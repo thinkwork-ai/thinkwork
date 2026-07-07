@@ -62,8 +62,14 @@ export interface MemoryGraphHandle {
       targetLabel: string;
       targetType: string;
       targetId: string;
+      /** Whether the anchoring node is the edge's source or target. */
+      direction: "in" | "out";
     }[];
   } | null;
+  /** Community hue for the node whose label matches (case-insensitive) —
+   *  lets detail surfaces color-code node badges consistently with the
+   *  canvas. */
+  getNodeColorByLabel: (label: string) => string | undefined;
 }
 
 interface MemoryGraphProps {
@@ -189,6 +195,16 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         else singleReexecute({ requestPolicy: "network-only" });
       },
       getNodeWithEdges: (nodeId: string) => getNodeWithEdgesRef.current(nodeId),
+      getNodeColorByLabel: (label: string) => {
+        const normalized = label.trim().toLowerCase();
+        const node = (graphDataRef.current.nodes as any[]).find(
+          (n) => (n.label ?? "").trim().toLowerCase() === normalized,
+        );
+        if (!node) return undefined;
+        return communityColor(
+          communityLayoutRef.current.communityByNode.get(node.id),
+        );
+      },
     }));
 
     useEffect(() => {
@@ -518,6 +534,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             targetLabel: otherNode?.label ?? otherId,
             targetType: otherNode?.nodeType ?? "unknown",
             targetId: otherId,
+            direction: (sId === nodeId ? "out" : "in") as "in" | "out",
           };
         });
       edges.sort((a, b) => a.targetLabel.localeCompare(b.targetLabel));

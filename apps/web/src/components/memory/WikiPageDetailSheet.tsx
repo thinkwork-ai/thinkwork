@@ -1,7 +1,6 @@
 import { useQuery } from "urql";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import {
-  COMMUNITY_COLORS,
   PAGE_TYPE_BADGE_CLASSES,
   pageTypeLabel,
   type WikiPageType,
@@ -13,6 +12,11 @@ import {
   SheetTitle,
 } from "@thinkwork/ui";
 import { ComputerWikiPageQuery } from "@/lib/graphql-queries";
+import {
+  NodeBadge,
+  RelationshipConnector,
+  hashColor,
+} from "@/components/memory/relationship-badges";
 
 export interface WikiPageSheetEdge {
   label: string;
@@ -51,38 +55,6 @@ function parseRelationshipLines(bodyMd: string) {
         ? { source: match[1]!, relationship: match[2]!, target: match[3]! }
         : { raw: line };
     });
-}
-
-/** Stable fallback hue when the graph isn't mounted to supply real
- *  community colors. */
-function hashColor(label: string): string {
-  let hash = 0;
-  for (let i = 0; i < label.length; i += 1) {
-    hash = (hash * 31 + label.charCodeAt(i)) | 0;
-  }
-  return COMMUNITY_COLORS[Math.abs(hash) % COMMUNITY_COLORS.length]!;
-}
-
-function NodeBadge({
-  label,
-  color,
-  onClick,
-}: {
-  label: string;
-  color: string;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={!onClick}
-      onClick={onClick}
-      className="inline-flex min-w-0 max-w-[38%] items-center rounded-full border px-1.5 py-px text-[11px] font-medium transition-opacity enabled:hover:opacity-75 disabled:cursor-default"
-      style={{ borderColor: color, backgroundColor: `${color}26` }}
-    >
-      <span className="truncate">{label}</span>
-    </button>
-  );
 }
 
 /**
@@ -162,7 +134,7 @@ export function WikiPageDetailSheet({
         </SheetDescription>
       </SheetHeader>
 
-      <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-5">
+      <div className="flex-1 overflow-y-auto px-6 pt-4 pb-8 space-y-5">
         {loadingPage ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading page…
@@ -232,9 +204,9 @@ export function WikiPageDetailSheet({
                                     }
                                     onClick={edgeClickFor(row.source)}
                                   />
-                                  <span className="shrink-0 whitespace-nowrap font-mono text-[9px] tracking-tight text-muted-foreground">
-                                    ── {row.relationship.toUpperCase()} ──▶
-                                  </span>
+                                  <RelationshipConnector
+                                    label={row.relationship}
+                                  />
                                   <NodeBadge
                                     label={row.target}
                                     color={
@@ -262,12 +234,6 @@ export function WikiPageDetailSheet({
               </div>
             )}
           </>
-        )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         )}
 
         {!loadingPage && page && connectedEdges.length === 0 && (
