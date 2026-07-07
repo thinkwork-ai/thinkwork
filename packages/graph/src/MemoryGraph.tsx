@@ -376,6 +376,18 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const focusRef = useRef<GraphFocusState | null>(null);
     focusRef.current = focus;
 
+    // The focused node renders as an overlay chip instead of immediately
+    // opening the host detail sheet — clicking a node should not shift the
+    // layout mid-exploration. Clicking the chip opens the sheet.
+    const [selectedNode, setSelectedNode] = useState<MemoryGraphNode | null>(
+      null,
+    );
+
+    const exitFocus = useCallback(() => {
+      setFocus(null);
+      setSelectedNode(null);
+    }, []);
+
     const classification = useMemo<GraphClassification | null>(
       () => composeGraphClassification(searchClassification, focus),
       [searchClassification, focus],
@@ -406,11 +418,11 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     useEffect(() => {
       const onKeyDown = (event: KeyboardEvent) => {
         if (event.key !== "Escape" || event.defaultPrevented) return;
-        if (focusRef.current) setFocus(null);
+        if (focusRef.current) exitFocus();
       };
       window.addEventListener("keydown", onKeyDown);
       return () => window.removeEventListener("keydown", onKeyDown);
-    }, []);
+    }, [exitFocus]);
 
     // Label visibility: `auto` follows the zoom gate in the overview and
     // lights lit-set labels in focus; `on`/`off` override absolutely.
@@ -799,39 +811,14 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           d3VelocityDecay={0.3}
           warmupTicks={50}
           onNodeClick={(node: any) => {
-            // Focus is additive to the existing click behavior: any node —
-            // lit or dimmed — becomes the new focus, and the detail sheet
-            // callback still fires.
+            // Clicking a node focuses it and surfaces the selected-node
+            // chip — the detail sheet opens only from the chip, so the
+            // layout never shifts mid-exploration.
             focusNode(node.id);
-            if (!onNodeClick) return;
-            const edges = graphData.links
-              .filter((l: any) => {
-                const sId =
-                  typeof l.source === "object" ? l.source.id : l.source;
-                const tId =
-                  typeof l.target === "object" ? l.target.id : l.target;
-                return sId === node.id || tId === node.id;
-              })
-              .map((l: any) => {
-                const sId =
-                  typeof l.source === "object" ? l.source.id : l.source;
-                const tId =
-                  typeof l.target === "object" ? l.target.id : l.target;
-                const otherId = sId === node.id ? tId : sId;
-                const otherNode = graphData.nodes.find(
-                  (n: any) => n.id === otherId,
-                );
-                return {
-                  label: l.label || "MENTIONS",
-                  targetLabel: otherNode?.label ?? otherId,
-                  targetType: otherNode?.nodeType ?? "unknown",
-                  targetId: otherId,
-                };
-              });
-            onNodeClick(node as MemoryGraphNode, edges);
+            setSelectedNode(node as MemoryGraphNode);
           }}
           onBackgroundClick={() => {
-            if (focusRef.current) setFocus(null);
+            if (focusRef.current) exitFocus();
           }}
           onNodeDragEnd={(node: any) => {
             node.fx = node.x;
@@ -839,12 +826,29 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             node.fz = node.z;
           }}
         />
-        {focus?.truncated && (
-          <div
-            role="status"
-            className="absolute top-3 left-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
-          >
-            Showing direct connections only
+        {focus && selectedNode && (
+          <div className="absolute top-3 left-3 flex flex-col items-start gap-1.5">
+            <button
+              type="button"
+              aria-label={`Open details for ${selectedNode.label}`}
+              className="flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+              onClick={() => {
+                if (!onNodeClick) return;
+                const detail = getNodeWithEdgesRef.current(selectedNode.id);
+                if (detail) onNodeClick(detail.node, detail.edges);
+              }}
+            >
+              <span className="font-medium">{selectedNode.label}</span>
+              <span className="text-muted-foreground">View details</span>
+            </button>
+            {focus.truncated && (
+              <div
+                role="status"
+                className="text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+              >
+                Showing direct connections only
+              </div>
+            )}
           </div>
         )}
         <GraphLabelToggles

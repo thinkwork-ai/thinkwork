@@ -297,7 +297,16 @@ describe("KnowledgeGraph", () => {
     await screen.findByTestId("force-graph");
     const props = latestForceGraphProps();
 
-    props.onNodeClick(props.graphData.nodes[1]);
+    // Node click surfaces the selected-node chip without opening the
+    // sheet; the chip click is what fires the host callback.
+    await act(async () => {
+      props.onNodeClick(props.graphData.nodes[1]);
+    });
+    expect(onNodeClick).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open details for Roadmap Risk" }),
+    );
 
     expect(onNodeClick).toHaveBeenCalledWith(
       expect.objectContaining({ id: "entity-2", label: "Roadmap Risk" }),
@@ -552,6 +561,10 @@ describe("KnowledgeGraph", () => {
       const nextProps = latestForceGraphProps();
       expect(nextProps.graphData).toBe(initialGraphData);
       expect(d3ForceCalls.length).toBe(initialForceCalls);
+
+      // Sheet opens from the selected-node chip, not the node click.
+      expect(onNodeClick).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: /Open details for/ }));
       expect(onNodeClick).toHaveBeenCalledWith(
         expect.objectContaining({ id: "entity-2" }),
         expect.any(Array),
