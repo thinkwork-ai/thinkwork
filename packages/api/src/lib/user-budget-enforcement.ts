@@ -106,7 +106,7 @@ function toNormalState(
 
 function toStatus(percentUsed: number): UserBudgetState {
   if (percentUsed >= 100) return "exceeded";
-  if (percentUsed >= 80) return "warning";
+  if (percentUsed >= 75) return "warning";
   return "normal";
 }
 

@@ -61,7 +61,7 @@ export async function budgetStatusForPolicy(p: any, tenantId: string) {
   const remainingUsd = Math.max(0, limitUsd - spentUsd);
   const percentUsed = limitUsd > 0 ? (spentUsd / limitUsd) * 100 : 0;
   const status =
-    percentUsed >= 100 ? "exceeded" : percentUsed >= 80 ? "warning" : "normal";
+    percentUsed >= 100 ? "exceeded" : percentUsed >= 75 ? "warning" : "normal";
   return {
     policy: snakeToCamel(p),
     spentUsd,
