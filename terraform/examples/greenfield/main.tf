@@ -454,12 +454,6 @@ variable "wiki_source" {
   }
 }
 
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name on the primary Aurora cluster (THINK-220 cutover flag). Empty (default) keeps the legacy layout (hindsight schema of the primary database); set after the database exists and data is migrated."
-  type        = string
-  default     = ""
-}
-
 variable "wiki_aggregation_pass_enabled" {
   description = <<-EOT
     Feature flag for the wiki aggregation pass — the second LLM call
@@ -832,7 +826,6 @@ module "thinkwork" {
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
-  hindsight_database_name                       = var.hindsight_database_name
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
