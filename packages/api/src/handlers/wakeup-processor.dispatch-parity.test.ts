@@ -114,6 +114,21 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wakeupSource).toContain("goal_mode: toRuntimeGoalModePayload");
   });
 
+  it("carries the workflowRun block into agentCorePayload for a workflow_step wakeup (THINK-219 U6)", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+
+    // The interpreter path is wakeup-only, so a gap is invisible on chat E2E:
+    // the workflowRun block must reach the runtime payload, and the goalMode
+    // must ride the same runtime goal-mode path as chat.
+    expect(wakeupSource).toContain('wakeup.source === "workflow_step"');
+    expect(wakeupSource).toContain("workflow_run: payload.workflowRun");
+    // goalMode reuses toRuntimeGoalModePayload inside the workflow_step block.
+    const workflowBlock = wakeupSource.slice(
+      wakeupSource.indexOf('if (wakeup.source === "workflow_step")'),
+    );
+    expect(workflowBlock).toContain("goal_mode: toRuntimeGoalModePayload");
+  });
+
   it("no dispatch-critical field is assembled inline in either handler", () => {
     // If a future field lands inline in chat-agent-invoke instead of the
     // helper, this fails and forces it through the helper — which is what

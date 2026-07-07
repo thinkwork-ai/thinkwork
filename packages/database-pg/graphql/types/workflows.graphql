@@ -375,4 +375,9 @@ extend type Mutation {
   ): N8nWorkflowBridgeCredential!
   deleteWorkflow(id: ID!): ID!
   triggerWorkflowRun(input: TriggerWorkflowRunInput!): WorkflowRun!
+  resolveWorkflowApproval(
+    runId: ID!
+    approve: Boolean!
+    note: String
+  ): WorkflowRun!
 }

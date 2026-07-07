@@ -27,12 +27,16 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import {
   createDbAgentLoopLedger,
+  createInterpreterWorkflowRun,
+  ensureInterpreterBinding,
   ensureThreadForWork,
   findAgentLoopRunByIdempotencyKey,
   getDb,
   loadActiveSpaceId,
   loadAgentDefaultSpaceId,
   loadAgentLoopRunRepairState,
+  markInterpreterRunStarted,
+  recordWorkflowStepEvent,
 } from "@thinkwork/database-pg";
 import {
   agents,
@@ -64,6 +68,7 @@ import {
 import { and, eq, gte, sql } from "drizzle-orm";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 
 // ---------------------------------------------------------------------------
 // Workspace skill enablement (capability-mapping plan U10, KTD-8).
@@ -213,6 +218,39 @@ const _SFN_CLIENT = new SFNClient({
   requestHandler: { requestTimeout: 15_000, connectionTimeout: 5_000 },
 });
 
+// The workflow-interpreter state-machine ARN is NOT an env var (graphql-http's
+// env block is at the 4 KB ceiling). It is read from SSM once per warm
+// container and cached. THINK-219 U7.
+const _SSM_CLIENT = new SSMClient({});
+let _interpreterStateMachineArn: string | null | undefined;
+export function _resetInterpreterStateMachineArnCache(): void {
+  _interpreterStateMachineArn = undefined;
+}
+async function resolveInterpreterStateMachineArn(): Promise<string | null> {
+  if (_interpreterStateMachineArn !== undefined) {
+    return _interpreterStateMachineArn;
+  }
+  const stage = process.env.STAGE;
+  if (!stage) {
+    _interpreterStateMachineArn = null;
+    return null;
+  }
+  try {
+    const res = await _SSM_CLIENT.send(
+      new GetParameterCommand({
+        Name: `/thinkwork/${stage}/workflow-interpreter/state-machine-arn`,
+      }),
+    );
+    _interpreterStateMachineArn = res.Parameter?.Value || null;
+  } catch (err) {
+    console.warn(
+      `[job-trigger] workflow-interpreter state-machine-arn SSM lookup failed: ${(err as Error)?.name}: ${(err as Error)?.message}`,
+    );
+    _interpreterStateMachineArn = null;
+  }
+  return _interpreterStateMachineArn;
+}
+
 interface JobTriggerEvent {
   triggerId: string;
   // agent_heartbeat | agent_reminder | agent_scheduled | routine_schedule |
@@ -225,6 +263,10 @@ interface JobTriggerEvent {
   agentId?: string;
   spaceId?: string;
   routineId?: string;
+  // workflow_schedule (THINK-219 U7): the shared-interpreter workflow this
+  // scheduled job fires. Stamped into the EventBridge payload by
+  // job-schedule-manager when the scheduled_jobs row carries workflow_id.
+  workflowId?: string;
   prompt?: string;
   scheduleName?: string;
   oneTime?: boolean;
@@ -255,6 +297,11 @@ interface JobTriggerEvent {
 
 export const AGENT_LOOP_CONTINUE_DISPATCH_TRIGGER_TYPE =
   "agent_loop_continue_dispatch";
+
+// THINK-219 U7: scheduled fire of a shared-interpreter workflow. The run row
+// is created BEFORE StartExecution so idempotency is trigger-scoped (never the
+// execution ARN).
+export const WORKFLOW_SCHEDULE_TRIGGER_TYPE = "workflow_schedule";
 
 const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
 
@@ -1039,6 +1086,206 @@ async function recordAgentLoopScheduleDiagnostic(
     .where(eq(scheduledJobs.id, triggerId));
 }
 
+// ---------------------------------------------------------------------------
+// workflow_schedule (THINK-219 U7) — scheduled fire of a shared-interpreter
+// workflow. Mirrors the agent-loop schedule branch: the run row is created
+// BEFORE StartExecution so a duplicate fire (same fireId) resolves to one run
+// (AE4), and a half-built start (queued run with no execution) is repaired
+// rather than duplicated.
+// ---------------------------------------------------------------------------
+
+function scheduledWorkflowIdempotencyKey(event: JobTriggerEvent): string {
+  const fireId =
+    event.fireId ||
+    event.scheduledTime ||
+    event.time ||
+    String(Math.floor(Date.now() / 60_000));
+  return `${WORKFLOW_SCHEDULE_TRIGGER_TYPE}:${event.triggerId}:${fireId}`;
+}
+
+export async function handleWorkflowSchedule(input: {
+  db: JobTriggerDb;
+  event: JobTriggerEvent;
+  job: { space_id?: string | null } | null;
+  tenantId: string;
+  triggerId: string;
+  actorId: string | null;
+}): Promise<void> {
+  const { db, event, job, tenantId, triggerId } = input;
+  const now = new Date();
+
+  const workflowId = event.workflowId ?? null;
+  if (!workflowId) {
+    console.warn(
+      `[job-trigger] workflow_schedule ${triggerId} has no workflowId; skipping`,
+    );
+    return;
+  }
+
+  const [workflow] = await db
+    .select({
+      id: workflows.id,
+      tenant_id: workflows.tenant_id,
+      name: workflows.name,
+      current_version_id: workflows.current_version_id,
+    })
+    .from(workflows)
+    .where(and(eq(workflows.id, workflowId), eq(workflows.tenant_id, tenantId)))
+    .limit(1);
+  if (!workflow) {
+    console.error(
+      `[job-trigger] workflow_schedule ${triggerId} references missing workflow ${workflowId}; skipping`,
+    );
+    return;
+  }
+
+  const stateMachineArn = await resolveInterpreterStateMachineArn();
+  if (!stateMachineArn) {
+    console.error(
+      `[job-trigger] workflow_schedule ${triggerId} cannot resolve the workflow-interpreter state machine ARN; skipping`,
+    );
+    return;
+  }
+
+  // Acting agent = the tenant's platform agent that executes the workflow's
+  // steps. dispatch_agent in workflow-step-dispatch REQUIRES input_summary
+  // to carry an agentId.
+  const [platformAgent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.tenant_id, tenantId),
+        eq(agents.is_platform_default, true),
+      ),
+    )
+    .limit(1);
+  if (!platformAgent) {
+    console.error(
+      `[job-trigger] workflow_schedule ${triggerId} has no platform agent for tenant ${tenantId}; skipping`,
+    );
+    return;
+  }
+
+  const binding = await ensureInterpreterBinding(db, {
+    tenantId,
+    workflowId: workflow.id,
+    workflowVersionId: workflow.current_version_id ?? null,
+    stateMachineArn,
+    now,
+  });
+
+  const idempotencyKey = scheduledWorkflowIdempotencyKey(event);
+  const spaceId = job?.space_id ?? event.spaceId ?? null;
+  const inputSummary = {
+    agentId: platformAgent.id,
+    workflowName: workflow.name ?? null,
+    spaceId,
+  };
+
+  const { run, created } = await createInterpreterWorkflowRun(db, {
+    tenantId,
+    workflowId: workflow.id,
+    workflowVersionId: workflow.current_version_id ?? null,
+    engineBindingId: binding.id,
+    triggerFamily: "schedule",
+    triggerSource: WORKFLOW_SCHEDULE_TRIGGER_TYPE,
+    idempotencyKey,
+    actorType: input.actorId ? "user" : "system",
+    actorId: input.actorId,
+    inputSummary,
+    now,
+  });
+
+  // A workflow with no published version fails loudly, in ThinkWork terms — a
+  // run-scoped failure event, not a silent skip.
+  if (!workflow.current_version_id) {
+    await recordWorkflowStepEvent(db, {
+      tenantId,
+      workflowRunId: run.id,
+      eventType: "workflow_step_failed",
+      summary: {
+        status: "failed",
+        reason: "workflow_has_no_published_version",
+      },
+      runStatus: "failed",
+      now,
+    });
+    console.error(
+      `[job-trigger] workflow_schedule ${triggerId} workflow ${workflow.id} has no published version; recorded failed run ${run.id}`,
+    );
+    return;
+  }
+
+  // Duplicate-fire / half-built repair (AE4). On a re-created run we always
+  // start. On an existing run we re-start ONLY if it is still queued with no
+  // execution (a half-built start); anything past that is a genuine duplicate
+  // fire and must not spawn a second execution.
+  if (!created) {
+    const [existing] = await db
+      .select({
+        status: workflowRuns.status,
+        backend_execution_id: workflowRuns.backend_execution_id,
+      })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, run.id))
+      .limit(1);
+    const repairable =
+      existing &&
+      existing.status === "queued" &&
+      !existing.backend_execution_id;
+    if (!repairable) {
+      console.log(
+        `[job-trigger] workflow_schedule ${triggerId} reused run ${run.id} (duplicate fire)`,
+      );
+      return;
+    }
+    console.log(
+      `[job-trigger] workflow_schedule ${triggerId} repairing half-built run ${run.id}`,
+    );
+  }
+
+  const cursorInput = {
+    cursor: {
+      workflowRunId: run.id,
+      tenantId,
+      stepPointer: 0,
+      iteration: 1,
+      loopCycleCount: 0,
+      rolloverCount: 0,
+    },
+  };
+
+  const startResp = await _SFN_CLIENT.send(
+    new StartExecutionCommand({
+      stateMachineArn,
+      // SFN execution names must be unique per state machine. The run id keeps
+      // it deterministic; a repair reuses the same run so name collisions with
+      // the original attempt are tolerated by StartExecution idempotency.
+      name: `run-${run.id}-r0`,
+      input: JSON.stringify(cursorInput),
+    }),
+  );
+  if (!startResp.executionArn) {
+    console.error(
+      `[job-trigger] workflow_schedule ${triggerId} StartExecution returned no executionArn for run ${run.id}`,
+    );
+    return;
+  }
+
+  await markInterpreterRunStarted(db, {
+    tenantId,
+    workflowId: workflow.id,
+    runId: run.id,
+    executionArn: startResp.executionArn,
+    now: startResp.startDate ?? now,
+  });
+
+  console.log(
+    `[job-trigger] workflow_schedule ${triggerId} started execution ${startResp.executionArn} for run ${run.id}`,
+  );
+}
+
 export async function handler(event: JobTriggerEvent): Promise<void> {
   const {
     triggerId,
@@ -1124,6 +1371,18 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         triggerId,
         actorId: ownerUserId,
         budgetPausedByOwner,
+      });
+      return;
+    }
+
+    if (triggerType === WORKFLOW_SCHEDULE_TRIGGER_TYPE) {
+      await handleWorkflowSchedule({
+        db,
+        event,
+        job: job ?? null,
+        tenantId,
+        triggerId,
+        actorId: ownerUserId,
       });
       return;
     }

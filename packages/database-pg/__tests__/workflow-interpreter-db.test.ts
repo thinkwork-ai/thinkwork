@@ -4,6 +4,7 @@ import {
   consumeTaskToken,
   createInterpreterWorkflowRun,
   ensureInterpreterBinding,
+  markInterpreterRunStarted,
   recordInterpreterRollover,
   recordWorkflowStepEvent,
   storeTaskToken,
@@ -107,6 +108,32 @@ describe("createInterpreterWorkflowRun", () => {
     expect(result.created).toBe(false);
     expect(result.run.id).toBe("run-1");
     expect(conflictOptions).toHaveBeenCalled();
+  });
+});
+
+describe("markInterpreterRunStarted", () => {
+  it("records the execution on the run and writes diagnostics evidence", async () => {
+    await markInterpreterRunStarted(fakeDb(), {
+      tenantId: "tenant-1",
+      workflowId: "workflow-1",
+      runId: "run-1",
+      executionArn: "arn:aws:states:exec-1",
+      now: new Date("2026-07-07T00:00:00Z"),
+    });
+    expect(updateValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "running",
+        backend_execution_id: "arn:aws:states:exec-1",
+        correlation_id: "arn:aws:states:exec-1",
+      }),
+    );
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evidence_type: "step_functions_execution",
+        source_id: "arn:aws:states:exec-1",
+        workflow_run_id: "run-1",
+      }),
+    );
   });
 });
 

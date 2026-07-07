@@ -74,6 +74,7 @@ interface CreateJobBody {
   agentId?: string;
   spaceId?: string | null;
   routineId?: string;
+  workflowId?: string;
   teamId?: string;
   name: string;
   description?: string;
@@ -193,6 +194,9 @@ async function createJob(
   let jobId: string;
   let triggerType = body.triggerType;
   let tenantId = body.tenantId;
+  // workflow_schedule (THINK-219 U7): the interpreter workflow this job fires,
+  // carried into the EventBridge payload so job-trigger can start it.
+  let workflowId: string | null = body.workflowId ?? null;
 
   if (body.triggerId) {
     // Row already exists — just attach the EB schedule
@@ -204,6 +208,7 @@ async function createJob(
     if (existing) {
       triggerType = existing.trigger_type;
       tenantId = existing.tenant_id;
+      workflowId = existing.workflow_id ?? workflowId;
     }
   } else {
     // Create DB row (legacy path)
@@ -215,6 +220,7 @@ async function createJob(
         agent_id: body.agentId || null,
         space_id: body.spaceId || null,
         routine_id: body.routineId || null,
+        workflow_id: body.workflowId || null,
         name: body.name,
         description: body.description,
         prompt: body.prompt,
@@ -243,6 +249,7 @@ async function createJob(
       agentId: body.agentId,
       spaceId: body.spaceId,
       routineId: body.routineId,
+      workflowId: workflowId || undefined,
       prompt: body.prompt || undefined,
       scheduleName,
       oneTime: isOneTime,
@@ -358,6 +365,7 @@ async function updateJob(
         agentId: effectiveAgentId,
         spaceId: body.spaceId !== undefined ? body.spaceId : current.space_id,
         routineId: current.routine_id,
+        workflowId: current.workflow_id ?? undefined,
         prompt: body.prompt !== undefined ? body.prompt : current.prompt,
         scheduleName,
         oneTime: current.schedule_type === "at",
@@ -408,6 +416,7 @@ async function updateJob(
         agentId: effectiveAgentId,
         spaceId: body.spaceId !== undefined ? body.spaceId : current.space_id,
         routineId: current.routine_id,
+        workflowId: current.workflow_id ?? undefined,
         prompt: body.prompt !== undefined ? body.prompt : current.prompt,
         scheduleName: current.eb_schedule_name!,
         oneTime: current.schedule_type === "at",
@@ -444,6 +453,7 @@ async function updateJob(
         agentId: effectiveAgentId,
         spaceId: body.spaceId !== undefined ? body.spaceId : current.space_id,
         routineId: current.routine_id,
+        workflowId: current.workflow_id ?? undefined,
         prompt: body.prompt !== undefined ? body.prompt : current.prompt,
         scheduleName,
         oneTime: current.schedule_type === "at",
