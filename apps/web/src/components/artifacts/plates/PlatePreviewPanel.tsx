@@ -18,6 +18,7 @@ import {
   documentThemeToken,
   withDocumentFrameEnvelope,
 } from "@/components/workbench/DocumentFrame";
+import { PlateConformancePanel } from "./PlateConformancePanel";
 
 interface PreviewData {
   documentPlatePreview?: {
@@ -76,18 +77,80 @@ export function PlatePreviewPanel({
   const fetching = seamed ? (fetchingProp ?? false) : result.fetching;
   const errorMessage = seamed ? errorProp : result.error?.message;
 
+  // THINK-189 U7: the detail surface is a tab strip — Preview (default)
+  // beside Conformance (aggregate rates over the report corpus). No modal,
+  // no route change; the tab resets when the selected plate changes.
+  const [tab, setTab] = useState<"preview" | "conformance">("preview");
+  const [tabSlug, setTabSlug] = useState(slug);
+  if (tabSlug !== slug) {
+    setTabSlug(slug);
+    setTab("preview");
+  }
+
   return (
-    <PlatePreviewFrame
-      title={displayName ?? slug ?? "Plate preview"}
-      slug={slug}
-      html={html}
-      diagnostics={diagnostics}
-      fetching={fetching}
-      errorMessage={errorMessage}
-      onClose={onClose}
-      onEdit={onEdit}
-      onClone={onClone}
-    />
+    <div className="flex h-full w-full min-h-0 min-w-0 flex-col bg-background">
+      {slug ? (
+        <div
+          className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5"
+          role="tablist"
+          aria-label="Plate detail views"
+        >
+          <Button
+            type="button"
+            role="tab"
+            aria-selected={tab === "preview"}
+            variant={tab === "preview" ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setTab("preview")}
+            data-testid="plate-detail-tab-preview"
+          >
+            Preview
+          </Button>
+          <Button
+            type="button"
+            role="tab"
+            aria-selected={tab === "conformance"}
+            variant={tab === "conformance" ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setTab("conformance")}
+            data-testid="plate-detail-tab-conformance"
+          >
+            Conformance
+          </Button>
+          {tab === "conformance" && onClose ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="ml-auto text-muted-foreground hover:text-foreground"
+              aria-label="Close preview"
+              title="Close preview"
+              onClick={onClose}
+              data-testid="plate-conformance-close"
+            >
+              <X className="size-4" />
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {tab === "conformance" && slug ? (
+        <PlateConformancePanel tenantId={tenantId} slug={slug} />
+      ) : (
+        <PlatePreviewFrame
+          title={displayName ?? slug ?? "Plate preview"}
+          slug={slug}
+          html={html}
+          diagnostics={diagnostics}
+          fetching={fetching}
+          errorMessage={errorMessage}
+          onClose={onClose}
+          onEdit={onEdit}
+          onClone={onClone}
+        />
+      )}
+    </div>
   );
 }
 

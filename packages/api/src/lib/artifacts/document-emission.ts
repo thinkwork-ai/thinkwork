@@ -44,6 +44,10 @@ import {
   sql,
 } from "../../graphql/utils.js";
 import { creatorUserIdForThread } from "./artifact-creator.js";
+import {
+  buildManifestSnapshot,
+  recordDocumentConformance,
+} from "./document-conformance.js";
 import { hasSpaceWriteRole } from "./canvas-access.js";
 import {
   compileDocument,
@@ -270,6 +274,12 @@ export interface DocumentEmissionDeps {
       reason: string;
     }>;
   }) => Promise<void>;
+  /**
+   * THINK-189 U3: append one conformance report for a manifest-bearing
+   * emission. Best-effort — a recording failure logs and never touches the
+   * emission outcome (R3).
+   */
+  recordConformance: typeof recordDocumentConformance;
   loadDocumentRow: (artifactId: string) => Promise<DocumentRow | null>;
   hasSpaceWriteRole: typeof hasSpaceWriteRole;
   pinDocumentHead: typeof pinDocumentHead;
@@ -414,6 +424,7 @@ function defaultDeps(): DocumentEmissionDeps {
         );
       }
     },
+    recordConformance: recordDocumentConformance,
     loadDocumentRow: async (artifactId) => {
       const rows = await db
         .select()
@@ -843,6 +854,29 @@ export async function handleDocumentEmission(
     const row = await deps.loadDocumentRow(artifactId);
     headVersion = row?.head_version ?? 0;
     memorySpaceId = row?.space_id ?? null;
+  }
+
+  // THINK-189 U3: append one conformance report per manifest-bearing
+  // emission (corpus semantics, unlike the waiver head-rewrite above).
+  // Best-effort and awaited — an INSERT is fast, and fire-and-forget
+  // promises die at Lambda freeze; a failure logs and the emission proceeds.
+  if ((plate.sections?.length ?? 0) > 0 && compiled.sectionFacts) {
+    try {
+      await deps.recordConformance({
+        tenantId: input.tenantId,
+        artifactId,
+        plateSlug: plate.slug,
+        documentStatus: status,
+        digestMarkdown: doc.digestMarkdown,
+        sectionFacts: compiled.sectionFacts,
+        manifestSnapshot: buildManifestSnapshot(plate),
+      });
+    } catch (err) {
+      console.error(
+        "[document-emission] conformance record failed (best-effort):",
+        err,
+      );
+    }
   }
 
   // ---- Documents-as-memory (THINK-152 / THINK-193 P3) --------------------

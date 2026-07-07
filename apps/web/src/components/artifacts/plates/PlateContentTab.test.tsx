@@ -202,3 +202,77 @@ describe("Plate directive vocabulary", () => {
     expect(PLATE_DIRECTIVE_KINDS).toContain("timeline");
   });
 });
+
+describe("measured section stats (THINK-189 R8)", () => {
+  const MEASURED = {
+    "pipeline-health": {
+      sectionId: "pipeline-health",
+      runCount: 10,
+      presentCount: 9,
+      waivedCount: 1,
+      missingCount: 0,
+      directiveSuggestedRuns: 10,
+      directiveUsedRuns: 6,
+      judgedRuns: 7,
+      judgedThinRuns: 2,
+      assertedNotComputedRuns: 0,
+    },
+    "territory-notes": {
+      sectionId: "territory-notes",
+      runCount: 10,
+      presentCount: 4,
+      waivedCount: 0,
+      missingCount: 6,
+      directiveSuggestedRuns: 10,
+      directiveUsedRuns: 6,
+      judgedRuns: 0,
+      judgedThinRuns: 0,
+      assertedNotComputedRuns: 0,
+    },
+  };
+
+  it("suggested sections show usage framing; required sections show presence only", () => {
+    renderTab(
+      <PlateContentTab
+        sections={[FLOOR, ADDED]}
+        analyses={[]}
+        isPlatform
+        allowedDirectives={null}
+        measured={MEASURED}
+        onSectionsChange={() => {}}
+        onAnalysesChange={() => {}}
+      />,
+    );
+    // ADDED is suggested-tier → usage framing.
+    const suggested = screen.getByTestId(
+      "plate-section-measured-territory-notes",
+    );
+    expect(suggested.textContent).toContain("present in 4/10 runs");
+    expect(suggested.textContent).toContain(
+      "suggested widgets used in 6/10 runs",
+    );
+    // FLOOR is required-if-material → presence context, no usage framing.
+    const required = screen.getByTestId(
+      "plate-section-measured-pipeline-health",
+    );
+    expect(required.textContent).toContain("present in 9/10 runs");
+    expect(required.textContent).toContain("waived in 1");
+    expect(required.textContent).not.toContain("widgets used");
+  });
+
+  it("no measured data → no stats line (display only, never fabricated)", () => {
+    renderTab(
+      <PlateContentTab
+        sections={[ADDED]}
+        analyses={[]}
+        isPlatform={false}
+        allowedDirectives={null}
+        onSectionsChange={() => {}}
+        onAnalysesChange={() => {}}
+      />,
+    );
+    expect(
+      screen.queryByTestId("plate-section-measured-territory-notes"),
+    ).toBeNull();
+  });
+});

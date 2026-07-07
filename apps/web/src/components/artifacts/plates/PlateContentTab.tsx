@@ -36,6 +36,7 @@ import {
   type SectionRowState,
 } from "./plate-support";
 import { PlateAnalysisPicker } from "./PlateAnalysisPicker";
+import type { ConformanceSectionStats } from "./PlateConformancePanel";
 
 const FLOOR_LOCK_EXPLANATION =
   "This section comes with the plate: it can't be removed or retitled, and its tier can only be raised. Guidance and suggested widgets are yours to adapt.";
@@ -49,6 +50,11 @@ export interface PlateContentTabProps {
   allowedDirectives: string[] | null;
   onSectionsChange: (rows: SectionRowState[]) => void;
   onAnalysesChange: (rows: AnalysisRowState[]) => void;
+  /**
+   * THINK-189 R8: measured conformance stats per section id — the evidence
+   * base for tier decisions. Display only; absent = no measurement shown.
+   */
+  measured?: Record<string, ConformanceSectionStats> | null;
 }
 
 export function PlateContentTab({
@@ -58,6 +64,7 @@ export function PlateContentTab({
   allowedDirectives,
   onSectionsChange,
   onAnalysesChange,
+  measured,
 }: PlateContentTabProps) {
   const duplicates = duplicateSectionRowKeys(sections);
 
@@ -127,6 +134,7 @@ export function PlateContentTab({
               index={index}
               isPlatform={isPlatform}
               duplicate={duplicates.has(row.rowKey)}
+              measured={measured?.[sectionRowId(row)]}
               onChange={(patch) => updateRow(row.rowKey, patch)}
               onRemove={() => removeRow(row.rowKey)}
               onMove={(delta) => moveRow(row.rowKey, delta)}
@@ -158,6 +166,7 @@ function SectionRow({
   index,
   isPlatform,
   duplicate,
+  measured,
   onChange,
   onRemove,
   onMove,
@@ -166,6 +175,7 @@ function SectionRow({
   index: number;
   isPlatform: boolean;
   duplicate: boolean;
+  measured?: ConformanceSectionStats;
   onChange: (patch: Partial<SectionRowState>) => void;
   onRemove: () => void;
   onMove: (delta: -1 | 1) => void;
@@ -246,6 +256,24 @@ function SectionRow({
         >
           Another section already uses the id &ldquo;{id}&rdquo; — titles must
           be unique within a plate.
+        </p>
+      ) : null}
+      {measured && measured.runCount > 0 ? (
+        <p
+          className="text-[11px] text-muted-foreground"
+          data-testid={`plate-section-measured-${id || index}`}
+        >
+          {row.tier === "suggested"
+            ? `Measured: present in ${measured.presentCount}/${measured.runCount} runs${
+                measured.directiveSuggestedRuns > 0
+                  ? ` · suggested widgets used in ${measured.directiveUsedRuns}/${measured.directiveSuggestedRuns} runs`
+                  : ""
+              }`
+            : `Measured: present in ${measured.presentCount}/${measured.runCount} runs${
+                measured.waivedCount > 0
+                  ? ` · waived in ${measured.waivedCount}`
+                  : ""
+              }`}
         </p>
       ) : null}
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">

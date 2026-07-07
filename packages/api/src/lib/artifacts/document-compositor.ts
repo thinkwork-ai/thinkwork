@@ -25,7 +25,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { Marked, type Tokens } from "marked";
+import { Marked, type Token, type Tokens } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { parse as parseYaml } from "yaml";
 import {
@@ -46,6 +46,33 @@ export interface CompositorDiagnostic {
   location: string;
 }
 
+/**
+ * Per-manifest-section structural facts for conformance reporting
+ * (THINK-189). Facts are manifest-shaped: one entry per declared section,
+ * never one per document heading.
+ */
+export interface SectionFact {
+  id: string;
+  tier: "required" | "required-if-material" | "suggested";
+  status: "present" | "missing" | "waived";
+  /** Markdown source chars attributed to this section (0 when not present). */
+  bodyChars: number;
+  suggestedDirectives: { kind: string; chartType?: string; used: boolean }[];
+}
+
+/** Declared-analysis facts: computed = rendered via tw:analysis (THINK-189). */
+export interface AnalysisFact {
+  key: string;
+  computed: boolean;
+  /** Manifest section the rendering fence sat under, when attributable. */
+  sectionId: string | null;
+}
+
+export interface CompositorSectionFacts {
+  sections: SectionFact[];
+  analyses: AnalysisFact[];
+}
+
 export type CompositorResult =
   | {
       ok: true;
@@ -53,6 +80,12 @@ export type CompositorResult =
       warnings: CompositorDiagnostic[];
       /** Suitability waivers collected from tw:waiver blocks (THINK-183). */
       waivers: CollectedWaiver[];
+      /**
+       * Structural conformance facts (THINK-189). Present only when the
+       * plate carries a section manifest — contract-less plates compile
+       * exactly as before (R4 inertness).
+       */
+      sectionFacts?: CompositorSectionFacts;
     }
   | { ok: false; diagnostics: CompositorDiagnostic[] };
 
@@ -248,6 +281,11 @@ interface CompileState {
   slug: (text: string) => string;
   /** Emitted heading ids, for the section-manifest check (THINK-183 KTD6). */
   headingIds: string[];
+  /**
+   * Heading token → emitted id, so the conformance facts walk (THINK-189)
+   * reuses the render pass's exact slug sequence instead of re-slugging.
+   */
+  headingIdByToken: Map<Tokens.Heading, string>;
   /** Waivers collected from tw:waiver blocks (THINK-183 KTD3). */
   waivers: CollectedWaiver[];
 }
@@ -256,12 +294,14 @@ function buildMarked(state: CompileState): Marked {
   const instance = new Marked({ gfm: true, breaks: false });
   instance.use({
     renderer: {
-      heading({ tokens, depth, text }: Tokens.Heading) {
+      heading(token: Tokens.Heading) {
+        const { tokens, depth, text } = token;
         const inner = this.parser.parseInline(tokens);
         // The shell owns the single H1; body headings start at h2.
         const level = Math.min(6, Math.max(2, depth === 1 ? 2 : depth));
         const id = state.slug(text);
         state.headingIds.push(id);
+        state.headingIdByToken.set(token, id);
         return `<h${level} id="${id}">${inner}</h${level}>\n`;
       },
       code({ text, lang }: Tokens.Code) {
@@ -396,6 +436,127 @@ const SANITIZE_CONFIG: sanitizeHtml.IOptions = {
   disallowedTagsMode: "discard",
 };
 
+/** Pull the declared-analysis key out of a tw:analysis fence body. The
+ * render pass already validated the body (a bad one rejects the compile), so
+ * this is a best-effort re-read for fact attribution, never a gate. */
+function extractAnalysisKey(body: string): string | null {
+  try {
+    const parsed = parseYaml(body, { strict: true });
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      return null;
+    const key = (parsed as Record<string, unknown>).analysis;
+    return typeof key === "string"
+      ? key
+      : typeof key === "number"
+        ? String(key)
+        : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Walk the top-level token stream against the plate manifest to produce
+ * structural conformance facts (THINK-189 U1). Attribution rule: a heading
+ * whose id is in the manifest opens that section; a non-manifest heading
+ * keeps the current section open when strictly deeper (nested subheading
+ * counts toward the enclosing manifest section) and closes it otherwise (a
+ * stray sibling/shallower heading attributes to no section). Directive
+ * fences count as directive usage, not body prose. Top-level tokens only —
+ * nested content counts via its parent token's raw source.
+ */
+function collectSectionFacts(input: {
+  tokens: Token[];
+  plate: CompositorPlate;
+  headingIds: string[];
+  headingIdByToken: Map<Tokens.Heading, string>;
+  waivers: CollectedWaiver[];
+}): CompositorSectionFacts {
+  const manifest = input.plate.sections ?? [];
+  const manifestIds = new Set(manifest.map((s) => s.id));
+  const bodyChars = new Map<string, number>();
+  const directivesBySection = new Map<string, Set<string>>();
+  const analysisRenders: { key: string; sectionId: string | null }[] = [];
+
+  let current: { id: string; depth: number } | null = null;
+  for (const token of input.tokens) {
+    if (token.type === "heading") {
+      const heading = token as Tokens.Heading;
+      const id = input.headingIdByToken.get(heading);
+      if (id !== undefined && manifestIds.has(id)) {
+        current = { id, depth: heading.depth };
+      } else if (current !== null && heading.depth > current.depth) {
+        // Nested subheading: its heading line is section body too.
+        bodyChars.set(
+          current.id,
+          (bodyChars.get(current.id) ?? 0) + token.raw.length,
+        );
+      } else {
+        current = null;
+      }
+      continue;
+    }
+    if (token.type === "space") continue;
+    if (token.type === "code") {
+      const info = ((token as Tokens.Code).lang ?? "").trim();
+      if (info.toLowerCase().startsWith(DIRECTIVE_FENCE_PREFIX)) {
+        const kind = info.slice(DIRECTIVE_FENCE_PREFIX.length).trim();
+        if (current !== null) {
+          const kinds = directivesBySection.get(current.id) ?? new Set();
+          kinds.add(kind);
+          directivesBySection.set(current.id, kinds);
+        }
+        if (kind === "analysis") {
+          const key = extractAnalysisKey((token as Tokens.Code).text);
+          if (key !== null) {
+            analysisRenders.push({ key, sectionId: current?.id ?? null });
+          }
+        }
+        continue;
+      }
+    }
+    if (current !== null) {
+      bodyChars.set(
+        current.id,
+        (bodyChars.get(current.id) ?? 0) + token.raw.length,
+      );
+    }
+  }
+
+  const presentIds = new Set(input.headingIds);
+  const waivedIds = new Set(input.waivers.map((w) => w.sectionId));
+  const sections: SectionFact[] = manifest.map((section) => {
+    const status = presentIds.has(section.id)
+      ? ("present" as const)
+      : waivedIds.has(section.id)
+        ? ("waived" as const)
+        : ("missing" as const);
+    const used = directivesBySection.get(section.id);
+    return {
+      id: section.id,
+      tier: section.tier,
+      status,
+      bodyChars: bodyChars.get(section.id) ?? 0,
+      suggestedDirectives: (section.suggestedDirectives ?? []).map((d) => ({
+        kind: d.kind,
+        ...(d.chartType !== undefined ? { chartType: d.chartType } : {}),
+        used: used?.has(d.kind) ?? false,
+      })),
+    };
+  });
+
+  const analyses: AnalysisFact[] = (input.plate.analyses ?? []).map((a) => {
+    const rendered = analysisRenders.find((r) => r.key === a.key);
+    return {
+      key: a.key,
+      computed: rendered !== undefined,
+      sectionId: rendered?.sectionId ?? null,
+    };
+  });
+
+  return { sections, analyses };
+}
+
 export interface CompileDocumentInput {
   plate: CompositorPlate;
   title: string;
@@ -484,11 +645,16 @@ export function compileDocument(
     nextPlaceholder: 0,
     slug: makeSlugger(),
     headingIds: [],
+    headingIdByToken: new Map(),
     waivers: [],
   };
 
   const marked = buildMarked(state);
-  const rawBody = marked.parse(body, { async: false }) as string;
+  // Explicit lex → parse split (equivalent to marked.parse) so the token
+  // array is available for the conformance facts walk (THINK-189) without
+  // re-lexing the markdown.
+  const bodyTokens = marked.lexer(body);
+  const rawBody = marked.parser(bodyTokens);
 
   // Post-parse contract check (THINK-183 KTD1/KTD6): every required or
   // required-if-material manifest section must be present as a heading id or
@@ -581,10 +747,24 @@ export function compileDocument(
     tokensDark: input.plate.tokensDark,
   });
 
+  // Structural conformance facts (THINK-189): manifest plates only —
+  // contract-less plates return exactly the pre-THINK-189 shape (R4).
+  const sectionFacts =
+    manifest.length > 0
+      ? collectSectionFacts({
+          tokens: bodyTokens,
+          plate: input.plate,
+          headingIds: state.headingIds,
+          headingIdByToken: state.headingIdByToken,
+          waivers: state.waivers,
+        })
+      : undefined;
+
   return {
     ok: true,
     renderHtml,
     warnings: state.warnings,
     waivers: state.waivers,
+    ...(sectionFacts !== undefined ? { sectionFacts } : {}),
   };
 }

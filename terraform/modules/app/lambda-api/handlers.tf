@@ -409,6 +409,14 @@ locals {
     "compliance-outbox-drainer" = {
       COMPLIANCE_DRAINER_SECRET_ARN = var.compliance_drainer_secret_arn
     }
+    # THINK-189 U5: the conformance judge model pin lives on the sweeper
+    # ONLY (KTD7 — graphql-http's 4KB env ceiling is a known deploy
+    # blocker; the deterministic layer needs no configuration). The shared
+    # api_ai_statements grant already authorizes Converse with this
+    # inference-profile ID.
+    "document-conformance-judge" = {
+      CONFORMANCE_JUDGE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    }
   }
 }
 
@@ -702,6 +710,11 @@ resource "aws_lambda_function" "handler" {
     # U2). EventBridge rate(1 minute) schedule + DLQ + MaxRetryAttempts=0
     # (defined in dedicated resources below).
     "compliance-outbox-drainer",
+    # THINK-189 U5: conformance judge sweeper. Scheduled (rate 2 min) +
+    # reserved_concurrent_executions=1 (single-writer makes direct
+    # process-and-complete safe) + MaxRetryAttempts=0 — the sweeper's own
+    # next tick is the retry (dedicated resources below).
+    "document-conformance-judge",
     # Phase 3 U6 of the Compliance audit-event log: runtime REST emit path.
     # Cross-runtime emit endpoint POST /api/compliance/events — Bearer
     # API_AUTH_SECRET, runtime clients post here with a
@@ -748,7 +761,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "canvas-refresh" ? 120 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -764,7 +777,10 @@ resource "aws_lambda_function" "handler" {
   # eval-worker's cap must be >= the fan-out event source mapping's
   # maximum_concurrency (eval-fanout.tf) or UpdateEventSourceMapping
   # rejects the apply.
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "eval-worker" ? 40 : -1
+  # document-conformance-judge is also a single-writer: direct
+  # process-and-complete with no in-flight claim status depends on never
+  # having two sweepers race the same pending rows (THINK-189 KTD4).
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : -1
 
   environment {
     variables = merge(
@@ -1024,6 +1040,41 @@ resource "aws_scheduler_schedule" "compliance_outbox_drainer" {
 
   target {
     arn      = aws_lambda_function.handler["compliance-outbox-drainer"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# THINK-189 U5: document-conformance-judge schedule + retry config
+#
+# The sweeper claims judge_status='pending' conformance reports and scores
+# each with one Bedrock Converse call. MaxRetryAttempts=0: rows stay
+# pending on a crash and the next tick re-claims them — Lambda-level async
+# retries would just race the schedule. Reserved concurrency 1 (set above)
+# is the single-writer guarantee for direct process-and-complete.
+# ---------------------------------------------------------------------------
+
+resource "aws_lambda_function_event_invoke_config" "document_conformance_judge" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["document-conformance-judge"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
+resource "aws_scheduler_schedule" "document_conformance_judge" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-document-conformance-judge"
+  group_name          = "default"
+  schedule_expression = "rate(2 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["document-conformance-judge"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

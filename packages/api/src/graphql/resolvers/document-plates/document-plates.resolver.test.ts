@@ -28,11 +28,45 @@ const mocks = vi.hoisted(() => ({
   artifactRefs: [] as Array<{ id: string }>,
   settingsRow: null as null | { id: string; features: unknown },
   settingsUpdates: [] as Array<Record<string, unknown>>,
+  conformanceCalls: [] as Array<[string, string]>,
 }));
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mocks.requireTenantAdmin,
   requireTenantMember: mocks.requireTenantMember,
+}));
+vi.mock("../../../lib/artifacts/document-conformance.js", async (orig) => ({
+  ...(await orig<
+    typeof import("../../../lib/artifacts/document-conformance.js")
+  >()),
+  summarizePlateConformance: (...args: [string, string]): Promise<unknown> => {
+    mocks.conformanceCalls.push(args);
+    return Promise.resolve({
+      plateSlug: args[1],
+      reportCount: 10,
+      judgedReportCount: 7,
+      pendingCount: 2,
+      errorCount: 1,
+      skippedCount: 0,
+      sections: [
+        {
+          sectionId: "pipeline-health",
+          runCount: 10,
+          presentCount: 9,
+          waivedCount: 0,
+          missingCount: 1,
+          directiveSuggestedRuns: 10,
+          directiveUsedRuns: 6,
+          judgedRuns: 7,
+          judgedThinRuns: 2,
+          assertedNotComputedRuns: 1,
+        },
+      ],
+      analyses: [
+        { key: "funnel-conversion", declaredRuns: 10, computedRuns: 6 },
+      ],
+    });
+  },
 }));
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: mocks.resolveCallerTenantId,
@@ -104,6 +138,7 @@ import {
 } from "./shared.js";
 import { documentPlates } from "./documentPlates.query.js";
 import { documentPlatePreview } from "./documentPlatePreview.query.js";
+import { plateConformance } from "./plateConformance.query.js";
 import { saveDocumentPlate } from "./saveDocumentPlate.mutation.js";
 import { deleteDocumentPlate } from "./deleteDocumentPlate.mutation.js";
 import { updateTenantDocumentPalette } from "./updateTenantDocumentPalette.mutation.js";
@@ -122,6 +157,7 @@ beforeEach(() => {
   mocks.artifactRefs = [];
   mocks.settingsRow = null;
   mocks.settingsUpdates = [];
+  mocks.conformanceCalls = [];
   mocks.requireTenantMember.mockResolvedValue("member");
   mocks.requireTenantAdmin.mockResolvedValue("admin");
 });
@@ -978,5 +1014,41 @@ describe("GraphQL contract surface (THINK-188 U4)", () => {
     // last enforced (required-if-material) section.
     expect(result.html).toContain("82.4%");
     expect(result.html).toContain("Section omitted");
+  });
+});
+
+describe("plateConformance query (THINK-189 U6)", () => {
+  it("returns the summary with AWSJSON-stringified sections/analyses", async () => {
+    const result = await plateConformance(
+      null,
+      { slug: "sales-rep-review" },
+      ctx,
+    );
+    expect(mocks.requireTenantMember).toHaveBeenCalledWith(ctx, TENANT);
+    expect(mocks.conformanceCalls).toEqual([[TENANT, "sales-rep-review"]]);
+    expect(result).toMatchObject({
+      plateSlug: "sales-rep-review",
+      reportCount: 10,
+      judgedReportCount: 7,
+    });
+    const sections = JSON.parse(result.sections as string);
+    expect(sections[0]).toMatchObject({
+      sectionId: "pipeline-health",
+      directiveUsedRuns: 6,
+      judgedRuns: 7,
+    });
+    expect(JSON.parse(result.analyses as string)[0].key).toBe(
+      "funnel-conversion",
+    );
+  });
+
+  it("rejects non-members", async () => {
+    mocks.requireTenantMember.mockRejectedValue(
+      new Error("Tenant member role required"),
+    );
+    await expect(
+      plateConformance(null, { slug: "sales-rep-review" }, ctx),
+    ).rejects.toThrow(/member role/);
+    expect(mocks.conformanceCalls).toEqual([]);
   });
 });

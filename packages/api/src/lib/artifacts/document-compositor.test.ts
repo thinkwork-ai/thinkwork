@@ -815,3 +815,193 @@ reason: No stage-level pipeline data is connected for this rep.
     expect(result.renderHtml).not.toContain("Section waived");
   });
 });
+
+describe("sectionFacts — structural conformance facts (THINK-189 U1)", () => {
+  const FACTS_PLATE: CompositorPlate = {
+    ...REPORT_PLATE,
+    sections: [
+      {
+        id: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "suggested",
+        guidance: "Stage-by-stage funnel with conversion rates.",
+        suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+      },
+      {
+        id: "quota-attainment",
+        title: "Quota Attainment",
+        tier: "required",
+        guidance: "Attainment vs target for the period.",
+      },
+      {
+        id: "coaching-notes",
+        title: "Coaching Notes",
+        tier: "required-if-material",
+        guidance: "Specific behaviors to keep or change.",
+      },
+    ],
+    analyses: [
+      {
+        key: "funnel-conversion",
+        op: "funnel_conversion",
+        presentation: { directive: "chart", chartType: "funnel" },
+      },
+    ],
+  };
+  const stubEngine: DirectiveEngine = () => ({
+    ok: true,
+    html: '<div class="stats"></div>',
+    containsSvg: false,
+  });
+
+  function factsOf(markdownBody: string, plate = FACTS_PLATE) {
+    const result = compileDocument(
+      { plate, title: "Rep Review", abstract: "x", markdownBody },
+      stubEngine,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("compile failed");
+    expect(result.sectionFacts).toBeDefined();
+    return result.sectionFacts!;
+  }
+
+  const BASE_DOC = `## Quota Attainment
+
+Attainment held at 82% of target.
+
+## Coaching Notes
+
+Keep the discovery-call cadence.
+`;
+
+  it("marks a present section with a skipped suggested directive and an uncomputed analysis (AE1)", () => {
+    const facts = factsOf(`${BASE_DOC}
+## Pipeline Health
+
+Funnel narrative without the chart.
+`);
+    const pipeline = facts.sections.find((s) => s.id === "pipeline-health")!;
+    expect(pipeline.status).toBe("present");
+    expect(pipeline.bodyChars).toBeGreaterThan(0);
+    expect(pipeline.suggestedDirectives).toEqual([
+      { kind: "chart", chartType: "funnel", used: false },
+    ]);
+    expect(facts.analyses).toEqual([
+      { key: "funnel-conversion", computed: false, sectionId: null },
+    ]);
+  });
+
+  it("marks a suggested directive used and an analysis computed when rendered in-section", () => {
+    const facts = factsOf(`${BASE_DOC}
+## Pipeline Health
+
+\`\`\`tw:chart
+stages: []
+\`\`\`
+
+\`\`\`tw:analysis
+analysis: funnel-conversion
+stages:
+  - { label: Leads, count: 120 }
+  - { label: Won, count: 12 }
+\`\`\`
+`);
+    const pipeline = facts.sections.find((s) => s.id === "pipeline-health")!;
+    expect(pipeline.suggestedDirectives[0].used).toBe(true);
+    expect(facts.analyses).toEqual([
+      {
+        key: "funnel-conversion",
+        computed: true,
+        sectionId: "pipeline-health",
+      },
+    ]);
+  });
+
+  it("marks a waived section waived with zero body chars", () => {
+    const facts = factsOf(`## Quota Attainment
+
+Attainment held at 82% of target.
+
+\`\`\`tw:waiver
+section: coaching-notes
+reason: No coaching sessions were held this period.
+\`\`\`
+`);
+    const coaching = facts.sections.find((s) => s.id === "coaching-notes")!;
+    expect(coaching.status).toBe("waived");
+    expect(coaching.tier).toBe("required-if-material");
+    expect(coaching.bodyChars).toBe(0);
+    const pipeline = facts.sections.find((s) => s.id === "pipeline-health")!;
+    expect(pipeline.status).toBe("missing");
+  });
+
+  it("keeps facts manifest-shaped: extra headings never appear, manifest sections still count", () => {
+    const facts = factsOf(`${BASE_DOC}
+## Appendix
+
+Extra content outside the manifest.
+`);
+    expect(facts.sections.map((s) => s.id).sort()).toEqual([
+      "coaching-notes",
+      "pipeline-health",
+      "quota-attainment",
+    ]);
+    const quota = facts.sections.find((s) => s.id === "quota-attainment")!;
+    expect(quota.status).toBe("present");
+    expect(quota.bodyChars).toBeGreaterThan(0);
+  });
+
+  it("contract-less plates carry no sectionFacts (AE5)", () => {
+    const result = compileDocument({
+      plate: REPORT_PLATE,
+      title: "Q3 — Report",
+      abstract: "x",
+      markdownBody: REPORT_MARKDOWN,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect("sectionFacts" in result).toBe(false);
+  });
+
+  it("attributes body to the exact-id match only under duplicate heading slugs", () => {
+    const facts = factsOf(`${BASE_DOC}
+## Pipeline Health
+
+First occurrence body.
+
+## Pipeline Health
+
+Second occurrence gets the -1 suffix and is not a manifest section.
+`);
+    const pipeline = facts.sections.find((s) => s.id === "pipeline-health")!;
+    expect(pipeline.status).toBe("present");
+    // Only the exact-id section's body counts; the "-1" duplicate closed it.
+    expect(pipeline.bodyChars).toBe("First occurrence body.".length);
+  });
+
+  it("attributes nested subheading content to the enclosing manifest section", () => {
+    const facts = factsOf(`${BASE_DOC}
+## Pipeline Health
+
+Top-level narrative.
+
+### Stage Detail
+
+Deeper dive under the same manifest section.
+
+## Appendix
+
+Sibling heading closes the section.
+`);
+    const pipeline = facts.sections.find((s) => s.id === "pipeline-health")!;
+    const ownProse =
+      "Top-level narrative.".length +
+      "Deeper dive under the same manifest section.".length;
+    // The h3 (and its heading line) attribute to the enclosing section...
+    expect(pipeline.bodyChars).toBeGreaterThanOrEqual(ownProse);
+    // ...but the sibling "## Appendix" closed it: appendix prose not counted.
+    expect(pipeline.bodyChars).toBeLessThan(
+      ownProse + "Sibling heading closes the section.".length,
+    );
+  });
+});
