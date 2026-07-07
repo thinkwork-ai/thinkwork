@@ -30,6 +30,7 @@ import {
   agentLoops,
   agentWakeupRequests,
   agents,
+  artifacts,
   inboxItems,
   spaces,
   users,
@@ -49,6 +50,11 @@ const ACTIVE_RUN_STATUSES = [
  * later failure raise a fresh item. Mirrors routine-exec-git's
  * `routine_infra_failure` dedup pattern. */
 const HEADLESS_FAILURE_INBOX_TYPE = "automation_headless_failure";
+/** THINK-155 U3: a scheduled document refresh failed — gate/authorization
+ * rejection inside the emission handler, or a terminal run failure for a run
+ * whose payload carried a bound documentId. Same one-OPEN-item-per-automation
+ * dedup as automation_headless_failure. */
+export const DOCUMENT_REFRESH_FAILURE_INBOX_TYPE = "document_refresh_failed";
 const INBOX_OPEN_STATUS = "pending";
 
 /**
@@ -387,6 +393,99 @@ export function createDbAgentLoopLedger(
   }
 
   return ledger;
+}
+
+/**
+ * THINK-155 U3: record a failed scheduled document refresh — stamp
+ * `artifacts.refresh_failed_at` (when the artifact is known) and raise a
+ * deduplicated `document_refresh_failed` inbox item, one OPEN item per
+ * automation (repeat failures update the pending item: failureCount++,
+ * lastFailureAt), mirroring `raiseHeadlessFailureItem`. Shared by the
+ * emission handler (gate/authz rejections) and the finalize projection
+ * (terminal run failures for documentId-carrying runs).
+ */
+export async function recordDocumentRefreshFailure(
+  db: Database,
+  input: {
+    tenantId: string;
+    agentLoopId: string;
+    loopName?: string | null;
+    runId: string;
+    errorCode: string;
+    errorMessage: string;
+    artifactId: string | null;
+    now: Date;
+  },
+): Promise<void> {
+  if (input.artifactId) {
+    await db
+      .update(artifacts)
+      .set({ refresh_failed_at: input.now, updated_at: input.now })
+      .where(
+        and(
+          eq(artifacts.id, input.artifactId),
+          eq(artifacts.tenant_id, input.tenantId),
+        ),
+      );
+  }
+
+  const [pending] = await db
+    .select({ id: inboxItems.id, config: inboxItems.config })
+    .from(inboxItems)
+    .where(
+      and(
+        eq(inboxItems.tenant_id, input.tenantId),
+        eq(inboxItems.type, DOCUMENT_REFRESH_FAILURE_INBOX_TYPE),
+        eq(inboxItems.entity_id, input.agentLoopId),
+        eq(inboxItems.status, INBOX_OPEN_STATUS),
+      ),
+    )
+    .limit(1);
+  const description = `${input.errorCode}: ${input.errorMessage}`.slice(
+    0,
+    2000,
+  );
+  if (pending) {
+    const prevConfig =
+      pending.config && typeof pending.config === "object"
+        ? (pending.config as Record<string, unknown>)
+        : {};
+    const prevCount = Number(prevConfig.failureCount ?? 1);
+    await db
+      .update(inboxItems)
+      .set({
+        description,
+        config: {
+          ...prevConfig,
+          runId: input.runId,
+          errorCode: input.errorCode,
+          errorMessage: input.errorMessage,
+          ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+          failureCount: prevCount + 1,
+          lastFailureAt: input.now.toISOString(),
+        },
+        updated_at: input.now,
+      })
+      .where(eq(inboxItems.id, pending.id));
+    return;
+  }
+  await db.insert(inboxItems).values({
+    tenant_id: input.tenantId,
+    type: DOCUMENT_REFRESH_FAILURE_INBOX_TYPE,
+    status: INBOX_OPEN_STATUS,
+    title: `Document refresh failed: ${input.loopName ?? input.agentLoopId}`,
+    description,
+    entity_type: "agent_loop",
+    entity_id: input.agentLoopId,
+    config: {
+      runId: input.runId,
+      errorCode: input.errorCode,
+      errorMessage: input.errorMessage,
+      artifactId: input.artifactId,
+      failureCount: 1,
+      lastFailureAt: input.now.toISOString(),
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

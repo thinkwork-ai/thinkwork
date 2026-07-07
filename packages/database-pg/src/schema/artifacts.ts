@@ -81,6 +81,13 @@ export const artifacts = pgTable(
     // sidebar Favorites section.
     favorited_at: timestamp("favorited_at", { withTimezone: true }),
 
+    // THINK-155 U3: scheduled-refresh observability. Stamped ONLY by the
+    // run-derived emission path — human-turn emissions never touch them.
+    // Success sets last_refresh_at and clears refresh_failed_at; a failed
+    // scheduled refresh sets refresh_failed_at (last good head stays).
+    last_refresh_at: timestamp("last_refresh_at", { withTimezone: true }),
+    refresh_failed_at: timestamp("refresh_failed_at", { withTimezone: true }),
+
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

@@ -7,7 +7,7 @@ import {
   type DispatchableAgentLoopVersion,
 } from "@thinkwork/agent-loops-core";
 import { and, eq } from "drizzle-orm";
-import { getDb } from "@thinkwork/database-pg";
+import { getDb, recordDocumentRefreshFailure } from "@thinkwork/database-pg";
 import {
   agentLoopIterations,
   agentLoopRuns,
@@ -24,6 +24,13 @@ import {
 export interface AgentLoopFinalizeContext {
   runId: string;
   iterationId: string;
+  /**
+   * THINK-155 U3/KTD4: the bound document's artifact id, present only when
+   * the run's wakeup payload carried one (inert until THINK-213's binding
+   * config lands). A terminal run failure for a documentId-carrying run
+   * raises a `document_refresh_failed` inbox item.
+   */
+  documentId: string | null;
 }
 
 export interface ProjectAgentLoopFinalizeInput {
@@ -90,6 +97,10 @@ export interface AgentLoopFinalizeLedger {
     runId: string;
     iterationId: string;
     iterationNumber: number;
+    /** THINK-155 U5: bound document carried forward from the prior turn's
+     * payload so resume iterations keep the same enforcement (payload-parity
+     * rule). Null when the run has no binding. */
+    documentId?: string | null;
     now: Date;
   }): Promise<{ id: string }>;
   markIterationWakeup(input: {
@@ -104,6 +115,24 @@ export interface AgentLoopFinalizeLedger {
     runId: string;
     iterationId: string;
     message: string;
+    now: Date;
+  }): Promise<void>;
+  /**
+   * THINK-155 U3: NEW wiring (the finalize ledger had no inbox capability
+   * before) — stamp `artifacts.refresh_failed_at` and raise the deduplicated
+   * `document_refresh_failed` inbox item when a documentId-carrying run ends
+   * in terminal failure. Mirrors the dispatch ledger's
+   * `raiseHeadlessFailureItem` shape; optional so test ledgers without inbox
+   * concerns keep compiling.
+   */
+  recordDocumentRefreshFailure?(input: {
+    tenantId: string;
+    agentLoopId: string;
+    loopName?: string | null;
+    runId: string;
+    errorCode: string;
+    errorMessage: string;
+    artifactId: string | null;
     now: Date;
   }): Promise<void>;
 }
@@ -192,6 +221,7 @@ export async function projectAgentLoopFinalize(
         runId: loaded.run.id,
         iterationId: nextIteration.id,
         iterationNumber: nextIterationNumber,
+        documentId: context.documentId,
         now,
       });
       nextWakeupId = nextWakeup.id;
@@ -232,6 +262,38 @@ export async function projectAgentLoopFinalize(
     };
   }
 
+  // THINK-155 U3 (KTD5b): a documentId-carrying run that ends in terminal
+  // failure means the scheduled refresh never landed — surface it. Inert
+  // until a dispatch path sets payload documentId (THINK-213 binding).
+  // Best-effort: an inbox fault never fails the projection.
+  if (
+    context.documentId &&
+    decision.terminal &&
+    decision.runStatus !== "completed" &&
+    projectionLedger.recordDocumentRefreshFailure
+  ) {
+    try {
+      await projectionLedger.recordDocumentRefreshFailure({
+        tenantId: input.tenantId,
+        agentLoopId: loaded.loop.id,
+        loopName: loaded.loop.name ?? null,
+        runId: loaded.run.id,
+        errorCode: decision.errorCode ?? decision.runStatus,
+        errorMessage:
+          decision.errorMessage ??
+          decision.terminalReason ??
+          "scheduled run failed before the document refresh completed",
+        artifactId: context.documentId,
+        now,
+      });
+    } catch (err) {
+      console.error(
+        "[agent-loop-finalize] document refresh-failure record failed (best-effort):",
+        err,
+      );
+    }
+  }
+
   return {
     status: "projected",
     runId: loaded.run.id,
@@ -255,7 +317,11 @@ export function agentLoopContextFromSnapshot(
   const runId = stringValue(agentLoop.runId);
   const iterationId = stringValue(agentLoop.iterationId);
   if (!runId || !iterationId) return null;
-  return { runId, iterationId };
+  return {
+    runId,
+    iterationId,
+    documentId: stringValue(agentLoop.documentId) ?? null,
+  };
 }
 
 export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger {
@@ -476,6 +542,8 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         trigger: {
           family: "manual",
           source: "agent_loop_continue",
+          // THINK-155 U5: keep the bound document on resume payloads.
+          documentId: input.documentId ?? null,
         },
         runId: input.runId,
         iterationId: input.iterationId,
@@ -572,6 +640,10 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
             eq(agentLoops.tenant_id, input.tenantId),
           ),
         );
+    },
+
+    async recordDocumentRefreshFailure(input) {
+      await recordDocumentRefreshFailure(db, input);
     },
   };
 }

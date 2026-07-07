@@ -87,6 +87,7 @@ function fakeLedger(
   nextIterations: unknown[];
   wakeups: unknown[];
   projectionFailures: unknown[];
+  refreshFailures: unknown[];
 } {
   const ledger = {
     iterationUpdates: [] as unknown[],
@@ -94,6 +95,7 @@ function fakeLedger(
     nextIterations: [] as unknown[],
     wakeups: [] as unknown[],
     projectionFailures: [] as unknown[],
+    refreshFailures: [] as unknown[],
     loadContext: vi.fn().mockResolvedValue(loaded),
     updateIteration: vi.fn(async (input: unknown) => {
       ledger.iterationUpdates.push(input);
@@ -112,6 +114,9 @@ function fakeLedger(
     markIterationWakeup: vi.fn(),
     recordProjectionFailure: vi.fn(async (input: unknown) => {
       ledger.projectionFailures.push(input);
+    }),
+    recordDocumentRefreshFailure: vi.fn(async (input: unknown) => {
+      ledger.refreshFailures.push(input);
     }),
   };
   return ledger;
@@ -143,8 +148,24 @@ describe("agentLoopContextFromSnapshot", () => {
       agentLoopContextFromSnapshot({
         agentLoop: { runId: "run-1", iterationId: "iteration-1" },
       }),
-    ).toEqual({ runId: "run-1", iterationId: "iteration-1" });
+    ).toEqual({ runId: "run-1", iterationId: "iteration-1", documentId: null });
     expect(agentLoopContextFromSnapshot({})).toBeNull();
+  });
+
+  it("carries the bound documentId when the payload has one (THINK-155 U3)", () => {
+    expect(
+      agentLoopContextFromSnapshot({
+        agentLoop: {
+          runId: "run-1",
+          iterationId: "iteration-1",
+          documentId: "artifact-9",
+        },
+      }),
+    ).toEqual({
+      runId: "run-1",
+      iterationId: "iteration-1",
+      documentId: "artifact-9",
+    });
   });
 });
 
@@ -252,6 +273,101 @@ describe("projectAgentLoopFinalize", () => {
     });
     expect(ledger.createNextIteration).not.toHaveBeenCalled();
     expect(ledger.enqueueNextWakeup).not.toHaveBeenCalled();
+  });
+
+  it("raises a document refresh failure when a documentId-carrying run fails terminally (THINK-155 U3)", async () => {
+    const ledger = fakeLedger();
+
+    const result = await projectAgentLoopFinalize(
+      {
+        ...baseInput(),
+        contextSnapshot: {
+          agentLoop: {
+            runId: "run-1",
+            iterationId: "iteration-1",
+            documentId: "artifact-9",
+          },
+        },
+        goalRun: null,
+        responseText: "Something broke.",
+        turnStatus: "failed",
+        errorMessage: "boom",
+      },
+      ledger,
+    );
+
+    expect(result).toMatchObject({ status: "projected", runStatus: "failed" });
+    expect(ledger.refreshFailures).toHaveLength(1);
+    expect(ledger.refreshFailures[0]).toMatchObject({
+      tenantId: "tenant-1",
+      agentLoopId: "loop-1",
+      loopName: "Weekly Agent Check-In",
+      runId: "run-1",
+      artifactId: "artifact-9",
+    });
+  });
+
+  it("does not raise a refresh failure on terminal failure without a documentId", async () => {
+    const ledger = fakeLedger();
+
+    await projectAgentLoopFinalize(
+      {
+        ...baseInput(),
+        goalRun: null,
+        responseText: "Something broke.",
+        turnStatus: "failed",
+        errorMessage: "boom",
+      },
+      ledger,
+    );
+
+    expect(ledger.refreshFailures).toHaveLength(0);
+  });
+
+  it("does not raise a refresh failure when a documentId-carrying run completes", async () => {
+    const ledger = fakeLedger();
+
+    await projectAgentLoopFinalize(
+      {
+        ...baseInput(),
+        contextSnapshot: {
+          agentLoop: {
+            runId: "run-1",
+            iterationId: "iteration-1",
+            documentId: "artifact-9",
+          },
+        },
+      },
+      ledger,
+    );
+
+    expect(ledger.refreshFailures).toHaveLength(0);
+  });
+
+  it("an inbox fault never fails the projection (best-effort)", async () => {
+    const ledger = fakeLedger();
+    ledger.recordDocumentRefreshFailure = vi.fn(async () => {
+      throw new Error("inbox down");
+    });
+
+    const result = await projectAgentLoopFinalize(
+      {
+        ...baseInput(),
+        contextSnapshot: {
+          agentLoop: {
+            runId: "run-1",
+            iterationId: "iteration-1",
+            documentId: "artifact-9",
+          },
+        },
+        goalRun: null,
+        turnStatus: "failed",
+        errorMessage: "boom",
+      },
+      ledger,
+    );
+
+    expect(result).toMatchObject({ status: "projected", runStatus: "failed" });
   });
 
   it("is idempotent when the iteration already reached a terminal status", async () => {
