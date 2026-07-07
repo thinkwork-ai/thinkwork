@@ -5959,6 +5959,18 @@ export type PlanRoutineDraftInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type PlateConformanceSummary = {
+  __typename?: "PlateConformanceSummary";
+  analyses: Scalars["AWSJSON"]["output"];
+  errorCount: Scalars["Int"]["output"];
+  judgedReportCount: Scalars["Int"]["output"];
+  pendingCount: Scalars["Int"]["output"];
+  plateSlug: Scalars["ID"]["output"];
+  reportCount: Scalars["Int"]["output"];
+  sections: Scalars["AWSJSON"]["output"];
+  skippedCount: Scalars["Int"]["output"];
+};
+
 /**
  * ThinkWork-owned app overlay state keyed to a trusted plugin app surface and
  * source-system record. Overlay payloads are tenant-shared in v1; created/updated

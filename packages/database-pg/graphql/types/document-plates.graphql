@@ -40,6 +40,27 @@ type DocumentPlate {
   analyses: AWSJSON
 }
 
+# THINK-189: per-plate conformance aggregates over the report corpus.
+# Judge-derived counts carry their own denominator (judgedReportCount /
+# per-section judgedRuns) — judge coverage may lag structural coverage, and
+# rates must never present over a silently smaller sample.
+type PlateConformanceSummary {
+  plateSlug: ID!
+  # Structural denominator: reports aggregated (newest-first, capped).
+  reportCount: Int!
+  # Judge denominator: reports with a complete judge verdict.
+  judgedReportCount: Int!
+  pendingCount: Int!
+  errorCount: Int!
+  skippedCount: Int!
+  # JSON array of per-section aggregates: { sectionId, runCount,
+  # presentCount, waivedCount, missingCount, directiveSuggestedRuns,
+  # directiveUsedRuns, judgedRuns, judgedThinRuns, assertedNotComputedRuns }
+  sections: AWSJSON!
+  # JSON array of { key, declaredRuns, computedRuns }
+  analyses: AWSJSON!
+}
+
 type TenantDocumentPalette {
   light: AWSJSON!
   dark: AWSJSON!

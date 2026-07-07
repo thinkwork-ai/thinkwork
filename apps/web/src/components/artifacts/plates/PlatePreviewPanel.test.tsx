@@ -71,3 +71,28 @@ describe("PlatePreviewPanel", () => {
     expect(screen.getByTestId("plate-preview-empty")).not.toBeNull();
   });
 });
+
+describe("plate detail tab strip (THINK-189 U7)", () => {
+  it("defaults to Preview and switches to the conformance panel", () => {
+    renderPanel();
+    expect(screen.getByTestId("plate-preview-frame")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("plate-detail-tab-conformance"));
+    expect(screen.queryByTestId("plate-preview-frame")).toBeNull();
+    expect(screen.getByTestId("plate-conformance-panel")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("plate-detail-tab-preview"));
+    expect(screen.getByTestId("plate-preview-frame")).toBeTruthy();
+  });
+
+  it("keeps the close action reachable on the conformance tab", () => {
+    const onClose = vi.fn();
+    renderPanel({ onClose });
+    fireEvent.click(screen.getByTestId("plate-detail-tab-conformance"));
+    fireEvent.click(screen.getByTestId("plate-conformance-close"));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("renders no tab strip without a selected plate", () => {
+    renderPanel({ slug: null, html: undefined });
+    expect(screen.queryByTestId("plate-detail-tab-conformance")).toBeNull();
+  });
+});

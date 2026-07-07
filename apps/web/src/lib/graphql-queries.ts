@@ -2854,6 +2854,22 @@ export const DocumentPlatePreviewQuery = gql`
   }
 `;
 
+// THINK-189: per-plate conformance aggregates (sections/analyses are AWSJSON).
+export const PlateConformanceQuery = gql`
+  query PlateConformance($tenantId: ID, $slug: String!) {
+    plateConformance(tenantId: $tenantId, slug: $slug) {
+      plateSlug
+      reportCount
+      judgedReportCount
+      pendingCount
+      errorCount
+      skippedCount
+      sections
+      analyses
+    }
+  }
+`;
+
 export const TenantDocumentPaletteQuery = gql`
   query TenantDocumentPalette($tenantId: ID) {
     tenantDocumentPalette(tenantId: $tenantId) {

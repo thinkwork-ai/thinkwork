@@ -48,6 +48,7 @@ interface Recorded {
   pins: Array<Record<string, unknown>>;
   cards: Array<Record<string, unknown>>;
   waiverWrites: Array<Record<string, unknown>>;
+  conformanceRecords: Array<Record<string, unknown>>;
   memoryIngests: Array<Record<string, unknown>>;
 }
 
@@ -62,6 +63,7 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     pins: [],
     cards: [],
     waiverWrites: [],
+    conformanceRecords: [],
     memoryIngests: [],
   };
   const row: DocumentRow = {
@@ -103,6 +105,11 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     }),
     replaceSectionWaivers: vi.fn(async (input) => {
       recorded.waiverWrites.push(input as unknown as Record<string, unknown>);
+    }),
+    recordConformance: vi.fn(async (input) => {
+      recorded.conformanceRecords.push(
+        input as unknown as Record<string, unknown>,
+      );
     }),
     loadDocumentRow: vi.fn(async () => row),
     hasSpaceWriteRole: vi.fn(async () => true),
@@ -743,5 +750,139 @@ describe("summarizePlateWaivers (THINK-189 seam)", () => {
       plateSlug: "weekly-status",
       count: 1,
     });
+  });
+});
+
+describe("conformance recording (THINK-189 U3)", () => {
+  const MANIFEST_PLATE_ROW = {
+    slug: "rep-check",
+    origin: "tenant" as const,
+    config: {
+      displayName: "Rep Check",
+      useFor: "A lightweight rep review with a two-section manifest.",
+      sections: [
+        {
+          id: "pipeline-health",
+          title: "Pipeline Health",
+          tier: "suggested",
+          guidance: "Stage-by-stage funnel.",
+          suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+        },
+        {
+          id: "summary",
+          title: "Summary",
+          tier: "required",
+          guidance: "Headline outcome.",
+        },
+      ],
+    },
+    hidden: false,
+  };
+
+  function conformanceDeps(overrides: Partial<DocumentEmissionDeps> = {}) {
+    return makeDeps({
+      resolvePlate: vi.fn(async ({ tenantId, slug }) => {
+        const plate = await resolvePlate(tenantId, slug, {
+          getPlateRow: async (_t: string, s: string) =>
+            s === "rep-check" ? (MANIFEST_PLATE_ROW as never) : null,
+          listPlateRows: async () => [MANIFEST_PLATE_ROW as never],
+          getTenantDocumentPalette: async () => ({ light: {}, dark: {} }),
+        });
+        const visibleSlugs = PLATFORM_PLATES.map((p) => p.slug);
+        return plate
+          ? ({ ok: true, plate, visibleSlugs } as const)
+          : ({ ok: false, visibleSlugs } as const);
+      }),
+      ...overrides,
+    });
+  }
+
+  const CONFORMING_DOC = {
+    documentId: "doc-1",
+    genre: "rep-check",
+    title: "Rep Review — Q3",
+    abstract: "Quarterly review.",
+    status: "draft",
+    digestMarkdown: `## Summary
+
+Attainment held at 82% of target.
+
+## Pipeline Health
+
+Funnel narrative without the chart.
+`,
+  };
+
+  it("records a report with facts joined from the compositor (AE1 shape)", async () => {
+    const { deps, recorded } = conformanceDeps();
+    const result = await emit(CONFORMING_DOC, deps);
+    expect(result.body).toMatchObject({ ok: true, status: "draft" });
+    expect(recorded.conformanceRecords).toHaveLength(1);
+    const record = recorded.conformanceRecords[0] as {
+      tenantId: string;
+      plateSlug: string;
+      documentStatus: string;
+      sectionFacts: {
+        sections: Array<Record<string, unknown>>;
+      };
+      manifestSnapshot: { sections: Array<{ id: string }> };
+    };
+    expect(record.tenantId).toBe(TENANT_ID);
+    expect(record.plateSlug).toBe("rep-check");
+    expect(record.documentStatus).toBe("draft");
+    const pipeline = record.sectionFacts.sections.find(
+      (s) => s.id === "pipeline-health",
+    )!;
+    expect(pipeline).toMatchObject({
+      status: "present",
+      suggestedDirectives: [
+        { kind: "chart", chartType: "funnel", used: false },
+      ],
+    });
+    expect(record.manifestSnapshot.sections.map((s) => s.id)).toEqual([
+      "pipeline-health",
+      "summary",
+    ]);
+  });
+
+  it("a finalized emission records documentStatus final", async () => {
+    const { deps, recorded } = conformanceDeps();
+    const result = await emit({ ...CONFORMING_DOC, status: "final" }, deps);
+    expect(result.body).toMatchObject({ ok: true, status: "final" });
+    expect(recorded.conformanceRecords).toHaveLength(1);
+    expect(recorded.conformanceRecords[0]).toMatchObject({
+      documentStatus: "final",
+    });
+  });
+
+  it("a contract-less plate emission never records (AE5)", async () => {
+    const { deps, recorded } = makeDeps();
+    const result = await emit(VALID_DOCUMENT, deps);
+    expect(result.body).toMatchObject({ ok: true });
+    expect(recorded.conformanceRecords).toHaveLength(0);
+  });
+
+  it("a recorder failure logs and the emission still succeeds (R3)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { deps } = conformanceDeps({
+      recordConformance: vi.fn(async () => {
+        throw new Error("insert exploded");
+      }),
+    });
+    const result = await emit(CONFORMING_DOC, deps);
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({ ok: true });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("conformance record failed"),
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("re-emitting the same document records again (append, not head-rewrite)", async () => {
+    const { deps, recorded } = conformanceDeps();
+    await emit(CONFORMING_DOC, deps);
+    await emit(CONFORMING_DOC, deps);
+    expect(recorded.conformanceRecords).toHaveLength(2);
   });
 });

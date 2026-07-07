@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useClient, useMutation } from "urql";
+import { useClient, useMutation, useQuery } from "urql";
 import {
   Button,
   Checkbox,
@@ -38,9 +38,11 @@ import type { DocumentPlateDiagnostic } from "@/gql/graphql";
 import {
   DeleteDocumentPlateMutation,
   DocumentPlatePreviewQuery,
+  PlateConformanceQuery,
   SaveDocumentPlateMutation,
 } from "@/lib/graphql-queries";
 import { PlatePreviewFrame } from "./PlatePreviewPanel";
+import { parseConformanceSummary } from "./PlateConformancePanel";
 import { PlateContentTab } from "./PlateContentTab";
 import {
   analysisRowsFromContract,
@@ -251,6 +253,25 @@ export function PlateEditDialog({
     slug: open && previewSlug ? previewSlug : null,
     draftConfig,
   });
+
+  // THINK-189 R8: measured section stats for existing plates (edit mode
+  // only — new/cloned plates have no corpus). Display-only evidence.
+  const [conformanceResult] = useQuery<{ plateConformance?: unknown }>({
+    query: PlateConformanceQuery,
+    variables: {
+      tenantId,
+      slug: isEdit ? (mode as { plate: PlateItem }).plate.slug : "",
+    },
+    requestPolicy: "cache-and-network",
+    pause: !open || !isEdit,
+  });
+  const measuredBySection = useMemo(() => {
+    const summary = parseConformanceSummary(
+      conformanceResult.data?.plateConformance ?? null,
+    );
+    if (!summary || summary.reportCount === 0) return null;
+    return Object.fromEntries(summary.sections.map((s) => [s.sectionId, s]));
+  }, [conformanceResult.data]);
 
   function setField<K extends keyof PlateFormState>(
     key: K,
@@ -573,6 +594,7 @@ export function PlateEditDialog({
                   analyses={form.analysesRows}
                   isPlatform={isPlatform}
                   allowedDirectives={allowedDirectives}
+                  measured={measuredBySection}
                   onSectionsChange={(rows) => setField("sections", rows)}
                   onAnalysesChange={(rows) => setField("analysesRows", rows)}
                 />
