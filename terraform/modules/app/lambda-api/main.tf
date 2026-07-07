@@ -20,7 +20,12 @@ data "aws_caller_identity" "current" {}
 
 locals {
   okf_efs_vpc_enabled = length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
-  api_base_url        = var.custom_domain != "" ? "https://${var.custom_domain}" : trimsuffix(aws_apigatewayv2_stage.default.invoke_url, "/")
+  # Constructed rather than read from aws_apigatewayv2_stage.default.invoke_url
+  # (the two are identical for an HTTP API's $default stage). Reading it off
+  # the stage made every Lambda's env depend on the stage, which forbids the
+  # stage's route_settings depending on the routes (THINK-208 throttle) —
+  # UpdateStage would race route creation and 404 on fresh applies.
+  api_base_url = var.custom_domain != "" ? "https://${var.custom_domain}" : "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
 }
 
 ################################################################################
@@ -56,6 +61,12 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_rate_limit  = 10
     throttling_burst_limit = 20
   }
+
+  # UpdateStage 404s ("Unable to find Route by key … within the provided
+  # RouteSettings") if the stage update races the route creation — Terraform
+  # sees no reference edge between route_settings.route_key and the route
+  # resource, so make the ordering explicit.
+  depends_on = [aws_apigatewayv2_route.handler]
 
   tags = {
     Name = "thinkwork-${var.stage}-api-default"
