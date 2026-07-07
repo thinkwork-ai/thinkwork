@@ -41,12 +41,16 @@ import {
   deriveGraphClassification,
   endpointId,
   expandNeighborhood,
+  initialCameraZ,
+  labelsVisibleAtZoom,
   normalizeGraphSearch,
   DEFAULT_FOCUS_CAP,
   DEFAULT_FOCUS_DEGREE,
   type GraphClassification,
   type GraphFocusState,
+  type LabelMode,
 } from "./graph-utils.js";
+import { makeEdgeLabelSprite } from "./three-label-sprite.js";
 import {
   PAGE_TYPES,
   PAGE_TYPE_FORCE_COLORS,
@@ -434,6 +438,82 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       return () => window.removeEventListener("keydown", onKeyDown);
     }, []);
 
+    // Label visibility: `auto` follows the zoom gate in the overview and
+    // lights lit-set labels in focus; `on`/`off` override absolutely.
+    const nodeLabelModeRef = useRef<LabelMode>("auto");
+    const linkLabelModeRef = useRef<LabelMode>("auto");
+    const labelGateRef = useRef(true);
+    const graphDataRef = useRef(graphData);
+    graphDataRef.current = graphData;
+
+    const nodeLabelVisible = useCallback((nodeId: string) => {
+      const mode = nodeLabelModeRef.current;
+      if (mode === "on") return true;
+      if (mode === "off") return false;
+      const focusState = focusRef.current;
+      if (focusState) return focusState.litIds.has(nodeId);
+      return labelGateRef.current;
+    }, []);
+
+    const linkLabelVisible = useCallback((link: any) => {
+      const mode = linkLabelModeRef.current;
+      if (mode === "off") return false;
+      const focusState = focusRef.current;
+      if (focusState) {
+        return (
+          focusState.litIds.has(endpointId(link.source)) &&
+          focusState.litIds.has(endpointId(link.target))
+        );
+      }
+      return mode === "on" ? labelGateRef.current : false;
+    }, []);
+
+    // Mutates stashed sprite visibility in place — same no-restart
+    // discipline as the opacity effect.
+    const applyLabelVisibility = useCallback(() => {
+      for (const n of graphDataRef.current.nodes as any[]) {
+        if (n.__labelSprite) n.__labelSprite.visible = nodeLabelVisible(n.id);
+      }
+      for (const l of graphDataRef.current.links as any[]) {
+        if (l.__labelSprite) l.__labelSprite.visible = linkLabelVisible(l);
+      }
+    }, [nodeLabelVisible, linkLabelVisible]);
+
+    // Zoom gate: 3D mode has no onZoom event, so listen (throttled) on the
+    // controls' change event and read the camera distance.
+    useEffect(() => {
+      const fg = fgRef.current;
+      if (!fg || !dims) return;
+      const controls = fg.controls?.();
+      const nodeCount = graphDataRef.current.nodes.length;
+      labelGateRef.current = labelsVisibleAtZoom(
+        // Falls back to the initial framing distance when this runs before
+        // camera init (z still 0).
+        fg.camera?.()?.position?.z || initialCameraZ(nodeCount),
+        nodeCount,
+      );
+      applyLabelVisibility();
+      if (!controls?.addEventListener) return;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const onChange = () => {
+        if (timer) return;
+        timer = setTimeout(() => {
+          timer = null;
+          const count = graphDataRef.current.nodes.length;
+          const gate = labelsVisibleAtZoom(fg.camera().position.z, count);
+          if (gate !== labelGateRef.current) {
+            labelGateRef.current = gate;
+            applyLabelVisibility();
+          }
+        }, 150);
+      };
+      controls.addEventListener("change", onChange);
+      return () => {
+        if (timer) clearTimeout(timer);
+        controls.removeEventListener("change", onChange);
+      };
+    }, [dims, graphData, applyLabelVisibility]);
+
     getNodeWithEdgesRef.current = (nodeId: string) => {
       const node = graphData.nodes.find((n: any) => n.id === nodeId);
       if (!node) return null;
@@ -509,6 +589,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.scale.set(r * 3, r * 3, 1);
       sprite.position.set(0, 0, 0);
+      sprite.visible = nodeLabelVisible(node.id);
       group.add(sprite);
 
       // Colored outline ring — visible only on 1-hop neighbors of a
@@ -543,9 +624,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       node.__sphereMat = material;
       node.__spriteMat = spriteMaterial;
       node.__ringMat = ringMaterial;
+      node.__labelSprite = sprite;
 
       return group;
-    }, []);
+    }, [nodeLabelVisible]);
 
     useEffect(() => {
       for (const n of graphData.nodes as any[]) {
@@ -556,8 +638,11 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         if (n.__spriteMat) n.__spriteMat.opacity = sphereOp;
         if (n.__ringMat) n.__ringMat.opacity = ringOp;
       }
+      // Focus flips which labels are lit; refresh() also re-runs the link
+      // object accessor so lit edges gain/drop their label sprites.
+      applyLabelVisibility();
       fgRef.current?.refresh?.();
-    }, [classification, graphData]);
+    }, [classification, graphData, applyLabelVisibility]);
 
     useEffect(() => {
       const fg = fgRef.current;
@@ -612,11 +697,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       // Scale starting distance with node count so large graphs start
       // framed. No post-settle zoom — zoomToFit over-corrects and shoves
       // the whole layout into a tiny center blob.
-      const nodeCount = graphData.nodes.length;
-      const initialZ = Math.max(
-        800,
-        Math.min(6000, 100 * Math.sqrt(nodeCount)),
-      );
+      const initialZ = initialCameraZ(graphData.nodes.length);
       camera.position.set(0, 0, initialZ);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, 0);
@@ -713,6 +794,37 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
               : "rgba(255,255,255,0.1)"
           }
           linkLabel={(link: any) => link.label || "references"}
+          linkThreeObjectExtend={true}
+          linkThreeObject={(link: any) => {
+            // Persistent edge-label sprites exist only where they can show:
+            // the focused lit set (auto) or the zoom-gated overview (mode
+            // "on"). Everything else returns nothing — at 10k+ nodes,
+            // sprite-per-edge is the perf cliff.
+            const mode = linkLabelModeRef.current;
+            const focusState = focusRef.current;
+            const lit =
+              !!focusState &&
+              focusState.litIds.has(endpointId(link.source)) &&
+              focusState.litIds.has(endpointId(link.target));
+            if (mode === "off" || (!lit && mode !== "on")) {
+              link.__labelSprite = undefined;
+              return undefined as unknown as THREE.Object3D;
+            }
+            const sprite = makeEdgeLabelSprite(link.label || "references");
+            sprite.visible = linkLabelVisible(link);
+            link.__labelSprite = sprite;
+            return sprite;
+          }}
+          linkPositionUpdate={(obj: any, coords: any) => {
+            if (!obj) return false;
+            const { start, end } = coords;
+            obj.position.set(
+              (start.x + end.x) / 2,
+              (start.y + end.y) / 2,
+              ((start.z ?? 0) + (end.z ?? 0)) / 2,
+            );
+            return false;
+          }}
           nodeLabel={(node: any) =>
             `${node.label}${
               node.displayType || node.entityType

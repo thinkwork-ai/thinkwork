@@ -10,6 +10,8 @@ import {
   composeGraphClassification,
   computeCommunityAnchors,
   carryNodePositions,
+  initialCameraZ,
+  labelsVisibleAtZoom,
 } from "./graph-utils.js";
 
 describe("endpointId", () => {
@@ -451,5 +453,37 @@ describe("carryNodePositions", () => {
     expect(carryNodePositions(null, next)).toBe(next);
     expect(carryNodePositions([], next)).toBe(next);
     expect((next[0] as any).x).toBeUndefined();
+  });
+});
+
+describe("labelsVisibleAtZoom", () => {
+  it("small graphs always show labels regardless of zoom", () => {
+    expect(labelsVisibleAtZoom(999999, 150)).toBe(true);
+    expect(labelsVisibleAtZoom(50, 3)).toBe(true);
+  });
+
+  it("large graphs hide labels at the initial framing distance", () => {
+    const nodeCount = 10000;
+    expect(labelsVisibleAtZoom(initialCameraZ(nodeCount), nodeCount)).toBe(
+      false,
+    );
+  });
+
+  it("large graphs show labels once zoomed close", () => {
+    expect(labelsVisibleAtZoom(500, 10000)).toBe(true);
+  });
+
+  it("threshold never drops below the readable floor", () => {
+    // 200 nodes: initialZ ~1414, quarter = ~354 < 700 floor.
+    expect(labelsVisibleAtZoom(699, 200)).toBe(true);
+    expect(labelsVisibleAtZoom(701, 200)).toBe(false);
+  });
+});
+
+describe("initialCameraZ", () => {
+  it("clamps between 800 and 6000", () => {
+    expect(initialCameraZ(1)).toBe(800);
+    expect(initialCameraZ(10000)).toBe(6000);
+    expect(initialCameraZ(400)).toBe(2000);
   });
 });

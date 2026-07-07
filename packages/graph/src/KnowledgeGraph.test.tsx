@@ -18,6 +18,29 @@ import {
 
 const forceGraphCalls = vi.hoisted(() => [] as any[]);
 const d3ForceCalls = vi.hoisted(() => [] as { name: string; force?: any }[]);
+const cameraMock = vi.hoisted(() => ({
+  position: {
+    x: 0,
+    y: 0,
+    z: 0,
+    set(x: number, y: number, z: number) {
+      this.x = x;
+      this.y = y;
+      this.z = z;
+    },
+  },
+  up: { set: () => {} },
+  lookAt: () => {},
+}));
+const controlsMock = vi.hoisted(() => ({
+  listeners: [] as (() => void)[],
+  addEventListener(_event: string, cb: () => void) {
+    this.listeners.push(cb);
+  },
+  removeEventListener(_event: string, cb: () => void) {
+    this.listeners = this.listeners.filter((l) => l !== cb);
+  },
+}));
 const urqlState = vi.hoisted(() => ({
   result: { fetching: false, data: null as any, error: null as any },
   reexecute: vi.fn(),
@@ -32,12 +55,8 @@ vi.mock("react-force-graph-3d", async () => {
   return {
     default: ReactActual.forwardRef((props: any, ref) => {
       ReactActual.useImperativeHandle(ref, () => ({
-        camera: () => ({
-          position: { set: vi.fn() },
-          up: { set: vi.fn() },
-          lookAt: vi.fn(),
-        }),
-        controls: () => ({}),
+        camera: () => cameraMock,
+        controls: () => controlsMock,
         d3Force: (name: string, force?: any) => {
           d3ForceCalls.push({ name, force });
           return {
@@ -120,6 +139,10 @@ const graphFixture = {
 beforeEach(() => {
   forceGraphCalls.length = 0;
   d3ForceCalls.length = 0;
+  cameraMock.position.x = 0;
+  cameraMock.position.y = 0;
+  cameraMock.position.z = 0;
+  controlsMock.listeners = [];
   urqlState.result = { fetching: false, data: null, error: null };
   urqlState.reexecute.mockClear();
 
@@ -540,6 +563,118 @@ describe("KnowledgeGraph", () => {
         expect.objectContaining({ id: "entity-2" }),
         expect.any(Array),
       );
+    });
+  });
+
+  describe("labels", () => {
+    // 160 nodes (> gate ceiling): "lone-*" isolated, plus a-b linked.
+    const largeFixture = {
+      nodes: [
+        { id: "a", entityId: "a", label: "Node A" },
+        { id: "b", entityId: "b", label: "Node B" },
+        ...Array.from({ length: 158 }, (_, i) => ({
+          id: `lone-${i}`,
+          entityId: `lone-${i}`,
+          label: `Lone ${i}`,
+        })),
+      ],
+      edges: [
+        {
+          id: "e1",
+          relationshipId: "r1",
+          source: "a",
+          target: "b",
+          label: "supports",
+        },
+      ],
+    };
+
+    async function renderLarge() {
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: largeFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+      for (const node of props.graphData.nodes) {
+        node.__labelSprite = { visible: false };
+        node.__sphereMat = { opacity: -1 };
+        node.__spriteMat = { opacity: -1 };
+        node.__ringMat = { opacity: -1 };
+      }
+      return props;
+    }
+
+    it("zoom gate shows labels close up and hides them far out (AE2)", async () => {
+      const props = await renderLarge();
+
+      // Camera init framed the graph at initialZ (~1265) — gate closed.
+      expect(cameraMock.position.z).toBeGreaterThan(800);
+
+      // Zoom in past the threshold.
+      cameraMock.position.z = 400;
+      controlsMock.listeners.forEach((cb) => cb());
+      await waitFor(() =>
+        expect(
+          props.graphData.nodes.every((n: any) => n.__labelSprite.visible),
+        ).toBe(true),
+      );
+
+      // Zoom back out — labels hide again.
+      cameraMock.position.z = 5000;
+      controlsMock.listeners.forEach((cb) => cb());
+      await waitFor(() =>
+        expect(
+          props.graphData.nodes.some((n: any) => n.__labelSprite.visible),
+        ).toBe(false),
+      );
+    });
+
+    it("focus lights lit-node labels at any zoom and only lit-edge label sprites exist (R9/R10)", async () => {
+      const props = await renderLarge();
+
+      // Far zoom, gate closed — no edge label sprites either.
+      expect(props.linkThreeObjectExtend).toBe(true);
+      expect(props.linkThreeObject(props.graphData.links[0])).toBeFalsy();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]); // focus "a"
+      });
+
+      const byId = Object.fromEntries(
+        props.graphData.nodes.map((n: any) => [n.id, n.__labelSprite.visible]),
+      );
+      expect(byId["a"]).toBe(true);
+      expect(byId["b"]).toBe(true);
+      expect(byId["lone-0"]).toBe(false);
+
+      // Lit edge now yields a label sprite; exiting focus removes it.
+      const litSprite = latestForceGraphProps().linkThreeObject(
+        props.graphData.links[0],
+      );
+      expect(litSprite).toBeTruthy();
+      expect(litSprite.visible).toBe(true);
+
+      await act(async () => {
+        latestForceGraphProps().onBackgroundClick();
+      });
+      expect(
+        latestForceGraphProps().linkThreeObject(props.graphData.links[0]),
+      ).toBeFalsy();
+    });
+
+    it("positions edge-label sprites at the link midpoint", async () => {
+      const props = await renderLarge();
+      const set = vi.fn();
+      const keepDefault = props.linkPositionUpdate(
+        { position: { set } },
+        { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 20, z: 0 } },
+        props.graphData.links[0],
+      );
+      expect(set).toHaveBeenCalledWith(5, 10, 0);
+      expect(keepDefault).toBe(false);
     });
   });
 

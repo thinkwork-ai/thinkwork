@@ -56,6 +56,33 @@ export function deriveGraphClassification<TLink extends GraphLinkLike>(
   return { matchedIds, neighborIds };
 }
 
+/** One-shot starting camera distance — scales with node count so large
+ *  graphs start framed. Shared by camera init and the label zoom gate. */
+export function initialCameraZ(nodeCount: number): number {
+  return Math.max(800, Math.min(6000, 100 * Math.sqrt(nodeCount)));
+}
+
+/** Graphs at or below this node count always show labels — gating adds
+ *  nothing when everything fits on screen. */
+export const LABEL_GATE_ALWAYS_MAX_NODES = 150;
+
+/**
+ * Zoom gate for overview node labels (R8): visible on small graphs, and on
+ * large graphs only once the camera is close enough that few nodes remain
+ * on screen. Threshold is relative to the initial framing distance.
+ */
+export function labelsVisibleAtZoom(
+  cameraZ: number,
+  nodeCount: number,
+): boolean {
+  if (nodeCount <= LABEL_GATE_ALWAYS_MAX_NODES) return true;
+  return cameraZ <= Math.max(700, initialCameraZ(nodeCount) * 0.25);
+}
+
+/** Tri-state label visibility control: `auto` follows zoom gating and
+ *  focus defaults; `on`/`off` override absolutely (R11). */
+export type LabelMode = "auto" | "on" | "off";
+
 /** Neighborhood depth lit by Graph Focus Mode. */
 export const DEFAULT_FOCUS_DEGREE = 2;
 /** Above this lit-set size, focus silently degrades to 1 degree (R5). */
