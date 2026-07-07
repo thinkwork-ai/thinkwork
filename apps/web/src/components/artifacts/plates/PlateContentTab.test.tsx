@@ -7,7 +7,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ThemeProvider } from "@thinkwork/ui";
 import { PlateContentTab } from "./PlateContentTab";
-import type { AnalysisRowState, SectionRowState } from "./plate-support";
+import {
+  PLATE_DIRECTIVE_KINDS,
+  type AnalysisRowState,
+  type SectionRowState,
+} from "./plate-support";
 
 afterEach(cleanup);
 
@@ -190,5 +194,11 @@ describe("PlateAnalysisPicker (U6)", () => {
     expect(rows).toHaveLength(2);
     expect(rows[1].op).toBe("ratio_pct");
     expect(rows[1].source).toBe("tenant");
+  });
+});
+
+describe("Plate directive vocabulary", () => {
+  it("includes timeline in the picker option source", () => {
+    expect(PLATE_DIRECTIVE_KINDS).toContain("timeline");
   });
 });

@@ -194,6 +194,7 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
         tier: "required",
         guidance:
           "Commitments for the coming quarter: owners, milestones, and the success measure for each.",
+        suggestedDirectives: [{ kind: "timeline" }],
       },
     ],
     analyses: [
@@ -228,10 +229,10 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
       "--accent-soft": "#271c3a",
       "--accent-text": "#c9b6ea",
     },
-    // Proposals are prose, pricing tables, and verdicts — charts read as
-    // padding in a commercial document (and this gives the library a live
-    // example of directive restriction, AE4).
-    allowedDirectives: ["stats", "verdict-grid"],
+    // Proposals are prose, pricing tables, timelines, and verdicts — charts
+    // read as padding in a commercial document (and this gives the library a
+    // live example of directive restriction, AE4).
+    allowedDirectives: ["stats", "verdict-grid", "timeline"],
     sections: [
       {
         id: "scope-of-work",
@@ -239,6 +240,7 @@ const BUSINESS_PLATES: readonly PlateDefinition[] = [
         tier: "required",
         guidance:
           "What is being delivered, phase by phase, with what is explicitly out of scope.",
+        suggestedDirectives: [{ kind: "timeline" }],
       },
       {
         id: "pricing",

@@ -42,6 +42,7 @@ export const PLATE_DIRECTIVE_KINDS = [
   "stats",
   "verdict-grid",
   "chart",
+  "timeline",
 ] as const;
 
 export type PlateDirectiveKind = (typeof PLATE_DIRECTIVE_KINDS)[number];
