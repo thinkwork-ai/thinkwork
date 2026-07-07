@@ -43,6 +43,7 @@ enum WorkflowVersionStatus {
 
 enum WorkflowBindingType {
   step_functions_routine
+  step_functions_interpreter
   n8n_bridge
   n8n_import
   twenty_crm

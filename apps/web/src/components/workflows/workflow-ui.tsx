@@ -70,6 +70,8 @@ export function sourceLabel(binding?: WorkflowBinding | null): string {
   switch (binding?.bindingType) {
     case "step_functions_routine":
       return "AWS Step";
+    case "step_functions_interpreter":
+      return "ThinkWork";
     case "n8n_bridge":
       return "n8n bridge";
     case "n8n_import":

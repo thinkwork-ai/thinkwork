@@ -26,6 +26,7 @@ import { workflowVersions, workflows } from "./workflows";
 
 export const WORKFLOW_BINDING_TYPES = [
   "step_functions_routine",
+  "step_functions_interpreter",
   "n8n_bridge",
   "n8n_import",
   "twenty_crm",

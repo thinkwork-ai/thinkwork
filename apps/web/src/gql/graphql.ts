@@ -6655,6 +6655,7 @@ export type Query = {
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   piExtensions: Array<PiExtension>;
   pinnedThreads: Array<PinnedThread>;
+  plateConformance: PlateConformanceSummary;
   /** ThinkWork-owned overlay sections for one plugin-app record. */
   pluginAppOverlays: Array<PluginAppOverlay>;
   /**
@@ -7456,6 +7457,12 @@ export type QueryPiExtensionsArgs = {
 export type QueryPinnedThreadsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryPlateConformanceArgs = {
+  slug: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -11504,6 +11511,7 @@ export enum WorkflowBindingType {
   N8nBridge = 'n8n_bridge',
   N8nImport = 'n8n_import',
   Native = 'native',
+  StepFunctionsInterpreter = 'step_functions_interpreter',
   StepFunctionsRoutine = 'step_functions_routine',
   TwentyCrm = 'twenty_crm'
 }
