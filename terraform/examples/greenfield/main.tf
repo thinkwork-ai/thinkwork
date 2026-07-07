@@ -110,12 +110,6 @@ variable "memory_engine" {
   type        = string
   default     = ""
 }
-
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name on the primary Aurora cluster (THINK-220 cutover flag). Empty (default) keeps the legacy layout: Hindsight in the `hindsight` schema of the primary database. Set only after the database exists and its data is migrated."
-  type        = string
-  default     = ""
-}
 variable "twenty_provisioned" {
   description = "Provision the retained Twenty CRM managed-app substrate. Runtime can be parked independently with twenty_runtime_enabled."
   type        = bool
@@ -745,7 +739,6 @@ module "thinkwork" {
   enable_hindsight                            = var.enable_hindsight
   hindsight_database_name                     = var.hindsight_database_name
   memory_engine                               = var.memory_engine
-  hindsight_database_name                     = var.hindsight_database_name
   twenty_provisioned                          = var.twenty_provisioned
   twenty_runtime_enabled                      = var.twenty_runtime_enabled
   twenty_image_uri                            = var.twenty_image_uri
