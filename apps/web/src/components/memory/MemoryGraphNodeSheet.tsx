@@ -9,12 +9,20 @@ import {
   SheetTitle,
 } from "@thinkwork/ui";
 import { parseMemoryTopics, stripTopicTags } from "@/lib/memory-strategy";
+import { RelatedMemories } from "@/components/memory/RelatedMemories";
+import {
+  NodeBadge,
+  RelationshipConnector,
+  hashColor,
+} from "@/components/memory/relationship-badges";
 
 export interface MemoryGraphEdge {
   label: string;
   targetLabel: string;
   targetType: string;
   targetId: string;
+  /** Whether the anchoring node is the edge's source or target. */
+  direction?: "in" | "out";
 }
 
 interface MemoryGraphNodeSheetProps {
@@ -23,6 +31,12 @@ interface MemoryGraphNodeSheetProps {
   historyDepth: number;
   onBack: () => void;
   onEdgeClick: (edge: MemoryGraphEdge) => void;
+  /** Community hue for a node label — supplied by the graph host so
+   *  badges match the canvas colors; falls back to a stable hash hue. */
+  resolveNodeColor?: (label: string) => string | undefined;
+  /** Scope for the related-memories lookup on entity nodes. */
+  tenantId?: string | null;
+  userId?: string | null;
 }
 
 function MemoryContent({ text }: { text: string }) {
@@ -57,8 +71,15 @@ export function MemoryGraphNodeSheet({
   historyDepth,
   onBack,
   onEdgeClick,
+  resolveNodeColor,
+  tenantId,
+  userId,
 }: MemoryGraphNodeSheetProps) {
   const isMemory = node.nodeType === "memory";
+  const currentLabel = isMemory ? "Memory" : node.label;
+  const colorFor = (label: string) =>
+    resolveNodeColor?.(label) ?? hashColor(label);
+
   return (
     <SheetContent className="sm:max-w-lg flex flex-col">
       <SheetHeader className="p-6 pb-0">
@@ -92,7 +113,7 @@ export function MemoryGraphNodeSheet({
         </SheetDescription>
       </SheetHeader>
 
-      <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-6 pt-4 pb-8 space-y-4">
         {isMemory && <MemoryContent text={node.label} />}
 
         {node.latestThreadId && (
@@ -105,40 +126,59 @@ export function MemoryGraphNodeSheet({
           </Link>
         )}
 
+        {!isMemory && (
+          <RelatedMemories
+            tenantId={tenantId}
+            userId={userId}
+            query={node.label}
+          />
+        )}
+
         {edges.length > 0 && (
           <div>
             <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              {isMemory ? "Mentions" : "Mentioned by"}
+              Relationships
             </h4>
-            <div className="space-y-2">
-              {edges.map((edge, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => onEdgeClick(edge)}
-                >
-                  <Badge
-                    variant="outline"
-                    className={`shrink-0 text-[10px] mt-0.5 ${
-                      edge.targetType === "memory"
-                        ? "border-pink-500/30 text-pink-400"
-                        : "border-sky-500/30 text-sky-400"
-                    }`}
+            <div className="space-y-1.5">
+              {edges.map((edge, i) => {
+                const other = stripTopicTags(edge.targetLabel);
+                const currentBadge = (
+                  <NodeBadge
+                    label={currentLabel}
+                    color={colorFor(node.label)}
+                  />
+                );
+                const otherBadge = (
+                  <NodeBadge
+                    label={other}
+                    color={colorFor(edge.targetLabel)}
+                    onClick={() => onEdgeClick(edge)}
+                  />
+                );
+                const connector = (
+                  <RelationshipConnector label={edge.label || "mentions"} />
+                );
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-1.5 overflow-hidden"
                   >
-                    {edge.targetType === "memory" ? "Memory" : "Entity"}
-                  </Badge>
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground truncate">
-                      {stripTopicTags(edge.targetLabel)}
-                    </p>
-                    {edge.label && (
-                      <p className="text-xs text-muted-foreground">
-                        {edge.label}
-                      </p>
+                    {edge.direction === "out" ? (
+                      <>
+                        {currentBadge}
+                        {connector}
+                        {otherBadge}
+                      </>
+                    ) : (
+                      <>
+                        {otherBadge}
+                        {connector}
+                        {currentBadge}
+                      </>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

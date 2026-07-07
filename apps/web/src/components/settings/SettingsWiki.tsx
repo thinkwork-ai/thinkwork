@@ -79,8 +79,7 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
 
   const [searchResult] = useQuery<{
     wikiSearch?:
-      | { score: number; matchedAlias: string | null; page: any }[]
-      | null;
+      { score: number; matchedAlias: string | null; page: any }[] | null;
   }>({
     query: ComputerWikiSearchQuery,
     variables: {
@@ -283,6 +282,9 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
               slug={graphNode.slug}
               title={graphNode.label}
               connectedEdges={graphNodeEdges}
+              resolveNodeColor={(label) =>
+                graphRef.current?.getNodeColorByLabel?.(label)
+              }
               historyDepth={graphNodeHistory.length}
               onBack={() => {
                 const prev = graphNodeHistory[graphNodeHistory.length - 1];

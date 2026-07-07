@@ -501,6 +501,11 @@ export function SettingsMemory({
           <MemoryGraphNodeSheet
             node={graphNode}
             edges={graphNodeEdges}
+            tenantId={effectiveTenantId}
+            userId={requesterUserId}
+            resolveNodeColor={(label) =>
+              graphRef.current?.getNodeColorByLabel?.(label)
+            }
             historyDepth={graphNodeHistory.length}
             onBack={() => {
               const prev = graphNodeHistory[graphNodeHistory.length - 1];

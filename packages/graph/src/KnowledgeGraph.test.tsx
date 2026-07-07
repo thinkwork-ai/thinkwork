@@ -1,5 +1,12 @@
 import React from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   KnowledgeGraph,
@@ -10,6 +17,7 @@ import {
 } from "./KnowledgeGraph.js";
 
 const forceGraphCalls = vi.hoisted(() => [] as any[]);
+const d3ForceCalls = vi.hoisted(() => [] as { name: string; force?: any }[]);
 const urqlState = vi.hoisted(() => ({
   result: { fetching: false, data: null as any, error: null as any },
   reexecute: vi.fn(),
@@ -19,22 +27,20 @@ vi.mock("urql", () => ({
   useQuery: vi.fn(() => [urqlState.result, urqlState.reexecute]),
 }));
 
-vi.mock("react-force-graph-3d", async () => {
+vi.mock("react-force-graph-2d", async () => {
   const ReactActual = await vi.importActual<typeof React>("react");
   return {
     default: ReactActual.forwardRef((props: any, ref) => {
       ReactActual.useImperativeHandle(ref, () => ({
-        camera: () => ({
-          position: { set: vi.fn() },
-          up: { set: vi.fn() },
-          lookAt: vi.fn(),
-        }),
-        controls: () => ({}),
-        d3Force: () => ({
-          strength: () => ({ distanceMax: vi.fn() }),
-          distance: vi.fn(),
-        }),
-        refresh: vi.fn(),
+        d3Force: (name: string, force?: any) => {
+          d3ForceCalls.push({ name, force });
+          return {
+            strength: () => ({ distanceMax: vi.fn() }),
+            distance: vi.fn(),
+          };
+        },
+        zoomToFit: vi.fn(),
+        zoom: vi.fn(),
       }));
       forceGraphCalls.push(props);
       return ReactActual.createElement("div", {
@@ -108,6 +114,7 @@ const graphFixture = {
 
 beforeEach(() => {
   forceGraphCalls.length = 0;
+  d3ForceCalls.length = 0;
   urqlState.result = { fetching: false, data: null, error: null };
   urqlState.reexecute.mockClear();
 
@@ -136,18 +143,84 @@ function latestForceGraphProps() {
   return forceGraphCalls[forceGraphCalls.length - 1];
 }
 
+function makeCtx(record: { fillAlpha?: number; texts: string[] }) {
+  let currentAlpha = 1;
+  return {
+    set globalAlpha(v: number) {
+      currentAlpha = v;
+    },
+    get globalAlpha() {
+      return currentAlpha;
+    },
+    beginPath() {},
+    arc() {},
+    moveTo() {},
+    lineTo() {},
+    closePath() {},
+    fill() {
+      if (record.fillAlpha === undefined || record.fillAlpha === -1) {
+        record.fillAlpha = currentAlpha;
+      }
+    },
+    stroke() {},
+    save() {},
+    restore() {},
+    translate() {},
+    rotate() {},
+    measureText(text: string) {
+      return { width: text.length * 6 };
+    },
+    fillText(text: string) {
+      record.texts.push(text);
+    },
+    font: "",
+    textAlign: "",
+    textBaseline: "",
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 0,
+  };
+}
+
+/** Paint a node and capture fill alpha + label lines. */
+function paintNode(props: any, node: any) {
+  const record = { fillAlpha: -1, texts: [] as string[] };
+  props.nodeCanvasObject({ ...node, x: 0, y: 0 }, makeCtx(record) as any, 1);
+  return record;
+}
+
+/** Paint a link and capture any inline label text. */
+function paintLink(props: any, link: any) {
+  const record = { texts: [] as string[] };
+  props.linkCanvasObject(link, makeCtx(record) as any, 1);
+  return record.texts;
+}
+
+/** Hydrate a link's endpoints to positioned objects (as the sim would). */
+function hydrateLink(link: any) {
+  return {
+    ...link,
+    source: { id: link.source, x: 0, y: 0 },
+    target: { id: link.target, x: 160, y: 0 },
+  };
+}
+
+async function renderGraph(extraProps: Record<string, any> = {}) {
+  urqlState.result = {
+    fetching: false,
+    data: { knowledgeGraphGraph: graphFixture },
+    error: null,
+  };
+  const view = render(
+    <KnowledgeGraph tenantId="tenant-1" threadId="thread-1" {...extraProps} />,
+  );
+  await screen.findByTestId("force-graph");
+  return { view, props: latestForceGraphProps() };
+}
+
 describe("KnowledgeGraph", () => {
   it("maps knowledgeGraphGraph nodes and edges into ForceGraph data", async () => {
-    urqlState.result = {
-      fetching: false,
-      data: { knowledgeGraphGraph: graphFixture },
-      error: null,
-    };
-
-    render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
-
-    await screen.findByTestId("force-graph");
-    const props = latestForceGraphProps();
+    const { props } = await renderGraph();
 
     expect(props.graphData.nodes).toHaveLength(3);
     expect(props.graphData.links).toHaveLength(2);
@@ -172,62 +245,68 @@ describe("KnowledgeGraph", () => {
     ).toBe(3);
   });
 
-  it("does not rebuild graph data or reset ForceGraph callbacks for local filters", async () => {
-    const data = { knowledgeGraphGraph: graphFixture };
-    urqlState.result = { fetching: false, data, error: null };
+  it("does not rebuild graph data or reset painters for local filters", async () => {
+    const { view, props } = await renderGraph();
+    const firstGraphData = props.graphData;
+    const firstPainter = props.nodeCanvasObject;
 
-    const { rerender } = render(
-      <KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />,
-    );
-
-    await screen.findByTestId("force-graph");
-    const firstProps = latestForceGraphProps();
-    const firstGraphData = firstProps.graphData;
-    const firstNodeThreeObject = firstProps.nodeThreeObject;
-
-    rerender(
+    view.rerender(
       <KnowledgeGraph
         tenantId="tenant-1"
         threadId="thread-1"
         searchQuery="Acme"
       />,
     );
-
     await waitFor(() => expect(forceGraphCalls.length).toBeGreaterThan(1));
     const nextProps = latestForceGraphProps();
 
     expect(nextProps.graphData).toBe(firstGraphData);
-    expect(nextProps.nodeThreeObject).toBe(firstNodeThreeObject);
-    expect(nextProps.linkColor(nextProps.graphData.links[0])).toContain(
-      "#14b8a6",
-    );
-    expect(nextProps.linkColor(nextProps.graphData.links[1])).toBe(
-      "rgba(255,255,255,0.12)",
-    );
+    expect(nextProps.nodeCanvasObject).toBe(firstPainter);
+    // Search dims non-matches through the same painter.
+    expect(paintNode(nextProps, firstGraphData.nodes[0]).fillAlpha).toBe(1);
+    expect(paintNode(nextProps, firstGraphData.nodes[2]).fillAlpha).toBe(0.15);
   });
 
-  it("returns connected edges for entity detail sheets", async () => {
-    urqlState.result = {
-      fetching: false,
-      data: { knowledgeGraphGraph: graphFixture },
-      error: null,
-    };
-    const graphRef = React.createRef<KnowledgeGraphHandle>();
-    const onNodeClick = vi.fn();
+  it("registers community cluster forces at data cadence, not filter cadence", async () => {
+    const { view } = await renderGraph();
 
-    render(
+    const clusterForceCalls = () =>
+      d3ForceCalls.filter((call) => call.name === "x" || call.name === "y")
+        .length;
+    const centerRemovals = d3ForceCalls.filter(
+      (call) => call.name === "center" && call.force === null,
+    );
+    const initialClusterCalls = clusterForceCalls();
+    expect(initialClusterCalls).toBeGreaterThanOrEqual(2);
+    expect(centerRemovals.length).toBeGreaterThanOrEqual(1);
+
+    view.rerender(
       <KnowledgeGraph
-        ref={graphRef}
         tenantId="tenant-1"
         threadId="thread-1"
-        onNodeClick={onNodeClick}
+        searchQuery="Acme"
       />,
     );
+    await waitFor(() => expect(forceGraphCalls.length).toBeGreaterThan(1));
 
-    await screen.findByTestId("force-graph");
-    const props = latestForceGraphProps();
+    // Filter changes must not re-register forces (no-restart invariant).
+    expect(clusterForceCalls()).toBe(initialClusterCalls);
+  });
 
-    props.onNodeClick(props.graphData.nodes[1]);
+  it("opens the detail sheet from the selected-node chip with connected edges", async () => {
+    const graphRef = React.createRef<KnowledgeGraphHandle>();
+    const onNodeClick = vi.fn();
+    const { props } = await renderGraph({ ref: graphRef, onNodeClick });
+
+    // Node click surfaces the chip without opening the sheet.
+    await act(async () => {
+      props.onNodeClick(props.graphData.nodes[1]);
+    });
+    expect(onNodeClick).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open details for Roadmap Risk" }),
+    );
 
     expect(onNodeClick).toHaveBeenCalledWith(
       expect.objectContaining({ id: "entity-2", label: "Roadmap Risk" }),
@@ -248,6 +327,286 @@ describe("KnowledgeGraph", () => {
     expect(graphRef.current?.getNodeWithEdges("entity-2")?.edges).toHaveLength(
       2,
     );
+  });
+
+  describe("Graph Focus Mode", () => {
+    it("clicking a node lights its direct neighborhood (1 degree)", async () => {
+      const { props } = await renderGraph();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+
+      // entity-1 -> entity-2 -> entity-3 is a chain: 1 degree from
+      // entity-1 lights entity-2 but not entity-3.
+      const latest = latestForceGraphProps();
+      expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(1);
+      expect(paintNode(latest, props.graphData.nodes[1]).fillAlpha).toBe(1);
+      expect(paintNode(latest, props.graphData.nodes[2]).fillAlpha).toBe(0.15);
+      expect(screen.queryByText("Showing direct connections only")).toBeNull();
+    });
+
+    it("background click clears focus and restores prior state (AE4)", async () => {
+      const { props } = await renderGraph();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+      await act(async () => {
+        latestForceGraphProps().onBackgroundClick();
+      });
+
+      const latest = latestForceGraphProps();
+      for (const node of props.graphData.nodes) {
+        expect(paintNode(latest, node).fillAlpha).toBe(1);
+      }
+    });
+
+    it("focus supersedes search dimming and exit restores it (AE5)", async () => {
+      const { view, props } = await renderGraph();
+
+      view.rerender(
+        <KnowledgeGraph
+          tenantId="tenant-1"
+          threadId="thread-1"
+          searchQuery="Beta"
+        />,
+      );
+      await waitFor(() =>
+        expect(
+          paintNode(latestForceGraphProps(), props.graphData.nodes[0])
+            .fillAlpha,
+        ).toBe(0.15),
+      );
+
+      await act(async () => {
+        latestForceGraphProps().onNodeClick(props.graphData.nodes[0]);
+      });
+      expect(
+        paintNode(latestForceGraphProps(), props.graphData.nodes[0]).fillAlpha,
+      ).toBe(1);
+
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "Escape" });
+      });
+      const restored = latestForceGraphProps();
+      expect(paintNode(restored, props.graphData.nodes[0]).fillAlpha).toBe(
+        0.15,
+      );
+      expect(paintNode(restored, props.graphData.nodes[2]).fillAlpha).toBe(1);
+    });
+
+    it("clicking a dimmed node moves focus to it (AE6)", async () => {
+      const isolatedFixture = {
+        nodes: graphFixture.nodes,
+        edges: [graphFixture.edges[0]], // entity-3 isolated
+      };
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: isolatedFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+      expect(
+        paintNode(latestForceGraphProps(), props.graphData.nodes[2]).fillAlpha,
+      ).toBe(0.15);
+
+      await act(async () => {
+        latestForceGraphProps().onNodeClick(props.graphData.nodes[2]);
+      });
+      const latest = latestForceGraphProps();
+      expect(paintNode(latest, props.graphData.nodes[2]).fillAlpha).toBe(1);
+      expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(0.15);
+    });
+
+    it("focusing an isolated node lights only it, no truncation chip (AE8)", async () => {
+      const isolatedFixture = {
+        nodes: graphFixture.nodes,
+        edges: [graphFixture.edges[0]],
+      };
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: isolatedFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[2]);
+      });
+
+      const latest = latestForceGraphProps();
+      expect(paintNode(latest, props.graphData.nodes[0]).fillAlpha).toBe(0.15);
+      expect(paintNode(latest, props.graphData.nodes[2]).fillAlpha).toBe(1);
+      expect(screen.queryByText("Showing direct connections only")).toBeNull();
+    });
+
+    it("hub focus lights all direct neighbors without a truncation chip", async () => {
+      const hubFixture = {
+        nodes: [
+          { id: "hub", entityId: "hub", label: "Hub" },
+          ...Array.from({ length: 151 }, (_, i) => ({
+            id: `leaf-${i}`,
+            entityId: `leaf-${i}`,
+            label: `Leaf ${i}`,
+          })),
+        ],
+        edges: Array.from({ length: 151 }, (_, i) => ({
+          id: `edge-${i}`,
+          relationshipId: `rel-${i}`,
+          source: "hub",
+          target: `leaf-${i}`,
+          label: "links",
+        })),
+      };
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: hubFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      const props = latestForceGraphProps();
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+
+      // Degree 1 is always accepted in full — no silent truncation.
+      const latest = latestForceGraphProps();
+      expect(paintNode(latest, props.graphData.nodes[1]).fillAlpha).toBe(1);
+      expect(screen.queryByText("Showing direct connections only")).toBeNull();
+    });
+
+    it("focus changes rebuild nothing: same graphData, no force re-registration", async () => {
+      const { props } = await renderGraph();
+      const initialGraphData = props.graphData;
+      const initialForceCalls = d3ForceCalls.length;
+
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[1]);
+      });
+
+      const nextProps = latestForceGraphProps();
+      expect(nextProps.graphData).toBe(initialGraphData);
+      expect(d3ForceCalls.length).toBe(initialForceCalls);
+    });
+  });
+
+  describe("labels", () => {
+    // 160 nodes (> gate ceiling): "lone-*" isolated, plus a-b linked.
+    const largeFixture = {
+      nodes: [
+        { id: "a", entityId: "a", label: "Node A" },
+        { id: "b", entityId: "b", label: "Node B" },
+        ...Array.from({ length: 158 }, (_, i) => ({
+          id: `lone-${i}`,
+          entityId: `lone-${i}`,
+          label: `Lone ${i}`,
+        })),
+      ],
+      edges: [
+        {
+          id: "e1",
+          relationshipId: "r1",
+          source: "a",
+          target: "b",
+          label: "supports",
+        },
+      ],
+    };
+
+    async function renderLarge() {
+      urqlState.result = {
+        fetching: false,
+        data: { knowledgeGraphGraph: largeFixture },
+        error: null,
+      };
+      render(<KnowledgeGraph tenantId="tenant-1" threadId="thread-1" />);
+      await screen.findByTestId("force-graph");
+      return latestForceGraphProps();
+    }
+
+    it("zoom gate shows labels close up and hides them far out (AE2)", async () => {
+      const props = await renderLarge();
+      const nodeA = props.graphData.nodes[0];
+
+      // Zoomed in past the 1.2 gate.
+      props.onZoom({ k: 1.5 });
+      expect(paintNode(props, nodeA).texts.length).toBeGreaterThan(0);
+
+      // Far zoom hides labels on a large graph.
+      props.onZoom({ k: 0.3 });
+      expect(paintNode(props, nodeA).texts.length).toBe(0);
+
+      // Zooming back in restores them.
+      props.onZoom({ k: 1.4 });
+      expect(paintNode(props, nodeA).texts.length).toBeGreaterThan(0);
+    });
+
+    it("edge labels ride the line: zoom-gated in overview, lit-only in focus (R9/R10)", async () => {
+      const props = await renderLarge();
+      const litLink = hydrateLink(props.graphData.links[0]);
+
+      // Far zoom on a large graph — gate closed, plain line only.
+      props.onZoom({ k: 0.3 });
+      expect(paintLink(props, litLink)).toEqual([]);
+
+      // Zoomed in — the label becomes part of the line.
+      props.onZoom({ k: 1.5 });
+      expect(paintLink(props, litLink)).toEqual(["supports"]);
+
+      // Focus "a": lit edge labeled at any zoom; node labels lit-only.
+      props.onZoom({ k: 0.3 });
+      await act(async () => {
+        props.onNodeClick(props.graphData.nodes[0]);
+      });
+      const latest = latestForceGraphProps();
+      expect(paintLink(latest, litLink)).toEqual(["supports"]);
+      expect(
+        paintNode(latest, props.graphData.nodes[0]).texts.length,
+      ).toBeGreaterThan(0);
+      expect(paintNode(latest, props.graphData.nodes[5]).texts.length).toBe(0);
+    });
+
+    it("the single Labels toggle overrides the gate in both directions (AE7/AE3)", async () => {
+      const props = await renderLarge();
+      props.onZoom({ k: 0.3 }); // gate closed
+      const nodeA = props.graphData.nodes[0];
+      const litLink = hydrateLink(props.graphData.links[0]);
+      expect(paintNode(props, nodeA).texts.length).toBe(0);
+      expect(paintLink(props, litLink)).toEqual([]);
+
+      const toggle = () =>
+        screen.getByRole("button", { name: "Toggle labels" });
+
+      // auto -> on: node and relationship labels appear despite the gate.
+      fireEvent.click(toggle());
+      expect(
+        paintNode(latestForceGraphProps(), nodeA).texts.length,
+      ).toBeGreaterThan(0);
+      expect(paintLink(latestForceGraphProps(), litLink)).toEqual(["supports"]);
+
+      // on -> off hides both everywhere, even zoomed in.
+      props.onZoom({ k: 2 });
+      fireEvent.click(toggle());
+      expect(paintNode(latestForceGraphProps(), nodeA).texts.length).toBe(0);
+      expect(paintLink(latestForceGraphProps(), litLink)).toEqual([]);
+
+      // off -> auto: gated behavior returns (zoomed in => visible).
+      fireEvent.click(toggle());
+      expect(
+        paintNode(latestForceGraphProps(), nodeA).texts.length,
+      ).toBeGreaterThan(0);
+    });
   });
 
   it("renders loading, empty, and error states for the Settings surface", async () => {

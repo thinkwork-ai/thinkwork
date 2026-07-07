@@ -36,10 +36,12 @@ export type {
 
 export {
   classifyNode,
+  communityColor,
   connectedGraphEdges,
   deriveGraphClassification,
   endpointId,
   normalizeGraphSearch,
+  COMMUNITY_COLORS,
 } from "./graph-utils.js";
 export type {
   GraphClassification,

@@ -28,37 +28,38 @@ import {
   useImperativeHandle,
   forwardRef,
 } from "react";
-import ForceGraph3D from "react-force-graph-3d";
-import * as THREE from "three";
+import ForceGraph2D from "react-force-graph-2d";
 import { useQuery, useClient } from "urql";
 import * as d3 from "d3-force";
 import { WikiGraphQuery } from "./queries.js";
 import {
-  PAGE_TYPES,
-  PAGE_TYPE_FORCE_COLORS,
-  PAGE_TYPE_DEFAULT_FORCE_COLOR,
+  carryNodePositions,
+  classifyNode,
+  composeGraphClassification,
+  communityColor,
+  computeCommunityLayout,
+  darkenColor,
+  degreeRadius,
+  isDarkMode,
+  deriveGraphClassification,
+  endpointId,
+  expandNeighborhood,
+  labelsVisibleAtScale,
+  wrapLabelLines,
+  normalizeGraphSearch,
+  DEFAULT_FOCUS_CAP,
+  DEFAULT_FOCUS_DEGREE,
+  type GraphClassification,
+  type GraphFocusState,
+  type LabelMode,
+} from "./graph-utils.js";
+import { GraphLabelToggles } from "./GraphLabelToggles.js";
+import {
   PAGE_TYPE_LABELS,
   type WikiPageType,
 } from "./palettes/wiki-palette.js";
 
 export type { WikiPageType };
-
-type NodeVisualState = "matched" | "neighbor" | "other";
-
-type GraphClassification = {
-  matchedIds: Set<string>;
-  neighborIds: Set<string>;
-};
-
-function classifyNode(
-  id: string,
-  c: GraphClassification | null,
-): NodeVisualState {
-  if (!c) return "matched";
-  if (c.matchedIds.has(id)) return "matched";
-  if (c.neighborIds.has(id)) return "neighbor";
-  return "other";
-}
 
 export interface WikiGraphNode {
   id: string;
@@ -79,6 +80,10 @@ export interface WikiGraphNode {
 
 export interface WikiGraphHandle {
   refetch: () => void;
+  /** Community hue for the node whose label matches (case-insensitive) —
+   *  lets detail surfaces color-code node badges consistently with the
+   *  canvas. */
+  getNodeColorByLabel: (label: string) => string | undefined;
   getNodeWithEdges: (nodeId: string) => {
     node: WikiGraphNode;
     edges: {
@@ -151,6 +156,12 @@ export function buildConnectedWikiGraphData(
     nodes: allNodes,
     links,
   };
+}
+
+/** Degree used for sizing — normalized against the graph's max degree at
+ *  render time so every view fills the same visual size range. */
+function nodeDegree(node: any): number {
+  return node.edgeCount || 1;
 }
 
 export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
@@ -256,6 +267,16 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         else singleReexecute({ requestPolicy: "network-only" });
       },
       getNodeWithEdges: (nodeId: string) => getNodeWithEdgesRef.current(nodeId),
+      getNodeColorByLabel: (label: string) => {
+        const normalized = label.trim().toLowerCase();
+        const node = (graphDataRef.current.nodes as any[]).find(
+          (n) => (n.label ?? "").trim().toLowerCase() === normalized,
+        );
+        if (!node) return undefined;
+        return communityColor(
+          communityLayoutRef.current.communityByNode.get(node.id),
+        );
+      },
     }));
 
     useEffect(() => {
@@ -345,14 +366,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         );
       }
       if (searchQuery) {
-        const normalize = (s: string) =>
-          s
-            .toLowerCase()
-            .replace(/[^a-z0-9\s]/g, "")
-            .replace(/\s+/g, " ")
-            .trim();
-        const q = normalize(searchQuery);
-        filtered = filtered.filter((n) => normalize(n.label).includes(q));
+        const q = normalizeGraphSearch(searchQuery);
+        filtered = filtered.filter((n) =>
+          normalizeGraphSearch(n.label).includes(q),
+        );
       }
       return new Set(filtered.map((n) => n.id));
     }, [allNodes, typeFilter, searchQuery, hasFilter]);
@@ -361,18 +378,54 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     // Filter mute is in-place material opacity (see effect below). Isolated
     // compiled pages stay visible so the graph and table agree on whether
     // wiki data exists.
+    const prevGraphRef = useRef<{
+      key: string;
+      data: { nodes: WikiGraphNode[]; links: WikiGraphLink[] };
+    } | null>(null);
     const graphData = useMemo(() => {
-      if (isMultiAgent) {
-        return buildConnectedWikiGraphData(
-          allNodes,
-          Object.entries(multiResults),
-        );
+      // Content-keyed identity: cache-and-network re-emits an identical
+      // payload as a fresh object ~1s after the cached render; rebuilding
+      // graphData for it restarts the engine and visibly nudges the
+      // layout. Byte-identical payloads keep the existing object.
+      const key = JSON.stringify(
+        isMultiAgent ? multiResults : (singleResult.data?.wikiGraph ?? null),
+      );
+      if (prevGraphRef.current && prevGraphRef.current.key === key) {
+        return prevGraphRef.current.data;
       }
-
-      return buildConnectedWikiGraphData(allNodes, [
-        [null, singleResult.data?.wikiGraph],
-      ]);
+      const data = isMultiAgent
+        ? buildConnectedWikiGraphData(allNodes, Object.entries(multiResults))
+        : buildConnectedWikiGraphData(allNodes, [
+            [null, singleResult.data?.wikiGraph],
+          ]);
+      // Keep simulation positions and user-drag pins stable across
+      // refetches — fresh node objects would otherwise scatter the layout.
+      carryNodePositions(prevGraphRef.current?.data.nodes ?? null, data.nodes);
+      prevGraphRef.current = { key, data };
+      return data;
     }, [allNodes, isMultiAgent, multiResults, singleResult.data]);
+
+    // Community layout runs at graphData-identity cadence only — the same
+    // cadence the simulation keys on. Never recomputed on filter or focus.
+    const communityLayout = useMemo(
+      () => computeCommunityLayout(graphData.nodes, graphData.links),
+      [graphData],
+    );
+    const communityLayoutRef = useRef(communityLayout);
+    communityLayoutRef.current = communityLayout;
+
+    // Normalize disc sizes to this graph's degree distribution.
+    const maxDegree = useMemo(
+      () => Math.max(1, ...graphData.nodes.map((n: any) => nodeDegree(n))),
+      [graphData],
+    );
+    const maxDegreeRef = useRef(maxDegree);
+    maxDegreeRef.current = maxDegree;
+
+    const nodeRadius = useCallback(
+      (node: any) => degreeRadius(nodeDegree(node), maxDegreeRef.current),
+      [],
+    );
 
     const matchedIdsRef = useRef<Set<string> | null>(null);
     matchedIdsRef.current = matchedIds;
@@ -382,28 +435,111 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     // visible: full opacity when at least one endpoint is matched,
     // muted when both are unmatched. Nothing is hidden — the whole
     // graph remains visible so users keep spatial context.
-    const classification = useMemo<GraphClassification | null>(() => {
-      if (!matchedIds) return null;
-      const neighborIds = new Set<string>();
-      for (const l of graphData.links) {
-        const sId =
-          typeof (l as any).source === "object"
-            ? ((l as any).source as any).id
-            : (l as any).source;
-        const tId =
-          typeof (l as any).target === "object"
-            ? ((l as any).target as any).id
-            : (l as any).target;
-        const sMatched = matchedIds.has(sId);
-        const tMatched = matchedIds.has(tId);
-        if (sMatched && !tMatched) neighborIds.add(tId);
-        else if (tMatched && !sMatched) neighborIds.add(sId);
-      }
-      return { matchedIds, neighborIds };
-    }, [matchedIds, graphData]);
+    const searchClassification = useMemo<GraphClassification | null>(
+      () => deriveGraphClassification(matchedIds, graphData.links),
+      [matchedIds, graphData],
+    );
+
+    // Graph Focus Mode: clicking a node lights its neighborhood in place
+    // while everything else dims. Focus supersedes search while active; the
+    // search classification is restored untouched on exit. Focus changes
+    // flow through the same opacity-mutation path as search — no graphData
+    // rebuild, no force re-registration.
+    const [focus, setFocus] = useState<GraphFocusState | null>(null);
+    const focusRef = useRef<GraphFocusState | null>(null);
+    focusRef.current = focus;
+
+    // The focused node renders as an overlay chip instead of immediately
+    // opening the host detail sheet — clicking a node should not shift the
+    // layout mid-exploration. Clicking the chip opens the sheet.
+    const [selectedNode, setSelectedNode] = useState<WikiGraphNode | null>(
+      null,
+    );
+
+    const exitFocus = useCallback(() => {
+      setFocus(null);
+      setSelectedNode(null);
+    }, []);
+
+    const classification = useMemo<GraphClassification | null>(
+      () => composeGraphClassification(searchClassification, focus),
+      [searchClassification, focus],
+    );
 
     const classificationRef = useRef<GraphClassification | null>(null);
     classificationRef.current = classification;
+
+    const focusNode = useCallback(
+      (nodeId: string) => {
+        const expansion = expandNeighborhood(
+          [nodeId],
+          graphData.links,
+          DEFAULT_FOCUS_DEGREE,
+          DEFAULT_FOCUS_CAP,
+        );
+        setFocus({
+          focusedId: nodeId,
+          litIds: expansion.ids,
+          degreeUsed: expansion.degreeUsed,
+          truncated: expansion.truncated,
+        });
+      },
+      [graphData],
+    );
+
+    // Escape exits focus. Skip events a dialog/sheet already consumed so
+    // closing an open detail sheet doesn't also tear down focus.
+    useEffect(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if (focusRef.current) exitFocus();
+      };
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }, [exitFocus]);
+
+    // Label visibility: `auto` follows the zoom gate in the overview and
+    // lights lit-set labels in focus; `on`/`off` override absolutely.
+    const [labelMode, setLabelMode] = useState<LabelMode>("auto");
+    const labelModeRef = useRef<LabelMode>("auto");
+    labelModeRef.current = labelMode;
+    // Canvas zoom scale from onZoom — the 2D renderer's zoom gate signal.
+    const zoomKRef = useRef(1);
+    const graphDataRef = useRef(graphData);
+    graphDataRef.current = graphData;
+    const dimsRef = useRef(dims);
+    dimsRef.current = dims;
+
+    const nodeLabelVisible = useCallback((nodeId: string) => {
+      const mode = labelModeRef.current;
+      if (mode === "on") return true;
+      if (mode === "off") return false;
+      const focusState = focusRef.current;
+      if (focusState) return focusState.litIds.has(nodeId);
+      return labelsVisibleAtScale(
+        zoomKRef.current,
+        graphDataRef.current.nodes.length,
+      );
+    }, []);
+
+    const linkLabelVisible = useCallback((link: any) => {
+      // Relationship labels ride the line itself (neo4j style). Off hides
+      // them everywhere; in focus they mark the lit set; in the overview
+      // they follow the same zoom gate as node labels.
+      if (labelModeRef.current === "off") return false;
+      const focusState = focusRef.current;
+      if (focusState) {
+        return (
+          focusState.litIds.has(endpointId(link.source)) &&
+          focusState.litIds.has(endpointId(link.target))
+        );
+      }
+      if (labelModeRef.current === "on") return true;
+      return labelsVisibleAtScale(
+        zoomKRef.current,
+        graphDataRef.current.nodes.length,
+      );
+    }, []);
 
     getNodeWithEdgesRef.current = (nodeId: string) => {
       const node = graphData.nodes.find((n: any) => n.id === nodeId);
@@ -426,153 +562,255 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
             targetId: otherId,
           };
         });
+      edges.sort((a, b) => a.targetLabel.localeCompare(b.targetLabel));
       return { node: node as WikiGraphNode, edges };
     };
 
-    const nodeThreeObject = useCallback((node: any) => {
-      const state = classifyNode(node.id, classificationRef.current);
+    // Canvas painter: flat neo4j-style disc + rim + clipped title. The
+    // neighbor state (1-hop from a search match) keeps the dim fill but
+    // draws its ring in the node's type color at full alpha. Reads state
+    // through refs; the canvas repaints continuously (autoPauseRedraw
+    // false), so filter/focus changes show without touching graphData.
+    const nodeCanvasObject = useCallback(
+      (node: any, ctx: CanvasRenderingContext2D) => {
+        const state = classifyNode(node.id, classificationRef.current);
+        const alpha = state === "matched" ? 1 : 0.15;
+        // Color by detected community so cluster membership reads at a
+        // glance — page-type colors were near-uniform in practice.
+        const color = communityColor(
+          communityLayoutRef.current.communityByNode.get(node.id),
+        );
+        const r = nodeRadius(node);
 
-      const entityType = node.entityType as WikiPageType;
-      const color =
-        PAGE_TYPE_FORCE_COLORS[entityType] ?? PAGE_TYPE_DEFAULT_FORCE_COLOR;
-      // Clip the label to keep the canvas readable without losing the full
-      // title from the tooltip (nodeLabel callback below passes the raw
-      // title to ForceGraph3D).
-      const rawLabel = node.label ?? "";
-      const label =
-        rawLabel.length > 16 ? rawLabel.slice(0, 15) + "…" : rawLabel;
-      // Size by degree. Pages with more links render bigger.
-      const degree = node.edgeCount || 1;
-      const r = Math.max(5, Math.min(18, 5 + Math.sqrt(degree) * 1.5));
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+        if (state === "neighbor") {
+          // Full-alpha type-colored ring marks 1-hop search neighbors.
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = Math.max(1.25, r * 0.08);
+          ctx.strokeStyle = color;
+          ctx.stroke();
+          ctx.globalAlpha = alpha;
+        } else {
+          ctx.lineWidth = Math.max(0.75, r * 0.05);
+          ctx.strokeStyle = darkenColor(color);
+          ctx.stroke();
+        }
 
-      const sphereOp = state === "matched" ? 1 : 0.15;
-      const labelOp = sphereOp;
-      const ringOp = state === "neighbor" ? 1 : 0;
+        if (nodeLabelVisible(node.id)) {
+          const rawLabel = node.label ?? "";
+          // Wrapped white text that stays inside the disc (neo4j style).
+          const fontSize = Math.max(3.5, r * 0.32);
+          ctx.font = `600 ${fontSize}px sans-serif`;
+          const lines = wrapLabelLines(
+            (s) => ctx.measureText?.(s)?.width ?? s.length * fontSize * 0.6,
+            rawLabel,
+            r * 1.7,
+            3,
+          );
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#ffffff";
+          const lineHeight = fontSize * 1.15;
+          const y0 = node.y - ((lines.length - 1) / 2) * lineHeight;
+          lines.forEach((line, index) => {
+            ctx.fillText(line, node.x, y0 + index * lineHeight);
+          });
+        }
+        ctx.globalAlpha = 1;
+      },
+      [nodeLabelVisible, nodeRadius],
+    );
 
-      const group = new THREE.Group();
+    // With a custom nodeCanvasObject the renderer can't infer hit areas —
+    // without this, node clicks and drags silently stop working.
+    const nodePointerAreaPaint = useCallback(
+      (node: any, color: string, ctx: CanvasRenderingContext2D) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, nodeRadius(node) + 4, 0, 2 * Math.PI);
+        ctx.fill();
+      },
+      [],
+    );
 
-      const geometry = new THREE.SphereGeometry(r, 16, 16);
-      const material = new THREE.MeshLambertMaterial({
-        color,
-        transparent: true,
-        opacity: sphereOp,
-      });
-      const sphere = new THREE.Mesh(geometry, material);
-      group.add(sphere);
-
-      const canvas = document.createElement("canvas");
-      const size = 128;
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d")!;
-      ctx.clearRect(0, 0, size, size);
-      ctx.font = "bold 14px sans-serif";
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, size / 2, size / 2);
-      const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        opacity: labelOp,
-      });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.scale.set(r * 3, r * 3, 1);
-      sprite.position.set(0, 0, 0);
-      group.add(sprite);
-
-      // Colored outline ring — visible only on 1-hop neighbors of a
-      // matched node. Canvas sprite so it always faces the camera.
-      // Scale = sphere diameter (r * 2) so the stroke sits inside the
-      // sphere's footprint and the node doesn't visually grow when it
-      // becomes a neighbor.
-      const ringCanvas = document.createElement("canvas");
-      const rSize = 128;
-      ringCanvas.width = rSize;
-      ringCanvas.height = rSize;
-      const rCtx = ringCanvas.getContext("2d")!;
-      rCtx.clearRect(0, 0, rSize, rSize);
-      rCtx.strokeStyle = color;
-      rCtx.lineWidth = 10;
-      rCtx.beginPath();
-      rCtx.arc(rSize / 2, rSize / 2, rSize / 2 - 10, 0, Math.PI * 2);
-      rCtx.stroke();
-      const ringTexture = new THREE.CanvasTexture(ringCanvas);
-      const ringMaterial = new THREE.SpriteMaterial({
-        map: ringTexture,
-        transparent: true,
-        opacity: ringOp,
-      });
-      const ringSprite = new THREE.Sprite(ringMaterial);
-      ringSprite.scale.set(r * 2, r * 2, 1);
-      ringSprite.position.set(0, 0, 0);
-      group.add(ringSprite);
-
-      // Stash materials so filter-mute can adjust opacity without rebuilding
-      // the graphData (which would restart the simulation).
-      node.__sphereMat = material;
-      node.__spriteMat = spriteMaterial;
-      node.__ringMat = ringMaterial;
-
-      return group;
+    // Edge brightness follows endpoint lit-state. In focus mode an edge is
+    // bright only when BOTH endpoints are lit — a half-lit edge would imply
+    // the outside node belongs to the neighborhood. Search keeps the
+    // either-endpoint rule. Reads refs so identity stays inert.
+    const isLinkBright = useCallback((link: any) => {
+      const sId = endpointId(link.source);
+      const tId = endpointId(link.target);
+      const focusLit = focusRef.current?.litIds;
+      if (focusLit) return focusLit.has(sId) && focusLit.has(tId);
+      const m = matchedIdsRef.current;
+      if (!m) return true;
+      return m.has(sId) || m.has(tId);
     }, []);
 
-    useEffect(() => {
-      for (const n of graphData.nodes as any[]) {
-        const state = classifyNode(n.id, classification);
-        const sphereOp = state === "matched" ? 1 : 0.15;
-        const ringOp = state === "neighbor" ? 1 : 0;
-        if (n.__sphereMat) n.__sphereMat.opacity = sphereOp;
-        if (n.__spriteMat) n.__spriteMat.opacity = sphereOp;
-        if (n.__ringMat) n.__ringMat.opacity = ringOp;
-      }
-      fgRef.current?.refresh?.();
-    }, [classification, graphData]);
+    // Full link painter (replace mode): line trimmed to disc edges,
+    // arrowhead terminating on the target rim, relationship label along
+    // lit edges in focus mode.
+    // Full link painter (replace mode): the line is trimmed to the disc
+    // edges with the arrowhead terminating at the target's rim. When the
+    // relationship label is visible it becomes part of the line itself —
+    // a gap opens at the midpoint and the text sits inline, in the line's
+    // color (neo4j style).
+    const linkCanvasObject = useCallback(
+      (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+        const start = link.source;
+        const end = link.target;
+        if (typeof start !== "object" || typeof end !== "object") return;
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const dist = Math.hypot(dx, dy);
+        if (!dist) return;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        const sourceTrim = nodeRadius(start) + 1.5;
+        const targetTrim = nodeRadius(end) + 1.5;
+        if (dist <= sourceTrim + targetTrim) return;
+        const sx = start.x + ux * sourceTrim;
+        const sy = start.y + uy * sourceTrim;
+        const tx = end.x - ux * targetTrim;
+        const ty = end.y - uy * targetTrim;
+        const lineLen = dist - sourceTrim - targetTrim;
+
+        const color = isLinkBright(link)
+          ? "rgba(148,163,184,0.9)"
+          : "rgba(148,163,184,0.15)";
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        // Constant 1px screen width regardless of zoom.
+        ctx.lineWidth = 1 / globalScale;
+
+        let labeled = false;
+        if (linkLabelVisible(link)) {
+          const label = link.label || "references";
+          const fontSize = 10 / globalScale;
+          ctx.font = `${fontSize}px sans-serif`;
+          const textWidth =
+            ctx.measureText?.(label)?.width ?? label.length * fontSize * 0.6;
+          const gap = textWidth + 10 / globalScale;
+          // Only inline the label when the line has room for it, and only
+          // when the midpoint is anywhere near the viewport (cheap cull so
+          // 10k offscreen labels don't cost a frame).
+          const mx = (sx + tx) / 2;
+          const my = (sy + ty) / 2;
+          let onScreen = true;
+          const t = (ctx as any).getTransform?.();
+          const viewport = dimsRef.current;
+          if (t && viewport) {
+            const px = t.a * mx + t.c * my + t.e;
+            const py = t.b * mx + t.d * my + t.f;
+            const bound = Math.max(viewport.w, viewport.h) * 2.5;
+            onScreen = px > -bound && px < bound && py > -bound && py < bound;
+          }
+          if (onScreen && lineLen > gap + 14 / globalScale) {
+            const half = gap / 2;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(mx - ux * half, my - uy * half);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(mx + ux * half, my + uy * half);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+            let angle = Math.atan2(dy, dx);
+            if (angle > Math.PI / 2) angle -= Math.PI;
+            else if (angle < -Math.PI / 2) angle += Math.PI;
+            ctx.save();
+            ctx.translate(mx, my);
+            ctx.rotate(angle);
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+            labeled = true;
+          }
+        }
+        if (!labeled) {
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+        }
+
+        // Arrowhead sitting exactly on the target disc's rim.
+        const ah = 4;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(
+          tx - ux * ah - uy * (ah * 0.5),
+          ty - uy * ah + ux * (ah * 0.5),
+        );
+        ctx.lineTo(
+          tx - ux * ah + uy * (ah * 0.5),
+          ty - uy * ah - ux * (ah * 0.5),
+        );
+        ctx.closePath();
+        ctx.fill();
+      },
+      [linkLabelVisible, isLinkBright],
+    );
 
     useEffect(() => {
       const fg = fgRef.current;
       if (!fg) return;
       const nodeCount = graphData.nodes.length;
-      const chargeStrength = nodeCount > 50 ? -200 : -130;
-      fg.d3Force("charge")?.strength(chargeStrength).distanceMax(200);
-      fg.d3Force("link")?.distance(nodeCount > 50 ? 100 : 75);
-      fg.d3Force("center")?.strength(1);
-      fg.d3Force("collide", d3.forceCollide().radius(28).strength(0.8));
-    }, [graphData]);
+      const { communityByNode, anchors } = communityLayout;
+      const anchorFor = (node: any) =>
+        anchors.get(communityByNode.get(node.id) ?? -1) ?? { x: 0, y: 0 };
+      const sameCommunity = (link: any) => {
+        const s = communityByNode.get(endpointId(link.source));
+        const t = communityByNode.get(endpointId(link.target));
+        return s !== undefined && s === t;
+      };
 
-    // One-shot camera setup. After this the user owns zoom/pan.
-    const cameraInitRef = useRef(false);
-    useEffect(() => {
-      const fg = fgRef.current;
-      if (!fg || !dims || cameraInitRef.current) return;
-      const camera = fg.camera();
-      const controls = fg.controls();
-      // Scale starting distance with node count so large graphs start
-      // framed. No post-settle zoom — zoomToFit over-corrects and shoves
-      // the whole layout into a tiny center blob.
-      const nodeCount = graphData.nodes.length;
-      const initialZ = Math.max(
-        800,
-        Math.min(6000, 100 * Math.sqrt(nodeCount)),
+      const chargeStrength = nodeCount > 50 ? -120 : -80;
+      fg.d3Force("charge")?.strength(chargeStrength).distanceMax(200);
+      // Community-aware springs: short/strong inside a community, long/weak
+      // across the bridge edges, so clusters densify without collapsing
+      // into each other.
+      const baseDistance = nodeCount > 50 ? 85 : 65;
+      const linkForce = fg.d3Force("link");
+      linkForce?.distance((link: any) =>
+        sameCommunity(link) ? baseDistance : baseDistance * 2,
       );
-      camera.position.set(0, 0, initialZ);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(0, 0, 0);
-      controls.enableRotate = false;
-      controls.panSpeed = 0.15;
-      controls.zoomSpeed = 0.5;
-      controls.mouseButtons = {
-        LEFT: THREE.MOUSE.PAN,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.PAN,
-      };
-      controls.touches = {
-        ONE: THREE.TOUCH.PAN,
-        TWO: THREE.TOUCH.DOLLY_PAN,
-      };
-      cameraInitRef.current = true;
-    }, [dims, graphData]);
+      linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
+      // Per-community anchors replace the global center force — anchors
+      // are packed around the origin so the graph stays framed. Nodes
+      // without an assignment (defensive) fall back to center attraction.
+      fg.d3Force("center", null);
+      fg.d3Force(
+        "x",
+        d3.forceX((node: any) => anchorFor(node).x).strength(0.08),
+      );
+      fg.d3Force(
+        "y",
+        d3.forceY((node: any) => anchorFor(node).y).strength(0.08),
+      );
+      fg.d3Force(
+        "collide",
+        d3
+          .forceCollide()
+          .radius((node: any) => nodeRadius(node) + 14)
+          .strength(0.9),
+      );
+      // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
+      // the first pass fires before the container is measured (fg == null).
+    }, [graphData, communityLayout, dims]);
+
+    // One-shot framing: zoom to fit after the first simulation settle.
+    // Zoom/pan after that belongs to the user.
+    const zoomInitRef = useRef(false);
+    // The first paint happens at the default zoom for a frame before
+    // onEngineStop applies the fit — keep the canvas invisible until the
+    // framing has landed so there's no visible jump.
+    const [framed, setFramed] = useState(false);
 
     const anyFetching = isMultiAgent
       ? multiFetching
@@ -604,51 +842,27 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       );
     }
 
-    const typeCounts = PAGE_TYPES.map((t) => ({
-      type: t,
-      count: graphData.nodes.filter(
-        (n: any) => (n.entityType as WikiPageType) === t,
-      ).length,
-    }));
-
     return (
-      <div ref={setContainerEl} className="absolute inset-0 overflow-hidden">
-        <ForceGraph3D
+      <div
+        ref={setContainerEl}
+        className={`absolute inset-0 overflow-hidden transition-opacity duration-150 ${
+          framed ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <ForceGraph2D
           ref={fgRef}
           graphData={graphData}
           width={dims.w}
           height={dims.h}
           backgroundColor="rgba(0,0,0,0)"
-          numDimensions={2}
-          nodeThreeObject={nodeThreeObject}
-          nodeRelSize={6}
-          showNavInfo={false}
-          linkColor={(link: any) => {
-            const m = matchedIdsRef.current;
-            if (!m) return "rgba(255,255,255,0.7)";
-            const sId =
-              typeof link.source === "object" ? link.source.id : link.source;
-            const tId =
-              typeof link.target === "object" ? link.target.id : link.target;
-            return m.has(sId) || m.has(tId)
-              ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)";
-          }}
-          linkWidth={() => 2}
-          linkDirectionalArrowLength={() => 4}
-          linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={(link: any) => {
-            const m = matchedIdsRef.current;
-            if (!m) return "rgba(255,255,255,0.7)";
-            const sId =
-              typeof link.source === "object" ? link.source.id : link.source;
-            const tId =
-              typeof link.target === "object" ? link.target.id : link.target;
-            return m.has(sId) || m.has(tId)
-              ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)";
-          }}
+          nodeCanvasObject={nodeCanvasObject}
+          nodePointerAreaPaint={nodePointerAreaPaint}
+          // Continuous repaint so ref-driven focus/filter/zoom changes show
+          // without rebuilding graphData.
+          autoPauseRedraw={false}
           linkLabel={(link: any) => link.label || "references"}
+          linkCanvasObjectMode={() => "replace" as const}
+          linkCanvasObject={linkCanvasObject}
           nodeLabel={(node: any) =>
             `${node.label}${
               node.displayType || node.entityType
@@ -656,57 +870,78 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
                 : ""
             }${node.edgeCount ? ` — ${node.edgeCount} link${node.edgeCount === 1 ? "" : "s"}` : ""}`
           }
-          cooldownTicks={100}
-          d3AlphaDecay={0.02}
-          d3VelocityDecay={0.3}
-          warmupTicks={50}
+          // Settle the layout synchronously before the first paint: zero
+          // cooldown until the initial framing lands (no load animation),
+          // then normal cooldown so dragging a node relaxes its neighbors.
+          cooldownTicks={framed ? 120 : 0}
+          // Warmup runs at slow decay so the pre-paint settle converges
+          // fully (communities separate); once framed, fast decay keeps
+          // drag-triggered reheats snappy.
+          d3AlphaDecay={
+            framed ? 0.05 : graphData.nodes.length > 2000 ? 0.035 : 0.0115
+          }
+          d3VelocityDecay={0.55}
+          warmupTicks={graphData.nodes.length > 2000 ? 200 : 600}
+          onZoom={({ k }: { k: number }) => {
+            zoomKRef.current = k;
+          }}
+          onEngineStop={() => {
+            if (zoomInitRef.current) return;
+            zoomInitRef.current = true;
+            // Frame the graph, but never fit-to-tiny: sparse layouts
+            // (many small components) would otherwise open unreadably
+            // zoomed out.
+            fgRef.current?.zoomToFit?.(0, 40);
+            const k = fgRef.current?.zoom?.();
+            if (typeof k === "number" && k < 0.55) {
+              fgRef.current?.zoom?.(0.55, 0);
+            }
+            setFramed(true);
+          }}
           onNodeClick={(node: any) => {
-            if (!onNodeClick) return;
-            const edges = graphData.links
-              .filter((l: any) => {
-                const sId =
-                  typeof l.source === "object" ? l.source.id : l.source;
-                const tId =
-                  typeof l.target === "object" ? l.target.id : l.target;
-                return sId === node.id || tId === node.id;
-              })
-              .map((l: any) => {
-                const sId =
-                  typeof l.source === "object" ? l.source.id : l.source;
-                const tId =
-                  typeof l.target === "object" ? l.target.id : l.target;
-                const otherId = sId === node.id ? tId : sId;
-                const otherNode = graphData.nodes.find(
-                  (n: any) => n.id === otherId,
-                );
-                return {
-                  label: l.label || "references",
-                  targetLabel: otherNode?.label ?? otherId,
-                  targetType: otherNode?.nodeType ?? "page",
-                  targetId: otherId,
-                };
-              });
-            onNodeClick(node as WikiGraphNode, edges);
+            // Clicking a node focuses it and surfaces the selected-node
+            // chip — the detail sheet opens only from the chip, so the
+            // layout never shifts mid-exploration.
+            focusNode(node.id);
+            setSelectedNode(node as WikiGraphNode);
+          }}
+          onBackgroundClick={() => {
+            if (focusRef.current) exitFocus();
           }}
           onNodeDragEnd={(node: any) => {
             node.fx = node.x;
             node.fy = node.y;
-            node.fz = node.z;
           }}
         />
-        <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
-          {typeCounts
-            .filter((t) => t.count > 0)
-            .map((t) => (
-              <span key={t.type} className="flex items-center gap-1">
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ background: PAGE_TYPE_FORCE_COLORS[t.type] }}
-                />
-                {PAGE_TYPE_LABELS[t.type]} ({t.count})
-              </span>
-            ))}
-        </div>
+        {focus && selectedNode && (
+          <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              aria-label={`Open details for ${selectedNode.label}`}
+              className="flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+              onClick={() => {
+                if (!onNodeClick) return;
+                const detail = getNodeWithEdgesRef.current(selectedNode.id);
+                if (detail) onNodeClick(detail.node, detail.edges);
+              }}
+            >
+              <span className="font-medium">{selectedNode.label}</span>
+              <span className="text-muted-foreground">View details</span>
+            </button>
+            {focus.truncated && (
+              <div
+                role="status"
+                className="text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+              >
+                Showing direct connections only
+              </div>
+            )}
+          </div>
+        )}
+        <GraphLabelToggles
+          labelMode={labelMode}
+          onLabelModeChange={setLabelMode}
+        />
       </div>
     );
   },
