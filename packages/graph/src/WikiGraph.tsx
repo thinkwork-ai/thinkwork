@@ -39,6 +39,7 @@ import {
   communityColor,
   computeCommunityLayout,
   darkenColor,
+  degreeRadius,
   isDarkMode,
   deriveGraphClassification,
   endpointId,
@@ -153,11 +154,10 @@ export function buildConnectedWikiGraphData(
   };
 }
 
-/** Node radius by degree — shared by rendering and the collide force so
- *  discs can never be forced to overlap. */
-function wikiNodeRadius(node: any): number {
-  const degree = node.edgeCount || 1;
-  return Math.max(8, Math.min(24, 8 + Math.sqrt(degree) * 2));
+/** Degree used for sizing — normalized against the graph's max degree at
+ *  render time so every view fills the same visual size range. */
+function nodeDegree(node: any): number {
+  return node.edgeCount || 1;
 }
 
 export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
@@ -387,6 +387,19 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     const communityLayoutRef = useRef(communityLayout);
     communityLayoutRef.current = communityLayout;
 
+    // Normalize disc sizes to this graph's degree distribution.
+    const maxDegree = useMemo(
+      () => Math.max(1, ...graphData.nodes.map((n: any) => nodeDegree(n))),
+      [graphData],
+    );
+    const maxDegreeRef = useRef(maxDegree);
+    maxDegreeRef.current = maxDegree;
+
+    const nodeRadius = useCallback(
+      (node: any) => degreeRadius(nodeDegree(node), maxDegreeRef.current),
+      [],
+    );
+
     const matchedIdsRef = useRef<Set<string> | null>(null);
     matchedIdsRef.current = matchedIds;
 
@@ -540,7 +553,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         const color = communityColor(
           communityLayoutRef.current.communityByNode.get(node.id),
         );
-        const r = wikiNodeRadius(node);
+        const r = nodeRadius(node);
 
         ctx.globalAlpha = alpha;
         ctx.beginPath();
@@ -582,7 +595,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         }
         ctx.globalAlpha = 1;
       },
-      [nodeLabelVisible],
+      [nodeLabelVisible, nodeRadius],
     );
 
     // With a custom nodeCanvasObject the renderer can't infer hit areas —
@@ -591,7 +604,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       (node: any, color: string, ctx: CanvasRenderingContext2D) => {
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(node.x, node.y, wikiNodeRadius(node) + 4, 0, 2 * Math.PI);
+        ctx.arc(node.x, node.y, nodeRadius(node) + 4, 0, 2 * Math.PI);
         ctx.fill();
       },
       [],
@@ -630,8 +643,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         if (!dist) return;
         const ux = dx / dist;
         const uy = dy / dist;
-        const sourceTrim = wikiNodeRadius(start) + 1.5;
-        const targetTrim = wikiNodeRadius(end) + 1.5;
+        const sourceTrim = nodeRadius(start) + 1.5;
+        const targetTrim = nodeRadius(end) + 1.5;
         if (dist <= sourceTrim + targetTrim) return;
         const sx = start.x + ux * sourceTrim;
         const sy = start.y + uy * sourceTrim;
@@ -735,7 +748,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       // Community-aware springs: short/strong inside a community, long/weak
       // across the bridge edges, so clusters densify without collapsing
       // into each other.
-      const baseDistance = nodeCount > 50 ? 70 : 55;
+      const baseDistance = nodeCount > 50 ? 85 : 65;
       const linkForce = fg.d3Force("link");
       linkForce?.distance((link: any) =>
         sameCommunity(link) ? baseDistance : baseDistance * 2,
@@ -757,7 +770,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         "collide",
         d3
           .forceCollide()
-          .radius((node: any) => wikiNodeRadius(node) + 12)
+          .radius((node: any) => nodeRadius(node) + 14)
           .strength(0.9),
       );
       // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —

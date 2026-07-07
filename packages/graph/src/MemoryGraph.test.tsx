@@ -210,7 +210,7 @@ describe("MemoryGraph (2D canvas)", () => {
     const link = {
       ...props.graphData.links[0],
       source: { id: "ent-1", x: 0, y: 0 },
-      target: { id: "ent-2", x: 100, y: 0 },
+      target: { id: "ent-2", x: 200, y: 0 },
     };
     const texts: string[] = [];
     const ctx = {

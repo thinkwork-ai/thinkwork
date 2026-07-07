@@ -25,6 +25,7 @@ import {
   composeGraphClassification,
   computeCommunityLayout,
   darkenColor,
+  degreeRadius,
   deriveGraphClassification,
   endpointId,
   expandNeighborhood,
@@ -238,15 +239,10 @@ export function buildKnowledgeGraphData(graph: any): {
   return { nodes, links };
 }
 
-/** Node radius by degree — shared by rendering and the collide force so
- *  discs can never be forced to overlap. */
-function knowledgeNodeRadius(node: any): number {
-  const degree = Math.max(
-    node.relationshipCount ?? 0,
-    node.evidenceCount ?? 0,
-    1,
-  );
-  return Math.max(8, Math.min(24, 8 + Math.sqrt(degree) * 2));
+/** Degree used for sizing — normalized against the graph's max degree at
+ *  render time so every view fills the same visual size range. */
+function nodeDegree(node: any): number {
+  return Math.max(node.relationshipCount ?? 0, node.evidenceCount ?? 0, 1);
 }
 
 export const KnowledgeGraph = forwardRef<
@@ -293,6 +289,19 @@ export const KnowledgeGraph = forwardRef<
   const communityLayout = useMemo(
     () => computeCommunityLayout(graphData.nodes, graphData.links),
     [graphData],
+  );
+
+  // Normalize disc sizes to this graph's degree distribution.
+  const maxDegree = useMemo(
+    () => Math.max(1, ...graphData.nodes.map((n: any) => nodeDegree(n))),
+    [graphData],
+  );
+  const maxDegreeRef = useRef(maxDegree);
+  maxDegreeRef.current = maxDegree;
+
+  const nodeRadius = useCallback(
+    (node: any) => degreeRadius(nodeDegree(node), maxDegreeRef.current),
+    [],
   );
 
   const prevTypesRef = useRef<string>("");
@@ -525,7 +534,7 @@ export const KnowledgeGraph = forwardRef<
       const state = classifyNode(node.id, classificationRef.current);
       const alpha = state === "matched" ? 1 : 0.15;
       const color = knowledgeGraphTrustColor(node);
-      const r = knowledgeNodeRadius(node);
+      const r = nodeRadius(node);
 
       ctx.globalAlpha = alpha;
       ctx.beginPath();
@@ -566,7 +575,7 @@ export const KnowledgeGraph = forwardRef<
       }
       ctx.globalAlpha = 1;
     },
-    [nodeLabelVisible],
+    [nodeLabelVisible, nodeRadius],
   );
 
   // With a custom nodeCanvasObject the renderer can't infer hit areas —
@@ -575,10 +584,10 @@ export const KnowledgeGraph = forwardRef<
     (node: any, color: string, ctx: CanvasRenderingContext2D) => {
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(node.x, node.y, knowledgeNodeRadius(node) + 4, 0, 2 * Math.PI);
+      ctx.arc(node.x, node.y, nodeRadius(node) + 4, 0, 2 * Math.PI);
       ctx.fill();
     },
-    [],
+    [nodeRadius],
   );
 
   // Full link painter (replace mode): line trimmed to disc edges,
@@ -600,8 +609,8 @@ export const KnowledgeGraph = forwardRef<
       if (!dist) return;
       const ux = dx / dist;
       const uy = dy / dist;
-      const sourceTrim = knowledgeNodeRadius(start) + 1.5;
-      const targetTrim = knowledgeNodeRadius(end) + 1.5;
+      const sourceTrim = nodeRadius(start) + 1.5;
+      const targetTrim = nodeRadius(end) + 1.5;
       if (dist <= sourceTrim + targetTrim) return;
       const sx = start.x + ux * sourceTrim;
       const sy = start.y + uy * sourceTrim;
@@ -705,7 +714,7 @@ export const KnowledgeGraph = forwardRef<
       .distanceMax(200);
     // Community-aware springs: short/strong inside a community, long/weak
     // across bridges, so clusters densify without collapsing together.
-    const baseDistance = nodeCount > 50 ? 70 : 55;
+    const baseDistance = nodeCount > 50 ? 85 : 65;
     const linkForce = fg.d3Force("link");
     linkForce?.distance((link: any) =>
       sameCommunity(link) ? baseDistance : baseDistance * 2,
@@ -721,7 +730,7 @@ export const KnowledgeGraph = forwardRef<
       "collide",
       d3
         .forceCollide()
-        .radius((node: any) => knowledgeNodeRadius(node) + 12)
+        .radius((node: any) => nodeRadius(node) + 14)
         .strength(0.9),
     );
     // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —

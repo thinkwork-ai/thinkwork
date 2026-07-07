@@ -106,6 +106,15 @@ export function labelsVisibleAtScale(k: number, nodeCount: number): boolean {
   return k >= LABEL_GATE_MIN_SCALE;
 }
 
+/** Disc radius from a node's degree normalized to the graph's max degree,
+ *  so sparse graphs (wiki pages with 1-3 links) use the same visual size
+ *  range as dense ones (entities with dozens of mentions). */
+export function degreeRadius(degree: number, maxDegree: number): number {
+  const d = Math.max(1, degree);
+  const max = Math.max(1, maxDegree);
+  return 10 + 14 * Math.sqrt(Math.min(1, d / max));
+}
+
 /** Distinct hues cycled across detected communities so cluster membership
  *  reads at a glance (the neo4j-browser look). */
 export const COMMUNITY_COLORS = [
