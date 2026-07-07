@@ -9,13 +9,25 @@ import { refreshCanvasData } from "./refreshCanvasData.mutation.js";
 import { createCanvasRefreshSchedule } from "./createCanvasRefreshSchedule.mutation.js";
 import { updateArtifact } from "./updateArtifact.mutation.js";
 import { deleteArtifact } from "./deleteArtifact.mutation.js";
+import { mintArtifactShareLink } from "./mintArtifactShareLink.mutation.js";
+import { revokeArtifactShareLink } from "./revokeArtifactShareLink.mutation.js";
+import {
+  artifactShares_ as artifactShares,
+  tenantArtifactShares,
+} from "./artifactShares.query.js";
 import {
   artifactTypeResolvers,
   artifactVersionTypeResolvers,
 } from "./types.js";
 
 export { artifactTypeResolvers, artifactVersionTypeResolvers };
-export const artifactQueries = { artifacts, artifact, threadCanvasContext };
+export const artifactQueries = {
+  artifacts,
+  artifact,
+  threadCanvasContext,
+  artifactShares,
+  tenantArtifactShares,
+};
 export const artifactMutations = {
   createArtifact,
   saveCanvas,
@@ -25,4 +37,6 @@ export const artifactMutations = {
   createCanvasRefreshSchedule,
   updateArtifact,
   deleteArtifact,
+  mintArtifactShareLink,
+  revokeArtifactShareLink,
 };

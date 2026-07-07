@@ -372,6 +372,18 @@ export const EVENT_PAYLOAD_SHAPES: Record<
     ]),
   },
 
+  // ── Public artifact share links (THINK-208) ──────────
+  //
+  // Identifiers only — the signed token itself never enters the audit log
+  // (it is re-derivable from shareId, but only with the server secret).
+
+  "output.artifact_share_created": {
+    allowedFields: new Set(["shareId", "artifactTitle"]),
+  },
+  "output.artifact_share_revoked": {
+    allowedFields: new Set(["shareId", "createdBy"]),
+  },
+
   // ── Application plugins (U5 of 2026-06-12-001 plan) ──────────
   //
   // Identifiers only — manifests, endpoint URLs, and component payloads

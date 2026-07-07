@@ -169,6 +169,9 @@ The scriptless rendering containment level for Document Artifacts: the sandboxed
 ### DocSpector
 The emission-time preflight validator for Document Artifacts: default-deny rejection of non-self-contained HTML (any URL-resolving attribute or CSS value that is not `data:`, `#fragment`, or `mailto:`), any `<script>` at the document tier, oversize bodies, missing dark-mode support, and renders not authored on the matching Genre Plate — with model-actionable diagnostics so the agent self-corrects in-turn. Named after SkillSpector, the skill-publish trust gate.
 
+### Public Share Link
+A revocable, unguessable tokenized URL that serves a Document Artifact's live compiled render to anonymous readers outside the workspace (THINK-208). Live by definition — recompiles are visible to link-holders; freezing stays the Snapshot mechanism's job. Minted only for document artifacts (the scriptless DocSpector guarantee is the safety premise); the "workspace members" share option is just the canonical app URL, not a token. Contrast with the deferred canvas-era "published embed", which was snapshot-based.
+
 ### Genre Plate
 A registered document genre's visual and structural identity: display name, use-for description, eyebrow, title suffix, palette tokens, and directive availability. Since the Document Compositor (THINK-154), a plate is compiler-owned configuration — the agent never authors on it; the server compiles every render from it, so plate conformance holds by construction. The exemplar-HTML plates shipped in the document-composer skill and DocSpector's off-plate rejection are the retired v1 mechanism. Shipped (THINK-153): plates are tenant-scoped registry rows — operators create and edit them as structured config, never freehand HTML. Target state (THINK-182/183): plates also carry a content contract — a Section Manifest and Declared Analyses — so a plate shapes what the agent authors, not just how it looks.
 

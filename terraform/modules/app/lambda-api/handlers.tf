@@ -511,6 +511,9 @@ resource "aws_lambda_function" "handler" {
     "auth-me",
     "public-auth-options",
     "workos-auth",
+    # Public artifact share links (THINK-208): GET /share/{token}, token
+    # verified in handler code (no gateway auth, uniform 404 on any miss).
+    "artifact-share",
     "extension-proxy",
     "tenants",
     "users",
@@ -1222,6 +1225,12 @@ locals {
 
       # Webhooks (public trigger) — legacy PRD-19 tokenized webhooks.
       "POST /webhooks/{proxy+}" = "webhooks"
+
+      # Public artifact share links (THINK-208). Unauthenticated by design:
+      # the HMAC-signed token is the access grant, verified in handler code;
+      # every miss returns a uniform 404. GET-only — the page is a top-level
+      # navigation, so no OPTIONS/preflight fires (KTD-9).
+      "GET /share/{token}" = "artifact-share"
 
       # n8n agent-step bridge — public tenant-scoped credential endpoint for
       # stock n8n HTTP Request nodes.

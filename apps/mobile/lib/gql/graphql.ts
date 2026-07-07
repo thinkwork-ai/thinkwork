@@ -842,6 +842,16 @@ export type ArtifactDataBinding = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type ArtifactShare = {
+  __typename?: "ArtifactShare";
+  artifactId: Scalars["ID"]["output"];
+  artifactTitle: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdBy: Scalars["ID"]["output"];
+  createdByName?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+};
+
 export enum ArtifactStatus {
   Draft = "DRAFT",
   Final = "FINAL",
@@ -1244,6 +1254,8 @@ export enum ComplianceEventType {
   McpGranted = "MCP_GRANTED",
   McpRemoved = "MCP_REMOVED",
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
+  OutputArtifactShareCreated = "OUTPUT_ARTIFACT_SHARE_CREATED",
+  OutputArtifactShareRevoked = "OUTPUT_ARTIFACT_SHARE_REVOKED",
   PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
   PluginActivationRevoked = "PLUGIN_ACTIVATION_REVOKED",
   PluginCutover = "PLUGIN_CUTOVER",
@@ -3532,6 +3544,12 @@ export type MessageSender = {
   type: Scalars["String"]["output"];
 };
 
+export type MintArtifactShareLinkResult = {
+  __typename?: "MintArtifactShareLinkResult";
+  share: ArtifactShare;
+  url: Scalars["String"]["output"];
+};
+
 /**
  * Fact-type picker values exposed to the mobile quick-capture footer. Maps to
  * Hindsight's native fact_type via the resolver. FACT is the default when the
@@ -3810,6 +3828,7 @@ export type Mutation = {
    */
   issuePremiumPluginInstallKey: IssuePremiumPluginInstallKeyResult;
   markThreadsRead: MarkThreadsReadResult;
+  mintArtifactShareLink: MintArtifactShareLinkResult;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
   notifyEvalRunUpdate?: Maybe<EvalRunUpdateEvent>;
@@ -3891,6 +3910,7 @@ export type Mutation = {
   /** Re-drive one failed component (failed → pending) and re-run its handler (tenant admin). */
   retryPluginComponent: PluginInstall;
   reviewGoal: ReviewGoalPayload;
+  revokeArtifactShareLink: Scalars["Boolean"]["output"];
   /**
    * ThinkWork-operator-only: revoke an issued premium plugin install key before
    * redemption.
@@ -4542,6 +4562,10 @@ export type MutationMarkThreadsReadArgs = {
   input: MarkThreadsReadInput;
 };
 
+export type MutationMintArtifactShareLinkArgs = {
+  artifactId: Scalars["ID"]["input"];
+};
+
 export type MutationNotifyAgentStatusArgs = {
   agentId: Scalars["ID"]["input"];
   name: Scalars["String"]["input"];
@@ -4855,6 +4879,10 @@ export type MutationRetryPluginComponentArgs = {
 
 export type MutationReviewGoalArgs = {
   input: ReviewGoalInput;
+};
+
+export type MutationRevokeArtifactShareLinkArgs = {
+  shareId: Scalars["ID"]["input"];
 };
 
 export type MutationRevokePremiumPluginInstallKeyArgs = {
@@ -6198,6 +6226,7 @@ export type Query = {
   appletState?: Maybe<AppletState>;
   applets: AppletConnection;
   artifact?: Maybe<Artifact>;
+  artifactShares: Array<ArtifactShare>;
   artifacts: Array<Artifact>;
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
   brainDreamRuns: Array<BrainDreamRun>;
@@ -6405,6 +6434,7 @@ export type Query = {
   tenant?: Maybe<Tenant>;
   tenantAgent: Agent;
   tenantAgentSummary: TenantAgentSummary;
+  tenantArtifactShares: Array<ArtifactShare>;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
   tenantDocumentPalette: TenantDocumentPalette;
@@ -6633,6 +6663,10 @@ export type QueryAppletsArgs = {
 
 export type QueryArtifactArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type QueryArtifactSharesArgs = {
+  artifactId: Scalars["ID"]["input"];
 };
 
 export type QueryArtifactsArgs = {
@@ -7220,6 +7254,10 @@ export type QueryTenantAgentArgs = {
 };
 
 export type QueryTenantAgentSummaryArgs = {
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryTenantArtifactSharesArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 

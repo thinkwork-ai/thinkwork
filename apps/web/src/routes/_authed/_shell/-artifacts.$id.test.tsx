@@ -9,6 +9,7 @@ vi.mock("urql", () => ({
   gql: (strings: TemplateStringsArray) => strings.join(""),
   useQuery: vi.fn(),
   useMutation: vi.fn(),
+  useClient: vi.fn(() => ({})),
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
@@ -257,6 +258,40 @@ describe("AppletRouteContent", () => {
         .querySelector('[data-runtime-mode="sandboxedGenerated"]'),
     ).toBeTruthy();
     expect(screen.queryByText("Hello applet")).toBeNull();
+  });
+
+  // The Share/Download actions render into the page header slot, which the
+  // mocked usePageHeaderActions swallows — assert against the action node it
+  // was handed instead of the document body.
+  function lastHeaderActionNode() {
+    const call = vi.mocked(usePageHeaderActions).mock.lastCall;
+    return (call?.[0] as { action?: React.ReactNode } | undefined)?.action;
+  }
+
+  it("renders the Share action for document artifacts (THINK-208 R1)", async () => {
+    setRouteQueryMocks({
+      artifact: artifactPayload({
+        type: "REPORT",
+        metadata: { kind: "document" },
+      }),
+      applet: null,
+    });
+    render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
+    render(<>{lastHeaderActionNode()}</>);
+    expect(screen.getByTestId("document-share")).toBeTruthy();
+  });
+
+  it("renders no Share affordance for canvas artifacts (THINK-208 AE3)", async () => {
+    setRouteQueryMocks({
+      artifact: artifactPayload({
+        type: "DATA_VIEW",
+        metadata: { kind: "json_render_canvas", stablePartId: "part-1" },
+      }),
+      applet: null,
+    });
+    render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
+    render(<>{lastHeaderActionNode()}</>);
+    expect(screen.queryByTestId("document-share")).toBeNull();
   });
 
   it("ignores artifact metadata that claims the trusted native runtime", async () => {

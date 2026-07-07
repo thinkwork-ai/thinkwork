@@ -9,7 +9,7 @@ import {
 import { javascript } from "@codemirror/lang-javascript";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import CodeMirror from "@uiw/react-codemirror";
-import { Braces, Download, RefreshCw, Save } from "lucide-react";
+import { Braces, Download, RefreshCw, Save, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { Button, cn } from "@thinkwork/ui";
@@ -26,6 +26,7 @@ import {
   isDocumentArtifactMetadata,
 } from "@/components/artifacts/ArtifactBodyView";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
+import { ArtifactShareDialog } from "@/components/artifacts/ArtifactShareDialog";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
 import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderActions";
@@ -391,6 +392,9 @@ function DocumentArtifactContent({
   backHref: string;
   breadcrumbRoot?: { label: string; href: string };
 }) {
+  // Public share links (THINK-208): documents only — the canvas/applet
+  // branches never render a Share affordance (R1).
+  const [shareOpen, setShareOpen] = useState(false);
   const downloadDocument = useCallback(() => {
     if (!artifact.renderHtml) return;
     const blob = new Blob([artifact.renderHtml], {
@@ -407,6 +411,15 @@ function DocumentArtifactContent({
   const composedHeaderAction = useMemo<ReactNode>(
     () => (
       <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShareOpen(true)}
+          data-testid="document-share"
+        >
+          <Share2 className="mr-1.5 h-3.5 w-3.5" />
+          Share
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -451,6 +464,12 @@ function DocumentArtifactContent({
   return (
     <main className="flex h-full min-h-0 w-full flex-1 flex-col">
       <DocumentArtifactBody artifact={artifact} />
+      <ArtifactShareDialog
+        artifactId={artifact.id}
+        artifactTitle={artifact.title}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
     </main>
   );
 }

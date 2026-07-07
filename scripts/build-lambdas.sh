@@ -145,6 +145,10 @@ build_handler "public-auth-options" \
 build_handler "workos-auth" \
   "$REPO_ROOT/packages/api/src/handlers/workos-auth.ts"
 
+# Public artifact share links (THINK-208): unauthenticated GET /share/{token}.
+build_handler "artifact-share" \
+  "$REPO_ROOT/packages/api/src/handlers/artifact-share.ts"
+
 # ---------------------------------------------------------------------------
 # P1: Agent invoke + thread management
 # ---------------------------------------------------------------------------

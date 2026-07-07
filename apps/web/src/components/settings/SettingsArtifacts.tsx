@@ -7,6 +7,7 @@ import {
   type PlatesActionsController,
 } from "@/components/artifacts/plates/PlatesListBody";
 import { SetAppStyleButton } from "@/components/artifacts/SetAppStyleDialog";
+import { SettingsArtifactSharesBody } from "@/components/settings/SettingsArtifactShares";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 
@@ -19,6 +20,7 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 export const SETTINGS_ARTIFACTS_TABS = [
   { to: "/settings/artifacts", label: "Artifacts" },
   { to: "/settings/artifacts/plates", label: "Plates" },
+  { to: "/settings/artifacts/shares", label: "Shared links" },
 ];
 
 export function SettingsArtifacts() {
@@ -99,6 +101,30 @@ export function SettingsArtifactsPlates() {
         />
       </div>
       <PlatesListBody onActionsControllerChange={updateController} />
+    </div>
+  );
+}
+
+/** The Shared-links tab (THINK-208 U6): tenant-wide public share oversight. */
+export function SettingsArtifactShares() {
+  usePageHeaderActions({
+    title: "Artifacts",
+    breadcrumbs: [{ label: "Artifacts" }],
+    tabs: SETTINGS_ARTIFACTS_TABS,
+    actionKey: "settings-artifacts-shares",
+  });
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 px-6 pt-6">
+        <SettingsPageTitle
+          title="Shared links"
+          description="Active public document links in this workspace. Revoking a link cuts off everyone who holds it."
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto px-6 pb-6">
+        <SettingsArtifactSharesBody />
+      </div>
     </div>
   );
 }

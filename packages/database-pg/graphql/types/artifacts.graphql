@@ -42,6 +42,25 @@ type Artifact {
   renderHtml: String
 }
 
+# Public share link grant (THINK-208): one active "anyone with the link"
+# share per document artifact. The signed URL token is never exposed here —
+# clients re-obtain the URL through mintArtifactShareLink's get-or-create.
+type ArtifactShare {
+  id: ID!
+  artifactId: ID!
+  # Denormalized for list surfaces (operator settings, share dialog).
+  artifactTitle: String!
+  createdBy: ID!
+  createdByName: String
+  createdAt: AWSDateTime!
+}
+
+# Mint result: the copyable public URL plus the (possibly pre-existing) share.
+type MintArtifactShareLinkResult {
+  url: String!
+  share: ArtifactShare!
+}
+
 # A content-addressed, write-once snapshot revision of a canvas artifact.
 type ArtifactVersion {
   id: ID!
@@ -331,6 +350,12 @@ extend type Query {
   # acting user's space access (KTD8) — the runtime asserts that user via
   # `x-principal-id` alongside the service secret.
   threadCanvasContext(threadId: ID!): ThreadCanvasContext!
+  # Public share links (THINK-208): the artifact's active share (0 or 1 rows),
+  # visible to any member who passes the document's read gate. Never returns
+  # a signed token.
+  artifactShares(artifactId: ID!): [ArtifactShare!]!
+  # Operator-only tenant-wide list of active public share links.
+  tenantArtifactShares(tenantId: ID!): [ArtifactShare!]!
   applet(appId: ID!): AppletPayload
   applets(cursor: String, limit: Int): AppletConnection!
   appletState(appId: ID!, instanceId: ID!, key: String!): AppletState
@@ -372,6 +397,13 @@ extend type Mutation {
   ): CanvasRefreshSchedule!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
+  # Public share links (THINK-208): mint (get-or-create) the public
+  # "anyone with the link" URL for a document artifact. Document-kind only;
+  # requires tenant membership plus the document's read gate.
+  mintArtifactShareLink(artifactId: ID!): MintArtifactShareLinkResult!
+  # Revoke a public share link. Creators revoke their own; operators any.
+  # Revoked tokens 404 on the public route.
+  revokeArtifactShareLink(shareId: ID!): Boolean!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
   promoteDraftApplet(input: PromoteDraftAppletInput!): SaveAppletPayload!
   regenerateApplet(input: SaveAppletInput!): SaveAppletPayload!
