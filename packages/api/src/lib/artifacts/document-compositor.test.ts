@@ -14,6 +14,7 @@ import {
   type DirectiveEngine,
 } from "./document-compositor.js";
 import { runDocumentPreflight } from "./document-preflight.js";
+import { DOCUMENT_PLATE_CSS } from "./document-templates.js";
 import { CORE_PLATE_SLUGS } from "./plate-definitions.js";
 import { resolvePlatformPlate } from "./plate-registry.js";
 
@@ -134,6 +135,39 @@ items:
       digestMarkdown: "# d",
     });
     expect(preflight.ok).toBe(true);
+  });
+
+  it("timeline track segments span the item's horizontal padding so adjacent segments meet (THINK-205 repair)", () => {
+    // R5/AE1: the row must read as ONE continuous line through all dots. Each
+    // item draws its own segment inside .t-track, but .t-item carries
+    // horizontal padding — unless the segment extends across that padding on
+    // both sides, adjacent segments stop short and the track shows gaps.
+    const cssRule = (selector: string) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = DOCUMENT_PLATE_CSS.match(
+        new RegExp(`(?:^|\\n|\\})${escaped}\\{([^}]*)\\}`),
+      );
+      expect(match, `missing CSS rule ${selector}`).not.toBeNull();
+      return match![1];
+    };
+    const pxValue = (decl: string, prop: string) => {
+      const match = decl.match(
+        new RegExp(`(?:^|;)${prop}:(-?[\\d.]+)(?:px)?(?:;|$)`),
+      );
+      return match ? Number(match[1]) : null;
+    };
+    const itemPadding =
+      cssRule(".timeline .t-item").match(/padding:0 ([\d.]+)px/)?.[1] ?? "0";
+    const track = cssRule(".timeline .t-track::before");
+    expect(pxValue(track, "left")).toBeLessThanOrEqual(-Number(itemPadding));
+    expect(pxValue(track, "right")).toBeLessThanOrEqual(-Number(itemPadding));
+    // End-trim stays: the outer halves are still cut at the first/last dot.
+    expect(cssRule(".timeline .t-item:first-child .t-track::before")).toContain(
+      "left:50%",
+    );
+    expect(cssRule(".timeline .t-item:last-child .t-track::before")).toContain(
+      "right:50%",
+    );
   });
 
   it("drops unknown frontmatter keys with a warning naming the allowed set (KTD7)", () => {
