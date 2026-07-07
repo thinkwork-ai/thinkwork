@@ -625,7 +625,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         });
         const sprite = new THREE.Sprite(spriteMaterial);
         sprite.scale.set(r * 3, r * 3, 1);
-        sprite.position.set(0, 0, 0);
+        sprite.position.set(0, 0, 2);
         sprite.visible = nodeLabelVisible(node.id);
         group.add(sprite);
 

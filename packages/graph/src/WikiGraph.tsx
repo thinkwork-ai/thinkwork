@@ -630,7 +630,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         });
         const sprite = new THREE.Sprite(spriteMaterial);
         sprite.scale.set(r * 3, r * 3, 1);
-        sprite.position.set(0, 0, 0);
+        sprite.position.set(0, 0, 2);
         sprite.visible = nodeLabelVisible(node.id);
         group.add(sprite);
 
@@ -658,7 +658,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         });
         const ringSprite = new THREE.Sprite(ringMaterial);
         ringSprite.scale.set(r * 2, r * 2, 1);
-        ringSprite.position.set(0, 0, 0);
+        ringSprite.position.set(0, 0, 1);
         group.add(ringSprite);
 
         // Stash materials so filter-mute can adjust opacity without rebuilding
