@@ -1,11 +1,24 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Plus, Search, X } from "lucide-react";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+  type ColumnDef,
+  type ColumnFiltersState,
+} from "@tanstack/react-table";
+import { CircleDot, Crosshair, Plus, Zap } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
-import { cn } from "@/lib/utils";
+import {
+  Badge,
+  Button,
+  DataTable,
+  DataTableTokenFilter,
+  dataTableTokenFilterFns,
+  type DataTableTokenFilterColumn,
+} from "@thinkwork/ui";
+import { CollapsedFilterSearch } from "@/components/artifacts/CollapsedFilterSearch";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useTenant } from "@/context/TenantContext";
@@ -32,7 +45,7 @@ import {
 import type { AgentLoopRow, SaveAgentLoopPayload } from "./agent-loop-types";
 import {
   defaultSpaceIdFromAgentRuntimeConfig,
-  formatDateTime,
+  formatShortDateTime,
   jsonRecord,
   readTargetSpec,
   stringValue,
@@ -59,13 +72,104 @@ type TenantAgentData = {
 type RoutinesData = { routines?: RoutineRow[] };
 type MembersData = { tenantMembers?: TenantMemberRow[] };
 
-const STATUS_TABS = [
-  { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "paused", label: "Paused" },
-] as const;
+const LOOP_FILTER_COLUMNS = {
+  search: "loopSearch",
+  status: "loopStatus",
+  trigger: "loopTrigger",
+  target: "loopTarget",
+} as const;
 
-type StatusTab = (typeof STATUS_TABS)[number]["id"];
+function loopSearchText(row: AgentLoopRow): string {
+  return [
+    row.name,
+    row.description ?? "",
+    row.lifecycleStatus,
+    triggerLabel(row),
+    targetLabel(row),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function uniqueOptions(
+  rows: AgentLoopRow[],
+  getValue: (row: AgentLoopRow) => string,
+) {
+  return Array.from(new Set(rows.map(getValue).filter(Boolean))).sort();
+}
+
+function buildLoopFilterColumns(): ColumnDef<AgentLoopRow>[] {
+  return [
+    {
+      id: LOOP_FILTER_COLUMNS.search,
+      accessorFn: loopSearchText,
+      filterFn: dataTableTokenFilterFns.text,
+    },
+    {
+      id: LOOP_FILTER_COLUMNS.status,
+      accessorFn: (row) => row.lifecycleStatus,
+      filterFn: dataTableTokenFilterFns.option,
+    },
+    {
+      id: LOOP_FILTER_COLUMNS.trigger,
+      accessorFn: triggerLabel,
+      filterFn: dataTableTokenFilterFns.option,
+    },
+    {
+      id: LOOP_FILTER_COLUMNS.target,
+      accessorFn: targetLabel,
+      filterFn: dataTableTokenFilterFns.option,
+    },
+  ];
+}
+
+function buildLoopTokenFilterColumns(
+  rows: AgentLoopRow[],
+): DataTableTokenFilterColumn[] {
+  return [
+    {
+      id: LOOP_FILTER_COLUMNS.status,
+      label: "Status",
+      type: "option",
+      icon: <CircleDot className="size-4" />,
+      options: uniqueOptions(rows, (row) => row.lifecycleStatus).map(
+        (value) => ({ value, label: titleize(value) }),
+      ),
+    },
+    {
+      id: LOOP_FILTER_COLUMNS.trigger,
+      label: "Trigger",
+      type: "option",
+      icon: <Zap className="size-4" />,
+      options: uniqueOptions(rows, triggerLabel).map((value) => ({
+        value,
+        label: value,
+      })),
+    },
+    {
+      id: LOOP_FILTER_COLUMNS.target,
+      label: "Target",
+      type: "option",
+      icon: <Crosshair className="size-4" />,
+      options: uniqueOptions(rows, targetLabel).map((value) => ({
+        value,
+        label: value,
+      })),
+    },
+  ];
+}
+
+function searchFilterText(filters: ColumnFiltersState): string {
+  const value = filters.find(
+    (filter) => filter.id === LOOP_FILTER_COLUMNS.search,
+  )?.value;
+  return value &&
+    typeof value === "object" &&
+    "value" in value &&
+    typeof (value as { value: unknown }).value === "string"
+    ? (value as { value: string }).value
+    : "";
+}
 
 export function AgentLoopInventory({
   routeScope = "settings",
@@ -75,10 +179,7 @@ export function AgentLoopInventory({
   const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
-  const [editingLoop, setEditingLoop] = useState<AgentLoopRow | null>(null);
-  const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   const [loopsResult, refetchLoops] = useQuery<AgentLoopsData>({
     query: SettingsAgentLoopsQuery,
@@ -157,48 +258,61 @@ export function AgentLoopInventory({
     [loopsResult.data?.agentLoops],
   );
 
-  const counts = useMemo(() => {
-    const active = rows.filter((r) => r.lifecycleStatus === "active").length;
-    const paused = rows.filter((r) => r.lifecycleStatus === "paused").length;
-    return { all: rows.length, active, paused };
-  }, [rows]);
-
-  const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (statusTab === "active" && row.lifecycleStatus !== "active") {
-        return false;
-      }
-      if (statusTab === "paused" && row.lifecycleStatus !== "paused") {
-        return false;
-      }
-      if (!query) return true;
-      return [
-        row.name,
-        row.description ?? "",
-        row.lifecycleStatus,
-        triggerLabel(row),
-        targetLabel(row),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    });
-  }, [rows, search, statusTab]);
+  const filterColumns = useMemo(() => buildLoopFilterColumns(), []);
+  const tokenFilterColumns = useMemo(
+    () => buildLoopTokenFilterColumns(rows),
+    [rows],
+  );
+  const filterTable = useReactTable({
+    data: rows,
+    columns: filterColumns,
+    state: { columnFilters },
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const filteredRows = useMemo(
+    () => filterTable.getFilteredRowModel().rows.map((row) => row.original),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filterTable.getState().columnFilters, rows],
+  );
+  const searchValue = searchFilterText(columnFilters);
+  const setSearchValue = (value: string) => {
+    const trimmed = value.trimStart();
+    filterTable
+      .getColumn(LOOP_FILTER_COLUMNS.search)
+      ?.setFilterValue(
+        trimmed ? { operator: "contains", value: trimmed } : undefined,
+      );
+  };
 
   const columns = useMemo<ColumnDef<AgentLoopRow>[]>(
     () => [
       {
         accessorKey: "name",
         header: "Name",
+        // Name flexes to absorb leftover width; the other columns fit their
+        // content and never force a horizontal scroll.
+        meta: {
+          headClassName: "w-full min-w-[200px]",
+          cellClassName: "w-full min-w-[200px] max-w-0",
+        },
         cell: ({ row }) => (
-          <span className="truncate font-medium">{row.original.name}</span>
+          <span
+            className="block truncate font-medium"
+            title={row.original.name}
+          >
+            {row.original.name}
+          </span>
         ),
       },
       {
         id: "trigger",
         header: "Trigger",
-        size: 170,
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) => (
           <Badge variant="outline" className="text-xs">
             {triggerLabel(row.original)}
@@ -208,7 +322,10 @@ export function AgentLoopInventory({
       {
         id: "target",
         header: "Target",
-        size: 150,
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) => (
           <Badge variant="secondary" className="text-xs">
             {targetLabel(row.original)}
@@ -218,7 +335,10 @@ export function AgentLoopInventory({
       {
         id: "status",
         header: "Status",
-        size: 120,
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) => (
           <StatusBadge status={row.original.lifecycleStatus} size="sm" />
         ),
@@ -226,32 +346,16 @@ export function AgentLoopInventory({
       {
         id: "lastRun",
         header: "Last run",
-        size: 180,
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) => (
           <span className="text-muted-foreground">
             {row.original.lastRunAt
-              ? formatDateTime(row.original.lastRunAt)
+              ? formatShortDateTime(row.original.lastRunAt)
               : "Never"}
           </span>
-        ),
-      },
-      {
-        id: "actions",
-        header: "",
-        size: 56,
-        cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Edit automation"
-            onClick={(event) => {
-              event.stopPropagation();
-              setEditingLoop(row.original);
-            }}
-          >
-            <Pencil className="size-4" />
-          </Button>
         ),
       },
     ],
@@ -283,27 +387,17 @@ export function AgentLoopInventory({
     if (id) openLoop(id);
   }
 
-  async function updateLoop(payload: SaveAgentLoopPayload) {
-    const result = await saveAgentLoop({ input: payload });
-    if (result.error) throw result.error;
-    toast.success("Automation updated");
-    setEditingLoop(null);
-    refetchLoops({ requestPolicy: "network-only" });
-  }
-
-  const dialogOpen = (creating || editingLoop !== null) && Boolean(tenantId);
-  const closeDialog = () => {
-    setCreating(false);
-    setEditingLoop(null);
-  };
+  // Editing lives on the automation detail page — the inventory only creates.
+  const dialogOpen = creating && Boolean(tenantId);
+  const closeDialog = () => setCreating(false);
 
   return (
     <>
       {dialogOpen ? (
         <AgentLoopForm
-          mode={editingLoop ? "edit" : "create"}
+          mode="create"
           tenantId={tenantId ?? ""}
-          initialLoop={editingLoop}
+          initialLoop={null}
           workerOptions={workerOptions}
           spaceOptions={spaceOptions}
           routineOptions={routineOptions}
@@ -311,7 +405,7 @@ export function AgentLoopInventory({
           memberOptions={memberOptions}
           defaultSpaceId={defaultSpaceId}
           currentUserId={userId}
-          onSubmit={editingLoop ? updateLoop : createLoop}
+          onSubmit={createLoop}
           onCancel={closeDialog}
         />
       ) : null}
@@ -319,67 +413,38 @@ export function AgentLoopInventory({
         title="Automations"
         description="Create, run, and inspect recurring or webhook automations."
         loading={loopsResult.fetching && !loopsResult.data}
-        actions={
-          <Button type="button" size="sm" onClick={() => setCreating(true)}>
-            <Plus className="mr-2 size-4" />
-            New Automation
+        headerActions={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="New automation"
+            title="New automation"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setCreating(true)}
+          >
+            <Plus className="size-4" />
           </Button>
         }
+        headerActionKey="agent-loops-create"
         toolbar={
-          <div className="flex w-full items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              {STATUS_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setStatusTab(tab.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
-                    statusTab === tab.id
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {tab.label}
-                  <span className="text-xs text-muted-foreground">
-                    {counts[tab.id]}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {searchOpen ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  autoFocus
-                  className="h-9 w-56"
-                  placeholder="Search automations..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Close search"
-                  onClick={() => {
-                    setSearch("");
-                    setSearchOpen(false);
-                  }}
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Search"
-                onClick={() => setSearchOpen(true)}
-              >
-                <Search className="size-4" />
-              </Button>
-            )}
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <CollapsedFilterSearch
+              value={searchValue}
+              onChange={setSearchValue}
+              label="Search automations"
+              placeholder="Search automations..."
+            />
+            <DataTableTokenFilter
+              table={filterTable}
+              columns={tokenFilterColumns}
+              addLabel="Filter"
+              showAddLabel={false}
+              clearLabel="Clear filters"
+              flattenToolbar
+              className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+              popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+            />
           </div>
         }
       >
@@ -392,6 +457,8 @@ export function AgentLoopInventory({
             columns={columns}
             data={filteredRows}
             scrollable
+            allowHorizontalScroll={false}
+            tableClassName="w-full table-auto"
             emptyState={
               <div className="py-12 text-center text-sm text-muted-foreground">
                 No automations found.

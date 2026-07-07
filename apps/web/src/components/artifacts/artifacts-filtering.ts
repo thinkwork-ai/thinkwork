@@ -50,6 +50,9 @@ export interface ArtifactListNode {
   status?: string | null;
   updatedAt?: string | null;
   headVersion?: number | null;
+  /** Display name of the generating user, resolved server-side via the source
+   * thread. Null when the artifact has no thread/user. */
+  userName?: string | null;
   metadata?: unknown;
 }
 
@@ -138,7 +141,7 @@ export function artifactNodeToItem(
     id: node.id,
     artifactId: node.id,
     title: node.title?.trim() || titleFallback,
-    userName: null,
+    userName: node.userName ?? null,
     modelId: null,
     stdlibVersion: null,
     generatedAt: node.updatedAt ?? "",

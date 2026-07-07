@@ -2622,17 +2622,19 @@ export const CanvasBindingFreshnessQuery = gql`
 // THINK-145/THINK-147: tenant-wide artifact rows for the Artifacts list — EVERY
 // kind (living canvases, HTML document artifacts, and any plugin-minted type),
 // not just DATA_VIEW canvases. Applet rows are excluded client-side (they come
-// from the applets query). `includeDrafts` defaults false (saved-only); the
-// list's "Include drafts" toggle flips it. `type` drives the Type badge.
+// from the applets query). Draft canvases stay hidden (`includeDrafts`
+// defaults false server-side). `type` drives the Type badge; `userName` is the
+// generating user resolved via the source thread.
 export const TenantArtifactsListQuery = gql`
-  query TenantArtifactsList($tenantId: ID!, $includeDrafts: Boolean) {
-    artifacts(tenantId: $tenantId, includeDrafts: $includeDrafts, limit: 100) {
+  query TenantArtifactsList($tenantId: ID!) {
+    artifacts(tenantId: $tenantId, limit: 100) {
       id
       title
       type
       status
       headVersion
       updatedAt
+      userName
       metadata
     }
   }
