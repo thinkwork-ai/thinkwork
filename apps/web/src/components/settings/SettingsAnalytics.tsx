@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { BrainCircuit, UserRound } from "lucide-react";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
@@ -316,9 +317,19 @@ function CostByUserCard({
               return (
                 <TableRow key={r.userId ?? "system"}>
                   <TableCell className="max-w-0">
-                    <div className="truncate font-medium">
-                      {r.isSystem ? "System" : r.userName}
-                    </div>
+                    {r.isSystem || !r.userId ? (
+                      <div className="truncate font-medium">
+                        {r.isSystem ? "System" : r.userName}
+                      </div>
+                    ) : (
+                      <Link
+                        to="/settings/users/$userId"
+                        params={{ userId: r.userId }}
+                        className="block truncate font-medium hover:underline"
+                      >
+                        {r.userName}
+                      </Link>
+                    )}
                   </TableCell>
                   <TableCell className="w-16 text-center tabular-nums text-muted-foreground">
                     {r.eventCount}
