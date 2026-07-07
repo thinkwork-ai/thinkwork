@@ -239,6 +239,17 @@ export function buildKnowledgeGraphData(graph: any): {
   return { nodes, links };
 }
 
+/** Node radius by degree — shared by rendering and the collide force so
+ *  discs can never be forced to overlap. */
+function knowledgeNodeRadius(node: any): number {
+  const degree = Math.max(
+    node.relationshipCount ?? 0,
+    node.evidenceCount ?? 0,
+    1,
+  );
+  return Math.max(8, Math.min(24, 8 + Math.sqrt(degree) * 2));
+}
+
 export const KnowledgeGraph = forwardRef<
   KnowledgeGraphHandle,
   KnowledgeGraphProps
@@ -566,7 +577,7 @@ export const KnowledgeGraph = forwardRef<
         node.evidenceCount ?? 0,
         1,
       );
-      const r = Math.max(8, Math.min(24, 8 + Math.sqrt(degree) * 2));
+      const r = knowledgeNodeRadius(node);
       const sphereOp = state === "matched" ? 1 : 0.15;
       const ringOp = state === "neighbor" ? 1 : 0;
 
@@ -683,7 +694,7 @@ export const KnowledgeGraph = forwardRef<
     const baseDistance = nodeCount > 50 ? 100 : 75;
     const linkForce = fg.d3Force("link");
     linkForce?.distance((link: any) =>
-      sameCommunity(link) ? baseDistance * 0.4 : baseDistance * 1.8,
+      sameCommunity(link) ? baseDistance * 0.7 : baseDistance * 1.8,
     );
     linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
     // Per-community anchors replace the global center force — anchors are
@@ -692,7 +703,13 @@ export const KnowledgeGraph = forwardRef<
     fg.d3Force("center", null);
     fg.d3Force("x", d3.forceX((node: any) => anchorFor(node).x).strength(0.08));
     fg.d3Force("y", d3.forceY((node: any) => anchorFor(node).y).strength(0.08));
-    fg.d3Force("collide", d3.forceCollide().radius(28).strength(0.8));
+    fg.d3Force(
+      "collide",
+      d3
+        .forceCollide()
+        .radius((node: any) => knowledgeNodeRadius(node) + 6)
+        .strength(0.9),
+    );
     // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
     // the first pass fires before the container is measured (fg == null).
   }, [graphData, communityLayout, dims]);
@@ -792,14 +809,7 @@ export const KnowledgeGraph = forwardRef<
             ? `${knowledgeGraphTrustColor(link)}cc`
             : "rgba(255,255,255,0.12)"
         }
-        linkWidth={0}
-        linkDirectionalArrowLength={() => 6}
-        linkDirectionalArrowRelPos={1}
-        linkDirectionalArrowColor={(link: any) =>
-          isLinkBright(link)
-            ? `${knowledgeGraphTrustColor(link)}cc`
-            : "rgba(255,255,255,0.12)"
-        }
+        linkWidth={1.2}
         linkLabel={(link: any) => link.label || "related to"}
         linkThreeObjectExtend={true}
         linkThreeObject={(link: any) => {

@@ -156,6 +156,13 @@ export function buildConnectedWikiGraphData(
   };
 }
 
+/** Node radius by degree — shared by rendering and the collide force so
+ *  discs can never be forced to overlap. */
+function wikiNodeRadius(node: any): number {
+  const degree = node.edgeCount || 1;
+  return Math.max(8, Math.min(24, 8 + Math.sqrt(degree) * 2));
+}
+
 export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
   function WikiGraph(
     {
@@ -583,7 +590,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           rawLabel.length > 16 ? rawLabel.slice(0, 15) + "…" : rawLabel;
         // Size by degree. Pages with more links render bigger.
         const degree = node.edgeCount || 1;
-        const r = Math.max(8, Math.min(24, 8 + Math.sqrt(degree) * 2));
+        const r = wikiNodeRadius(node);
 
         const sphereOp = state === "matched" ? 1 : 0.15;
         const labelOp = sphereOp;
@@ -711,7 +718,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       const baseDistance = nodeCount > 50 ? 100 : 75;
       const linkForce = fg.d3Force("link");
       linkForce?.distance((link: any) =>
-        sameCommunity(link) ? baseDistance * 0.4 : baseDistance * 1.8,
+        sameCommunity(link) ? baseDistance * 0.7 : baseDistance * 1.8,
       );
       linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
       // Per-community anchors replace the global center force — anchors
@@ -726,7 +733,13 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         "y",
         d3.forceY((node: any) => anchorFor(node).y).strength(0.08),
       );
-      fg.d3Force("collide", d3.forceCollide().radius(28).strength(0.8));
+      fg.d3Force(
+        "collide",
+        d3
+          .forceCollide()
+          .radius((node: any) => wikiNodeRadius(node) + 6)
+          .strength(0.9),
+      );
       // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
       // the first pass fires before the container is measured (fg == null).
     }, [graphData, communityLayout, dims]);
@@ -830,17 +843,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           showNavInfo={false}
           linkColor={(link: any) =>
             isLinkBright(link)
-              ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)"
+              ? "rgba(148,163,184,0.9)"
+              : "rgba(148,163,184,0.12)"
           }
-          linkWidth={0}
-          linkDirectionalArrowLength={() => 6}
-          linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={(link: any) =>
-            isLinkBright(link)
-              ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)"
-          }
+          linkWidth={1.2}
           linkLabel={(link: any) => link.label || "references"}
           linkThreeObjectExtend={true}
           linkThreeObject={(link: any) => {

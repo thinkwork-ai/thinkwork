@@ -8,25 +8,25 @@ import * as THREE from "three";
  */
 export function makeEdgeLabelSprite(text: string): THREE.Sprite {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 64;
+  canvas.width = 320;
+  canvas.height = 80;
   const ctx = canvas.getContext("2d");
   if (ctx) {
-    ctx.clearRect(0, 0, 256, 64);
-    ctx.font = "24px sans-serif";
-    ctx.fillStyle = "#ffffff";
+    ctx.clearRect(0, 0, 320, 80);
+    ctx.font = "30px sans-serif";
+    ctx.fillStyle = "#e2e8f0";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const clipped = text.length > 24 ? text.slice(0, 23) + "…" : text;
-    ctx.fillText(clipped, 128, 32);
+    ctx.fillText(clipped, 160, 40);
   }
   const material = new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas),
     transparent: true,
-    opacity: 0.9,
+    opacity: 0.95,
     depthWrite: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(48, 12, 1);
+  sprite.scale.set(80, 20, 1);
   return sprite;
 }

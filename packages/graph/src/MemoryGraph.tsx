@@ -98,6 +98,14 @@ interface MemoryGraphProps {
   emptyFallback?: React.ReactNode;
 }
 
+/** Node radius by degree — shared by rendering and the collide force so
+ *  discs can never be forced to overlap. */
+function memoryNodeRadius(node: any): number {
+  if (node.nodeType === "memory") return 12;
+  const mentions = node.edgeCount || 1;
+  return Math.max(8, Math.min(24, 8 + Math.sqrt(mentions) * 2));
+}
+
 export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
   function MemoryGraph(
     {
@@ -574,9 +582,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             : ENTITY_COLOR;
         // Size by mention count (edgeCount carries mention_count from resolver)
         const mentions = node.edgeCount || 1;
-        const r = isMemory
-          ? 12
-          : Math.max(8, Math.min(24, 8 + Math.sqrt(mentions) * 2));
+        const r = memoryNodeRadius(node);
         const opacity = muted ? 0.15 : 1;
 
         const group = new THREE.Group();
@@ -679,7 +685,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       const baseDistance = nodeCount > 50 ? 70 : 55;
       const linkForce = fg.d3Force("link");
       linkForce?.distance((link: any) =>
-        sameCommunity(link) ? baseDistance * 0.4 : baseDistance * 1.8,
+        sameCommunity(link) ? baseDistance * 0.7 : baseDistance * 1.8,
       );
       linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
       // Per-community anchors replace the global center force — anchors
@@ -694,7 +700,13 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         "y",
         d3.forceY((node: any) => anchorFor(node).y).strength(0.08),
       );
-      fg.d3Force("collide", d3.forceCollide().radius(20).strength(0.8));
+      fg.d3Force(
+        "collide",
+        d3
+          .forceCollide()
+          .radius((node: any) => memoryNodeRadius(node) + 6)
+          .strength(0.9),
+      );
       // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
       // the first pass fires before the container is measured (fg == null).
     }, [graphData, communityLayout, dims]);
@@ -776,17 +788,10 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           showNavInfo={false}
           linkColor={(link: any) =>
             isLinkBright(link)
-              ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)"
+              ? "rgba(148,163,184,0.9)"
+              : "rgba(148,163,184,0.12)"
           }
-          linkWidth={0}
-          linkDirectionalArrowLength={() => 6}
-          linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={(link: any) =>
-            isLinkBright(link)
-              ? "rgba(255,255,255,0.7)"
-              : "rgba(255,255,255,0.1)"
-          }
+          linkWidth={1.2}
           linkLabel={(link: any) => link.label || "mentions"}
           linkThreeObjectExtend={true}
           linkThreeObject={(link: any) => {
