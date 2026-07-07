@@ -132,15 +132,16 @@ describe("record_advance — continuation policy (AE1)", () => {
       {
         phase: "record_advance",
         cursor: cursor({ iteration: 3 }),
-        stepResult: { turnStatus: "completed", evidence: { status: "completed" } },
+        stepResult: {
+          turnStatus: "completed",
+          evidence: { status: "completed" },
+        },
       },
       NOW,
     );
     expect(result.directive).toBe("terminal_success");
     // No wakeup / dispatch happens on this phase.
-    expect(
-      fake.inserts.some((i) => i.source === "workflow_step"),
-    ).toBe(false);
+    expect(fake.inserts.some((i) => i.source === "workflow_step")).toBe(false);
     // Policy decision recorded with runStatus succeeded.
     expect(fake.updates.some((u) => u.status === "succeeded")).toBe(true);
   });
@@ -152,7 +153,10 @@ describe("record_advance — continuation policy (AE1)", () => {
       {
         phase: "record_advance",
         cursor: cursor({ iteration: 5 }),
-        stepResult: { turnStatus: "completed", evidence: { status: "working" } },
+        stepResult: {
+          turnStatus: "completed",
+          evidence: { status: "working" },
+        },
       },
       NOW,
     );
@@ -161,9 +165,9 @@ describe("record_advance — continuation policy (AE1)", () => {
       (i) => i.event_type === "workflow_policy_decision",
     );
     expect(decision).toBeTruthy();
-    expect(
-      (decision?.payload_summary as Record<string, unknown>).reason,
-    ).toBe("max_iterations_reached");
+    expect((decision?.payload_summary as Record<string, unknown>).reason).toBe(
+      "max_iterations_reached",
+    );
     expect(fake.updates.some((u) => u.status === "failed")).toBe(true);
   });
 });
@@ -224,7 +228,10 @@ describe("record_advance — idempotent retry", () => {
       {
         phase: "record_advance",
         cursor: cursor({ iteration: 3 }),
-        stepResult: { turnStatus: "completed", evidence: { status: "completed" } },
+        stepResult: {
+          turnStatus: "completed",
+          evidence: { status: "completed" },
+        },
       },
       NOW,
     );
@@ -249,7 +256,10 @@ describe("record_advance — rollover", () => {
           iteration: 2,
           loopCycleCount: ROLLOVER_CYCLE_THRESHOLD,
         }),
-        stepResult: { turnStatus: "completed", evidence: { status: "working" } },
+        stepResult: {
+          turnStatus: "completed",
+          evidence: { status: "working" },
+        },
       },
       NOW,
     );
@@ -270,7 +280,10 @@ describe("record_advance — rollover", () => {
           loopCycleCount: ROLLOVER_CYCLE_THRESHOLD,
           rolloverCount: MAX_ROLLOVERS,
         }),
-        stepResult: { turnStatus: "completed", evidence: { status: "working" } },
+        stepResult: {
+          turnStatus: "completed",
+          evidence: { status: "working" },
+        },
       },
       NOW,
     );
@@ -331,6 +344,28 @@ describe("load_next", () => {
     expect(Number.isNaN(Date.parse(result.until as string))).toBe(false);
     expect(result.until).toBe(new Date(NOW.getTime() + 60_000).toISOString());
   });
+
+  it("fails the run cleanly for a valid-but-not-yet-executable step kind", async () => {
+    const routineDef: WorkflowDefinition = {
+      version: 1,
+      steps: [{ id: "crunch", kind: "routine", routineId: "r-1" }],
+    };
+    fake.selectQueue.push([runRow()], [versionRow(routineDef)]);
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("terminal_failure");
+    const event = fake.inserts.find(
+      (row) => row.event_type === "workflow_step_failed",
+    ) as { payload_summary?: Record<string, unknown> } | undefined;
+    expect(event?.payload_summary).toMatchObject({
+      stepId: "crunch",
+      stepKind: "routine",
+      reason: "step_kind_not_executable",
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -381,11 +416,7 @@ describe("dispatch_agent", () => {
   });
 
   it("throws when the run records no acting agent", async () => {
-    fake.selectQueue.push(
-      [runRow({ input_summary: {} })],
-      [versionRow()],
-      [],
-    );
+    fake.selectQueue.push([runRow({ input_summary: {} })], [versionRow()], []);
     await expect(
       handleDispatchAgent(
         fake.db as never,

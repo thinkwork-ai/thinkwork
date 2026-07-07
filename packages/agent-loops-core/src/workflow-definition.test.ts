@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  extractTemplateReferences,
   isLoopingDefinition,
   readWorkflowDefinition,
   validateWorkflowDefinition,
@@ -146,6 +147,201 @@ describe("validateWorkflowDefinition", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("validateWorkflowDefinition — full step taxonomy (THINK-214)", () => {
+  it("accepts a definition using every step kind", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        {
+          id: "fetch",
+          kind: "http",
+          method: "GET",
+          url: "https://api.example.com/items",
+        },
+        {
+          id: "crunch",
+          kind: "routine",
+          routineId: "r-123",
+          input: { items: "{{ steps.fetch.output.body }}" },
+        },
+        {
+          id: "summarize",
+          kind: "tool",
+          tool: "emit_document",
+          input: { title: "Digest" },
+        },
+        { id: "draft", kind: "agent", objective: "Write the digest" },
+        {
+          id: "sign-off",
+          kind: "approval",
+          prompt: "Publish the digest?",
+          timeoutSeconds: 86400,
+        },
+        { id: "cool-off", kind: "wait", durationSeconds: 60 },
+        {
+          id: "announce",
+          kind: "emit_event",
+          eventType: "digest.published",
+          payload: { runNote: "{{ run.input.note }}" },
+        },
+      ],
+    });
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it("rejects a routine step without routineId", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "r1", kind: "routine" }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        stepId: "r1",
+        field: "steps[0].routineId",
+      });
+    }
+  });
+
+  it("rejects a tool step without a tool name", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "t1", kind: "tool", input: {} }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.field).toBe("steps[0].tool");
+    }
+  });
+
+  it("rejects an approval step without a prompt", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "ok1", kind: "approval" }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]?.field).toBe("steps[0].prompt");
+  });
+
+  it("rejects an http step with a bad method or non-http(s) literal url", () => {
+    const badMethod = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "h1", kind: "http", method: "BREW", url: "https://x.dev" }],
+    });
+    expect(badMethod.ok).toBe(false);
+    if (!badMethod.ok)
+      expect(badMethod.errors[0]?.field).toBe("steps[0].method");
+
+    const badUrl = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "h1", kind: "http", method: "POST", url: "ftp://x.dev" }],
+    });
+    expect(badUrl.ok).toBe(false);
+    if (!badUrl.ok) expect(badUrl.errors[0]?.field).toBe("steps[0].url");
+  });
+
+  it("accepts a templated http url without literal-URL parsing", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        {
+          id: "resume",
+          kind: "http",
+          method: "POST",
+          url: "{{ trigger.payload.resumeUrl }}",
+        },
+      ],
+    });
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it("rejects an emit_event step with a malformed eventType", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "e1", kind: "emit_event", eventType: "not an event!" }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]?.field).toBe("steps[0].eventType");
+  });
+});
+
+describe("validateWorkflowDefinition — input mapping references", () => {
+  it("rejects an unknown template root", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        {
+          id: "e1",
+          kind: "emit_event",
+          eventType: "x.y",
+          payload: { v: "{{ secrets.apiKey }}" },
+        },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.reason).toContain('unknown root "secrets"');
+    }
+  });
+
+  it("rejects forward and self step references, accepts backward ones", () => {
+    const forward = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        {
+          id: "first",
+          kind: "emit_event",
+          eventType: "x.y",
+          payload: { v: "{{ steps.second.output.z }}" },
+        },
+        { id: "second", kind: "agent", objective: "later" },
+      ],
+    });
+    expect(forward.ok).toBe(false);
+    if (!forward.ok) {
+      expect(forward.errors[0]?.reason).toContain('references step "second"');
+    }
+
+    const self = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        {
+          id: "only",
+          kind: "emit_event",
+          eventType: "x.y",
+          payload: { v: "{{ steps.only.output.z }}" },
+        },
+      ],
+    });
+    expect(self.ok).toBe(false);
+
+    const backward = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        { id: "first", kind: "agent", objective: "produce output" },
+        {
+          id: "second",
+          kind: "emit_event",
+          eventType: "x.y",
+          payload: { v: "{{ steps.first.output.z }}" },
+        },
+      ],
+    });
+    expect(backward).toMatchObject({ ok: true });
+  });
+
+  it("extractTemplateReferences finds nested placeholders with roots and step ids", () => {
+    const refs = extractTemplateReferences({
+      a: "{{ trigger.payload.callbackUrl }}",
+      b: { c: ["{{ steps.fetch.output.body }}", "literal"] },
+    });
+    expect(refs).toEqual([
+      { expression: "trigger.payload.callbackUrl", root: "trigger" },
+      { expression: "steps.fetch.output.body", root: "steps", stepId: "fetch" },
+    ]);
   });
 });
 
