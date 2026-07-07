@@ -9,7 +9,14 @@ import {
 import { javascript } from "@codemirror/lang-javascript";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import CodeMirror from "@uiw/react-codemirror";
-import { Braces, Download, RefreshCw, Save, Share2 } from "lucide-react";
+import {
+  Braces,
+  Download,
+  RefreshCw,
+  Save,
+  Share2,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
 import { Button, cn } from "@thinkwork/ui";
@@ -25,7 +32,10 @@ import {
   DocumentArtifactBody,
   isDocumentArtifactMetadata,
 } from "@/components/artifacts/ArtifactBodyView";
-import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
+import {
+  ArtifactDeleteDialog,
+  ArtifactDetailActions,
+} from "@/components/artifacts/ArtifactDetailActions";
 import { ArtifactShareDialog } from "@/components/artifacts/ArtifactShareDialog";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
 import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
@@ -178,19 +188,31 @@ export function AppletRouteContent({
     );
   }, [artifactId, favoritedAt]);
 
-  usePageHeaderActions({
-    title,
-    ...(breadcrumbRoot
-      ? { breadcrumbs: [breadcrumbRoot, { label: title }] }
-      : {}),
-    backHref,
-    backBehavior: "history",
-    action: composedHeaderAction,
-    titleTrailing,
-    actionKey: composedHeaderAction
-      ? `artifact-actions:${artifactId ?? "_"}:${favoritedAt ?? "_"}:${headerAction ? "1" : "0"}`
-      : "",
-  });
+  // Document and canvas artifacts render through child components that own
+  // the page header themselves (Share/Download/snapshot actions). Passing
+  // null here relinquishes the header instead of racing the child's
+  // registration with an empty one (the intermittent blank-header-actions
+  // bug on /artifacts/$id and the Settings artifact embed).
+  const delegatesHeaderToChild =
+    !!artifact &&
+    (isDocumentArtifactNode(artifact) || artifact.type === "DATA_VIEW");
+  usePageHeaderActions(
+    delegatesHeaderToChild
+      ? null
+      : {
+          title,
+          ...(breadcrumbRoot
+            ? { breadcrumbs: [breadcrumbRoot, { label: title }] }
+            : {}),
+          backHref,
+          backBehavior: "history",
+          action: composedHeaderAction,
+          titleTrailing,
+          actionKey: composedHeaderAction
+            ? `artifact-actions:${artifactId ?? "_"}:${favoritedAt ?? "_"}:${headerAction ? "1" : "0"}`
+            : "",
+        },
+  );
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -395,6 +417,7 @@ function DocumentArtifactContent({
   // Public share links (THINK-208): documents only — the canvas/applet
   // branches never render a Share affordance (R1).
   const [shareOpen, setShareOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const downloadDocument = useCallback(() => {
     if (!artifact.renderHtml) return;
     const blob = new Blob([artifact.renderHtml], {
@@ -408,35 +431,51 @@ function DocumentArtifactContent({
     URL.revokeObjectURL(url);
   }, [artifact.renderHtml, artifact.title]);
 
+  // Muted icon actions, matching the canvas header idiom — no labeled
+  // buttons, no overflow menu.
   const composedHeaderAction = useMemo<ReactNode>(
     () => (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <Button
-          variant="outline"
-          size="sm"
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground"
+          title="Share"
+          aria-label="Share"
           onClick={() => setShareOpen(true)}
           data-testid="document-share"
         >
-          <Share2 className="mr-1.5 h-3.5 w-3.5" />
-          Share
+          <Share2 className="size-4" />
         </Button>
         <Button
-          variant="outline"
-          size="sm"
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground"
+          title="Download"
+          aria-label="Download"
           onClick={downloadDocument}
           disabled={!artifact.renderHtml}
           data-testid="document-download"
         >
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          Download
+          <Download className="size-4" />
         </Button>
-        <ArtifactDetailActions
-          artifactId={artifact.id}
-          artifactTitle={artifact.title}
-        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground"
+          title="Delete"
+          aria-label="Delete"
+          onClick={() => setDeleteOpen(true)}
+          data-testid="document-delete"
+        >
+          <Trash2 className="size-4" />
+        </Button>
       </div>
     ),
-    [artifact.id, artifact.renderHtml, artifact.title, downloadDocument],
+    [artifact.renderHtml, downloadDocument],
   );
   const titleTrailing = useMemo<ReactNode>(
     () => (
@@ -469,6 +508,12 @@ function DocumentArtifactContent({
         artifactTitle={artifact.title}
         open={shareOpen}
         onOpenChange={setShareOpen}
+      />
+      <ArtifactDeleteDialog
+        artifactId={artifact.id}
+        artifactTitle={artifact.title}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
       />
     </main>
   );

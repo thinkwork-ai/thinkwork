@@ -63,6 +63,8 @@ export interface PageHeaderActions {
 interface PageHeaderContextValue {
   actions: PageHeaderActions | null;
   setActions: (actions: PageHeaderActions | null) => void;
+  /** Clear only if `prev` is still the currently registered actions object. */
+  clearActions: (prev: PageHeaderActions) => void;
 }
 
 const PageHeaderContext = createContext<PageHeaderContextValue | null>(null);
@@ -74,13 +76,17 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
     setActionsState(next);
   }, []);
 
+  const clearActions = useCallback((prev: PageHeaderActions) => {
+    setActionsState((current) => (current === prev ? null : current));
+  }, []);
+
   useEffect(() => {
     const docTitle = actions?.documentTitle ?? actions?.title;
     document.title = docTitle ? `${docTitle} · ThinkWork` : "ThinkWork";
   }, [actions]);
 
   return (
-    <PageHeaderContext.Provider value={{ actions, setActions }}>
+    <PageHeaderContext.Provider value={{ actions, setActions, clearActions }}>
       {children}
     </PageHeaderContext.Provider>
   );
@@ -109,8 +115,17 @@ export function usePageHeaderActions(actions: PageHeaderActions | null) {
     : null;
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
+    // `null` means this caller does not own the header right now — e.g. a
+    // parent route that delegates the header to a child view (document /
+    // canvas artifact content). Registering null anyway would clobber the
+    // child's registration: child effects run before parent effects, so the
+    // parent's empty registration would land last and blank the header
+    // (the /artifacts/$id empty-header-actions bug).
+    if (actions === null) return;
     ctx.setActions(actions);
-    return () => ctx.setActions(null);
+    // Clear only if this registration is still the current one — another
+    // component may have registered since (unmount ordering races).
+    return () => ctx.clearActions(actions);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 }
