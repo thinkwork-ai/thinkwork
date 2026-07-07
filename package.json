@@ -51,7 +51,8 @@
       "react-is": "^19.2.7"
     },
     "patchedDependencies": {
-      "@earendil-works/pi-ai@0.76.0": "patches/@earendil-works__pi-ai@0.76.0.patch"
+      "@earendil-works/pi-ai@0.76.0": "patches/@earendil-works__pi-ai@0.76.0.patch",
+      "@earendil-works/pi-coding-agent@0.76.0": "patches/@earendil-works__pi-coding-agent@0.76.0.patch"
     }
   }
 }

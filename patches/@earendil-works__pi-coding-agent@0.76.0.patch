@@ -1,0 +1,42 @@
+diff --git a/dist/core/agent-session.js b/dist/core/agent-session.js
+index 74c3bfbf707247be73460414d758f452a4281d36..6e7193b5c9e38f2becace9035ce48cb2f2d348e0 100644
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -1719,13 +1719,19 @@ export class AgentSession {
+                 });
+             },
+             sendUserMessage: (content, options) => {
+-                this.sendUserMessage(content, options).catch((err) => {
++                // THINK-222: return the promise so awaiting extensions (pi-goal's
++                // kickoff prompt in headless hosts) observe turn completion. The
++                // attached catch keeps non-awaiting callers from producing
++                // unhandled rejections; awaiting callers still see the rejection.
++                const result = this.sendUserMessage(content, options);
++                result.catch((err) => {
+                     runner.emitError({
+                         extensionPath: "<runtime>",
+                         event: "send_user_message",
+                         error: err instanceof Error ? err.message : String(err),
+                     });
+                 });
++                return result;
+             },
+             appendEntry: (customType, data) => {
+                 this.sessionManager.appendCustomEntry(customType, data);
+diff --git a/dist/core/extensions/loader.js b/dist/core/extensions/loader.js
+index 3a27d1cdff1ae072e0532e33269922c73e72d9e2..de2347fd35387c501f4a1304ac42f2fd9ea67b08 100644
+--- a/dist/core/extensions/loader.js
++++ b/dist/core/extensions/loader.js
+@@ -199,7 +199,11 @@ function createExtensionAPI(extension, runtime, cwd, eventBus) {
+         },
+         sendUserMessage(content, options) {
+             runtime.assertActive();
+-            runtime.sendUserMessage(content, options);
++            // THINK-222: propagate the runtime's promise so extensions that await
++            // sendUserMessage (e.g. pi-goal's kickoff prompt) block until the turn
++            // has actually run. Fire-and-forget callers are unaffected — the
++            // runtime binding keeps a handled rejection branch.
++            return runtime.sendUserMessage(content, options);
+         },
+         appendEntry(customType, data) {
+             runtime.assertActive();
