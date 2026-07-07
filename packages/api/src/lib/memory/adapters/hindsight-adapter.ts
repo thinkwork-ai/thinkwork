@@ -618,7 +618,10 @@ export class HindsightAdapter implements MemoryAdapter {
           m.mentioned_at, m.tags, m.access_count, m.proof_count,
           m.metadata, m.created_at, m.updated_at
         FROM ${hindsightSql()}memory_units m
-        WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR m.bank_id = ANY(${bankIds}::text[]))
+        WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR m.bank_id = ANY(ARRAY[${sql.join(
+            bankIds.map((bankId) => sql`${bankId}`),
+            sql`, `,
+          )}]::text[]))
           ${
             searchPattern
               ? sql`AND (

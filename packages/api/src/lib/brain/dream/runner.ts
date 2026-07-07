@@ -73,7 +73,10 @@ export async function enumerateDreamBanks(
   const withUnits = await resolveHindsightDb(db).execute(sql`
     SELECT DISTINCT bank_id
     FROM ${hindsightSql()}memory_units
-    WHERE bank_id = ANY(${candidateIds}::text[])
+    WHERE bank_id = ANY(ARRAY[${sql.join(
+      candidateIds.map((bankId) => sql`${bankId}`),
+      sql`, `,
+    )}]::text[])
   `);
   const present = new Set(
     ((withUnits.rows ?? []) as Array<{ bank_id: string }>).map(
