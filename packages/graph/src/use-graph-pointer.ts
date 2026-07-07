@@ -68,6 +68,14 @@ export function useGraphPointer({
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     };
 
+    // Only handle events that originate on the canvas itself — overlay
+    // UI (selected-node chip, label toggle, legends) lives inside the
+    // container and must keep its own click behavior untouched.
+    const isCanvasEvent = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      return target === containerEl || target?.tagName === "CANVAS";
+    };
+
     const hitNode = (px: number, py: number): any | null => {
       const fg = fgRef.current;
       if (!fg?.screen2GraphCoords) return null;
@@ -116,7 +124,7 @@ export function useGraphPointer({
     // from the library's d3-zoom listeners so dragging a node doesn't pan
     // the camera.
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || !isCanvasEvent(event)) return;
       const { x, y } = localPoint(event);
       const node = hitNode(x, y);
       if (!node) return;
@@ -153,6 +161,10 @@ export function useGraphPointer({
 
     const onPointerMove = (event: PointerEvent) => {
       if (dragRef.current) return;
+      if (!isCanvasEvent(event)) {
+        updateHover(null);
+        return;
+      }
       const { x, y } = localPoint(event);
       updateHover(hitNode(x, y));
     };
@@ -166,6 +178,7 @@ export function useGraphPointer({
         suppressClickRef.current = false;
         return;
       }
+      if (!isCanvasEvent(event)) return;
       const { x, y } = localPoint(event);
       const node = hitNode(x, y);
       if (node) callbacksRef.current.onNodeClick(node);
