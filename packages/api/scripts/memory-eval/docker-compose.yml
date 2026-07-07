@@ -40,7 +40,9 @@ services:
       retries: 10
 
   hindsight:
-    image: ghcr.io/vectorize-io/hindsight:0.5.6
+    # Pin to the DEPLOYED tag (THINK-201): run verify-deployed-tag.sh and
+    # export HINDSIGHT_TAG before bringing the stack up.
+    image: ghcr.io/vectorize-io/hindsight:${HINDSIGHT_TAG:-0.8.4}
     container_name: hindsight-eval-candidate
     depends_on:
       pg:

@@ -138,6 +138,9 @@ extend type Query {
     draftConfig: DocumentPlateDraftConfigInput
   ): DocumentPlatePreview!
   tenantDocumentPalette(tenantId: ID): TenantDocumentPalette!
+  # THINK-189: conformance aggregates for one plate (member-gated read;
+  # digest content is never exposed — aggregates and counts only).
+  plateConformance(tenantId: ID, slug: String!): PlateConformanceSummary!
 }
 
 extend type Mutation {

@@ -23,6 +23,15 @@ Postgres — zero AWS infra changes, only Bedrock inference cost.
 
 ### 0. Prerequisites
 
+**Pin the deployed image tag first (THINK-201 lesson):** the harness once
+validated 0.5.6+ while dev silently ran 0.5.0 (a parent-module terraform
+default), so the validated swap broke production extraction. Always run:
+
+```bash
+export HINDSIGHT_TAG=$(./verify-deployed-tag.sh dev --print)
+./verify-deployed-tag.sh dev   # sanity: prints OK
+```
+
 - Docker running locally (ARM64 native on Apple Silicon — dev's ECS task
   also runs `cpu_architecture = "ARM64"`).
 - AWS credentials in the environment with `bedrock:InvokeModel` (the local

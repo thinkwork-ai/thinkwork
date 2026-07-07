@@ -339,6 +339,21 @@ async function processClaimedRetainAttempt(
         throw highConfidenceFactError;
       }
 
+      // THINK-201 fail-loud seam: the 0.5.0 incident stored conversation
+      // documents while extraction silently produced ZERO units, and the
+      // attempt ledger still said "retained". Retention is synchronous, so a
+      // post-retain readback makes silent-extraction failure visible. Zero can
+      // be legitimate for trivial threads, so this warns (grep/alarm on
+      // `retained_zero_units`) and records the count instead of failing.
+      const extractedUnitCount = evalTraffic
+        ? null
+        : await countExtractedUnitsForThread(eventThreadId);
+      if (extractedUnitCount === 0) {
+        console.warn(
+          `[memory-retain] retained_zero_units thread=${eventThreadId} tenant=${tenantId} merged=${merged.length} — document stored but extraction produced no memory units`,
+        );
+      }
+
       await markRetainAttemptRetained(attempt.id, {
         backendLatencyMs: Date.now() - started,
         providerDocumentId: eventThreadId,
@@ -347,6 +362,7 @@ async function processClaimedRetainAttempt(
           adapterKind: adapter.kind,
           messageCount: merged.length,
           highConfidenceFactCount: highConfidenceFacts.documents.length,
+          ...(extractedUnitCount !== null ? { extractedUnitCount } : {}),
         },
         metadata: mergeAttemptMetadata(attempt.metadata, {
           dbMessageCount: dbMessages.length,
@@ -355,6 +371,7 @@ async function processClaimedRetainAttempt(
           highConfidenceFacts: highConfidenceFacts.documents,
           rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
           fallbackUsed: dbMessages.length === 0 && eventMessages.length > 0,
+          ...(extractedUnitCount !== null ? { extractedUnitCount } : {}),
           retainedAt: new Date().toISOString(),
         }),
       });
@@ -811,6 +828,31 @@ function highConfidenceFactDocumentId(
  * Logging hygiene: never include message content in logs. Identifiers are
  * prefix-truncated.
  */
+/**
+ * THINK-201: post-retain extraction readback. Conversation retains store the
+ * whole thread as one Hindsight document with `document_id = threadId`;
+ * extracted units carry the same document_id, so a count answers "did
+ * extraction actually produce anything?". Returns null (never throws) on any
+ * failure — the readback is diagnostic, not a retain gate.
+ */
+async function countExtractedUnitsForThread(
+  threadId: string,
+): Promise<number | null> {
+  try {
+    const db = getDb();
+    const result = await db.execute(
+      sql`SELECT count(*)::int AS n FROM hindsight.memory_units WHERE document_id = ${threadId}`,
+    );
+    const row = (result.rows ?? [])[0] as { n?: number } | undefined;
+    return typeof row?.n === "number" ? row.n : null;
+  } catch (err) {
+    console.warn(
+      `[memory-retain] extraction readback failed (diagnostic only): ${(err as Error)?.message}`,
+    );
+    return null;
+  }
+}
+
 async function fetchThreadTranscript(
   tenantId: string,
   threadId: string,
