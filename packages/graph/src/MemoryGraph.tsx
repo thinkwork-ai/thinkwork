@@ -470,9 +470,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
 
     // Edge brightness follows endpoint lit-state. In focus mode an edge is
     // bright only when BOTH endpoints are lit; search keeps the
-    // either-endpoint rule. Reads refs so identity stays inert; repaints
-    // ride the classification effect's refresh().
-    const isLinkBright = (link: any) => {
+    // either-endpoint rule. Reads refs so identity stays inert.
+    const isLinkBright = useCallback((link: any) => {
       const sId = endpointId(link.source);
       const tId = endpointId(link.target);
       const focusLit = focusRef.current?.litIds;
@@ -480,7 +479,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       const m = matchedIdsRef.current;
       if (!m) return true;
       return m.has(sId) || m.has(tId);
-    };
+    }, []);
 
     // Update getNodeWithEdges ref after graphData is available
     getNodeWithEdgesRef.current = (nodeId: string) => {
@@ -563,28 +562,65 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       [],
     );
 
-    // Relationship labels drawn along the lit edges (focus mode only),
-    // constant on-screen size, flipped to stay upright.
+    // Full link painter (replace mode): the line is trimmed to the disc
+    // edges with the arrowhead terminating at the target's rim — lines
+    // never run under translucent discs. Relationship labels draw along
+    // lit edges (focus mode only), constant on-screen size, upright.
     const linkCanvasObject = useCallback(
       (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-        if (!linkLabelVisible(link)) return;
         const start = link.source;
         const end = link.target;
         if (typeof start !== "object" || typeof end !== "object") return;
-        let angle = Math.atan2(end.y - start.y, end.x - start.x);
-        if (angle > Math.PI / 2) angle -= Math.PI;
-        else if (angle < -Math.PI / 2) angle += Math.PI;
-        ctx.save();
-        ctx.translate((start.x + end.x) / 2, (start.y + end.y) / 2);
-        ctx.rotate(angle);
-        ctx.font = `${11 / globalScale}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillStyle = "rgba(226,232,240,0.9)";
-        ctx.fillText(link.label || "mentions", 0, -2 / globalScale);
-        ctx.restore();
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const dist = Math.hypot(dx, dy);
+        if (!dist) return;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        const sourceTrim = memoryNodeRadius(start) + 1.5;
+        const targetTrim = memoryNodeRadius(end) + 1.5;
+        if (dist <= sourceTrim + targetTrim) return; // discs touch
+        const sx = start.x + ux * sourceTrim;
+        const sy = start.y + uy * sourceTrim;
+        const tx = end.x - ux * targetTrim;
+        const ty = end.y - uy * targetTrim;
+
+        const color = isLinkBright(link)
+          ? "rgba(148,163,184,0.9)"
+          : "rgba(148,163,184,0.12)";
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+
+        // Arrowhead sitting exactly on the target disc's rim.
+        const ah = 5;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx - ux * ah - uy * (ah * 0.5), ty - uy * ah + ux * (ah * 0.5));
+        ctx.lineTo(tx - ux * ah + uy * (ah * 0.5), ty - uy * ah - ux * (ah * 0.5));
+        ctx.closePath();
+        ctx.fill();
+
+        if (linkLabelVisible(link)) {
+          let angle = Math.atan2(dy, dx);
+          if (angle > Math.PI / 2) angle -= Math.PI;
+          else if (angle < -Math.PI / 2) angle += Math.PI;
+          ctx.save();
+          ctx.translate((sx + tx) / 2, (sy + ty) / 2);
+          ctx.rotate(angle);
+          ctx.font = `${11 / globalScale}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillStyle = "rgba(226,232,240,0.9)";
+          ctx.fillText(link.label || "mentions", 0, -2 / globalScale);
+          ctx.restore();
+        }
       },
-      [linkLabelVisible],
+      [linkLabelVisible, isLinkBright],
     );
 
     // Force layout tuning — safe to re-run when data changes (strengths
@@ -610,7 +646,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       const baseDistance = nodeCount > 50 ? 70 : 55;
       const linkForce = fg.d3Force("link");
       linkForce?.distance((link: any) =>
-        sameCommunity(link) ? baseDistance * 0.7 : baseDistance * 1.8,
+        sameCommunity(link) ? baseDistance : baseDistance * 2,
       );
       linkForce?.strength?.((link: any) => (sameCommunity(link) ? 0.6 : 0.05));
       // Per-community anchors replace the global center force — anchors
@@ -629,7 +665,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         "collide",
         d3
           .forceCollide()
-          .radius((node: any) => memoryNodeRadius(node) + 6)
+          .radius((node: any) => memoryNodeRadius(node) + 12)
           .strength(0.9),
       );
       // `dims` is a dep so this re-runs once ForceGraph3D actually mounts —
@@ -684,14 +720,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           // without rebuilding graphData (the 2D analog of the old
           // material-mutation + refresh pattern).
           autoPauseRedraw={false}
-          linkColor={(link: any) =>
-            isLinkBright(link)
-              ? "rgba(148,163,184,0.9)"
-              : "rgba(148,163,184,0.12)"
-          }
-          linkWidth={1.2}
           linkLabel={(link: any) => link.label || "mentions"}
-          linkCanvasObjectMode={() => "after"}
+          linkCanvasObjectMode={() => "replace" as const}
           linkCanvasObject={linkCanvasObject}
           nodeLabel={(node: any) =>
             `${node.label}${node.entityType ? ` (${node.entityType})` : ""}${

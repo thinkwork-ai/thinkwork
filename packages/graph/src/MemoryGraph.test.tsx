@@ -205,7 +205,7 @@ describe("MemoryGraph (2D canvas)", () => {
     const link = {
       ...props.graphData.links[0],
       source: { id: "ent-1", x: 0, y: 0 },
-      target: { id: "ent-2", x: 10, y: 0 },
+      target: { id: "ent-2", x: 100, y: 0 },
     };
     const texts: string[] = [];
     const ctx = {
@@ -213,6 +213,12 @@ describe("MemoryGraph (2D canvas)", () => {
       restore() {},
       translate() {},
       rotate() {},
+      beginPath() {},
+      moveTo() {},
+      lineTo() {},
+      closePath() {},
+      stroke() {},
+      fill() {},
       fillText(t: string) {
         texts.push(t);
       },
@@ -220,6 +226,8 @@ describe("MemoryGraph (2D canvas)", () => {
       textAlign: "",
       textBaseline: "",
       fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 0,
     };
 
     // Overview: no edge labels.
