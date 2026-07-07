@@ -52,6 +52,10 @@ export function createPiGoalExtensionFactory(
       process.env.THINKWORK_PI_GOAL_DISABLE_HIDDEN_CONTINUATION;
     process.env.PI_CODING_AGENT_DIR = options.agentDir;
     process.env.THINKWORK_PI_GOAL_DISABLE_HIDDEN_CONTINUATION = "true";
+    // Headless host: nobody can answer startGoal's "Replace goal?" confirm.
+    // A stale non-complete goal must be replaced, not silently kept, or every
+    // dispatched goal start no-ops (THINK-219).
+    process.env.THINKWORK_PI_GOAL_AUTO_REPLACE = "true";
     try {
       await piGoal(pi);
     } finally {

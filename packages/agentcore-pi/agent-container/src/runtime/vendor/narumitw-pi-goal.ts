@@ -82,6 +82,10 @@ let completionStatusTimer: NodeJS.Timeout | undefined;
 let extensionApi: ExtensionAPI | undefined;
 let continuationPending: ContinuationPending | undefined;
 let legacyAgentDir: string | undefined;
+
+// ThinkWork headless hosts auto-replace stale goals (no user to answer the
+// startGoal confirm); captured at extension setup, see the default export.
+let autoReplaceGoals = false;
 const cancelledContinuationMarkers = new Set<string>();
 
 const goalCompleteTool = defineTool({
@@ -132,6 +136,9 @@ const goalCompleteTool = defineTool({
 export default function goal(pi: ExtensionAPI) {
   const disableHiddenContinuation =
     process.env.THINKWORK_PI_GOAL_DISABLE_HIDDEN_CONTINUATION === "true";
+  // Captured at setup like the flag above — the factory restores env vars
+  // after registration, so handler-time reads would miss it.
+  autoReplaceGoals = process.env.THINKWORK_PI_GOAL_AUTO_REPLACE === "true";
   legacyAgentDir = process.env.PI_CODING_AGENT_DIR;
   extensionApi = pi;
   pi.registerTool(goalCompleteTool);
@@ -278,10 +285,16 @@ async function startGoal(
   const existingGoal =
     activeGoal?.status !== "complete" ? activeGoal : undefined;
   if (existingGoal) {
-    const shouldReplace = await ctx.ui.confirm(
-      "Replace goal?",
-      `Current goal: ${existingGoal.text}\n\nNew goal: ${objective}`,
-    );
+    // ThinkWork headless hosts (AgentCore wakeups) have no user to answer the
+    // confirm — an unanswerable prompt silently keeps a stale goal and every
+    // dispatched /goal start becomes a no-op (THINK-219: a never-completed
+    // goal on the shared platform agent blocked all workflow steps).
+    const shouldReplace =
+      autoReplaceGoals ||
+      (await ctx.ui.confirm(
+        "Replace goal?",
+        `Current goal: ${existingGoal.text}\n\nNew goal: ${objective}`,
+      ));
     if (!shouldReplace) {
       ctx.ui.notify(`Goal kept: ${existingGoal.text}`, "info");
       return;
