@@ -160,6 +160,7 @@ describe("SettingsMemory render", () => {
                   strategy: "semantic",
                   strategyId: "world",
                   factType: "world",
+                  proofCount: 3,
                   accessCount: 0,
                 },
                 {
@@ -174,6 +175,7 @@ describe("SettingsMemory render", () => {
                   strategy: "semantic",
                   strategyId: "world",
                   factType: "world",
+                  proofCount: 3,
                   accessCount: 0,
                 },
               ],
@@ -357,6 +359,8 @@ describe("SettingsMemory render", () => {
                   ownerType: "user",
                   ownerId: "user-1",
                   strategy: "semantic",
+                  // THINK-199: curated default hides uncorroborated raw units.
+                  proofCount: 3,
                 },
               ],
             },

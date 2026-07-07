@@ -31,6 +31,7 @@ import {
   strategyLabel,
   stripTopicTags,
 } from "@/lib/memory-strategy";
+import { isCuratedMemory } from "@/lib/memory-curation";
 import {
   MemoryDetailSheet,
   type MemoryRow,
@@ -47,6 +48,16 @@ export interface MemoryRefreshController {
   refresh: () => Promise<void>;
   isRefreshing: boolean;
   disabled: boolean;
+}
+
+/**
+ * THINK-199: raw-units visibility state, published to the parent so the
+ * Show/Hide-raw toggle renders in the page header next to the refresh action.
+ */
+export interface MemoryRawUnitsController {
+  showRaw: boolean;
+  hiddenCount: number;
+  toggle: () => void;
 }
 
 // Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
@@ -69,10 +80,14 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
 export function SettingsMemory({
   embedded,
   onRefreshControllerChange,
+  onRawUnitsControllerChange,
 }: {
   embedded?: boolean;
   onRefreshControllerChange?: (
     controller: MemoryRefreshController | null,
+  ) => void;
+  onRawUnitsControllerChange?: (
+    controller: MemoryRawUnitsController | null,
   ) => void;
 } = {}) {
   const { tenantId } = useTenant();
@@ -184,12 +199,27 @@ export function SettingsMemory({
     return recordsResult.data?.memoryRecords ?? [];
   }, [recordsResult.data]);
 
-  const rows: MemoryRow[] = useMemo(
+  const allRows: MemoryRow[] = useMemo(
     () =>
       rawRecords
         .map(mapRecord)
         .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
     [rawRecords, mapRecord],
+  );
+
+  // THINK-199 (Brain Quality P4): the default view shows curated memory —
+  // observations, corroborated units, deliberate sources — and hides raw
+  // uncorroborated chat-fragment exhaust behind the eye toggle (the
+  // THINK-173 show-compiled pattern). Explicit searches always show all.
+  const [showRaw, setShowRaw] = useState(false);
+  const rawHiddenCount = useMemo(
+    () =>
+      activeSearch ? 0 : allRows.filter((row) => !isCuratedMemory(row)).length,
+    [allRows, activeSearch],
+  );
+  const rows: MemoryRow[] = useMemo(
+    () => (activeSearch || showRaw ? allRows : allRows.filter(isCuratedMemory)),
+    [allRows, activeSearch, showRaw],
   );
 
   const ownerLabels = useMemo(() => {
@@ -330,6 +360,25 @@ export function SettingsMemory({
     refreshMemory,
   ]);
 
+  // THINK-199: publish raw-units state so the toggle renders in the page
+  // header (next to refresh). Hidden while searching or in graph view — the
+  // filter only applies to the default table listing.
+  const rawToggleVisible =
+    view === "table" && !activeSearch && rawHiddenCount > 0;
+  useEffect(() => {
+    if (!onRawUnitsControllerChange) return;
+    onRawUnitsControllerChange(
+      rawToggleVisible
+        ? {
+            showRaw,
+            hiddenCount: rawHiddenCount,
+            toggle: () => setShowRaw((v) => !v),
+          }
+        : null,
+    );
+    return () => onRawUnitsControllerChange(null);
+  }, [rawToggleVisible, showRaw, rawHiddenCount, onRawUnitsControllerChange]);
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
       {embedded ? null : <MemoryHeader />}
@@ -414,7 +463,17 @@ export function SettingsMemory({
             <LoadingShimmer />
           </div>
         ) : rows.length === 0 ? (
-          <MemoryEmptyState activeSearch={activeSearch} />
+          rawHiddenCount > 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="max-w-xl px-6 text-center text-sm text-muted-foreground">
+                No curated memories yet — {rawHiddenCount} raw unit
+                {rawHiddenCount === 1 ? "" : "s"} hidden. Use “Show raw units”
+                to see them.
+              </p>
+            </div>
+          ) : (
+            <MemoryEmptyState activeSearch={activeSearch} />
+          )
         ) : (
           <DataTable
             columns={columns}

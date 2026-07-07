@@ -1,10 +1,17 @@
 import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
-import { Button, cn } from "@thinkwork/ui";
+import { Eye, EyeOff, RefreshCw } from "lucide-react";
+import {
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  cn,
+} from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   SettingsMemory,
+  type MemoryRawUnitsController,
   type MemoryRefreshController,
 } from "@/components/settings/SettingsMemory";
 import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeBases";
@@ -36,10 +43,18 @@ export function SettingsMemoryHome() {
   const [refreshController, setRefreshController] =
     useState<MemoryRefreshController | null>(null);
   const [refreshPending, setRefreshPending] = useState(false);
+  const [rawUnitsController, setRawUnitsController] =
+    useState<MemoryRawUnitsController | null>(null);
 
   const updateRefreshController = useCallback(
     (controller: MemoryRefreshController | null) => {
       setRefreshController(controller);
+    },
+    [],
+  );
+  const updateRawUnitsController = useCallback(
+    (controller: MemoryRawUnitsController | null) => {
+      setRawUnitsController(controller);
     },
     [],
   );
@@ -62,21 +77,61 @@ export function SettingsMemoryHome() {
 
   const refreshAction =
     activeTab === "memory" ? (
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className={cn(
-          "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
-          refreshing && "bg-primary/10 text-primary hover:text-primary",
-        )}
-        aria-label="Refresh memory records"
-        title="Refresh memory records"
-        disabled={refreshDisabled}
-        onClick={() => void refreshMemory()}
-      >
-        <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
-      </Button>
+      <div className="flex items-center gap-1">
+        {rawUnitsController ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
+                  rawUnitsController.showRaw &&
+                    "bg-primary/10 text-primary hover:text-primary",
+                )}
+                aria-label={
+                  rawUnitsController.showRaw
+                    ? "Hide raw memory units"
+                    : "Show raw memory units"
+                }
+                data-testid="settings-memory-toggle-raw"
+                onClick={() => rawUnitsController.toggle()}
+              >
+                {rawUnitsController.showRaw ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              className="max-w-64 border border-border bg-popover text-popover-foreground shadow-md"
+              arrowClassName="bg-popover fill-popover border-b border-r border-border"
+            >
+              {rawUnitsController.showRaw
+                ? "Showing all memory units. Click to return to the curated view (consolidated observations, corroborated facts, and deliberate captures)."
+                : `Curated view — ${rawUnitsController.hiddenCount} raw uncorroborated unit${rawUnitsController.hiddenCount === 1 ? "" : "s"} hidden. Click to show everything.`}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className={cn(
+            "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
+            refreshing && "bg-primary/10 text-primary hover:text-primary",
+          )}
+          aria-label="Refresh memory records"
+          title="Refresh memory records"
+          disabled={refreshDisabled}
+          onClick={() => void refreshMemory()}
+        >
+          <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+        </Button>
+      </div>
     ) : null;
 
   usePageHeaderActions({
@@ -89,7 +144,7 @@ export function SettingsMemoryHome() {
       { to: ONTOLOGY, label: "Ontology" },
     ],
     action: refreshAction,
-    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}`,
+    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}`,
   });
 
   return (
@@ -98,6 +153,7 @@ export function SettingsMemoryHome() {
         <SettingsMemory
           embedded
           onRefreshControllerChange={updateRefreshController}
+          onRawUnitsControllerChange={updateRawUnitsController}
         />
       ) : null}
       {activeTab === "wiki" ? <SettingsWiki embedded /> : null}
