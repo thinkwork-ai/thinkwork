@@ -539,8 +539,8 @@ describe("KnowledgeGraph", () => {
       const props = await renderLarge();
       const nodeA = props.graphData.nodes[0];
 
-      // Default zoom scale 1 clears the 0.7 gate.
-      props.onZoom({ k: 1 });
+      // Zoomed in past the 1.2 gate.
+      props.onZoom({ k: 1.5 });
       expect(paintNode(props, nodeA).texts.length).toBeGreaterThan(0);
 
       // Far zoom hides labels on a large graph.
@@ -548,7 +548,7 @@ describe("KnowledgeGraph", () => {
       expect(paintNode(props, nodeA).texts.length).toBe(0);
 
       // Zooming back in restores them.
-      props.onZoom({ k: 0.9 });
+      props.onZoom({ k: 1.4 });
       expect(paintNode(props, nodeA).texts.length).toBeGreaterThan(0);
     });
 
@@ -561,7 +561,7 @@ describe("KnowledgeGraph", () => {
       expect(paintLink(props, litLink)).toEqual([]);
 
       // Zoomed in — the label becomes part of the line.
-      props.onZoom({ k: 1 });
+      props.onZoom({ k: 1.5 });
       expect(paintLink(props, litLink)).toEqual(["supports"]);
 
       // Focus "a": lit edge labeled at any zoom; node labels lit-only.

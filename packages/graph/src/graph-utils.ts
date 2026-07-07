@@ -78,7 +78,7 @@ export function initialCameraZ(nodeCount: number): number {
 
 /** Graphs at or below this node count always show labels — gating adds
  *  nothing when everything fits on screen. */
-export const LABEL_GATE_ALWAYS_MAX_NODES = 150;
+export const LABEL_GATE_ALWAYS_MAX_NODES = 50;
 
 /**
  * Zoom gate for overview node labels (R8): visible on small graphs, and on
@@ -99,7 +99,7 @@ export function labelsVisibleAtZoom(
 /** Canvas-renderer zoom gate (react-force-graph-2d): `k` is the canvas
  *  zoom scale from onZoom. Below this, node text would render under
  *  ~7px — unreadable — so labels hide on large graphs. */
-export const LABEL_GATE_MIN_SCALE = 0.7;
+export const LABEL_GATE_MIN_SCALE = 1.2;
 
 export function labelsVisibleAtScale(k: number, nodeCount: number): boolean {
   if (nodeCount <= LABEL_GATE_ALWAYS_MAX_NODES) return true;

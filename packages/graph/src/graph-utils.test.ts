@@ -456,7 +456,7 @@ describe("carryNodePositions", () => {
 
 describe("labelsVisibleAtZoom", () => {
   it("small graphs always show labels regardless of zoom", () => {
-    expect(labelsVisibleAtZoom(999999, 150)).toBe(true);
+    expect(labelsVisibleAtZoom(999999, 50)).toBe(true);
     expect(labelsVisibleAtZoom(50, 3)).toBe(true);
   });
 
