@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { BrainCircuit, UserRound } from "lucide-react";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
@@ -294,12 +295,12 @@ function CostByUserCard({
         <UserRound className="size-4 text-muted-foreground" />
         Cost by User
       </h2>
-      <Table>
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead>User</TableHead>
-            <TableHead className="w-20 text-center">Events</TableHead>
-            <TableHead className="w-24">Budget</TableHead>
+            <TableHead className="w-16 text-center">Events</TableHead>
+            <TableHead className="w-28">Budget</TableHead>
             <TableHead className="w-20 text-right">Cost</TableHead>
           </TableRow>
         </TableHeader>
@@ -315,20 +316,25 @@ function CostByUserCard({
               const budget = r.userId ? userBudgetMap.get(r.userId) : null;
               return (
                 <TableRow key={r.userId ?? "system"}>
-                  <TableCell className="min-w-0">
-                    <div className="truncate font-medium">
-                      {r.isSystem ? "System" : r.userName}
-                    </div>
-                    {!r.isSystem && r.userEmail ? (
-                      <div className="truncate text-xs text-muted-foreground">
-                        {r.userEmail}
+                  <TableCell className="max-w-0">
+                    {r.isSystem || !r.userId ? (
+                      <div className="truncate font-medium">
+                        {r.isSystem ? "System" : r.userName}
                       </div>
-                    ) : null}
+                    ) : (
+                      <Link
+                        to="/settings/users/$userId"
+                        params={{ userId: r.userId }}
+                        className="block truncate font-medium hover:underline"
+                      >
+                        {r.userName}
+                      </Link>
+                    )}
                   </TableCell>
-                  <TableCell className="w-20 text-center tabular-nums text-muted-foreground">
+                  <TableCell className="w-16 text-center tabular-nums text-muted-foreground">
                     {r.eventCount}
                   </TableCell>
-                  <TableCell className="w-24">
+                  <TableCell className="w-28">
                     {budget ? (
                       <BudgetProgress budget={budget} />
                     ) : (
@@ -368,14 +374,20 @@ function BudgetProgress({ budget }: { budget: BudgetStatusRow }) {
       ? (budget.visibleSpendUsd / budget.policy.limitUsd) * 100
       : 0;
   const percent = Math.min(100, Math.max(0, visiblePercent));
+  // Color from the same number that drives the bar width (visible spend),
+  // not the server status — the server's enforced-spend status can lag
+  // behind what the bar visibly shows.
   const barClass =
-    budget.status === "exceeded"
+    visiblePercent >= 100
       ? "bg-red-500"
-      : budget.status === "warning"
-        ? "bg-yellow-500"
+      : visiblePercent >= 75
+        ? "bg-amber-500"
         : "bg-primary";
   return (
-    <div className="w-24">
+    <div
+      className="w-24"
+      title="Month-to-date spend against the monthly budget. The Cost column shows the last 30 days."
+    >
       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
           className={`h-full ${barClass}`}

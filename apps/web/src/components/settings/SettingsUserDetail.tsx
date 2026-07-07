@@ -80,10 +80,14 @@ export function SettingsUserDetail() {
     pause: !tenantId,
   });
 
+  // The route param is canonically the tenant-member id, but callers that
+  // only know the user id (e.g. Analytics "Cost by User" links) resolve too.
   const member = useMemo(
     () =>
       result.data?.tenantMembers?.find(
-        (m) => m.id === memberId && m.principalType.toUpperCase() === "USER",
+        (m) =>
+          (m.id === memberId || m.user?.id === memberId) &&
+          m.principalType.toUpperCase() === "USER",
       ),
     [result.data, memberId],
   );
