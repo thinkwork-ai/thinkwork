@@ -345,7 +345,7 @@ const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
  */
 export function computeCommunityAnchors(
   communityByNode: ReadonlyMap<string, number>,
-  { spacing = 26, gap = 1.35 }: { spacing?: number; gap?: number } = {},
+  { spacing = 22, gap = 1.2 }: { spacing?: number; gap?: number } = {},
 ): Map<number, CommunityAnchor> {
   const counts = new Map<number, number>();
   for (const communityId of communityByNode.values()) {

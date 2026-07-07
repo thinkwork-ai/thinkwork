@@ -701,11 +701,11 @@ export const KnowledgeGraph = forwardRef<
     };
 
     fg.d3Force("charge")
-      ?.strength(nodeCount > 50 ? -200 : -130)
+      ?.strength(nodeCount > 50 ? -120 : -80)
       .distanceMax(200);
     // Community-aware springs: short/strong inside a community, long/weak
     // across bridges, so clusters densify without collapsing together.
-    const baseDistance = nodeCount > 50 ? 100 : 75;
+    const baseDistance = nodeCount > 50 ? 70 : 55;
     const linkForce = fg.d3Force("link");
     linkForce?.distance((link: any) =>
       sameCommunity(link) ? baseDistance : baseDistance * 2,
@@ -814,7 +814,14 @@ export const KnowledgeGraph = forwardRef<
         onEngineStop={() => {
           if (zoomInitRef.current) return;
           zoomInitRef.current = true;
-          fgRef.current?.zoomToFit?.(400, 40);
+          // Frame the graph, but never fit-to-tiny: sparse layouts
+          // (many small components) would otherwise open unreadably
+          // zoomed out.
+          fgRef.current?.zoomToFit?.(0, 40);
+          const k = fgRef.current?.zoom?.();
+          if (typeof k === "number" && k < 0.55) {
+            fgRef.current?.zoom?.(0.55, 0);
+          }
         }}
         onNodeClick={(node: any) => {
           // Clicking a node focuses it and surfaces the selected-node

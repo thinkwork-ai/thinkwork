@@ -798,7 +798,14 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           onEngineStop={() => {
             if (zoomInitRef.current) return;
             zoomInitRef.current = true;
-            fgRef.current?.zoomToFit?.(400, 40);
+            // Frame the graph, but never fit-to-tiny: sparse layouts
+            // (many small components) would otherwise open unreadably
+            // zoomed out.
+            fgRef.current?.zoomToFit?.(0, 40);
+            const k = fgRef.current?.zoom?.();
+            if (typeof k === "number" && k < 0.55) {
+              fgRef.current?.zoom?.(0.55, 0);
+            }
           }}
           onNodeClick={(node: any) => {
             // Clicking a node focuses it and surfaces the selected-node
