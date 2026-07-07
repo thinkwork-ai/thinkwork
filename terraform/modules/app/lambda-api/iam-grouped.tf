@@ -657,6 +657,29 @@ locals {
           }
         }
       },
+      # Workflow Interpreter (THINK-219): job-trigger (workflow_schedule
+      # branch) and graphql-http (manual triggerWorkflowRun / resolveWorkflow
+      # Approval) both run under this shared role and StartExecution the ONE
+      # static interpreter machine per stage. Name is fixed
+      # (`thinkwork-${stage}-workflow-interpreter`); the machine ARN itself is
+      # resolved from SSM at runtime (already readable via the stage-wide
+      # ssm:GetParameter grant in api_data_plane). SendTaskSuccess/Failure for
+      # workflow-resume rides the wildcard RoutineTaskTokens statement above.
+      {
+        Sid    = "WorkflowInterpreterExecution"
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution",
+          "states:StopExecution",
+          "states:DescribeExecution",
+          "states:ListExecutions",
+          "states:GetExecutionHistory",
+        ]
+        Resource = [
+          "arn:aws:states:${var.region}:${var.account_id}:stateMachine:thinkwork-${var.stage}-workflow-interpreter",
+          "arn:aws:states:${var.region}:${var.account_id}:execution:thinkwork-${var.stage}-workflow-interpreter:*",
+        ]
+      },
       # (was standalone managed policy "lambda_deployment_stepfunctions")
       # Allow API Lambdas to start and inspect the deployment orchestrator.
       {
