@@ -441,12 +441,15 @@ export const KnowledgeGraph = forwardRef<
     const mode = labelModeRef.current;
     if (mode === "on") return true;
     if (mode === "off") return false;
-    const focusState = focusRef.current;
-    if (focusState) return focusState.litIds.has(nodeId);
-    return labelsVisibleAtScale(
+    // Focus narrows which labels are eligible (the lit set) but the
+    // zoom gate still applies — labels stay hidden until zoomed in.
+    const gate = labelsVisibleAtScale(
       zoomKRef.current,
       graphDataRef.current.nodes.length,
     );
+    const focusState = focusRef.current;
+    if (focusState) return gate && focusState.litIds.has(nodeId);
+    return gate;
   }, []);
 
   const linkLabelVisible = useCallback((link: any) => {
@@ -454,6 +457,14 @@ export const KnowledgeGraph = forwardRef<
     // them everywhere; in focus they mark the lit set; in the overview
     // they follow the same zoom gate as node labels.
     if (labelModeRef.current === "off") return false;
+    if (labelModeRef.current === "on") return true;
+    // The zoom gate applies in focus mode too — focus only narrows
+    // which edges are eligible (the lit set).
+    const gate = labelsVisibleAtScale(
+      zoomKRef.current,
+      graphDataRef.current.nodes.length,
+    );
+    if (!gate) return false;
     const focusState = focusRef.current;
     if (focusState) {
       return (
@@ -461,11 +472,7 @@ export const KnowledgeGraph = forwardRef<
         focusState.litIds.has(endpointId(link.target))
       );
     }
-    if (labelModeRef.current === "on") return true;
-    return labelsVisibleAtScale(
-      zoomKRef.current,
-      graphDataRef.current.nodes.length,
-    );
+    return true;
   }, []);
 
   // Edge brightness follows endpoint lit-state. In focus mode an edge is

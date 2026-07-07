@@ -581,10 +581,16 @@ describe("KnowledgeGraph", () => {
       props.onZoom({ k: 1.5 });
       expect(paintLink(props, litLink)).toEqual(["supports"]);
 
-      // Focus "a": lit edge labeled at any zoom; node labels lit-only.
+      // Focus "a" at far zoom: the gate still applies — nothing labeled.
       props.onZoom({ k: 0.3 });
       await clickNodeIndex(0);
-      const latest = latestForceGraphProps();
+      let latest = latestForceGraphProps();
+      expect(paintLink(latest, litLink)).toEqual([]);
+      expect(paintNode(latest, props.graphData.nodes[0]).texts.length).toBe(0);
+
+      // Zoomed in while focused: only the lit set labels.
+      props.onZoom({ k: 1.5 });
+      latest = latestForceGraphProps();
       expect(paintLink(latest, litLink)).toEqual(["supports"]);
       expect(
         paintNode(latest, props.graphData.nodes[0]).texts.length,
