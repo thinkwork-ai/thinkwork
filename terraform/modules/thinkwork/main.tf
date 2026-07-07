@@ -1284,6 +1284,12 @@ module "routines_stepfunctions" {
 # cycle here: module.api does not consume any interpreter output (the machine
 # ARN reaches graphql-http/job-trigger via SSM at runtime, not terraform), so
 # this module can safely depend on module.api for the callback function ARN.
+#
+# enable_execution_callback is a STATIC true (not derived from the ARN): the
+# module gates its EventBridge resources' count on it, and a count that depends
+# on a computed attribute (the Lambda ARN, unknown until the function exists)
+# fails plan with "Invalid count argument". The ARN itself is consumed only
+# inside resource bodies, where computed values are fine.
 module "workflow_interpreter_stepfunctions" {
   source = "../app/workflow-interpreter-stepfunctions"
 
@@ -1291,6 +1297,7 @@ module "workflow_interpreter_stepfunctions" {
   account_id = var.account_id
   region     = var.region
 
+  enable_execution_callback     = true
   execution_callback_lambda_arn = module.api.workflow_execution_callback_fn_arn
 }
 

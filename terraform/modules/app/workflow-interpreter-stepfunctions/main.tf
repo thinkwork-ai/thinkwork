@@ -420,7 +420,7 @@ resource "aws_ssm_parameter" "state_machine_arn" {
 ################################################################################
 
 resource "aws_cloudwatch_event_rule" "sfn_state_change" {
-  count       = var.execution_callback_lambda_arn != "" ? 1 : 0
+  count       = var.enable_execution_callback ? 1 : 0
   name        = "thinkwork-${var.stage}-workflow-interpreter-sfn-state-change"
   description = "Forward interpreter Step Functions execution-state-change events to workflow-execution-callback so workflow_runs tracks lifecycle status."
 
@@ -448,14 +448,14 @@ resource "aws_cloudwatch_event_rule" "sfn_state_change" {
 }
 
 resource "aws_cloudwatch_event_target" "sfn_state_change" {
-  count     = var.execution_callback_lambda_arn != "" ? 1 : 0
+  count     = var.enable_execution_callback ? 1 : 0
   rule      = aws_cloudwatch_event_rule.sfn_state_change[0].name
   target_id = "workflow-execution-callback"
   arn       = var.execution_callback_lambda_arn
 }
 
 resource "aws_lambda_permission" "sfn_state_change" {
-  count         = var.execution_callback_lambda_arn != "" ? 1 : 0
+  count         = var.enable_execution_callback ? 1 : 0
   statement_id  = "AllowEventBridgeInvokeWorkflowExecutionCallback"
   action        = "lambda:InvokeFunction"
   function_name = var.execution_callback_lambda_arn
