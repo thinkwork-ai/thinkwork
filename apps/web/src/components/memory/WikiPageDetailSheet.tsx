@@ -263,28 +263,6 @@ export function WikiPageDetailSheet({
             )}
           </>
         )}
-
-        {connectedEdges.length > 0 && onEdgeClick && (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Connected pages
-            </h4>
-            <div className="space-y-2">
-              {connectedEdges.map((edge, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => onEdgeClick(edge)}
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground truncate">
-                      {edge.targetLabel}
-                    </p>
-                    {edge.label && edge.label !== "references" && (
-                      <p className="text-xs text-muted-foreground">
-                        {edge.label}
-                      </p>
-                    )}
                   </div>
                 </div>
               ))}
