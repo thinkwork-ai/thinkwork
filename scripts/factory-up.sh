@@ -7,8 +7,10 @@
 # What it does:
 #   1. Preflight: claude CLI, gh auth, agent-browser, ~/.thinkwork-factory dirs.
 #   2. Keeps the Mac awake (caffeinate tied to this process).
-#   3. Starts a Sonnet Claude Code session running `/loop 4m linear-dispatch`
-#      with permissions bypassed so unattended worker launches never stall.
+#   3. Starts a Sonnet Claude Code session running `/loop linear-dispatch`
+#      (self-paced: the dispatcher picks the next heartbeat delay from factory
+#      state — ~4 min while workers/CI/deploys are in flight, 20-30 min when
+#      idle) with permissions bypassed so unattended launches never stall.
 #
 # The /loop recurring task expires after ~7 days — rerun this script weekly,
 # after a reboot, or whenever the terminal closes. The Codex lane is separate:
@@ -58,7 +60,7 @@ caffeinate -dimsu -w $$ &
 
 echo
 echo "== Starting Claude-lane dispatcher (Sonnet) =="
-echo "   /loop 4m linear-dispatch — leave this terminal open."
+echo "   /loop linear-dispatch (self-paced) — leave this terminal open."
 echo
 
-exec claude --model sonnet --dangerously-skip-permissions "/loop 4m linear-dispatch"
+exec claude --model sonnet --dangerously-skip-permissions "/loop linear-dispatch"

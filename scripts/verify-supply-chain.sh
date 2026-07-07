@@ -103,15 +103,29 @@ while IFS= read -r raw_line || [ -n "$raw_line" ]; do
   # (`.`, `+`, `(`, …) match literally. The header lines pnpm emits are
   # `  '<name>@<version>':` (two-space indent) so we anchor on that exact
   # prefix to avoid cross-package false positives.
+  #
+  # The same header can appear more than once: pnpm's `patchedDependencies`
+  # section lists `'<name>@<version>':` with a patch-file path and hash but
+  # no `integrity:` field, ahead of the real `packages:` entry. Scan every
+  # occurrence and verify against the first block that carries an
+  # `integrity:` value; the patch file itself is reviewed in git, and the
+  # tarball integrity pinned here is unaffected by patching.
   header_literal="'${pkg_id}':"
   block=$(awk -v hdr="$header_literal" '
-    !found && index($0, hdr) > 0 { found = 1; next }
+    index($0, hdr) > 0 { found = 1; seen = 1; lines_after = 0; buf = ""; next }
     found && lines_after < 5 {
       lines_after++
-      print
-      if (/integrity:/) { exit }
+      buf = buf $0 "\n"
+      if (/integrity:/) { printf "%s", buf; matched = 1; exit }
+      next
     }
-    found && lines_after >= 5 { exit }
+    found { found = 0 }
+    END {
+      if (!matched && seen) {
+        if (buf != "") printf "%s", buf
+        else print "__header_seen_no_block__"
+      }
+    }
   ' "$LOCKFILE_PATH" || true)
 
   if [ -z "$block" ]; then

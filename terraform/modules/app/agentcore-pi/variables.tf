@@ -132,6 +132,14 @@ variable "okf_efs_mount_path" {
   default     = "/mnt/thinkwork-okf"
 }
 
+variable "pi_bedrock_model_regions" {
+  description = "Per-model Bedrock region overrides for the Pi runtime (PI_BEDROCK_MODEL_REGIONS). Routes individual model ids to another region when a regional marketplace endpoint degrades (e.g. the 2026-07-06 moonshotai.kimi-k2.5 us-east-1 throughput collapse). Empty map = no overrides; revert by setting {}."
+  type        = map(string)
+  default = {
+    "moonshotai.kimi-k2.5" = "us-west-2"
+  }
+}
+
 variable "capability_signing_public_key" {
   description = "Ed25519 public key (SPKI PEM) the runtime verifies capability manifests with (THINK-173). Empty = manifest-mode invocations fail closed."
   type        = string

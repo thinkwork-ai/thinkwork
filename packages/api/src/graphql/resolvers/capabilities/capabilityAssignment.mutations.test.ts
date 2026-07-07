@@ -26,6 +26,8 @@ const {
   mockGetConfig,
   mockS3Send,
   mockMaterializeMcp,
+  mockAgentUsesFolderDispatch,
+  mockReadConnectionAssignment,
   mockRemoveMcp,
   mockReadMcp,
   mockPutCapabilityFolder,
@@ -45,6 +47,8 @@ const {
   mockGetConfig: vi.fn(),
   mockS3Send: vi.fn(),
   mockMaterializeMcp: vi.fn(),
+  mockAgentUsesFolderDispatch: vi.fn(),
+  mockReadConnectionAssignment: vi.fn(),
   mockRemoveMcp: vi.fn(),
   mockReadMcp: vi.fn(),
   mockPutCapabilityFolder: vi.fn(),
@@ -235,6 +239,13 @@ vi.mock("../../../lib/mcp/assignment-state.js", () => ({
   materializeMcpAssignmentFolder: mockMaterializeMcp,
   removeMcpAssignmentFolder: mockRemoveMcp,
   readMcpAssignmentState: mockReadMcp,
+  agentUsesFolderDispatch: mockAgentUsesFolderDispatch,
+}));
+
+// THINK-190: flipped agents read their assignment record from the
+// connection sidecar instead of the mcp/ file.
+vi.mock("../../../lib/capabilities/connection-assignments.js", () => ({
+  readConnectionAssignment: mockReadConnectionAssignment,
 }));
 
 // The connection-folder write path used by the MCP grant/detach. The real
@@ -313,6 +324,8 @@ beforeEach(() => {
   mockMaterializeMcp.mockResolvedValue(true);
   mockRemoveMcp.mockResolvedValue(true);
   mockReadMcp.mockResolvedValue(null);
+  mockAgentUsesFolderDispatch.mockResolvedValue(false);
+  mockReadConnectionAssignment.mockResolvedValue(null);
   mockPutCapabilityFolder.mockResolvedValue({ ok: true });
   mockRemoveCapabilityFolder.mockResolvedValue({ ok: true });
 });
@@ -1030,6 +1043,118 @@ describe("mcp_server @ agent (workspace files are the assignment)", () => {
     expect(mockMaterializeMcp).not.toHaveBeenCalled();
     expect(mockPutCapabilityFolder).not.toHaveBeenCalled();
     expect(mockRemoveMcp).not.toHaveBeenCalled();
+  });
+
+  // ── THINK-190: flipped agents hold ONE record (the connection sidecar) ──
+
+  it("flipped grant skips the mcp/ mirror; the connection folder is the record", async () => {
+    mockAgentUsesFolderDispatch.mockResolvedValue(true);
+    rowsQueue.push(
+      [AGENT_ROW],
+      [TENANT_ROW],
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
+    );
+    mockReadConnectionAssignment.mockResolvedValueOnce(null); // not attached
+
+    const result = await grantCapability(
+      null,
+      {
+        input: {
+          tenantId: TENANT_ID,
+          capabilityClass: "MCP_SERVER",
+          scope: "AGENT",
+          agentId: AGENT_ID,
+          capabilityRef: "github",
+          toolAllowlist: ["issues_read"],
+        },
+      },
+      ctx,
+    );
+    expect(result.outcome).toBe("applied");
+    // Never resurrect the mirror the migration removed; never read it.
+    expect(mockMaterializeMcp).not.toHaveBeenCalled();
+    expect(mockReadMcp).not.toHaveBeenCalled();
+    expect(mockPutCapabilityFolder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        klass: "connection",
+        slug: "github",
+        sidecar: expect.objectContaining({
+          enabled: true,
+          permissions: { operations: ["issues_read"] },
+          config: { registryServerId: SERVER_ID },
+        }),
+      }),
+    );
+  });
+
+  it("flipped re-grant no-ops off the connection sidecar record", async () => {
+    mockAgentUsesFolderDispatch.mockResolvedValue(true);
+    rowsQueue.push(
+      [AGENT_ROW],
+      [TENANT_ROW],
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
+    );
+    mockReadConnectionAssignment.mockResolvedValueOnce({
+      slug: "github",
+      registryServerId: SERVER_ID,
+      enabled: true,
+      operations: ["issues_read"],
+      updated_at: "2026-07-06T00:00:00.000Z",
+    });
+
+    const result = await grantCapability(
+      null,
+      {
+        input: {
+          tenantId: TENANT_ID,
+          capabilityClass: "MCP_SERVER",
+          scope: "AGENT",
+          agentId: AGENT_ID,
+          capabilityRef: "github",
+          toolAllowlist: ["issues_read"],
+        },
+      },
+      ctx,
+    );
+    expect(result.outcome).toBe("noop");
+    expect(mockMaterializeMcp).not.toHaveBeenCalled();
+    expect(mockPutCapabilityFolder).not.toHaveBeenCalled();
+  });
+
+  it("flipped detach applies off the sidecar record even when the stale mirror removal fails", async () => {
+    mockAgentUsesFolderDispatch.mockResolvedValue(true);
+    rowsQueue.push(
+      [AGENT_ROW],
+      [TENANT_ROW],
+      [{ id: SERVER_ID, slug: "github", name: "GitHub", url: "https://x" }],
+    );
+    mockReadConnectionAssignment.mockResolvedValueOnce({
+      slug: "github",
+      registryServerId: SERVER_ID,
+      enabled: true,
+      operations: [],
+      updated_at: "2026-07-06T00:00:00.000Z",
+    });
+    // Stale-mirror cleanup is best-effort for flipped agents.
+    mockRemoveMcp.mockResolvedValueOnce(false);
+
+    const result = await detachCapability(
+      null,
+      {
+        input: {
+          tenantId: TENANT_ID,
+          capabilityClass: "MCP_SERVER",
+          scope: "AGENT",
+          agentId: AGENT_ID,
+          capabilityRef: SERVER_ID,
+        },
+      },
+      ctx,
+    );
+    expect(result.outcome).toBe("applied");
+    expect(mockRemoveCapabilityFolder).toHaveBeenCalledWith(
+      expect.objectContaining({ klass: "connection", slug: "github" }),
+    );
   });
 });
 

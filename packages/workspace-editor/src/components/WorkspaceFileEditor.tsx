@@ -80,6 +80,9 @@ export interface WorkspaceFileEditorProps<TTarget> {
   /** Draw the outer border + rounded corners around the tree/editor split.
    *  Default true; full-screen hosts can opt out for an edge-to-edge look. */
   bordered?: boolean;
+  /** Allow dragging the tree/editor divider. Default true; hosts that want a
+   *  fixed split (no grip handle) pass false. */
+  resizable?: boolean;
   /** Replaces the default spinner shown while files load. Hosts pass their
    *  app-standard loading treatment (e.g. the monospace shimmer). */
   loadingSlot?: ReactNode;
@@ -107,6 +110,7 @@ export function WorkspaceFileEditor<TTarget>({
   className,
   managedSectionHeadings = DEFAULT_MANAGED_SECTION_HEADINGS,
   bordered = true,
+  resizable = true,
   loadingSlot,
 }: WorkspaceFileEditorProps<TTarget>) {
   const stableTarget = useMemo(() => target, [targetKey, target]);
@@ -729,7 +733,7 @@ export function WorkspaceFileEditor<TTarget>({
                 />
               </div>
             </ResizablePanel>
-            <ResizableHandle withHandle />
+            {resizable ? <ResizableHandle withHandle /> : null}
             <ResizablePanel
               defaultSize="72%"
               className="flex min-h-0 min-w-0 flex-col"

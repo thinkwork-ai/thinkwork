@@ -29,6 +29,10 @@ import {
   Input,
   Label,
   Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from "@thinkwork/ui";
 import type { DocumentPlateDiagnostic } from "@/gql/graphql";
 import {
@@ -37,14 +41,21 @@ import {
   SaveDocumentPlateMutation,
 } from "@/lib/graphql-queries";
 import { PlatePreviewFrame } from "./PlatePreviewPanel";
+import { PlateContentTab } from "./PlateContentTab";
 import {
+  analysisRowsFromContract,
   applyPlatePreviewResult,
+  buildContractPayload,
+  duplicateSectionRowKeys,
   initialPlatePreviewState,
   PLATE_DIRECTIVE_KINDS,
   PLATE_PALETTE_TOKENS,
+  sectionRowsFromContract,
+  type AnalysisRowState,
   type PlateDirectiveKind,
   type PlateItem,
   type PlatePreviewState,
+  type SectionRowState,
 } from "./plate-support";
 
 export type PlateEditMode =
@@ -62,6 +73,9 @@ interface PlateFormState {
   paletteDark: Record<string, string>;
   directives: Set<PlateDirectiveKind>;
   hidden: boolean;
+  /** Content contract rows (THINK-188): floor + additions, editor order. */
+  sections: SectionRowState[];
+  analysesRows: AnalysisRowState[];
 }
 
 function seedForm(mode: PlateEditMode): PlateFormState {
@@ -77,6 +91,8 @@ function seedForm(mode: PlateEditMode): PlateFormState {
       paletteDark: {},
       directives: allDirectives,
       hidden: false,
+      sections: [],
+      analysesRows: [],
     };
   }
   const source = mode.kind === "clone" ? mode.source : mode.plate;
@@ -86,7 +102,8 @@ function seedForm(mode: PlateEditMode): PlateFormState {
       : new Set(source.allowedDirectives as PlateDirectiveKind[]);
   if (mode.kind === "clone") {
     // Capture the full resolved look so the clone matches visually; the new
-    // plate owns these as its own palette.
+    // plate owns these as its own palette — and owns the source's resolved
+    // contract outright (a tenant plate has no floor).
     return {
       slug: "",
       displayName: `${source.displayName} copy`,
@@ -97,6 +114,8 @@ function seedForm(mode: PlateEditMode): PlateFormState {
       paletteDark: { ...source.tokensDark },
       directives,
       hidden: false,
+      sections: sectionRowsFromContract(source.sections, true),
+      analysesRows: analysisRowsFromContract(source.analyses, true),
     };
   }
   // edit — seed structural from resolved fields, palette from the tenant delta
@@ -111,6 +130,16 @@ function seedForm(mode: PlateEditMode): PlateFormState {
     paletteDark: { ...(source.overrides?.paletteDark ?? {}) },
     directives,
     hidden: source.hidden,
+    // Contract rows edit the RESOLVED contract; buildContractPayload later
+    // diffs floor rows against their baselines into a delta (KTD1).
+    sections: sectionRowsFromContract(
+      source.sections,
+      source.origin === "tenant",
+    ),
+    analysesRows: analysisRowsFromContract(
+      source.analyses,
+      source.origin === "tenant",
+    ),
   };
 }
 
@@ -183,8 +212,13 @@ export function PlateEditDialog({
   const draftConfig = useMemo(() => {
     const paletteLight = JSON.stringify(nonEmptyPalette(form.paletteLight));
     const paletteDark = JSON.stringify(nonEmptyPalette(form.paletteDark));
+    const contract = buildContractPayload(
+      form.sections,
+      form.analysesRows.filter((a) => a.source === "platform" || a.key),
+      isPlatform,
+    );
     if (isPlatform) {
-      return { paletteLight, paletteDark };
+      return { paletteLight, paletteDark, ...contract };
     }
     return {
       displayName: form.displayName || undefined,
@@ -194,6 +228,7 @@ export function PlateEditDialog({
       paletteLight,
       paletteDark,
       allowedDirectives,
+      ...contract,
     };
   }, [
     isPlatform,
@@ -203,6 +238,8 @@ export function PlateEditDialog({
     form.useFor,
     form.eyebrow,
     form.titleSuffix,
+    form.sections,
+    form.analysesRows,
     allowedDirectives,
   ]);
 
@@ -263,9 +300,40 @@ export function PlateEditDialog({
       setError("Enter a “use for” description.");
       return;
     }
+    if (
+      form.sections.some((row) => row.source === "tenant" && !row.title.trim())
+    ) {
+      setError("Every section needs a title.");
+      return;
+    }
+    if (duplicateSectionRowKeys(form.sections).size > 0) {
+      setError("Section titles must be unique — see the flagged rows.");
+      return;
+    }
+    const tenantAnalyses = form.analysesRows.filter(
+      (a) => a.source === "tenant",
+    );
+    if (tenantAnalyses.some((a) => !a.key)) {
+      setError("Every analysis needs a name.");
+      return;
+    }
+    if (
+      new Set(tenantAnalyses.map((a) => a.key)).size !== tenantAnalyses.length
+    ) {
+      setError("Analysis names must be unique.");
+      return;
+    }
 
     const paletteLight = JSON.stringify(nonEmptyPalette(form.paletteLight));
     const paletteDark = JSON.stringify(nonEmptyPalette(form.paletteDark));
+    // Wipe guard (THINK-188): the save ALWAYS carries the full current
+    // contract state — the server rebuilds row config from this input, so a
+    // style-only save that omitted it would delete stored contract deltas.
+    const contract = buildContractPayload(
+      form.sections,
+      form.analysesRows,
+      isPlatform,
+    );
 
     const input = isPlatform
       ? {
@@ -274,6 +342,7 @@ export function PlateEditDialog({
           paletteLight,
           paletteDark,
           hidden: form.hidden,
+          ...contract,
         }
       : {
           tenantId,
@@ -286,6 +355,7 @@ export function PlateEditDialog({
           paletteDark,
           allowedDirectives,
           hidden: form.hidden,
+          ...contract,
         };
 
     const result = await savePlate({ input });
@@ -361,114 +431,153 @@ export function PlateEditDialog({
         </DialogHeader>
 
         <div className="grid min-h-0 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          {/* Form column */}
+          {/* Form column: Style | Content tabs (THINK-188 U5); the preview
+              column stays outside the tabs and reflects the combined draft. */}
           <div
-            className="min-h-0 space-y-5 overflow-y-auto border-b border-border p-6 md:border-b-0 md:border-r"
+            className="min-h-0 space-y-4 overflow-y-auto border-b border-border p-6 md:border-b-0 md:border-r"
             data-testid="plate-edit-form"
           >
-            {isPlatform ? (
-              <p
-                className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground"
-                data-testid="plate-platform-note"
+            <Tabs defaultValue="content">
+              <TabsList
+                variant="line"
+                className="w-full justify-start border-b"
               >
-                This is a platform plate. You can override its palette and hide
-                it, but its name, copy, and available components are managed by
-                ThinkWork.
-              </p>
-            ) : null}
+                <TabsTrigger
+                  value="content"
+                  className="flex-none px-3"
+                  data-testid="plate-tab-content"
+                >
+                  Content
+                </TabsTrigger>
+                <TabsTrigger
+                  value="style"
+                  className="flex-none px-3"
+                  data-testid="plate-tab-style"
+                >
+                  Style
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="style" className="mt-4 space-y-5">
+                {isPlatform ? (
+                  <p
+                    className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground"
+                    data-testid="plate-platform-note"
+                  >
+                    This is a platform plate. You can override its palette and
+                    hide it, but its name, copy, and available components are
+                    managed by ThinkWork.
+                  </p>
+                ) : null}
 
-            <div className="space-y-3">
-              {!isEdit ? (
-                <Field label="Slug" htmlFor="plate-slug">
-                  <Input
-                    id="plate-slug"
-                    value={form.slug}
-                    onChange={(e) => setField("slug", e.target.value)}
-                    placeholder="quarterly-report"
-                    data-testid="plate-field-slug"
-                  />
-                </Field>
-              ) : null}
-              <Field label="Display name" htmlFor="plate-display-name">
-                <Input
-                  id="plate-display-name"
-                  value={form.displayName}
-                  onChange={(e) => setField("displayName", e.target.value)}
-                  disabled={!structuralEditable}
-                  data-testid="plate-field-display-name"
-                />
-              </Field>
-              <Field label="Use for" htmlFor="plate-use-for">
-                <Input
-                  id="plate-use-for"
-                  value={form.useFor}
-                  onChange={(e) => setField("useFor", e.target.value)}
-                  disabled={!structuralEditable}
-                  placeholder="Board reports, investor updates"
-                  data-testid="plate-field-use-for"
-                />
-              </Field>
-              <Field label="Eyebrow" htmlFor="plate-eyebrow">
-                <Input
-                  id="plate-eyebrow"
-                  value={form.eyebrow}
-                  onChange={(e) => setField("eyebrow", e.target.value)}
-                  disabled={!structuralEditable}
-                  data-testid="plate-field-eyebrow"
-                />
-              </Field>
-              <Field label="Title suffix" htmlFor="plate-title-suffix">
-                <Input
-                  id="plate-title-suffix"
-                  value={form.titleSuffix}
-                  onChange={(e) => setField("titleSuffix", e.target.value)}
-                  disabled={!structuralEditable}
-                  data-testid="plate-field-title-suffix"
-                />
-              </Field>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Available components</div>
-              <div
-                className="flex flex-wrap gap-4"
-                data-testid="plate-directives"
-              >
-                {PLATE_DIRECTIVE_KINDS.map((kind) => (
-                  <label key={kind} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={form.directives.has(kind)}
-                      onCheckedChange={(checked) =>
-                        toggleDirective(kind, checked === true)
-                      }
+                <div className="space-y-3">
+                  {!isEdit ? (
+                    <Field label="Slug" htmlFor="plate-slug">
+                      <Input
+                        id="plate-slug"
+                        value={form.slug}
+                        onChange={(e) => setField("slug", e.target.value)}
+                        placeholder="quarterly-report"
+                        data-testid="plate-field-slug"
+                      />
+                    </Field>
+                  ) : null}
+                  <Field label="Display name" htmlFor="plate-display-name">
+                    <Input
+                      id="plate-display-name"
+                      value={form.displayName}
+                      onChange={(e) => setField("displayName", e.target.value)}
                       disabled={!structuralEditable}
-                      data-testid={`plate-directive-${kind}`}
+                      data-testid="plate-field-display-name"
                     />
-                    {kind}
-                  </label>
-                ))}
-              </div>
-              {allChecked ? (
-                <p className="text-xs text-muted-foreground">
-                  All components available to documents in this plate.
-                </p>
-              ) : null}
-            </div>
+                  </Field>
+                  <Field label="Use for" htmlFor="plate-use-for">
+                    <Input
+                      id="plate-use-for"
+                      value={form.useFor}
+                      onChange={(e) => setField("useFor", e.target.value)}
+                      disabled={!structuralEditable}
+                      placeholder="Board reports, investor updates"
+                      data-testid="plate-field-use-for"
+                    />
+                  </Field>
+                  <Field label="Eyebrow" htmlFor="plate-eyebrow">
+                    <Input
+                      id="plate-eyebrow"
+                      value={form.eyebrow}
+                      onChange={(e) => setField("eyebrow", e.target.value)}
+                      disabled={!structuralEditable}
+                      data-testid="plate-field-eyebrow"
+                    />
+                  </Field>
+                  <Field label="Title suffix" htmlFor="plate-title-suffix">
+                    <Input
+                      id="plate-title-suffix"
+                      value={form.titleSuffix}
+                      onChange={(e) => setField("titleSuffix", e.target.value)}
+                      disabled={!structuralEditable}
+                      data-testid="plate-field-title-suffix"
+                    />
+                  </Field>
+                </div>
 
-            <PaletteEditor
-              paletteLight={form.paletteLight}
-              paletteDark={form.paletteDark}
-              onChange={setPaletteToken}
-            />
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">
+                    Available components
+                  </div>
+                  <div
+                    className="flex flex-wrap gap-4"
+                    data-testid="plate-directives"
+                  >
+                    {PLATE_DIRECTIVE_KINDS.map((kind) => (
+                      <label
+                        key={kind}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={form.directives.has(kind)}
+                          onCheckedChange={(checked) =>
+                            toggleDirective(kind, checked === true)
+                          }
+                          disabled={!structuralEditable}
+                          data-testid={`plate-directive-${kind}`}
+                        />
+                        {kind}
+                      </label>
+                    ))}
+                  </div>
+                  {allChecked ? (
+                    <p className="text-xs text-muted-foreground">
+                      All components available to documents in this plate.
+                    </p>
+                  ) : null}
+                </div>
 
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={form.hidden}
-                onCheckedChange={(checked) => setField("hidden", checked)}
-                data-testid="plate-field-hidden"
-              />
-              Hidden (agents can&apos;t pick this plate)
-            </label>
+                <PaletteEditor
+                  paletteLight={form.paletteLight}
+                  paletteDark={form.paletteDark}
+                  onChange={setPaletteToken}
+                />
+
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch
+                    checked={form.hidden}
+                    onCheckedChange={(checked) => setField("hidden", checked)}
+                    data-testid="plate-field-hidden"
+                  />
+                  Hidden (agents can&apos;t pick this plate)
+                </label>
+              </TabsContent>
+              <TabsContent value="content" className="mt-4">
+                <PlateContentTab
+                  sections={form.sections}
+                  analyses={form.analysesRows}
+                  isPlatform={isPlatform}
+                  allowedDirectives={allowedDirectives}
+                  onSectionsChange={(rows) => setField("sections", rows)}
+                  onAnalysesChange={(rows) => setField("analysesRows", rows)}
+                />
+              </TabsContent>
+            </Tabs>
 
             {error ? (
               <p
@@ -506,7 +615,10 @@ export function PlateEditDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-wrap gap-2 border-t border-border px-6 py-4">
+        {/* The DialogFooter base assumes a p-4 DialogContent and offsets with
+            -mx-4/-mb-4; this dialog is p-0, so neutralize the offsets or the
+            footer buttons sit flush against the dialog edge. */}
+        <DialogFooter className="mx-0 mb-0 flex-wrap gap-2 border-t border-border px-6 py-4">
           {isPlatform ? (
             <div className="mr-auto flex gap-2">
               <Button

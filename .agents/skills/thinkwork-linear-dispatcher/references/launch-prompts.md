@@ -21,7 +21,11 @@ Lane notes:
 
 Model policy (Claude lane): the dispatcher runs on Sonnet; every worker launch
 passes an explicit `--model` — brainstorm/plan/implement/repair on `fable`,
-verify/debug on `opus`, compound on `sonnet`.
+verify/debug on `opus`, compound on `sonnet` — plus an explicit
+`--max-budget-usd` runaway backstop per the dispatcher skill's Model Policy
+table. A budget-killed worker is a normal dead worker (sweep relaunches from
+the Progress document); two consecutive budget kills on the same phase are a
+blocker, not a third relaunch.
 
 Orchestration doctrine (Fable workers — brainstorm, plan, implement): you are
 the architect, not the typist. Load the fable-advisor orchestration skill and
@@ -176,8 +180,10 @@ artifact and attached Linear document when useful. Do not implement product
 fixes unless this is a Ready to Work implementation/repair issue or an LFG
 issue with explicit scope. Commit artifact, PR, wait checks, fix failures,
 squash-merge when allowed, clean up, update the progress document and rolling
-ledger, post the handoff comment for the next phase, and move to Ready to Work
-for LFG or Plan Review otherwise. Stop.
+ledger, post the handoff comment for the next phase, and route the exit: move
+to Brainstorming when the diagnosis reveals a product-framing question that
+requirements work must settle, otherwise Ready to Work for LFG or Plan Review
+for human review. Stop.
 ```
 
 ## Autopilot Implementation Prompt

@@ -1,0 +1,80 @@
+# THINK-198 memory-quality eval harness — local Hindsight + pgvector Postgres.
+#
+# Mirrors the deployed dev config in terraform/modules/app/hindsight-memory/
+# main.tf:279-305, minus AWS ECS/ALB — one candidate's retain model is
+# selected per run via the CANDIDATE env var, isolated into its own schema
+# via CANDIDATE_SCHEMA. See README.md in this directory for the full
+# per-candidate workflow.
+#
+# Usage (one candidate at a time):
+#   docker compose up -d pg
+#   CANDIDATE="openai.gpt-oss-20b-1:0" CANDIDATE_SCHEMA=eval_baseline \
+#     docker compose up -d --force-recreate hindsight
+#   curl http://localhost:8888/health   # allow ~5 min on first boot (model download)
+#   ... run-retain.ts against http://localhost:8888 ...
+#   # next candidate: repeat with a different CANDIDATE / CANDIDATE_SCHEMA.
+#   # `pg` stays up across candidates — each schema's memory_units persist
+#   # for the judge/report steps.
+#
+# Requires AWS credentials in the environment (AWS_ACCESS_KEY_ID,
+# AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN if using an assumed role) with
+# bedrock:InvokeModel — the container talks to Bedrock directly, not through
+# the Pi Lambda callback fetch used in-app.
+
+services:
+  pg:
+    image: pgvector/pgvector:pg16
+    container_name: hindsight-eval-pg
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_PASSWORD: hindsight
+      POSTGRES_DB: hindsight
+    volumes:
+      - hindsight-eval-pg-data:/var/lib/postgresql/data
+      - ./pg-init.sql:/docker-entrypoint-initdb.d/pg-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:0.5.6
+    container_name: hindsight-eval-candidate
+    depends_on:
+      pg:
+        condition: service_healthy
+    ports:
+      - "8888:8888"
+    environment:
+      HINDSIGHT_API_DATABASE_URL: "postgresql://postgres:hindsight@pg:5432/hindsight"
+      HINDSIGHT_API_DATABASE_SCHEMA: "${CANDIDATE_SCHEMA:-eval_baseline}"
+      HINDSIGHT_API_VECTOR_EXTENSION: pgvector
+      HINDSIGHT_API_TEXT_SEARCH_EXTENSION: native
+      HINDSIGHT_API_RUN_MIGRATIONS_ON_STARTUP: "true"
+      HINDSIGHT_API_LLM_PROVIDER: bedrock
+      HINDSIGHT_API_LLM_MODEL: "${CANDIDATE:-openai.gpt-oss-20b-1:0}"
+      HINDSIGHT_API_RETAIN_LLM_PROVIDER: bedrock
+      HINDSIGHT_API_RETAIN_LLM_MODEL: "${CANDIDATE:-openai.gpt-oss-20b-1:0}"
+      AWS_REGION_NAME: "${AWS_REGION:-us-east-1}"
+      AWS_DEFAULT_REGION: "${AWS_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_SESSION_TOKEN: "${AWS_SESSION_TOKEN:-}"
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: local
+      HINDSIGHT_API_EMBEDDINGS_LOCAL_MODEL: BAAI/bge-small-en-v1.5
+      HINDSIGHT_API_RERANKER_PROVIDER: local
+      # Disabled so retain extraction quality is measured raw, not masked by
+      # the consolidation/dedup engine. Dev runs this true (main.tf:301-302);
+      # flip to true for a secondary "as-deployed" pass if needed.
+      HINDSIGHT_API_ENABLE_AUTO_CONSOLIDATION: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8888/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+volumes:
+  hindsight-eval-pg-data:

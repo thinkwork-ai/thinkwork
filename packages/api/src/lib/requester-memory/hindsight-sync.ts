@@ -114,7 +114,12 @@ export function requesterMemoryDocumentId(
 
 export function isHindsightSyncableRequesterMemoryPath(path: string): boolean {
   if (path === "memory/MEMORY.md") return true;
-  if (path === "memory/DREAMS.md") return true;
+  // memory/DREAMS.md is deliberately NOT syncable (THINK-197): it is the
+  // dream-state reflection journal — memory-management chatter about memory
+  // candidates, scores, and consolidation. Syncing it lets Hindsight extract
+  // meta-memories ("the user has a memory candidate named …") that surface as
+  // knowledge. Agents read DREAMS.md directly from the requester-memory tree.
+  if (path === "memory/DREAMS.md") return false;
   const [root, collection, filename, extra] = path.split("/");
   return (
     root === "memory" &&

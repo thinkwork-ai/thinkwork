@@ -31,7 +31,10 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { getDb } from "@thinkwork/database-pg";
-import { messages } from "@thinkwork/database-pg/schema";
+import {
+  documentSectionWaivers,
+  messages,
+} from "@thinkwork/database-pg/schema";
 import {
   and,
   artifacts,
@@ -40,6 +43,7 @@ import {
   eq,
   sql,
 } from "../../graphql/utils.js";
+import { creatorUserIdForThread } from "./artifact-creator.js";
 import { hasSpaceWriteRole } from "./canvas-access.js";
 import {
   compileDocument,
@@ -56,6 +60,10 @@ import {
   artifactRenderKey,
   writeArtifactPayloadToS3,
 } from "./payload-storage.js";
+import {
+  ingestDocumentArtifactMemory,
+  type DocumentMemoryInput,
+} from "./document-memory.js";
 import {
   appendThreadTurnEvent,
   drizzleThreadTurnEventStore,
@@ -247,9 +255,30 @@ export interface DocumentEmissionDeps {
     digestKey: string;
     actingUserId: string | null;
   }) => Promise<void>;
+  /**
+   * THINK-183 U5: rewrite the artifact's section-waiver rows (delete +
+   * reinsert, head semantics). Called only for manifest-bearing plates — a
+   * contract-less emission never touches the waiver table.
+   */
+  replaceSectionWaivers: (input: {
+    tenantId: string;
+    artifactId: string;
+    plateSlug: string;
+    waivers: ReadonlyArray<{
+      sectionId: string;
+      tier: "required" | "required-if-material";
+      reason: string;
+    }>;
+  }) => Promise<void>;
   loadDocumentRow: (artifactId: string) => Promise<DocumentRow | null>;
   hasSpaceWriteRole: typeof hasSpaceWriteRole;
   pinDocumentHead: typeof pinDocumentHead;
+  /**
+   * Documents-as-memory (THINK-152 / THINK-193 P3): retain the digest +
+   * colophon into the memory engine. Best-effort — a memory fault never fails
+   * the emission.
+   */
+  ingestDocumentMemory: (input: DocumentMemoryInput) => Promise<unknown>;
   appendCardEvent: (input: {
     tenantId: string;
     turnId: string;
@@ -326,6 +355,8 @@ function defaultDeps(): DocumentEmissionDeps {
       };
       const title = boundedCanvasText(input.title, 160);
       const summary = boundedCanvasText(input.abstract || input.title, 500);
+      const createdByUserId =
+        input.actingUserId ?? (await creatorUserIdForThread(input.threadId));
       await db
         .insert(artifacts)
         .values({
@@ -333,6 +364,7 @@ function defaultDeps(): DocumentEmissionDeps {
           tenant_id: input.tenantId,
           agent_id: input.agentId,
           thread_id: input.threadId,
+          created_by_user_id: createdByUserId,
           title,
           type: input.genre,
           status: "draft",
@@ -355,6 +387,33 @@ function defaultDeps(): DocumentEmissionDeps {
           },
         });
     },
+    replaceSectionWaivers: async ({
+      tenantId,
+      artifactId,
+      plateSlug,
+      waivers,
+    }) => {
+      await db
+        .delete(documentSectionWaivers)
+        .where(
+          and(
+            eq(documentSectionWaivers.tenant_id, tenantId),
+            eq(documentSectionWaivers.artifact_id, artifactId),
+          ),
+        );
+      if (waivers.length > 0) {
+        await db.insert(documentSectionWaivers).values(
+          waivers.map((w) => ({
+            tenant_id: tenantId,
+            artifact_id: artifactId,
+            plate_slug: plateSlug,
+            section_id: w.sectionId,
+            tier: w.tier,
+            reason: w.reason,
+          })),
+        );
+      }
+    },
     loadDocumentRow: async (artifactId) => {
       const rows = await db
         .select()
@@ -365,6 +424,7 @@ function defaultDeps(): DocumentEmissionDeps {
     },
     hasSpaceWriteRole,
     pinDocumentHead,
+    ingestDocumentMemory: ingestDocumentArtifactMemory,
     appendCardEvent: async ({
       tenantId,
       turnId,
@@ -729,9 +789,24 @@ export async function handleDocumentEmission(
     actingUserId,
   });
 
+  // THINK-183 U5: head-semantics waiver rewrite. Only manifest-bearing plates
+  // touch the table — a re-emission with zero waivers clears prior rows, and
+  // a contract-less plate issues no statement at all (AE4 inert path).
+  if ((plate.sections?.length ?? 0) > 0) {
+    await deps.replaceSectionWaivers({
+      tenantId: input.tenantId,
+      artifactId,
+      plateSlug: plate.slug,
+      waivers: compiled.waivers,
+    });
+  }
+
   // ---- Finalize: pin both bodies + flip (KTD8) ----------------------------
   let headVersion = 0;
   let status: "draft" | "final" = "draft";
+  // Space owner for memory routing: the finalize input wins; a re-emitted
+  // draft of a previously space-assigned document keeps the row's space.
+  let memorySpaceId: string | null = doc.spaceId ?? null;
   if (doc.status === "final") {
     const row = await deps.loadDocumentRow(artifactId);
     if (!row) {
@@ -744,6 +819,7 @@ export async function handleDocumentEmission(
         },
       };
     }
+    memorySpaceId = doc.spaceId ?? row.space_id ?? null;
     try {
       const pin = await deps.pinDocumentHead({
         row,
@@ -766,7 +842,35 @@ export async function handleDocumentEmission(
   } else {
     const row = await deps.loadDocumentRow(artifactId);
     headVersion = row?.head_version ?? 0;
+    memorySpaceId = row?.space_id ?? null;
   }
+
+  // ---- Documents-as-memory (THINK-152 / THINK-193 P3) --------------------
+  // Best-effort like the card append: the document is durably persisted; a
+  // memory fault costs Brain ingestion, not data.
+  await deps
+    .ingestDocumentMemory({
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      artifactId,
+      documentId,
+      genre: doc.genre,
+      title: doc.title,
+      abstract: doc.abstract,
+      digestMarkdown: doc.digestMarkdown,
+      status,
+      headVersion,
+      actingUserId,
+      spaceId: memorySpaceId,
+      emittedAt: new Date().toISOString(),
+    })
+    .catch((err) => {
+      console.error(
+        "[document-emission] memory ingest failed (best-effort):",
+        err,
+      );
+    });
 
   // ---- Compact card event (R4) — abstract truncated to the ceiling -------
   const card = buildDocumentCard({

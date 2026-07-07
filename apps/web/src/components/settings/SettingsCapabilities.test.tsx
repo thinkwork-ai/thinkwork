@@ -494,11 +494,12 @@ describe("capability write actions (sheet rows)", () => {
     });
     fireEvent.click(screen.getByTestId("add-skill-pick-expenses"));
     await waitFor(() => expect(grantMock).toHaveBeenCalled());
-    // A held gate (reason ≠ not_installed) is settled immediately — no ghost.
-    expect(editorProps()?.pendingSkillSlug).toBeNull();
+    // A held gate (reason ≠ not_installed) is settled immediately — no
+    // footer sync status.
+    expect(screen.queryByTestId("composer-sync-status")).toBeNull();
   });
 
-  it("post-attach S3 lag forwards a sync ghost to the editor, cleared when the row lands active", async () => {
+  it("post-attach S3 lag shows the footer sync status, cleared when the row lands active", async () => {
     grantMock.mockResolvedValue(
       grantResult({
         capabilityClass: "skill",
@@ -516,10 +517,14 @@ describe("capability write actions (sheet rows)", () => {
       (editorProps()?.onAddSkill as () => void)();
     });
     fireEvent.click(screen.getByTestId("add-skill-pick-expenses"));
-    // The sync window forwards the affected slug to the editor as a ghost.
+    // The sync window surfaces in the footer status (lower right), NOT as a
+    // ghost node in the tree.
     await waitFor(() =>
-      expect(editorProps()?.pendingSkillSlug).toBe("expenses"),
+      expect(
+        screen.getByTestId("composer-sync-status").textContent,
+      ).toContain("Syncing skill expenses"),
     );
+    expect(editorProps()).not.toHaveProperty("pendingSkillSlug", "expenses");
 
     queryState.inspector = {
       data: inspection({
@@ -538,7 +543,9 @@ describe("capability write actions (sheet rows)", () => {
       error: undefined,
     };
     view.rerender(<SettingsCapabilities />);
-    await waitFor(() => expect(editorProps()?.pendingSkillSlug).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByTestId("composer-sync-status")).toBeNull(),
+    );
   });
 
   it("a granted extension version that left the registry shows a disabled detach (plan U8)", () => {
@@ -779,18 +786,13 @@ describe("tree context-menu callbacks (item 4)", () => {
 });
 
 describe("MCP tree callbacks (U9c)", () => {
-  it("forwards mcp decoration state + sync/removing slugs to the editor", () => {
+  it("forwards mcp callbacks WITHOUT the retired mcp_server decoration map", () => {
     render(<SettingsCapabilities />);
     const props = editorProps();
-    const map = props?.mcpStateBySlug as Map<
-      string,
-      { active: boolean; reason: string | null }
-    >;
-    expect(map.get("github")).toEqual({ active: true, reason: null });
-    expect(map.get("slack")).toEqual({
-      active: false,
-      reason: "oauth_missing",
-    });
+    // The mcp_server inspector class never enters resolution on
+    // folder-dispatch agents, so its per-folder decoration stamped every
+    // attached server not_installed — the map is retired, not forwarded.
+    expect(props?.mcpStateBySlug).toBeUndefined();
     expect(typeof props?.onAddMcpServer).toBe("function");
     expect(typeof props?.onDetachMcpServer).toBe("function");
   });
@@ -945,6 +947,35 @@ describe("folder capabilities from the manifest (THINK-173 U9)", () => {
     expect(tools.get("gated-mailer")?.reason).toBe("approval_gated");
     expect(tools.get("shadow")?.reason).toBe("collision");
     expect(tools.get("cruncher")?.reason).toBe("trust_gate");
+  });
+
+  it("THINK-190: the Add-connection picker's row state prefers connection-manifest truth over the retired mcp_server class", () => {
+    // Inspector says github=active, slack=oauth_missing (the dead class);
+    // the connection manifest says the opposite — manifest truth wins.
+    seedManifest({
+      active: [{ slug: "slack", class: "connection" }],
+      withheld: [
+        { slug: "github", class: "connection", reason: "definition_drift" },
+      ],
+    });
+    render(<SettingsCapabilities />);
+    act(() => {
+      (editorProps()?.onAddConnection as () => void)();
+    });
+    const githubRow = screen.getByTestId("add-mcp-row-github");
+    expect(githubRow.textContent).toContain("definition_drift");
+    expect(
+      (screen.getByTestId("add-mcp-pick-github") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    const slackRow = screen.getByTestId("add-mcp-row-slack");
+    expect(slackRow.textContent).toContain("active");
+    expect(
+      (screen.getByTestId("add-mcp-pick-slack") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByTestId("add-mcp-pick-slack").textContent).toBe(
+      "Attached",
+    );
   });
 
   it("lists ONLY unsigned folders as pending proposals; approve grants with the folder class", async () => {

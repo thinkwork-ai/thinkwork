@@ -9,7 +9,13 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { queryResponses, executeMutationMock } = vi.hoisted(() => ({
@@ -199,17 +205,47 @@ describe("AgentProfilesSheet", () => {
     });
   });
 
-  it("create fires the default-payload mutation", async () => {
+  it("New profile opens an unsaved draft; the create mutation fires only on Save", async () => {
     executeMutationMock.mockReturnValue({
       data: { createAgentProfile: { id: "profile-new" } },
     });
     render(<AgentProfilesSheet open onOpenChange={vi.fn()} />);
     fireEvent.click(screen.getByTestId("profiles-sheet-new"));
-    await screen.findByTestId("agent-profiles-sheet");
+    // Draft editor open, NOTHING created yet.
+    await screen.findByTestId("profiles-sheet-save");
+    expect(
+      executeMutationMock.mock.calls.find(
+        ([key]) => key === "CreateAgentProfile",
+      ),
+    ).toBeUndefined();
+    // Save fires the create with the drafted payload.
+    fireEvent.click(screen.getByTestId("profiles-sheet-save"));
+    await waitFor(() => {
+      expect(
+        executeMutationMock.mock.calls.find(
+          ([key]) => key === "CreateAgentProfile",
+        ),
+      ).toBeTruthy();
+    });
     const call = executeMutationMock.mock.calls.find(
       ([key]) => key === "CreateAgentProfile",
-    );
-    expect(call).toBeTruthy();
+    )!;
+    const input = (call[1] as { input: Record<string, unknown> }).input;
+    expect(input.name).toBe("New Agent Profile");
+    expect(input.modelId).toBeTruthy();
+  });
+
+  it("backing out of the draft creates nothing", async () => {
+    render(<AgentProfilesSheet open onOpenChange={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("profiles-sheet-new"));
+    await screen.findByTestId("profiles-sheet-save");
+    fireEvent.click(screen.getByTestId("profiles-sheet-back"));
+    await screen.findByTestId("profiles-sheet-new");
+    expect(
+      executeMutationMock.mock.calls.find(
+        ([key]) => key === "CreateAgentProfile",
+      ),
+    ).toBeUndefined();
   });
 
   it("imports no capability grant/detach mutations (single write path, R12)", () => {

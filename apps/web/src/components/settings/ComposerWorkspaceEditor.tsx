@@ -28,7 +28,7 @@
  *     State filter cleared;
  *   - jump-to-cause (item 2): non-skill nodes resolve to their owning surface —
  *     skill folders focus the capability row in the Side Sheet in-page; Spaces /
- *     User / generated agent files navigate to the owning editor;
+ *     every rendered layer edits in place through its source client;
  *   - direct manipulation (item 4): right-clicking a `skills/<slug>/` folder
  *     offers "Detach skill…"; right-clicking the `skills/` folder offers
  *     "Add skill…". Both route through the host's existing grant/detach +
@@ -37,7 +37,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useClient } from "urql";
 import {
   ChevronRight,
@@ -50,6 +49,7 @@ import {
   FolderOpen,
   FolderPlus,
   FolderTree,
+  Loader2,
   Pencil,
   Plus,
   Scissors,
@@ -120,11 +120,6 @@ export interface ComposerWorkspaceEditorProps {
    */
   refreshToken?: number;
   /**
-   * Skill slug inside the post-attach sync-pending window: its folder node
-   * renders as a ghost with a "syncing…" badge until the refetch lands.
-   */
-  pendingSkillSlug?: string | null;
-  /**
    * Skill slug whose detach is in flight: its folder renders dimmed with a
    * "removing…" badge until the manifest refetch drops it.
    */
@@ -153,12 +148,16 @@ export interface ComposerWorkspaceEditorProps {
    * "Detach MCP server…" — the same picker/confirm/sync machinery, second class.
    */
   mcpStateBySlug?: Map<string, SkillNodeState>;
-  /** MCP-server slug inside the post-attach sync-pending window (ghost node). */
-  pendingMcpSlug?: string | null;
-  /** MCP-server slug whose detach is in flight ("removing…" affordance). */
+  /** Connection folder slug whose MCP detach is in flight ("removing…"). */
   removingMcpSlug?: string | null;
   /** Open the Add-MCP-server picker (context menu on the `mcp/` folder). */
   onAddMcpServer?: () => void;
+  /**
+   * Open the Add-connection picker (context menu on the `connections/`
+   * root). Connections subsume MCP servers post-THINK-173, so this opens
+   * the same registry-backed picker the legacy `mcp/` root used.
+   */
+  onAddConnection?: () => void;
   /** Open the destructive detach confirm for an `mcp/<slug>/` folder. */
   onDetachMcpServer?: (slug: string) => void;
   /**
@@ -175,6 +174,12 @@ export interface ComposerWorkspaceEditorProps {
     klass: "connection" | "tool",
     slug: string,
   ) => void;
+  /**
+   * "Remove connection…" record-severing hook: detach the assignment
+   * (MCP_SERVER class when registry-backed; noop otherwise) BEFORE the
+   * editor deletes the folder files. Awaited inside the delete confirm.
+   */
+  onRemoveConnection?: (slug: string) => Promise<void> | void;
   /** Revoke a signed folder capability (removes the sidecar only). */
   onDetachCapabilityFolder?: (
     klass: "connection" | "tool",
@@ -418,9 +423,21 @@ function mcpSlugForFolder(node: TreeNode): string | null {
  * content-addressed `capabilities/<sha>.json` copies are BUILD OUTPUT of
  * the capability folders — hidden from the tree by default (Eric: "build
  * output mixed into src") behind the Show-compiled debug toggle.
+ *
+ * `mcp/<slug>/.assignment.json` records live behind the same toggle: since
+ * #3409 they are platform-managed assignment state (never agent-authored
+ * content), and every attached server ALSO renders as its
+ * `connections/<slug>/` folder — showing both duplicate-lists the same
+ * capability surface. `connections/` is the tree's one capability surface;
+ * the raw records stay reachable for debugging via the toggle.
  */
 export function isCompiledArtifactPath(path: string): boolean {
-  return path === "capabilities.json" || path.startsWith("capabilities/");
+  return (
+    path === "capabilities.json" ||
+    path.startsWith("capabilities/") ||
+    path === "mcp" ||
+    path.startsWith("mcp/")
+  );
 }
 
 function connectionSlugForFolder(node: TreeNode): string | null {
@@ -510,6 +527,13 @@ interface DeleteConfirmState {
    * deleted. undefined = not applicable, null = still loading.
    */
   automationRefs?: number | null;
+  /**
+   * Set when this is a connections/<slug> "Remove connection…" — the host
+   * detaches the assignment record first, then the folder files delete.
+   */
+  connectionSlug?: string;
+  /** True while the delete mutation is in flight (spinner + disabled). */
+  busy?: boolean;
 }
 
 interface ManifestState {
@@ -529,7 +553,6 @@ export function ComposerWorkspaceEditor({
   spaceId,
   perspectiveUserId,
   refreshToken = 0,
-  pendingSkillSlug = null,
   removingSkillSlug = null,
   onFocusCapabilityRow,
   skillStateBySlug,
@@ -541,9 +564,10 @@ export function ComposerWorkspaceEditor({
   toolStateBySlug,
   onApproveCapabilityFolder,
   onDetachCapabilityFolder,
-  pendingMcpSlug = null,
+  onRemoveConnection,
   removingMcpSlug = null,
   onAddMcpServer,
+  onAddConnection,
   onDetachMcpServer,
   onConfigureAgentProfile,
   onCreateAgentProfile,
@@ -553,7 +577,6 @@ export function ComposerWorkspaceEditor({
   profileScopeName = null,
   initialSelectedPath = null,
 }: ComposerWorkspaceEditorProps) {
-  const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
   const canEditSource = isOperator && roleResolved;
   const urqlClient = useClient();
@@ -729,10 +752,21 @@ export function ComposerWorkspaceEditor({
   }, [nameDialog, srcForPath, loadManifest, selectedPath]);
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteConfirm) return;
-    const { path, isFolder } = deleteConfirm;
-    setDeleteConfirm(null);
+    if (!deleteConfirm || deleteConfirm.busy) return;
+    const { path, isFolder, connectionSlug } = deleteConfirm;
+    // Keep the dialog open and mark it busy so the button spins and the
+    // controls disable — the tree can take a moment to remove a folder.
+    setDeleteConfirm((current) =>
+      current && current.path === path ? { ...current, busy: true } : current,
+    );
     try {
+      // "Remove connection…": sever the assignment record FIRST (the host
+      // runs the MCP_SERVER detach when the connection is registry-backed —
+      // without it a reconciler resurrects the folder), then delete
+      // whatever files remain.
+      if (connectionSlug) {
+        await onRemoveConnection?.(connectionSlug);
+      }
       const targets = isFolder
         ? entries
             .filter((e) => e.path === path || e.path.startsWith(`${path}/`))
@@ -750,12 +784,25 @@ export function ComposerWorkspaceEditor({
       ) {
         setSelectedPath(null);
       }
+      setDeleteConfirm(null);
     } catch (err) {
       toast.error(
         `Delete failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+      setDeleteConfirm((current) =>
+        current && current.path === path
+          ? { ...current, busy: false }
+          : current,
+      );
     }
-  }, [deleteConfirm, entries, srcForPath, loadManifest, selectedPath]);
+  }, [
+    deleteConfirm,
+    entries,
+    srcForPath,
+    loadManifest,
+    selectedPath,
+    onRemoveConnection,
+  ]);
 
   const pasteInto = useCallback(
     async (folderPath: string) => {
@@ -803,13 +850,6 @@ export function ComposerWorkspaceEditor({
     void loadFile(selectedPath);
   }, [selectedPath, loadFile, refreshToken, entryByPath, result, spaceId]);
 
-  // Post-attach sync ghosts: one per capability-folder class (skills + mcp).
-  const pendingFolderPaths = useMemo(() => {
-    const paths: string[] = [];
-    if (pendingSkillSlug) paths.push(`skills/${pendingSkillSlug}`);
-    if (pendingMcpSlug) paths.push(`mcp/${pendingMcpSlug}`);
-    return paths;
-  }, [pendingSkillSlug, pendingMcpSlug]);
   // Debug toggle: compiled artifacts are off by default; the manifest
   // stays inspectable through the capability sheet either way.
   const [showCompiled, setShowCompiled] = useState(false);
@@ -820,35 +860,10 @@ export function ComposerWorkspaceEditor({
         : entries.filter((entry) => !isCompiledArtifactPath(entry.path)),
     [entries, showCompiled],
   );
-  const tree = useMemo(() => {
-    const nodes = buildPreviewTree(visibleEntries);
-    for (const pendingPath of pendingFolderPaths) {
-      if (entries.some((entry) => entry.path.startsWith(`${pendingPath}/`))) {
-        continue;
-      }
-      const rootName = pendingPath.split("/")[0];
-      const rootFolder = nodes.find(
-        (node) => node.path === rootName && node.isFolder,
-      );
-      const ghost: TreeNode = {
-        name: pendingPath.split("/")[1],
-        path: pendingPath,
-        isFolder: true,
-        children: [],
-      };
-      if (rootFolder) {
-        rootFolder.children.unshift(ghost);
-      } else {
-        nodes.unshift({
-          name: rootName,
-          path: rootName,
-          isFolder: true,
-          children: [ghost],
-        });
-      }
-    }
-    return nodes;
-  }, [visibleEntries, entries, pendingFolderPaths]);
+  // Attach/detach progress renders in the host's footer status (no ghost
+  // nodes or per-node badges in the tree — the folder simply appears on the
+  // post-sync refetch).
+  const tree = useMemo(() => buildPreviewTree(visibleEntries), [visibleEntries]);
 
   // Default state is COLLAPSED at EVERY depth — every folder starts closed, only
   // root files are visible; expanding a folder reveals its immediate children
@@ -877,55 +892,9 @@ export function ComposerWorkspaceEditor({
     });
   }
 
-  function jumpToCause(entry: ComposerPreviewEntry) {
-    const cause = causeOf(entry);
-    if (!cause) return;
-    switch (cause.kind) {
-      case "skill":
-        onFocusCapabilityRow?.("skill", cause.slug);
-        return;
-      case "space": {
-        const targetSpaceId = result?.spaceId ?? spaceId;
-        if (!targetSpaceId) return;
-        void navigate({
-          to: "/settings/spaces/$spaceId",
-          params: { spaceId: targetSpaceId },
-          search: {
-            view: "workspace",
-            ...(cause.file ? { file: cause.file } : {}),
-          },
-        });
-        return;
-      }
-      case "user": {
-        const targetUserId = result?.perspectiveUserId ?? perspectiveUserId;
-        if (!targetUserId) return;
-        void navigate({
-          to: "/settings/users/$userId",
-          params: { userId: targetUserId },
-        });
-        return;
-      }
-      case "agent_source":
-        // KTD-7 (U7): this page IS the agent surface — select in place.
-        setSelectedPath(cause.file);
-        return;
-    }
-  }
-
-  function jumpEntryFor(node: TreeNode): ComposerPreviewEntry | null {
-    if (node.entry) return node.entry;
-    if (pendingFolderPaths.includes(node.path)) return null;
-    let cursor: TreeNode | undefined = node;
-    while (cursor && !cursor.entry) {
-      cursor = cursor.children[0];
-    }
-    return cursor?.entry ?? null;
-  }
 
   function renderNode(node: TreeNode, depth: number): React.ReactNode {
     const isCollapsed = collapsed.has(node.path);
-    const isPending = pendingFolderPaths.includes(node.path);
     const skillSlug = skillSlugForFolder(node);
     const skillState = skillSlug ? skillStateBySlug?.get(skillSlug) : undefined;
     // MCP mirror (U9c): `mcp/<slug>/` folders carry the mcp_server row state.
@@ -974,8 +943,12 @@ export function ComposerWorkspaceEditor({
       canManageSkills &&
       onApproveCapabilityFolder,
     );
+    // Tools keep Revoke (sidecar-only). Connections replace the revoke/raw-
+    // delete split with ONE "Remove connection…" that detaches the record
+    // and deletes the folder (Eric: managed folder, one destructive action).
     const canRevokeFolderCapability = Boolean(
       folderCapability &&
+      folderCapability.klass === "tool" &&
       folderCapability.state?.active &&
       canManageSkills &&
       onDetachCapabilityFolder,
@@ -983,10 +956,15 @@ export function ComposerWorkspaceEditor({
     const isGated = Boolean(gateState && !gateState.active);
     const isRemoving = Boolean(
       (skillSlug && skillSlug === removingSkillSlug) ||
-      (mcpSlug && mcpSlug === removingMcpSlug),
+      // THINK-190: an in-flight MCP detach removes the connections/<slug>/
+      // folder; the mcp/<slug> match stays for un-flipped-stage operators
+      // viewing the legacy mirror behind the compiled toggle.
+      (mcpSlug && mcpSlug === removingMcpSlug) ||
+      (connectionSlug && connectionSlug === removingMcpSlug),
     );
-    const jumpEntry = jumpEntryFor(node);
-    const causeKind = jumpEntry ? (causeOf(jumpEntry)?.kind ?? null) : null;
+    const canRemoveConnection = Boolean(
+      connectionSlug && canManageSkills && !isRemoving,
+    );
     // Profile files get the dedicated Edit/Delete treatment (U2); the generic
     // "Open agent source" item is suppressed for them by contract (R5).
     const profileSlug = agentProfileSlugForFile(node);
@@ -1000,22 +978,14 @@ export function ComposerWorkspaceEditor({
     // Profiles sheet, never as raw files.
     const isAgentsRoot = node.isFolder && node.path === "agents";
     const canAddProfileHere = Boolean(isAgentsRoot && onCreateAgentProfile);
-    // "Open …source" navigation is offered ONLY for nodes that open a real
-    // owning editor — Spaces file → space editor, User file → user detail.
-    // Agent-owned files just select locally in this tree (KTD-7), so they get
-    // no menu entry; skill nodes likewise (the gate-badge click still jumps).
-    const canOpenSource =
-      !canConfigureProfile &&
-      Boolean(jumpEntry) &&
-      (causeKind === "space"
-        ? true
-        : causeKind === "user"
-          ? Boolean(result?.perspectiveUserId ?? perspectiveUserId)
-          : false);
-    const openSourceLabel =
-      causeKind === "space" ? "Open space source" : "Open user source";
+    // No "Open …source" navigation: Space- and User-owned files edit in
+    // place through their source layers, exactly like USER.md — the tree IS
+    // the editor for every layer it renders.
     const isSkillsRoot = node.isFolder && node.path === "skills";
     const isMcpRoot = node.isFolder && node.path === "mcp";
+    // connections/ is managed like skills/ and mcp/ — folders arrive via
+    // the Add-connection picker or agent proposals, never raw file ops.
+    const isConnectionsRoot = node.isFolder && node.path === "connections";
     const canDetachThis = Boolean(
       skillSlug && canManageSkills && onDetachSkill && !isRemoving,
     );
@@ -1026,6 +996,9 @@ export function ComposerWorkspaceEditor({
     );
     const canAddMcpHere = Boolean(
       isMcpRoot && canManageSkills && onAddMcpServer,
+    );
+    const canAddConnectionHere = Boolean(
+      isConnectionsRoot && canManageSkills && onAddConnection,
     );
 
     // Standard file-tree ops (v1.1), routed through the owning SOURCE layer.
@@ -1040,12 +1013,15 @@ export function ComposerWorkspaceEditor({
       !isSpacesContainer &&
       !isSkillsRoot &&
       !isMcpRoot &&
+      !isConnectionsRoot &&
       !isAgentsRoot,
     );
-    const canNewInside = stdEligible; // create inside any editable folder (incl. skill folder)
-    // Capability folders (skills/<slug>, mcp/<slug>) map their destructive
-    // action to Detach — never raw Rename/Delete that would bypass the
-    // unified mutation.
+    // connections/<slug> is fully managed: its lifecycle is Approve /
+    // Re-approve / Remove — no raw file ops at all.
+    const canNewInside = stdEligible && !connectionSlug;
+    // Capability folders (skills/<slug>, mcp/<slug>, connections/<slug>) map
+    // their destructive action to Detach/Remove — never raw Rename/Delete
+    // that would bypass the unified mutation.
     const canRename = Boolean(
       stdEligible && !node.isFolder
         ? !node.entry?.generated
@@ -1053,6 +1029,7 @@ export function ComposerWorkspaceEditor({
             node.isFolder &&
             !skillSlug &&
             !mcpSlug &&
+            !connectionSlug &&
             !isSourceRoot,
     );
     const canDelete = canRename;
@@ -1060,6 +1037,7 @@ export function ComposerWorkspaceEditor({
     const canPaste = Boolean(
       node.isFolder &&
       stdEligible &&
+      !connectionSlug &&
       clipboardPath &&
       srcForPath(clipboardPath)?.layer === src?.layer,
     );
@@ -1071,19 +1049,20 @@ export function ComposerWorkspaceEditor({
       canAddHere ||
       canDetachMcp ||
       canAddMcpHere ||
+      canAddConnectionHere ||
       canApproveFolderCapability ||
       canRevokeFolderCapability ||
+      canRemoveConnection ||
       canConfigureProfile ||
       canDeleteProfile ||
       canAddProfileHere ||
-      hasStdOps ||
-      canOpenSource;
+      hasStdOps;
 
     const row = (
       <div
         className={cn(
           "group flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5",
-          (isPending || isGated || isRemoving) && "opacity-60",
+          (isGated || isRemoving) && "opacity-60",
           !node.isFolder &&
             selectedPath === node.path &&
             "bg-muted text-foreground",
@@ -1166,24 +1145,6 @@ export function ComposerWorkspaceEditor({
             </Badge>
           </button>
         ) : null}
-        {isPending ? (
-          <Badge
-            variant="outline"
-            className="shrink-0 border-sky-500/40 bg-sky-500/10 px-1.5 py-0 text-[10px] text-sky-700 dark:text-sky-400"
-            data-testid={`tree-pending-${node.path}`}
-          >
-            syncing…
-          </Badge>
-        ) : null}
-        {isRemoving ? (
-          <Badge
-            variant="outline"
-            className="shrink-0 border-sky-500/40 bg-sky-500/10 px-1.5 py-0 text-[10px] text-sky-700 dark:text-sky-400"
-            data-testid={`tree-removing-${node.path}`}
-          >
-            removing…
-          </Badge>
-        ) : null}
       </div>
     );
 
@@ -1196,7 +1157,7 @@ export function ComposerWorkspaceEditor({
               onSelect={() => onCreateAgentProfile?.()}
               data-testid="menu-add-agent-profile"
             >
-              <Plus className="mr-2 size-4" /> Add New Agent…
+              <Plus className="mr-2 size-4" /> Add Sub-Agent
             </ContextMenuItem>
           ) : null}
           {canConfigureProfile ? (
@@ -1227,8 +1188,8 @@ export function ComposerWorkspaceEditor({
             >
               <Plus className="mr-2 size-4" />{" "}
               {profileScopeName
-                ? `Add skill for ${profileScopeName}…`
-                : "Add skill…"}
+                ? `Add Skill for ${profileScopeName}…`
+                : "Add Skill…"}
             </ContextMenuItem>
           ) : null}
           {canDetachThis ? (
@@ -1252,6 +1213,17 @@ export function ComposerWorkspaceEditor({
               {profileScopeName
                 ? `Add MCP server for ${profileScopeName}…`
                 : "Add MCP server…"}
+            </ContextMenuItem>
+          ) : null}
+          {canAddConnectionHere ? (
+            <ContextMenuItem
+              onSelect={() => onAddConnection?.()}
+              data-testid="menu-add-connection"
+            >
+              <Plus className="mr-2 size-4" />{" "}
+              {profileScopeName
+                ? `Add Connection for ${profileScopeName}…`
+                : "Add Connection…"}
             </ContextMenuItem>
           ) : null}
           {canDetachMcp ? (
@@ -1310,13 +1282,30 @@ export function ComposerWorkspaceEditor({
               (definition stays as a proposal)…
             </ContextMenuItem>
           ) : null}
+          {canRemoveConnection && connectionSlug ? (
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() =>
+                setDeleteConfirm({
+                  path: node.path,
+                  isFolder: true,
+                  connectionSlug,
+                })
+              }
+              data-testid={`menu-remove-connection-${connectionSlug}`}
+            >
+              <Trash2 className="mr-2 size-4" /> Remove connection…
+            </ContextMenuItem>
+          ) : null}
           {(canAddHere ||
             canDetachThis ||
             canAddMcpHere ||
+            canAddConnectionHere ||
             canDetachMcp ||
             canApproveFolderCapability ||
             canReapproveFolderCapability ||
-            canRevokeFolderCapability) &&
+            canRevokeFolderCapability ||
+            canRemoveConnection) &&
           hasStdOps ? (
             <ContextMenuSeparator />
           ) : null}
@@ -1411,22 +1400,6 @@ export function ComposerWorkspaceEditor({
               data-testid={`menu-delete-${node.path}`}
             >
               <Trash2 className="mr-2 size-4" /> Delete
-            </ContextMenuItem>
-          ) : null}
-          {(canAddHere ||
-            canDetachThis ||
-            canAddMcpHere ||
-            canDetachMcp ||
-            hasStdOps) &&
-          canOpenSource ? (
-            <ContextMenuSeparator />
-          ) : null}
-          {canOpenSource && jumpEntry ? (
-            <ContextMenuItem
-              onSelect={() => jumpToCause(jumpEntry)}
-              data-testid={`menu-open-source-${node.path}`}
-            >
-              {openSourceLabel}
             </ContextMenuItem>
           ) : null}
         </ContextMenuContent>
@@ -1673,19 +1646,25 @@ export function ComposerWorkspaceEditor({
       {/* Standard-menu delete confirm (v1.1). */}
       <AlertDialog
         open={deleteConfirm !== null}
-        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        onOpenChange={(open) =>
+          !open && !deleteConfirm?.busy && setDeleteConfirm(null)
+        }
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {deleteConfirm?.isFolder ? "folder" : "file"}?
+              {deleteConfirm?.connectionSlug
+                ? "Remove connection?"
+                : `Delete ${deleteConfirm?.isFolder ? "folder" : "file"}?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteConfirm
-                ? `This removes ${deleteConfirm.path}${
-                    deleteConfirm.isFolder ? " and everything inside it" : ""
-                  } from its source layer.`
-                : ""}
+              {deleteConfirm?.connectionSlug
+                ? `This detaches ${deleteConfirm.connectionSlug} from the agent and deletes its folder.`
+                : deleteConfirm
+                  ? `This removes ${deleteConfirm.path}${
+                      deleteConfirm.isFolder ? " and everything inside it" : ""
+                    } from its source layer.`
+                  : ""}
               {typeof deleteConfirm?.automationRefs === "number" &&
               deleteConfirm.automationRefs > 0 ? (
                 <span
@@ -1701,12 +1680,26 @@ export function ComposerWorkspaceEditor({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteConfirm?.busy}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               data-testid="composer-delete-confirm"
-              onClick={() => void confirmDelete()}
+              disabled={deleteConfirm?.busy}
+              onClick={(event) => {
+                // Keep the dialog mounted through the async delete; Radix
+                // otherwise closes it on click.
+                event.preventDefault();
+                void confirmDelete();
+              }}
             >
-              Delete
+              {deleteConfirm?.busy ? (
+                <Loader2
+                  className="mr-2 size-4 animate-spin"
+                  data-testid="composer-delete-spinner"
+                />
+              ) : null}
+              {deleteConfirm?.busy ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

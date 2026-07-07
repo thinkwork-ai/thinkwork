@@ -7,7 +7,13 @@ import {
 } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useSubscription } from "urql";
-import { type ColumnDef } from "@tanstack/react-table";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import {
   Activity,
   AlertTriangle,
@@ -36,6 +42,9 @@ import {
   Badge,
   Button,
   DataTable,
+  DataTableTokenFilter,
+  type DataTableTokenFilterColumn,
+  dataTableTokenFilterFns,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -44,6 +53,7 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { CollapsedFilterSearch } from "@/components/artifacts/CollapsedFilterSearch";
 import { useTenant } from "@/context/TenantContext";
 import { EvalTestCaseForm } from "@/components/settings/EvalTestCaseForm";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
@@ -70,7 +80,6 @@ import {
   computeEvalRunComparison,
   countEvalVerdictGroups,
   deriveEvalFailureMode,
-  evalErrorCauseBreakdown,
   evalErrorCauseDescription,
   evalErrorCauseLabel,
   evalFailureModeDescription,
@@ -88,8 +97,40 @@ import {
   sortEvalSpans,
   type EvalRunTransition,
   type EvalSpanRow,
-  type EvalVerdictGroup,
 } from "@/components/settings/eval-result-detail";
+
+// Hidden-column ids for the Work Items-style filter table on this page.
+const FILTER_COLUMNS = {
+  search: "filterSearch",
+  category: "filterCategory",
+  status: "filterStatus",
+} as const;
+
+/** Read the contains-search string out of the token-filter state. */
+function tokenFilterSearchValue(
+  columnFilters: ColumnFiltersState,
+  id: string,
+): string {
+  const raw = columnFilters.find((filter) => filter.id === id)?.value;
+  if (raw && typeof raw === "object" && "value" in raw) {
+    const value = (raw as { value: unknown }).value;
+    if (typeof value === "string") return value;
+  }
+  return "";
+}
+
+/** Read the selected option values (an "is any of" set) out of the state. */
+function tokenFilterOptionValues(
+  columnFilters: ColumnFiltersState,
+  id: string,
+): string[] {
+  const raw = columnFilters.find((filter) => filter.id === id)?.value;
+  if (!raw || typeof raw !== "object" || !("value" in raw)) return [];
+  const value = (raw as { value: unknown }).value;
+  if (Array.isArray(value)) return value.map(String);
+  if (value == null) return [];
+  return [String(value)];
+}
 
 const EVAL_RESULT_SHEET_WIDTH_CLASS = "data-[side=right]:max-w-none";
 const EVAL_RESULT_SHEET_STYLE = {
@@ -412,12 +453,10 @@ export function SettingsEvalRunDetail() {
   const [editingTestCaseId, setEditingTestCaseId] = useState<string | null>(
     null,
   );
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  // Verdict filter (Trust Core U11): errors grouped apart from
-  // behavioral failures. Combines with the category filter.
-  const [verdictFilter, setVerdictFilter] = useState<EvalVerdictGroup | null>(
-    null,
-  );
+  // Filters follow the Work Items list idiom (collapsed search + token
+  // filters): a hidden react-table holds the filter state and drives the
+  // category/status token pickers and the free-text search over test names.
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [compareOpen, setCompareOpen] = useState(false);
 
   const [, deleteRun] = useMutation(DeleteEvalRunMutation);
@@ -482,24 +521,117 @@ export function SettingsEvalRunDetail() {
     [runResults],
   );
 
-  const categoryPassRates = useMemo(() => {
-    return calculateCategoryPassRates(runResults);
-  }, [runResults]);
-
   const verdictCounts = useMemo(
     () => countEvalVerdictGroups(runResults),
     [runResults],
   );
-  const errorBreakdown = useMemo(
-    () => evalErrorCauseBreakdown(runResults),
+  // Hidden filter table (Work Items idiom): each result maps to a filter row
+  // whose text/option columns feed the search + token pickers. The flat view
+  // renders `filteredResults`; the multi-trial view derives the same
+  // selections and applies them to case groups.
+  const filterRows = useMemo(
+    () =>
+      runResults.map((result) => ({
+        result,
+        filterSearch: `${result.testCaseName ?? ""} ${result.category ?? ""}`,
+        filterCategory: result.category ?? "",
+        filterStatus: evalResultVerdictGroup(result),
+      })),
     [runResults],
   );
+  type EvalFilterRow = (typeof filterRows)[number];
 
-  const filteredResults = runResults.filter(
-    (r) =>
-      (!categoryFilter || r.category === categoryFilter) &&
-      (!verdictFilter || evalResultVerdictGroup(r) === verdictFilter),
+  const filterColumns = useMemo<ColumnDef<EvalFilterRow>[]>(
+    () => [
+      {
+        id: FILTER_COLUMNS.search,
+        accessorKey: "filterSearch",
+        filterFn: dataTableTokenFilterFns.text,
+      },
+      {
+        id: FILTER_COLUMNS.category,
+        accessorKey: "filterCategory",
+        filterFn: dataTableTokenFilterFns.option,
+      },
+      {
+        id: FILTER_COLUMNS.status,
+        accessorKey: "filterStatus",
+        filterFn: dataTableTokenFilterFns.option,
+      },
+    ],
+    [],
   );
+
+  const filterTable = useReactTable({
+    data: filterRows,
+    columns: filterColumns,
+    autoResetPageIndex: false,
+    state: { columnFilters },
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+
+  const filteredResults = filterTable
+    .getFilteredRowModel()
+    .rows.map((row) => row.original.result);
+
+  const searchValue = tokenFilterSearchValue(
+    columnFilters,
+    FILTER_COLUMNS.search,
+  );
+  const selectedCategories = tokenFilterOptionValues(
+    columnFilters,
+    FILTER_COLUMNS.category,
+  );
+  const selectedStatuses = tokenFilterOptionValues(
+    columnFilters,
+    FILTER_COLUMNS.status,
+  );
+
+  const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(() => {
+    const cols: DataTableTokenFilterColumn[] = [];
+    if (categories.length > 0) {
+      cols.push({
+        id: FILTER_COLUMNS.category,
+        label: "Category",
+        type: "option",
+        options: categories.map((cat) => ({ value: cat, label: cat })),
+      });
+    }
+    cols.push({
+      id: FILTER_COLUMNS.status,
+      label: "Status",
+      type: "option",
+      options: [
+        { value: "pass", label: "Passed" },
+        { value: "fail", label: "Behavioral failures" },
+        { value: "error", label: "Errors" },
+        ...(verdictCounts.other > 0
+          ? [{ value: "other", label: "Other" }]
+          : []),
+      ],
+    });
+    return cols;
+  }, [categories, verdictCounts.other]);
+
+  // The summary-bar counts double as one-click Status filters (a single
+  // selected verdict), so "2 errored" jumps straight to the errored evals.
+  const statusActive = (value: string) =>
+    selectedStatuses.length === 1 && selectedStatuses[0] === value;
+  const toggleStatusFilter = (value: string) =>
+    filterTable
+      .getColumn(FILTER_COLUMNS.status)
+      ?.setFilterValue(
+        statusActive(value)
+          ? undefined
+          : { operator: "is_any_of", value: [value] },
+      );
+  const countButtonClass = (value: string) =>
+    cn(
+      "rounded underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+      statusActive(value) && "text-foreground font-medium underline",
+    );
 
   // Case-grouped view (KTD12): a multi-trial run (any trialIndex > 0)
   // renders case verdicts with per-trial rows nested — trial rows never
@@ -511,8 +643,15 @@ export function SettingsEvalRunDetail() {
   );
   const filteredCaseGroups = caseGroups.filter(
     (group) =>
-      (!categoryFilter || group.category === categoryFilter) &&
-      (!verdictFilter || group.verdict === verdictFilter),
+      (selectedCategories.length === 0 ||
+        (group.category != null &&
+          selectedCategories.includes(group.category))) &&
+      (selectedStatuses.length === 0 ||
+        selectedStatuses.includes(group.verdict)) &&
+      (searchValue.trim() === "" ||
+        (group.testCaseName ?? "")
+          .toLowerCase()
+          .includes(searchValue.trim().toLowerCase())),
   );
   const [expandedCases, setExpandedCases] = useState<Set<string>>(
     () => new Set(),
@@ -569,116 +708,13 @@ export function SettingsEvalRunDetail() {
       { label: "Evaluations", href: "/settings/evaluations" },
       { label: `Run ${runId.slice(0, 8)}` },
     ],
-    subtitle: runDetail
-      ? [
-          runDetail.agentName,
-          `${runDetail.passed ?? 0} passed, ${runDetail.failed ?? 0} failed${
-            (runDetail.errored ?? 0) > 0 ? `, ${runDetail.errored} errored` : ""
-          } of ${runDetail.totalTests ?? 0} tests`,
-        ]
-          .filter(Boolean)
-          .join(" — ")
-      : undefined,
+    backHref: "/settings/evaluations",
+    backBehavior: "history",
+    // Timestamp + the run-level control (cancel while running, else delete)
+    // stay anchored in the AppTopBar; the descriptive metrics move to the
+    // content summary below.
     action: runDetail ? (
       <div className="flex items-center gap-2">
-        {statusBadge(runDetail.status)}
-        {isLegacyDesktopRun && (
-          <Badge
-            variant="secondary"
-            className="gap-1 bg-slate-500/15 text-slate-600 dark:text-slate-300"
-          >
-            <History className="h-3 w-3" />
-            Legacy run
-          </Badge>
-        )}
-        {runDetail.isLegacyScoring && (
-          <Badge
-            variant="outline"
-            className="text-muted-foreground"
-            title="Scored before scoring v2: errors counted as failures. Not comparable to current pass rates."
-          >
-            legacy scoring
-          </Badge>
-        )}
-        {runDataset && (
-          <Badge variant="secondary" className="gap-1">
-            <Database className="h-3 w-3" />
-            {runDataset.name ?? runDataset.slug}
-            {runDetail.datasetVersion != null &&
-              ` · v${runDetail.datasetVersion}`}
-          </Badge>
-        )}
-        {/* Eval Profile provenance (THINK-107): pre-profile runs are
-            labeled, never blended silently into profile comparisons. */}
-        {runDetail.profileId ? (
-          <Badge variant="secondary" className="whitespace-nowrap">
-            {runDetail.profileName ?? "Profile"}
-          </Badge>
-        ) : (
-          <Badge
-            variant="outline"
-            className="text-muted-foreground whitespace-nowrap"
-          >
-            Legacy (pre-profile)
-          </Badge>
-        )}
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {passRate}
-          {passRate.endsWith("%") ? " pass rate" : ""}
-        </span>
-        {(runDetail.errored ?? 0) > 0 && (
-          <Badge
-            variant="outline"
-            className="gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400 tabular-nums"
-            title="Infra/judge errors — excluded from the score."
-          >
-            <AlertTriangle className="h-3 w-3" />
-            {runDetail.errored} errored
-          </Badge>
-        )}
-        {(runDetail.unstable ?? 0) > 0 && (
-          <Badge
-            variant="outline"
-            className="gap-1 border-purple-500/60 text-purple-600 dark:text-purple-400 tabular-nums"
-            title="Cases whose scored trials split with no majority — excluded from the score like errors."
-          >
-            {runDetail.unstable} unstable
-          </Badge>
-        )}
-        {(runDetail.latencyP50Ms != null || runDetail.latencyP95Ms != null) && (
-          <span
-            className="text-xs text-muted-foreground tabular-nums whitespace-nowrap"
-            title="Agent-turn latency percentiles over this run's results"
-          >
-            p50 {runDetail.latencyP50Ms ?? "—"}ms · p95{" "}
-            {runDetail.latencyP95Ms ?? "—"}ms
-          </span>
-        )}
-        {runDetail.datasetId && !isRunning && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground h-8 w-8"
-            title="Compare with previous run"
-            aria-label="Compare with previous run"
-            onClick={() => setCompareOpen(true)}
-          >
-            <GitCompareArrows className="h-4 w-4" />
-          </Button>
-        )}
-        {runDetail.costUsd != null && Number(runDetail.costUsd) > 0 && (
-          <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-            ${Number(runDetail.costUsd).toFixed(4)}
-            {runDetail.costPartial && (
-              <span
-                className="ml-1 text-amber-600 dark:text-amber-400"
-                title="Some result rows are missing priced agent-turn cost — this total understates real spend."
-              >
-                (partial)
-              </span>
-            )}
-          </span>
-        )}
         {dateLabel && (
           <span className="text-xs text-muted-foreground">{dateLabel}</span>
         )}
@@ -729,8 +765,153 @@ export function SettingsEvalRunDetail() {
         )}
       </div>
     ) : undefined,
-    actionKey: `eval-run:${runId}:${runDetail?.status ?? "loading"}:${cancelling}:${passRate}:${runDetail?.errored ?? ""}:${runDataset?.slug ?? ""}`,
+    actionKey: `eval-run:${runId}:${runDetail?.status ?? "loading"}:${cancelling}:${dateLabel}`,
   });
+
+  // The run summary lives at the top of the content area (not crammed into
+  // the AppTopBar) so the title + back arrow stay legible.
+  const runSummary = runDetail ? (
+    <div className="mb-4 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
+      {runDetail.agentName && (
+        <span className="text-sm font-medium">{runDetail.agentName}</span>
+      )}
+      <span className="flex flex-wrap items-center gap-x-1 text-sm text-muted-foreground">
+        <button
+          type="button"
+          className={countButtonClass("pass")}
+          onClick={() => toggleStatusFilter("pass")}
+          title="Show only passed"
+        >
+          {runDetail.passed ?? 0} passed
+        </button>
+        <span>,</span>
+        <button
+          type="button"
+          className={countButtonClass("fail")}
+          onClick={() => toggleStatusFilter("fail")}
+          title="Show only behavioral failures"
+        >
+          {runDetail.failed ?? 0} failed
+        </button>
+        {(runDetail.errored ?? 0) > 0 && (
+          <>
+            <span>,</span>
+            <button
+              type="button"
+              className={countButtonClass("error")}
+              onClick={() => toggleStatusFilter("error")}
+              title="Show only errored evals"
+            >
+              {runDetail.errored} errored
+            </button>
+          </>
+        )}
+        <span>of {runDetail.totalTests ?? 0} tests</span>
+      </span>
+      {statusBadge(runDetail.status)}
+      {isLegacyDesktopRun && (
+        <Badge
+          variant="secondary"
+          className="gap-1 bg-slate-500/15 text-slate-600 dark:text-slate-300"
+        >
+          <History className="h-3 w-3" />
+          Legacy run
+        </Badge>
+      )}
+      {runDetail.isLegacyScoring && (
+        <Badge
+          variant="outline"
+          className="text-muted-foreground"
+          title="Scored before scoring v2: errors counted as failures. Not comparable to current pass rates."
+        >
+          legacy scoring
+        </Badge>
+      )}
+      {runDataset && (
+        <Badge variant="secondary" className="gap-1">
+          <Database className="h-3 w-3" />
+          {runDataset.name ?? runDataset.slug}
+          {runDetail.datasetVersion != null &&
+            ` · v${runDetail.datasetVersion}`}
+        </Badge>
+      )}
+      {/* Eval Profile provenance (THINK-107): pre-profile runs are
+            labeled, never blended silently into profile comparisons. */}
+      {runDetail.profileId ? (
+        <Badge variant="secondary" className="whitespace-nowrap">
+          {runDetail.profileName ?? "Profile"}
+        </Badge>
+      ) : (
+        <Badge
+          variant="outline"
+          className="text-muted-foreground whitespace-nowrap"
+        >
+          Legacy (pre-profile)
+        </Badge>
+      )}
+      <span className="text-sm text-muted-foreground tabular-nums">
+        {passRate}
+        {passRate.endsWith("%") ? " pass rate" : ""}
+      </span>
+      {(runDetail.errored ?? 0) > 0 && (
+        <Badge
+          variant="outline"
+          className={cn(
+            "cursor-pointer gap-1 border-amber-500/50 text-amber-600 tabular-nums dark:text-amber-400",
+            statusActive("error") && "bg-amber-500/15",
+          )}
+          title="Infra/judge errors — excluded from the score. Click to filter."
+          onClick={() => toggleStatusFilter("error")}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          {runDetail.errored} errored
+        </Badge>
+      )}
+      {(runDetail.unstable ?? 0) > 0 && (
+        <Badge
+          variant="outline"
+          className="gap-1 border-purple-500/60 text-purple-600 dark:text-purple-400 tabular-nums"
+          title="Cases whose scored trials split with no majority — excluded from the score like errors."
+        >
+          {runDetail.unstable} unstable
+        </Badge>
+      )}
+      {(runDetail.latencyP50Ms != null || runDetail.latencyP95Ms != null) && (
+        <span
+          className="text-xs text-muted-foreground tabular-nums whitespace-nowrap"
+          title="Agent-turn latency percentiles over this run's results"
+        >
+          p50 {runDetail.latencyP50Ms ?? "—"}ms · p95{" "}
+          {runDetail.latencyP95Ms ?? "—"}ms
+        </span>
+      )}
+      {runDetail.datasetId && !isRunning && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground h-8 w-8"
+          title="Compare with previous run"
+          aria-label="Compare with previous run"
+          onClick={() => setCompareOpen(true)}
+        >
+          <GitCompareArrows className="h-4 w-4" />
+        </Button>
+      )}
+      {runDetail.costUsd != null && Number(runDetail.costUsd) > 0 && (
+        <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+          ${Number(runDetail.costUsd).toFixed(4)}
+          {runDetail.costPartial && (
+            <span
+              className="ml-1 text-amber-600 dark:text-amber-400"
+              title="Some result rows are missing priced agent-turn cost — this total understates real spend."
+            >
+              (partial)
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  ) : null;
 
   if (runResult.fetching && !runDetail) {
     return (
@@ -749,113 +930,34 @@ export function SettingsEvalRunDetail() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      {/* Verdict filter — errors grouped apart from behavioral failures.
-          Error rows are infra noise excluded from the score; the chips
-          carry the per-cause breakdown. */}
-      {runResults.length > 0 && (
-        <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-          <Badge
-            variant={verdictFilter === null ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => setVerdictFilter(null)}
-          >
-            All {runResults.length}
-          </Badge>
-          <Badge
-            variant={verdictFilter === "pass" ? "default" : "outline"}
-            className={cn(
-              "cursor-pointer",
-              verdictFilter !== "pass" && "border-green-600 text-green-500",
-            )}
-            onClick={() =>
-              setVerdictFilter((cur) => (cur === "pass" ? null : "pass"))
-            }
-          >
-            Passed {verdictCounts.pass}
-          </Badge>
-          <Badge
-            variant={verdictFilter === "fail" ? "default" : "outline"}
-            className={cn(
-              "cursor-pointer",
-              verdictFilter !== "fail" && "border-red-600 text-red-500",
-            )}
-            onClick={() =>
-              setVerdictFilter((cur) => (cur === "fail" ? null : "fail"))
-            }
-          >
-            Behavioral failures {verdictCounts.fail}
-          </Badge>
-          <Badge
-            variant={verdictFilter === "error" ? "default" : "outline"}
-            className={cn(
-              "cursor-pointer",
-              verdictFilter !== "error" &&
-                "border-amber-500/60 text-amber-600 dark:text-amber-400",
-            )}
-            title="Infra/judge errors — excluded from the score"
-            onClick={() =>
-              setVerdictFilter((cur) => (cur === "error" ? null : "error"))
-            }
-          >
-            Errors {verdictCounts.error}
-          </Badge>
-          {errorBreakdown.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {errorBreakdown
-                .map((entry) => `${entry.label} ${entry.count}`)
-                .join(" · ")}
-            </span>
-          )}
-        </div>
-      )}
+      {runSummary}
 
-      {/* Category filter badges — color-coded by per-category pass rate */}
-      {categories.length > 0 && (
-        <div className="mb-4 flex shrink-0 flex-wrap gap-2">
-          <Badge
-            variant={categoryFilter === null ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => setCategoryFilter(null)}
-          >
-            All
-          </Badge>
-          {categories.map((cat) => {
-            const rate = categoryPassRates[cat] ?? -1;
-            const isSelected = categoryFilter === cat;
-            let colorClass = "";
-            if (rate >= 0) {
-              if (isSelected) {
-                if (rate >= 0.9)
-                  colorClass =
-                    "bg-green-600 hover:bg-green-600 text-white border-green-600";
-                else if (rate >= 0.7)
-                  colorClass =
-                    "bg-yellow-500 hover:bg-yellow-500 text-black border-yellow-500";
-                else
-                  colorClass =
-                    "bg-red-600 hover:bg-red-600 text-white border-red-600";
-              } else {
-                if (rate >= 0.9) colorClass = "border-green-600 text-green-500";
-                else if (rate >= 0.7)
-                  colorClass = "border-yellow-600 text-yellow-500";
-                else colorClass = "border-red-600 text-red-500";
-              }
+      {/* Filters follow the Work Items list idiom: a collapsed search over
+          test names plus token pickers for category and verdict/status. */}
+      {runResults.length > 0 && (
+        <div className="mb-4 flex shrink-0 flex-wrap items-center gap-2">
+          <CollapsedFilterSearch
+            value={searchValue}
+            onChange={(value) =>
+              filterTable
+                .getColumn(FILTER_COLUMNS.search)
+                ?.setFilterValue(
+                  value ? { operator: "contains", value } : undefined,
+                )
             }
-            const pct = rate >= 0 ? ` ${(rate * 100).toFixed(0)}%` : "";
-            return (
-              <Badge
-                key={cat}
-                variant={isSelected && rate < 0 ? "default" : "outline"}
-                className={`cursor-pointer ${colorClass}`}
-                onClick={() =>
-                  setCategoryFilter(cat === categoryFilter ? null : cat)
-                }
-              >
-                {cat}
-                {pct}
-              </Badge>
-            );
-          })}
+            label="Search tests"
+            placeholder="Search tests..."
+          />
+          <DataTableTokenFilter
+            table={filterTable}
+            columns={tokenFilterColumns}
+            addLabel="Filter"
+            showAddLabel={false}
+            clearLabel="Clear filters"
+            flattenToolbar
+            className="max-w-full"
+            popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+          />
         </div>
       )}
 

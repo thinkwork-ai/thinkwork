@@ -203,10 +203,13 @@ describe("deployment profile contract", () => {
       expiresAt: "2026-07-06T12:00:00.000Z",
     });
 
-    const result = assessDeploymentProfile({
-      ...signed,
-      apiUrl: "https://evil.example.com",
-    });
+    const result = assessDeploymentProfile(
+      {
+        ...signed,
+        apiUrl: "https://evil.example.com",
+      },
+      { now: "2026-06-07T12:00:00.000Z" },
+    );
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("endpoint_mismatch");

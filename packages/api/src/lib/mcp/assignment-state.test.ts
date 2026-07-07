@@ -230,6 +230,23 @@ describe("write/read/list/remove", () => {
   });
 });
 
+describe("removeLegacyMcpFolders (THINK-190 flip scrub)", () => {
+  it("removes every mcp/<slug>/ folder, leaves connections/, idempotent", async () => {
+    const { removeLegacyMcpFolders } = await import("./assignment-state.js");
+    store.set(`${PREFIX}mcp/github/.assignment.json`, "{}");
+    store.set(`${PREFIX}mcp/gmail/.assignment.json`, "{}");
+    store.set(`${PREFIX}connections/github/CONNECTION.md`, "kept");
+
+    const removed = await removeLegacyMcpFolders(PREFIX, DEPS);
+    expect(removed).toEqual(["github", "gmail"]);
+    expect(await listWorkspaceMcpSlugs(PREFIX, DEPS)).toEqual([]);
+    expect(store.get(`${PREFIX}connections/github/CONNECTION.md`)).toBe(
+      "kept",
+    );
+    expect(await removeLegacyMcpFolders(PREFIX, DEPS)).toEqual([]);
+  });
+});
+
 describe("materializeMcpAssignmentFolder (grant target)", () => {
   it("reads the registry row and writes the manifest", async () => {
     dbRows.registry = [

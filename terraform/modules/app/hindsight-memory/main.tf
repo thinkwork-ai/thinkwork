@@ -36,7 +36,7 @@ variable "database_url" {
 variable "image_tag" {
   description = "Hindsight Docker image tag (ghcr.io/vectorize-io/hindsight:<tag>)"
   type        = string
-  default     = "0.5.6"
+  default     = "0.8.4"
 }
 
 variable "enable_auto_consolidation" {
@@ -49,6 +49,12 @@ variable "consolidation_dedup_threshold" {
   description = "Cosine-similarity threshold for near-duplicate observation reconciliation (0.0-1.0; 1.0 disables). Hindsight default is 0.97 — set explicitly so deploys don't drift with image defaults."
   type        = string
   default     = "0.97"
+}
+
+variable "retain_llm_model" {
+  description = "Bedrock model id for Hindsight's retain/extraction pass. Default = Haiku 4.5, validated on image 0.8.4 (THINK-201, 2026-07-06): 12.9% dangling-referent rate vs ~38% for gpt-oss-20b, best usefulness of any measured config, zero Anthropic tool-schema errors (the 0.5.0 incompatibility that caused the THINK-198 incident is fixed upstream). Evidence: docs/solutions/tooling-decisions/hindsight-084-upgrade-validation-2026-07-06.md. Requires image >= 0.8.x for anthropic.* models."
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
 variable "observations_mission" {
@@ -286,7 +292,7 @@ resource "aws_ecs_task_definition" "hindsight" {
       { name = "AWS_REGION_NAME", value = data.aws_region.current.name },
       { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
       { name = "HINDSIGHT_API_RETAIN_LLM_PROVIDER", value = "bedrock" },
-      { name = "HINDSIGHT_API_RETAIN_LLM_MODEL", value = "openai.gpt-oss-20b-1:0" },
+      { name = "HINDSIGHT_API_RETAIN_LLM_MODEL", value = var.retain_llm_model },
       { name = "HINDSIGHT_API_REFLECT_LLM_PROVIDER", value = "bedrock" },
       { name = "HINDSIGHT_API_REFLECT_LLM_MODEL", value = "openai.gpt-oss-120b-1:0" },
       { name = "HINDSIGHT_API_EMBEDDINGS_PROVIDER", value = "local" },

@@ -195,6 +195,68 @@ function mergeMemoryItems(...groups: MemoryItem[][]): MemoryItem[] {
   return out;
 }
 
+/**
+ * THINK-199 (Brain Quality P4): recall prefers consolidated signal. Relevance
+ * score still leads, but at equal score a consolidated observation outranks a
+ * raw unit, and higher proof (corroboration) count breaks the remaining ties.
+ * 96% of raw units are proof_count=1 uncorroborated one-liners; observations
+ * are the layer Hindsight has already cross-checked.
+ */
+export function compareMemoryItems(a: MemoryItem, b: MemoryItem): number {
+  const scoreDelta = (b.score ?? 0) - (a.score ?? 0);
+  if (scoreDelta !== 0) return scoreDelta;
+  const aObs = a.factType === "observation" ? 0 : 1;
+  const bObs = b.factType === "observation" ? 0 : 1;
+  if (aObs !== bObs) return aObs - bObs;
+  return (b.proofCount ?? 0) - (a.proofCount ?? 0);
+}
+
+const MEMORY_UNIT_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * THINK-199 (Brain Quality P4): make `access_count` real. Hindsight never
+ * updates it on recall (verified 0 across all dev units on 0.8.4), so the
+ * provider increments it for the unit ids actually returned to the turn.
+ * Best-effort: a failure logs and never fails recall. Synthetic fallback ids
+ * (`unit-N`, `high-confidence-N`) are filtered out by the UUID shape check.
+ */
+async function recordMemoryAccess(
+  options: HindsightMemoryProviderOptions,
+  items: MemoryItem[],
+): Promise<void> {
+  if (!options.dbClusterArn?.trim() || !options.dbSecretArn?.trim()) return;
+  const ids = [
+    ...new Set(
+      items
+        .map((item) => item.id)
+        .filter((id): id is string => MEMORY_UNIT_ID_RE.test(id ?? "")),
+    ),
+  ].slice(0, 50);
+  if (ids.length === 0) return;
+  const client = options.rdsDataClient ?? new RDSDataClient({});
+  const placeholders = ids.map((_, i) => `:id${i}`).join(", ");
+  try {
+    await client.send(
+      new ExecuteStatementCommand({
+        resourceArn: options.dbClusterArn,
+        secretArn: options.dbSecretArn,
+        database: options.dbName || "thinkwork",
+        sql: `UPDATE hindsight.memory_units SET access_count = COALESCE(access_count, 0) + 1 WHERE id::text IN (${placeholders})`,
+        parameters: ids.map((id, i) => ({
+          name: `id${i}`,
+          value: { stringValue: id },
+        })),
+      }),
+    );
+  } catch (err) {
+    console.warn(
+      "[hindsight-memory] access-count update failed (best-effort):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 function fieldString(field: Field | undefined): string | undefined {
   if (!field || field.isNull) return undefined;
   if (typeof field.stringValue === "string") return field.stringValue;
@@ -790,6 +852,26 @@ export function createHindsightMemoryProvider(
         );
       }
       const searchQueries = listSearchQueries(query);
+      // THINK-199: one exit for every tier — records access counts for the
+      // memories actually surfaced to the turn and emits the per-turn recall
+      // trace line. Best-effort; never fails the turn.
+      const finish = async (
+        tier: string,
+        items: MemoryItem[],
+        usage?: unknown,
+      ): Promise<MemoryRecallResult> => {
+        const memories = request.limit ? items.slice(0, request.limit) : items;
+        if (memories.length > 0) {
+          console.log(
+            `[hindsight-memory] recalled tier=${tier} n=${memories.length} observations=${memories.filter((m) => m.factType === "observation").length} ids=${memories
+              .map((m) => m.id)
+              .slice(0, 10)
+              .join(",")}`,
+          );
+          await recordMemoryAccess(options, memories);
+        }
+        return { memories, usage };
+      };
       const highConfidenceBatches = await Promise.all(
         targets.map(async (target) => {
           const highConfidenceGroups = await Promise.all(
@@ -802,14 +884,9 @@ export function createHindsightMemoryProvider(
       );
       const highConfidenceMemories = mergeMemoryItems(
         ...highConfidenceBatches,
-      ).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      ).sort(compareMemoryItems);
       if (highConfidenceMemories.length > 0) {
-        return {
-          memories: request.limit
-            ? highConfidenceMemories.slice(0, request.limit)
-            : highConfidenceMemories,
-          usage: undefined,
-        };
+        return finish("high-confidence", highConfidenceMemories);
       }
 
       const listedBatches = await Promise.all(
@@ -823,15 +900,10 @@ export function createHindsightMemoryProvider(
         }),
       );
       const listedMemories = mergeMemoryItems(...listedBatches).sort(
-        (a, b) => (b.score ?? 0) - (a.score ?? 0),
+        compareMemoryItems,
       );
       if (listedMemories.length > 0) {
-        return {
-          memories: request.limit
-            ? listedMemories.slice(0, request.limit)
-            : listedMemories,
-          usage: undefined,
-        };
+        return finish("list", listedMemories);
       }
 
       const batches = await Promise.all(
@@ -860,15 +932,16 @@ export function createHindsightMemoryProvider(
       );
       const memories = mergeMemoryItems(
         ...batches.map((batch) => batch.memories),
-      ).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+      ).sort(compareMemoryItems);
       if (memories.length === 0) {
         const failed = batches.find((batch) => batch.error !== undefined);
         if (failed?.error) throw failed.error;
       }
-      return {
-        memories: request.limit ? memories.slice(0, request.limit) : memories,
-        usage: mergeUnknownValues(batches.map((batch) => batch.usage)),
-      };
+      return finish(
+        "recall",
+        memories,
+        mergeUnknownValues(batches.map((batch) => batch.usage)),
+      );
     },
 
     async reflect(

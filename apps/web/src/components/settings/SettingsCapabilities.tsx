@@ -33,6 +33,7 @@ import {
   Bot,
   Info,
   ListChecks,
+  Loader2,
   Puzzle,
   RefreshCw,
   ScanSearch,
@@ -232,6 +233,15 @@ function rowKeyOf(
   return `${item.capabilityClass}:${item.capabilityId}`;
 }
 
+/**
+ * `connections/<slug>/` folder name for a registry server id/slug —
+ * folder-write's sanitize rule (THINK-190: the connection folder is the
+ * assignment record for folder-dispatch agents).
+ */
+function connectionSlugFor(capabilityId: string): string {
+  return capabilityId.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+}
+
 function stateChip(item: InspectorItem) {
   if (item.active && item.detail && !item.reason) {
     return (
@@ -355,9 +365,8 @@ export function SettingsCapabilities({
     Record<string, string>
   >({});
   const [detachTarget, setDetachTarget] = useState<InspectorItem | null>(null);
-  // Tree context-menu profile ops: "Add New Agent…" (create counter handed to
+  // Tree context-menu profile ops: "Add Sub-Agent" (create counter handed to
   // the Profiles sheet) and "Delete Agent Profile" (destructive confirm here).
-  const [profilesCreateRequest, setProfilesCreateRequest] = useState(0);
   const [deleteProfileTarget, setDeleteProfileTarget] = useState<{
     id: string;
     name: string;
@@ -655,24 +664,35 @@ export function SettingsCapabilities({
     [items],
   );
 
-  // MCP mirror (U9c): decoration state per server slug, and the Add picker
-  // pool — ALL registered mcp_server rows (state shown verbatim; Add is
-  // disabled on already-active rows).
-  const mcpStateBySlug = useMemo(() => {
-    const map = new Map<string, SkillNodeState>();
-    for (const item of items) {
-      if (item.capabilityClass !== "mcp_server") continue;
-      map.set(item.capabilityId, {
-        active: item.active,
-        reason: item.reason ?? null,
-      });
-    }
-    return map;
-  }, [items]);
-
+  // The Add-connection picker pool — ALL registered mcp_server rows. On a
+  // folder-dispatch agent the mcp_server class never enters resolution
+  // (connections own dispatch), so its verbatim state stamps every attached
+  // server `not_installed` — THINK-190 Phase 2 overlays the connection
+  // manifest's truth per row (active/Attached, withheld reasons). Rows
+  // without a connection entry keep the inspector state verbatim, which
+  // stays accurate on un-flipped customer stages and for never-attached
+  // servers.
   const addMcpPool = useMemo(
-    () => items.filter((item) => item.capabilityClass === "mcp_server"),
-    [items],
+    () =>
+      items
+        .filter((item) => item.capabilityClass === "mcp_server")
+        .map((item) => {
+          const connection = folderStateBySlug.connection.get(
+            connectionSlugFor(item.capabilityId),
+          );
+          // detail is cleared with the overlay — the inspector's text
+          // explains the mcp_server class's own (dead) resolution, which
+          // reads as "degraded"/excluded next to a healthy connection.
+          return connection
+            ? {
+                ...item,
+                active: connection.active,
+                reason: connection.reason,
+                detail: null,
+              }
+            : item;
+        }),
+    [items, folderStateBySlug.connection],
   );
 
   // ── Pi-extension controls (plan U8) ──────────────────────────────────────
@@ -938,6 +958,20 @@ export function SettingsCapabilities({
     if (item) setDetachTarget(item);
   }
 
+  // "Remove connection…" (editor delete-confirm hook): sever the assignment
+  // record via the MCP_SERVER detach when the connection is registry-backed
+  // — without this a reconciler resurrects the folder the editor deletes.
+  // A non-registry connection (agent draft / API type) has no record to
+  // sever; the editor's file delete is the whole removal.
+  async function removeConnectionRecord(slug: string) {
+    const item = items.find(
+      (candidate) =>
+        candidate.capabilityClass === "mcp_server" &&
+        connectionSlugFor(candidate.capabilityId) === slug,
+    );
+    if (item) await runMutation("detach", item);
+  }
+
   // MCP mirror (U9c): same confirm dialog + detach mutation, second class.
   function requestDetachMcp(slug: string) {
     const item = items.find(
@@ -992,7 +1026,13 @@ export function SettingsCapabilities({
       item.capabilityClass === "mcp_server"
         ? setRemovingMcpSlug
         : setRemovingSkillSlug;
-    setRemoving(item.capabilityId);
+    // mcp_server detach removes the connections/<slug>/ folder (THINK-190),
+    // so the removing decoration carries the connection folder slug.
+    setRemoving(
+      item.capabilityClass === "mcp_server"
+        ? connectionSlugFor(item.capabilityId)
+        : item.capabilityId,
+    );
     await runMutation("detach", item);
     setRemoving(null);
   }
@@ -1216,10 +1256,24 @@ export function SettingsCapabilities({
     confirmation?.syncPending && confirmation.rowKey.startsWith("skill:")
       ? confirmation.rowKey.slice("skill:".length)
       : null;
+  // THINK-190: attach materializes a connections/<slug>/ folder (the mcp/
+  // mirror is retired for folder-dispatch agents), so the sync status
+  // carries the CONNECTION folder slug.
   const pendingMcpSlug =
     confirmation?.syncPending && confirmation.rowKey.startsWith("mcp_server:")
-      ? confirmation.rowKey.slice("mcp_server:".length)
+      ? connectionSlugFor(confirmation.rowKey.slice("mcp_server:".length))
       : null;
+  // Attach/detach progress surfaces HERE (footer, lower right) — not as
+  // ghost nodes or badges inside the tree.
+  const syncStatusLabel = pendingMcpSlug
+    ? `Syncing MCP server ${pendingMcpSlug}…`
+    : pendingSkillSlug
+      ? `Syncing skill ${pendingSkillSlug}…`
+      : removingMcpSlug
+        ? `Removing MCP server ${removingMcpSlug}…`
+        : removingSkillSlug
+          ? `Removing skill ${removingSkillSlug}…`
+          : null;
 
   // Agent page merge U12: page actions live in the header bar as muted icons
   // (Evaluations pattern) — the in-body row keeps only search + filters.
@@ -1455,7 +1509,6 @@ export function SettingsCapabilities({
           spaceId={spaceId}
           perspectiveUserId={perspectiveUserId}
           refreshToken={previewRefreshToken}
-          pendingSkillSlug={pendingSkillSlug}
           removingSkillSlug={removingSkillSlug}
           onFocusCapabilityRow={focusCapabilityRow}
           skillStateBySlug={skillStateBySlug}
@@ -1463,13 +1516,13 @@ export function SettingsCapabilities({
           profileScopeName={selectedProfileName}
           onAddSkill={() => setAddSkillOpen(true)}
           onDetachSkill={requestDetachSkill}
-          mcpStateBySlug={mcpStateBySlug}
-          pendingMcpSlug={pendingMcpSlug}
           removingMcpSlug={removingMcpSlug}
           onAddMcpServer={() => setAddMcpOpen(true)}
+          onAddConnection={() => setAddMcpOpen(true)}
           onDetachMcpServer={requestDetachMcp}
           connectionStateBySlug={folderStateBySlug.connection}
           toolStateBySlug={folderStateBySlug.tool}
+          onRemoveConnection={removeConnectionRecord}
           onApproveCapabilityFolder={(klass, slug) =>
             void approveFolderCapability(klass, slug)
           }
@@ -1482,10 +1535,7 @@ export function SettingsCapabilities({
             );
             requestSheet("profiles", { profileId: match?.id ?? null });
           }}
-          onCreateAgentProfile={() => {
-            setProfilesCreateRequest((count) => count + 1);
-            requestSheet("profiles");
-          }}
+          onCreateAgentProfile={() => requestSheet("profiles")}
           onDeleteAgentProfile={(slug) => {
             const match = (profilesResult.data?.agentProfiles ?? []).find(
               (profile) => profile.slug === slug,
@@ -1596,6 +1646,15 @@ export function SettingsCapabilities({
             ))}
           </span>
         ) : null}
+        {syncStatusLabel ? (
+          <span
+            className="ml-auto flex items-center gap-1.5 text-sky-700 dark:text-sky-400"
+            data-testid="composer-sync-status"
+          >
+            <Loader2 className="size-3.5 animate-spin" />
+            {syncStatusLabel}
+          </span>
+        ) : null}
       </div>
 
       <AgentProfilesSheet
@@ -1607,7 +1666,6 @@ export function SettingsCapabilities({
           )
         }
         initialProfileId={profilesSheet.profileId}
-        createRequest={profilesCreateRequest}
       />
 
       {/* Capability Side Sheet (v1.1 item 2): the class tabs + rows + attach/
@@ -1814,11 +1872,11 @@ export function SettingsCapabilities({
       <Dialog open={addMcpOpen} onOpenChange={setAddMcpOpen}>
         <DialogContent data-testid="add-mcp-dialog">
           <DialogHeader>
-            <DialogTitle>Add an MCP server</DialogTitle>
+            <DialogTitle>Add a connection</DialogTitle>
             <DialogDescription>
-              MCP servers registered for this tenant. Attaching ends on the
-              server&apos;s live state — an honest gate reason (OAuth,
-              activation…) shows if it&apos;s held.
+              MCP servers registered for this tenant attach as connections.
+              Attaching ends on the server&apos;s live state — an honest gate
+              reason (OAuth, activation…) shows if it&apos;s held.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-80 overflow-y-auto">

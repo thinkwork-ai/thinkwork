@@ -8,13 +8,22 @@
  */
 
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import type { ColumnDef } from "@tanstack/react-table";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import {
   Badge,
   Button,
   DataTable,
-  Input,
+  DataTableTokenFilter,
+  type DataTableTokenFilterColumn,
+  dataTableTokenFilterFns,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -24,6 +33,8 @@ import {
 import { ExternalLink, Settings2 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { CollapsedFilterSearch } from "@/components/artifacts/CollapsedFilterSearch";
+import { relativeTime } from "@/lib/utils";
 import { SettingsGitRoutinesQuery } from "@/lib/graphql-queries";
 import { SettingsTenantCredentialsQuery } from "@/lib/settings-queries";
 import { TenantCredentialStatus } from "@/gql/graphql";
@@ -47,6 +58,31 @@ interface GitRoutine {
   validatedSha?: string | null;
   disabledReason?: string | null;
   lastRunAt?: string | null;
+}
+
+// Hidden-column ids for the Work Items-style filter table.
+const FILTER_COLUMNS = {
+  search: "filterSearch",
+  status: "filterStatus",
+} as const;
+
+/** Collapse a routine into the coarse status the token filter offers. */
+function routineFilterStatus(routine: GitRoutine): string {
+  if (routine.status !== "active") return "disabled";
+  return routine.validatedSha ? "validated" : "unvalidated";
+}
+
+/** Read the contains-search string out of the token-filter state. */
+function tokenFilterSearchValue(
+  columnFilters: ColumnFiltersState,
+  id: string,
+): string {
+  const raw = columnFilters.find((filter) => filter.id === id)?.value;
+  if (raw && typeof raw === "object" && "value" in raw) {
+    const value = (raw as { value: unknown }).value;
+    if (typeof value === "string") return value;
+  }
+  return "";
 }
 
 function stringFromMetadata(raw: unknown, key: string): string | null {
@@ -76,7 +112,8 @@ function moduleUrl(
 
 export function SettingsRoutines() {
   const { tenantId } = useTenant();
-  const [search, setSearch] = useState("");
+  const navigate = useNavigate();
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [configOpen, setConfigOpen] = useState(false);
 
   const [routinesResult, refetchRoutines] = useQuery({
@@ -122,6 +159,70 @@ export function SettingsRoutines() {
     [routinesResult.data],
   );
 
+  // Hidden filter table (Work Items idiom): drives the collapsed search over
+  // name/description plus the Status token picker.
+  const filterRows = useMemo(
+    () =>
+      routines.map((routine) => ({
+        routine,
+        filterSearch: `${routine.name} ${routine.description ?? ""}`,
+        filterStatus: routineFilterStatus(routine),
+      })),
+    [routines],
+  );
+  type RoutineFilterRow = (typeof filterRows)[number];
+
+  const filterColumns = useMemo<ColumnDef<RoutineFilterRow>[]>(
+    () => [
+      {
+        id: FILTER_COLUMNS.search,
+        accessorKey: "filterSearch",
+        filterFn: dataTableTokenFilterFns.text,
+      },
+      {
+        id: FILTER_COLUMNS.status,
+        accessorKey: "filterStatus",
+        filterFn: dataTableTokenFilterFns.option,
+      },
+    ],
+    [],
+  );
+
+  const filterTable = useReactTable({
+    data: filterRows,
+    columns: filterColumns,
+    autoResetPageIndex: false,
+    state: { columnFilters },
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+
+  const filteredRoutines = filterTable
+    .getFilteredRowModel()
+    .rows.map((row) => row.original.routine);
+
+  const searchValue = tokenFilterSearchValue(
+    columnFilters,
+    FILTER_COLUMNS.search,
+  );
+
+  const tokenFilterColumns = useMemo<DataTableTokenFilterColumn[]>(
+    () => [
+      {
+        id: FILTER_COLUMNS.status,
+        label: "Status",
+        type: "option",
+        options: [
+          { value: "validated", label: "Validated" },
+          { value: "unvalidated", label: "Needs validation" },
+          { value: "disabled", label: "Disabled" },
+        ],
+      },
+    ],
+    [],
+  );
+
   usePageHeaderActions({
     title: "Routines",
     action: (
@@ -164,6 +265,22 @@ export function SettingsRoutines() {
             </span>
           ) : (
             <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "lastRun",
+        header: "Last run",
+        size: 120,
+        cell: ({ row }) =>
+          row.original.lastRunAt ? (
+            <span
+              className="text-sm text-muted-foreground"
+              title={new Date(row.original.lastRunAt).toLocaleString()}
+            >
+              {relativeTime(row.original.lastRunAt)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Never run</span>
           ),
       },
       {
@@ -248,26 +365,48 @@ export function SettingsRoutines() {
     <>
       <SettingsTablePane
         title="Routines"
-        description="Deterministic Python routines that run recurring work with zero model tokens. Code lives in the connected GitHub repo (the single source of truth); an operator asks the agent to author routines, and Automations run them as token-free actions."
+        description="Reliable, repeatable routines that handle recurring work automatically — ask your agent to create one and it takes care of the rest."
         loading={routinesResult.fetching && routines.length === 0 && !error}
         toolbar={
           error ? (
             <p className="text-sm text-destructive">{error.message}</p>
           ) : (
-            <Input
-              placeholder="Search routines…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <CollapsedFilterSearch
+                value={searchValue}
+                onChange={(value) =>
+                  filterTable
+                    .getColumn(FILTER_COLUMNS.search)
+                    ?.setFilterValue(
+                      value ? { operator: "contains", value } : undefined,
+                    )
+                }
+                label="Search routines"
+                placeholder="Search routines…"
+              />
+              <DataTableTokenFilter
+                table={filterTable}
+                columns={tokenFilterColumns}
+                addLabel="Filter"
+                showAddLabel={false}
+                clearLabel="Clear filters"
+                flattenToolbar
+                className="max-w-full"
+                popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+              />
+            </div>
           )
         }
       >
         <DataTable
           columns={columns}
-          data={routines}
-          filterValue={search}
-          filterColumn="name"
+          data={filteredRoutines}
+          onRowClick={(routine) =>
+            navigate({
+              to: "/settings/routines/$routineId",
+              params: { routineId: routine.id },
+            })
+          }
           scrollable
           allowHorizontalScroll={false}
           pageSize={0}

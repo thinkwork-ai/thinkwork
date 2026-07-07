@@ -9,7 +9,6 @@ import { User } from "lucide-react";
 import { CollapsedFilterSearch } from "./CollapsedFilterSearch";
 import {
   DataTableTokenFilter,
-  Switch,
   type DataTableTokenFilterColumn,
 } from "@thinkwork/ui";
 
@@ -24,26 +23,22 @@ export interface ArtifactsToolbarProps {
   showUserFilter?: boolean;
   userIdFilter?: string;
   onUserIdFilterChange?: (value: string) => void;
-  /**
-   * Living Artifacts (R14): canvas rows default to saved-only. This toggle
-   * flips `includeDrafts` so unsaved draft canvases also appear.
-   */
-  includeDrafts?: boolean;
-  onIncludeDraftsChange?: (value: boolean) => void;
+  /** Tenant members the operator can pick from (value = user id). */
+  userOptions?: Array<{ value: string; label: string }>;
+  usersLoading?: boolean;
 }
 
 const FILTER_COLUMNS = {
   user: "filterUser",
 } as const;
 
-function textValueOf(filters: ColumnFiltersState, id: string): string {
+/** Extract the picked user id from the single-select option filter value. */
+function selectedUserIdOf(filters: ColumnFiltersState, id: string): string {
   const value = filters.find((filter) => filter.id === id)?.value;
-  return value &&
-    typeof value === "object" &&
-    "value" in value &&
-    typeof (value as { value: unknown }).value === "string"
-    ? (value as { value: string }).value
-    : "";
+  if (!value || typeof value !== "object" || !("value" in value)) return "";
+  const raw = (value as { value: unknown }).value;
+  if (typeof raw === "string") return raw;
+  return Array.isArray(raw) && typeof raw[0] === "string" ? raw[0] : "";
 }
 
 /**
@@ -57,8 +52,8 @@ export function ArtifactsToolbar({
   onSearchChange,
   showUserFilter = false,
   onUserIdFilterChange,
-  includeDrafts = false,
-  onIncludeDraftsChange,
+  userOptions = [],
+  usersLoading = false,
 }: ArtifactsToolbarProps) {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
@@ -74,7 +69,7 @@ export function ArtifactsToolbar({
     onColumnFiltersChange: (updater) => {
       setColumnFilters((prev) => {
         const next = typeof updater === "function" ? updater(prev) : updater;
-        onUserIdFilterChange?.(textValueOf(next, FILTER_COLUMNS.user));
+        onUserIdFilterChange?.(selectedUserIdOf(next, FILTER_COLUMNS.user));
         return next;
       });
     },
@@ -88,12 +83,17 @@ export function ArtifactsToolbar({
             {
               id: FILTER_COLUMNS.user,
               label: "User",
-              type: "text",
+              type: "option",
+              singleSelect: true,
               icon: <User className="size-4" />,
+              options: userOptions,
+              loading: usersLoading,
+              loadingMessage: "Loading users...",
+              emptyMessage: "No users found.",
             },
           ]
         : [],
-    [showUserFilter],
+    [showUserFilter, userOptions, usersLoading],
   );
 
   return (
@@ -118,20 +118,6 @@ export function ArtifactsToolbar({
           className="max-w-full"
           popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
         />
-      ) : null}
-
-      {onIncludeDraftsChange ? (
-        <label
-          className="ml-auto flex items-center gap-2 text-sm text-muted-foreground"
-          data-testid="artifacts-include-drafts"
-        >
-          <Switch
-            checked={includeDrafts}
-            onCheckedChange={onIncludeDraftsChange}
-            data-testid="artifacts-include-drafts-switch"
-          />
-          Include drafts
-        </label>
       ) : null}
     </div>
   );

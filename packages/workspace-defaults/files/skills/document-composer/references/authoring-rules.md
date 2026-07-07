@@ -31,8 +31,10 @@ the tool's `title` parameter.
 - Prose held to short paragraphs; every claim a chart shows must also be
   stated in text — a visual complements prose, never replaces it.
 - GFM tables for 5+ uniform items; keep header rows short.
-- Ordered lists for sequences and recommendations; definition-style bullet
-  pairs (`**Evidence:** …`) for labeled fields inside repeated items.
+- Ordered lists for procedural steps and recommendations; an ordered
+  sequence of named events or phases belongs in a `tw:timeline`, not a list
+  (see below). Definition-style bullet pairs (`**Evidence:** …`) for labeled
+  fields inside repeated items.
 
 ## Choosing chart types (form first)
 
@@ -58,6 +60,31 @@ Pick the form by the data's job — one chart, one job:
   drop-off"), never a description of the chart type.
 - The platform pairs every chart with a collapsible data table
   automatically — don't duplicate the numbers in a markdown table.
+
+## Sequences: when to reach for `tw:timeline`
+
+The trigger is **an ordered sequence of named events or phases** — rollout
+phases, project milestones, onboarding stages, launch plans. When the
+document's story is "first this, then this, then this" with meaningful stage
+names, render it as a `tw:timeline` unprompted; the reader scans the track
+instead of parsing a list.
+
+Pick the neighbor when the content's job differs:
+
+| Content's job                                          | Use              |
+| ------------------------------------------------------ | ---------------- |
+| Ordered sequence of named events or phases             | `tw:timeline`    |
+| Quantitative stage-to-stage conversion (counts shrink) | `chart` (funnel) |
+| Headline numbers with no inherent order                | `tw:stats`       |
+| Procedural steps that don't need visual scanning       | ordered list     |
+
+- 1–8 items, `label` required; `caption`/`date` optional and rendered
+  verbatim (`Week 1`, `Q4`), at most one `current: true` for the phase in
+  progress now.
+- More than 8 phases: aggregate to 8 or fewer, or fall back to an ordered
+  list.
+- Don't force a timeline onto content with no inherent order — a findings
+  list or a set of parallel workstreams is not a sequence.
 
 ## Machine navigability
 

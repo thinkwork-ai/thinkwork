@@ -65,11 +65,11 @@ function RoutineExecutionHeaderPublisher({
     title: routineName ?? "Execution",
     breadcrumbs: routineName
       ? [
-          { label: "Workflows", href: "/settings/workflows" },
+          { label: "Routines", href: "/settings/routines" },
           { label: routineName, href: `/settings/routines/${routineId}` },
           { label: `Run ${executionId.slice(0, 8)}` },
         ]
-      : [{ label: "Workflows", href: "/settings/workflows" }],
+      : [{ label: "Routines", href: "/settings/routines" }],
     action: status ? <StatusBadge status={status.toLowerCase()} /> : undefined,
     actionKey: `exec:${executionId}:${status ?? "loading"}`,
   });

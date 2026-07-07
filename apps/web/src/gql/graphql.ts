@@ -805,6 +805,7 @@ export type Artifact = {
   title: Scalars["String"]["output"];
   type: Scalars["String"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+  userName?: Maybe<Scalars["String"]["output"]>;
   versions: Array<ArtifactVersion>;
 };
 
@@ -1949,12 +1950,14 @@ export type DisconnectN8nWorkflowResult = {
 export type DocumentPlate = {
   __typename?: "DocumentPlate";
   allowedDirectives?: Maybe<Array<Scalars["String"]["output"]>>;
+  analyses?: Maybe<Scalars["AWSJSON"]["output"]>;
   customized: Scalars["Boolean"]["output"];
   displayName: Scalars["String"]["output"];
   eyebrow: Scalars["String"]["output"];
   hidden: Scalars["Boolean"]["output"];
   origin: DocumentPlateOrigin;
   overrides?: Maybe<Scalars["AWSJSON"]["output"]>;
+  sections?: Maybe<Scalars["AWSJSON"]["output"]>;
   slug: Scalars["ID"]["output"];
   titleSuffix: Scalars["String"]["output"];
   tokensDark: Scalars["AWSJSON"]["output"];
@@ -1970,10 +1973,13 @@ export type DocumentPlateDiagnostic = {
 
 export type DocumentPlateDraftConfigInput = {
   allowedDirectives?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  analyses?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   displayName?: InputMaybe<Scalars["String"]["input"]>;
   eyebrow?: InputMaybe<Scalars["String"]["input"]>;
   paletteDark?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   paletteLight?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  sectionOverrides?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  sections?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   titleSuffix?: InputMaybe<Scalars["String"]["input"]>;
   useFor?: InputMaybe<Scalars["String"]["input"]>;
 };
@@ -6373,6 +6379,7 @@ export type Query = {
   routineExecutions: Array<RoutineExecution>;
   routineRecipeCatalog: Array<RoutineRecipe>;
   routineRepairEvents: Array<RoutineRepairEvent>;
+  routineSource: RoutineSource;
   routineStepEvents: Array<RoutineStepEvent>;
   routines: Array<Routine>;
   runtimeManifestsByAgent: Array<RuntimeManifest>;
@@ -7106,6 +7113,10 @@ export type QueryRoutineRecipeCatalogArgs = {
 
 export type QueryRoutineRepairEventsArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
+  routineId: Scalars["ID"]["input"];
+};
+
+export type QueryRoutineSourceArgs = {
   routineId: Scalars["ID"]["input"];
 };
 
@@ -7997,6 +8008,20 @@ export enum RoutineRunStatus {
   Running = "RUNNING",
 }
 
+export type RoutineSource = {
+  __typename?: "RoutineSource";
+  files: Array<RoutineSourceFile>;
+  ref: Scalars["String"]["output"];
+  routineId: Scalars["ID"]["output"];
+};
+
+export type RoutineSourceFile = {
+  __typename?: "RoutineSourceFile";
+  content: Scalars["String"]["output"];
+  language: Scalars["String"]["output"];
+  path: Scalars["String"]["output"];
+};
+
 export enum RoutineStatus {
   Active = "ACTIVE",
   Archived = "ARCHIVED",
@@ -8128,11 +8153,14 @@ export type SaveAppletStateInput = {
 
 export type SaveDocumentPlateInput = {
   allowedDirectives?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  analyses?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   displayName?: InputMaybe<Scalars["String"]["input"]>;
   eyebrow?: InputMaybe<Scalars["String"]["input"]>;
   hidden?: InputMaybe<Scalars["Boolean"]["input"]>;
   paletteDark?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   paletteLight?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  sectionOverrides?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  sections?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   slug: Scalars["String"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   titleSuffix?: InputMaybe<Scalars["String"]["input"]>;
@@ -12540,6 +12568,25 @@ export type N8nAppDataQuery = {
         errorMessage?: string | null;
         updatedAt: any;
       }>;
+    }>;
+  };
+};
+
+export type RoutineSourceQueryVariables = Exact<{
+  routineId: Scalars["ID"]["input"];
+}>;
+
+export type RoutineSourceQuery = {
+  __typename?: "Query";
+  routineSource: {
+    __typename?: "RoutineSource";
+    routineId: string;
+    ref: string;
+    files: Array<{
+      __typename?: "RoutineSourceFile";
+      path: string;
+      content: string;
+      language: string;
     }>;
   };
 };
@@ -21050,6 +21097,73 @@ export const N8nAppDataDocument = {
     },
   ],
 } as unknown as DocumentNode<N8nAppDataQuery, N8nAppDataQueryVariables>;
+export const RoutineSourceDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "RoutineSource" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "routineId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "routineSource" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "routineId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "routineId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "routineId" } },
+                { kind: "Field", name: { kind: "Name", value: "ref" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "files" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "path" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "content" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "language" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<RoutineSourceQuery, RoutineSourceQueryVariables>;
 export const RoutineDetailDocument = {
   kind: "Document",
   definitions: [

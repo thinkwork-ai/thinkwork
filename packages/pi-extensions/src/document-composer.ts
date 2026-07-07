@@ -31,6 +31,18 @@ export interface DocumentPlateSummary {
   slug: string;
   displayName: string;
   useFor: string;
+  /**
+   * THINK-183 KTD8: enforced content contract, when the plate declares one.
+   * Sections are required (or required-if-material — waive with tw:waiver
+   * when the data is genuinely unavailable); analyses name plate-declared
+   * server-computed calculations authored via tw:analysis blocks.
+   */
+  sections?: Array<{
+    id: string;
+    title: string;
+    tier: "required" | "required-if-material";
+  }>;
+  analyses?: Array<{ key: string; op: string; inputHint: string }>;
 }
 
 /**
@@ -69,6 +81,55 @@ const PLATE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
  * field (wrong shape, junk entries only) is treated as ABSENT — the caller
  * falls back to the core four and logs a structured event — never a throw.
  */
+/** THINK-183 KTD8: carry a plate's contract sections; junk degrades to absent. */
+function normalizePlateSections(
+  raw: unknown,
+): DocumentPlateSummary["sections"] {
+  if (!Array.isArray(raw)) return undefined;
+  const sections: NonNullable<DocumentPlateSummary["sections"]> = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const rec = entry as Record<string, unknown>;
+    const id = typeof rec.id === "string" ? rec.id.trim() : "";
+    const title = typeof rec.title === "string" ? rec.title.trim() : "";
+    const tier = rec.tier;
+    if (
+      !PLATE_SLUG_RE.test(id) ||
+      !title ||
+      (tier !== "required" && tier !== "required-if-material")
+    ) {
+      continue;
+    }
+    sections.push({ id, title, tier });
+  }
+  return sections.length > 0 ? sections : undefined;
+}
+
+/** THINK-183 KTD8: carry a plate's declared analyses; junk degrades to absent. */
+function normalizePlateAnalyses(
+  raw: unknown,
+): DocumentPlateSummary["analyses"] {
+  if (!Array.isArray(raw)) return undefined;
+  const analyses: NonNullable<DocumentPlateSummary["analyses"]> = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const rec = entry as Record<string, unknown>;
+    const key = typeof rec.key === "string" ? rec.key.trim() : "";
+    const op = typeof rec.op === "string" ? rec.op.trim() : "";
+    if (!PLATE_SLUG_RE.test(key) || !op) continue;
+    analyses.push({
+      key,
+      op,
+      inputHint: typeof rec.inputHint === "string" ? rec.inputHint.trim() : "",
+    });
+  }
+  return analyses.length > 0 ? analyses : undefined;
+}
+
 export function normalizeDocumentPlates(
   raw: unknown,
 ): DocumentPlateSummary[] | null {
@@ -81,6 +142,8 @@ export function normalizeDocumentPlates(
     const rec = entry as Record<string, unknown>;
     const slug = typeof rec.slug === "string" ? rec.slug.trim() : "";
     if (!PLATE_SLUG_RE.test(slug)) continue;
+    const sections = normalizePlateSections(rec.sections);
+    const analyses = normalizePlateAnalyses(rec.analyses);
     plates.push({
       slug,
       displayName:
@@ -88,6 +151,8 @@ export function normalizeDocumentPlates(
           ? rec.displayName.trim()
           : slug,
       useFor: typeof rec.useFor === "string" ? rec.useFor.trim() : "",
+      ...(sections ? { sections } : {}),
+      ...(analyses ? { analyses } : {}),
     });
   }
   return plates.length > 0 ? plates : null;
@@ -166,10 +231,34 @@ export function createDocumentComposerExtension(
       } catch {
         plates = FALLBACK_PLATES;
       }
+      // THINK-183 KTD8 (R14 floor): each contract-bearing plate's line names
+      // its enforced sections (expected heading titles) and declared analyses
+      // (key + op + input-shape hint) — enough to author a contract-satisfying
+      // emission first-pass. Full guidance arrives in rejection diagnostics.
       const genreLines = plates
-        .map((p) => `\`${p.slug}\`${p.useFor ? ` — ${p.useFor}` : ""}`)
+        .map((p) => {
+          let line = `\`${p.slug}\`${p.useFor ? ` — ${p.useFor}` : ""}`;
+          if (p.sections?.length) {
+            const parts = p.sections.map(
+              (s) =>
+                `"## ${s.title}"${s.tier === "required-if-material" ? " (waive via tw:waiver if data is unavailable)" : ""}`,
+            );
+            line += ` [required sections: ${parts.join(", ")}]`;
+          }
+          if (p.analyses?.length) {
+            const parts = p.analyses.map(
+              (a) =>
+                `${a.key} (op ${a.op}${a.inputHint ? `: ${a.inputHint}` : ""})`,
+            );
+            line += ` [declared analyses — author a \`\`\`tw:analysis block with \`analysis: <key>\` plus raw inputs; the server computes: ${parts.join(", ")}]`;
+          }
+          return line;
+        })
         .join("; ");
       const genreList = plates.map((p) => p.slug).join(", ");
+      const anyContract = plates.some(
+        (p) => p.sections?.length || p.analyses?.length,
+      );
 
       const tool: ToolDefinition = {
         name: EMIT_DOCUMENT_TOOL_NAME,
@@ -183,6 +272,13 @@ export function createDocumentComposerExtension(
           "never write HTML or SVG yourself (raw HTML is stripped; external links become plain text). " +
           "Start the body at ## Summary (the platform renders the H1 from title). " +
           "Unknown components or malformed YAML reject with a diagnostic showing the corrected form. " +
+          (anyContract
+            ? "Some genres declare a content contract: author every required section as a ## heading with " +
+              "its exact listed title, satisfy declared analyses with ```tw:analysis blocks (analysis: <key> " +
+              "plus the op's raw inputs — the server computes the numbers), and when a required section's " +
+              "data is genuinely unavailable, waive it explicitly with a ```tw:waiver block (section: <id>, " +
+              "reason: <why>) instead of omitting it. "
+            : "") +
           "Emitting again with the same document_id revises the document (always pass the document_id " +
           "returned by a prior call when revising). status 'final' pins an immutable version; drafts stay " +
           "editable. Never include secrets, tokens, or credentials.",

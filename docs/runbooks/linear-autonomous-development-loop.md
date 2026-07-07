@@ -321,14 +321,18 @@ scripts/factory-up.sh
 
 The script preflights (claude CLI, gh auth, agent-browser, worker dirs, stale
 auto-worktree note), starts `caffeinate` tied to its own lifetime, and execs a
-**Sonnet** Claude Code session running `/loop 4m linear-dispatch` with
+**Sonnet** Claude Code session running `/loop linear-dispatch` with
 permissions bypassed so unattended worker launches never stall on approval
-prompts. Equivalent manual startup:
+prompts. The loop is self-paced: the dispatcher schedules its own next
+heartbeat from factory state (~4 min while workers/CI/deploys are in flight,
+20–30 min when everything is waiting on humans or the queue is empty), per
+the pacing table in `.claude/skills/linear-dispatch/SKILL.md`. Equivalent
+manual startup:
 
 ```bash
 caffeinate -dims &                                  # keeps the Mac awake
 claude --model sonnet --dangerously-skip-permissions   # then inside the session:
-/loop 4m linear-dispatch
+/loop linear-dispatch
 ```
 
 Notes:
@@ -336,7 +340,14 @@ Notes:
 - `/loop` recurring tasks expire after ~7 days; rerun `scripts/factory-up.sh`
   weekly, after a reboot, or whenever the terminal closes.
 - The dispatcher session never edits the repo; workers run headless in their
-  own worktrees with logs in `~/.thinkwork-factory/logs/`.
+  own worktrees with logs in `~/.thinkwork-factory/logs/` and a pid sidecar
+  (`<same-name>.pid`) next to each log. `scripts/factory-status.sh` prints a
+  one-shot factory snapshot (worker liveness, log ages/tails, auto-worktrees)
+  — the dispatcher runs it every heartbeat, and it's also the fastest way for
+  a human to see what's running.
+- Every worker launch carries a `--max-budget-usd` runaway backstop (per-phase
+  table in the Claude-lane SKILL.md). A budget-killed worker is treated as a
+  normal dead worker; two consecutive budget kills escalate as a blocker.
 - To pause the lane, stop the loop; in-flight workers finish their current
   phase and stop at the next gate.
 - Both lanes tolerate restarts: all durable state lives in Linear (Progress

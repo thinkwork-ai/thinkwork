@@ -99,6 +99,14 @@ export interface AgentDispatchControlFieldArgs {
     slug: string;
     displayName: string;
     useFor: string;
+    /** THINK-183 KTD8: enforced manifest sections (id + expected title). */
+    sections?: Array<{
+      id: string;
+      title: string;
+      tier: "required" | "required-if-material";
+    }>;
+    /** THINK-183 KTD8: declared analyses with op input-shape hints. */
+    analyses?: Array<{ key: string; op: string; inputHint: string }>;
   }>;
   /**
    * Resolved-config fingerprint (capability-mapping plan U12, KTD-3):

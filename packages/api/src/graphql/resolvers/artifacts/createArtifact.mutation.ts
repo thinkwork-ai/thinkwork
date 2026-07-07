@@ -1,6 +1,8 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, randomUUID, artifacts } from "../../utils.js";
+import { creatorUserIdForThread } from "../../../lib/artifacts/artifact-creator.js";
 import { requireTenantMember } from "../core/authz.js";
+import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import {
   artifactToCamelWithPayload,
   persistArtifactContentPayload,
@@ -35,6 +37,11 @@ export const createArtifact = async (
           type,
         })
       : null;
+  // Creator of record: the source thread's owner, falling back to the acting
+  // caller for thread-less artifacts.
+  const createdByUserId =
+    (await creatorUserIdForThread(i.threadId)) ??
+    (ctx.auth ? (await resolveCallerFromAuth(ctx.auth)).userId : null);
   const [row] = await db
     .insert(artifacts)
     .values({
@@ -42,6 +49,7 @@ export const createArtifact = async (
       tenant_id: i.tenantId,
       agent_id: i.agentId ?? null,
       thread_id: i.threadId ?? null,
+      created_by_user_id: createdByUserId,
       title: i.title,
       type,
       status: i.status?.toLowerCase() ?? "final",

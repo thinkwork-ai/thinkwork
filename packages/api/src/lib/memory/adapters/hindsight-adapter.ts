@@ -249,10 +249,14 @@ export class HindsightAdapter implements MemoryAdapter {
       }),
     );
     // Score descending; at equal score consolidated observations rank ahead
-    // of raw facts (they are deduplicated, evidence-weighted beliefs).
+    // of raw facts (they are deduplicated, evidence-weighted beliefs), then
+    // higher corroboration (proof count) breaks the remaining ties (THINK-199).
     return dedupeRecordsById(batches.flat(), (r) => r.record.id)
       .sort(
-        (a, b) => b.score - a.score || observationRank(a) - observationRank(b),
+        (a, b) =>
+          b.score - a.score ||
+          observationRank(a) - observationRank(b) ||
+          proofCountOf(b) - proofCountOf(a),
       )
       .slice(0, limit);
   }
@@ -1250,6 +1254,11 @@ function defaultMarkdownDocumentSource(context: string): string {
 
 function observationRank(result: RecallResult): number {
   return result.record.metadata?.factType === "observation" ? 0 : 1;
+}
+
+function proofCountOf(result: RecallResult): number {
+  const value = result.record.metadata?.proofCount;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function applyHindsightQueryOptions(

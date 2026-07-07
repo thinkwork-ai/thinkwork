@@ -213,6 +213,20 @@ describe("materializeMcpAssignmentFoldersForAgents (attach)", () => {
     expect(putSpy).not.toHaveBeenCalled();
   });
 
+  it("THINK-190: skips flipped agents — their record is the connection sidecar", async () => {
+    (
+      state.agent as typeof state.agent & {
+        capability_folder_dispatch?: boolean;
+      }
+    ).capability_folder_dispatch = true;
+    const written = await materializeMcpAssignmentFoldersForAgents(
+      { agentIds: ["agent-1"], tenantId: "t-1", registryServerId: "srv-1" },
+      DEPS,
+    );
+    expect(written).toBe(0);
+    expect(putSpy).not.toHaveBeenCalled();
+  });
+
   it("returns 0 when the registry row is gone", async () => {
     state.server = null;
     const written = await materializeMcpAssignmentFoldersForAgents(

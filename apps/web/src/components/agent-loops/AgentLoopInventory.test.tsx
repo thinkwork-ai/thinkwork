@@ -49,17 +49,20 @@ vi.mock("@/components/settings/SettingsContent", () => ({
   ),
   SettingsTablePane: ({
     actions,
+    headerActions,
     children,
     title,
     toolbar,
   }: {
     actions?: React.ReactNode;
+    headerActions?: React.ReactNode;
     children: React.ReactNode;
     title: string;
     toolbar?: React.ReactNode;
   }) => (
     <section>
       <h1>{title}</h1>
+      {headerActions}
       {actions}
       {toolbar}
       {children}
@@ -111,6 +114,19 @@ vi.mock("@thinkwork/ui", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input {...props} />
   ),
+  DataTableTokenFilter: () => <div data-testid="token-filter" />,
+  dataTableTokenFilterFns: {
+    text: (
+      row: { getValue: (id: string) => unknown },
+      columnId: string,
+      filterValue: { value?: unknown } | undefined,
+    ) =>
+      String(row.getValue(columnId))
+        .toLowerCase()
+        .includes(String(filterValue?.value ?? "").toLowerCase()),
+    option: () => true,
+    boolean: () => true,
+  },
 }));
 
 import {
@@ -253,7 +269,7 @@ describe("AgentLoopInventory", () => {
     });
 
     render(<AgentLoopInventory />);
-    fireEvent.click(screen.getByRole("button", { name: /New Automation/ }));
+    fireEvent.click(screen.getByRole("button", { name: /New automation/i }));
     fireEvent.click(await screen.findByText("Save mocked loop"));
 
     await waitFor(() => expect(saveMutationMock).toHaveBeenCalled());

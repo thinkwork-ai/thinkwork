@@ -8,7 +8,7 @@
 // through verbatim and `toolPolicy` merges only `builtInTools` — so a sheet
 // save can never clobber tree-written grants while `updateAgentProfile`
 // still replace-writes whole policy fields (retires in U11).
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
@@ -126,17 +126,11 @@ export function AgentProfilesSheet({
   open,
   onOpenChange,
   initialProfileId,
-  createRequest = 0,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Deep-link target: open directly on this profile's detail. */
   initialProfileId?: string | null;
-  /**
-   * Increment to request a new-profile creation (tree "Add New Agent…").
-   * Fires once per increment, after the model catalog is available.
-   */
-  createRequest?: number;
 }) {
   const { tenantId } = useTenant();
   const [profilesResult, refetchProfiles] = useQuery({
@@ -144,7 +138,6 @@ export function AgentProfilesSheet({
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId || !open,
   });
-  const [, createProfile] = useMutation(SettingsCreateAgentProfileMutation);
   const [, deleteProfile] = useMutation(SettingsDeleteAgentProfileMutation);
 
   // null = list view; a profile id = that profile's detail.
@@ -165,62 +158,45 @@ export function AgentProfilesSheet({
   const catalog = profilesResult.data?.agentProfileEditorCatalog;
   const detail = profiles.find((profile) => profile.id === detailId) ?? null;
 
-  async function onCreateProfile() {
-    if (!tenantId) return;
+  // Create is DRAFT-first: "Add Sub-Agent" / "New profile" open the detail
+  // editor on an unsaved template; the create mutation fires only from Save
+  // (no more accidental duplicate profiles from a stray click).
+  const [creating, setCreating] = useState(false);
+  const draftTemplate = useMemo<AgentProfileRow | null>(() => {
     const modelId =
       catalog?.models?.[0]?.modelId ?? profiles[0]?.modelId ?? null;
-    if (!modelId) {
+    if (!modelId) return null;
+    return {
+      id: "",
+      slug: "new-agent-profile",
+      name: "New Agent Profile",
+      description: "Custom task profile.",
+      routingGuidance: "Use for focused delegated work.",
+      instructions:
+        "Complete the assigned task and return a concise result with relevant context.",
+      modelId,
+      model: null,
+      enabled: true,
+      builtInKey: null,
+      toolPolicy: { builtInTools: [], mcpServers: [] },
+      skillPolicy: { skillSlugs: [] },
+      executionControls: {
+        foreground: true,
+        clarify: false,
+        maxSubagentDepth: 0,
+      },
+      spaces: [],
+    };
+  }, [catalog?.models, profiles]);
+
+  function openCreateDraft() {
+    if (!draftTemplate) {
       toast.error("Model catalog unavailable");
       return;
     }
-    const result = await createProfile({
-      tenantId,
-      input: {
-        name: "New Agent Profile",
-        description: "Custom task profile.",
-        routingGuidance: "Use for focused delegated work.",
-        instructions:
-          "Complete the assigned task and return a concise result with relevant context.",
-        modelId,
-        enabled: true,
-        toolPolicy: { builtInTools: [], mcpServers: [] },
-        skillPolicy: { skillSlugs: [] },
-        executionControls: {
-          foreground: true,
-          clarify: false,
-          maxSubagentDepth: 0,
-        },
-        spaceIds: [],
-      },
-    });
-    if (result.error) {
-      toast.error("Could not create Agent Profile", {
-        description: result.error.message,
-      });
-      return;
-    }
-    const id = result.data?.createAgentProfile.id;
-    refetchProfiles({ requestPolicy: "network-only" });
-    toast.success("Agent Profile created");
-    // Land on the new profile's detail inside the sheet (R13).
-    if (id) setDetailId(id);
+    setDetailId(null);
+    setCreating(true);
   }
-
-  // Tree-menu create ("Add New Agent…"): the request arrives before this
-  // sheet's queries resolve, so fire once per increment only after a model
-  // id is derivable — otherwise create would fail on an empty catalog.
-  const [lastCreateRequest, setLastCreateRequest] = useState(createRequest);
-  const canDeriveModel = Boolean(
-    catalog?.models?.[0]?.modelId ?? profiles[0]?.modelId,
-  );
-  useEffect(() => {
-    if (!open || createRequest === lastCreateRequest || !canDeriveModel) {
-      return;
-    }
-    setLastCreateRequest(createRequest);
-    void onCreateProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, createRequest, lastCreateRequest, canDeriveModel]);
 
   async function onDeleteProfile(profile: AgentProfileRow) {
     if (!tenantId || profile.builtInKey) return;
@@ -239,12 +215,40 @@ export function AgentProfilesSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(680px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+        className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(560px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
         data-testid="agent-profiles-sheet"
       >
-        <SheetHeader className="px-6">
+        {!detail && !creating ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="absolute top-3 right-12"
+            onClick={openCreateDraft}
+            data-testid="profiles-sheet-new"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            New profile
+          </Button>
+        ) : null}
+        <SheetHeader className="px-4">
           <SheetTitle>
-            {detail ? (
+            {creating ? (
+              <span className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setCreating(false)}
+                  aria-label="Back to profile list"
+                  data-testid="profiles-sheet-back"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                New Agent Profile
+                <Badge variant="outline">unsaved</Badge>
+              </span>
+            ) : detail ? (
               <span className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -268,16 +272,34 @@ export function AgentProfilesSheet({
             )}
           </SheetTitle>
           <SheetDescription>
-            {detail
-              ? `${detail.slug} · ${detail.model?.displayName ?? detail.modelId}`
-              : "Task profiles the parent Agent can delegate work to."}
+            {creating
+              ? "Draft — nothing is created until you press Save."
+              : detail
+                ? `${detail.slug} · ${detail.model?.displayName ?? detail.modelId}`
+                : "Task profiles the parent Agent can delegate work to."}
           </SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-8">
           {profilesResult.error ? (
             <p className="p-4 text-sm text-destructive">
               {profilesResult.error.message}
             </p>
+          ) : creating && draftTemplate && catalog ? (
+            <AgentProfileDetailEditor
+              key="new-profile-draft"
+              tenantId={tenantId ?? ""}
+              profile={draftTemplate}
+              createMode
+              models={(catalog.models ?? []) as ModelOption[]}
+              spaces={(catalog.spaces ?? []) as SpaceOption[]}
+              builtInTools={catalog.builtInTools ?? []}
+              onSaved={() => refetchProfiles({ requestPolicy: "network-only" })}
+              onCreated={(id) => {
+                setCreating(false);
+                setDetailId(id);
+              }}
+              onDelete={() => setCreating(false)}
+            />
           ) : detail && catalog ? (
             <AgentProfileDetailEditor
               key={detail.id}
@@ -291,24 +313,12 @@ export function AgentProfilesSheet({
             />
           ) : (
             <div data-testid="profiles-sheet-list">
-              <div className="mb-2 flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={onCreateProfile}
-                  data-testid="profiles-sheet-new"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  New profile
-                </Button>
-              </div>
               {profilesResult.fetching && profiles.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">
                   Loading Agent Profiles…
                 </p>
               ) : (
-                <div className="divide-y divide-border">
+                <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
                   {profiles.map((profile) => (
                     <button
                       key={profile.id}
@@ -316,7 +326,7 @@ export function AgentProfilesSheet({
                       onClick={() => setDetailId(profile.id)}
                       data-testid={`profiles-sheet-row-${profile.slug}`}
                       className={cn(
-                        "group flex w-full items-center gap-4 px-2 py-3 text-left transition-colors hover:bg-muted/40",
+                        "group flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-muted/40",
                       )}
                     >
                       <div className="min-w-0 flex-1">
@@ -363,25 +373,33 @@ export function AgentProfilesSheet({
 function AgentProfileDetailEditor({
   tenantId,
   profile,
+  createMode = false,
   models,
   spaces,
   builtInTools,
   onSaved,
+  onCreated,
   onDelete,
 }: {
   tenantId: string;
+  /** In create mode: an unsaved template row (id "") the draft seeds from. */
   profile: AgentProfileRow;
+  /** Draft-first create: Save fires the create mutation (nothing before). */
+  createMode?: boolean;
   models: ModelOption[];
   spaces: SpaceOption[];
   builtInTools: string[];
   onSaved: () => void;
+  /** Create mode only: navigate to the newly created profile's detail. */
+  onCreated?: (id: string) => void;
   onDelete: () => void;
 }) {
   const [saveState, save] = useMutation(SettingsUpdateAgentProfileMutation);
+  const [createState, create] = useMutation(SettingsCreateAgentProfileMutation);
   const [draft, setDraft] = useState(() => profileToDraft(profile));
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const saving = saveState.fetching;
+  const saving = saveState.fetching || createState.fetching;
   const custom = !profile.builtInKey;
   const draftValid =
     validPositiveInteger(draft.loopMaxIterations) &&
@@ -391,6 +409,29 @@ function AgentProfileDetailEditor({
     if (!tenantId) return;
     if (!draftValid) {
       toast.error("Loop limits must be positive whole numbers");
+      return;
+    }
+    if (createMode) {
+      const result = await create({
+        tenantId,
+        // draftToInput builds the full create shape (the template profile
+        // seeds the policy fields) — the JsonRecord return just can't prove
+        // it to the codegen input type.
+        input: draftToInput(
+          draft,
+          profile,
+        ) as unknown as import("@/gql/graphql").AgentProfileInput,
+      });
+      if (result.error) {
+        toast.error("Could not create Agent Profile", {
+          description: result.error.message,
+        });
+        return;
+      }
+      onSaved();
+      toast.success("Agent Profile created");
+      const id = result.data?.createAgentProfile.id;
+      if (id) onCreated?.(id);
       return;
     }
     const result = await save({
@@ -483,9 +524,10 @@ function AgentProfileDetailEditor({
         <SettingsRow
           label="Description"
           description="Short summary shown in profile lists."
+          layout="stacked"
         >
           <Textarea
-            className="w-full max-w-[32rem]"
+            className="w-full"
             value={draft.description}
             onChange={(e) =>
               setDraftField(setDraft, "description", e.target.value)
@@ -496,9 +538,10 @@ function AgentProfileDetailEditor({
         <SettingsRow
           label="Routing guidance"
           description="When the parent Agent should choose this profile."
+          layout="stacked"
         >
           <Textarea
-            className="w-full max-w-[32rem]"
+            className="w-full"
             value={draft.routingGuidance}
             onChange={(e) =>
               setDraftField(setDraft, "routingGuidance", e.target.value)
@@ -509,9 +552,10 @@ function AgentProfileDetailEditor({
         <SettingsRow
           label="Instructions"
           description="Prompt instructions for delegated profile runs."
+          layout="stacked"
         >
           <Textarea
-            className="w-full max-w-[32rem]"
+            className="w-full"
             value={draft.instructions}
             onChange={(e) =>
               setDraftField(setDraft, "instructions", e.target.value)
@@ -737,7 +781,7 @@ function AgentProfileDetailEditor({
 
       <div className="mb-8 flex justify-end">
         <div className="flex items-center gap-2">
-          {custom ? (
+          {custom && !createMode ? (
             <Button
               type="button"
               variant="ghost"
@@ -755,7 +799,13 @@ function AgentProfileDetailEditor({
             disabled={saving || !draftValid}
             data-testid="profiles-sheet-save"
           >
-            {saving ? "Saving…" : "Save"}
+            {saving
+              ? createMode
+                ? "Creating…"
+                : "Saving…"
+              : createMode
+                ? "Create profile"
+                : "Save"}
           </Button>
         </div>
       </div>

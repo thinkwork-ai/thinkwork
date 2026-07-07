@@ -93,8 +93,6 @@ export function SettingsGeneral() {
         </SettingsSection>
       ) : null}
 
-      <SetUpMobileCard />
-
       {showOperator ? (
         <>
           <SettingsSection label="Deployment">
@@ -143,6 +141,8 @@ export function SettingsGeneral() {
               </>
             )}
           </SettingsSection>
+
+          <SetUpMobileCard />
 
           {!deploymentFailed ? (
             <SettingsSection label="Resources & URLs">
@@ -203,7 +203,9 @@ export function SettingsGeneral() {
             }
           />
         </>
-      ) : null}
+      ) : (
+        <SetUpMobileCard />
+      )}
     </SettingsPane>
   );
 }

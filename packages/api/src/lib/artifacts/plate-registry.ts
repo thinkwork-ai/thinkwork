@@ -28,12 +28,22 @@ import {
   type DocumentPlateOrigin,
 } from "@thinkwork/database-pg/schema";
 import { and, eq } from "drizzle-orm";
-import { DIRECTIVE_KINDS } from "./document-directives.js";
+import { ANALYSIS_OPS, getAnalysisOp } from "./document-analyses.js";
+import {
+  ANALYSIS_PRESENTATION_DIRECTIVES,
+  CHART_TYPES,
+  DIRECTIVE_KINDS,
+} from "./document-directives.js";
 import {
   getPlatformPlate,
   PLATFORM_PLATES,
+  PLATE_SECTION_TIERS,
+  type PlateAnalysisSpec,
   type PlateDefinition,
   type PlatePalette,
+  type PlateSectionSpec,
+  type PlateSectionTier,
+  type PlateSuggestedDirective,
 } from "./plate-definitions.js";
 
 // ---------------------------------------------------------------------------
@@ -135,6 +145,10 @@ export interface ResolvedPlate {
   tokensDark: Record<string, string>;
   /** Directive kinds documents in this plate may use; "all" = unrestricted. */
   allowedDirectives: readonly string[] | "all";
+  /** Content contract: tiered section manifest (THINK-183; absent = none). */
+  sections?: readonly PlateSectionSpec[];
+  /** Content contract: declared analyses (THINK-183; absent = none). */
+  analyses?: readonly PlateAnalysisSpec[];
   /** "platform" (code-defined, possibly overridden) or "tenant" (row-owned). */
   origin: "platform" | "tenant";
   hidden: boolean;
@@ -250,6 +264,228 @@ function normalizeAllowedDirectives(
   return kinds;
 }
 
+// ---------------------------------------------------------------------------
+// Content-contract normalization (THINK-183). Save gates validate loudly;
+// these re-filter stored config at resolution time (defense in depth, same
+// posture as filterPalette) so a row predating a vocabulary tightening can
+// never push an invalid contract into the compiler.
+// ---------------------------------------------------------------------------
+
+/** Matches the document_plates slug CHECK and the compositor slug shape. */
+const CONTRACT_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+function normalizeSuggestedDirectives(
+  raw: unknown,
+): PlateSuggestedDirective[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PlateSuggestedDirective[] = [];
+  for (const entry of raw) {
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    const kind = rec?.kind;
+    if (typeof kind !== "string" || !DIRECTIVE_KINDS.includes(kind)) continue;
+    const chartType = rec?.chartType;
+    out.push(
+      typeof chartType === "string" &&
+        (CHART_TYPES as readonly string[]).includes(chartType)
+        ? { kind, chartType }
+        : { kind },
+    );
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeSections(raw: unknown): PlateSectionSpec[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PlateSectionSpec[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    if (!rec) continue;
+    const id = rec.id;
+    const title = rec.title;
+    const tier = rec.tier;
+    const guidance = rec.guidance;
+    if (
+      typeof id !== "string" ||
+      !CONTRACT_SLUG_RE.test(id) ||
+      seen.has(id) ||
+      typeof title !== "string" ||
+      title.trim() === "" ||
+      !(PLATE_SECTION_TIERS as readonly string[]).includes(tier as string) ||
+      typeof guidance !== "string"
+    ) {
+      continue;
+    }
+    seen.add(id);
+    out.push({
+      id,
+      title: title.trim(),
+      tier: tier as PlateSectionTier,
+      guidance: guidance.trim(),
+      suggestedDirectives: normalizeSuggestedDirectives(
+        rec.suggestedDirectives,
+      ),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/**
+ * Floor-model tier order (THINK-188 KTD2): overrides may only raise. The
+ * resolution-time clamp `max(platform, override)` means a stale row that
+ * predates a validation tightening can never weaken the floor.
+ */
+const SECTION_TIER_RANK: Record<PlateSectionTier, number> = {
+  suggested: 0,
+  "required-if-material": 1,
+  required: 2,
+};
+
+function maxTier(a: PlateSectionTier, b: PlateSectionTier): PlateSectionTier {
+  return SECTION_TIER_RANK[a] >= SECTION_TIER_RANK[b] ? a : b;
+}
+
+interface NormalizedSectionOverride {
+  guidance?: string;
+  tier?: PlateSectionTier;
+  suggestedDirectives?: PlateSuggestedDirective[];
+}
+
+/** Defensive re-filter of stored sectionOverrides (filterPalette posture). */
+function normalizeSectionOverrides(
+  raw: unknown,
+): Record<string, NormalizedSectionOverride> | undefined {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const out: Record<string, NormalizedSectionOverride> = {};
+  for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!CONTRACT_SLUG_RE.test(id)) continue;
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    if (!rec) continue;
+    const override: NormalizedSectionOverride = {};
+    if (typeof rec.guidance === "string" && rec.guidance.trim() !== "") {
+      override.guidance = rec.guidance.trim();
+    }
+    if (
+      typeof rec.tier === "string" &&
+      (PLATE_SECTION_TIERS as readonly string[]).includes(rec.tier)
+    ) {
+      override.tier = rec.tier as PlateSectionTier;
+    }
+    const suggested = normalizeSuggestedDirectives(rec.suggestedDirectives);
+    if (suggested) override.suggestedDirectives = suggested;
+    if (Object.keys(override).length > 0) out[id] = override;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * The floor-model merge for platform plates (THINK-188 KTD1/R7): platform
+ * floor sections in platform order, each patched by its override (tier
+ * clamped raise-only), then tenant additions appended — dropping any addition
+ * whose id collides with a floor id (defense in depth; save gates reject the
+ * collision loudly).
+ */
+function mergeFloorSections(
+  floor: readonly PlateSectionSpec[] | undefined,
+  overrides: Record<string, NormalizedSectionOverride> | undefined,
+  additions: PlateSectionSpec[] | undefined,
+): PlateSectionSpec[] | undefined {
+  const floorIds = new Set((floor ?? []).map((s) => s.id));
+  const patched = (floor ?? []).map((section) => {
+    const override = overrides?.[section.id];
+    if (!override) return section;
+    return {
+      ...section,
+      guidance: override.guidance ?? section.guidance,
+      tier: override.tier ? maxTier(section.tier, override.tier) : section.tier,
+      suggestedDirectives:
+        override.suggestedDirectives ?? section.suggestedDirectives,
+    };
+  });
+  const appended = (additions ?? []).filter((s) => !floorIds.has(s.id));
+  const merged = [...patched, ...appended];
+  return merged.length > 0 ? merged : undefined;
+}
+
+/** Platform floor analyses + tenant additions (key collisions dropped). */
+function mergeFloorAnalyses(
+  floor: readonly PlateAnalysisSpec[] | undefined,
+  additions: PlateAnalysisSpec[] | undefined,
+): PlateAnalysisSpec[] | undefined {
+  const floorKeys = new Set((floor ?? []).map((a) => a.key));
+  const merged = [
+    ...(floor ?? []),
+    ...(additions ?? []).filter((a) => !floorKeys.has(a.key)),
+  ];
+  return merged.length > 0 ? merged : undefined;
+}
+
+function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: PlateAnalysisSpec[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const rec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : null;
+    if (!rec) continue;
+    const key = rec.key;
+    const op = rec.op;
+    const presentation =
+      rec.presentation !== null &&
+      typeof rec.presentation === "object" &&
+      !Array.isArray(rec.presentation)
+        ? (rec.presentation as Record<string, unknown>)
+        : null;
+    const directive = presentation?.directive;
+    if (
+      typeof key !== "string" ||
+      !CONTRACT_SLUG_RE.test(key) ||
+      seen.has(key) ||
+      typeof op !== "string" ||
+      !ANALYSIS_OPS.includes(op) ||
+      typeof directive !== "string" ||
+      !(ANALYSIS_PRESENTATION_DIRECTIVES as readonly string[]).includes(
+        directive,
+      )
+    ) {
+      continue;
+    }
+    const chartType = presentation?.chartType;
+    const params =
+      rec.params !== null &&
+      typeof rec.params === "object" &&
+      !Array.isArray(rec.params)
+        ? (rec.params as Record<string, unknown>)
+        : undefined;
+    seen.add(key);
+    out.push({
+      key,
+      op,
+      params,
+      presentation:
+        typeof chartType === "string" &&
+        (CHART_TYPES as readonly string[]).includes(chartType)
+          ? { directive, chartType }
+          : { directive },
+      source: "model-supplied",
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
 }
@@ -278,6 +514,8 @@ function resolveFromLayers(input: {
       tokensDark: { ...tenantPalette.dark, ...filterPalette(c.paletteDark) },
       allowedDirectives:
         normalizeAllowedDirectives(c.allowedDirectives) ?? "all",
+      sections: normalizeSections(c.sections),
+      analyses: normalizeAnalyses(c.analyses),
       origin: "tenant",
       hidden: row.hidden,
       customized: false,
@@ -306,6 +544,21 @@ function resolveFromLayers(input: {
     allowedDirectives:
       normalizeAllowedDirectives(c.allowedDirectives) ??
       platform.allowedDirectives,
+    // Floor-model layered merge (THINK-188 KTD1/R7): the platform contract is
+    // a floor — config `sections`/`analyses` are tenant ADDITIONS and
+    // `sectionOverrides` patches floor sections (tier raise-only) — so
+    // platform contract improvements keep flowing to customized tenants.
+    // (Replaces THINK-183's wholesale per-key override for platform rows;
+    // tenant-origin rows above keep full-contract semantics.)
+    sections: mergeFloorSections(
+      platform.sections,
+      normalizeSectionOverrides(c.sectionOverrides),
+      normalizeSections(c.sections),
+    ),
+    analyses: mergeFloorAnalyses(
+      platform.analyses,
+      normalizeAnalyses(c.analyses),
+    ),
     origin: "platform",
     hidden: row?.hidden ?? false,
     customized:
@@ -419,17 +672,52 @@ export async function listPlates(
   return resolved;
 }
 
-/** The agent-facing subset (R10): visible plates only, discovery fields only. */
+/**
+ * The agent-facing plate summary (R10 + THINK-183 KTD8/R14): discovery
+ * fields plus a terse contract projection — enforced section ids with their
+ * expected titles and tier, and declared analysis keys with their ops and
+ * the op's one-line input-shape hint. No guidance text (token cost scales
+ * with plate count; full guidance arrives in rejection diagnostics at point
+ * of use). Contract-less plates keep the original three-field shape.
+ */
+export interface PlateDispatchSummary {
+  slug: string;
+  displayName: string;
+  useFor: string;
+  sections?: Array<{
+    id: string;
+    title: string;
+    tier: "required" | "required-if-material";
+  }>;
+  analyses?: Array<{ key: string; op: string; inputHint: string }>;
+}
+
 export function visiblePlateSummaries(
   plates: readonly ResolvedPlate[],
-): Array<{ slug: string; displayName: string; useFor: string }> {
+): PlateDispatchSummary[] {
   return plates
     .filter((p) => !p.hidden)
-    .map((p) => ({
-      slug: p.slug,
-      displayName: p.displayName,
-      useFor: p.useFor,
-    }));
+    .map((p) => {
+      const sections = (p.sections ?? [])
+        .filter((s) => s.tier !== "suggested")
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          tier: s.tier as "required" | "required-if-material",
+        }));
+      const analyses = (p.analyses ?? []).map((a) => ({
+        key: a.key,
+        op: a.op,
+        inputHint: getAnalysisOp(a.op)?.inputHint ?? "",
+      }));
+      return {
+        slug: p.slug,
+        displayName: p.displayName,
+        useFor: p.useFor,
+        ...(sections.length > 0 ? { sections } : {}),
+        ...(analyses.length > 0 ? { analyses } : {}),
+      };
+    });
 }
 
 /**
@@ -463,9 +751,7 @@ export async function resolvePlateForEmission(
 export async function documentPlatesForDispatch(
   tenantId: string,
   store: PlateStore = drizzlePlateStore(),
-): Promise<
-  Array<{ slug: string; displayName: string; useFor: string }> | undefined
-> {
+): Promise<PlateDispatchSummary[] | undefined> {
   try {
     return visiblePlateSummaries(await listPlates(tenantId, store));
   } catch (err) {
@@ -500,6 +786,12 @@ cards:
   - { question: Overall health, answer: Strong, note: All commitments met this period, tone: acc }
   - { question: Attention needed, answer: One item, note: Renewal paperwork pending signature, tone: warn }
 \`\`\``,
+  timeline: `\`\`\`tw:timeline
+items:
+  - { label: Kickoff, caption: Goals and owners locked, date: Week 1 }
+  - { label: Rollout, caption: Phased team onboarding, current: true }
+  - { label: Full adoption, date: Q4 }
+\`\`\``,
   chart: `\`\`\`tw:chart
 type: bar
 title: Quarterly momentum
@@ -520,8 +812,10 @@ export interface PlateExemplar {
 
 /**
  * Assemble the representative document for a plate: fixed prose base plus one
- * block per allowed directive. Deterministic — same plate config, same
- * exemplar.
+ * block per allowed directive — and, for contract-bearing plates (THINK-183
+ * KTD7), a heading per manifest section and one example tw:analysis block per
+ * declared analysis, so the exemplar satisfies the plate's own contract and
+ * gate 2 compiles clean. Deterministic — same plate config, same exemplar.
  */
 export function buildPlateExemplar(plate: ResolvedPlate): PlateExemplar {
   const allowed =
@@ -532,6 +826,24 @@ export function buildPlateExemplar(plate: ResolvedPlate): PlateExemplar {
     .map((kind) => EXEMPLAR_DIRECTIVE_SNIPPETS[kind])
     .filter(Boolean);
 
+  // One example block per declared analysis: the op's corrected minimal
+  // example with the declared key substituted in.
+  const analysisBlocks = (plate.analyses ?? [])
+    .map((analysis) => {
+      const spec = getAnalysisOp(analysis.op);
+      if (!spec) return null;
+      const body = spec.example.replace("<declared key>", analysis.key);
+      return `\`\`\`tw:analysis\n${body}\n\`\`\``;
+    })
+    .filter((b): b is string => b !== null);
+
+  // A heading per manifest section (title verbatim — its slug is the section
+  // id by the KTD6 save-time consistency check) with representative prose.
+  const manifestSections = (plate.sections ?? []).map(
+    (section) =>
+      `## ${section.title}\n\nRepresentative content for this section. ${section.guidance}`,
+  );
+
   const markdownBody = `---
 date: Q3 2026
 context: Sample document — compiled to validate and preview this plate
@@ -541,13 +853,13 @@ context: Sample document — compiled to validate and preview this plate
 
 This is a representative document compiled with the **${plate.displayName}** plate. It exercises the elements a real document uses: prose, emphasis, lists, a table, and the plate's component vocabulary, so what you see is what documents in this plate will look like.
 
-${directiveBlocks.join("\n\n")}
+${[...directiveBlocks, ...analysisBlocks].join("\n\n")}
 
 - The first point carries the headline finding.
 - The second point adds supporting detail with \`inline code\`.
 - The third point notes an open question.
 
-## Detail by area
+${manifestSections.length > 0 ? `${manifestSections.join("\n\n")}\n\n` : ""}## Detail by area
 
 | Area | Status | Note |
 | --- | --- | --- |
@@ -565,6 +877,98 @@ A closing paragraph wraps up the narrative and points at the decision or action 
   return {
     title: `Acme Corp — Sample ${plate.displayName}`,
     abstract: `A representative ${plate.displayName} used to validate and preview the "${plate.slug}" plate.`,
+    markdownBody,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Contract preview exemplar (THINK-188 KTD4/R9) — the "see it in action"
+// document the operator previews. The SAVE gates keep compiling
+// buildPlateExemplar above byte-identically; this richer builder is display
+// only: every manifest section with representative prose, every declared
+// analysis computed from the op registry's curated sampleInputs, and one
+// waived-section demo (the last enforced section, heading omitted — the
+// SECTION_WAIVER_CONFLICT check rejects waiving a present section).
+// ---------------------------------------------------------------------------
+
+const WAIVER_DEMO_REASON =
+  "Preview example — this is how an explicitly waived section renders when its backing data is unavailable.";
+
+function yamlScalar(v: unknown): string {
+  if (typeof v === "string") return JSON.stringify(v);
+  return String(v);
+}
+
+/** Minimal deterministic YAML rendering for sampleInputs (flat + one list level). */
+function sampleInputsToYaml(inputs: Record<string, unknown>): string {
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(inputs)) {
+    if (Array.isArray(value)) {
+      lines.push(`${key}:`);
+      for (const entry of value) {
+        if (entry !== null && typeof entry === "object") {
+          const fields = Object.entries(entry as Record<string, unknown>)
+            .map(([k, v]) => `${k}: ${yamlScalar(v)}`)
+            .join(", ");
+          lines.push(`  - { ${fields} }`);
+        } else {
+          lines.push(`  - ${yamlScalar(entry)}`);
+        }
+      }
+    } else {
+      lines.push(`${key}: ${yamlScalar(value)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export function buildContractPreviewExemplar(
+  plate: ResolvedPlate,
+): PlateExemplar {
+  const base = buildPlateExemplar(plate);
+  const sections = plate.sections ?? [];
+  const analyses = plate.analyses ?? [];
+  if (sections.length === 0 && analyses.length === 0) return base;
+
+  const analysisBlocks = analyses
+    .map((analysis) => {
+      const spec = getAnalysisOp(analysis.op);
+      if (!spec) return null;
+      return `\`\`\`tw:analysis\nanalysis: ${analysis.key}\n${sampleInputsToYaml(spec.sampleInputs)}\n\`\`\``;
+    })
+    .filter((b): b is string => b !== null);
+
+  // Waiver demo target: the LAST enforced section, preferring
+  // required-if-material (waiving is its expected common case).
+  const enforced = sections.filter((s) => s.tier !== "suggested");
+  const demoTarget =
+    [...enforced].reverse().find((s) => s.tier === "required-if-material") ??
+    enforced.at(-1);
+
+  const sectionBlocks = sections.map((section) => {
+    if (section.id === demoTarget?.id) {
+      return `\`\`\`tw:waiver\nsection: ${section.id}\nreason: ${WAIVER_DEMO_REASON}\n\`\`\``;
+    }
+    return `## ${section.title}\n\nRepresentative content for this section. ${section.guidance}`;
+  });
+
+  const markdownBody = `---
+date: Q3 2026
+context: Contract preview — every declared section and analysis, in action
+---
+
+## Where things stand
+
+This preview compiles the **${plate.displayName}** plate's full content contract: every declared section with representative content, every declared analysis computed by the platform from realistic sample data${demoTarget ? ", and one explicitly waived section so you can see how honest omission renders" : ""}.
+
+${analysisBlocks.join("\n\n")}
+
+${sectionBlocks.join("\n\n")}
+`;
+
+  return {
+    title: base.title,
+    abstract: `The "${plate.slug}" plate's content contract in action — sections, computed analyses, and waiver rendering.`,
     markdownBody,
   };
 }

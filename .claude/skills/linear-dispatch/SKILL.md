@@ -15,23 +15,49 @@ One invocation of this skill is one heartbeat. Eric runs the loop with:
 
 ```text
 claude --model sonnet     # dispatcher session runs on Sonnet — routing is mechanical
-/loop 4m linear-dispatch
+/loop linear-dispatch     # no interval: self-paced, see Heartbeat Pacing
 ```
 
 from a dedicated Claude Code session at the repo root, with the Mac kept awake
 (`caffeinate -dims` in a spare terminal). The `/loop` recurring task expires
 after 7 days and must be restarted.
 
+## Heartbeat Pacing
+
+The loop is self-paced: at the end of every heartbeat, schedule the next
+wakeup based on what the factory is actually waiting on — never a fixed
+interval regardless of state. Pick the delay from this table (first matching
+row wins) and say in the wakeup reason what you are watching:
+
+| Factory state after this heartbeat                                                                             | Next heartbeat |
+| -------------------------------------------------------------------------------------------------------------- | -------------- |
+| Any live local worker, `waiting-on-deploy`, a pending phase transition, or a dead-worker relaunch you deferred | 240s           |
+| Issues enrolled but all waiting on human gates (`Needs User`, Requirements/Plan Review without `LFG`)          | 1200s          |
+| No candidate issues at all (nothing lane-labeled active, nothing in Verification)                              | 1800s          |
+
+Do not pick 300s or other values between 270s and 1200s: the prompt cache
+lives 5 minutes, so 240s keeps the dispatcher context warm while anything is
+in flight, and once nothing can change for a while a heartbeat should be rare
+enough to amortize the cold read. An idle factory must not poll every few
+minutes.
+
 ## Model Policy
 
 The dispatcher runs on Sonnet. Workers get an explicit `--model` per phase —
 never inherit the session default:
 
-| Phase                              | `--model` | Notes                                                               |
-| ---------------------------------- | --------- | ------------------------------------------------------------------- |
-| Brainstorm, Plan, Implement/Repair | `fable`   | Architect-as-orchestrator: delegate units to cheaper lanes (below). |
-| Verify (dogfood), Debug            | `opus`    | Judgment-heavy; browser + evidence work.                            |
-| Compound                           | `sonnet`  | Mechanical distillation.                                            |
+Every worker also gets `--max-budget-usd` — a runaway backstop, not a target.
+A worker killed by its budget shows the budget error in its log tail and is
+handled by the normal dead-worker sweep (relaunch from the Progress document).
+If the same phase hits its cap twice in a row, do not relaunch a third time:
+record it as a blocker per the question protocol instead.
+
+| Phase                   | `--model` | `--max-budget-usd` | Notes                                                               |
+| ----------------------- | --------- | ------------------ | ------------------------------------------------------------------- |
+| Brainstorm, Plan        | `fable`   | 25                 | Architect-as-orchestrator: delegate units to cheaper lanes (below). |
+| Implement/Repair        | `fable`   | 100                | Same orchestration doctrine; largest phase.                         |
+| Verify (dogfood), Debug | `opus`    | 50                 | Judgment-heavy; browser + evidence work.                            |
+| Compound                | `sonnet`  | 10                 | Mechanical distillation.                                            |
 
 Fable workers must act as architects, not typists: load the fable-advisor
 orchestration doctrine and delegate mechanical implementation to subagent
@@ -57,6 +83,11 @@ with the missing-skill-resource blocker and stop. Do not fall back to memory.
 
 ## Dispatcher Loop
 
+0. Run `scripts/factory-status.sh` (one Bash call). It reports every recorded
+   local worker (ALIVE/DEAD from pid sidecars, log size/age, log tail), the
+   `auto-*` worktrees, and orphan logs. Use this snapshot as the local-worker
+   evidence for the liveness sweep and the duplicate-worker gate below instead
+   of ad-hoc `ps`/`ls`/`worktree list` reasoning.
 1. Load Linear MCP tools (issues, comments, documents, labels).
 2. Find active ThinkWork-team issues labeled `Claude`, plus **all issues in
    `Verification` status regardless of lane label** — Verification is owned by
@@ -110,15 +141,18 @@ When a route requires a worker:
      -b auto/<issue-slug>-<phase> origin/main
    ```
 
-4. Launch the worker in the background and capture the pid, passing the
-   phase's model from the Model Policy table (never rely on the session
-   default):
+4. Launch the worker in the background, passing the phase's model and budget
+   cap from the Model Policy table (never rely on the session default), and
+   write the pid sidecar next to the log — `scripts/factory-status.sh` reads
+   it on every later heartbeat:
 
    ```bash
    cd <worktree> && nohup claude -p "$(cat <prompt-file>)" \
      --model <phase-model> \
+     --max-budget-usd <phase-budget> \
      --dangerously-skip-permissions \
-     > ~/.thinkwork-factory/logs/<ISSUE_ID>-<phase>-<ts>.log 2>&1 & echo $!
+     > ~/.thinkwork-factory/logs/<ISSUE_ID>-<phase>-<ts>.log 2>&1 &
+   echo $! > ~/.thinkwork-factory/logs/<ISSUE_ID>-<phase>-<ts>.pid
    ```
 
 5. Record the worker id as `pid:<PID> log:<log-path> worktree:<path>`.
@@ -140,9 +174,10 @@ second worker for the same issue in that heartbeat.
 ## Worker Liveness And Continuation
 
 A Claude worker's durable state is the Progress document and handoff
-comments, not the process. On each heartbeat, for each recorded worker id:
+comments, not the process. On each heartbeat, for each recorded worker id
+(liveness comes from the step-0 `factory-status.sh` snapshot):
 
-- `ps -p <PID>` alive and the log growing → `active-worker`; do not launch.
+- ALIVE and the log growing → `active-worker`; do not launch.
 - Process gone and the phase's exit evidence (merged PR, status move, posted
   handoff, verdict) is recorded in Linear → the phase completed; route the new
   status normally.
@@ -156,10 +191,12 @@ comments, not the process. On each heartbeat, for each recorded worker id:
 Before creating any worker, prove there is no existing active worker for the
 same issue and phase:
 
-1. Check every recorded `pid:` in Linear comments with `ps -p` and its log
-   file's recency.
-2. Run `git -C /Users/ericodom/Projects/thinkwork worktree list` and inspect
-   `~/.thinkwork-factory/logs/` for the issue id or title slug.
+1. Cross-check every recorded `pid:` in Linear comments against the step-0
+   `factory-status.sh` snapshot (ALIVE/DEAD state and log recency). A pid
+   recorded in Linear but absent from the snapshot must still be checked with
+   `ps -p` directly.
+2. Scan the snapshot's worktree and orphan-log sections for the issue id or
+   title slug.
 3. For issues entering Verification from the Codex lane, validate recorded
    Codex `threadId`s are inactive (via Codex MCP `read_thread` when available;
    otherwise treat a recent unresolved Codex launch comment as active and

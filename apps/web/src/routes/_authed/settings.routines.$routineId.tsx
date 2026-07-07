@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { OperatorGuard } from "@/components/settings/OperatorGuard";
 import { parseStatusFilter } from "@/components/routines/ExecutionList";
-import { RoutineWorkflowDetailRedirect } from "@/components/workflows/RoutineWorkflowRedirects";
+import { RoutineDetailRouter } from "@/components/workflows/RoutineWorkflowRedirects";
 
 export const Route = createFileRoute("/_authed/settings/routines/$routineId")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -15,7 +15,7 @@ function RoutineDetailCompatibilityRoute() {
   const { routineId } = Route.useParams();
   return (
     <OperatorGuard>
-      <RoutineWorkflowDetailRedirect routineId={routineId} />
+      <RoutineDetailRouter routineId={routineId} tab="code" />
     </OperatorGuard>
   );
 }

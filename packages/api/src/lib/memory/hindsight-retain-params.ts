@@ -182,6 +182,31 @@ export function buildHighConfidenceFactRetainOptions(input: {
   });
 }
 
+/**
+ * Emitted document artifacts (THINK-152 / THINK-193 P3): the markdown digest +
+ * colophon of every `emit_document` is retained as a first-class memory
+ * document. Space-assigned documents land in the space bank; everything else
+ * is personal to the acting user.
+ */
+export function buildDocumentArtifactRetainOptions(input: {
+  spaceId?: string | null;
+  timestamp?: string | null;
+}): HindsightRetainOptions {
+  const scopeTags = input.spaceId
+    ? [`space:${input.spaceId}`, "scope:space"]
+    : ["scope:personal"];
+  return retainOptions({
+    timestamp: toIsoTimestamp(input.timestamp) ?? "unset",
+    tags: ["source:document", "surface:pi", "scope:document", ...scopeTags],
+    documentTags: ["source:document", "scope:document", ...scopeTags],
+    observationScopes: [
+      ["source:document"],
+      ["scope:document"],
+      ...scopeTags.map((tag) => [tag]),
+    ],
+  });
+}
+
 export function buildJournalImportRetainOptions(input: {
   timestamp?: unknown;
 }): HindsightRetainOptions {

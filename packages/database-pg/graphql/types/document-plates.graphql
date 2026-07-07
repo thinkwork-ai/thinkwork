@@ -31,6 +31,13 @@ type DocumentPlate {
   # The tenant's raw delta config for this plate (drives the editor form and
   # reset); null when the plate is untouched platform default.
   overrides: AWSJSON
+  # THINK-188: the RESOLVED content contract. Sections is a JSON array of
+  # { id, title, tier, guidance, suggestedDirectives?, source, overridden? }
+  # where source is "platform" (floor) or "tenant" (addition) and overridden
+  # flags which fields a tenant patched on a floor section. Null = none.
+  sections: AWSJSON
+  # JSON array of { key, op, presentation, source }. Null = none.
+  analyses: AWSJSON
 }
 
 type TenantDocumentPalette {
@@ -59,13 +66,19 @@ input DocumentPlateDraftConfigInput {
   paletteLight: AWSJSON
   paletteDark: AWSJSON
   allowedDirectives: [String!]
+  # THINK-188 contract fields — tenant plates: the full contract; platform
+  # plates: additions, with sectionOverrides patching floor sections.
+  sections: AWSJSON
+  analyses: AWSJSON
+  sectionOverrides: AWSJSON
 }
 
 input SaveDocumentPlateInput {
   tenantId: ID
   slug: String!
-  # Platform plates accept palette/hidden only (R4); tenant plates accept the
-  # full set. displayName + useFor are required when creating a tenant plate.
+  # Platform plates accept palette, hidden, and content-contract deltas under
+  # the floor rules (THINK-188 R8); identity fields stay tenant-plate-only.
+  # displayName + useFor are required when creating a tenant plate.
   displayName: String
   useFor: String
   eyebrow: String
@@ -74,6 +87,10 @@ input SaveDocumentPlateInput {
   paletteDark: AWSJSON
   allowedDirectives: [String!]
   hidden: Boolean
+  # THINK-188 contract fields (JSON arrays / object, validated server-side).
+  sections: AWSJSON
+  analyses: AWSJSON
+  sectionOverrides: AWSJSON
 }
 
 input UpdateTenantDocumentPaletteInput {

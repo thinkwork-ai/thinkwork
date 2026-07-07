@@ -56,6 +56,19 @@ export function formatDateTime(value: unknown): string {
   return date.toLocaleString();
 }
 
+/** Compact list-surface timestamp, e.g. "7/6, 2:24 PM". */
+export function formatShortDateTime(value: unknown): string {
+  if (!value) return "-";
+  const date = new Date(value as string);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function formatDuration(start?: string | null, end?: string | null) {
   if (!start || !end) return "-";
   const ms = new Date(end).getTime() - new Date(start).getTime();

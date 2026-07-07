@@ -1,10 +1,4 @@
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { Button } from "@thinkwork/ui";
@@ -13,6 +7,7 @@ import { AdminAppletsQuery } from "@/lib/applet-admin-queries";
 import { type AppletPreviewNode, toAppletPreview } from "@/lib/app-artifacts";
 import { computerArtifactRoute } from "@/lib/computer-routes";
 import { AppletsQuery, TenantArtifactsListQuery } from "@/lib/graphql-queries";
+import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { ArtifactsTable } from "./ArtifactsTable";
 import { ArtifactsToolbar } from "./ArtifactsToolbar";
 import {
@@ -133,14 +128,28 @@ function LiveArtifactsListBody({
   const operatorReady = roleResolved && isOperator;
 
   const [userIdFilter, setUserIdFilter] = useState("");
-  // R14: canvas rows default to saved-only; the toggle flips includeDrafts.
-  const [includeDrafts, setIncludeDrafts] = useState(false);
-  // Debounce the value that drives the query so a typed user ID issues ONE
-  // admin request, not one per keystroke. The input itself stays instant.
-  const trimmedUserId = useDebouncedValue(userIdFilter.trim(), 250);
+  const trimmedUserId = userIdFilter.trim();
   // tenantId always comes from TenantContext, never a route param or
   // user-editable field — the server still re-enforces requireTenantAdmin.
   const filterActive = operatorReady && !!tenantId && trimmedUserId.length > 0;
+
+  // Tenant members feed the operator "User" filter picker (value = user id).
+  const [membersResult] = useQuery({
+    query: SettingsTenantMembersQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !operatorReady || !tenantId,
+  });
+  const userOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    for (const member of membersResult.data?.tenantMembers ?? []) {
+      const user = member.user;
+      if (!user?.id) continue;
+      options.set(user.id, user.name || user.email || user.id);
+    }
+    return [...options.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [membersResult.data?.tenantMembers]);
 
   const [defaultResult] = useQuery<AppletsResult>({
     query: AppletsQuery,
@@ -160,10 +169,11 @@ function LiveArtifactsListBody({
   // Every artifact kind (living canvases, HTML documents, plugin-minted types)
   // joins the list via the tenant-wide artifacts query. Suppressed while the
   // operator user-ID filter is active (that view is applet-scoped by user).
+  // Draft canvases stay hidden (includeDrafts defaults off server-side).
   const [artifactsResult] = useQuery<{ artifacts?: ArtifactListNode[] | null }>(
     {
       query: TenantArtifactsListQuery,
-      variables: { tenantId: tenantId ?? "", includeDrafts },
+      variables: { tenantId: tenantId ?? "" },
       requestPolicy: "cache-and-network",
       pause: !tenantId || filterActive,
     },
@@ -195,9 +205,9 @@ function LiveArtifactsListBody({
       showUserFilter={operatorReady}
       userIdFilter={userIdFilter}
       onUserIdFilterChange={setUserIdFilter}
+      userOptions={userOptions}
+      usersLoading={membersResult.fetching && !membersResult.data}
       filterActive={filterActive}
-      includeDrafts={includeDrafts}
-      onIncludeDraftsChange={setIncludeDrafts}
       detailPathFor={detailPathFor}
       headerSlot={headerSlot}
     />
@@ -211,9 +221,9 @@ function ArtifactsListBodyView({
   showUserFilter,
   userIdFilter,
   onUserIdFilterChange,
+  userOptions,
+  usersLoading,
   filterActive,
-  includeDrafts,
-  onIncludeDraftsChange,
   detailPathFor,
   headerSlot,
 }: {
@@ -223,9 +233,9 @@ function ArtifactsListBodyView({
   showUserFilter: boolean;
   userIdFilter: string;
   onUserIdFilterChange: (value: string) => void;
+  userOptions?: Array<{ value: string; label: string }>;
+  usersLoading?: boolean;
   filterActive: boolean;
-  includeDrafts?: boolean;
-  onIncludeDraftsChange?: (value: boolean) => void;
   detailPathFor: (id: string) => string;
   headerSlot?: ReactNode;
 }) {
@@ -258,7 +268,7 @@ function ArtifactsListBodyView({
       ? "Loading artifacts…"
       : items.length === 0
         ? filterActive
-          ? "No artifacts found for this user ID."
+          ? "No artifacts found for this user."
           : "Ask ThinkWork to create an artifact and it will appear here."
         : "No artifacts match your filters.";
 
@@ -271,8 +281,8 @@ function ArtifactsListBodyView({
         showUserFilter={showUserFilter}
         userIdFilter={userIdFilter}
         onUserIdFilterChange={onUserIdFilterChange}
-        includeDrafts={includeDrafts}
-        onIncludeDraftsChange={onIncludeDraftsChange}
+        userOptions={userOptions}
+        usersLoading={usersLoading}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-4">
         {showLoadingShell ? (
@@ -299,18 +309,6 @@ function ArtifactsListBodyView({
       </div>
     </div>
   );
-}
-
-// Returns `value` delayed by `delayMs`, collapsing rapid changes (e.g. typing
-// in the operator user-ID filter) into a single settled value so we issue one
-// query per pause instead of one per keystroke.
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
 }
 
 export function ArtifactsCreateAction() {

@@ -4,25 +4,42 @@ import { ArtifactsToolbar } from "./ArtifactsToolbar";
 
 afterEach(cleanup);
 
-describe("ArtifactsToolbar include-drafts toggle", () => {
-  it("is hidden when no onIncludeDraftsChange handler is supplied", () => {
+describe("ArtifactsToolbar", () => {
+  it("renders the collapsed search affordance and no drafts toggle", () => {
     render(<ArtifactsToolbar search="" onSearchChange={vi.fn()} />);
+    expect(
+      screen.getByRole("button", { name: "Search artifacts" }),
+    ).toBeTruthy();
     expect(screen.queryByTestId("artifacts-include-drafts")).toBeNull();
   });
 
-  it("defaults off (saved-only) and toggles includeDrafts on change", () => {
-    const onIncludeDraftsChange = vi.fn();
+  it("expands search and forwards typed values", () => {
+    const onSearchChange = vi.fn();
+    render(<ArtifactsToolbar search="" onSearchChange={onSearchChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search artifacts" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Search artifacts" }),
+      {
+        target: { value: "report" },
+      },
+    );
+    expect(onSearchChange).toHaveBeenCalledWith("report");
+  });
+
+  it("hides the operator user filter for non-operators", () => {
+    render(<ArtifactsToolbar search="" onSearchChange={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Filter" })).toBeNull();
+  });
+
+  it("shows the operator user token filter when enabled", () => {
     render(
       <ArtifactsToolbar
         search=""
         onSearchChange={vi.fn()}
-        includeDrafts={false}
-        onIncludeDraftsChange={onIncludeDraftsChange}
+        showUserFilter
+        onUserIdFilterChange={vi.fn()}
       />,
     );
-    const toggle = screen.getByTestId("artifacts-include-drafts-switch");
-    expect(toggle.getAttribute("data-state")).toBe("unchecked");
-    fireEvent.click(toggle);
-    expect(onIncludeDraftsChange).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "Filter" })).toBeTruthy();
   });
 });

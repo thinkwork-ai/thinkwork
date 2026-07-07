@@ -170,7 +170,19 @@ The scriptless rendering containment level for Document Artifacts: the sandboxed
 The emission-time preflight validator for Document Artifacts: default-deny rejection of non-self-contained HTML (any URL-resolving attribute or CSS value that is not `data:`, `#fragment`, or `mailto:`), any `<script>` at the document tier, oversize bodies, missing dark-mode support, and renders not authored on the matching Genre Plate — with model-actionable diagnostics so the agent self-corrects in-turn. Named after SkillSpector, the skill-publish trust gate.
 
 ### Genre Plate
-A complete exemplar document shipped in the document-composer skill's references, one per genre, that the agent authors on when composing — pattern-book plates rather than prose style rules. Plates are enforced, not suggested: each carries a genre marker and DocSpector rejects a render authored off-plate, so an agent cannot ship an improvised document. The v1 plates encode the house style (header anatomy, inline-SVG visuals, dual-theme tokens, print CSS) with full self-containment (system fonts).
+A registered document genre's visual and structural identity: display name, use-for description, eyebrow, title suffix, palette tokens, and directive availability. Since the Document Compositor (THINK-154), a plate is compiler-owned configuration — the agent never authors on it; the server compiles every render from it, so plate conformance holds by construction. The exemplar-HTML plates shipped in the document-composer skill and DocSpector's off-plate rejection are the retired v1 mechanism. Shipped (THINK-153): plates are tenant-scoped registry rows — operators create and edit them as structured config, never freehand HTML. Target state (THINK-182/183): plates also carry a content contract — a Section Manifest and Declared Analyses — so a plate shapes what the agent authors, not just how it looks.
+
+### Section Manifest
+A plate's ordered declaration of the sections a document in that genre should contain. Each section carries a stable id, title, guidance text, optional suggested directives, and a tier: `required` (silent omission is a preflight rejection), `required-if-material` (required, but waiver-on-thin-data is the expected common case), or `suggested` (never blocks or warns). Section presence is checked against the compositor's id-anchored heading seam. A plate with no manifest behaves as pure styling config (THINK-183).
+
+### Declared Analysis
+A calculation a plate names as part of its content contract, referencing a typed op from the closed, platform-versioned analysis op registry (funnel conversion, ratio, variance-vs-prior, etc. — the calc-layer sibling of the Directive Block vocabulary). The server computes the result deterministically from raw inputs the model supplies at emission (`model-supplied` source, v1) and directives render the computed value by key — the model narrates numbers it was handed, never numbers it invented. The declared `source` seam accommodates a future binding-backed rung once document data bindings exist (THINK-183).
+
+### Suitability Waiver
+The explicit escape hatch for a required section the model cannot back with data: the model waives the section with a stated reason at emission. The waiver renders as a visible omission notice at the section's position in the document body, is recorded in the provenance footer, and is persisted queryably per plate (feeding conformance scoring). A waivered document still reaches `final` — omission is honest and loud, never silent, and never stalls recurring runs (THINK-183).
+
+### Platform Floor
+The governance rule for tenant customization of a platform plate's content contract (THINK-188): the platform's required sections and declared analyses are a floor — tenants can add sections and analyses, rewrite a floor section's guidance, raise its tier, and add suggested widgets, but never remove or retitle a platform section (the title is the enforcement key), lower its tier, or remove a platform analysis. Enforced server-side at save; contract merge layers tenant deltas over the floor so platform contract improvements keep propagating to customized tenants. Tenant-created plates have no floor — full contract ownership.
 
 ## Skills Distribution
 
@@ -185,6 +197,15 @@ The copy step from Skill Catalog to an agent's workspace: installing a skill wri
 
 ### Default Skill Seeding
 The deploy-time process that publishes a curated allowlist of platform skills through the Skill Trust Pipeline into every tenant's Skill Catalog, auto-installing designated ones on the platform agent. Only allowlisted skills participate — a default skill absent from the allowlist never propagates, regardless of content changes.
+
+### Document Compositor
+The deterministic server-side compiler (v2 of the document pipeline, THINK-154) that turns an agent-authored markdown body — frontmatter, prose, and Directive Blocks — into the house-style HTML render at emission. Removes HTML from the model's hands entirely: identical input compiles to identical output, plate conformance holds by construction rather than by DocSpector rejection, and the same function powers corpus backfill.
+
+### Directive Block
+A fenced block in a compositor-authored markdown body carrying declarative data for a house component — a chart, stats strip, or verdict grid — from a versioned, closed, per-genre vocabulary. The model writes the data; the compiler renders the pixels. Unknown directives are a compile-time rejection, and there is no raw-HTML escape block. Because directives live in the canonical digest, agents and mobile read them as legible fenced data.
+
+### House Chart Renderer
+The compositor's deterministic SVG chart engine: palette-locked to the house tokens, dark-mode aware, scriptless by construction. Renders chart Directive Blocks at compile time so every document's visuals match. Launch catalog: bar, line, donut, stat-strip, sparkline, meter, funnel.
 
 ## Flagged ambiguities
 

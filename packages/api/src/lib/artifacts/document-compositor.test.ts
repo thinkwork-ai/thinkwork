@@ -14,6 +14,7 @@ import {
   type DirectiveEngine,
 } from "./document-compositor.js";
 import { runDocumentPreflight } from "./document-preflight.js";
+import { DOCUMENT_PLATE_CSS } from "./document-templates.js";
 import { CORE_PLATE_SLUGS } from "./plate-definitions.js";
 import { resolvePlatformPlate } from "./plate-registry.js";
 
@@ -106,6 +107,67 @@ describe("compileDocument", () => {
       }
       expect(preflight.ok).toBe(true);
     }
+  });
+
+  it("compiles tw:timeline onto the report plate and preserves sanitizer-safe classes", () => {
+    const result = compileDocument({
+      plate: REPORT_PLATE,
+      title: "Launch — Report",
+      abstract: "Milestone sequence.",
+      markdownBody: `## Timeline
+
+\`\`\`tw:timeline
+items:
+  - { label: Kickoff, caption: Contract signed }
+  - { label: Build, caption: Core implementation, current: true }
+  - { label: Launch, date: Q4 }
+\`\`\`
+`,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain('<div class="timeline">');
+    expect(result.renderHtml).toContain('class="t-item current"');
+    expect(result.renderHtml).toContain("t-dot");
+    expect(result.renderHtml).toContain(".timeline{");
+    const preflight = runDocumentPreflight({
+      renderHtml: result.renderHtml,
+      digestMarkdown: "# d",
+    });
+    expect(preflight.ok).toBe(true);
+  });
+
+  it("timeline track segments span the item's horizontal padding so adjacent segments meet (THINK-205 repair)", () => {
+    // R5/AE1: the row must read as ONE continuous line through all dots. Each
+    // item draws its own segment inside .t-track, but .t-item carries
+    // horizontal padding — unless the segment extends across that padding on
+    // both sides, adjacent segments stop short and the track shows gaps.
+    const cssRule = (selector: string) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = DOCUMENT_PLATE_CSS.match(
+        new RegExp(`(?:^|\\n|\\})${escaped}\\{([^}]*)\\}`),
+      );
+      expect(match, `missing CSS rule ${selector}`).not.toBeNull();
+      return match![1];
+    };
+    const pxValue = (decl: string, prop: string) => {
+      const match = decl.match(
+        new RegExp(`(?:^|;)${prop}:(-?[\\d.]+)(?:px)?(?:;|$)`),
+      );
+      return match ? Number(match[1]) : null;
+    };
+    const itemPadding =
+      cssRule(".timeline .t-item").match(/padding:0 ([\d.]+)px/)?.[1] ?? "0";
+    const track = cssRule(".timeline .t-track::before");
+    expect(pxValue(track, "left")).toBeLessThanOrEqual(-Number(itemPadding));
+    expect(pxValue(track, "right")).toBeLessThanOrEqual(-Number(itemPadding));
+    // End-trim stays: the outer halves are still cut at the first/last dot.
+    expect(cssRule(".timeline .t-item:first-child .t-track::before")).toContain(
+      "left:50%",
+    );
+    expect(cssRule(".timeline .t-item:last-child .t-track::before")).toContain(
+      "right:50%",
+    );
   });
 
   it("drops unknown frontmatter keys with a warning naming the allowed set (KTD7)", () => {
@@ -313,5 +375,443 @@ describe("plate-driven compilation (THINK-153)", () => {
         "## Body\n\n```tw:stats\nitems:\n  - { value: 1, label: a }\n```\n",
     });
     expect(allowed.ok).toBe(true);
+  });
+
+  it("plate excluding timeline rejects it with DIRECTIVE_GENRE_RESTRICTED (AE5)", () => {
+    const result = compileDocument({
+      plate: tenantPlate,
+      title: "T",
+      abstract: "",
+      markdownBody:
+        "## Body\n\n```tw:timeline\nitems:\n  - { label: Kickoff }\n  - { label: Build, current: true }\n  - { label: Launch }\n```\n",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics[0].code).toBe("DIRECTIVE_GENRE_RESTRICTED");
+    }
+  });
+});
+
+describe("tw:analysis — server-computed analyses (THINK-183 U3)", () => {
+  const ANALYSES = [
+    {
+      key: "pipeline-conversion",
+      op: "funnel_conversion",
+      presentation: { directive: "chart", chartType: "funnel" as const },
+    },
+    {
+      key: "quota-attainment",
+      op: "ratio_pct",
+      presentation: { directive: "stats" },
+    },
+  ];
+  const ANALYSIS_PLATE: CompositorPlate = {
+    ...REPORT_PLATE,
+    analyses: ANALYSES,
+  };
+  const FUNNEL_BLOCK = `\`\`\`tw:analysis
+analysis: pipeline-conversion
+stages:
+  - { label: Leads, count: 120 }
+  - { label: Qualified, count: 80 }
+  - { label: Proposal, count: 30 }
+  - { label: Won, count: 12 }
+\`\`\``;
+  const DIGEST = `## Summary
+
+Pipeline narrative narrated from computed numbers.
+
+${FUNNEL_BLOCK}
+
+## Recommendations
+
+Keep qualifying harder.
+`;
+
+  it("compiles a funnel_conversion block with server-computed rates in the render (AE2)", () => {
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "Pipeline — Report",
+      abstract: "Computed funnel.",
+      markdownBody: DIGEST,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Server-computed transition rates appear (labels in SVG + fallback table).
+    expect(result.renderHtml).toContain("66.7%");
+    expect(result.renderHtml).toContain("37.5%");
+    expect(result.renderHtml).toContain("Overall conversion 10%");
+    expect(result.renderHtml).toContain(
+      "<details><summary>Chart data</summary>",
+    );
+    const preflight = runDocumentPreflight({
+      renderHtml: result.renderHtml,
+      digestMarkdown: DIGEST,
+    });
+    expect(preflight.ok).toBe(true);
+  });
+
+  it("model-authored numbers cannot leak: extraneous fields are ignored, rendered values are computed", () => {
+    const digest = `## Summary
+
+\`\`\`tw:analysis
+analysis: pipeline-conversion
+rates: [99, 98, 97]
+stages:
+  - { label: Leads, count: 120 }
+  - { label: Won, count: 12 }
+\`\`\`
+`;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "Pipeline — Report",
+      abstract: "x",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain("10%");
+    expect(result.renderHtml).not.toContain("99%");
+  });
+
+  it("a stats-presented analysis renders computed stat tiles", () => {
+    const digest = `## Summary
+
+\`\`\`tw:analysis
+analysis: quota-attainment
+numerator: 82
+denominator: 100
+label: Quota attainment
+\`\`\`
+`;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "Rep — Report",
+      abstract: "x",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain('<div class="stats">');
+    expect(result.renderHtml).toContain("82%");
+  });
+
+  it("unknown analysis key rejects, listing the plate's declared keys", () => {
+    const digest = `\`\`\`tw:analysis
+analysis: churn-rate
+stages:
+  - { label: A, count: 2 }
+  - { label: B, count: 1 }
+\`\`\``;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].message).toContain("pipeline-conversion");
+    expect(result.diagnostics[0].message).toContain("quota-attainment");
+  });
+
+  it("raw inputs failing the op's shape reject with the op diagnostic and corrected example", () => {
+    const digest = `\`\`\`tw:analysis
+analysis: pipeline-conversion
+stages:
+  - { label: Leads, count: 120 }
+\`\`\``;
+    const result = compileDocument({
+      plate: ANALYSIS_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].message).toContain("2–24");
+    expect(result.diagnostics[0].message).toContain(
+      "Corrected minimal example",
+    );
+    expect(result.diagnostics[0].location).toBe("tw:analysis");
+  });
+
+  it("tw:analysis on a plate declaring no analyses rejects saying so (AE4-adjacent)", () => {
+    const result = compileDocument({
+      plate: REPORT_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: DIGEST,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].message).toContain("declares no analyses");
+  });
+
+  it("a plate with analyses but no manifest can still use tw:analysis (contract halves independent)", () => {
+    const plate: CompositorPlate = { ...REPORT_PLATE, analyses: ANALYSES };
+    expect(plate.sections).toBeUndefined();
+    const result = compileDocument({
+      plate,
+      title: "t",
+      abstract: "a",
+      markdownBody: DIGEST,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("tw:analysis bypasses a restricted allowedDirectives list (KTD11 structural directive)", () => {
+    const proposalShaped: CompositorPlate = {
+      ...REPORT_PLATE,
+      slug: "proposal",
+      allowedDirectives: ["stats", "verdict-grid"],
+      analyses: [
+        {
+          key: "quota-attainment",
+          op: "ratio_pct",
+          presentation: { directive: "stats" },
+        },
+      ],
+    };
+    const digest = `## Summary
+
+\`\`\`tw:analysis
+analysis: quota-attainment
+numerator: 3
+denominator: 4
+\`\`\`
+`;
+    const result = compileDocument({
+      plate: proposalShaped,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain("75%");
+    // The plate gate still applies to ordinary directives.
+    const chartResult = compileDocument({
+      plate: proposalShaped,
+      title: "t",
+      abstract: "a",
+      markdownBody:
+        "```tw:chart\ntype: bar\ntitle: x\nseries:\n  - { label: a, value: 1 }\n```",
+    });
+    expect(chartResult.ok).toBe(false);
+  });
+
+  it("plate-declared params win over model-supplied inputs", () => {
+    const plate: CompositorPlate = {
+      ...REPORT_PLATE,
+      analyses: [
+        {
+          key: "top-accounts",
+          op: "top_n",
+          params: { n: 1 },
+          presentation: { directive: "chart", chartType: "bar" },
+        },
+      ],
+    };
+    const digest = `\`\`\`tw:analysis
+analysis: top-accounts
+n: 24
+items:
+  - { label: Acme, value: 10 }
+  - { label: Globex, value: 20 }
+\`\`\``;
+    const result = compileDocument({
+      plate,
+      title: "t",
+      abstract: "a",
+      markdownBody: digest,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain("Globex");
+    // n: 1 (plate param) beat n: 24 (model input) — only one row in the table.
+    expect(result.renderHtml).not.toMatch(/<td>Acme<\/td>/);
+  });
+});
+
+describe("tw:waiver + section enforcement (THINK-183 U4)", () => {
+  const MANIFEST_PLATE: CompositorPlate = {
+    ...REPORT_PLATE,
+    sections: [
+      {
+        id: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material",
+        guidance: "Stage-by-stage funnel with conversion rates.",
+        suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+      },
+      {
+        id: "quota-attainment",
+        title: "Quota Attainment",
+        tier: "required",
+        guidance: "Attainment vs target for the period.",
+      },
+      {
+        id: "coaching-notes",
+        title: "Coaching Notes",
+        tier: "suggested",
+        guidance: "Specific behaviors to keep or change.",
+      },
+    ],
+  };
+  const QUOTA_SECTION = `## Quota Attainment
+
+Attainment held at 82% of target.`;
+  const PIPELINE_SECTION = `## Pipeline Health
+
+Funnel narrative goes here.`;
+  const WAIVER_BLOCK = `\`\`\`tw:waiver
+section: pipeline-health
+reason: No stage-level pipeline data is connected for this rep.
+\`\`\``;
+
+  function compileWith(markdownBody: string, plate = MANIFEST_PLATE) {
+    return compileDocument({
+      plate,
+      title: "Rep Review — Report",
+      abstract: "Representative review.",
+      markdownBody,
+    });
+  }
+
+  it("silent omission of a required section rejects, naming section, guidance, and suggested directives (AE1/F3)", () => {
+    const result = compileWith(`${QUOTA_SECTION}\n`);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics).toHaveLength(1);
+    const d = result.diagnostics[0];
+    expect(d.code).toBe("REQUIRED_SECTION_MISSING");
+    expect(d.location).toBe("section:pipeline-health");
+    expect(d.message).toContain("Pipeline Health");
+    expect(d.message).toContain("Stage-by-stage funnel");
+    expect(d.message).toContain("tw:chart (funnel)");
+    expect(d.message).toContain("tw:waiver");
+  });
+
+  it("an explicit waiver passes: omission notice in place, footer line, waiver on the result (F2)", () => {
+    const result = compileWith(`${QUOTA_SECTION}\n\n${WAIVER_BLOCK}\n`);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.waivers).toEqual([
+      {
+        sectionId: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material",
+        reason: "No stage-level pipeline data is connected for this rep.",
+      },
+    ]);
+    expect(result.renderHtml).toContain("Section omitted");
+    expect(result.renderHtml).toContain(
+      "Section waived: Pipeline Health — No stage-level pipeline data",
+    );
+    const preflight = runDocumentPreflight({
+      renderHtml: result.renderHtml,
+      digestMarkdown: QUOTA_SECTION,
+    });
+    expect(preflight.ok).toBe(true);
+  });
+
+  it("authoring the manifest title satisfies the check; a different heading slug does not", () => {
+    const good = compileWith(`${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n`);
+    expect(good.ok).toBe(true);
+    const bad = compileWith(
+      `${QUOTA_SECTION}\n\n## Funnel Overview\n\nWrong slug.\n`,
+    );
+    expect(bad.ok).toBe(false);
+  });
+
+  it("required-if-material shares the code but names waiving as the expected path; suggested is never checked (R11)", () => {
+    const result = compileWith(`${PIPELINE_SECTION}\n`);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // quota-attainment (required) missing; coaching-notes (suggested) silent.
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0].location).toBe("section:quota-attainment");
+    // The required-if-material diagnostic names waiving as expected:
+    const rim = compileWith(`${QUOTA_SECTION}\n`);
+    if (rim.ok) return;
+    expect(rim.diagnostics[0].message).toContain(
+      "waiving is the expected path",
+    );
+    expect(rim.diagnostics[0].code).toBe("REQUIRED_SECTION_MISSING");
+  });
+
+  it("waiver validation: unknown section, missing reason, suggested tier, no manifest", () => {
+    const unknown = compileWith(
+      `${QUOTA_SECTION}\n\n\`\`\`tw:waiver\nsection: churn\nreason: x\n\`\`\`\n`,
+    );
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) {
+      expect(unknown.diagnostics[0].message).toContain("pipeline-health");
+    }
+    const noReason = compileWith(
+      `${QUOTA_SECTION}\n\n\`\`\`tw:waiver\nsection: pipeline-health\n\`\`\`\n`,
+    );
+    expect(noReason.ok).toBe(false);
+    const suggested = compileWith(
+      `${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n\n\`\`\`tw:waiver\nsection: coaching-notes\nreason: nothing to coach\n\`\`\`\n`,
+    );
+    expect(suggested.ok).toBe(false);
+    if (!suggested.ok) {
+      expect(suggested.diagnostics[0].message).toContain("suggested");
+    }
+    const noManifest = compileDocument({
+      plate: REPORT_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: `## Summary\n\n\`\`\`tw:waiver\nsection: x\nreason: y\n\`\`\`\n`,
+    });
+    expect(noManifest.ok).toBe(false);
+    if (!noManifest.ok) {
+      expect(noManifest.diagnostics[0].message).toContain(
+        "no section manifest",
+      );
+    }
+  });
+
+  it("waiving a section that is also authored rejects with SECTION_WAIVER_CONFLICT", () => {
+    const result = compileWith(
+      `${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n\n${WAIVER_BLOCK}\n`,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics[0].code).toBe("SECTION_WAIVER_CONFLICT");
+  });
+
+  it("multiple missing required sections produce one diagnostic each (single-pass repair)", () => {
+    const result = compileWith(`## Summary\n\nNothing else.\n`);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.map((d) => d.location).sort()).toEqual([
+      "section:pipeline-health",
+      "section:quota-attainment",
+    ]);
+  });
+
+  it("duplicate headings elsewhere don't false-positive the check (slugger -1 suffixes)", () => {
+    // Two "Notes" headings dedupe to notes / notes-1; the manifest sections
+    // are present exactly once each and still satisfy.
+    const result = compileWith(
+      `## Notes\n\nx\n\n## Notes\n\ny\n\n${QUOTA_SECTION}\n\n${PIPELINE_SECTION}\n`,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("a contract-less plate reports no waivers and compiles as before (AE4)", () => {
+    const result = compileDocument({
+      plate: REPORT_PLATE,
+      title: "t",
+      abstract: "a",
+      markdownBody: REPORT_MARKDOWN,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.waivers).toEqual([]);
+    expect(result.renderHtml).not.toContain("Section waived");
   });
 });

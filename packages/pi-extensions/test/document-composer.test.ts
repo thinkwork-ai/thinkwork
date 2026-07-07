@@ -297,3 +297,83 @@ describe("createDocumentComposerExtension", () => {
     );
   });
 });
+
+describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
+  const CONTRACT_PLATE = {
+    slug: "sales-rep-review",
+    displayName: "Sales Rep Review",
+    useFor: "A sales rep performance review.",
+    sections: [
+      {
+        id: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material" as const,
+      },
+      { id: "summary", title: "Summary", tier: "required" as const },
+    ],
+    analyses: [
+      {
+        key: "pipeline-conversion",
+        op: "funnel_conversion",
+        inputHint: "ordered stages: [{ label, count }], >=2 stages",
+      },
+    ],
+  };
+
+  it("normalizeDocumentPlates preserves contract fields", () => {
+    const plates = normalizeDocumentPlates([CONTRACT_PLATE]);
+    expect(plates).toEqual([CONTRACT_PLATE]);
+  });
+
+  it("malformed contract fields degrade to a plain summary, never a throw", () => {
+    const plates = normalizeDocumentPlates([
+      {
+        slug: "qbr",
+        displayName: "QBR",
+        useFor: "x",
+        sections: "junk",
+        analyses: [{ key: "NOT VALID", op: 42 }, "garbage"],
+      },
+    ]);
+    expect(plates).toEqual([{ slug: "qbr", displayName: "QBR", useFor: "x" }]);
+  });
+
+  it("tool surface names expected section titles and analysis input hints (R14 floor)", () => {
+    const { tools } = register({
+      documentComposerConfig: {
+        ...CONFIG,
+        documentPlates: [CONTRACT_PLATE],
+      },
+      fetchImpl: okFetch({ ok: true }),
+    });
+    const tool = tools[0] as unknown as {
+      description: string;
+      parameters: { properties: { genre: { description: string } } };
+    };
+    const genreDesc = tool.parameters.properties.genre.description;
+    expect(genreDesc).toContain('"## Pipeline Health"');
+    expect(genreDesc).toContain("waive via tw:waiver");
+    expect(genreDesc).toContain("pipeline-conversion");
+    expect(genreDesc).toContain(
+      "op funnel_conversion: ordered stages: [{ label, count }], >=2 stages",
+    );
+    // The contract authoring rules land in the tool description once any
+    // plate carries a contract.
+    expect(tool.description).toContain("tw:waiver");
+    expect(tool.description).toContain("tw:analysis");
+  });
+
+  it("contract-less plate lists keep the plain surface (no contract prose)", () => {
+    const { tools } = register({
+      documentComposerConfig: {
+        ...CONFIG,
+        documentPlates: [
+          { slug: "qbr", displayName: "QBR", useFor: "Quarterly review." },
+        ],
+      },
+      fetchImpl: okFetch({ ok: true }),
+    });
+    const tool = tools[0] as unknown as { description: string };
+    expect(tool.description).not.toContain("tw:waiver");
+  });
+});
