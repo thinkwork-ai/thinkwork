@@ -96,6 +96,34 @@ export function labelsVisibleAtZoom(
   );
 }
 
+/** Canvas-renderer zoom gate (react-force-graph-2d): `k` is the canvas
+ *  zoom scale from onZoom. Below this, node text would render under
+ *  ~7px — unreadable — so labels hide on large graphs. */
+export const LABEL_GATE_MIN_SCALE = 0.7;
+
+export function labelsVisibleAtScale(k: number, nodeCount: number): boolean {
+  if (nodeCount <= LABEL_GATE_ALWAYS_MAX_NODES) return true;
+  return k >= LABEL_GATE_MIN_SCALE;
+}
+
+/** Darken a hex color for disc rims (canvas has no material math). */
+export function darkenColor(hex: string, factor = 0.55): string {
+  const raw = hex.replace("#", "");
+  const full =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : raw;
+  const n = Number.parseInt(full, 16);
+  if (Number.isNaN(n)) return hex;
+  const r = Math.round(((n >> 16) & 255) * factor);
+  const g = Math.round(((n >> 8) & 255) * factor);
+  const b = Math.round((n & 255) * factor);
+  return `rgb(${r},${g},${b})`;
+}
+
 /** Tri-state label visibility control: `auto` follows zoom gating and
  *  focus defaults; `on`/`off` override absolutely (R11). */
 export type LabelMode = "auto" | "on" | "off";
