@@ -317,6 +317,16 @@ describe("enumerateDreamBanks (THINK-220 two-step split)", () => {
     );
     // The two halves stay separate statements — no cross-schema JOIN/EXISTS.
     expect(texts.some((t) => t.includes("FROM users") && t.includes("memory_units"))).toBe(false);
+    // Render the Hindsight filter query for real: a drizzle array param
+    // expands to a record and Postgres rejects ANY($1::text[]) with "cannot
+    // cast type record to text[]" — the query must build ARRAY[...].
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const unitsCall = execute.mock.calls.find((call) =>
+      JSON.stringify(call[0]?.queryChunks ?? "").includes("SELECT DISTINCT bank_id"),
+    );
+    const rendered = new PgDialect().sqlToQuery(unitsCall![0]);
+    expect(rendered.sql).toContain("ANY(ARRAY[");
+    expect(rendered.params).toEqual(["space_a", "space_b", "user_a"]);
   });
 
   it("skips the Hindsight round-trip when the tenant has no candidate banks", async () => {

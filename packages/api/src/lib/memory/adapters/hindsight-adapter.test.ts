@@ -831,6 +831,17 @@ describe("HindsightAdapter legacy user bank reads", () => {
     });
 
     expect(executeMock).toHaveBeenCalledTimes(2);
+    // Render the units query through the real pg dialect — a drizzle array
+    // param expands to a record `($1, $2)`, which Postgres rejects inside
+    // ANY(...)::text[] ("cannot cast type record to text[]"); the query must
+    // build an explicit ARRAY[...] instead. Serializing here catches what
+    // execute-mock tests cannot.
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const rendered = new PgDialect().sqlToQuery(executeMock.mock.calls[1][0]);
+    expect(rendered.sql).toContain("ANY(ARRAY[");
+    expect(rendered.sql).not.toMatch(/ANY\(\(?\$\d+\)?::text\[\]/);
+    expect(rendered.params).toContain(`user_${USER_ID}`);
+    expect(rendered.params).toContain(`space_${SPACE_ID}`);
     expect(records).toEqual([
       expect.objectContaining({
         tenantId: TENANT_ID,
