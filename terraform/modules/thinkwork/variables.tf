@@ -370,6 +370,12 @@ variable "hindsight_image_tag" {
   default     = "0.8.4"
 }
 
+variable "hindsight_database_name" {
+  description = "Dedicated Hindsight database name on the primary Aurora cluster (THINK-220 cutover flag). Empty (default) = legacy layout: Hindsight lives in the `hindsight` schema of the primary database and its upstream maintenance discovery no-ops (see hindsight_image_tag note). Set to e.g. \"thinkwork_hindsight\" AFTER the database exists and its data is migrated (plan 2026-07-07-004): flips the Hindsight service, the api Lambdas, and the Pi runtime to that database's `public` schema in one apply."
+  type        = string
+  default     = ""
+}
+
 variable "hindsight_enable_auto_consolidation" {
   description = "Run Hindsight's observation consolidation engine automatically after retain (used when enable_hindsight = true)."
   type        = bool

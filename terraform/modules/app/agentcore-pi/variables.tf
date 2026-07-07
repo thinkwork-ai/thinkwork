@@ -49,6 +49,12 @@ variable "hindsight_endpoint" {
   default     = ""
 }
 
+variable "hindsight_database_name" {
+  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty = the provider's direct SQL (high-confidence-fact recall, access-count writes) targets the `hindsight` schema of the primary database; set = that database's `public` schema."
+  type        = string
+  default     = ""
+}
+
 variable "agentcore_memory_id" {
   description = "AgentCore Memory resource ID. Populated automatically by the agentcore-memory module; injected into the container as AGENTCORE_MEMORY_ID for auto-retention."
   type        = string
