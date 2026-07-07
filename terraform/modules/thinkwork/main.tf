@@ -1275,6 +1275,25 @@ module "routines_stepfunctions" {
   execution_callback_lambda_arn = ""
 }
 
+# Workflow Interpreter substrate (THINK-219): the ONE static Step Functions
+# state machine per stage that interprets every workflow definition, plus its
+# shared execution role, vended log group, machine-ARN SSM parameter, and the
+# EventBridge SFN-state-change rule -> workflow-execution-callback.
+#
+# Unlike routines (rule moved into module.api to break a cycle), there is NO
+# cycle here: module.api does not consume any interpreter output (the machine
+# ARN reaches graphql-http/job-trigger via SSM at runtime, not terraform), so
+# this module can safely depend on module.api for the callback function ARN.
+module "workflow_interpreter_stepfunctions" {
+  source = "../app/workflow-interpreter-stepfunctions"
+
+  stage      = var.stage
+  account_id = var.account_id
+  region     = var.region
+
+  execution_callback_lambda_arn = module.api.workflow_execution_callback_fn_arn
+}
+
 module "hindsight" {
   count  = local.hindsight_enabled ? 1 : 0
   source = "../app/hindsight-memory"

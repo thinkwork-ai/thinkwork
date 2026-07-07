@@ -64,6 +64,7 @@ import {
 } from "../workspace-projection-snapshot.js";
 import { finalizeN8nAgentStepRun } from "../n8n-agent-step/finalize.js";
 import { projectAgentLoopFinalize } from "../agent-loops/finalize-projection.js";
+import { projectWorkflowStepFinalizeSafely } from "../workflows/workflow-step-finalize.js";
 import { autoSubmitSkillCreatorDraft } from "../skill-creator/auto-submit-draft.js";
 import { recordTraceEvidence } from "../trace-ledger/record-trace-evidence.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
@@ -289,6 +290,15 @@ export async function processFinalize(
       suppressAssistantMessage: hiddenDesktopDelegation,
     });
     await projectAgentLoopFinalizeSafely({
+      tenantId,
+      threadTurnId: turnId,
+      contextSnapshot: claimed[0]?.contextSnapshot,
+      goalRun: goalRunProjectionFromFinalizePayload(payload),
+      responseText: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
+      turnStatus: "failed",
+      errorMessage,
+    });
+    await projectWorkflowStepFinalizeSafely({
       tenantId,
       threadTurnId: turnId,
       contextSnapshot: claimed[0]?.contextSnapshot,
@@ -632,6 +642,14 @@ export async function processFinalize(
   });
 
   await projectAgentLoopFinalizeSafely({
+    tenantId,
+    threadTurnId: turnId,
+    contextSnapshot: claimed[0]?.contextSnapshot,
+    goalRun,
+    responseText,
+    turnStatus: "completed",
+  });
+  await projectWorkflowStepFinalizeSafely({
     tenantId,
     threadTurnId: turnId,
     contextSnapshot: claimed[0]?.contextSnapshot,

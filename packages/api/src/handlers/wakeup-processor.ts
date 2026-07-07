@@ -1649,6 +1649,24 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
       break;
     }
+    case "workflow_step": {
+      // THINK-219: the workflow-step wakeup carries the goal-mode objective as
+      // both payload.message and goalMode.objective.
+      const workflowGoalMode =
+        payload?.goalMode &&
+        typeof payload.goalMode === "object" &&
+        !Array.isArray(payload.goalMode)
+          ? (payload.goalMode as { objective?: unknown })
+          : null;
+      agentMessage = String(
+        payload?.message ||
+          (typeof workflowGoalMode?.objective === "string"
+            ? workflowGoalMode.objective
+            : "") ||
+          "Run this workflow step.",
+      );
+      break;
+    }
     case "routine_repair": {
       // Deterministic routines v1 (plan 2026-07-03-004 U8, KTD-4): the
       // repair dispatch builds the full instruction — pointer context plus
@@ -2348,6 +2366,28 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           payload.goalMode as RuntimeGoalMode,
         ),
       });
+    }
+
+    // Workflow interpreter agent step (THINK-219 U6): the wakeup runs in Pi
+    // goal mode (action 'start', per-iteration goal_run_id), so its goalMode
+    // rides the same runtime goal-mode path as chat. The workflowRun block
+    // must ALSO reach the runtime payload — the interpreter path is
+    // wakeup-only, so a gap here is invisible on chat E2E (payload parity).
+    // (The turn's context_snapshot already carries workflowRun since it
+    // spreads the wakeup payload; the finalize hook keys on that.)
+    if (wakeup.source === "workflow_step") {
+      if (payload?.goalMode) {
+        Object.assign(agentCorePayload, {
+          goal_mode: toRuntimeGoalModePayload(
+            payload.goalMode as RuntimeGoalMode,
+          ),
+        });
+      }
+      if (payload?.workflowRun) {
+        Object.assign(agentCorePayload, {
+          workflow_run: payload.workflowRun,
+        });
+      }
     }
 
     if (wakeup.source === "chat_message" && payload?.skillCreatorCommand) {

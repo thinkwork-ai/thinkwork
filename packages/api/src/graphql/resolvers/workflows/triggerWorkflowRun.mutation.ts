@@ -1,5 +1,13 @@
+import { randomUUID } from "node:crypto";
+import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 import { and, eq } from "drizzle-orm";
 import {
+  createInterpreterWorkflowRun,
+  ensureInterpreterBinding,
+  markInterpreterRunStarted,
+} from "@thinkwork/database-pg";
+import {
+  agents,
   workflowEngineBindings,
   workflowRuns,
   workflows as workflowsTable,
@@ -7,8 +15,11 @@ import {
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { createWorkflowRunLedger } from "../../../lib/workflows/run-ledger.js";
+import { resolveInterpreterStateMachineArn } from "../../../lib/workflows/interpreter-state-machine.js";
 import { triggerRoutineRun } from "../routines/triggerRoutineRun.mutation.js";
 import { assertCanReadWorkflowTenant } from "./types.js";
+
+const _SFN_CLIENT = new SFNClient({});
 
 type TriggerWorkflowRunArgs = {
   input: {
@@ -25,6 +36,7 @@ type TriggerWorkflowRunArgs = {
 type WorkflowRow = {
   id: string;
   tenant_id: string;
+  name?: string | null;
   visibility: string;
   owner_agent_id?: string | null;
   lifecycle_status: string;
@@ -65,6 +77,24 @@ export async function triggerWorkflowRun(
   const normalizedInput = normalizeAwsJsonObject(args.input.input);
   const actor = resolveWorkflowActor(ctx, args.input);
   const triggerSource = args.input.triggerSource ?? "workflow_contract";
+
+  // THINK-219 U7: prefer the shared workflow interpreter. When the workflow is
+  // ready and has a published version, resolve/ensure the interpreter binding
+  // and start a run directly — AHEAD of the legacy step_functions_routine
+  // binding. Falls through (returns null) when the interpreter is unavailable
+  // (SSM param missing / no platform agent), preserving the routine + blocked
+  // paths below.
+  if (isWorkflowReady(workflow) && workflow.current_version_id) {
+    const interpreterRun = await tryStartInterpreterRun({
+      workflow,
+      actor,
+      triggerSource,
+      normalizedInput,
+      idempotencyKey: args.input.idempotencyKey ?? null,
+    });
+    if (interpreterRun) return interpreterRun;
+  }
+
   const binding = await loadReadyStepFunctionsBinding(workflow.id);
 
   if (!isWorkflowReady(workflow) || !binding) {
@@ -146,6 +176,114 @@ export async function triggerWorkflowRun(
     );
   }
   return run;
+}
+
+/**
+ * Start (or repair) a shared-interpreter workflow run for a manual trigger.
+ * Returns the canonical workflow run, or null when the interpreter is
+ * unavailable so the caller can fall through to the routine/blocked paths.
+ */
+async function tryStartInterpreterRun(input: {
+  workflow: WorkflowRow;
+  actor: ReturnType<typeof resolveWorkflowActor>;
+  triggerSource: string;
+  normalizedInput: Record<string, unknown>;
+  idempotencyKey: string | null;
+}): Promise<unknown | null> {
+  const { workflow, actor, triggerSource, normalizedInput } = input;
+
+  const stateMachineArn = await resolveInterpreterStateMachineArn();
+  if (!stateMachineArn) return null;
+
+  // Acting agent = the tenant's platform agent that executes the steps.
+  // dispatch_agent REQUIRES input_summary.agentId.
+  const [platformAgent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.tenant_id, workflow.tenant_id),
+        eq(agents.is_platform_default, true),
+      ),
+    )
+    .limit(1);
+  if (!platformAgent) return null;
+
+  const binding = await ensureInterpreterBinding(db, {
+    tenantId: workflow.tenant_id,
+    workflowId: workflow.id,
+    workflowVersionId: workflow.current_version_id ?? null,
+    stateMachineArn,
+  });
+
+  const idempotencyKey = input.idempotencyKey ?? `manual:${randomUUID()}`;
+  const { run, created } = await createInterpreterWorkflowRun(db, {
+    tenantId: workflow.tenant_id,
+    workflowId: workflow.id,
+    workflowVersionId: workflow.current_version_id ?? null,
+    engineBindingId: binding.id,
+    triggerFamily: "manual",
+    triggerSource,
+    idempotencyKey,
+    actorType: actor.actorType,
+    actorId: actor.actorId,
+    inputSummary: {
+      ...normalizedInput,
+      agentId: platformAgent.id,
+      workflowName: workflow.name ?? null,
+      spaceId: null,
+    },
+  });
+
+  // Duplicate / half-built repair: re-start ONLY a queued run with no
+  // execution; anything past that is a genuine duplicate and is returned as-is.
+  if (!created) {
+    const [existing] = await db
+      .select({
+        status: workflowRuns.status,
+        backend_execution_id: workflowRuns.backend_execution_id,
+      })
+      .from(workflowRuns)
+      .where(eq(workflowRuns.id, run.id))
+      .limit(1);
+    const repairable =
+      existing &&
+      existing.status === "queued" &&
+      !existing.backend_execution_id;
+    if (!repairable) return await loadWorkflowRunById(run.id);
+  }
+
+  const startResp = await _SFN_CLIENT.send(
+    new StartExecutionCommand({
+      stateMachineArn,
+      name: `run-${run.id}-r0`,
+      input: JSON.stringify({
+        cursor: {
+          workflowRunId: run.id,
+          tenantId: workflow.tenant_id,
+          stepPointer: 0,
+          iteration: 1,
+          loopCycleCount: 0,
+          rolloverCount: 0,
+        },
+      }),
+    }),
+  );
+  if (!startResp.executionArn) {
+    throw new Error(
+      "Workflow interpreter execution started without a backend execution id",
+    );
+  }
+
+  await markInterpreterRunStarted(db, {
+    tenantId: workflow.tenant_id,
+    workflowId: workflow.id,
+    runId: run.id,
+    executionArn: startResp.executionArn,
+    now: startResp.startDate ?? undefined,
+  });
+
+  return await loadWorkflowRunById(run.id);
 }
 
 function assertWorkflowCallableByActor(

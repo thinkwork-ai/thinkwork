@@ -280,4 +280,79 @@ describe("WorkflowInventory", () => {
     );
     expect(link?.getAttribute("target")).toBe("_blank");
   });
+
+  it("shows a Looping badge when the current version defines a continuation policy", () => {
+    mockWorkflowInventoryQueries({
+      workflows: [
+        {
+          id: "workflow-loop",
+          name: "Weekly report loop",
+          lifecycleStatus: "active",
+          primaryTriggerFamily: "schedule",
+          currentVersionNumber: 2,
+          currentVersion: {
+            id: "version-loop",
+            definitionSnapshot: {
+              version: 1,
+              steps: [{ id: "draft", kind: "agent", objective: "write it" }],
+              continuationPolicy: {
+                exitSignal: "the report is shared",
+                maxIterations: 5,
+              },
+            },
+          },
+          readinessState: "ready",
+          readinessReasons: [],
+          bindings: [
+            {
+              id: "binding-loop",
+              bindingType: "native",
+              bindingStatus: "ready",
+            },
+          ],
+          triggers: [],
+        },
+      ],
+    });
+
+    render(<WorkflowInventory />);
+
+    expect(screen.getByText("Looping")).toBeTruthy();
+  });
+
+  it("omits the Looping badge when the current version has no continuation policy", () => {
+    mockWorkflowInventoryQueries({
+      workflows: [
+        {
+          id: "workflow-linear",
+          name: "One-shot report",
+          lifecycleStatus: "active",
+          primaryTriggerFamily: "schedule",
+          currentVersionNumber: 1,
+          currentVersion: {
+            id: "version-linear",
+            definitionSnapshot: {
+              version: 1,
+              steps: [{ id: "draft", kind: "agent", objective: "write it" }],
+            },
+          },
+          readinessState: "ready",
+          readinessReasons: [],
+          bindings: [
+            {
+              id: "binding-linear",
+              bindingType: "native",
+              bindingStatus: "ready",
+            },
+          ],
+          triggers: [],
+        },
+      ],
+    });
+
+    render(<WorkflowInventory />);
+
+    expect(screen.getByText("One-shot report")).toBeTruthy();
+    expect(screen.queryByText("Looping")).toBeNull();
+  });
 });

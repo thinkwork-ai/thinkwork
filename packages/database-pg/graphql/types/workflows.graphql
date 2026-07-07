@@ -43,6 +43,7 @@ enum WorkflowVersionStatus {
 
 enum WorkflowBindingType {
   step_functions_routine
+  step_functions_interpreter
   n8n_bridge
   n8n_import
   twenty_crm
@@ -61,6 +62,7 @@ enum WorkflowBindingStatus {
 enum WorkflowRunStatus {
   queued
   running
+  waiting_for_human
   succeeded
   failed
   canceled
@@ -375,4 +377,9 @@ extend type Mutation {
   ): N8nWorkflowBridgeCredential!
   deleteWorkflow(id: ID!): ID!
   triggerWorkflowRun(input: TriggerWorkflowRunInput!): WorkflowRun!
+  resolveWorkflowApproval(
+    runId: ID!
+    approve: Boolean!
+    note: String
+  ): WorkflowRun!
 }

@@ -23,7 +23,7 @@ import {
   SheetTitle,
   type DataTableTokenFilterColumn,
 } from "@thinkwork/ui";
-import { CircleDot, GitBranch, Plug, Search, X } from "lucide-react";
+import { CircleDot, GitBranch, Plug, Repeat, Search, X } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
 import {
@@ -48,6 +48,10 @@ type WorkflowRow = {
   lifecycleStatus: string;
   primaryTriggerFamily: string;
   currentVersionNumber?: number | null;
+  currentVersion?: {
+    id: string;
+    definitionSnapshot?: unknown;
+  } | null;
   readinessState: string;
   readinessReasons?: unknown;
   bindings: WorkflowBinding[];
@@ -78,6 +82,24 @@ function bindingFilterValue(row: WorkflowRow): string {
   return primaryBinding(row.bindings)?.bindingType ?? "unknown";
 }
 
+/**
+ * A workflow is a Loop when its current version definition declares a
+ * continuationPolicy. definitionSnapshot arrives as parsed AWSJSON; tolerate a
+ * string form defensively.
+ */
+function workflowIsLooping(row: WorkflowRow): boolean {
+  let snapshot: unknown = row.currentVersion?.definitionSnapshot;
+  if (typeof snapshot === "string") {
+    try {
+      snapshot = JSON.parse(snapshot);
+    } catch {
+      return false;
+    }
+  }
+  const policy = recordFromUnknown(snapshot).continuationPolicy;
+  return Boolean(policy) && typeof policy === "object";
+}
+
 function workflowSearchText(row: WorkflowRow): string {
   return [
     row.name,
@@ -87,6 +109,7 @@ function workflowSearchText(row: WorkflowRow): string {
     sourceLabel(primaryBinding(row.bindings)),
     row.lifecycleStatus,
     row.readinessState,
+    workflowIsLooping(row) ? "looping" : "",
   ]
     .join(" ")
     .toLowerCase();
@@ -164,14 +187,26 @@ export function WorkflowInventory() {
           cellClassName: "w-full min-w-[200px] max-w-0",
         },
         cell: ({ row }) => (
-          <Link
-            to="/settings/workflows/$workflowId"
-            params={{ workflowId: row.original.id }}
-            className="block truncate font-medium text-foreground transition-colors hover:text-primary"
-            title={row.original.name}
-          >
-            {row.original.name}
-          </Link>
+          <div className="flex min-w-0 items-center gap-2">
+            <Link
+              to="/settings/workflows/$workflowId"
+              params={{ workflowId: row.original.id }}
+              className="min-w-0 truncate font-medium text-foreground transition-colors hover:text-primary"
+              title={row.original.name}
+            >
+              {row.original.name}
+            </Link>
+            {workflowIsLooping(row.original) ? (
+              <Badge
+                variant="outline"
+                className="shrink-0 gap-1 text-xs"
+                title="This workflow loops until its continuation policy is satisfied"
+              >
+                <Repeat className="size-3" />
+                Looping
+              </Badge>
+            ) : null}
+          </div>
         ),
       },
       {

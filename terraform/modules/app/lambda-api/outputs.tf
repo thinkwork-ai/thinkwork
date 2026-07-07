@@ -43,6 +43,11 @@ output "memory_retain_fn_arn" {
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["memory-retain"].arn : ""
 }
 
+output "workflow_execution_callback_fn_arn" {
+  description = "workflow-execution-callback Lambda ARN (THINK-219). Wired into the workflow-interpreter-stepfunctions module so its EventBridge SFN-state-change rule can target it."
+  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["workflow-execution-callback"].arn : ""
+}
+
 output "okf_efs_refresh_fn_name" {
   description = "OKF EFS refresh Lambda function name."
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["okf-efs-refresh"].function_name : ""

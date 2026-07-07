@@ -450,6 +450,20 @@ build_handler "routine-execution-callback" \
 build_handler "routine-task-weather-email" \
   "$REPO_ROOT/packages/api/src/handlers/routine-task-weather-email.ts"
 
+# Workflow Interpreter Lambdas (THINK-219). One shared static state machine per
+# stage drives these; default ESBUILD_FLAGS (no bundled-agentcore SDK needed).
+# workflow-step-dispatch serves every interpreter ASL phase (load_next /
+# dispatch_agent / await_approval / record_approval / record_advance).
+# workflow-execution-callback is the EventBridge SFN-state-change target.
+# workflow-resume is SDK-invoked by resolveWorkflowApproval. All three ship
+# inert-throwing until U5/U6 wire them (plan KTD10).
+build_handler "workflow-step-dispatch" \
+  "$REPO_ROOT/packages/lambda/workflow-step-dispatch.ts"
+build_handler "workflow-execution-callback" \
+  "$REPO_ROOT/packages/lambda/workflow-execution-callback.ts"
+build_handler "workflow-resume" \
+  "$REPO_ROOT/packages/lambda/workflow-resume.ts"
+
 build_handler "guardrails" \
   "$REPO_ROOT/packages/api/src/handlers/guardrails-handler.ts"
 

@@ -4,6 +4,7 @@ import { deleteWorkflow } from "./deleteWorkflow.mutation.js";
 import { discoverN8nWorkflows } from "./discoverN8nWorkflows.query.js";
 import { disconnectN8nWorkflow } from "./disconnectN8nWorkflow.mutation.js";
 import { importN8nWorkflowDraft } from "./importN8nWorkflowDraft.mutation.js";
+import { resolveWorkflowApproval } from "./resolveWorkflowApproval.mutation.js";
 import { triggerWorkflowRun } from "./triggerWorkflowRun.mutation.js";
 import { workflow } from "./workflow.query.js";
 import { workflowRun } from "./workflowRun.query.js";
@@ -24,6 +25,7 @@ export const workflowMutations = {
   deleteWorkflow,
   disconnectN8nWorkflow,
   importN8nWorkflowDraft,
+  resolveWorkflowApproval,
   triggerWorkflowRun,
 };
 

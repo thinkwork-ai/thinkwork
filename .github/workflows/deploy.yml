@@ -1460,6 +1460,15 @@ jobs:
             # api_data_plane listed, a new invoke grant in api_orchestration
             # sat unapplied while every deploy reported success (canvas-refresh
             # AccessDeniedException, THINK-145 U11 live demo, 2026-07-04).
+            #
+            # THINK-219 workflow interpreter: the three new handlers
+            # (workflow-step-dispatch / -execution-callback / -resume) are
+            # covered by the blanket aws_lambda_function.handler target below,
+            # and the new states:StartExecution grant lives in api_orchestration
+            # (already listed). The interpreter's OWN execution role + inline
+            # policies live in a separate module; list them so an IAM grant on
+            # the SFN execution role self-heals on the next no-tf deploy even if
+            # the tf-carrying apply was cancelled by concurrency.
             TF_TARGET_ARGS+=(
               -target=module.thinkwork.module.api.aws_iam_policy.api_data_plane
               -target=module.thinkwork.module.api.aws_iam_policy.api_orchestration
@@ -1467,6 +1476,10 @@ jobs:
               -target=module.thinkwork.module.api.aws_iam_policy.api_observability
               -target=module.thinkwork.module.api.aws_lambda_function.handler
               -target=module.thinkwork.module.cognito.aws_lambda_function.custom_auth
+              -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role.execution
+              -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_logs
+              -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_lambda_invoke
+              -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_states
             )
           fi
           # -refresh=false skips ~30s of "Refreshing state…" against ~700

@@ -3903,6 +3903,7 @@ export type Mutation = {
    * next compile rebuilds from scratch. Destructive when force=true.
    */
   resetWikiCursor: WikiResetCursorResult;
+  resolveWorkflowApproval: WorkflowRun;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   retryAgentDispatch: Message;
@@ -4853,6 +4854,12 @@ export type MutationResetWikiCursorArgs = {
   ownerId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   userId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type MutationResolveWorkflowApprovalArgs = {
+  approve: Scalars["Boolean"]["input"];
+  note?: InputMaybe<Scalars["String"]["input"]>;
+  runId: Scalars["ID"]["input"];
 };
 
 export type MutationResubmitInboxItemArgs = {
@@ -5959,6 +5966,18 @@ export type PlanRoutineDraftInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type PlateConformanceSummary = {
+  __typename?: "PlateConformanceSummary";
+  analyses: Scalars["AWSJSON"]["output"];
+  errorCount: Scalars["Int"]["output"];
+  judgedReportCount: Scalars["Int"]["output"];
+  pendingCount: Scalars["Int"]["output"];
+  plateSlug: Scalars["ID"]["output"];
+  reportCount: Scalars["Int"]["output"];
+  sections: Scalars["AWSJSON"]["output"];
+  skippedCount: Scalars["Int"]["output"];
+};
+
 /**
  * ThinkWork-owned app overlay state keyed to a trusted plugin app surface and
  * source-system record. Overlay payloads are tenant-shared in v1; created/updated
@@ -6376,6 +6395,7 @@ export type Query = {
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   piExtensions: Array<PiExtension>;
   pinnedThreads: Array<PinnedThread>;
+  plateConformance: PlateConformanceSummary;
   /** ThinkWork-owned overlay sections for one plugin-app record. */
   pluginAppOverlays: Array<PluginAppOverlay>;
   /**
@@ -7081,6 +7101,11 @@ export type QueryPiExtensionsArgs = {
 export type QueryPinnedThreadsArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryPlateConformanceArgs = {
+  slug: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryPluginAppOverlaysArgs = {
@@ -11021,6 +11046,7 @@ export enum WorkflowBindingType {
   N8nBridge = "n8n_bridge",
   N8nImport = "n8n_import",
   Native = "native",
+  StepFunctionsInterpreter = "step_functions_interpreter",
   StepFunctionsRoutine = "step_functions_routine",
   TwentyCrm = "twenty_crm",
 }
@@ -11173,6 +11199,7 @@ export enum WorkflowRunStatus {
   Running = "running",
   Succeeded = "succeeded",
   TimedOut = "timed_out",
+  WaitingForHuman = "waiting_for_human",
 }
 
 export type WorkflowTemplateBinding = {

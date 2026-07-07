@@ -5,11 +5,36 @@ const {
   mockAssertCanReadWorkflowTenant,
   mockTriggerRoutineRun,
   mockCreateWorkflowRunLedger,
+  mockResolveArn,
+  mockEnsureBinding,
+  mockCreateRun,
+  mockMarkStarted,
+  mockSfnSend,
 } = vi.hoisted(() => ({
   mockRows: vi.fn(),
   mockAssertCanReadWorkflowTenant: vi.fn(),
   mockTriggerRoutineRun: vi.fn(),
   mockCreateWorkflowRunLedger: vi.fn(),
+  mockResolveArn: vi.fn(),
+  mockEnsureBinding: vi.fn(),
+  mockCreateRun: vi.fn(),
+  mockMarkStarted: vi.fn(),
+  mockSfnSend: vi.fn(),
+}));
+
+vi.mock("@aws-sdk/client-sfn", () => ({
+  SFNClient: vi.fn(() => ({ send: mockSfnSend })),
+  StartExecutionCommand: vi.fn((input) => ({ input })),
+}));
+
+vi.mock("@thinkwork/database-pg", () => ({
+  createInterpreterWorkflowRun: mockCreateRun,
+  ensureInterpreterBinding: mockEnsureBinding,
+  markInterpreterRunStarted: mockMarkStarted,
+}));
+
+vi.mock("../../../lib/workflows/interpreter-state-machine.js", () => ({
+  resolveInterpreterStateMachineArn: mockResolveArn,
 }));
 
 vi.mock("../../utils.js", () => ({
@@ -50,6 +75,11 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   workflows: {
     id: "workflows.id",
   },
+  agents: {
+    id: "agents.id",
+    tenant_id: "agents.tenant_id",
+    is_platform_default: "agents.is_platform_default",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -76,6 +106,14 @@ beforeEach(async () => {
   mockAssertCanReadWorkflowTenant.mockReset();
   mockTriggerRoutineRun.mockReset();
   mockCreateWorkflowRunLedger.mockReset();
+  mockResolveArn.mockReset();
+  mockEnsureBinding.mockReset();
+  mockCreateRun.mockReset();
+  mockMarkStarted.mockReset();
+  mockSfnSend.mockReset();
+  // Default: interpreter unavailable, so the legacy routine + blocked paths
+  // run exactly as before this unit landed.
+  mockResolveArn.mockResolvedValue(null);
   vi.resetModules();
 
   resolver = await import("./triggerWorkflowRun.mutation.js");
@@ -154,6 +192,78 @@ describe("triggerWorkflowRun", () => {
       }),
       expect.anything(),
     );
+  });
+
+  it("prefers a ready interpreter binding and returns the started run", async () => {
+    mockResolveArn.mockResolvedValue("arn:sm:interp");
+    mockEnsureBinding.mockResolvedValue({ id: "binding-interp", created: true });
+    mockCreateRun.mockResolvedValue({
+      run: { id: "run-interp", status: "queued" },
+      created: true,
+    });
+    mockSfnSend.mockResolvedValue({
+      executionArn: "arn:aws:states:exec-interp",
+      startDate: new Date("2026-07-07T00:00:00Z"),
+    });
+    mockRows
+      .mockReturnValueOnce([
+        workflowRow({
+          id: "workflow-1",
+          tenant_id: "tenant-1",
+          name: "Nightly Digest",
+          visibility: "tenant_shared",
+          lifecycle_status: "active",
+          current_version_id: "version-1",
+          readiness_state: "ready",
+          readiness_reasons: [],
+          capability_flags: { start: true },
+        }),
+      ])
+      .mockReturnValueOnce([{ id: "agent-platform" }]) // platform agent
+      .mockReturnValueOnce([
+        {
+          id: "run-interp",
+          tenant_id: "tenant-1",
+          workflow_id: "workflow-1",
+          status: "running",
+          backend_execution_id: "arn:aws:states:exec-interp",
+        },
+      ]);
+
+    const result = await resolver.triggerWorkflowRun(
+      null,
+      { input: { workflowId: "workflow-1" } },
+      {
+        auth: { tenantId: "tenant-1", agentId: null, principalId: "user-1" },
+      } as any,
+    );
+
+    expect(result).toMatchObject({
+      id: "run-interp",
+      backendExecutionId: "arn:aws:states:exec-interp",
+    });
+    expect(mockCreateRun).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        triggerFamily: "manual",
+        engineBindingId: "binding-interp",
+        inputSummary: expect.objectContaining({
+          agentId: "agent-platform",
+          workflowName: "Nightly Digest",
+        }),
+      }),
+    );
+    expect(mockSfnSend).toHaveBeenCalledTimes(1);
+    expect(mockSfnSend.mock.calls[0][0].input.name).toBe("run-run-interp-r0");
+    expect(mockMarkStarted).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        runId: "run-interp",
+        executionArn: "arn:aws:states:exec-interp",
+      }),
+    );
+    // Legacy routine path must NOT run when the interpreter handled it.
+    expect(mockTriggerRoutineRun).not.toHaveBeenCalled();
   });
 
   it("returns an existing idempotent workflow run before starting another backend execution", async () => {

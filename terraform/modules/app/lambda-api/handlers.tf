@@ -643,6 +643,22 @@ resource "aws_lambda_function" "handler" {
     # for steps + on the conditional UPDATE for executions.
     "routine-step-callback",
     "routine-execution-callback",
+    # Workflow Interpreter Lambdas (THINK-219). One shared static state
+    # machine per stage (workflow-interpreter-stepfunctions module) drives
+    # these. workflow-step-dispatch serves EVERY interpreter ASL phase
+    # (load_next / dispatch_agent / await_approval / record_approval /
+    # record_advance) — the SFN execution role's lambda:InvokeFunction grant
+    # is scoped to this one function. workflow-execution-callback is the
+    # EventBridge SFN-state-change target that projects terminal status onto
+    # workflow_runs. workflow-resume is SDK-invoked by resolveWorkflowApproval
+    # (SendTaskSuccess/SendTaskFailure) — SendTask* is granted stage-wide in
+    # the RoutineTaskTokens statement (iam-grouped.tf), states:StartExecution
+    # on the interpreter machine is granted in api_orchestration. All three
+    # ship inert-throwing until U5/U6 wire them (plan KTD10 — a silent no-op
+    # would strand runs in queued).
+    "workflow-step-dispatch",
+    "workflow-execution-callback",
+    "workflow-resume",
     # Skill-run dispatcher runtime-config fetch (plan
     # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
     # runtime skill dispatch calls this with Bearer API_AUTH_SECRET to pull
@@ -761,7 +777,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 120 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
