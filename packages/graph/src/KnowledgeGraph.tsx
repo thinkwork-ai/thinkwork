@@ -41,6 +41,7 @@ import {
   type LabelMode,
 } from "./graph-utils.js";
 import { GraphLabelToggles } from "./GraphLabelToggles.js";
+import { useGraphPointer } from "./use-graph-pointer.js";
 
 export type KnowledgeGraphGroundingStatus =
   "GROUNDED" | "UNAPPROVED_TYPE" | "UNGROUNDED" | "CONFLICT" | "UNKNOWN";
@@ -440,12 +441,15 @@ export const KnowledgeGraph = forwardRef<
     const mode = labelModeRef.current;
     if (mode === "on") return true;
     if (mode === "off") return false;
-    const focusState = focusRef.current;
-    if (focusState) return focusState.litIds.has(nodeId);
-    return labelsVisibleAtScale(
+    // Focus narrows which labels are eligible (the lit set) but the
+    // zoom gate still applies — labels stay hidden until zoomed in.
+    const gate = labelsVisibleAtScale(
       zoomKRef.current,
       graphDataRef.current.nodes.length,
     );
+    const focusState = focusRef.current;
+    if (focusState) return gate && focusState.litIds.has(nodeId);
+    return gate;
   }, []);
 
   const linkLabelVisible = useCallback((link: any) => {
@@ -453,6 +457,14 @@ export const KnowledgeGraph = forwardRef<
     // them everywhere; in focus they mark the lit set; in the overview
     // they follow the same zoom gate as node labels.
     if (labelModeRef.current === "off") return false;
+    if (labelModeRef.current === "on") return true;
+    // The zoom gate applies in focus mode too — focus only narrows
+    // which edges are eligible (the lit set).
+    const gate = labelsVisibleAtScale(
+      zoomKRef.current,
+      graphDataRef.current.nodes.length,
+    );
+    if (!gate) return false;
     const focusState = focusRef.current;
     if (focusState) {
       return (
@@ -460,11 +472,7 @@ export const KnowledgeGraph = forwardRef<
         focusState.litIds.has(endpointId(link.target))
       );
     }
-    if (labelModeRef.current === "on") return true;
-    return labelsVisibleAtScale(
-      zoomKRef.current,
-      graphDataRef.current.nodes.length,
-    );
+    return true;
   }, []);
 
   // Edge brightness follows endpoint lit-state. In focus mode an edge is
@@ -585,18 +593,6 @@ export const KnowledgeGraph = forwardRef<
       ctx.globalAlpha = 1;
     },
     [nodeLabelVisible, nodeRadius],
-  );
-
-  // With a custom nodeCanvasObject the renderer can't infer hit areas —
-  // without this, node clicks and drags silently stop working.
-  const nodePointerAreaPaint = useCallback(
-    (node: any, color: string, ctx: CanvasRenderingContext2D) => {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, nodeRadius(node) + 4, 0, 2 * Math.PI);
-      ctx.fill();
-    },
-    [nodeRadius],
   );
 
   // Full link painter (replace mode): line trimmed to disc edges,
@@ -746,6 +742,30 @@ export const KnowledgeGraph = forwardRef<
     // the first pass fires before the container is measured (fg == null).
   }, [graphData, communityLayout, dims]);
 
+  // Geometric pointer handling — replaces the library's canvas-picking
+  // (broken under Brave/Firefox fingerprinting protection).
+  const { tooltip } = useGraphPointer({
+    containerEl,
+    fgRef,
+    graphDataRef,
+    nodeRadius,
+    tooltipText: (node: any) =>
+      `${node.label}${node.typeLabel ? ` (${node.typeLabel})` : ""} - ${TRUST_LABELS[knowledgeGraphTrustState(node)]}${
+        node.evidenceCount
+          ? ` - ${node.evidenceCount} evidence item${node.evidenceCount === 1 ? "" : "s"}`
+          : ""
+      }`,
+    onNodeClick: (node: any) => {
+      // Clicking a node focuses it and surfaces the selected-node chip —
+      // the detail sheet opens only from the chip.
+      focusNode(node.id);
+      setSelectedNode(node as KnowledgeGraphNode);
+    },
+    onBackgroundClick: () => {
+      if (focusRef.current) exitFocus();
+    },
+  });
+
   // One-shot framing: zoom to fit after the first simulation settle.
   // Zoom/pan after that belongs to the user.
   const zoomInitRef = useRef(false);
@@ -806,6 +826,7 @@ export const KnowledgeGraph = forwardRef<
   return (
     <div
       ref={setContainerEl}
+      data-testid="graph-container"
       className={`absolute inset-0 overflow-hidden transition-opacity duration-150 ${
         framed ? "opacity-100" : "opacity-0"
       }`}
@@ -817,20 +838,13 @@ export const KnowledgeGraph = forwardRef<
         height={dims.h}
         backgroundColor="rgba(0,0,0,0)"
         nodeCanvasObject={nodeCanvasObject}
-        nodePointerAreaPaint={nodePointerAreaPaint}
         // Continuous repaint so ref-driven focus/filter/zoom changes show
         // without rebuilding graphData.
         autoPauseRedraw={false}
+        enablePointerInteraction={false}
         linkLabel={(link: any) => link.label || "related to"}
         linkCanvasObjectMode={() => "replace" as const}
         linkCanvasObject={linkCanvasObject}
-        nodeLabel={(node: any) =>
-          `${node.label}${node.typeLabel ? ` (${node.typeLabel})` : ""} - ${TRUST_LABELS[knowledgeGraphTrustState(node)]}${
-            node.evidenceCount
-              ? ` - ${node.evidenceCount} evidence item${node.evidenceCount === 1 ? "" : "s"}`
-              : ""
-          }`
-        }
         // Settle the layout synchronously before the first paint: zero
         // cooldown until the initial framing lands (no load animation),
         // then normal cooldown so dragging a node relaxes its neighbors.
@@ -859,50 +873,49 @@ export const KnowledgeGraph = forwardRef<
           }
           setFramed(true);
         }}
-        onNodeClick={(node: any) => {
-          // Clicking a node focuses it and surfaces the selected-node
-          // chip — the detail sheet opens only from the chip, so the
-          // layout never shifts mid-exploration.
-          focusNode(node.id);
-          setSelectedNode(node as KnowledgeGraphNode);
-        }}
-        onBackgroundClick={() => {
-          if (focusRef.current) exitFocus();
-        }}
-        onNodeDragEnd={(node: any) => {
-          node.fx = node.x;
-          node.fy = node.y;
-        }}
       />
-      {focus && selectedNode && (
-        <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
-          <button
-            type="button"
-            aria-label={`Open details for ${selectedNode.label}`}
-            className="flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
-            onClick={() => {
-              if (!onNodeClick) return;
-              const detail = getNodeWithEdgesRef.current(selectedNode.id);
-              if (detail) onNodeClick(detail.node, detail.edges);
-            }}
-          >
-            <span className="font-medium">{selectedNode.label}</span>
-            <span className="text-muted-foreground">View details</span>
-          </button>
-          {focus.truncated && (
-            <div
-              role="status"
-              className="text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+      {/* Overlay chrome lives in its own explicit stacking layer above
+            the canvas; the layer passes pointer events through except on
+            the interactive controls. */}
+      <div className="pointer-events-none absolute inset-0 z-20">
+        {focus && selectedNode && (
+          <div className="pointer-events-auto absolute top-3 right-3 flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              aria-label={`Open details for ${selectedNode.label}`}
+              className="flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+              onClick={() => {
+                if (!onNodeClick) return;
+                const detail = getNodeWithEdgesRef.current(selectedNode.id);
+                if (detail) onNodeClick(detail.node, detail.edges);
+              }}
             >
-              Showing direct connections only
-            </div>
-          )}
-        </div>
-      )}
-      <GraphLabelToggles
-        labelMode={labelMode}
-        onLabelModeChange={setLabelMode}
-      />
+              <span className="font-medium">{selectedNode.label}</span>
+              <span className="text-muted-foreground">View details</span>
+            </button>
+            {focus.truncated && (
+              <div
+                role="status"
+                className="text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5"
+              >
+                Showing direct connections only
+              </div>
+            )}
+          </div>
+        )}
+        {tooltip && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-background/90 px-2 py-1 text-xs whitespace-nowrap"
+            style={{ left: tooltip.x, top: tooltip.y }}
+          >
+            {tooltip.text}
+          </div>
+        )}
+        <GraphLabelToggles
+          labelMode={labelMode}
+          onLabelModeChange={setLabelMode}
+        />
+      </div>
       <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-muted-foreground bg-background/80 rounded px-3 py-1.5 flex-wrap">
         {trustCounts
           .filter((item) => item.count > 0)

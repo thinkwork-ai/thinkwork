@@ -28,7 +28,10 @@ vi.mock("react-force-graph-2d", async () => {
           distance: vi.fn(),
         }),
         zoomToFit: vi.fn(),
-        zoom: vi.fn(),
+        zoom: () => 1,
+        screen2GraphCoords: (x: number, y: number) => ({ x, y }),
+        graph2ScreenCoords: (x: number, y: number) => ({ x, y }),
+        d3ReheatSimulation: vi.fn(),
       }));
       forceGraphCalls.push(props);
       return ReactActual.createElement("div", {
@@ -65,6 +68,40 @@ afterEach(() => {
 
 function latestForceGraphProps() {
   return forceGraphCalls[forceGraphCalls.length - 1];
+}
+
+/** Position nodes 1000px apart so geometric hit-testing is unambiguous
+ *  (the identity screen<->graph mocks make screen == graph coords). */
+function placeNodes(props: any) {
+  props.graphData.nodes.forEach((node: any, i: number) => {
+    node.x = i * 1000;
+    node.y = 0;
+  });
+}
+
+function pointerEvent(type: string, x: number, y: number) {
+  return new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+  });
+}
+
+async function clickNodeIndex(index: number) {
+  placeNodes(latestForceGraphProps());
+  const container = screen.getByTestId("graph-container");
+  await act(async () => {
+    container.dispatchEvent(pointerEvent("click", index * 1000, 0));
+  });
+}
+
+async function clickBackground() {
+  const container = screen.getByTestId("graph-container");
+  await act(async () => {
+    container.dispatchEvent(pointerEvent("click", 5_000_000, 5000));
+  });
 }
 
 function paintNodeAlpha(props: any, node: any) {
@@ -134,13 +171,10 @@ describe("WikiGraph", () => {
     await screen.findByTestId("force-graph");
     const props = latestForceGraphProps();
 
-    // Interactivity contract: custom-painted nodes must provide a pointer
-    // area or clicks/drags silently die.
-    expect(typeof props.nodePointerAreaPaint).toBe("function");
+    // Interactivity is geometric — the library's canvas picking is off.
+    expect(props.enablePointerInteraction).toBe(false);
 
-    await act(async () => {
-      props.onNodeClick(props.graphData.nodes[0]);
-    });
+    await clickNodeIndex(0);
 
     let latest = latestForceGraphProps();
     expect(paintNodeAlpha(latest, props.graphData.nodes[0])).toBe(1);
@@ -149,9 +183,7 @@ describe("WikiGraph", () => {
     // graphData identity untouched by focus (no-restart invariant).
     expect(latest.graphData).toBe(props.graphData);
 
-    await act(async () => {
-      latestForceGraphProps().onBackgroundClick();
-    });
+    await clickBackground();
     latest = latestForceGraphProps();
     expect(paintNodeAlpha(latest, props.graphData.nodes[2])).toBe(1);
   });
