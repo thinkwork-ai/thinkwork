@@ -106,6 +106,15 @@ export interface AgentLoopTriggerContext {
    * call sites resolve this as `loop.run_as_user_id ?? null`.
    */
   runAsUserId?: string | null;
+  /**
+   * THINK-155 U5 (KTD4): the bound document's artifact id — the document this
+   * scheduled run maintains. Rides the wakeup payload's `agentLoop` block so
+   * the turn's emission enforces it server-side (`document.emit` revises
+   * exactly that artifact). INERT until THINK-213's binding config lands:
+   * every production call site passes null. Payload-parity rule: carried
+   * identically on start and resume payloads.
+   */
+  documentId?: string | null;
   threadId?: string | null;
   spaceId?: string | null;
   scheduledJobId?: string | null;
@@ -252,6 +261,15 @@ export interface AgentLoopWakeupPayload {
      * Null when the automation has no run-as identity (system-actor run).
      */
     runAsUserId?: string | null;
+    /**
+     * THINK-155 U5 (KTD4): the bound document's artifact id this run
+     * maintains. Emission enforces it server-side via the turn's
+     * context_snapshot; the finalize projection raises a
+     * document_refresh_failed inbox item when a documentId-carrying run
+     * fails terminally. Inert (null) until THINK-213's binding config
+     * lands. Carried identically on start and resume payloads.
+     */
+    documentId?: string | null;
     completionCriteria: string[];
     loopPolicy: LoopPolicy;
     /** Outcomes of routine actions executed before this agent turn (mixed
@@ -467,6 +485,8 @@ export function buildAgentLoopWakeupPayload(input: {
       triggerSource: input.trigger.source,
       scheduledJobId: input.trigger.scheduledJobId ?? null,
       runAsUserId: input.runAsUserId ?? null,
+      // THINK-155 U5 (KTD4): bound document, inert until THINK-213.
+      documentId: input.trigger.documentId ?? null,
       completionCriteria: input.version.goalSpec.completionCriteria,
       loopPolicy: input.version.loopPolicy,
       routineActionResults: input.routineActionResults ?? null,

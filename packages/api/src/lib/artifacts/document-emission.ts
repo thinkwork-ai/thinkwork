@@ -34,6 +34,7 @@ import { getDb } from "@thinkwork/database-pg";
 import {
   documentSectionWaivers,
   messages,
+  threadTurns,
 } from "@thinkwork/database-pg/schema";
 import {
   and,
@@ -107,6 +108,13 @@ export function isDocumentMetadata(metadata: unknown): boolean {
     parsed !== null &&
     (parsed as { kind?: unknown }).kind === DOCUMENT_METADATA_KIND
   );
+}
+
+/** The logical documentId recorded on a document artifact row's metadata. */
+function metadataDocumentId(row: DocumentRow): string | null {
+  const meta = parseMetadata(row.metadata);
+  const documentId = meta?.documentId;
+  return typeof documentId === "string" && documentId ? documentId : null;
 }
 
 function parseMetadata(metadata: unknown): Record<string, unknown> | null {
@@ -258,6 +266,18 @@ export interface DocumentEmissionDeps {
     turnId: string;
   }) => Promise<TurnRunContext | null>;
   /**
+   * THINK-155 U5 (KTD4): the bound document's artifact id for this turn, read
+   * from `thread_turns.context_snapshot.agentLoop.documentId` (the wakeup
+   * payload spreads into the snapshot). Null when the run carries no binding
+   * — every production dispatch path today (ship-inert). Unlike identity,
+   * this IS payload-carried by design: it is a target constraint the server
+   * enforces, not a trust input.
+   */
+  resolveBoundDocumentId: (input: {
+    tenantId: string;
+    turnId: string;
+  }) => Promise<string | null>;
+  /**
    * THINK-155 U3: stamp a successful scheduled refresh — sets
    * `artifacts.last_refresh_at`, clears `refresh_failed_at`. Best-effort;
    * called only on the run-derived path.
@@ -384,6 +404,28 @@ function defaultDeps(): DocumentEmissionDeps {
         : null;
     },
     resolveTurnRunContext: (input) => resolveTurnRunContext(input),
+    resolveBoundDocumentId: async ({ tenantId, turnId }) => {
+      const rows = await getDb()
+        .select({ context_snapshot: threadTurns.context_snapshot })
+        .from(threadTurns)
+        .where(
+          and(
+            eq(threadTurns.id, turnId),
+            eq(threadTurns.tenant_id, tenantId),
+          ),
+        )
+        .limit(1);
+      const snapshot = rows[0]?.context_snapshot;
+      const agentLoop =
+        snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+          ? (snapshot as Record<string, unknown>).agentLoop
+          : null;
+      const documentId =
+        agentLoop && typeof agentLoop === "object" && !Array.isArray(agentLoop)
+          ? (agentLoop as Record<string, unknown>).documentId
+          : null;
+      return typeof documentId === "string" && documentId ? documentId : null;
+    },
     markRefreshSucceeded: async ({ tenantId, artifactId }) => {
       await db
         .update(artifacts)
@@ -690,34 +732,13 @@ export async function handleDocumentEmission(
   }
   const runDerived = runContext !== null;
 
-  let documentId = doc.documentId ?? null;
-  if (!documentId) {
-    // THINK-155 U2: run-derived turns never adopt a stray draft row —
-    // continuity rides the documentId the agent carries between emits.
-    if (runDerived) {
-      documentId = randomUUID();
-    } else {
-      const existing = await deps.findExistingDraftDocument({
-        tenantId: input.tenantId,
-        threadId: input.threadId,
-        genre: doc.genre,
-        title: doc.title,
-      });
-      documentId = existing?.documentId ?? randomUUID();
-    }
-  }
-  const artifactId = deriveDocumentArtifactId(
-    input.tenantId,
-    input.threadId,
-    documentId,
-  );
-
   // THINK-155 U3: a failed scheduled *finalize* is recorded (refresh stamp +
   // deduplicated inbox item). Draft-stage rejections are the agent's in-turn
   // self-correction loop (DocSpector-style), not a refresh failure yet — the
   // run either recovers with a successful finalize or fails terminally
   // (caught by the finalize-projection path). Best-effort: recording never
   // masks the emission response.
+  let refreshArtifactId: string | null = null;
   const recordScheduledRefreshFailure = async (
     errorCode: string,
     errorMessage: string,
@@ -731,7 +752,7 @@ export async function handleDocumentEmission(
         runId: runContext.runId,
         errorCode,
         errorMessage,
-        artifactId,
+        artifactId: refreshArtifactId,
       });
     } catch (err) {
       console.error(
@@ -740,6 +761,93 @@ export async function handleDocumentEmission(
       );
     }
   };
+
+  // ---- Bound-document target enforcement (THINK-155 U5, KTD4) ------------
+  // When the run's payload carries a bound documentId (an artifact id), every
+  // emit on this turn revises exactly that artifact — the agent cannot fork a
+  // duplicate report through instruction drift. Inert today: no production
+  // dispatch path sets it until THINK-213's binding config lands.
+  let boundArtifact: DocumentRow | null = null;
+  if (runDerived) {
+    const boundId = await deps.resolveBoundDocumentId({
+      tenantId: input.tenantId,
+      turnId: input.turnId,
+    });
+    if (boundId) {
+      const row = await deps.loadDocumentRow(boundId);
+      // KTD1-mirror cross-check: the bound artifact must exist in the turn's
+      // tenant. A cross-tenant or dangling binding rejects with no write.
+      if (!row || row.tenant_id !== input.tenantId) {
+        await recordScheduledRefreshFailure(
+          "BOUND_DOCUMENT_INVALID",
+          `Bound document ${boundId} was not found in this workspace`,
+        );
+        return {
+          statusCode: 200,
+          body: {
+            ok: false,
+            code: "BOUND_DOCUMENT_INVALID",
+            error:
+              "This run maintains a bound document that could not be resolved in this workspace. Do not create a replacement document; report the failure instead.",
+          },
+        };
+      }
+      refreshArtifactId = row.id;
+      const boundLogicalId = metadataDocumentId(row) ?? row.id;
+      if (
+        doc.documentId &&
+        doc.documentId !== boundLogicalId &&
+        doc.documentId !== row.id
+      ) {
+        return {
+          statusCode: 200,
+          body: {
+            ok: false,
+            code: "BOUND_DOCUMENT_MISMATCH",
+            error: `This run maintains one bound document; emit with document_id "${boundLogicalId}" (or omit document_id) instead of starting a new document.`,
+          },
+        };
+      }
+      boundArtifact = row;
+    }
+  }
+
+  let documentId: string;
+  let artifactId: string;
+  if (boundArtifact) {
+    // Revisions target the bound artifact regardless of the turn's thread —
+    // the (tenant, thread, documentId) derivation would fork a copy when the
+    // automation runs in a fresh thread.
+    documentId = metadataDocumentId(boundArtifact) ?? boundArtifact.id;
+    artifactId = boundArtifact.id;
+  } else if (doc.documentId) {
+    documentId = doc.documentId;
+    artifactId = deriveDocumentArtifactId(
+      input.tenantId,
+      input.threadId,
+      documentId,
+    );
+  } else {
+    // THINK-155 U2: run-derived turns never adopt a stray draft row —
+    // continuity rides the documentId the agent carries between emits.
+    if (runDerived) {
+      documentId = randomUUID();
+    } else {
+      const existing = await deps.findExistingDraftDocument({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        genre: doc.genre,
+        title: doc.title,
+      });
+      documentId = existing?.documentId ?? randomUUID();
+    }
+    artifactId = deriveDocumentArtifactId(
+      input.tenantId,
+      input.threadId,
+      documentId,
+    );
+  }
+  refreshArtifactId = artifactId;
 
   // ---- Plate registry (THINK-153 KTD3): validate the genre between parse
   // and compile. Unknown slug → self-repair rejection naming the valid set;

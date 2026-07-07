@@ -105,6 +105,7 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
       triggeringMessageId ? USER_ID : null,
     ),
     resolveTurnRunContext: vi.fn(async () => null),
+    resolveBoundDocumentId: vi.fn(async () => null),
     markRefreshSucceeded: vi.fn(async (input) => {
       recorded.refreshSuccesses.push(input as unknown as Record<string, unknown>);
     }),
@@ -720,6 +721,130 @@ describe("refresh state + failure observability (THINK-155 U3)", () => {
       null,
     );
     expect(result.body.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("bound-document target enforcement (THINK-155 U5)", () => {
+  const BOUND_ARTIFACT_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+  const boundRow: DocumentRow = {
+    id: BOUND_ARTIFACT_ID,
+    tenant_id: TENANT_ID,
+    thread_id: "00000000-0000-0000-0000-000000000001", // an earlier run's thread
+    space_id: SPACE_ID,
+    status: "final",
+    head_version: 3,
+    head_write_seq: 3,
+    metadata: { kind: "document", genre: "report", documentId: "doc-bound" },
+  };
+
+  function makeBoundDeps(overrides: Partial<DocumentEmissionDeps> = {}) {
+    return makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      resolveBoundDocumentId: vi.fn(async () => BOUND_ARTIFACT_ID),
+      loadDocumentRow: vi.fn(async (artifactId: string) =>
+        artifactId === BOUND_ARTIFACT_ID ? boundRow : null,
+      ),
+      ...overrides,
+    });
+  }
+
+  it("emit with no document_id revises the bound artifact across threads", async () => {
+    const { deps, recorded } = makeBoundDeps();
+    const result = await emit(
+      { ...VALID_DOCUMENT, documentId: undefined, status: "final" },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(true);
+    expect(result.body.artifactId).toBe(BOUND_ARTIFACT_ID);
+    expect(result.body.documentId).toBe("doc-bound");
+    expect(recorded.upserts[0].artifactId).toBe(BOUND_ARTIFACT_ID);
+    expect(recorded.pins[0]).toMatchObject({ row: boundRow });
+  });
+
+  it("emit with the bound document_id also revises the bound artifact", async () => {
+    const { deps, recorded } = makeBoundDeps();
+    const result = await emit(
+      { ...VALID_DOCUMENT, documentId: "doc-bound", status: "final" },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(true);
+    expect(recorded.upserts[0].artifactId).toBe(BOUND_ARTIFACT_ID);
+  });
+
+  it("emit attempting a different document is rejected with an actionable error", async () => {
+    const { deps, recorded } = makeBoundDeps();
+    const result = await emit(
+      { ...VALID_DOCUMENT, documentId: "some-other-doc", status: "final" },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("BOUND_DOCUMENT_MISMATCH");
+    expect(String(result.body.error)).toContain("doc-bound");
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+    expect(recorded.pins).toHaveLength(0);
+  });
+
+  it("a bound artifact in a different tenant is rejected with no write", async () => {
+    const { deps, recorded } = makeBoundDeps({
+      loadDocumentRow: vi.fn(async () => ({
+        ...boundRow,
+        tenant_id: "00000000-0000-0000-0000-00000000dead",
+      })),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("BOUND_DOCUMENT_INVALID");
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+    expect(recorded.pins).toHaveLength(0);
+    // Finalize attempt on a broken binding is a recorded refresh failure.
+    expect(recorded.refreshFailures).toHaveLength(1);
+    expect(recorded.refreshFailures[0].errorCode).toBe(
+      "BOUND_DOCUMENT_INVALID",
+    );
+  });
+
+  it("a dangling bound id (no artifact row) is rejected with no write", async () => {
+    const { deps, recorded } = makeBoundDeps({
+      loadDocumentRow: vi.fn(async () => null),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("BOUND_DOCUMENT_INVALID");
+    expect(recorded.upserts).toHaveLength(0);
+  });
+
+  it("no documentId in the payload (all production paths today) leaves behavior unchanged", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      resolveBoundDocumentId: vi.fn(async () => null),
+    });
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    expect(result.body.ok).toBe(true);
+    expect(result.body.artifactId).toBe(
+      deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
+    );
+    expect(recorded.pins).toHaveLength(1);
+  });
+
+  it("human turns never consult the bound-document seam", async () => {
+    const boundResolver = vi.fn(async () => BOUND_ARTIFACT_ID);
+    const { deps } = makeDeps({ resolveBoundDocumentId: boundResolver });
+    const result = await emit(VALID_DOCUMENT, deps); // human turn
+    expect(result.body.ok).toBe(true);
+    expect(boundResolver).not.toHaveBeenCalled();
   });
 });
 

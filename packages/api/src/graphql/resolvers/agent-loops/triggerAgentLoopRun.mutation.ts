@@ -134,6 +134,9 @@ export async function triggerAgentLoopRun(
         // automation's run_as_user_id (defaults to the creator; U3), not the
         // triggering operator. Null ⇒ system-actor run, no identity injected.
         runAsUserId: loop.run_as_user_id ?? null,
+        // THINK-155 U5 (KTD4): bound document — null until THINK-213's
+        // binding config exists (ship-inert; payload-parity rule).
+        documentId: null,
         threadId: executionThread?.threadId ?? null,
         spaceId: executionSpaceId,
         idempotencyKey,

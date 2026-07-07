@@ -823,6 +823,9 @@ async function handleAgentLoopContinueDispatch(input: {
         // the run-as identity must ride here too. The tenant cross-check
         // already ran in the mutation's dispatchAgentLoop before deferral.
         runAsUserId: loop.run_as_user_id ?? null,
+        // THINK-155 U5 (KTD4): bound document — null until THINK-213's
+        // binding config exists (ship-inert; payload-parity rule).
+        documentId: null,
         threadId: event.threadId ?? null,
         spaceId: event.spaceId ?? null,
         webhookDelivery: event.webhookDelivery ?? null,
@@ -1025,6 +1028,9 @@ async function handleAgentLoopSchedule(input: {
         // context injection (workspace projection + memory bank). Null ⇒
         // system-actor run, no identity injected.
         runAsUserId: loop.run_as_user_id ?? null,
+        // THINK-155 U5 (KTD4): bound document — null until THINK-213's
+        // binding config exists (ship-inert; payload-parity rule).
+        documentId: null,
         threadId: executionThread?.threadId ?? null,
         spaceId: executionSpaceId,
         scheduledJobId: triggerId,

@@ -97,6 +97,10 @@ export interface AgentLoopFinalizeLedger {
     runId: string;
     iterationId: string;
     iterationNumber: number;
+    /** THINK-155 U5: bound document carried forward from the prior turn's
+     * payload so resume iterations keep the same enforcement (payload-parity
+     * rule). Null when the run has no binding. */
+    documentId?: string | null;
     now: Date;
   }): Promise<{ id: string }>;
   markIterationWakeup(input: {
@@ -217,6 +221,7 @@ export async function projectAgentLoopFinalize(
         runId: loaded.run.id,
         iterationId: nextIteration.id,
         iterationNumber: nextIterationNumber,
+        documentId: context.documentId,
         now,
       });
       nextWakeupId = nextWakeup.id;
@@ -537,6 +542,8 @@ export function createDrizzleAgentLoopFinalizeLedger(): AgentLoopFinalizeLedger 
         trigger: {
           family: "manual",
           source: "agent_loop_continue",
+          // THINK-155 U5: keep the bound document on resume payloads.
+          documentId: input.documentId ?? null,
         },
         runId: input.runId,
         iterationId: input.iterationId,

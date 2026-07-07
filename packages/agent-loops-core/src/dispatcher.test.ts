@@ -922,6 +922,40 @@ describe("run-as identity (Per-Sender Context Injection, R5)", () => {
     expect(start.agentLoop.runAsUserId).toBe("run-as-user");
     expect(resume.agentLoop.runAsUserId).toBe(start.agentLoop.runAsUserId);
   });
+
+  it("resume-turn payload carries the SAME bound documentId as the initial turn (THINK-155 U5)", () => {
+    const version = baseInput().version!;
+    const common = {
+      loop: baseInput().loop,
+      version,
+      trigger: { ...baseInput().trigger, documentId: "artifact-9" },
+      runId: "run-1",
+      iterationId: "iter-1",
+    };
+    const start = buildAgentLoopWakeupPayload({
+      ...common,
+      goalModeAction: "start" as const,
+    });
+    const resume = buildAgentLoopWakeupPayload({
+      ...common,
+      goalModeAction: "resume" as const,
+    });
+
+    expect(start.agentLoop.documentId).toBe("artifact-9");
+    expect(resume.agentLoop.documentId).toBe(start.agentLoop.documentId);
+  });
+
+  it("payload documentId is null when the trigger carries none (inert default)", () => {
+    const version = baseInput().version!;
+    const payload = buildAgentLoopWakeupPayload({
+      loop: baseInput().loop,
+      version,
+      trigger: baseInput().trigger,
+      runId: "run-1",
+      iterationId: "iter-1",
+    });
+    expect(payload.agentLoop.documentId).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
