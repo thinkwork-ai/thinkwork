@@ -5,6 +5,7 @@ import {
   handleDocumentEmission,
   parseDocumentEmitInput,
   DOCUMENT_CARD_PAYLOAD_KIND,
+  DocumentEmissionConflict,
   type DocumentEmissionDeps,
   type DocumentRow,
 } from "./document-emission.js";
@@ -405,6 +406,183 @@ describe("run-derived acting user (THINK-155 U1)", () => {
     expect(result.body.code).toBe("FORBIDDEN");
     expect(recorded.upserts).toHaveLength(0);
     expect(recorded.pins).toHaveLength(0);
+  });
+});
+
+describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => {
+  const RUN_AS_USER_ID = "88888888-8888-8888-8888-888888888888";
+
+  /** Deps where every mutating call appends to a shared op log. */
+  function makeOrderedDeps(overrides: Partial<DocumentEmissionDeps> = {}) {
+    const { deps, recorded } = makeDeps({
+      resolveRunActingUserId: vi.fn(async () => RUN_AS_USER_ID),
+    });
+    const ops: string[] = [];
+    const wrapped: DocumentEmissionDeps = {
+      ...deps,
+      writePayload: vi.fn(async (args) => {
+        ops.push(
+          (args as { key: string }).key.includes("render")
+            ? "s3:render"
+            : "s3:digest",
+        );
+        return deps.writePayload(args);
+      }),
+      upsertDocumentRow: vi.fn(async (input) => {
+        ops.push("db:upsert");
+        return deps.upsertDocumentRow(input);
+      }),
+      pinDocumentHead: vi.fn(async (input) => {
+        ops.push("db:pin");
+        return deps.pinDocumentHead(input);
+      }),
+      replaceSectionWaivers: vi.fn(async (input) => {
+        ops.push("db:waivers");
+        return deps.replaceSectionWaivers(input);
+      }),
+      ...overrides,
+    };
+    return { deps: wrapped, recorded, ops };
+  }
+
+  it("gate-rejected run-derived finalize changes nothing visible (AE2)", async () => {
+    const { deps, recorded } = makeOrderedDeps({
+      preflight: vi.fn(() => ({
+        ok: false as const,
+        diagnostics: [{ code: "SKELETON" as const, message: "empty", location: "head" }],
+      })),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+    expect(recorded.pins).toHaveLength(0);
+    expect(recorded.waiverWrites).toHaveLength(0);
+  });
+
+  it("run-derived refresh of an existing document swaps the head only after the pin (KTD2)", async () => {
+    const { deps, recorded, ops } = makeOrderedDeps();
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    expect(result.body.ok).toBe(true);
+    expect(result.body.status).toBe("final");
+    expect(recorded.pins).toHaveLength(1);
+    // Existing row (loadDocumentRow returns it): head bodies land after the pin.
+    expect(ops.indexOf("db:pin")).toBeLessThan(ops.indexOf("s3:digest"));
+    expect(ops.indexOf("db:pin")).toBeLessThan(ops.indexOf("s3:render"));
+    expect(ops.indexOf("db:upsert")).toBeLessThan(ops.indexOf("db:pin"));
+    // Status is never demoted mid-refresh.
+    expect(recorded.upserts[0].preserveHeadOnConflict).toBe(true);
+  });
+
+  it("first run-derived emission (no prior row) writes head bodies before the pin", async () => {
+    let created = false;
+    const { deps, recorded, ops } = makeOrderedDeps();
+    const baseLoad = deps.loadDocumentRow;
+    deps.loadDocumentRow = vi.fn(async (artifactId: string) => {
+      if (!created) {
+        created = true; // first load: preexistence probe → not found
+        return null;
+      }
+      return baseLoad(artifactId);
+    });
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    expect(result.body.ok).toBe(true);
+    expect(ops.indexOf("s3:digest")).toBeLessThan(ops.indexOf("db:upsert"));
+    expect(recorded.pins).toHaveLength(1);
+  });
+
+  it("run-derived pin conflict leaves the head bodies unwritten", async () => {
+    const { deps, recorded } = makeOrderedDeps({
+      pinDocumentHead: vi.fn(async () => {
+        throw new DocumentEmissionConflict("concurrent head change");
+      }),
+    });
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("CONFLICT");
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.waiverWrites).toHaveLength(0);
+  });
+
+  it("failure after staging then a successful retry converges (idempotent keys)", async () => {
+    let attempts = 0;
+    const { deps, recorded } = makeOrderedDeps({
+      pinDocumentHead: vi.fn(async (input) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("transient db failure");
+        recorded.pins.push(input as unknown as Record<string, unknown>);
+        return { headVersion: 2, contentHash: "hash", pinned: true };
+      }),
+    });
+    await expect(
+      emit({ ...VALID_DOCUMENT, status: "final" }, deps, null),
+    ).rejects.toThrow("transient db failure");
+    expect(recorded.s3Writes).toHaveLength(0); // head untouched by the failure
+    const retry = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    expect(retry.body.ok).toBe(true);
+    expect(retry.body.headVersion).toBe(2);
+    expect(recorded.s3Writes.length).toBeGreaterThan(0);
+  });
+
+  it("two sequential successful run-derived emissions keep a stable artifact id (R3)", async () => {
+    const { deps, recorded } = makeOrderedDeps();
+    const first = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const second = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    expect(first.body.artifactId).toBe(second.body.artifactId);
+    expect(recorded.pins).toHaveLength(2);
+  });
+
+  it("run-derived draft emit stages nothing visible; continuity rides the returned documentId", async () => {
+    const { deps, recorded } = makeOrderedDeps();
+    const draft = await emit(
+      { ...VALID_DOCUMENT, documentId: undefined },
+      deps,
+      null,
+    );
+    expect(draft.body.ok).toBe(true);
+    expect(draft.body.status).toBe("draft");
+    expect(typeof draft.body.documentId).toBe("string");
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+    expect(recorded.cards).toHaveLength(0);
+    // Stray drafts are never adopted on run-derived turns.
+    expect(deps.findExistingDraftDocument).not.toHaveBeenCalled();
+  });
+
+  it("run-derived draft emit then gate-rejected finalize leaves head, status, and versions unchanged", async () => {
+    const { deps, recorded } = makeOrderedDeps();
+    const draft = await emit(
+      { ...VALID_DOCUMENT, documentId: undefined },
+      deps,
+      null,
+    );
+    const boundId = draft.body.documentId as string;
+    deps.preflight = vi.fn(() => ({
+      ok: false as const,
+      diagnostics: [{ code: "SKELETON" as const, message: "empty", location: "head" }],
+    }));
+    const finalize = await emit(
+      { ...VALID_DOCUMENT, documentId: boundId, status: "final" },
+      deps,
+      null,
+    );
+    expect(finalize.body.ok).toBe(false);
+    expect(recorded.s3Writes).toHaveLength(0);
+    expect(recorded.upserts).toHaveLength(0);
+    expect(recorded.pins).toHaveLength(0);
+  });
+
+  it("human-turn emission keeps the draft-first write order (regression guard)", async () => {
+    const { deps, recorded, ops } = makeOrderedDeps();
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps); // human turn
+    expect(result.body.ok).toBe(true);
+    expect(ops.indexOf("s3:digest")).toBeLessThan(ops.indexOf("db:upsert"));
+    expect(ops.indexOf("db:upsert")).toBeLessThan(ops.indexOf("db:pin"));
+    expect(recorded.upserts[0].preserveHeadOnConflict).toBeUndefined();
   });
 });
 

@@ -269,6 +269,12 @@ export interface DocumentEmissionDeps {
     documentId: string;
     digestKey: string;
     actingUserId: string | null;
+    /**
+     * THINK-155 U2: run-derived refreshes must never demote a finalized
+     * document to draft mid-emission — on conflict, update metadata only and
+     * leave `status` (and the head pointer) to the finalize pin.
+     */
+    preserveHeadOnConflict?: boolean;
   }) => Promise<void>;
   /**
    * THINK-183 U5: rewrite the artifact's section-waiver rows (delete +
@@ -400,13 +406,17 @@ function defaultDeps(): DocumentEmissionDeps {
           // Re-emission refreshes the head and re-opens a working draft (F3:
           // edits after finalize start a new draft head; the pinned version
           // stays immutable). createdBy is preserved from the original insert.
-          set: {
-            title,
-            summary,
-            s3_key: input.digestKey,
-            status: "draft",
-            updated_at: new Date(),
-          },
+          // Run-derived refreshes (THINK-155 U2) update metadata only —
+          // status stays untouched so readers never see a draft flash.
+          set: input.preserveHeadOnConflict
+            ? { title, summary, updated_at: new Date() }
+            : {
+                title,
+                summary,
+                s3_key: input.digestKey,
+                status: "draft",
+                updated_at: new Date(),
+              },
         });
     },
     replaceSectionWaivers: async ({
@@ -726,22 +736,7 @@ export async function handleDocumentEmission(
     };
   }
 
-  // ---- Identity: documentId fallback (KTD8) + acting user ----------------
-  let documentId = doc.documentId ?? null;
-  if (!documentId) {
-    const existing = await deps.findExistingDraftDocument({
-      tenantId: input.tenantId,
-      threadId: input.threadId,
-      genre: doc.genre,
-      title: doc.title,
-    });
-    documentId = existing?.documentId ?? randomUUID();
-  }
-  const artifactId = deriveDocumentArtifactId(
-    input.tenantId,
-    input.threadId,
-    documentId,
-  );
+  // ---- Identity: acting user + documentId fallback (KTD8) ----------------
   let actingUserId = await deps.resolveActingUserId({
     tenantId: input.tenantId,
     triggeringMessageId: input.triggeringMessageId,
@@ -759,6 +754,29 @@ export async function handleDocumentEmission(
     });
     if (actingUserId) actingUserSource = "run";
   }
+  const runDerived = actingUserSource === "run";
+
+  let documentId = doc.documentId ?? null;
+  if (!documentId) {
+    // THINK-155 U2: run-derived turns never adopt a stray draft row —
+    // continuity rides the documentId the agent carries between emits.
+    if (runDerived) {
+      documentId = randomUUID();
+    } else {
+      const existing = await deps.findExistingDraftDocument({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        genre: doc.genre,
+        title: doc.title,
+      });
+      documentId = existing?.documentId ?? randomUUID();
+    }
+  }
+  const artifactId = deriveDocumentArtifactId(
+    input.tenantId,
+    input.threadId,
+    documentId,
+  );
 
   // ---- Finalize-time space authorization (before any write) --------------
   if (doc.status === "final" && doc.spaceId) {
@@ -791,6 +809,26 @@ export async function handleDocumentEmission(
     }
   }
 
+  // ---- THINK-155 U2: run-derived draft emits stage nothing visible -------
+  // Each emit carries the full document, so a scheduled draft needs no
+  // persistence: the response's documentId is the continuity token the agent
+  // carries into the finalize emit, and the document row is created only at
+  // finalize. Readers keep seeing the last finalized state throughout.
+  if (runDerived && doc.status !== "final") {
+    const row = await deps.loadDocumentRow(artifactId);
+    return {
+      statusCode: 200,
+      body: {
+        ok: true,
+        artifactId,
+        documentId,
+        status: "draft",
+        headVersion: row?.head_version ?? 0,
+        ...(compileWarnings.length > 0 ? { warnings: compileWarnings } : {}),
+      },
+    };
+  }
+
   // ---- Head writes (two-key rule) + born-as-artifact upsert --------------
   const digestKey = artifactContentKey({
     tenantId: input.tenantId,
@@ -800,50 +838,68 @@ export async function handleDocumentEmission(
     tenantId: input.tenantId,
     artifactId,
   });
-  await deps.writePayload({
-    tenantId: input.tenantId,
-    key: digestKey,
-    body: doc.digestMarkdown,
-    contentType: DOCUMENT_DIGEST_CONTENT_TYPE,
-  });
-  await deps.writePayload({
-    tenantId: input.tenantId,
-    key: renderKey,
-    body: renderHtml,
-    contentType: DOCUMENT_RENDER_CONTENT_TYPE,
-  });
-  await deps.upsertDocumentRow({
-    artifactId,
-    tenantId: input.tenantId,
-    threadId: input.threadId,
-    agentId: input.agentId,
-    genre: doc.genre,
-    title: doc.title,
-    abstract: doc.abstract,
-    documentId,
-    digestKey,
-    actingUserId,
-  });
-
-  // THINK-183 U5: head-semantics waiver rewrite. Only manifest-bearing plates
-  // touch the table — a re-emission with zero waivers clears prior rows, and
-  // a contract-less plate issues no statement at all (AE4 inert path).
-  if ((plate.sections?.length ?? 0) > 0) {
-    await deps.replaceSectionWaivers({
+  const writeHeadBodies = async () => {
+    await deps.writePayload({
       tenantId: input.tenantId,
-      artifactId,
-      plateSlug: plate.slug,
-      waivers: compiled.waivers,
+      key: digestKey,
+      body: doc.digestMarkdown,
+      contentType: DOCUMENT_DIGEST_CONTENT_TYPE,
     });
-  }
+    await deps.writePayload({
+      tenantId: input.tenantId,
+      key: renderKey,
+      body: renderHtml,
+      contentType: DOCUMENT_RENDER_CONTENT_TYPE,
+    });
+  };
+  const writeWaivers = async () => {
+    // THINK-183 U5: head-semantics waiver rewrite. Only manifest-bearing
+    // plates touch the table — a re-emission with zero waivers clears prior
+    // rows, and a contract-less plate issues no statement at all (AE4 inert
+    // path).
+    if ((plate.sections?.length ?? 0) > 0) {
+      await deps.replaceSectionWaivers({
+        tenantId: input.tenantId,
+        artifactId,
+        plateSlug: plate.slug,
+        waivers: compiled.waivers,
+      });
+    }
+  };
 
-  // ---- Finalize: pin both bodies + flip (KTD8) ----------------------------
   let headVersion = 0;
   let status: "draft" | "final" = "draft";
   // Space owner for memory routing: the finalize input wins; a re-emitted
   // draft of a previously space-assigned document keeps the row's space.
   let memorySpaceId: string | null = doc.spaceId ?? null;
-  if (doc.status === "final") {
+
+  if (runDerived) {
+    // ---- THINK-155 U2: keep-last-good ordering for scheduled finalize ----
+    // The visible head (head render key — the body resolver always reads it)
+    // and `artifacts.status` change only after the pin succeeds. A failure or
+    // crash anywhere in this block leaves readers on the last finalized
+    // version; the pin's own S3 writes are content-addressed and idempotent,
+    // so a retried emission converges instead of colliding with staged keys.
+    const preexisting = await deps.loadDocumentRow(artifactId);
+    if (!preexisting) {
+      // First emission: no last-good state to preserve — write the head
+      // bodies up front so the fresh row never dangles without content.
+      await writeHeadBodies();
+    }
+    await deps.upsertDocumentRow({
+      artifactId,
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      genre: doc.genre,
+      title: doc.title,
+      abstract: doc.abstract,
+      documentId,
+      digestKey,
+      actingUserId,
+      // Never demote a finalized document to draft mid-refresh (draft flash).
+      preserveHeadOnConflict: true,
+    });
     const row = await deps.loadDocumentRow(artifactId);
     if (!row) {
       return {
@@ -875,10 +931,65 @@ export async function handleDocumentEmission(
       }
       throw err;
     }
+    if (preexisting) {
+      // The head swap is the last visible step (KTD2).
+      await writeHeadBodies();
+    }
+    await writeWaivers();
   } else {
-    const row = await deps.loadDocumentRow(artifactId);
-    headVersion = row?.head_version ?? 0;
-    memorySpaceId = row?.space_id ?? null;
+    await writeHeadBodies();
+    await deps.upsertDocumentRow({
+      artifactId,
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      genre: doc.genre,
+      title: doc.title,
+      abstract: doc.abstract,
+      documentId,
+      digestKey,
+      actingUserId,
+    });
+    await writeWaivers();
+
+    // ---- Finalize: pin both bodies + flip (KTD8) -------------------------
+    if (doc.status === "final") {
+      const row = await deps.loadDocumentRow(artifactId);
+      if (!row) {
+        return {
+          statusCode: 500,
+          body: {
+            ok: false,
+            error: "Document row missing after upsert",
+            code: "INTERNAL",
+          },
+        };
+      }
+      memorySpaceId = doc.spaceId ?? row.space_id ?? null;
+      try {
+        const pin = await deps.pinDocumentHead({
+          row,
+          userId: actingUserId,
+          spaceId: doc.spaceId,
+          digestMarkdown: doc.digestMarkdown,
+          renderHtml,
+        });
+        headVersion = pin.headVersion;
+        status = "final";
+      } catch (err) {
+        if (err instanceof DocumentEmissionConflict) {
+          return {
+            statusCode: 200,
+            body: { ok: false, code: "CONFLICT", error: err.message },
+          };
+        }
+        throw err;
+      }
+    } else {
+      const row = await deps.loadDocumentRow(artifactId);
+      headVersion = row?.head_version ?? 0;
+      memorySpaceId = row?.space_id ?? null;
+    }
   }
 
   // THINK-189 U3: append one conformance report per manifest-bearing
