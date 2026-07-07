@@ -870,10 +870,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
                 : ""
             }${node.edgeCount ? ` — ${node.edgeCount} link${node.edgeCount === 1 ? "" : "s"}` : ""}`
           }
-          // Settle the layout synchronously before the first paint and skip
-          // the animated cooldown — the graph appears already laid out and
-          // framed instead of sliding into place and snapping on zoomToFit.
-          cooldownTicks={0}
+          // Settle the layout synchronously before the first paint: zero
+          // cooldown until the initial framing lands (no load animation),
+          // then normal cooldown so dragging a node relaxes its neighbors.
+          cooldownTicks={framed ? 120 : 0}
           d3AlphaDecay={0.05}
           d3VelocityDecay={0.55}
           warmupTicks={graphData.nodes.length > 2000 ? 120 : 300}
