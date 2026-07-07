@@ -79,6 +79,26 @@ cards:
 
 Tones: `acc` (positive), `info` (neutral), `warn`, `bad`.
 
+**Timeline** — an ordered sequence of named events or phases on a horizontal
+track (rollout phases, project milestones, launch plans). Reach for it
+whenever the content is "first this, then this, then this" with named stages —
+don't wait to be asked for one:
+
+````
+```tw:timeline
+items:
+  - { label: Kickoff, caption: Goals and owners locked, date: Week 1 }
+  - { label: Rollout, caption: Phased team onboarding, current: true }
+  - { label: Full adoption, date: Q4 }
+```
+````
+
+- 1–8 `items`, in the order they happen; `label` is required on every item.
+- `caption` (one-line detail) and `date` are optional and rendered verbatim —
+  write display-ready text (`Week 1`, `Q4`, `Jan 2026`), not machine dates.
+- Mark at most one item `current: true` — the phase in progress now; the
+  platform emphasizes it. Omit `current` for purely past or future sequences.
+
 **Chart** — data you write, pixels the platform draws. Types: `bar`, `line`,
 `donut`, `stat-strip`, `sparkline`, `meter`, `funnel`.
 
