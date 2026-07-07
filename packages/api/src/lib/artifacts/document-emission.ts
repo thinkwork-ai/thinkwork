@@ -77,6 +77,7 @@ import {
   resolvePlateForEmission,
   type EmissionPlateResolution,
 } from "./plate-registry.js";
+import { resolveRunActingUserId } from "../agent-loops/run-acting-user.js";
 
 /** `artifacts.metadata.kind` for dual-body document artifacts. */
 export const DOCUMENT_METADATA_KIND = "document" as const;
@@ -241,6 +242,16 @@ export interface DocumentEmissionDeps {
     tenantId: string;
     triggeringMessageId: string | null;
   }) => Promise<string | null>;
+  /**
+   * THINK-155 U1: second derivation source for scheduled turns — the
+   * automation's run-as user (turn → run → `agent_loops.run_as_user_id`,
+   * tenant-membership cross-checked). Consulted only when the triggering-
+   * message source yields no user; human turns keep priority.
+   */
+  resolveRunActingUserId: (input: {
+    tenantId: string;
+    turnId: string;
+  }) => Promise<string | null>;
   findExistingDraftDocument: (input: {
     tenantId: string;
     threadId: string;
@@ -337,6 +348,7 @@ function defaultDeps(): DocumentEmissionDeps {
         ? row.sender_id
         : null;
     },
+    resolveRunActingUserId: (input) => resolveRunActingUserId(input),
     findExistingDraftDocument: async ({ tenantId, threadId, genre, title }) => {
       const rows = await db
         .select({ metadata: artifacts.metadata })
@@ -730,10 +742,23 @@ export async function handleDocumentEmission(
     input.threadId,
     documentId,
   );
-  const actingUserId = await deps.resolveActingUserId({
+  let actingUserId = await deps.resolveActingUserId({
     tenantId: input.tenantId,
     triggeringMessageId: input.triggeringMessageId,
   });
+  // THINK-155 U1: scheduled turns (no triggering user message) fall back to
+  // the automation's run-as user; human turns keep priority. The source
+  // distinction also drives write ordering (U2 keep-last-good).
+  let actingUserSource: "message" | "run" | null = actingUserId
+    ? "message"
+    : null;
+  if (!actingUserId) {
+    actingUserId = await deps.resolveRunActingUserId({
+      tenantId: input.tenantId,
+      turnId: input.turnId,
+    });
+    if (actingUserId) actingUserSource = "run";
+  }
 
   // ---- Finalize-time space authorization (before any write) --------------
   if (doc.status === "final" && doc.spaceId) {

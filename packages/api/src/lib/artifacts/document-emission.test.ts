@@ -99,6 +99,7 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     resolveActingUserId: vi.fn(async ({ triggeringMessageId }) =>
       triggeringMessageId ? USER_ID : null,
     ),
+    resolveRunActingUserId: vi.fn(async () => null),
     findExistingDraftDocument: vi.fn(async () => null),
     upsertDocumentRow: vi.fn(async (input) => {
       recorded.upserts.push(input as unknown as Record<string, unknown>);
@@ -333,6 +334,77 @@ describe("handleDocumentEmission", () => {
     });
     const result = await emit(VALID_DOCUMENT, deps);
     expect(result.body.ok).toBe(true);
+  });
+});
+
+describe("run-derived acting user (THINK-155 U1)", () => {
+  const RUN_AS_USER_ID = "88888888-8888-8888-8888-888888888888";
+
+  it("scheduled finalize-with-space succeeds as the run-as user (AE1 identity leg)", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveRunActingUserId: vi.fn(async () => RUN_AS_USER_ID),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null, // no triggering user message — scheduled turn
+    );
+    expect(result.body.ok).toBe(true);
+    expect(result.body.status).toBe("final");
+    expect(deps.resolveRunActingUserId).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      turnId: TURN_ID,
+    });
+    expect(deps.hasSpaceWriteRole).toHaveBeenCalledWith(
+      TENANT_ID,
+      SPACE_ID,
+      RUN_AS_USER_ID,
+    );
+    expect(recorded.upserts[0].actingUserId).toBe(RUN_AS_USER_ID);
+    expect(recorded.pins[0].userId).toBe(RUN_AS_USER_ID);
+  });
+
+  it("triggering-message user wins over the run source (priority order)", async () => {
+    const runResolver = vi.fn(async () => RUN_AS_USER_ID);
+    const { deps, recorded } = makeDeps({
+      resolveRunActingUserId: runResolver,
+    });
+    const result = await emit(VALID_DOCUMENT, deps); // human turn
+    expect(result.body.ok).toBe(true);
+    expect(runResolver).not.toHaveBeenCalled();
+    expect(recorded.upserts[0].actingUserId).toBe(USER_ID);
+  });
+
+  it("run resolver yielding null (stale/non-member run-as) keeps the guard firing", async () => {
+    const runResolver = vi.fn(async () => null);
+    const { deps, recorded } = makeDeps({
+      resolveRunActingUserId: runResolver,
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
+    expect(runResolver).toHaveBeenCalled();
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("FORBIDDEN");
+    expect(recorded.pins).toHaveLength(0);
+  });
+
+  it("run-as user without space membership is rejected (AE3)", async () => {
+    const { deps, recorded } = makeDeps({
+      resolveRunActingUserId: vi.fn(async () => RUN_AS_USER_ID),
+      hasSpaceWriteRole: vi.fn(async () => false),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(false);
+    expect(result.body.code).toBe("FORBIDDEN");
+    expect(recorded.upserts).toHaveLength(0);
+    expect(recorded.pins).toHaveLength(0);
   });
 });
 
