@@ -233,6 +233,9 @@ lambda-build/
 **/*.generated.ts
 **/__generated__/
 **/generated/
+# The analyst semantic model is generated but committed (staleness-gated by
+# packages/database-pg/__tests__/analyst-semantic-model.test.ts).
+!packages/database-pg/generated/
 
 # Local environment overrides
 .env.local
