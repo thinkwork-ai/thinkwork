@@ -1112,7 +1112,7 @@ function scheduledWorkflowIdempotencyKey(event: JobTriggerEvent): string {
 export async function handleWorkflowSchedule(input: {
   db: JobTriggerDb;
   event: JobTriggerEvent;
-  job: { space_id?: string | null } | null;
+  job: { space_id?: string | null; workflow_id?: string | null } | null;
   tenantId: string;
   triggerId: string;
   actorId: string | null;
@@ -1120,7 +1120,9 @@ export async function handleWorkflowSchedule(input: {
   const { db, event, job, tenantId, triggerId } = input;
   const now = new Date();
 
-  const workflowId = event.workflowId ?? null;
+  // Migrated schedules (THINK-216) carry no workflowId in their frozen
+  // EventBridge payload; the repointed row is authoritative.
+  const workflowId = event.workflowId ?? job?.workflow_id ?? null;
   if (!workflowId) {
     console.warn(
       `[job-trigger] workflow_schedule ${triggerId} has no workflowId; skipping`,
@@ -1160,10 +1162,7 @@ export async function handleWorkflowSchedule(input: {
     .select({ id: agents.id })
     .from(agents)
     .where(
-      and(
-        eq(agents.tenant_id, tenantId),
-        eq(agents.is_platform_default, true),
-      ),
+      and(eq(agents.tenant_id, tenantId), eq(agents.is_platform_default, true)),
     )
     .limit(1);
   if (!platformAgent) {
@@ -1334,8 +1333,10 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         tenant_id: scheduledJobs.tenant_id,
         enabled: scheduledJobs.enabled,
         name: scheduledJobs.name,
+        trigger_type: scheduledJobs.trigger_type,
         agent_id: scheduledJobs.agent_id,
         agent_loop_id: scheduledJobs.agent_loop_id,
+        workflow_id: scheduledJobs.workflow_id,
         space_id: scheduledJobs.space_id,
         prompt: scheduledJobs.prompt,
         config: scheduledJobs.config,
@@ -1370,6 +1371,35 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     }
     const jobAgentId = job?.agent_id ?? agentId ?? null;
     const jobSpaceId = job?.space_id ?? event.spaceId ?? null;
+
+    // THINK-216 migration redirect: EventBridge Scheduler payloads are
+    // snapshotted at provision time, so a migrated Automation's schedule keeps
+    // firing with triggerType=agent_loop_schedule. The ROW is authoritative —
+    // when it was repointed to workflow_schedule, dispatch through the shared
+    // interpreter instead of the retired agent-loop path.
+    if (
+      isAgentLoopSchedule &&
+      job?.trigger_type === WORKFLOW_SCHEDULE_TRIGGER_TYPE
+    ) {
+      if (!job.enabled || job.budget_paused || budgetPausedByOwner) {
+        console.log(
+          `[job-trigger] migrated workflow_schedule ${triggerId} is disabled/paused, skipping`,
+        );
+        return;
+      }
+      console.log(
+        `[job-trigger] agent_loop_schedule ${triggerId} was migrated to workflow_schedule; redirecting`,
+      );
+      await handleWorkflowSchedule({
+        db,
+        event,
+        job,
+        tenantId,
+        triggerId,
+        actorId: ownerUserId,
+      });
+      return;
+    }
 
     if (isAgentLoopSchedule) {
       await handleAgentLoopSchedule({

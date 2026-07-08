@@ -121,11 +121,7 @@ describe("handleWorkflowSchedule", () => {
     });
     const { db, insertValuesCalls, updateSetCalls } = makeDb({
       selects: [[WORKFLOW], [{ id: "agent-1" }], []],
-      inserts: [
-        [{ id: "binding-1" }],
-        [{ id: "run-1", status: "queued" }],
-        [],
-      ],
+      inserts: [[{ id: "binding-1" }], [{ id: "run-1", status: "queued" }], []],
     });
 
     await handleWorkflowSchedule({ db, ...baseArgs });
@@ -167,6 +163,36 @@ describe("handleWorkflowSchedule", () => {
         (v) => v.backend_execution_id === "arn:aws:states:exec-1",
       ),
     ).toBe(true);
+  });
+
+  it("falls back to the row's workflow_id when the frozen payload has none (THINK-216 migration)", async () => {
+    mockSfnSend.mockResolvedValue({
+      executionArn: "arn:aws:states:exec-2",
+      startDate: new Date("2026-07-07T00:00:00Z"),
+    });
+    const { db, insertValuesCalls } = makeDb({
+      selects: [[WORKFLOW], [{ id: "agent-1" }], []],
+      inserts: [[{ id: "binding-1" }], [{ id: "run-2", status: "queued" }], []],
+    });
+
+    await handleWorkflowSchedule({
+      db,
+      ...baseArgs,
+      event: {
+        triggerId: "trigger-1",
+        triggerType: "agent_loop_schedule",
+        tenantId: "tenant-1",
+        fireId: "fire-2",
+      },
+      job: { space_id: "space-1", workflow_id: "wf-1" },
+    });
+
+    expect(mockSfnSend).toHaveBeenCalledTimes(1);
+    const runInsert = insertValuesCalls.find(
+      (v) => v.idempotency_key === "workflow_schedule:trigger-1:fire-2",
+    );
+    expect(runInsert).toBeDefined();
+    expect(runInsert?.workflow_id).toBe("wf-1");
   });
 
   it("resolves a duplicate fire to a single run without starting another execution (AE4)", async () => {

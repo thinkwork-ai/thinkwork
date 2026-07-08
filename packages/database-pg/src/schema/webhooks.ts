@@ -25,6 +25,7 @@ import { agents } from "./agents";
 import { routines } from "./routines";
 import { connectProviders } from "./integrations";
 import { spaces } from "./spaces";
+import { workflows } from "./workflows";
 import { agentLoops } from "./agent-loops";
 
 // ---------------------------------------------------------------------------
@@ -49,6 +50,11 @@ export const webhooks = pgTable(
     routine_id: uuid("routine_id").references(() => routines.id),
     // THINK-137 Automations: webhook bound to an Automation (nullable).
     agent_loop_id: uuid("agent_loop_id").references(() => agentLoops.id, {
+      onDelete: "cascade",
+    }),
+    // THINK-216: webhook repointed to a canonical workflow — the `workflow`
+    // target branch starts a shared-interpreter run with the caller payload.
+    workflow_id: uuid("workflow_id").references(() => workflows.id, {
       onDelete: "cascade",
     }),
     connect_provider_id: uuid("connect_provider_id").references(

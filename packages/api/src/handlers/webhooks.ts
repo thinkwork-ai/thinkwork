@@ -31,6 +31,7 @@ import { db } from "../lib/db.js";
 import { json, error, notFound } from "../lib/response.js";
 import { startSpaceWebhookThread } from "../lib/spaces/space-webhook-thread-start.js";
 import { dispatchAutomationWebhook } from "../lib/webhooks/automation-webhook-dispatch.js";
+import { startInterpreterRun } from "../lib/workflows/start-interpreter-run.js";
 
 // ---------------------------------------------------------------------------
 // In-memory rate limiter (sliding window, resets on cold start)
@@ -104,11 +105,7 @@ function extractSignaturePrefix(
 // ---------------------------------------------------------------------------
 
 type SignatureStatus =
-  | "verified"
-  | "invalid"
-  | "missing"
-  | "skipped_dev"
-  | "not_required";
+  "verified" | "invalid" | "missing" | "skipped_dev" | "not_required";
 
 type ResolutionStatus =
   | "ok"
@@ -298,7 +295,11 @@ async function triggerByToken(
   // routine branches keep the header-only skip-when-absent behavior (U8 retires
   // them).
   const idempotencyKey = headers["x-idempotency-key"];
-  if (targetType !== "automation" && idempotencyKey) {
+  if (
+    targetType !== "automation" &&
+    targetType !== "workflow" &&
+    idempotencyKey
+  ) {
     const [existing] = await db
       .select()
       .from(webhookIdempotency)
@@ -346,6 +347,61 @@ async function triggerByToken(
     }
     if (delivery.is_replay !== undefined) record.is_replay = delivery.is_replay;
     return response;
+  }
+  // workflow (THINK-216): start a shared-interpreter run with the caller
+  // payload as the run input (R13/R15 — the generic surface external engines
+  // use). Idempotency mirrors the automation branch: header when present,
+  // else a deterministic hash of webhook id + raw body, keyed on
+  // workflow_runs. The caller receives the run identifier.
+  if (targetType === "workflow" && webhook.workflow_id) {
+    const derivedKey =
+      idempotencyKey ??
+      createHash("sha256")
+        .update(`${webhook.id}:${rawBody}`)
+        .digest("hex")
+        .slice(0, 48);
+    try {
+      const result = await startInterpreterRun({
+        tenantId: webhook.tenant_id,
+        workflowId: webhook.workflow_id,
+        triggerFamily: "webhook",
+        triggerSource: `webhook:${webhook.id}`,
+        idempotencyKey: `webhook:${webhook.id}:${derivedKey}`,
+        actorType: "webhook",
+        actorId: webhook.id,
+        payload: parsedBody,
+        requestedByUserId:
+          webhook.created_by_type === "user" ? webhook.created_by_id : null,
+        spaceId: webhook.space_id ?? null,
+      });
+      if (!result.ok) {
+        record.resolution_status = "error";
+        record.error_message = result.reason;
+        record.status_code = 409;
+        return {
+          statusCode: 409,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ok: false, reason: result.reason }),
+        };
+      }
+      record.resolution_status = "ok";
+      record.status_code = 202;
+      record.is_replay = !result.created;
+      return {
+        statusCode: 202,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ok: true,
+          runId: result.runId,
+          deduplicated: !result.created,
+        }),
+      };
+    } catch (err) {
+      record.resolution_status = "error";
+      record.error_message = err instanceof Error ? err.message : String(err);
+      record.status_code = 500;
+      return error("Workflow run failed to start");
+    }
   }
   if (targetType === "agent" && webhook.agent_id) {
     return dispatchAgent(webhook, parsedBody, idempotencyKey, record);
