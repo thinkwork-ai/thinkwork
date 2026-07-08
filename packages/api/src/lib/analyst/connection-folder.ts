@@ -10,7 +10,7 @@
  * connection-aware today, so CONNECTION.md's prose points the analyst at
  * SCHEMA.md by relative path.
  *
- * Called from scripts/provision-analyst-connector.ts after the registry
+ * Called from scripts/provision-analyst-connector.mts after the registry
  * row seed (U4); re-running after a schema regeneration refreshes the
  * workspace copy and (because the sidecar signs the definition bytes)
  * re-signs the folder.

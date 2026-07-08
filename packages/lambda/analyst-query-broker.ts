@@ -6,7 +6,7 @@
  * JSON-RPC: initialize / tools/list / tools/call / ping — one POST, one
  * response, no session state). Mounted at POST /mcp/analyst; registered
  * per-tenant as an approved `tenant_mcp_servers` row by
- * scripts/provision-analyst-connector.ts (U4).
+ * scripts/provision-analyst-connector.mts (U4).
  *
  * Security posture (plan KTD7/KTD8 + assumptions):
  *   - SQL executes ONLY as the hardened `analyst_reader` role
@@ -139,7 +139,7 @@ async function getBrokerCredential(): Promise<BrokerCredential> {
     throw new Error(
       "analyst-query-broker: ANALYST_BROKER_SECRET_ARN is unset — the broker " +
         "cannot authenticate callers. Wire it via Terraform and populate the " +
-        "secret with scripts/provision-analyst-connector.ts.",
+        "secret with scripts/provision-analyst-connector.mts.",
     );
   }
   const { SecretsManagerClient, GetSecretValueCommand } =

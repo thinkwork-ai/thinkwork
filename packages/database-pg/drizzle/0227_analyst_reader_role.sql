@@ -82,9 +82,29 @@ BEGIN
       'CREATE ROLE analyst_reader WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS NOREPLICATION',
       current_setting('thinkwork.analyst_reader_pass'));
   ELSE
+    -- Re-run path: rotate the password only. On RDS the master user is
+    -- rds_superuser, NOT superuser, and an ALTER ROLE that mentions any
+    -- superuser-class attribute (even the no-op NOSUPERUSER / NOBYPASSRLS /
+    -- NOREPLICATION) fails with "must be superuser to alter superuser
+    -- roles" — attributes are pinned at creation and asserted below.
     EXECUTE format(
-      'ALTER ROLE analyst_reader WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS NOREPLICATION',
+      'ALTER ROLE analyst_reader WITH LOGIN PASSWORD %L',
       current_setting('thinkwork.analyst_reader_pass'));
+  END IF;
+END $$;
+
+-- Assert the creation-time attribute hardening actually holds (covers the
+-- re-run path, where ALTER no longer re-asserts attributes, and any
+-- out-of-band mutation).
+DO $$
+DECLARE
+  r pg_roles%ROWTYPE;
+BEGIN
+  SELECT * INTO r FROM pg_roles WHERE rolname = 'analyst_reader';
+  IF r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolinherit
+     OR r.rolbypassrls OR r.rolreplication THEN
+    RAISE EXCEPTION 'analyst_reader attribute hardening violated: super=% createdb=% createrole=% inherit=% bypassrls=% replication=%',
+      r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolinherit, r.rolbypassrls, r.rolreplication;
   END IF;
 END $$;
 

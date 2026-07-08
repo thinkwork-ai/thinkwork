@@ -16,7 +16,7 @@
  * which rewrites url/auth_config, recomputes the hash, and restamps
  * approval in one write. A raw UPDATE would silently brick the connector.
  *
- * Invoked by scripts/provision-analyst-connector.ts (no web UI in v1 —
+ * Invoked by scripts/provision-analyst-connector.mts (no web UI in v1 —
  * R3: provisioning is scriptable end-to-end).
  */
 
@@ -75,6 +75,49 @@ export function analystConnectorRowValues(input: AnalystConnectorInput) {
     url_hash: computeMcpUrlHash(input.brokerUrl, auth_config),
     approved_at: new Date(),
   };
+}
+
+/**
+ * Ensure the broker credential secret holds a value: JSON {token, tenantId}.
+ * Generates a token on first run; preserves the existing one after that
+ * (`rotate: true` mints a new token — every cached caller token dies, so the
+ * script insists on --re-approve alongside it). Lives here rather than in
+ * the tsx script because this package declares the Secrets Manager SDK.
+ */
+export async function ensureAnalystBrokerSecret(input: {
+  secretRef: string;
+  tenantId: string;
+  rotate?: boolean;
+}): Promise<"unchanged" | "created" | "updated"> {
+  const { randomBytes } = await import("node:crypto");
+  const { SecretsManagerClient, GetSecretValueCommand, PutSecretValueCommand } =
+    await import("@aws-sdk/client-secrets-manager");
+  const sm = new SecretsManagerClient({
+    region: process.env.AWS_REGION || "us-east-1",
+  });
+  let existing: { token?: string; tenantId?: string } = {};
+  try {
+    const current = await sm.send(
+      new GetSecretValueCommand({ SecretId: input.secretRef }),
+    );
+    existing = JSON.parse(current.SecretString || "{}") as typeof existing;
+  } catch {
+    // No value yet (fresh container) — write one below.
+  }
+  if (!input.rotate && existing.token && existing.tenantId === input.tenantId) {
+    return "unchanged";
+  }
+  const token =
+    input.rotate || !existing.token
+      ? randomBytes(32).toString("hex")
+      : existing.token;
+  await sm.send(
+    new PutSecretValueCommand({
+      SecretId: input.secretRef,
+      SecretString: JSON.stringify({ token, tenantId: input.tenantId }),
+    }),
+  );
+  return input.rotate || !existing.token ? "created" : "updated";
 }
 
 /**

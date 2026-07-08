@@ -381,7 +381,7 @@ resource "aws_secretsmanager_secret" "analyst_reader" {
 
 # Broker caller credential for the analyst query broker (THINK-228 U3).
 # The connector row (tenant_mcp_servers, seeded by
-# scripts/provision-analyst-connector.ts) references this ARN as its
+# scripts/provision-analyst-connector.mts) references this ARN as its
 # auth_config.secretRef; the broker Lambda validates incoming Bearer
 # tokens against it. Value shape: JSON {token, tenantId} — populated by
 # the provisioning script, never by Terraform.

@@ -59,7 +59,12 @@ async function resolveDatabaseUrl(): Promise<string> {
   const secret = JSON.parse(result.SecretString || "{}") as SecretShape;
   const user = encodeURIComponent(secret.username);
   const pass = encodeURIComponent(secret.password);
-  return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=require`;
+  // sslmode=no-verify (the compliance-anchor WRITER pattern): node-pg treats
+  // `require` as verify-full, and the Lambda Node runtime does not trust the
+  // RDS CA — verified live ("unable to get local issuer certificate" on every
+  // query). TLS still encrypts the hop; the broker's enforcement surface is
+  // the analyst_reader grant matrix + Secrets Manager IAM, not cert pinning.
+  return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=no-verify`;
 }
 
 /**

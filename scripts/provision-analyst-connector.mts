@@ -25,22 +25,16 @@
  *   AWS_REGION (default us-east-1)
  *
  * Usage:
- *   npx tsx scripts/provision-analyst-connector.ts [--re-approve] [--rotate-token]
+ *   npx tsx scripts/provision-analyst-connector.mts [--re-approve] [--rotate-token]
  */
 
-import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  GetSecretValueCommand,
-  PutSecretValueCommand,
-  SecretsManagerClient,
-} from "@aws-sdk/client-secrets-manager";
-
 import { materializeAnalystConnectionFolder } from "../packages/api/src/lib/analyst/connection-folder";
 import {
+  ensureAnalystBrokerSecret,
   provisionAnalystConnector,
   refreshAnalystProfileFromSeed,
   resolveAnalystProvisionConfig,
@@ -56,44 +50,6 @@ const SCHEMA_MD_PATH = join(
   "analyst",
   "SCHEMA.md",
 );
-
-async function ensureBrokerSecretValue(
-  secretRef: string,
-  tenantId: string,
-  rotate: boolean,
-): Promise<void> {
-  const sm = new SecretsManagerClient({
-    region: process.env.AWS_REGION || "us-east-1",
-  });
-  let existing: { token?: string; tenantId?: string } = {};
-  try {
-    const current = await sm.send(
-      new GetSecretValueCommand({ SecretId: secretRef }),
-    );
-    existing = JSON.parse(current.SecretString || "{}") as typeof existing;
-  } catch {
-    // No value yet (fresh container) — we'll write one below.
-  }
-  if (!rotate && existing.token && existing.tenantId === tenantId) {
-    console.error("==> Broker credential secret already populated");
-    return;
-  }
-  const token =
-    rotate || !existing.token
-      ? randomBytes(32).toString("hex")
-      : existing.token;
-  await sm.send(
-    new PutSecretValueCommand({
-      SecretId: secretRef,
-      SecretString: JSON.stringify({ token, tenantId }),
-    }),
-  );
-  console.error(
-    rotate || !existing.token
-      ? "==> Broker credential secret populated (new token minted)"
-      : "==> Broker credential secret updated (tenantId aligned)",
-  );
-}
 
 async function main() {
   const args = new Set(process.argv.slice(2));
@@ -116,7 +72,12 @@ async function main() {
 
   const config = resolveAnalystProvisionConfig(process.env);
 
-  await ensureBrokerSecretValue(config.secretRef, config.tenantId, rotateToken);
+  const secretOutcome = await ensureAnalystBrokerSecret({
+    secretRef: config.secretRef,
+    tenantId: config.tenantId,
+    rotate: rotateToken,
+  });
+  console.error(`==> Broker credential secret ${secretOutcome}`);
 
   const outcome = await provisionAnalystConnector({ ...config, reApprove });
   console.error(
