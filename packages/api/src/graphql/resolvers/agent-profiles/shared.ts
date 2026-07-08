@@ -146,15 +146,36 @@ function mergeBuiltInToolPolicy(
     !Array.isArray(currentValue)
       ? (currentValue as Record<string, unknown>)
       : {};
+  let next = current;
+
   const seedTools = stringArray(
     (seedValue as { builtInTools?: unknown }).builtInTools,
   );
-  if (seedTools.length === 0) return current;
+  if (seedTools.length > 0) {
+    const currentTools = stringArray(current.builtInTools);
+    const mergedTools = [...new Set([...currentTools, ...seedTools])];
+    if (mergedTools.length !== currentTools.length) {
+      next = { ...next, builtInTools: mergedTools };
+    }
+  }
 
-  const currentTools = stringArray(current.builtInTools);
-  const mergedTools = [...new Set([...currentTools, ...seedTools])];
-  if (mergedTools.length === currentTools.length) return current;
-  return { ...current, builtInTools: mergedTools };
+  // THINK-228 U6: seed-granted MCP connector slugs merge into existing
+  // rows the same way built-in tools do — otherwise a tenant seeded
+  // before the grant never sees the connector. Union keeps any
+  // operator-added slugs. Fail-closed downstream: resolution drops slugs
+  // whose registry row is not approved+enabled.
+  const seedMcpServers = stringArray(
+    (seedValue as { mcpServers?: unknown }).mcpServers,
+  );
+  if (seedMcpServers.length > 0) {
+    const currentServers = stringArray(current.mcpServers);
+    const mergedServers = [...new Set([...currentServers, ...seedMcpServers])];
+    if (mergedServers.length !== currentServers.length) {
+      next = { ...next, mcpServers: mergedServers };
+    }
+  }
+
+  return next;
 }
 
 function stringArray(value: unknown): string[] {

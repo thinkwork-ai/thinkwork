@@ -282,6 +282,9 @@ describe("Agent Profile resolvers", () => {
       {
         tool_policy: {
           builtInTools: ["execute_code", "file_read"],
+          // THINK-228 U6: seed-granted connector slugs merge into existing
+          // rows alongside built-in tools.
+          mcpServers: ["postgres-dev"],
         },
         updated_at: expect.any(Date),
       },

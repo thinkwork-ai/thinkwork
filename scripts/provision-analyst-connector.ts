@@ -42,6 +42,7 @@ import {
 import { materializeAnalystConnectionFolder } from "../packages/api/src/lib/analyst/connection-folder";
 import {
   provisionAnalystConnector,
+  refreshAnalystProfileFromSeed,
   resolveAnalystProvisionConfig,
 } from "../packages/api/src/lib/analyst/provision-connector";
 
@@ -121,6 +122,13 @@ async function main() {
   console.error(
     `==> Connector row ${outcome.action} (id ${outcome.id}, url ${config.brokerUrl})`,
   );
+
+  // U6: refresh the tenant's seeded analyst profile from the current
+  // built-in seed (instructions + execution controls incl. the R9 query
+  // cap; tool_policy merges via the seeder's sync). Deliberate overwrite —
+  // the analyst built-in's behavior contract ships with the platform.
+  await refreshAnalystProfileFromSeed(config.tenantId);
+  console.error("==> Analyst profile refreshed from the built-in seed");
 
   // U5: materialize the workspace connection folder (CONNECTION.md +
   // signed .assignment.json + the generated SCHEMA.md semantic model).

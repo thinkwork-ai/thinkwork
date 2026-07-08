@@ -24,6 +24,12 @@ import {
   type ProfileChildRunResult,
   type ProfileChildRunner,
 } from "./agent-profile-adapter.js";
+import {
+  AnalystQueryCapError,
+  createAnalystQueryCapState,
+  wrapAnalystQueryTools,
+  DEFAULT_MAX_QUERIES_PER_RUN,
+} from "./analyst-query-cap.js";
 import { getMcpAgentToolIdentity } from "./mcp.js";
 import type { McpToolRegistry } from "./mcp-registry.js";
 import type { WorkspaceSkill } from "./runtime/workspace-skills.js";
@@ -114,7 +120,12 @@ function normalizeProfileConfig(value: unknown): AgentProfileConfig | null {
       mcpServers: mcpServers.map((server) => {
         const serverRecord = recordValue(server);
         return {
-          serverName: asString(serverRecord.name ?? serverRecord.slug),
+          // Slug FIRST: MCP AgentTool identities are namespaced by the
+          // runtime MCP config name, which resolve-agent-runtime-config
+          // sets to `slug ?? name` — matching on the display name here
+          // would silently drop every granted tool from the child surface
+          // (the allowlist-omission trap, THINK-228 U6).
+          serverName: asString(serverRecord.slug ?? serverRecord.name),
           toolWhitelist: stringArray(
             serverRecord.allowedTools ?? serverRecord.availableTools,
           ),
@@ -128,6 +139,7 @@ function normalizeProfileConfig(value: unknown): AgentProfileConfig | null {
       maxExecutionTimeMs: numberValue(execution.maxExecutionTimeMs),
       maxTokens: numberValue(execution.maxTokens),
       costBudgetUsd: numberValue(execution.costBudgetUsd),
+      maxQueriesPerRun: numberValue(execution.maxQueriesPerRun),
       reviewGate: booleanValue(execution.reviewGate),
       maxReviewLoops: numberValue(execution.maxReviewLoops),
       loopPolicy: normalizeLoopPolicy(
@@ -408,6 +420,42 @@ export function createProfileChildRunner(
       });
       const profileExtensionFactories =
         options.profileExtensionFactoriesById?.get(request.profileId) ?? [];
+      // THINK-228 U6 (KTD3/R9 + KTD2 file facet): the delegation loop owns
+      // the per-run run_query cap in memory, and staged results land in the
+      // child session's data dir so execute_code can read them.
+      const queryCapState = createAnalystQueryCapState(
+        request.execution.maxQueriesPerRun ?? DEFAULT_MAX_QUERIES_PER_RUN,
+      );
+      const childTools = wrapAnalystQueryTools({
+        tools: childSurface.tools,
+        state: queryCapState,
+        landing: {
+          dataDir: path.join(
+            options.agentDir,
+            "profiles",
+            request.profileRunId,
+            "data",
+          ),
+        },
+      });
+      const queryCapFailResult = (): ProfileChildRunResult => {
+        const summary =
+          `Delegation stopped: the run_query cap (${queryCapState.cap} queries per ` +
+          "delegated run) was exceeded. Failed attempts count toward the cap.";
+        return {
+          content: summary,
+          status: "failed",
+          error: "QUERY_CAP_EXCEEDED",
+          handoff: {
+            verdict: "fail",
+            summary,
+            confidence: "high",
+            feedback:
+              "Re-delegate with a narrower question or fewer exploratory queries; " +
+              `the analyst may run at most ${queryCapState.cap} queries per run.`,
+          },
+        };
+      };
       try {
         const systemPrompt = [
           profileSystemPrompt(request),
@@ -426,7 +474,7 @@ export function createProfileChildRunner(
             message: request.task,
             history: options.parentHistory ?? [],
             systemPrompt,
-            tools: childSurface.tools,
+            tools: childTools,
             extensionFactories: [
               ...options.extensionFactories,
               ...profileExtensionFactories,
@@ -448,6 +496,22 @@ export function createProfileChildRunner(
             emitActivity: profileActivityEmitter(options, request),
           },
         );
+        if (queryCapState.exceeded) {
+          const failResult = queryCapFailResult();
+          options.emitActivity?.({
+            eventType: "agent_profile_run_failed",
+            message: request.profileName,
+            stream: "step",
+            payload: agentProfileActivityPayload(request, {
+              status: "failed",
+              task: request.task,
+              error: failResult.error,
+              query_cap: queryCapState.cap,
+              query_count: queryCapState.count,
+            }),
+          });
+          return failResult;
+        }
         options.emitActivity?.({
           eventType: "agent_profile_run_completed",
           message: request.profileName,
@@ -459,6 +523,25 @@ export function createProfileChildRunner(
         });
         return childResultFromRunLoop(result);
       } catch (error) {
+        if (queryCapState.exceeded || error instanceof AnalystQueryCapError) {
+          // The loop, not the model, owns the count: whether the SDK
+          // surfaced the cap throw as a tool error or propagated it, the
+          // delegation ends with a structured Verdict: fail (AE5).
+          const failResult = queryCapFailResult();
+          options.emitActivity?.({
+            eventType: "agent_profile_run_failed",
+            message: request.profileName,
+            stream: "step",
+            payload: agentProfileActivityPayload(request, {
+              status: "failed",
+              task: request.task,
+              error: failResult.error,
+              query_cap: queryCapState.cap,
+              query_count: queryCapState.count,
+            }),
+          });
+          return failResult;
+        }
         options.emitActivity?.({
           eventType: "agent_profile_run_failed",
           message: request.profileName,
