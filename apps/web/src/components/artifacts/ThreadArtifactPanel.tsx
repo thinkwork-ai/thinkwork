@@ -38,7 +38,10 @@ import {
 import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderActions";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { THREAD_ARTIFACT_PANEL_LIST } from "@/components/artifacts/thread-artifact-panel-store";
-import { ArtifactDetailForRouteQuery } from "@/lib/graphql-queries";
+import {
+  ArtifactDetailForRouteQuery,
+  DocumentArtifactForPanelQuery,
+} from "@/lib/graphql-queries";
 
 /** Trailing debounce for live re-emission refetches — a streamed emission can
  *  arrive as several subscription chunks; collapse them into one refetch that
@@ -51,6 +54,7 @@ interface PanelArtifactResult {
 
 export function ThreadArtifactPanel({
   artifactId,
+  fallbackDocumentId = null,
   listArtifacts = [],
   onOpenArtifact,
   onBackToList,
@@ -59,6 +63,13 @@ export function ThreadArtifactPanel({
 }: {
   /** Artifact to show, or THREAD_ARTIFACT_PANEL_LIST for the list state. */
   artifactId: string;
+  /**
+   * The card's logical documentId (when the opened card carried one). Used
+   * only as a self-heal: if `artifactId` no longer resolves (the card
+   * pointed at a fork that was cleaned up), the panel re-resolves the LIVING
+   * document by this id instead of showing "Artifact not found."
+   */
+  fallbackDocumentId?: string | null;
   /** The thread's card-rendered artifacts, newest first (list state). */
   listArtifacts?: ArtifactCardData[];
   /** Load an artifact picked from the list (in this same panel). */
@@ -77,7 +88,21 @@ export function ThreadArtifactPanel({
       requestPolicy: "cache-and-network",
       pause: isListState,
     });
-  const artifact = isListState ? null : (data?.artifact ?? null);
+  const primaryMissing = !isListState && !fetching && !data?.artifact;
+  const [{ data: fallbackData, fetching: fallbackFetching }] = useQuery<{
+    documentArtifact?: (ArtifactBodyNode & { threadId?: string | null }) | null;
+  }>({
+    query: DocumentArtifactForPanelQuery,
+    variables: { documentId: fallbackDocumentId ?? "" },
+    requestPolicy: "cache-and-network",
+    pause: isListState || !fallbackDocumentId || !primaryMissing,
+  });
+  const artifact = isListState
+    ? null
+    : (data?.artifact ??
+      (primaryMissing && fallbackDocumentId
+        ? (fallbackData?.documentArtifact ?? null)
+        : null));
 
   const refetch = useCallback(() => {
     reexecuteQuery({ requestPolicy: "network-only" });
@@ -157,7 +182,7 @@ export function ThreadArtifactPanel({
           >
             <Link
               to="/artifacts/$id"
-              params={{ id: artifactId }}
+              params={{ id: artifact?.id ?? artifactId }}
               title="Open full page"
               aria-label="Open full page"
               data-testid="thread-artifact-panel-full-page"
@@ -197,7 +222,7 @@ export function ThreadArtifactPanel({
           </div>
         ) : artifact ? (
           <ArtifactBodyView artifact={artifact} />
-        ) : fetching ? (
+        ) : fetching || (primaryMissing && fallbackFetching) ? (
           <div className="flex h-full items-center justify-center p-6">
             <LoadingShimmer
               text="Loading artifact..."

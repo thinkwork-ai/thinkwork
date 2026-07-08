@@ -11,6 +11,8 @@ import { ArtifactCard } from "@/components/artifacts/ArtifactCard";
 
 export interface DocumentCardData {
   artifactId: string;
+  /** Logical document id — self-heal key when artifactId no longer resolves. */
+  documentId?: string;
   title: string;
   genre?: string;
   abstract?: string;

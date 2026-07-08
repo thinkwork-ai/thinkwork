@@ -1,5 +1,6 @@
 import { artifacts_ as artifacts } from "./artifacts.query.js";
 import { artifact } from "./artifact.query.js";
+import { documentArtifact } from "./documentArtifact.query.js";
 import { documentVersionRender } from "./documentVersionRender.query.js";
 import { threadCanvasContext } from "./threadCanvasContext.query.js";
 import { createArtifact } from "./createArtifact.mutation.js";
@@ -25,6 +26,7 @@ export { artifactTypeResolvers, artifactVersionTypeResolvers };
 export const artifactQueries = {
   artifacts,
   artifact,
+  documentArtifact,
   documentVersionRender,
   threadCanvasContext,
   artifactShares,
