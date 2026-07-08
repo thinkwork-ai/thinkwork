@@ -15,7 +15,7 @@ import {
   MessageCirclePlus,
 } from "lucide-react";
 import { IconFiles } from "@tabler/icons-react";
-import { Button } from "@thinkwork/ui";
+import { Button, TooltipIconButton } from "@thinkwork/ui";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import { StartOnboardingDialog } from "@/components/spaces/StartOnboardingDialog";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -195,16 +195,9 @@ function SpaceWorkroomHome() {
     documentTitle: `Spaces > ${spaceName}`,
     breadcrumbs: [{ label: "Spaces", href: "/new" }, { label: spaceName }],
     action: (
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={
-          filesModeOpen
-            ? "Close Space workspace files"
-            : "Open Space workspace files"
-        }
-        title={
+        label={
           filesModeOpen
             ? "Close Space workspace files"
             : "Open Space workspace files"
@@ -217,7 +210,7 @@ function SpaceWorkroomHome() {
         onClick={() => setFilesModeOpen((current) => !current)}
       >
         <IconFiles className="size-4" />
-      </Button>
+      </TooltipIconButton>
     ),
     actionKey: `space-files:${spaceId}:${filesModeOpen ? "open" : "closed"}`,
   });

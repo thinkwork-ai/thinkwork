@@ -1,7 +1,7 @@
 import DataLoader from "dataloader";
-import { inArray, sql, and, eq, gt } from "drizzle-orm";
+import { inArray, sql, and, eq, gt, asc } from "drizzle-orm";
 import { pendingUserQuestions } from "@thinkwork/database-pg/schema";
-import { db, messages, threadTurns } from "../../utils.js";
+import { db, messages, threadTurns, threadParticipants } from "../../utils.js";
 import {
   deriveLifecycleStatus,
   QUEUED_FRESHNESS_MS,
@@ -189,6 +189,34 @@ export const createThreadLoaders = () => ({
         rows.map((row) => [row.thread_id, userQuestionToGraphql(row)]),
       );
       return ids.map((id) => map.get(id) ?? null);
+    },
+  ),
+
+  /**
+   * Thread.participants — batched fetch of all participant rows per thread,
+   * ordered by created_at (starter first). Backs the `participants` field
+   * resolver; batching keeps the operator activity list (100–200 threads)
+   * from firing one query per row. Same tenant-safety contract as the loaders
+   * above: only invoke via a field resolver on an already-authorized Thread.
+   * Returns raw snake_case rows; the resolver camelCases them.
+   */
+  threadParticipants: new DataLoader<string, Record<string, unknown>[]>(
+    async (threadIds) => {
+      const ids = [...threadIds];
+      if (ids.length === 0) return [];
+      const rows = await db
+        .select()
+        .from(threadParticipants)
+        .where(inArray(threadParticipants.thread_id, ids))
+        .orderBy(asc(threadParticipants.created_at));
+      const map = new Map<string, Record<string, unknown>[]>();
+      for (const row of rows) {
+        const key = row.thread_id as string;
+        const bucket = map.get(key);
+        if (bucket) bucket.push(row);
+        else map.set(key, [row]);
+      }
+      return ids.map((id) => map.get(id) ?? []);
     },
   ),
 });

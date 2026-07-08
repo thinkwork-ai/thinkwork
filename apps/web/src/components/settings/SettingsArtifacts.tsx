@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Palette, Plus } from "lucide-react";
-import { Button } from "@thinkwork/ui";
+import { TooltipIconButton } from "@thinkwork/ui";
 import { ArtifactsListBody } from "@/components/artifacts/ArtifactsListBody";
 import {
   PlatesListBody,
@@ -63,30 +63,24 @@ export function SettingsArtifactsPlates() {
     tabs: SETTINGS_ARTIFACTS_TABS,
     action: controller ? (
       <div className="flex items-center gap-1">
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
+          label="Tenant palette"
           className="text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-          aria-label="Tenant palette"
-          title="Tenant palette"
           onClick={() => controller.openPalette()}
           data-testid="plates-tenant-palette"
         >
           <Palette className="size-4" />
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
+          label="New plate"
           className="text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-          aria-label="New plate"
-          title="New plate"
           onClick={() => controller.openCreate()}
           data-testid="plates-new"
         >
           <Plus className="size-4" />
-        </Button>
+        </TooltipIconButton>
       </div>
     ) : null,
     actionKey: `settings-artifacts-plates:${controller ? "ready" : "idle"}`,

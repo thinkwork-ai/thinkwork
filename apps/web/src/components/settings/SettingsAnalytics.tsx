@@ -450,7 +450,7 @@ function CostByModelCard({
                   {formatTokens(m.outputTokens)} out
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {formatUsd(m.totalUsd, 4)}
+                  {formatUsd(m.totalUsd)}
                 </TableCell>
               </TableRow>
             ))
@@ -464,7 +464,7 @@ function CostByModelCard({
                 {formatTokens(totalIn)} in / {formatTokens(totalOut)} out
               </TableCell>
               <TableCell className="text-right font-semibold tabular-nums">
-                {formatUsd(total, 4)}
+                {formatUsd(total)}
               </TableCell>
             </TableRow>
           </TableFooter>

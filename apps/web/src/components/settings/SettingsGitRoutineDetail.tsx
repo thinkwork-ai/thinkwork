@@ -10,7 +10,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { Loader2, RefreshCw, Zap } from "lucide-react";
-import { Button } from "@thinkwork/ui";
+import { TooltipIconButton } from "@thinkwork/ui";
 import {
   WorkspaceFileEditor,
   type WorkspaceFilesClient,
@@ -121,34 +121,31 @@ export function SettingsGitRoutineDetail({
     action: routine ? (
       <div className="flex items-center gap-1">
         {tab === "executions" ? (
-          <Button
+          <TooltipIconButton
             type="button"
-            variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={() => setExecutionRefreshKey((key) => key + 1)}
             aria-label="Refresh executions"
-            title="Refresh"
+            label="Refresh"
           >
             <RefreshCw className="h-4 w-4" />
-          </Button>
+          </TooltipIconButton>
         ) : null}
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={handleRunNow}
           disabled={triggerState.fetching}
-          aria-label="Run now"
-          title="Run now"
+          label="Run now"
         >
           {triggerState.fetching ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Zap className="h-4 w-4" />
           )}
-        </Button>
+        </TooltipIconButton>
       </div>
     ) : undefined,
     actionKey: `git-routine:${routineId}:${tab}:${triggerState.fetching}:${routine?.name ?? ""}`,

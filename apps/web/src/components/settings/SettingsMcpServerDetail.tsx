@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { Badge, Button, Input, Switch } from "@thinkwork/ui";
+import { Badge, Button, Input, Switch, TooltipIconButton } from "@thinkwork/ui";
 import {
   KeyRound,
   Loader2,
@@ -602,11 +602,9 @@ export function SettingsMcpServerDetail() {
                 }}
                 className="h-8 w-48 text-sm"
               />
-              <Button
+              <TooltipIconButton
                 size="icon"
-                variant="ghost"
-                aria-label="Refresh tools"
-                title="Refresh tools"
+                label="Refresh tools"
                 disabled={toolsLoading || !runtimeAgentId}
                 onClick={loadRuntimeTools}
               >
@@ -615,7 +613,7 @@ export function SettingsMcpServerDetail() {
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-              </Button>
+              </TooltipIconButton>
             </div>
           }
         >

@@ -51,6 +51,24 @@ vi.mock("urql", () => ({
 // ToggleGroupItem clicks drive the parent's onValueChange via toggleRef.
 vi.mock("@thinkwork/ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@thinkwork/ui")>()),
+  TooltipIconButton: ({
+    children,
+    label,
+    tooltipSide,
+    tooltipAlign,
+    tooltipClassName,
+    tooltipDelayDuration,
+    "aria-label": ariaLabel,
+    ...props
+  }: any) => (
+    <button
+      aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
+      {...props}
+    >
+      {children}
+      {typeof label === "string" ? null : label}
+    </button>
+  ),
   Badge: ({
     children,
     className,

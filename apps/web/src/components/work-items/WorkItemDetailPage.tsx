@@ -55,6 +55,7 @@ import {
   SheetHeader,
   SheetTitle,
   Textarea,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Response } from "@/components/ai-elements/response";
@@ -268,17 +269,15 @@ export function WorkItemDetailPage({
       { label: item?.title ?? "Work Item" },
     ],
     action: item ? (
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
         size="icon"
         className="size-8 text-muted-foreground hover:text-foreground lg:hidden"
-        aria-label="Show Work Item details"
-        title="Show Work Item details"
+        label="Show Work Item details"
         onClick={() => setDetailsSheetOpen(true)}
       >
         <Info className="size-4" />
-      </Button>
+      </TooltipIconButton>
     ) : undefined,
     actionKey: item ? `work-item-detail-actions:${item.id}` : undefined,
   });

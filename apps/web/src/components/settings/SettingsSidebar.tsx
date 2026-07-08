@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { Button, cn } from "@thinkwork/ui";
+import { cn, TooltipIconButton } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import {
@@ -156,28 +156,22 @@ function SettingsNavControls({
   };
   return (
     <>
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
         className={cn("size-8", desktopToolbarButtonClassName)}
-        aria-label="Back"
-        title="Back"
+        label="Back"
         onClick={handleBack}
       >
         <ArrowLeft className="size-4" />
-      </Button>
-      <Button
+      </TooltipIconButton>
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
         className={cn("size-8", desktopToolbarButtonClassName)}
-        aria-label="Forward"
-        title="Forward"
+        label="Forward"
         onClick={() => window.history.forward()}
       >
         <ArrowRight className="size-4" />
-      </Button>
+      </TooltipIconButton>
     </>
   );
 }

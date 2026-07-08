@@ -29,6 +29,7 @@ import {
   TabsTrigger,
   Tooltip,
   TooltipContent,
+  TooltipIconButton,
   TooltipProvider,
   TooltipTrigger,
 } from "@thinkwork/ui";
@@ -605,22 +606,13 @@ function IconAction({
   children: ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={label}
-            disabled={disabled}
-            onClick={onClick}
-          >
-            {children}
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <TooltipIconButton
+      type="button"
+      label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </TooltipIconButton>
   );
 }

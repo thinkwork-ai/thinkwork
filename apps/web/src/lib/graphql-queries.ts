@@ -51,6 +51,20 @@ export const ThreadsPagedQuery = gql`
           name
           avatarUrl
         }
+        user {
+          id
+          name
+          image
+        }
+        participants {
+          participantType
+          userId
+          user {
+            id
+            name
+            image
+          }
+        }
         checkoutRunId
         channel
         costSummary

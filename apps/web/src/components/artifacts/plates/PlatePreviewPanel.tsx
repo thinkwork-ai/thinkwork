@@ -11,7 +11,7 @@
 import { useMemo, useState } from "react";
 import { Copy, Moon, Pencil, Sun, X } from "lucide-react";
 import { useQuery } from "urql";
-import { Button, useTheme } from "@thinkwork/ui";
+import { Button, TooltipIconButton, useTheme } from "@thinkwork/ui";
 import type { DocumentPlateDiagnostic } from "@/gql/graphql";
 import { DocumentPlatePreviewQuery } from "@/lib/graphql-queries";
 import {
@@ -120,18 +120,15 @@ export function PlatePreviewPanel({
             Conformance
           </Button>
           {tab === "conformance" && onClose ? (
-            <Button
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className="ml-auto text-muted-foreground hover:text-foreground"
-              aria-label="Close preview"
-              title="Close preview"
+              label="Close preview"
               onClick={onClose}
               data-testid="plate-conformance-close"
             >
               <X className="size-4" />
-            </Button>
+            </TooltipIconButton>
           ) : null}
         </div>
       ) : null}
@@ -215,68 +212,57 @@ export function PlatePreviewFrame({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {onClone ? (
-            <Button
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className="text-muted-foreground hover:text-foreground"
-              aria-label="Clone plate"
-              title="Clone plate"
+              label="Clone plate"
               onClick={onClone}
               data-testid="plate-clone-action"
             >
               <Copy className="size-4" />
-            </Button>
+            </TooltipIconButton>
           ) : null}
           {onEdit ? (
-            <Button
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className="text-muted-foreground hover:text-foreground"
-              aria-label="Edit plate"
-              title="Edit plate"
+              label="Edit plate"
               onClick={onEdit}
               data-testid="plate-edit-action"
             >
               <Pencil className="size-4" />
-            </Button>
+            </TooltipIconButton>
           ) : null}
-          <Button
+          <TooltipIconButton
             type="button"
             variant={localTheme === "light" ? "secondary" : "ghost"}
-            size="icon-sm"
-            aria-label="Preview in light theme"
+            label="Preview in light theme"
             aria-pressed={localTheme === "light"}
             onClick={() => setLocalTheme("light")}
             data-testid="plate-preview-theme-light"
           >
             <Sun className="size-4" />
-          </Button>
-          <Button
+          </TooltipIconButton>
+          <TooltipIconButton
             type="button"
             variant={localTheme === "dark" ? "secondary" : "ghost"}
-            size="icon-sm"
-            aria-label="Preview in dark theme"
+            label="Preview in dark theme"
             aria-pressed={localTheme === "dark"}
             onClick={() => setLocalTheme("dark")}
             data-testid="plate-preview-theme-dark"
           >
             <Moon className="size-4" />
-          </Button>
+          </TooltipIconButton>
           {onClose ? (
-            <Button
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className="text-muted-foreground hover:text-foreground"
-              aria-label="Close preview"
-              title="Close preview"
+              label="Close preview"
               onClick={onClose}
               data-testid="plate-preview-close"
             >
               <X className="size-4" />
-            </Button>
+            </TooltipIconButton>
           ) : null}
         </div>
       </div>

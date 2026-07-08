@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Button } from "@thinkwork/ui";
+import { TooltipIconButton } from "@thinkwork/ui";
 import { Play, RotateCw, Trash2 } from "lucide-react";
 import { ManagedApplicationPlanDialog } from "./ManagedApplicationPlanDialog";
 import {
@@ -117,43 +117,32 @@ export function ManagedApplicationLifecycleActions({
   return (
     <div className="flex items-center gap-1">
       {hasJob ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="View plan"
-          title="View plan"
-          onClick={openPlan}
-        >
+        <TooltipIconButton type="button" label="View plan" onClick={openPlan}>
           <RotateCw className="size-4" />
-        </Button>
+        </TooltipIconButton>
       ) : null}
       {canDeploy ? (
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
+          label="Plan deploy"
           aria-label={`Plan deploy ${label}`}
-          title="Plan deploy"
           disabled={planState.fetching}
           onClick={() => void startOperation("ENABLE")}
         >
           <Play className="size-4" />
-        </Button>
+        </TooltipIconButton>
       ) : null}
       {canDestroy ? (
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="text-destructive hover:text-destructive"
+          label="Plan destroy"
           aria-label={`Plan destroy ${label}`}
-          title="Plan destroy"
+          className="text-destructive hover:text-destructive"
           disabled={planState.fetching}
           onClick={() => void startOperation("DESTROY")}
         >
           <Trash2 className="size-4" />
-        </Button>
+        </TooltipIconButton>
       ) : null}
       <ManagedApplicationPlanDialog
         job={job}

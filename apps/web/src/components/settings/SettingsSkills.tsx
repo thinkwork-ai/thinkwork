@@ -28,6 +28,7 @@ import {
   SheetHeader,
   SheetTitle,
   Spinner,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { Response } from "@/components/ai-elements/response";
 import { useTenant } from "@/context/TenantContext";
@@ -475,13 +476,10 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
   );
 
   const importAction = (
-    <Button
+    <TooltipIconButton
       type="button"
-      variant="ghost"
-      size="icon-sm"
       className={desktopToolbarButtonClassName}
-      aria-label="Import skill archive"
-      title="Import skill archive"
+      label="Import skill archive"
       disabled={importing}
       onClick={() => fileInputRef.current?.click()}
     >
@@ -490,7 +488,7 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
       ) : (
         <Upload className="size-4" />
       )}
-    </Button>
+    </TooltipIconButton>
   );
 
   usePageHeaderActions({

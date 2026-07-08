@@ -3,7 +3,7 @@ import { useClient, useMutation } from "urql";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { IconCameraSpark } from "@tabler/icons-react";
-import { Button } from "@thinkwork/ui";
+import { TooltipIconButton } from "@thinkwork/ui";
 import {
   CanvasBindingFreshnessQuery,
   SnapshotArtifactMutation,
@@ -197,33 +197,29 @@ export function CanvasHeaderActions({
   return (
     <>
       {hasBindings ? (
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="text-muted-foreground hover:text-foreground"
-          title="Refresh data"
-          aria-label="Refresh data"
+          label="Refresh data"
           disabled={refreshing}
           onClick={() => void handleRefresh()}
           data-testid="canvas-refresh-all"
         >
           <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-        </Button>
+        </TooltipIconButton>
       ) : null}
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
         size="icon"
         className="text-muted-foreground hover:text-foreground"
-        title="Snapshot"
-        aria-label="Snapshot"
+        label="Snapshot"
         disabled={snapshotting}
         onClick={() => void handleSnapshot()}
         data-testid="canvas-snapshot"
       >
         <IconCameraSpark className="size-4" />
-      </Button>
+      </TooltipIconButton>
     </>
   );
 }

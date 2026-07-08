@@ -18,6 +18,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  TooltipIconButton,
   cn,
 } from "@thinkwork/ui";
 
@@ -89,48 +90,32 @@ export function TwentyClientEngagementApp({
         ) : null}
         {showCrmAction ? (
           crmUrl ? (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              asChild
-              title="Open in CRM"
-              aria-label="Open in CRM"
-              className="text-muted-foreground hover:text-foreground"
-            >
+            <TooltipIconButton type="button" asChild label="Open in CRM">
               <a href={crmUrl} target="_blank" rel="noreferrer">
                 <ExternalLink className="size-3.5" />
-                <span className="sr-only">Open in CRM</span>
               </a>
-            </Button>
+            </TooltipIconButton>
           ) : (
-            <Button
+            <TooltipIconButton
               type="button"
-              size="icon-sm"
-              variant="ghost"
-              className="text-muted-foreground hover:text-foreground"
-              disabled
-              title="Open in CRM unavailable until Twenty URL is absolute"
+              label="Open in CRM unavailable until Twenty URL is absolute"
               aria-label="Open in CRM"
+              disabled
             >
               <ExternalLink className="size-3.5" />
-            </Button>
+            </TooltipIconButton>
           )
         ) : null}
-        <Button
+        <TooltipIconButton
           type="button"
-          size="icon-sm"
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
+          label="Refresh"
           onClick={data.refreshDashboard}
           disabled={data.dashboardFetching}
-          title="Refresh"
-          aria-label="Refresh"
         >
           <RefreshCcw
             className={`size-3.5 ${data.dashboardFetching ? "animate-spin" : ""}`}
           />
-        </Button>
+        </TooltipIconButton>
       </div>
     ),
     [

@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, SquareArrowOutUpRight, X } from "lucide-react";
 import { useQuery } from "urql";
-import { Button } from "@thinkwork/ui";
+import { TooltipIconButton } from "@thinkwork/ui";
 import {
   ArtifactBodyView,
   coerceArtifactMetadataRecord,
@@ -141,18 +141,16 @@ export function ThreadArtifactPanel({
     >
       <header className="flex shrink-0 items-center gap-1 border-b border-border/70 py-1.5 pl-2 pr-2">
         {!isListState && onBackToList ? (
-          <Button
+          <TooltipIconButton
             type="button"
-            variant="ghost"
             size="icon"
             className="text-muted-foreground hover:text-foreground"
-            title="Back to artifact list"
-            aria-label="Back to artifact list"
+            label="Back to artifact list"
             onClick={onBackToList}
             data-testid="thread-artifact-panel-back"
           >
             <ArrowLeft className="size-4" />
-          </Button>
+          </TooltipIconButton>
         ) : null}
         <h2
           className="min-w-0 flex-1 truncate pl-2 text-sm font-medium text-foreground"
@@ -174,35 +172,31 @@ export function ThreadArtifactPanel({
           />
         ) : null}
         {!isListState ? (
-          <Button
+          <TooltipIconButton
             asChild
-            variant="ghost"
             size="icon"
             className="text-muted-foreground hover:text-foreground"
+            label="Open full page"
           >
             <Link
               to="/artifacts/$id"
               params={{ id: artifact?.id ?? artifactId }}
-              title="Open full page"
-              aria-label="Open full page"
               data-testid="thread-artifact-panel-full-page"
             >
               <SquareArrowOutUpRight className="size-4" />
             </Link>
-          </Button>
+          </TooltipIconButton>
         ) : null}
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="text-muted-foreground hover:text-foreground"
-          title="Close artifact panel"
-          aria-label="Close artifact panel"
+          label="Close artifact panel"
           onClick={onClose}
           data-testid="thread-artifact-panel-close"
         >
           <X className="size-4" />
-        </Button>
+        </TooltipIconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isListState ? (

@@ -42,6 +42,7 @@ import {
   DialogTitle,
   DialogTrigger,
   Label,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -535,12 +536,8 @@ export function SettingsEvaluations() {
     breadcrumbs: [{ label: "Evaluations" }],
     action: tenantId ? (
       <div className={cn("flex items-center", desktopToolbarGapClassName)}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          title="Refresh evaluations"
-          aria-label="Refresh evaluations"
+        <TooltipIconButton
+          label="Refresh evaluations"
           className={desktopToolbarButtonClassName}
           disabled={dashboardRefreshing}
           onClick={refreshEvaluationDashboard}
@@ -548,67 +545,52 @@ export function SettingsEvaluations() {
           <RefreshCw
             className={cn("size-4", dashboardRefreshing && "animate-spin")}
           />
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           asChild
-          variant="ghost"
-          size="icon-sm"
-          title="Datasets"
-          aria-label="Datasets"
+          label="Datasets"
           className={desktopToolbarButtonClassName}
         >
           <Link to="/settings/evaluations/datasets">
             <Database className="size-4" />
           </Link>
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           asChild
-          variant="ghost"
-          size="icon-sm"
-          title="Profiles"
-          aria-label="Profiles"
+          label="Profiles"
           className={desktopToolbarButtonClassName}
         >
           <Link to="/settings/evaluations/profiles">
             <Layers className="size-4" />
           </Link>
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           asChild
-          variant="ghost"
-          size="icon-sm"
-          title="Compare profiles"
-          aria-label="Compare profiles"
+          label="Compare profiles"
           className={desktopToolbarButtonClassName}
         >
           <Link to="/settings/evaluations/compare">
             <GitCompareArrows className="size-4" />
           </Link>
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           asChild
-          variant="ghost"
-          size="icon-sm"
-          title="Studio"
-          aria-label="Studio"
+          label="Studio"
           className={desktopToolbarButtonClassName}
         >
           <Link to="/settings/evaluations/studio">
             <SlidersHorizontal className="size-4" />
           </Link>
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           asChild
-          variant="ghost"
-          size="icon-sm"
-          title="Replay tools"
-          aria-label="Replay tools"
+          label="Replay tools"
           className={desktopToolbarButtonClassName}
         >
           <Link to="/settings/evaluations/replay-tools">
             <ShieldCheck className="size-4" />
           </Link>
-        </Button>
+        </TooltipIconButton>
         <RunEvaluationButton
           tenantId={tenantId}
           onStarted={() => {
@@ -812,15 +794,12 @@ function RunEvaluationButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="Run evaluation"
-          aria-label="Run evaluation"
+        <TooltipIconButton
+          label="Run evaluation"
           className={desktopToolbarButtonClassName}
         >
           <Play className="size-4" />
-        </Button>
+        </TooltipIconButton>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>

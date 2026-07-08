@@ -1,13 +1,7 @@
 import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Eye, EyeOff, RefreshCw } from "lucide-react";
-import {
-  Button,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  cn,
-} from "@thinkwork/ui";
+import { TooltipIconButton, cn } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   SettingsMemory,
@@ -79,58 +73,41 @@ export function SettingsMemoryHome() {
     activeTab === "memory" ? (
       <div className="flex items-center gap-1">
         {rawUnitsController ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className={cn(
-                  "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
-                  rawUnitsController.showRaw &&
-                    "bg-primary/10 text-primary hover:text-primary",
-                )}
-                aria-label={
-                  rawUnitsController.showRaw
-                    ? "Hide raw memory units"
-                    : "Show raw memory units"
-                }
-                data-testid="settings-memory-toggle-raw"
-                onClick={() => rawUnitsController.toggle()}
-              >
-                {rawUnitsController.showRaw ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              className="max-w-64 border border-border bg-popover text-popover-foreground shadow-md"
-              arrowClassName="bg-popover fill-popover border-b border-r border-border"
-            >
-              {rawUnitsController.showRaw
+          <TooltipIconButton
+            label={
+              rawUnitsController.showRaw
                 ? "Showing all memory units. Click to return to the curated view (consolidated observations, corroborated facts, and deliberate captures)."
-                : `Curated view — ${rawUnitsController.hiddenCount} raw uncorroborated unit${rawUnitsController.hiddenCount === 1 ? "" : "s"} hidden. Click to show everything.`}
-            </TooltipContent>
-          </Tooltip>
+                : `Curated view — ${rawUnitsController.hiddenCount} raw uncorroborated unit${rawUnitsController.hiddenCount === 1 ? "" : "s"} hidden. Click to show everything.`
+            }
+            className={cn(
+              rawUnitsController.showRaw &&
+                "bg-primary/10 text-primary hover:text-primary",
+            )}
+            aria-label={
+              rawUnitsController.showRaw
+                ? "Hide raw memory units"
+                : "Show raw memory units"
+            }
+            data-testid="settings-memory-toggle-raw"
+            onClick={() => rawUnitsController.toggle()}
+          >
+            {rawUnitsController.showRaw ? (
+              <EyeOff className="size-4" />
+            ) : (
+              <Eye className="size-4" />
+            )}
+          </TooltipIconButton>
         ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
+        <TooltipIconButton
+          label="Refresh memory records"
           className={cn(
-            "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
             refreshing && "bg-primary/10 text-primary hover:text-primary",
           )}
-          aria-label="Refresh memory records"
-          title="Refresh memory records"
           disabled={refreshDisabled}
           onClick={() => void refreshMemory()}
         >
           <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
-        </Button>
+        </TooltipIconButton>
       </div>
     ) : null;
 

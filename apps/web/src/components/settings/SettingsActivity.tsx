@@ -11,8 +11,10 @@ import { Activity, MessageSquare, RefreshCw, Search } from "lucide-react";
 import { Bar, BarChart, Cell, XAxis } from "recharts";
 import { useQuery, useSubscription } from "urql";
 import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
   Badge,
-  Button,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -20,6 +22,7 @@ import {
   DisplayViewControl,
   GroupedListView,
   Input,
+  TooltipIconButton,
   type ChartConfig,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
@@ -47,33 +50,79 @@ import {
   filterActivityItems,
   formatActivityDay,
   formatCost,
-  formatDuration,
   mapThreadsToActivityItems,
-  STATUS_COLORS,
   TYPE_COLORS,
   TYPE_LABELS,
   type ActivityItem,
+  type ActivityParticipant,
   type ActivityThreadSummary,
 } from "@/lib/settings-activity";
 
 const RECENT_ACTIVITY_LIMIT = 200;
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
 
-type ActivityGroup = "recency" | "status" | "type" | "agent";
-type ActivitySort =
-  | "updated"
-  | "title"
-  | "status"
-  | "type"
-  | "cost"
-  | "duration";
-type ActivityProperty =
-  | "status"
-  | "type"
-  | "agent"
-  | "duration"
-  | "cost"
-  | "updated";
+function participantInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+}
+
+function ParticipantBadge({
+  participant,
+}: {
+  participant: ActivityParticipant;
+}) {
+  return (
+    <Badge
+      variant="secondary"
+      className="max-w-32 gap-1 py-0 pl-0.5 pr-1.5 text-xs font-normal"
+    >
+      <Avatar size="xs" className="h-4 w-4">
+        {participant.image ? (
+          <AvatarImage src={participant.image} alt={participant.name} />
+        ) : null}
+        <AvatarFallback className="text-[9px]">
+          {participantInitials(participant.name)}
+        </AvatarFallback>
+      </Avatar>
+      <span className="truncate">{participant.name}</span>
+    </Badge>
+  );
+}
+
+/**
+ * Thread starter + mentioned users. Shows up to two named badges; three or
+ * more collapse into a single "N participants" count badge.
+ */
+function ParticipantBadges({
+  participants,
+}: {
+  participants: ActivityParticipant[];
+}) {
+  if (participants.length === 0) return null;
+  if (participants.length > 2) {
+    return (
+      <Badge
+        variant="secondary"
+        className="whitespace-nowrap text-xs font-normal"
+      >
+        {participants.length} participants
+      </Badge>
+    );
+  }
+  return (
+    <>
+      {participants.map((participant) => (
+        <ParticipantBadge key={participant.id} participant={participant} />
+      ))}
+    </>
+  );
+}
+
+type ActivityGroup = "recency" | "type" | "agent";
+type ActivitySort = "updated" | "title" | "type" | "cost";
+type ActivityProperty = "type" | "agent" | "cost" | "updated";
 
 export type SettingsActivityDisplayState = DisplayListState<
   ActivityGroup,
@@ -90,41 +139,35 @@ export const ACTIVITY_DISPLAY_CONFIG: DisplayListConfig<
   groups: [
     { value: "none", label: "None" },
     { value: "recency", label: "Recency" },
-    { value: "status", label: "Status" },
     { value: "type", label: "Type" },
     { value: "agent", label: "Agent" },
   ],
   subgroups: [
     { value: "none", label: "None" },
-    { value: "status", label: "Status" },
     { value: "type", label: "Type" },
     { value: "agent", label: "Agent" },
   ],
   sorts: [
     { value: "updated", label: "Updated" },
     { value: "title", label: "Title" },
-    { value: "status", label: "Status" },
     { value: "type", label: "Type" },
     { value: "cost", label: "Cost" },
-    { value: "duration", label: "Duration" },
   ],
   properties: [
-    { value: "status", label: "Status" },
     { value: "type", label: "Type" },
     { value: "agent", label: "Agent" },
-    { value: "duration", label: "Duration" },
     { value: "cost", label: "Cost" },
     { value: "updated", label: "Updated" },
   ],
   defaults: {
     view: "table",
     group: "recency",
-    subgroup: "status",
+    subgroup: "type",
     sort: "updated",
     dir: "desc",
     showEmptyGroups: true,
     showEmptySubgroups: false,
-    properties: ["status", "type", "agent", "duration", "cost", "updated"],
+    properties: ["type", "agent", "cost", "updated"],
   },
 };
 
@@ -144,12 +187,6 @@ const activityGroupingOptions: DisplayGroupingOption<
       { key: "older", label: "Older" },
       { key: "unknown", label: "Unknown" },
     ],
-  },
-  {
-    value: "status",
-    label: "Status",
-    group: (item) => item.status,
-    labelFor: (key) => key.replace(/_/g, " "),
   },
   {
     value: "type",
@@ -175,20 +212,12 @@ const activitySortOptions: DisplaySortOption<ActivitySort, ActivityItem>[] = [
     compare: (left, right) => left.title.localeCompare(right.title),
   },
   {
-    value: "status",
-    compare: (left, right) => left.status.localeCompare(right.status),
-  },
-  {
     value: "type",
     compare: (left, right) => left.type.localeCompare(right.type),
   },
   {
     value: "cost",
     compare: (left, right) => (left.cost ?? 0) - (right.cost ?? 0),
-  },
-  {
-    value: "duration",
-    compare: (left, right) => (left.duration ?? 0) - (right.duration ?? 0),
   },
 ];
 
@@ -352,18 +381,8 @@ export function SettingsActivity({
                 />
               </span>
               <span className="ml-auto hidden shrink-0 items-center gap-3 sm:flex">
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "max-w-32 truncate text-xs capitalize",
-                    STATUS_COLORS[item.status] ??
-                      "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {item.status.replace(/_/g, " ")}
-                </Badge>
-                <span className="w-14 text-right text-xs tabular-nums text-muted-foreground">
-                  {formatDuration(item.duration)}
+                <span className="hidden items-center gap-1.5 md:flex">
+                  <ParticipantBadges participants={item.participants} />
                 </span>
                 <span className="w-16 text-right text-xs tabular-nums text-muted-foreground">
                   {formatCost(item.cost)}
@@ -412,22 +431,18 @@ export function SettingsActivity({
   const headerActions = useMemo(
     () => (
       <div className="flex items-center gap-0.5">
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
           className="size-8 text-muted-foreground/70 hover:bg-white/[0.05] hover:text-foreground/85"
           onClick={refreshAll}
           disabled={fetching}
-          aria-label="Refresh activity"
-          title="Refresh activity"
+          label="Refresh activity"
         >
           <RefreshCw
             className={cn("h-4 w-4", fetching && "animate-spin")}
             aria-hidden="true"
           />
-          <span className="sr-only">Refresh activity</span>
-        </Button>
+        </TooltipIconButton>
         <DisplayViewControl
           state={displayState}
           modes={[
@@ -515,7 +530,7 @@ export function SettingsActivity({
                   hideHeader
                   scrollable
                   allowHorizontalScroll={false}
-                  pageSize={10}
+                  pageSize={100}
                   tableClassName="table-fixed"
                   onRowClick={handleRowClick}
                   emptyState={
@@ -627,18 +642,6 @@ function ActivityPropertyChip({
   property: ActivityProperty;
 }) {
   switch (property) {
-    case "status":
-      return (
-        <Badge
-          variant="secondary"
-          className={cn(
-            "max-w-32 truncate text-xs capitalize",
-            STATUS_COLORS[item.status] ?? "bg-muted text-muted-foreground",
-          )}
-        >
-          {item.status.replace(/_/g, " ")}
-        </Badge>
-      );
     case "type":
       return (
         <Badge
@@ -656,12 +659,6 @@ function ActivityPropertyChip({
       return (
         <span className="text-xs text-muted-foreground">
           {item.agentName ?? "Unassigned"}
-        </span>
-      );
-    case "duration":
-      return (
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {formatDuration(item.duration)}
         </span>
       );
     case "cost":
@@ -695,7 +692,7 @@ function ActivityChart({
   return (
     <ChartContainer
       config={activityChartConfig}
-      className="aspect-auto h-32 w-full"
+      className="aspect-auto h-32 w-full [&_svg_*:focus]:outline-none [&_svg:focus]:outline-none"
       data-testid="activity-chart"
     >
       <BarChart

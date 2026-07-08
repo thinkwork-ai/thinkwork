@@ -12,6 +12,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -157,15 +158,14 @@ export function SettingsKnowledgeBaseDetail() {
           description={kb.description ?? undefined}
           badge={<Badge variant={statusVariant(kb.status)}>{kb.status}</Badge>}
           actions={
-            <Button
+            <TooltipIconButton
               size="icon"
-              variant="ghost"
               aria-label="Edit source"
-              title="Edit name & description"
+              label="Edit name & description"
               onClick={() => setEditOpen(true)}
             >
               <Pencil className="h-4 w-4" />
-            </Button>
+            </TooltipIconButton>
           }
         />
 
@@ -616,8 +616,8 @@ function TestRetrievalSection({
       <div className="space-y-3 p-4">
         {notProvisioned ? (
           <p className="text-sm text-muted-foreground">
-            This Knowledge Base is not provisioned yet. Retry provisioning before
-            testing retrieval.
+            This Knowledge Base is not provisioned yet. Retry provisioning
+            before testing retrieval.
           </p>
         ) : (
           <>

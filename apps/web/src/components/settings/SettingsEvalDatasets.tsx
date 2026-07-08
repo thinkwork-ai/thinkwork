@@ -30,6 +30,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -321,16 +322,13 @@ export function SettingsEvalDatasets() {
     ],
     action: tenantId ? (
       <div className={cn("flex items-center", desktopToolbarGapClassName)}>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="New dataset"
-          aria-label="New dataset"
+        <TooltipIconButton
+          label="New dataset"
           className={desktopToolbarButtonClassName}
           onClick={() => setCreateOpen(true)}
         >
           <Plus className="size-4" />
-        </Button>
+        </TooltipIconButton>
       </div>
     ) : undefined,
     actionKey: `eval-datasets:${tenantId ?? ""}`,

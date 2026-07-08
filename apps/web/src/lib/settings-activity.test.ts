@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  activityParticipants,
   activityTimestamp,
   activityRecencyBucket,
   activityRecencyLabel,
@@ -36,6 +37,45 @@ function thread(
 describe("settings activity helpers", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("derives human participants with the starter first, deduped", () => {
+    const item = activityParticipants(
+      thread({
+        user: { id: "u1", name: "Ada Lovelace" },
+        participants: [
+          {
+            participantType: "USER",
+            userId: "u1",
+            user: { id: "u1", name: "Ada Lovelace" },
+          },
+          { participantType: "AGENT", userId: null, user: null },
+          {
+            participantType: "USER",
+            userId: "u2",
+            user: { id: "u2", name: "Grace Hopper" },
+          },
+        ],
+      }),
+    );
+
+    expect(item.map((p) => p.id)).toEqual(["u1", "u2"]);
+    expect(item[0]?.name).toBe("Ada Lovelace");
+  });
+
+  it("falls back to a label when a participant has no name", () => {
+    const item = activityParticipants(
+      thread({ user: { id: "u9", name: null }, participants: [] }),
+    );
+    expect(item).toEqual([
+      { id: "u9", name: "Unknown user", image: undefined },
+    ]);
+  });
+
+  it("returns no participants when the thread has none", () => {
+    expect(
+      activityParticipants(thread({ user: null, participants: null })),
+    ).toEqual([]);
   });
 
   it("maps a thread to an activity row", () => {

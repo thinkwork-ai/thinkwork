@@ -12,6 +12,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import {
   ArrowDownToLine,
@@ -265,19 +266,15 @@ export function PluginDetail() {
       { label: displayName },
     ],
     action: workosDashboardUrl ? (
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Open WorkOS dashboard"
-        title="Open WorkOS dashboard"
-        className="text-muted-foreground hover:text-foreground"
+        label="Open WorkOS dashboard"
         onClick={() => {
           window.open(workosDashboardUrl, "_blank", "noopener,noreferrer");
         }}
       >
         <ExternalLink className="size-4" />
-      </Button>
+      </TooltipIconButton>
     ) : undefined,
     actionKey: workosDashboardUrl ? "workos-dashboard" : undefined,
   });

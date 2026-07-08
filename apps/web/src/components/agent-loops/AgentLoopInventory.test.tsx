@@ -79,6 +79,24 @@ vi.mock("./AgentLoopForm", () => ({
 }));
 
 vi.mock("@thinkwork/ui", () => ({
+  TooltipIconButton: ({
+    children,
+    label,
+    tooltipSide,
+    tooltipAlign,
+    tooltipClassName,
+    tooltipDelayDuration,
+    "aria-label": ariaLabel,
+    ...props
+  }: any) => (
+    <button
+      aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
+      {...props}
+    >
+      {children}
+      {typeof label === "string" ? null : label}
+    </button>
+  ),
   Badge: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),

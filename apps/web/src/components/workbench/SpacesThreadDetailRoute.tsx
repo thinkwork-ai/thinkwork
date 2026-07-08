@@ -4,7 +4,7 @@ import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Flag, Info, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { describeSendMessageError } from "@/lib/send-message-error";
-import { Button } from "@thinkwork/ui";
+import { TooltipIconButton } from "@thinkwork/ui";
 import {
   parseSpaceRecord,
   type LinkedTaskSummary,
@@ -1727,12 +1727,9 @@ export function SpacesThreadDetailRoute({
     action: (
       <div className={`flex items-center ${desktopToolbarGapClassName}`}>
         {isOperator && latestCompletedTurnId ? (
-          <Button
+          <TooltipIconButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Flag for evaluation"
-            title="Flag for evaluation"
+            label="Flag for evaluation"
             data-testid="thread-flag-for-eval"
             className={desktopToolbarButtonClassName}
             onClick={() => {
@@ -1741,14 +1738,11 @@ export function SpacesThreadDetailRoute({
             }}
           >
             <Flag className="size-4" />
-          </Button>
+          </TooltipIconButton>
         ) : null}
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={threadInfoOpen ? "Close thread info" : "Open thread info"}
-          title={threadInfoOpen ? "Close thread info" : "Open thread info"}
+          label={threadInfoOpen ? "Close thread info" : "Open thread info"}
           className={
             threadInfoOpen
               ? desktopToolbarActiveButtonClassName
@@ -1763,18 +1757,11 @@ export function SpacesThreadDetailRoute({
           }}
         >
           <Info className="size-4" />
-        </Button>
+        </TooltipIconButton>
         {newestCardArtifactId ? (
-          <Button
+          <TooltipIconButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={
-              dockedArtifactPanel.artifactId
-                ? "Close artifact panel"
-                : "Open artifact panel"
-            }
-            title={
+            label={
               dockedArtifactPanel.artifactId
                 ? "Close artifact panel"
                 : "Open artifact panel"
@@ -1800,7 +1787,7 @@ export function SpacesThreadDetailRoute({
             }}
           >
             <PanelRight className="size-4" />
-          </Button>
+          </TooltipIconButton>
         ) : null}
       </div>
     ),

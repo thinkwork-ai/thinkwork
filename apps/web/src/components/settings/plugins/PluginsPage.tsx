@@ -7,10 +7,7 @@ import {
   Button,
   ToggleGroup,
   ToggleGroupItem,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
@@ -354,34 +351,19 @@ function CatalogRefreshAction({
     ? `Plugin catalog metadata: ${metadataSummary(metadata)}`
     : "Refresh plugins";
   return (
-    <TooltipProvider delayDuration={CATALOG_METADATA_TOOLTIP_DELAY_MS}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onRefresh}
-            aria-label={
-              showTrustedRefresh ? "Refresh plugin catalog" : "Refresh plugins"
-            }
-            disabled={refreshing}
-          >
-            <RefreshCw
-              className={`size-4 ${refreshing ? "animate-spin" : ""}`}
-            />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent
-          side="bottom"
-          align="end"
-          className="max-w-[18rem] border border-border bg-popover px-2.5 py-2 text-popover-foreground shadow-md"
-          hideArrow
-        >
-          {metadata ? <CatalogMetadataDetails metadata={metadata} /> : title}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <TooltipIconButton
+      label={metadata ? <CatalogMetadataDetails metadata={metadata} /> : title}
+      onClick={onRefresh}
+      aria-label={
+        showTrustedRefresh ? "Refresh plugin catalog" : "Refresh plugins"
+      }
+      disabled={refreshing}
+      tooltipAlign="end"
+      tooltipDelayDuration={CATALOG_METADATA_TOOLTIP_DELAY_MS}
+      tooltipClassName="max-w-[18rem] px-2.5 py-2"
+    >
+      <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+    </TooltipIconButton>
   );
 }
 

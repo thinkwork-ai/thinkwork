@@ -12,6 +12,7 @@ import {
   Badge,
   Button,
   Dialog,
+  TooltipIconButton,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -59,14 +60,11 @@ export function SettingsSpaceConfig() {
     space?.name?.trim() || (result.fetching ? "Space" : "Space");
 
   const viewToggle = (
-    <Button
+    <TooltipIconButton
       asChild
       type="button"
-      variant="ghost"
-      size="icon-sm"
       className="text-muted-foreground hover:text-foreground"
-      aria-label={workspaceView ? "Space config" : "Space files"}
-      title={workspaceView ? "Space config" : "Space files"}
+      label={workspaceView ? "Space config" : "Space files"}
     >
       {workspaceView ? (
         <Link to="/settings/spaces/$spaceId" params={{ spaceId }} search={{}}>
@@ -83,7 +81,7 @@ export function SettingsSpaceConfig() {
           <span className="sr-only">Space files</span>
         </Link>
       )}
-    </Button>
+    </TooltipIconButton>
   );
 
   usePageHeaderActions({

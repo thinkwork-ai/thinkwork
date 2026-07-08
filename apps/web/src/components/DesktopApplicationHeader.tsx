@@ -2,10 +2,10 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ChevronRight, RefreshCw } from "lucide-react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
-  Button,
   SidebarTrigger,
   ToggleGroup,
   ToggleGroupItem,
+  TooltipIconButton,
   useSidebar,
 } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
@@ -85,39 +85,31 @@ export function DesktopNavigationControls({
       className={`flex min-w-0 items-center ${desktopToolbarGapClassName} text-sidebar-foreground ${className ?? ""}`}
     >
       <SidebarTrigger className={`size-8 ${desktopToolbarButtonClassName}`} />
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
         className={`size-8 ${desktopToolbarButtonClassName}`}
-        aria-label="Refresh thread"
-        title="Refresh thread"
+        label="Refresh thread"
         aria-busy={refreshing ? "true" : undefined}
         onClick={handleRefresh}
       >
         <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-        <span className="sr-only">Refresh thread</span>
-      </Button>
-      <Button
+      </TooltipIconButton>
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
         className={`size-8 ${desktopToolbarButtonClassName}`}
+        label="Back"
         onClick={handleHistoryBack}
       >
         <ArrowLeft className="size-4" />
-        <span className="sr-only">Back</span>
-      </Button>
-      <Button
+      </TooltipIconButton>
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
         className={`size-8 ${desktopToolbarButtonClassName}`}
+        label="Forward"
         onClick={() => window.history.forward()}
       >
         <ArrowRight className="size-4" />
-        <span className="sr-only">Forward</span>
-      </Button>
+      </TooltipIconButton>
       <DesktopUpdateBadge className="ml-auto" />
     </div>
   );
