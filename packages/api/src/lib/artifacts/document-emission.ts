@@ -41,8 +41,11 @@ import {
   artifacts,
   artifactVersions,
   db,
+  desc,
   eq,
+  inArray,
   sql,
+  threadTurnEvents,
 } from "../../graphql/utils.js";
 import { creatorUserIdForThread } from "./artifact-creator.js";
 import {
@@ -301,12 +304,22 @@ export interface DocumentEmissionDeps {
     errorMessage: string;
     artifactId: string | null;
   }) => Promise<void>;
-  findExistingDraftDocument: (input: {
+  /**
+   * In-thread continuity for interactive emits (no documentId carried): the
+   * document this thread is already working on, so a follow-up edit revises
+   * it instead of forking a copy. Two sources, in priority order:
+   *   1. a document row homed in this thread (draft OR final — F3: edits
+   *      after finalize re-open a draft head) matching genre+title;
+   *   2. the thread's most recent `document.card` event matching genre+title
+   *      — covers documents emitted INTO this thread by a bound automation
+   *      run whose artifact row is homed in another thread.
+   */
+  findThreadDocumentForRevision: (input: {
     tenantId: string;
     threadId: string;
     genre: string;
     title: string;
-  }) => Promise<{ documentId: string } | null>;
+  }) => Promise<DocumentRow | null>;
   upsertDocumentRow: (input: {
     artifactId: string;
     tenantId: string;
@@ -409,10 +422,7 @@ function defaultDeps(): DocumentEmissionDeps {
         .select({ context_snapshot: threadTurns.context_snapshot })
         .from(threadTurns)
         .where(
-          and(
-            eq(threadTurns.id, turnId),
-            eq(threadTurns.tenant_id, tenantId),
-          ),
+          and(eq(threadTurns.id, turnId), eq(threadTurns.tenant_id, tenantId)),
         )
         .limit(1);
       const snapshot = rows[0]?.context_snapshot;
@@ -440,24 +450,72 @@ function defaultDeps(): DocumentEmissionDeps {
     },
     recordRefreshFailure: (input) =>
       recordDocumentRefreshFailure(getDb(), { ...input, now: new Date() }),
-    findExistingDraftDocument: async ({ tenantId, threadId, genre, title }) => {
+    findThreadDocumentForRevision: async ({
+      tenantId,
+      threadId,
+      genre,
+      title,
+    }) => {
+      // Rows store the bounded title (upsertDocumentRow) — compare likewise.
+      const boundedTitle = boundedCanvasText(title, 160);
       const rows = await db
-        .select({ metadata: artifacts.metadata })
+        .select()
         .from(artifacts)
         .where(
           and(
             eq(artifacts.tenant_id, tenantId),
             eq(artifacts.thread_id, threadId),
             eq(artifacts.type, genre),
-            eq(artifacts.title, title),
-            eq(artifacts.status, "draft"),
+            eq(artifacts.title, boundedTitle),
+            inArray(artifacts.status, ["draft", "final"]),
             sql`${artifacts.metadata}->>'kind' = ${DOCUMENT_METADATA_KIND}`,
           ),
         )
+        .orderBy(desc(artifacts.updated_at))
         .limit(1);
-      const meta = parseMetadata(rows[0]?.metadata);
-      const documentId = meta?.documentId;
-      return typeof documentId === "string" ? { documentId } : null;
+      if (rows[0]) return rows[0] as DocumentRow;
+
+      // Card-event fallback: a bound automation run emits into this thread
+      // but homes the artifact row in the automation's own thread. The card
+      // the thread displays is the continuity record. Bounded scan of the
+      // thread's recent cards, newest first.
+      const cards = await db
+        .select({ payload: threadTurnEvents.payload })
+        .from(threadTurnEvents)
+        .innerJoin(threadTurns, eq(threadTurnEvents.run_id, threadTurns.id))
+        .where(
+          and(
+            eq(threadTurnEvents.tenant_id, tenantId),
+            eq(threadTurns.thread_id, threadId),
+            sql`${threadTurnEvents.payload}->>'kind' = ${DOCUMENT_CARD_PAYLOAD_KIND}`,
+          ),
+        )
+        .orderBy(desc(threadTurnEvents.id))
+        .limit(20);
+      for (const row of cards) {
+        const card = (row.payload as { card?: Record<string, unknown> } | null)
+          ?.card;
+        if (
+          card &&
+          card.genre === genre &&
+          card.title === boundedTitle &&
+          typeof card.artifactId === "string"
+        ) {
+          const doc = await db
+            .select()
+            .from(artifacts)
+            .where(
+              and(
+                eq(artifacts.id, card.artifactId),
+                eq(artifacts.tenant_id, tenantId),
+                inArray(artifacts.status, ["draft", "final"]),
+              ),
+            )
+            .limit(1);
+          if (doc[0]) return doc[0] as DocumentRow;
+        }
+      }
+      return null;
     },
     upsertDocumentRow: async (input) => {
       const metadata = {
@@ -828,24 +886,37 @@ export async function handleDocumentEmission(
       documentId,
     );
   } else {
-    // THINK-155 U2: run-derived turns never adopt a stray draft row —
-    // continuity rides the documentId the agent carries between emits.
+    // THINK-155 U2: run-derived turns never adopt a stray row — continuity
+    // rides the documentId the agent carries between emits (or the binding).
     if (runDerived) {
       documentId = randomUUID();
+      artifactId = deriveDocumentArtifactId(
+        input.tenantId,
+        input.threadId,
+        documentId,
+      );
     } else {
-      const existing = await deps.findExistingDraftDocument({
+      // Interactive continuity: a follow-up emit in a thread that already
+      // has this document (own row or an automation-emitted card) revises it
+      // — one living document per thread, never a same-title fork.
+      const existing = await deps.findThreadDocumentForRevision({
         tenantId: input.tenantId,
         threadId: input.threadId,
         genre: doc.genre,
         title: doc.title,
       });
-      documentId = existing?.documentId ?? randomUUID();
+      if (existing) {
+        documentId = metadataDocumentId(existing) ?? existing.id;
+        artifactId = existing.id;
+      } else {
+        documentId = randomUUID();
+        artifactId = deriveDocumentArtifactId(
+          input.tenantId,
+          input.threadId,
+          documentId,
+        );
+      }
     }
-    artifactId = deriveDocumentArtifactId(
-      input.tenantId,
-      input.threadId,
-      documentId,
-    );
   }
   refreshArtifactId = artifactId;
 
@@ -880,15 +951,9 @@ export async function handleDocumentEmission(
   }
   const plate = resolution.plate;
   if (plate.hidden) {
-    const revisionRow = doc.documentId
-      ? await deps.loadDocumentRow(
-          deriveDocumentArtifactId(
-            input.tenantId,
-            input.threadId,
-            doc.documentId,
-          ),
-        )
-      : null;
+    // artifactId is already resolved (bound, carried, adopted, or fresh) —
+    // an existing row of the hidden genre means this is a revision, allowed.
+    const revisionRow = await deps.loadDocumentRow(artifactId);
     if (!revisionRow) {
       await recordScheduledRefreshFailure(
         "COMPILE_REJECTED",

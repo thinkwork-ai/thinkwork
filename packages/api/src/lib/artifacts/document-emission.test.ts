@@ -107,12 +107,16 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
     resolveTurnRunContext: vi.fn(async () => null),
     resolveBoundDocumentId: vi.fn(async () => null),
     markRefreshSucceeded: vi.fn(async (input) => {
-      recorded.refreshSuccesses.push(input as unknown as Record<string, unknown>);
+      recorded.refreshSuccesses.push(
+        input as unknown as Record<string, unknown>,
+      );
     }),
     recordRefreshFailure: vi.fn(async (input) => {
-      recorded.refreshFailures.push(input as unknown as Record<string, unknown>);
+      recorded.refreshFailures.push(
+        input as unknown as Record<string, unknown>,
+      );
     }),
-    findExistingDraftDocument: vi.fn(async () => null),
+    findThreadDocumentForRevision: vi.fn(async () => null),
     upsertDocumentRow: vi.fn(async (input) => {
       recorded.upserts.push(input as unknown as Record<string, unknown>);
     }),
@@ -124,7 +128,7 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
         input as unknown as Record<string, unknown>,
       );
     }),
-    loadDocumentRow: vi.fn(async () => row),
+    loadDocumentRow: vi.fn(async (id: string) => (id === row.id ? row : null)),
     hasSpaceWriteRole: vi.fn(async () => true),
     pinDocumentHead: vi.fn(async (input) => {
       recorded.pins.push(input as unknown as Record<string, unknown>);
@@ -290,16 +294,57 @@ describe("handleDocumentEmission", () => {
     expect(recorded.upserts[0].artifactId).toBe(recorded.upserts[1].artifactId);
   });
 
-  it("falls back to the thread's existing draft when documentId is absent", async () => {
+  it("adopts the thread's existing document when documentId is absent", async () => {
+    const existingRow: DocumentRow = {
+      id: deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
+      tenant_id: TENANT_ID,
+      thread_id: THREAD_ID,
+      space_id: null,
+      status: "draft",
+      head_version: 0,
+      head_write_seq: 0,
+      metadata: { kind: "document", genre: "report", documentId: "doc-1" },
+    };
     const { deps } = makeDeps({
-      findExistingDraftDocument: vi.fn(async () => ({ documentId: "doc-1" })),
+      findThreadDocumentForRevision: vi.fn(async () => existingRow),
     });
     const { documentId: _omitted, ...withoutId } = VALID_DOCUMENT;
     const result = await emit(withoutId, deps);
-    expect(result.body.artifactId).toBe(
-      deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
-    );
+    expect(result.body.artifactId).toBe(existingRow.id);
     expect(result.body.documentId).toBe("doc-1");
+  });
+
+  it("a follow-up emit revises a FINALIZED document emitted into the thread by a bound run (no fork)", async () => {
+    // Cross-thread continuity: the artifact row is homed in the automation's
+    // own thread; this thread only shows the card. Adoption targets the row's
+    // real id — never the (tenant, thread, documentId) derivation, which
+    // would fork a copy.
+    const boundRow: DocumentRow = {
+      id: "11111111-2222-4333-8444-555555555555",
+      tenant_id: TENANT_ID,
+      thread_id: "99999999-9999-4999-8999-999999999999",
+      space_id: null,
+      status: "final",
+      head_version: 2,
+      head_write_seq: 2,
+      metadata: { kind: "document", genre: "report", documentId: "doc-run" },
+    };
+    const { deps, recorded } = makeDeps({
+      findThreadDocumentForRevision: vi.fn(async () => boundRow),
+      loadDocumentRow: vi.fn(async (id: string) =>
+        id === boundRow.id ? boundRow : null,
+      ),
+    });
+    const { documentId: _omitted, ...withoutId } = VALID_DOCUMENT;
+    const result = await emit({ ...withoutId, status: "final" }, deps);
+    expect(result.body.ok).toBe(true);
+    expect(result.body.artifactId).toBe(boundRow.id);
+    expect(result.body.documentId).toBe("doc-run");
+    expect(recorded.upserts).toHaveLength(1);
+    expect(recorded.upserts[0].artifactId).toBe(boundRow.id);
+    // The pin advances the SAME document's version chain.
+    expect(recorded.pins).toHaveLength(1);
+    expect((recorded.pins[0].row as DocumentRow).id).toBe(boundRow.id);
   });
 
   it("finalize pins both bodies and reports the new head version (AE3)", async () => {
@@ -470,7 +515,9 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
     const { deps, recorded } = makeOrderedDeps({
       preflight: vi.fn(() => ({
         ok: false as const,
-        diagnostics: [{ code: "SKELETON" as const, message: "empty", location: "head" }],
+        diagnostics: [
+          { code: "SKELETON" as const, message: "empty", location: "head" },
+        ],
       })),
     });
     const result = await emit(
@@ -487,7 +534,11 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
 
   it("run-derived refresh of an existing document swaps the head only after the pin (KTD2)", async () => {
     const { deps, recorded, ops } = makeOrderedDeps();
-    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
     expect(result.body.ok).toBe(true);
     expect(result.body.status).toBe("final");
     expect(recorded.pins).toHaveLength(1);
@@ -510,7 +561,11 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
       }
       return baseLoad(artifactId);
     });
-    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
     expect(result.body.ok).toBe(true);
     expect(ops.indexOf("s3:digest")).toBeLessThan(ops.indexOf("db:upsert"));
     expect(recorded.pins).toHaveLength(1);
@@ -522,7 +577,11 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
         throw new DocumentEmissionConflict("concurrent head change");
       }),
     });
-    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
     expect(result.body.ok).toBe(false);
     expect(result.body.code).toBe("CONFLICT");
     expect(recorded.s3Writes).toHaveLength(0);
@@ -543,7 +602,11 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
       emit({ ...VALID_DOCUMENT, status: "final" }, deps, null),
     ).rejects.toThrow("transient db failure");
     expect(recorded.s3Writes).toHaveLength(0); // head untouched by the failure
-    const retry = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const retry = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
     expect(retry.body.ok).toBe(true);
     expect(retry.body.headVersion).toBe(2);
     expect(recorded.s3Writes.length).toBeGreaterThan(0);
@@ -551,8 +614,16 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
 
   it("two sequential successful run-derived emissions keep a stable artifact id (R3)", async () => {
     const { deps, recorded } = makeOrderedDeps();
-    const first = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
-    const second = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const first = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
+    const second = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
     expect(first.body.artifactId).toBe(second.body.artifactId);
     expect(recorded.pins).toHaveLength(2);
   });
@@ -570,8 +641,8 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
     expect(recorded.s3Writes).toHaveLength(0);
     expect(recorded.upserts).toHaveLength(0);
     expect(recorded.cards).toHaveLength(0);
-    // Stray drafts are never adopted on run-derived turns.
-    expect(deps.findExistingDraftDocument).not.toHaveBeenCalled();
+    // Stray rows are never adopted on run-derived turns.
+    expect(deps.findThreadDocumentForRevision).not.toHaveBeenCalled();
   });
 
   it("run-derived draft emit then gate-rejected finalize leaves head, status, and versions unchanged", async () => {
@@ -584,7 +655,9 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
     const boundId = draft.body.documentId as string;
     deps.preflight = vi.fn(() => ({
       ok: false as const,
-      diagnostics: [{ code: "SKELETON" as const, message: "empty", location: "head" }],
+      diagnostics: [
+        { code: "SKELETON" as const, message: "empty", location: "head" },
+      ],
     }));
     const finalize = await emit(
       { ...VALID_DOCUMENT, documentId: boundId, status: "final" },
@@ -644,7 +717,11 @@ describe("refresh state + failure observability (THINK-155 U3)", () => {
         visibleSlugs: ["report"],
       })),
     });
-    const result = await emit({ ...VALID_DOCUMENT, genre: "novel" }, deps, null);
+    const result = await emit(
+      { ...VALID_DOCUMENT, genre: "novel" },
+      deps,
+      null,
+    );
     expect(result.body.ok).toBe(false);
     expect(recorded.refreshFailures).toHaveLength(0);
   });
@@ -654,7 +731,11 @@ describe("refresh state + failure observability (THINK-155 U3)", () => {
       resolveTurnRunContext: vi.fn(async () => runContext()),
       hasSpaceWriteRole: vi.fn(async () => false),
     });
-    await emit({ ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID }, deps, null);
+    await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
     expect(recorded.refreshFailures).toHaveLength(1);
     expect(recorded.refreshFailures[0].errorCode).toBe("FORBIDDEN");
     expect(String(recorded.refreshFailures[0].errorMessage)).toContain(
@@ -666,7 +747,11 @@ describe("refresh state + failure observability (THINK-155 U3)", () => {
     const { deps, recorded } = makeDeps({
       resolveTurnRunContext: vi.fn(async () => runContext(null)),
     });
-    await emit({ ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID }, deps, null);
+    await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
     expect(recorded.refreshFailures).toHaveLength(1);
     expect(String(recorded.refreshFailures[0].errorMessage)).toContain(
       "run-as user",
@@ -677,7 +762,11 @@ describe("refresh state + failure observability (THINK-155 U3)", () => {
     const { deps, recorded } = makeDeps({
       resolveTurnRunContext: vi.fn(async () => runContext()),
     });
-    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
     expect(result.body.ok).toBe(true);
     expect(recorded.refreshSuccesses).toHaveLength(1);
     expect(recorded.refreshSuccesses[0]).toMatchObject({
@@ -831,7 +920,11 @@ describe("bound-document target enforcement (THINK-155 U5)", () => {
       resolveTurnRunContext: vi.fn(async () => runContext()),
       resolveBoundDocumentId: vi.fn(async () => null),
     });
-    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps, null);
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final" },
+      deps,
+      null,
+    );
     expect(result.body.ok).toBe(true);
     expect(result.body.artifactId).toBe(
       deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),

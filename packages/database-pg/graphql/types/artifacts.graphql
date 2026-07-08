@@ -76,6 +76,9 @@ type ArtifactVersion {
   s3Key: String!
   contentHash: String!
   createdBy: ID
+  # Display name of the snapshot's creator (lazy users lookup). Drives the
+  # document reader's change-log footer (THINK-155 follow-up).
+  createdByName: String
   createdAt: AWSDateTime!
   # Living Artifacts (THINK-145 U10): the snapshot revision's canvas payload,
   # lazily hydrated from S3. Only fetched when selected — the version list
@@ -349,6 +352,12 @@ extend type Query {
     cursor: String
   ): [Artifact!]!
   artifact(id: ID!): Artifact
+  # Document change log (THINK-155 follow-up): one pinned version's rendered
+  # HTML, read from its content-addressed render pin. Precise single-version
+  # fetch so the history panel never hydrates every snapshot at once. Gated
+  # exactly like Artifact.renderHtml (tenant member + canvas/document access);
+  # null for non-document artifacts or unknown versions.
+  documentVersionRender(artifactId: ID!, version: Int!): String
   # Living Artifacts (THINK-145 U9): the canvas context for a thread, powering the
   # agent parity tools (save/load/refresh/list). Returns the thread's home space,
   # the current canvas part (save target), the SAVED canvases in the space (drafts

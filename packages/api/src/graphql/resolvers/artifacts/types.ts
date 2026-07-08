@@ -16,6 +16,7 @@ import {
   desc,
   eq,
   snakeToCamel,
+  users,
 } from "../../utils.js";
 import { isDocumentMetadata } from "../../../lib/artifacts/document-emission.js";
 import {
@@ -113,5 +114,22 @@ export const artifactVersionTypeResolvers = {
     if (!tenantId || !s3Key) return null;
     if (!isArtifactPayloadS3Key(tenantId, s3Key)) return null;
     return readArtifactPayloadFromS3({ tenantId, key: s3Key });
+  },
+
+  /**
+   * Display name of the snapshot's creator — lazy per-row users lookup for
+   * the document reader's change-log footer. Version lists are short, so a
+   * per-row query beats plumbing a batch loader through the parent.
+   */
+  createdByName: async (parent: any): Promise<string | null> => {
+    const createdBy: string | null =
+      parent?.createdBy ?? parent?.created_by ?? null;
+    if (!createdBy) return null;
+    const rows = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, createdBy))
+      .limit(1);
+    return rows[0]?.name ?? null;
   },
 };

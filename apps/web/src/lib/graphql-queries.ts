@@ -2532,6 +2532,7 @@ export const ArtifactDetailForRouteQuery = gql`
         version
         contentHash
         createdBy
+        createdByName
         createdAt
       }
       bindings {
@@ -2540,6 +2541,15 @@ export const ArtifactDetailForRouteQuery = gql`
     }
   }
   ${CanvasBindingFields}
+`;
+
+// Document change log (THINK-155 follow-up): one pinned version's rendered
+// HTML — precise single-version fetch when a history entry is clicked, never
+// a hydrate-all sweep.
+export const DocumentVersionRenderQuery = gql`
+  query DocumentVersionRender($artifactId: ID!, $version: Int!) {
+    documentVersionRender(artifactId: $artifactId, version: $version)
+  }
 `;
 
 // On-demand read of a single snapshot version's canvas payload (viewing history
