@@ -259,8 +259,6 @@ type N8nPluginSettings {
   desiredStatus: String
   currentStatus: String
   desiredConfig: AWSJSON!
-  agentStepBridgeEndpointPath: String!
-  agentStepBridgeCredentialConfigured: Boolean!
   n8nApiCredentialConfigured: Boolean!
   n8nApiCredentialBaseUrl: String
   currentPackageConfig: N8nPackageConfig!
@@ -272,7 +270,6 @@ type N8nPluginSettings {
   lastJobError: String
   lastEvidenceBucket: String
   lastEvidencePrefix: String
-  recentAgentStepRuns: [N8nAgentStepRunTelemetry!]!
 }
 
 input InstallPluginInput {

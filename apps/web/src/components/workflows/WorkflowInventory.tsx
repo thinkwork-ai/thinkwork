@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   type ColumnDef,
@@ -16,11 +16,6 @@ import {
   DataTableTokenFilter,
   dataTableTokenFilterFns,
   Input,
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
   type DataTableTokenFilterColumn,
 } from "@thinkwork/ui";
 import { CircleDot, GitBranch, Plug, Repeat, Search, X } from "lucide-react";
@@ -31,7 +26,6 @@ import {
   SettingsPluginCatalogQuery,
 } from "@/lib/settings-queries";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
-import { N8nPluginWorkflows } from "@/components/settings/plugins/n8n/N8nPluginWorkflows";
 import {
   primaryBinding,
   sourceLabel,
@@ -124,8 +118,6 @@ function uniqueOptions(
 
 export function WorkflowInventory() {
   const { tenantId } = useTenant();
-  const [discoveryOpen, setDiscoveryOpen] = useState(false);
-  const ignoreDiscoveryState = useCallback(() => {}, []);
 
   const [result] = useQuery<WorkflowsData>({
     query: SettingsWorkflowsQuery,
@@ -150,13 +142,11 @@ export function WorkflowInventory() {
     (catalogResult.data?.pluginCatalog ?? []).find(
       (candidate) => candidate.pluginKey === "n8n",
     ) ?? null;
-  const n8nInstall = n8nCatalogEntry?.install ?? null;
   const n8nRuntime =
     deploymentResult.data?.deploymentStatus.managedApplications.find(
       (candidate) => candidate.key === "n8n",
     );
   const n8nLaunchUrl = n8nRuntime?.url ?? n8nCatalogEntry?.launchUrl ?? null;
-  const canDiscoverN8n = Boolean(n8nInstall);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const tokenFilterColumns = useMemo(
     () => buildWorkflowTokenFilterColumns(rows),
@@ -274,22 +264,6 @@ export function WorkflowInventory() {
       title="Workflows"
       description="Monitor workflows imported from routines, plugins, connected apps, and native ThinkWork sources."
       loading={loading}
-      headerActions={
-        canDiscoverN8n ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Discover n8n workflows"
-            title="Discover n8n workflows"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => setDiscoveryOpen(true)}
-          >
-            <Search className="size-4" />
-          </Button>
-        ) : null
-      }
-      headerActionKey={`workflow-discovery:${n8nInstall?.id ?? "missing"}`}
     >
       {result.error ? (
         <div className="rounded-md border border-destructive/30 p-4 text-sm text-destructive">
@@ -320,24 +294,6 @@ export function WorkflowInventory() {
           </div>
         </div>
       )}
-      <Sheet open={discoveryOpen} onOpenChange={setDiscoveryOpen}>
-        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(900px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
-          <SheetHeader className="border-b border-border px-6 py-5">
-            <SheetTitle>Discover n8n workflows</SheetTitle>
-            <SheetDescription>
-              Search available n8n workflows and connect them to ThinkWork.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 p-6">
-            <N8nPluginWorkflows
-              installId={n8nInstall?.id ?? null}
-              launchUrl={n8nLaunchUrl}
-              refreshNonce={0}
-              onDiscoveryStateChange={ignoreDiscoveryState}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
     </SettingsTablePane>
   );
 }

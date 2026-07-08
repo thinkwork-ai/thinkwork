@@ -9,20 +9,8 @@ import {
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { normalizeN8nPackageConfig } from "@thinkwork/plugin-n8n/package-config";
+import { Badge, Button, Input, Label } from "@thinkwork/ui";
 import {
-  Badge,
-  Button,
-  Input,
-  Label,
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@thinkwork/ui";
-import {
-  Activity,
-  Copy,
   Loader2,
   PackagePlus,
   Plus,
@@ -53,7 +41,6 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
-import { BridgeRunTelemetryPanel } from "@/components/workbench/BridgeRunTelemetryPanel";
 
 const TERMINAL_JOB_STATUSES = new Set([
   "succeeded",
@@ -68,12 +55,10 @@ export function N8nSettings({
   installId,
   installState,
   onChanged,
-  onRecentAgentStepsActionChange,
 }: {
   installId: string;
   installState: string;
   onChanged: () => void;
-  onRecentAgentStepsActionChange?: (action: ReactNode | null) => void;
 }) {
   const { tenant, tenantId } = useTenant();
   const tenantSlug = tenant?.slug ?? null;
@@ -81,7 +66,6 @@ export function N8nSettings({
   const [serverError, setServerError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [agentStepsOpen, setAgentStepsOpen] = useState(false);
   const [mcpServer, setMcpServer] = useState<McpServer | null>(null);
   const [mcpStatus, setMcpStatus] = useState<McpServiceCredentialStatus | null>(
     null,
@@ -186,24 +170,6 @@ export function N8nSettings({
     void loadMcpServiceCredential();
   }, [loadMcpServiceCredential]);
 
-  useEffect(() => {
-    if (!onRecentAgentStepsActionChange) return;
-    onRecentAgentStepsActionChange(
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Open recent n8n agent steps"
-        title="Recent agent steps"
-        className="text-muted-foreground hover:text-foreground"
-        onClick={() => setAgentStepsOpen(true)}
-      >
-        <Activity className="size-4" />
-      </Button>,
-    );
-    return () => onRecentAgentStepsActionChange(null);
-  }, [onRecentAgentStepsActionChange]);
-
   const local = useMemo(() => {
     try {
       const rawSpecs = rows.map((row) => row.trim()).filter(Boolean);
@@ -307,13 +273,6 @@ export function N8nSettings({
       setSelectedJobId(settings.lastJobId);
       setDialogOpen(true);
     }
-  }
-
-  async function copyBridgeEndpoint() {
-    const endpoint = settings?.agentStepBridgeEndpointPath;
-    if (!endpoint) return;
-    await navigator.clipboard.writeText(endpoint);
-    toast.success("n8n bridge endpoint copied.");
   }
 
   async function saveMcpAccessToken() {
@@ -521,26 +480,6 @@ export function N8nSettings({
         </div>
       </SettingsRow>
 
-      {!onRecentAgentStepsActionChange ? (
-        <SettingsRow
-          label="Recent agent steps"
-          description="Redacted bridge-run evidence from n8n workflow steps that delegated work to ThinkWork agents."
-          layout="stacked"
-        >
-          <BridgeRunTelemetryPanel
-            runs={settings?.recentAgentStepRuns ?? []}
-            title="Recent bridge runs"
-            compact
-            className="w-full"
-          />
-          {settings?.recentAgentStepRuns?.length ? null : (
-            <p className="text-sm text-muted-foreground">
-              No n8n agent-step bridge runs yet.
-            </p>
-          )}
-        </SettingsRow>
-      ) : null}
-
       <SettingsRow
         label={
           <SettingsLabelWithBadge
@@ -684,47 +623,6 @@ export function N8nSettings({
         </div>
       </SettingsRow>
 
-      <SettingsRow
-        label={
-          <SettingsLabelWithBadge
-            label="Agent-step bridge"
-            badge={
-              <StatusBadge
-                configured={Boolean(
-                  settings?.agentStepBridgeCredentialConfigured,
-                )}
-              >
-                {settings?.agentStepBridgeCredentialConfigured
-                  ? "Configured"
-                  : "Not configured"}
-              </StatusBadge>
-            }
-          />
-        }
-        description="Tenant-scoped HTTP entrypoint for n8n workflows that delegate one workflow step to a ThinkWork agent."
-        layout="stacked"
-      >
-        <div className="w-full space-y-3">
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <code className="min-h-9 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-sm text-foreground">
-              {settings?.agentStepBridgeEndpointPath ??
-                "/api/integrations/n8n/agent-steps"}
-            </code>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              aria-label="Copy n8n bridge endpoint"
-              title="Copy endpoint"
-              disabled={!settings?.agentStepBridgeEndpointPath}
-              onClick={() => void copyBridgeEndpoint()}
-            >
-              <Copy className="size-4" />
-            </Button>
-          </div>
-        </div>
-      </SettingsRow>
-
       <ManagedApplicationPlanDialog
         job={job}
         open={dialogOpen}
@@ -736,31 +634,6 @@ export function N8nSettings({
           onChanged();
         }}
       />
-
-      <Sheet open={agentStepsOpen} onOpenChange={setAgentStepsOpen}>
-        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-2xl">
-          <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
-            <SheetTitle>Recent agent steps</SheetTitle>
-            <SheetDescription>
-              Redacted bridge-run evidence from n8n workflow steps that
-              delegated work to ThinkWork agents.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="p-6">
-            <BridgeRunTelemetryPanel
-              runs={settings?.recentAgentStepRuns ?? []}
-              title="Recent bridge runs"
-              compact
-              className="w-full"
-            />
-            {settings?.recentAgentStepRuns?.length ? null : (
-              <p className="mt-3 text-sm text-muted-foreground">
-                No n8n agent-step bridge runs yet.
-              </p>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
     </SettingsSection>
   );
 }

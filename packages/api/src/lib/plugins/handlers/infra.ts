@@ -282,8 +282,6 @@ function n8nDefaultDesiredConfig(): Record<string, unknown> {
     operatorSecretArn: process.env.THINKWORK_N8N_OPERATOR_SECRET_ARN,
     serviceCredentialSecretArn:
       process.env.THINKWORK_N8N_SERVICE_CREDENTIAL_SECRET_ARN,
-    agentStepBridgeCredentialSecretArn:
-      process.env.THINKWORK_N8N_AGENT_STEP_BRIDGE_CREDENTIAL_SECRET_ARN,
     storageBucketName: process.env.THINKWORK_N8N_STORAGE_BUCKET_NAME,
     storagePrefix:
       process.env.THINKWORK_N8N_STORAGE_PREFIX ?? "managed-apps/n8n",
@@ -347,7 +345,6 @@ function desiredConfigForPlanJob(args: {
       delete desiredConfig.encryptionKeySecretArn;
       delete desiredConfig.operatorSecretArn;
       delete desiredConfig.serviceCredentialSecretArn;
-      delete desiredConfig.agentStepBridgeCredentialSecretArn;
     }
     return desiredConfig;
   }

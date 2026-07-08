@@ -1,4 +1,3 @@
-import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button } from "@thinkwork/ui";
@@ -42,8 +41,6 @@ import { N8nPluginSettings } from "./N8nPluginSettings";
 export function N8nPluginHome() {
   const { isOperator, roleResolved } = useTenant();
   const showOperatorActions = roleResolved && isOperator;
-  const [recentAgentStepsAction, setRecentAgentStepsAction] =
-    useState<ReactNode | null>(null);
 
   const [catalogResult, refreshCatalog] = useQuery({
     query: SettingsPluginCatalogQuery,
@@ -181,32 +178,26 @@ export function N8nPluginHome() {
       { label: "Plugins", href: "/settings/plugins" },
       { label: displayName },
     ],
-    action:
-      recentAgentStepsAction || launchUrl ? (
-        <div className="flex items-center gap-1">
-          {recentAgentStepsAction}
-          {launchUrl ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Open n8n UI"
-              title="Open n8n UI"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                window.open(launchUrl, "_blank", "noopener,noreferrer");
-              }}
-            >
-              <ExternalLink className="size-4" />
-            </Button>
-          ) : null}
-        </div>
-      ) : null,
-    actionKey: [
-      install?.id ?? "missing",
-      launchUrl ?? "no-launch-url",
-      recentAgentStepsAction ? "recent-agent-steps" : "no-recent-agent-steps",
-    ].join(":"),
+    action: launchUrl ? (
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Open n8n UI"
+          title="Open n8n UI"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            window.open(launchUrl, "_blank", "noopener,noreferrer");
+          }}
+        >
+          <ExternalLink className="size-4" />
+        </Button>
+      </div>
+    ) : null,
+    actionKey: [install?.id ?? "missing", launchUrl ?? "no-launch-url"].join(
+      ":",
+    ),
   });
 
   return (
@@ -373,7 +364,6 @@ export function N8nPluginHome() {
         installId={install?.id ?? null}
         installState={install?.state ?? "missing"}
         onChanged={() => refreshInstalls({ requestPolicy: "network-only" })}
-        onRecentAgentStepsActionChange={setRecentAgentStepsAction}
       />
     </SettingsPane>
   );

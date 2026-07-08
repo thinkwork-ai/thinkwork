@@ -95,8 +95,8 @@ locals {
     # WORKSPACE_RENDERER_FUNCTION_NAME is derived from the per-stage naming
     # convention by deriveFunctionName("workspace-renderer") — stored
     # nowhere (R7).
-    WORKSPACE_BUCKET    = var.bucket_name
-    HINDSIGHT_ENDPOINT  = var.hindsight_endpoint
+    WORKSPACE_BUCKET   = var.bucket_name
+    HINDSIGHT_ENDPOINT = var.hindsight_endpoint
     # THINK-220 cutover flag: empty = hindsight schema on the primary DB;
     # set = that database's public schema via the database-pg seam.
     HINDSIGHT_DATABASE_NAME = var.hindsight_database_name
@@ -551,8 +551,6 @@ resource "aws_lambda_function" "handler" {
     "job-trigger",
     "routine-task-weather-email",
     "webhooks",
-    "n8n-agent-step-bridge",
-    "n8n-agent-step-expirer",
     "webhooks-admin",
     "webhook-deliveries-cleanup",
     "skill-runs-reconciler",
@@ -1308,11 +1306,6 @@ locals {
       # navigation, so no OPTIONS/preflight fires (KTD-9).
       "GET /share/{token}" = "artifact-share"
 
-      # n8n agent-step bridge — public tenant-scoped credential endpoint for
-      # stock n8n HTTP Request nodes.
-      "POST /api/integrations/n8n/agent-steps"    = "n8n-agent-step-bridge"
-      "OPTIONS /api/integrations/n8n/agent-steps" = "n8n-agent-step-bridge"
-
       # Webhooks admin
       "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
       "ANY /api/webhooks"          = "webhooks-admin"
@@ -1554,28 +1547,6 @@ resource "aws_scheduler_schedule" "wakeup_processor" {
 
   target {
     arn      = aws_lambda_function.handler["wakeup-processor"].arn
-    role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-# ---------------------------------------------------------------------------
-# n8n agent-step expirer — resumes waiting n8n executions on timeout/retry
-# ---------------------------------------------------------------------------
-
-resource "aws_scheduler_schedule" "n8n_agent_step_expirer" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-n8n-agent-step-expirer"
-  group_name          = "default"
-  schedule_expression = "rate(1 minutes)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["n8n-agent-step-expirer"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

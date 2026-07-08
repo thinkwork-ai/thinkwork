@@ -22,7 +22,6 @@ const mocks = vi.hoisted(() => ({
   recordGuardrailBlock: vi.fn(),
   promoteNextDeferredWakeup: vi.fn(),
   mergeWorkspaceProjectionReconcileSummary: vi.fn(),
-  finalizeN8nAgentStepRun: vi.fn(),
   projectAgentLoopFinalize: vi.fn(),
   autoSubmitSkillCreatorDraft: vi.fn(),
 }));
@@ -121,10 +120,6 @@ vi.mock("../wakeup-defer.js", () => ({
   promoteNextDeferredWakeup: mocks.promoteNextDeferredWakeup,
 }));
 
-vi.mock("../n8n-agent-step/finalize.js", () => ({
-  finalizeN8nAgentStepRun: mocks.finalizeN8nAgentStepRun,
-}));
-
 vi.mock("../agent-loops/finalize-projection.js", () => ({
   projectAgentLoopFinalize: mocks.projectAgentLoopFinalize,
 }));
@@ -213,12 +208,6 @@ beforeEach(() => {
   mocks.promoteNextDeferredWakeup.mockResolvedValue(null);
   mocks.mergeWorkspaceProjectionReconcileSummary.mockReset();
   mocks.mergeWorkspaceProjectionReconcileSummary.mockResolvedValue(undefined);
-  mocks.finalizeN8nAgentStepRun.mockReset();
-  mocks.finalizeN8nAgentStepRun.mockResolvedValue({
-    action: "no_run",
-    runId: null,
-    status: null,
-  });
   mocks.projectAgentLoopFinalize.mockReset();
   mocks.projectAgentLoopFinalize.mockResolvedValue({
     status: "skipped",
@@ -2371,37 +2360,6 @@ describe("processFinalize deferred-wakeup promotion", () => {
       TENANT_ID,
       THREAD_ID,
     );
-    expect(mocks.finalizeN8nAgentStepRun).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      threadId: THREAD_ID,
-      threadTurnId: TURN_ID,
-      resolution: "turn_completed",
-      summary: "done",
-      output: { response: "done" },
-    });
-  });
-
-  it("records failed turns against n8n bridge runs after normal failure finalization", async () => {
-    await expect(
-      processFinalize({
-        thread_turn_id: TURN_ID,
-        tenant_id: TENANT_ID,
-        agent_id: AGENT_ID,
-        thread_id: THREAD_ID,
-        duration_ms: 25,
-        status: "failed",
-        error_message: "agent crashed",
-      }),
-    ).resolves.toMatchObject({ finalized: true, messageId: null });
-
-    expect(mocks.finalizeN8nAgentStepRun).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      threadId: THREAD_ID,
-      threadTurnId: TURN_ID,
-      resolution: "turn_failed",
-      error: "agent crashed",
-      summary: "agent crashed",
-    });
   });
 
   it("does not promote on idempotent re-entry (turn already finalized)", async () => {
@@ -2420,7 +2378,6 @@ describe("processFinalize deferred-wakeup promotion", () => {
     ).resolves.toMatchObject({ finalized: false });
 
     expect(mocks.promoteNextDeferredWakeup).not.toHaveBeenCalled();
-    expect(mocks.finalizeN8nAgentStepRun).not.toHaveBeenCalled();
   });
 
   it("a promotion failure does not fail the finalize", async () => {

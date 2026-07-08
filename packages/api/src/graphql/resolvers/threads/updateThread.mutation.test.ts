@@ -9,7 +9,6 @@ const {
   mockResolveCallerUserId,
   mockNotifyThreadUpdate,
   mockRefreshGoalFolder,
-  mockFinalizeN8nAgentStepRun,
   state,
   updatedGoalValues,
 } = vi.hoisted(() => {
@@ -134,11 +133,6 @@ const {
     mockResolveCallerUserId: vi.fn(async () => "user-1" as string | null),
     mockNotifyThreadUpdate: vi.fn(async () => undefined),
     mockRefreshGoalFolder: vi.fn(async () => null),
-    mockFinalizeN8nAgentStepRun: vi.fn(async () => ({
-      action: "no_run",
-      runId: null,
-      status: null,
-    })),
     state: mutableState,
   };
 });
@@ -184,10 +178,6 @@ vi.mock("../../../lib/user-questions/consume.js", () => ({
   cancelPendingQuestions: mockCancelPendingQuestions,
 }));
 
-vi.mock("../../../lib/n8n-agent-step/finalize.js", () => ({
-  finalizeN8nAgentStepRun: mockFinalizeN8nAgentStepRun,
-}));
-
 import { updateThread } from "./updateThread.mutation.js";
 
 beforeEach(() => {
@@ -214,12 +204,6 @@ beforeEach(() => {
   mockRefreshGoalFolder.mockReset();
   mockRefreshGoalFolder.mockResolvedValue(null);
   mockCancelPendingQuestions.mockClear();
-  mockFinalizeN8nAgentStepRun.mockClear();
-  mockFinalizeN8nAgentStepRun.mockResolvedValue({
-    action: "no_run",
-    runId: null,
-    status: null,
-  });
 });
 
 describe("updateThread participant-scoped read state", () => {
@@ -356,22 +340,6 @@ describe("updateThread participant-scoped read state", () => {
     });
   });
 
-  it("re-checks n8n bridge finalization after a terminal thread status update", async () => {
-    await updateThread(
-      {},
-      {
-        id: "thread-1",
-        input: { status: "CANCELLED" },
-      },
-      { auth: { authType: "cognito" } } as any,
-    );
-
-    expect(mockFinalizeN8nAgentStepRun).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      threadId: "thread-1",
-      resolution: "thread_status_changed",
-    });
-  });
 });
 
 describe("updateThread Thread Mode override (plan 2026-07-03-003 U3)", () => {

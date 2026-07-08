@@ -116,7 +116,6 @@ import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
 import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
 import { observabilityQueries } from "./observability/index.js";
-import { n8nAgentStepRunQueries } from "./n8n-agent-step-runs/index.js";
 import {
   linkedTaskMutations,
   linkedTaskQueries,
@@ -196,7 +195,6 @@ export const queryResolvers: Record<string, any> = {
   ...slackQueries,
   ...ontologyQueries,
   ...observabilityQueries,
-  ...n8nAgentStepRunQueries,
   ...spaceQueries,
   ...linkedTaskQueries,
   ...workItemQueries,

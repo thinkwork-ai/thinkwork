@@ -1831,26 +1831,6 @@ def validate_managed_app_desired_state(payload, desired_config, manifest_images)
         )
 
 
-def n8n_bridge_secret_arn_fallback(stage):
-    """Guardrail states recorded before v0.1.0-canary.315 lack the
-    n8n_agent_step_bridge_credential_secret_arn key even though the secret
-    itself exists (created by the n8n provision flow). Resolve it by its
-    well-known name so the guardrail precondition can pass on the first
-    post-upgrade deploy; the successful apply re-records the guardrail input
-    and later runs read it from state again. Observed live on the mcpherson
-    stage 2026-07-04 (v314 -> v315)."""
-    try:
-        out = output([
-            "aws", "secretsmanager", "describe-secret",
-            "--secret-id", f"thinkwork/{stage}/n8n/agent-step-bridge-credential",
-            "--query", "ARN", "--output", "text",
-        ])
-        arn = (out or "").strip()
-        return arn if arn.startswith("arn:") else ""
-    except Exception:
-        return ""
-
-
 def managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state):
     app_key = payload.get("appKey")
     operation = str(payload.get("operation") or "").upper()
@@ -1914,10 +1894,6 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             "",
         ),
         "n8n_operator_secret_arn": n8n_guardrails.get("n8n_operator_secret_arn", ""),
-        "n8n_agent_step_bridge_credential_secret_arn": (
-            n8n_guardrails.get("n8n_agent_step_bridge_credential_secret_arn", "")
-            or n8n_bridge_secret_arn_fallback(stage)
-        ),
         "n8n_service_credential_secret_arn": n8n_guardrails.get(
             "n8n_service_credential_secret_arn",
             "",
@@ -3476,11 +3452,6 @@ variable "n8n_operator_secret_arn" {{
   type = string
 }}
 
-variable "n8n_agent_step_bridge_credential_secret_arn" {{
-  type    = string
-  default = ""
-}}
-
 variable "n8n_service_credential_secret_arn" {{
   type = string
 }}
@@ -3707,7 +3678,6 @@ module "thinkwork" {{
   n8n_database_name                = var.n8n_database_name
   n8n_encryption_key_secret_arn    = var.n8n_encryption_key_secret_arn
   n8n_operator_secret_arn          = var.n8n_operator_secret_arn
-  n8n_agent_step_bridge_credential_secret_arn = var.n8n_agent_step_bridge_credential_secret_arn
   n8n_service_credential_secret_arn = var.n8n_service_credential_secret_arn
   n8n_storage_bucket_name          = var.n8n_storage_bucket_name
   n8n_create_storage_bucket        = var.n8n_create_storage_bucket

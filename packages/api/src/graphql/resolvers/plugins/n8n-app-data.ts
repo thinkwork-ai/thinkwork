@@ -6,14 +6,12 @@ import {
   discoverN8nExecutions as discoverExecutions,
   n8nNativeWorkflowUrl,
 } from "../../../lib/workflows/n8n-executions.js";
-import { loadN8nAgentStepRunTelemetry } from "../n8n-agent-step-runs/telemetry.js";
 import { requirePluginTenantMember } from "./shared.js";
 
 export interface N8nAppDataDeps {
   db?: typeof defaultDb;
   discoverWorkflows?: typeof discoverWorkflows;
   discoverExecutions?: typeof discoverExecutions;
-  loadTelemetry?: typeof loadN8nAgentStepRunTelemetry;
 }
 
 export async function n8nAppData(
@@ -38,7 +36,7 @@ export async function n8nAppData(
   }
   const db = deps.db ?? defaultDb;
   try {
-    const [workflowResult, executionResult, bridgeRuns] = await Promise.all([
+    const [workflowResult, executionResult] = await Promise.all([
       (deps.discoverWorkflows ?? discoverWorkflows)(db, {
         tenantId,
         installId: args.installId,
@@ -48,14 +46,7 @@ export async function n8nAppData(
         installId: args.installId,
         limit: args.executionLimit,
       }),
-      (deps.loadTelemetry ?? loadN8nAgentStepRunTelemetry)({
-        tenantId,
-        pluginInstallId: args.installId,
-        limit: 50,
-        db,
-      }),
     ]);
-    const bridgeRunsByExecution = bridgeRunsByExecutionId(bridgeRuns);
     const workflowNameById = new Map(
       workflowResult.workflows.map((workflow) => [
         workflow.externalWorkflowId,
@@ -78,39 +69,17 @@ export async function n8nAppData(
             )
           : null,
       })),
-      executions: executionResult.executions.map((execution) => {
-        const executionBridgeRuns =
-          bridgeRunsByExecution
-            .get(execution.externalExecutionId)
-            ?.filter(
-              (run) => run.workflowId === execution.externalWorkflowId,
-            ) ?? [];
-        return {
-          ...execution,
-          workflowName:
-            execution.workflowName ??
-            workflowNameById.get(execution.externalWorkflowId) ??
-            executionBridgeRuns.find((run) => run.workflowName)?.workflowName ??
-            null,
-          bridgeRuns: executionBridgeRuns,
-        };
-      }),
+      executions: executionResult.executions.map((execution) => ({
+        ...execution,
+        workflowName:
+          execution.workflowName ??
+          workflowNameById.get(execution.externalWorkflowId) ??
+          null,
+      })),
     };
   } catch (error) {
     throw new GraphQLError((error as Error).message, {
       extensions: { code: "FAILED_PRECONDITION" },
     });
   }
-}
-
-function bridgeRunsByExecutionId(
-  bridgeRuns: Awaited<ReturnType<typeof loadN8nAgentStepRunTelemetry>>,
-) {
-  const byExecution = new Map<string, typeof bridgeRuns>();
-  for (const run of bridgeRuns) {
-    const existing = byExecution.get(run.executionId) ?? [];
-    existing.push(run);
-    byExecution.set(run.executionId, existing);
-  }
-  return byExecution;
 }

@@ -16,7 +16,6 @@ import {
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { cancelPendingQuestions } from "../../../lib/user-questions/consume.js";
-import { finalizeN8nAgentStepRun } from "../../../lib/n8n-agent-step/finalize.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "../../../lib/spaces/customer-onboarding-goal-md.js";
 import {
   resolveCallerTenantId,
@@ -208,21 +207,6 @@ export const updateThread = async (
       status: row.status,
       title: row.title,
     }).catch(() => {}); // fire-and-forget
-  }
-
-  if (i.status !== undefined) {
-    try {
-      await finalizeN8nAgentStepRun({
-        tenantId: row.tenant_id,
-        threadId: row.id,
-        resolution: "thread_status_changed",
-      });
-    } catch (err) {
-      console.error(
-        `[updateThread] n8n bridge finalization failed for thread=${row.id}:`,
-        err,
-      );
-    }
   }
 
   return threadToCamel({

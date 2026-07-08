@@ -107,16 +107,6 @@ export const N8nAppDataQuery = graphql(`
         nativeExecutionUrl
         nativeWorkflowUrl
         warnings
-        bridgeRuns {
-          id
-          threadId
-          threadTurnId
-          status
-          resumeStatus
-          summary
-          errorMessage
-          updatedAt
-        }
       }
     }
   }
