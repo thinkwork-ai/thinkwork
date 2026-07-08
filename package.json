@@ -46,6 +46,9 @@
     "tsx": "^4.21.0"
   },
   "pnpm": {
+    "neverBuiltDependencies": [
+      "canvas"
+    ],
     "overrides": {
       "@smithy/types": "4.14.0",
       "react-is": "^19.2.7"

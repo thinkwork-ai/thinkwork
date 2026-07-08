@@ -1844,8 +1844,6 @@ export const SettingsN8nPluginSettingsQuery = graphql(`
       desiredStatus
       currentStatus
       desiredConfig
-      agentStepBridgeEndpointPath
-      agentStepBridgeCredentialConfigured
       currentPackageConfig {
         schemaVersion
         packageSpecs
@@ -1866,68 +1864,6 @@ export const SettingsN8nPluginSettingsQuery = graphql(`
       lastJobError
       lastEvidenceBucket
       lastEvidencePrefix
-      recentAgentStepRuns {
-        id
-        status
-        resumeStatus
-        workflowId
-        workflowName
-        executionId
-        correlationId
-        instructionsPreview
-        inputPreview
-        outputPreview
-        errorMessage
-        summary
-        links
-        resumeAttemptCount
-        lastResumeHttpStatus
-        lastResumeError
-        expiresAt
-        updatedAt
-      }
-    }
-  }
-`);
-
-export const SettingsDiscoverN8nWorkflowsQuery = graphql(`
-  query SettingsDiscoverN8nWorkflows($installId: ID!) {
-    discoverN8nWorkflows(installId: $installId) {
-      installId
-      readinessState
-      readinessReasons
-      workflows {
-        externalWorkflowId
-        name
-        active
-        triggerTypes
-        lastModifiedAt
-        lastExecutionAt
-        warnings
-        connectedWorkflowId
-        connectedBindingId
-        readinessState
-        readinessReasons
-      }
-    }
-  }
-`);
-
-export const SettingsConnectN8nWorkflowMutation = graphql(`
-  mutation SettingsConnectN8nWorkflow($input: ConnectN8nWorkflowInput!) {
-    connectN8nWorkflow(input: $input) {
-      created
-      workflow {
-        id
-        name
-        readinessState
-      }
-      binding {
-        id
-        externalWorkflowId
-        externalWorkflowName
-        readinessState
-      }
     }
   }
 `);
@@ -1964,26 +1900,6 @@ export const SettingsUpdateN8nPluginPackageSettingsMutation = graphql(`
         lastJobError
         lastEvidenceBucket
         lastEvidencePrefix
-        recentAgentStepRuns {
-          id
-          status
-          resumeStatus
-          workflowId
-          workflowName
-          executionId
-          correlationId
-          instructionsPreview
-          inputPreview
-          outputPreview
-          errorMessage
-          summary
-          links
-          resumeAttemptCount
-          lastResumeHttpStatus
-          lastResumeError
-          expiresAt
-          updatedAt
-        }
       }
       deploymentJob {
         id

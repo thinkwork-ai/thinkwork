@@ -82,7 +82,6 @@ export * from "./pending-user-questions";
 export * from "./plugins";
 export * from "./plugin-app-overlays";
 export * from "./pi-extensions";
-export * from "./n8n-agent-step-runs";
 export * from "./document-plates";
 export * from "./document-section-waivers";
 export * from "./document-conformance-reports";

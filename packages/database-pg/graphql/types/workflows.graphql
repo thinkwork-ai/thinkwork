@@ -243,87 +243,6 @@ type WorkflowEvidence {
   createdAt: AWSDateTime!
 }
 
-type N8nWorkflowDiscovery {
-  installId: ID!
-  readinessState: WorkflowReadinessState!
-  readinessReasons: AWSJSON!
-  workflows: [N8nDiscoveredWorkflow!]!
-}
-
-type N8nDiscoveredWorkflow {
-  externalWorkflowId: String!
-  name: String!
-  active: Boolean
-  triggerTypes: [String!]!
-  lastModifiedAt: AWSDateTime
-  lastExecutionAt: AWSDateTime
-  warnings: [String!]!
-  connectedWorkflowId: ID
-  connectedBindingId: ID
-  readinessState: WorkflowReadinessState!
-  readinessReasons: AWSJSON!
-}
-
-input ConnectN8nWorkflowInput {
-  installId: ID!
-  externalWorkflowId: String!
-  externalWorkflowName: String!
-  active: Boolean
-  triggerTypes: [String!]
-  lastModifiedAt: AWSDateTime
-  idempotencyKey: String!
-}
-
-type ConnectN8nWorkflowResult {
-  workflow: Workflow!
-  binding: WorkflowEngineBinding!
-  created: Boolean!
-}
-
-input DisconnectN8nWorkflowInput {
-  workflowId: ID
-  bindingId: ID
-  idempotencyKey: String!
-}
-
-type DisconnectN8nWorkflowResult {
-  workflow: Workflow!
-  binding: WorkflowEngineBinding!
-}
-
-type N8nWorkflowDraftDiagnostic {
-  code: String!
-  severity: String!
-  message: String!
-  nodeId: String
-  nodeName: String
-  nodeType: String
-}
-
-input ImportN8nWorkflowDraftInput {
-  tenantId: ID!
-  workflowUrl: String!
-  name: String
-  description: String
-  n8nCredentialSlug: String
-  pdiCredentialSlug: String
-}
-
-type ImportN8nWorkflowDraftResult {
-  workflow: Workflow!
-  workflowVersion: WorkflowVersion!
-  binding: WorkflowEngineBinding!
-  diagnostics: [N8nWorkflowDraftDiagnostic!]!
-  credentialRequirements: AWSJSON!
-  sourceMetadata: AWSJSON!
-  activationBlocked: Boolean!
-}
-
-input CreateN8nWorkflowBridgeInput {
-  workflowId: ID!
-  idempotencyKey: String!
-}
-
 input TriggerWorkflowRunInput {
   workflowId: ID!
   input: AWSJSON
@@ -332,16 +251,6 @@ input TriggerWorkflowRunInput {
   actorType: String
   actorId: ID
   agentId: ID
-}
-
-type N8nWorkflowBridgeCredential {
-  workflowId: ID!
-  bindingId: ID!
-  sharedSecret: String!
-  secretPreview: String!
-  signingHeader: String!
-  timestampHeader: String!
-  replayWindowSeconds: Int!
 }
 
 extend type Query {
@@ -361,20 +270,9 @@ extend type Query {
     cursor: String
   ): [WorkflowRun!]!
   workflowRun(id: ID!): WorkflowRun
-  discoverN8nWorkflows(installId: ID!): N8nWorkflowDiscovery!
 }
 
 extend type Mutation {
-  connectN8nWorkflow(input: ConnectN8nWorkflowInput!): ConnectN8nWorkflowResult!
-  disconnectN8nWorkflow(
-    input: DisconnectN8nWorkflowInput!
-  ): DisconnectN8nWorkflowResult!
-  importN8nWorkflowDraft(
-    input: ImportN8nWorkflowDraftInput!
-  ): ImportN8nWorkflowDraftResult!
-  createN8nWorkflowBridge(
-    input: CreateN8nWorkflowBridgeInput!
-  ): N8nWorkflowBridgeCredential!
   deleteWorkflow(id: ID!): ID!
   triggerWorkflowRun(input: TriggerWorkflowRunInput!): WorkflowRun!
   resolveWorkflowApproval(

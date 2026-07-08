@@ -80,19 +80,6 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     ).toHaveLength(1);
   });
 
-  it("links n8n agent-step wakeups to the created thread turn before dispatch", () => {
-    const wakeupSource = handlerSource("wakeup-processor.ts");
-    const linkSource = readFileSync(
-      new URL("../lib/n8n-agent-step/link-turn.ts", import.meta.url),
-      "utf8",
-    );
-
-    expect(wakeupSource).toContain("n8nAgentStepRunId");
-    expect(wakeupSource).toContain("linkN8nAgentStepRunTurn");
-    expect(linkSource).toContain(".update(n8nAgentStepRuns)");
-    expect(linkSource).toContain("thread_turn_id: input.threadTurnId");
-  });
-
   it("links AgentLoop wakeups to the created thread turn before dispatch", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
 

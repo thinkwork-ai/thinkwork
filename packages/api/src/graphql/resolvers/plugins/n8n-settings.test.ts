@@ -77,8 +77,6 @@ describe("n8nPluginSettings", () => {
             packageConfigDigest: current.digest,
             publicUrl: "https://n8n.example.test",
             serviceCredentialSecretArn: "arn:aws:secretsmanager:secret",
-            agentStepBridgeCredentialSecretArn:
-              "arn:aws:secretsmanager:bridge-secret",
           },
         }),
         latestJob: jobRow({ id: "job-last", status: "succeeded" }),
@@ -93,56 +91,10 @@ describe("n8nPluginSettings", () => {
     });
     expect(result.desiredConfig.publicUrl).toBe("https://n8n.example.test");
     expect(result.desiredConfig.serviceCredentialSecretArn).toBeUndefined();
-    expect(
-      result.desiredConfig.agentStepBridgeCredentialSecretArn,
-    ).toBeUndefined();
-    expect(result.agentStepBridgeEndpointPath).toBe(
-      "/api/integrations/n8n/agent-steps",
-    );
-    expect(result.agentStepBridgeCredentialConfigured).toBe(true);
     expect(result.lastJobStatus).toBe("succeeded");
   });
 
-  it("returns recent redacted bridge telemetry for the n8n settings surface", async () => {
-    const result = (await n8nPluginSettings(null, { installId }, CTX, {
-      db: fakeDb({
-        app: appRow({ id: "app-n8n" }),
-        recentRuns: [
-          runRow({
-            plugin_install_id: installId,
-            managed_application_id: "app-n8n",
-            status: "resume_failed",
-            resume_status: "failed",
-            output_payload: { secret: "raw output should not leak" },
-            error_payload: { message: "n8n callback returned 410 Gone" },
-            resume_url_host: "n8n.example.test",
-            resume_url_path: "/webhook-waiting/leaky-token",
-          }),
-        ],
-      }),
-      pluginDeps: pluginDeps(),
-    })) as Record<string, any>;
-
-    expect(result.recentAgentStepRuns).toHaveLength(1);
-    expect(result.recentAgentStepRuns[0]).toMatchObject({
-      status: "resume_failed",
-      resumeStatus: "failed",
-      outputPreview: null,
-      errorMessage: "n8n callback returned 410 Gone",
-      pluginInstallId: installId,
-      managedApplicationId: "app-n8n",
-    });
-    expect(JSON.stringify(result.recentAgentStepRuns[0])).not.toContain(
-      "raw output should not leak",
-    );
-    expect(result.recentAgentStepRuns[0]).not.toHaveProperty("tenantId");
-    expect(result.recentAgentStepRuns[0]).not.toHaveProperty("idempotencyKey");
-    expect(result.recentAgentStepRuns[0]).not.toHaveProperty("resumeUrlHost");
-    expect(result.recentAgentStepRuns[0]).not.toHaveProperty("resumeUrlPath");
-    expect(result.recentAgentStepRuns[0]).not.toHaveProperty("outputPayload");
-  });
-
-  it("reports a missing bridge credential without leaking secret fields", async () => {
+  it("redacts secret fields from the desired config", async () => {
     const result = (await n8nPluginSettings(null, { installId }, CTX, {
       db: fakeDb({
         app: appRow({
@@ -157,7 +109,6 @@ describe("n8nPluginSettings", () => {
     expect(result.desiredConfig).toEqual({
       publicUrl: "https://n8n.example.test",
     });
-    expect(result.agentStepBridgeCredentialConfigured).toBe(false);
   });
 });
 
@@ -618,54 +569,6 @@ function jobRow(overrides: Record<string, unknown> = {}) {
     rejected_by_user_id: null,
     rejected_at: null,
     error_message: null,
-    created_at: now,
-    updated_at: now,
-    ...overrides,
-  };
-}
-
-function runRow(overrides: Record<string, unknown> = {}) {
-  const now = new Date("2026-06-19T12:00:00.000Z");
-  return {
-    id: "run-1",
-    tenant_id: TENANT_ID,
-    plugin_install_id: installId,
-    managed_application_id: "app-n8n",
-    space_id: "space-1",
-    agent_id: "agent-1",
-    thread_id: "thread-1",
-    thread_turn_id: "turn-1",
-    opening_message_id: "message-1",
-    status: "waiting",
-    resume_status: "not_ready",
-    workflow_id: "workflow-1",
-    workflow_name: "Order triage",
-    execution_id: "execution-1",
-    step_id: "agent-step",
-    correlation_id: "corr-1",
-    request_id: "request-1",
-    idempotency_key: "idem-secret",
-    instructions_preview: "Investigate the order",
-    input_preview: '{"orderId":"123"}',
-    request_metadata: {},
-    resume_url_secret_ref: "secret-ref",
-    resume_url_host: "n8n.example.test",
-    resume_url_path: "/webhook-waiting/token",
-    timeout_seconds: 3600,
-    expires_at: now,
-    result_payload: null,
-    output_payload: null,
-    error_payload: null,
-    summary: null,
-    links: { threadUrl: "/threads/thread-1" },
-    resume_attempt_count: 0,
-    next_resume_attempt_at: null,
-    last_resume_attempt_at: null,
-    last_resume_http_status: null,
-    last_resume_error: null,
-    resumed_at: null,
-    terminal_at: null,
-    accepted_at: now,
     created_at: now,
     updated_at: now,
     ...overrides,

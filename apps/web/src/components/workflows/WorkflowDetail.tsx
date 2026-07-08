@@ -21,7 +21,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@thinkwork/ui";
-import { Unlink } from "lucide-react";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { RoutineDefinitionPanel } from "@/components/routines/RoutineDefinitionPanel";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
@@ -29,7 +28,6 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   DeleteWorkflowMutation,
-  DisconnectN8nWorkflowMutation,
   SettingsWorkflowQuery,
 } from "@/lib/graphql-queries";
 import {
@@ -102,9 +100,6 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     variables: { id: workflowId, runLimit: 25 },
     requestPolicy: "cache-and-network",
   });
-  const [disconnectState, disconnectWorkflow] = useMutation(
-    DisconnectN8nWorkflowMutation,
-  );
   const [deleteState, deleteWorkflowMutation] = useMutation(
     DeleteWorkflowMutation,
   );
@@ -112,38 +107,10 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
   const workflow = result.data?.workflow ?? null;
   const binding = primaryBinding(workflow?.bindings);
   const readinessReason = readinessReasonText(workflow?.readinessReasons);
-  const canUnlinkN8nWorkflow = Boolean(
-    workflow &&
-    binding?.bindingType === "n8n_bridge" &&
-    binding.bindingStatus !== "archived" &&
-    workflow.lifecycleStatus !== "archived",
-  );
   const routineId =
     binding?.bindingType === "step_functions_routine"
       ? binding.routineId
       : null;
-
-  async function unlinkN8nWorkflow() {
-    if (!workflow || !binding) return;
-    const response = await disconnectWorkflow({
-      input: {
-        workflowId: workflow.id,
-        bindingId: binding.id,
-        idempotencyKey: [
-          "n8n",
-          "disconnect",
-          workflow.id,
-          Date.now().toString(36),
-        ].join("-"),
-      },
-    });
-    if (response.error) {
-      toast.error(`Could not unlink workflow: ${response.error.message}`);
-      return;
-    }
-    toast.success("Workflow unlinked.");
-    void navigate({ to: "/settings/workflows" });
-  }
 
   async function deleteWorkflow() {
     if (!workflow) return;
@@ -283,44 +250,6 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            {canUnlinkN8nWorkflow ? (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    disabled={disconnectState.fetching}
-                  >
-                    <Unlink className="mr-2 size-4" />
-                    Unlink
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Unlink n8n workflow?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This archives the ThinkWork workflow projection and n8n
-                      bridge binding. Run history and evidence remain available,
-                      but the workflow will no longer appear as an active
-                      ThinkWork workflow.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      disabled={disconnectState.fetching}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void unlinkN8nWorkflow();
-                      }}
-                    >
-                      Unlink workflow
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            ) : null}
             <Button
               type="button"
               size="sm"

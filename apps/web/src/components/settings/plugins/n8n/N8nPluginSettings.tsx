@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { SettingsSection } from "@/components/settings/SettingsContent";
 import { N8nSettings } from "./N8nSettings";
 
@@ -6,12 +5,10 @@ export function N8nPluginSettings({
   installId,
   installState,
   onChanged,
-  onRecentAgentStepsActionChange,
 }: {
   installId: string | null;
   installState: string;
   onChanged: () => void;
-  onRecentAgentStepsActionChange?: (action: ReactNode | null) => void;
 }) {
   if (!installId) {
     return (
@@ -29,7 +26,6 @@ export function N8nPluginSettings({
       installId={installId}
       installState={installState}
       onChanged={onChanged}
-      onRecentAgentStepsActionChange={onRecentAgentStepsActionChange}
     />
   );
 }

@@ -57,7 +57,6 @@ import { WorkflowInventory } from "./WorkflowInventory";
 import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
 import {
   SettingsDeploymentStatusQuery,
-  SettingsDiscoverN8nWorkflowsQuery,
   SettingsPluginCatalogQuery,
 } from "@/lib/settings-queries";
 
@@ -99,21 +98,6 @@ function mockWorkflowInventoryQueries({
             },
           },
         },
-      ];
-    }
-
-    if (query === SettingsDiscoverN8nWorkflowsQuery) {
-      return [
-        {
-          fetching: false,
-          data: {
-            discoverN8nWorkflows: {
-              readinessState: "ready",
-              workflows: [],
-            },
-          },
-        },
-        vi.fn(),
       ];
     }
 

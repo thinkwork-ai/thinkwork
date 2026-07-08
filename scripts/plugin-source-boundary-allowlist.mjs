@@ -42,16 +42,6 @@ export const sharedPluginTermAllowlist = [
       "shared plugin settings shell renders the Email Channel plugin control plane.",
   },
   {
-    path: "packages/api/src/graphql/resolvers/routines/importN8nRoutine.mutation.ts",
-    reason:
-      "legacy n8n workflow-to-Routine import mutation; THNK-50 application plugin source lives under plugins/n8n.",
-  },
-  {
-    pathPrefix: "packages/api/src/lib/routines/n8n/",
-    reason:
-      "legacy n8n workflow-to-Routine migration/import substrate, not THNK-50 application plugin source.",
-  },
-  {
     path: "packages/database-pg/__tests__/migration-0170-email-channel-plugin.test.ts",
     reason: "Email Channel plugin database contract coverage.",
   },
@@ -59,6 +49,11 @@ export const sharedPluginTermAllowlist = [
     path: "packages/database-pg/__tests__/migration-0188-company-etl-plugin-rename.test.ts",
     reason:
       "Company ETL plugin-key rename database migration contract coverage.",
+  },
+  {
+    path: "packages/database-pg/graphql/types/n8n-app-data.graphql",
+    reason:
+      "shared platform GraphQL contract for the n8n plugin App UI (workflows/executions viewing); native app runtime and manifest source remain package-owned under plugins/n8n.",
   },
   {
     path: "packages/database-pg/graphql/types/email-channel.graphql",
@@ -121,53 +116,8 @@ export const sharedPluginTermAllowlist = [
       "shared Workflow control-plane n8n discovery and bridge contract adapters; managed app runtime source remains package-owned under plugins/n8n.",
   },
   {
-    pathPrefix: "packages/api/src/lib/n8n-agent-step/",
-    reason:
-      "shared platform bridge contract for n8n workflows invoking ThinkWork agent steps; managed app runtime source remains package-owned under plugins/n8n.",
-  },
-  {
-    pathPrefix: "packages/api/src/graphql/resolvers/n8n-agent-step-runs/",
-    reason:
-      "shared platform GraphQL telemetry surface for n8n workflow-to-agent bridge runs; managed app runtime source remains package-owned under plugins/n8n.",
-  },
-  {
-    path: "packages/api/src/handlers/n8n-agent-step-bridge.ts",
-    reason:
-      "shared platform HTTP bridge endpoint for n8n workflows invoking ThinkWork agent steps; managed app runtime source remains package-owned under plugins/n8n.",
-  },
-  {
-    path: "packages/api/src/handlers/n8n-agent-step-bridge.test.ts",
-    reason:
-      "shared platform HTTP bridge endpoint coverage for n8n workflow-to-agent starts.",
-  },
-  {
-    path: "packages/api/src/handlers/n8n-agent-step-expirer.ts",
-    reason:
-      "shared platform scheduled bridge expirer for n8n workflow-to-agent callbacks.",
-  },
-  {
-    path: "packages/api/src/handlers/n8n-agent-step-expirer.test.ts",
-    reason:
-      "shared platform scheduled bridge expirer coverage for n8n workflow-to-agent callbacks.",
-  },
-  {
-    path: "packages/database-pg/__tests__/migration-0176-n8n-agent-step-runs.test.ts",
-    reason:
-      "shared platform database contract coverage for n8n agent-step bridge run state.",
-  },
-  {
     path: "packages/database-pg/drizzle/0176_n8n_agent_step_runs.sql",
     reason:
       "shared platform database migration for n8n agent-step bridge run state.",
-  },
-  {
-    path: "packages/database-pg/graphql/types/n8n-agent-step-runs.graphql",
-    reason:
-      "shared platform GraphQL contract for n8n agent-step bridge run state.",
-  },
-  {
-    path: "packages/database-pg/src/schema/n8n-agent-step-runs.ts",
-    reason:
-      "shared platform Drizzle schema for n8n agent-step bridge run state.",
   },
 ];

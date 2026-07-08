@@ -141,7 +141,6 @@ import {
   toRuntimeGoalModePayload,
   type RuntimeGoalMode,
 } from "../lib/goal-mode.js";
-import { linkN8nAgentStepRunTurn } from "../lib/n8n-agent-step/link-turn.js";
 import { normalizeThreadJsonRenderParts } from "../lib/chat-finalize/notify.js";
 import { goalRunProjectionFromFinalizePayload } from "../lib/chat-finalize/process-finalize.js";
 import { projectWorkflowStepFinalizeSafely } from "../lib/workflows/workflow-step-finalize.js";
@@ -1438,25 +1437,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     })
     .returning();
 
-  const n8nAgentStepRunId =
-    typeof payload?.n8nAgentStepRunId === "string"
-      ? payload.n8nAgentStepRunId
-      : null;
-  if (run?.id && n8nAgentStepRunId) {
-    try {
-      await linkN8nAgentStepRunTurn({
-        tenantId: wakeup.tenant_id,
-        runId: n8nAgentStepRunId,
-        threadTurnId: run.id,
-        now,
-      });
-    } catch (err) {
-      console.error(
-        `[wakeup-processor] failed to link n8n bridge run ${n8nAgentStepRunId} to turn ${run.id}:`,
-        err,
-      );
-    }
-  }
   if (run?.id && agentLoopPayload?.iterationId) {
     await linkAgentLoopIterationTurn({
       tenantId: wakeup.tenant_id,

@@ -62,7 +62,6 @@ import {
   buildWorkspaceProjectionReconcileSummary,
   mergeWorkspaceProjectionReconcileSummary,
 } from "../workspace-projection-snapshot.js";
-import { finalizeN8nAgentStepRun } from "../n8n-agent-step/finalize.js";
 import { projectAgentLoopFinalize } from "../agent-loops/finalize-projection.js";
 import { projectWorkflowStepFinalizeSafely } from "../workflows/workflow-step-finalize.js";
 import { autoSubmitSkillCreatorDraft } from "../skill-creator/auto-submit-draft.js";
@@ -328,14 +327,6 @@ export async function processFinalize(
     });
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
-    await finalizeN8nAgentStepRunSafely({
-      tenantId,
-      threadId,
-      threadTurnId: turnId,
-      resolution: "turn_failed",
-      error: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
-      summary: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
-    });
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -663,14 +654,6 @@ export async function processFinalize(
     console.warn(`[chat-finalize] Empty response from AgentCore`);
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
-    await finalizeN8nAgentStepRunSafely({
-      tenantId,
-      threadId,
-      threadTurnId: turnId,
-      resolution: "turn_completed",
-      summary: "ThinkWork agent step completed.",
-      output: { response: "" },
-    });
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -680,14 +663,6 @@ export async function processFinalize(
     );
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
-    await finalizeN8nAgentStepRunSafely({
-      tenantId,
-      threadId,
-      threadTurnId: turnId,
-      resolution: "turn_completed",
-      summary: responseText,
-      output: { response: responseText },
-    });
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -876,14 +851,6 @@ export async function processFinalize(
   // only flips status 'deferred'→'queued' — the wakeup-processor's
   // 1-minute poll picks the queued row up and runs it.
   await promoteDeferredWakeupSafely(tenantId, threadId);
-  await finalizeN8nAgentStepRunSafely({
-    tenantId,
-    threadId,
-    threadTurnId: turnId,
-    resolution: "turn_completed",
-    summary: responseText,
-    output: { response: responseText },
-  });
 
   return {
     finalized: true,
@@ -941,16 +908,6 @@ async function promoteDeferredWakeupSafely(
       `[chat-finalize] Failed to promote deferred wakeup for thread=${threadId}:`,
       err,
     );
-  }
-}
-
-async function finalizeN8nAgentStepRunSafely(
-  input: Parameters<typeof finalizeN8nAgentStepRun>[0],
-): Promise<void> {
-  try {
-    await finalizeN8nAgentStepRun(input);
-  } catch (err) {
-    console.error("[chat-finalize] n8n bridge finalization failed:", err);
   }
 }
 

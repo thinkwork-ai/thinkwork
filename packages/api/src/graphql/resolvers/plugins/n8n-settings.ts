@@ -10,7 +10,6 @@ import {
   normalizeN8nPackageConfig,
   type NormalizedN8nPackageConfig,
 } from "@thinkwork/plugin-n8n/package-config";
-import { N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH } from "@thinkwork/plugin-n8n/manifest";
 import type { GraphQLContext } from "../../context.js";
 import { db as defaultDb } from "../../utils.js";
 import {
@@ -32,7 +31,6 @@ import {
 } from "../deployments/shared.js";
 import { requirePluginTenantAdmin } from "./shared.js";
 import type { PluginInstallRow } from "../../../lib/plugins/store.js";
-import { loadN8nAgentStepRunTelemetry } from "../n8n-agent-step-runs/telemetry.js";
 
 type DbLike = typeof defaultDb;
 
@@ -65,19 +63,11 @@ export async function n8nPluginSettings(
   const db = deps.db ?? defaultDb;
   const app = await findN8nManagedApplication(tenantId, db);
   const latestJob = await findLatestN8nDeploymentJob(tenantId, db);
-  const recentAgentStepRuns = await loadN8nAgentStepRunTelemetry({
-    tenantId,
-    pluginInstallId: install.id,
-    managedApplicationId: app?.id ?? null,
-    limit: 5,
-    db,
-  });
   const n8nApiCredential = await findN8nApiCredential(tenantId, db);
   return settingsPayload({
     install,
     app,
     latestJob,
-    recentAgentStepRuns,
     n8nApiCredential,
   });
 }
@@ -182,7 +172,6 @@ export async function updateN8nPluginPackageSettings(
       install,
       app: updatedApp,
       latestJob: started.job,
-      recentAgentStepRuns: [],
     }),
     deploymentJob: toDeploymentPayload(started.job, started.events),
   };
@@ -258,7 +247,6 @@ export async function updateN8nPluginApiCredential(
       install,
       app,
       latestJob: await findLatestN8nDeploymentJob(tenantId, db),
-      recentAgentStepRuns: [],
       n8nApiCredential: savedCredential,
     }),
   };
@@ -399,7 +387,6 @@ function settingsPayload(args: {
   install: PluginInstallRow;
   app: ManagedApplicationRow | null;
   latestJob: ManagedApplicationDeploymentJobRow | null;
-  recentAgentStepRuns?: unknown[];
   n8nApiCredential?: TenantCredentialRow | null;
 }) {
   const desiredConfig = recordValue(args.app?.desired_config);
@@ -414,10 +401,6 @@ function settingsPayload(args: {
     desiredStatus: args.app?.desired_status ?? null,
     currentStatus: args.app?.current_status ?? null,
     desiredConfig: publicDesiredConfig(desiredConfig),
-    agentStepBridgeEndpointPath: N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH,
-    agentStepBridgeCredentialConfigured: Boolean(
-      stringValue(desiredConfig.agentStepBridgeCredentialSecretArn),
-    ),
     n8nApiCredentialConfigured: Boolean(args.n8nApiCredential),
     n8nApiCredentialBaseUrl:
       stringValue(n8nApiCredentialMetadata.n8nBaseUrl) ??
@@ -435,7 +418,6 @@ function settingsPayload(args: {
     lastJobError: args.latestJob?.error_message ?? null,
     lastEvidenceBucket: args.latestJob?.evidence_bucket ?? null,
     lastEvidencePrefix: args.latestJob?.evidence_prefix ?? null,
-    recentAgentStepRuns: args.recentAgentStepRuns ?? [],
   };
 }
 

@@ -166,7 +166,6 @@ function mockActivityQueries(options?: {
   turn?: typeof turn;
   traces?: Array<Record<string, unknown>>;
   models?: Array<Record<string, unknown>>;
-  bridgeRuns?: Array<Record<string, unknown>>;
 }) {
   const activeThread = options?.thread ?? thread;
   const activeTurn = options?.turn ?? turn;
@@ -224,12 +223,11 @@ function mockActivityQueries(options?: {
       createdAt: "2026-06-04T16:55:08.000Z",
     },
   ];
-  const bridgeRuns = options?.bridgeRuns ?? [];
   vi.mocked(useQuery).mockImplementation(({ query }: { query: unknown }) => {
     if (query === ComputerThreadQuery) {
       return [
         {
-          data: { thread: activeThread, n8nAgentStepRuns: bridgeRuns },
+          data: { thread: activeThread },
           fetching: false,
           error: undefined,
           stale: false,
@@ -344,52 +342,6 @@ describe("SettingsActivityThreadDetail", () => {
       screen.getByRole("button", { name: "Open thread properties" }),
     );
     expect(screen.getByText("Properties")).toBeTruthy();
-  });
-
-  it("renders bridge evidence in the properties panel when a run exists", () => {
-    vi.mocked(useQuery).mockReset();
-    mockActivityQueries({
-      bridgeRuns: [
-        {
-          id: "run-1",
-          status: "waiting",
-          resumeStatus: "not_ready",
-          workflowId: "workflow-1",
-          workflowName: "Invoice approval",
-          executionId: "exec-1",
-          correlationId: "corr-1",
-          instructionsPreview: "Check invoice status",
-          inputPreview: null,
-          outputPreview: null,
-          errorMessage: null,
-          summary: null,
-          links: {},
-          resumeAttemptCount: 0,
-          lastResumeHttpStatus: null,
-          lastResumeError: null,
-          expiresAt: "2026-06-20T12:30:00.000Z",
-          updatedAt: "2026-06-20T12:00:00.000Z",
-        },
-      ],
-    });
-
-    render(
-      <SettingsActivityThreadDetail
-        threadId="thread-1"
-        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
-      />,
-    );
-
-    const headerArgs = usePageHeaderActionsMock.mock.calls.at(-1)?.[0];
-    render(headerArgs.action);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open thread properties" }),
-    );
-
-    expect(screen.getByText("n8n agent steps")).toBeTruthy();
-    expect(screen.getByText("Invoice approval")).toBeTruthy();
-    expect(screen.getByText("waiting")).toBeTruthy();
-    expect(screen.getByText("Check invoice status")).toBeTruthy();
   });
 
   it("uses shortcut display text for the Activity breadcrumb and document title", () => {

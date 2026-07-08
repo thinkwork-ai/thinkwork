@@ -14,10 +14,6 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import {
-  BridgeRunTelemetryPanel,
-  type BridgeRunTelemetry,
-} from "@/components/workbench/BridgeRunTelemetryPanel";
-import {
   GoalRunCard,
   goalRunFromTurnEvidence,
   type GoalRunEvidence,
@@ -60,7 +56,6 @@ interface SettingsActivityThreadDetailProps {
 
 interface ThreadDetailResult {
   thread?: ActivityThread | null;
-  n8nAgentStepRuns?: BridgeRunTelemetry[] | null;
 }
 
 interface ActivityThread {
@@ -259,7 +254,6 @@ export function SettingsActivityThreadDetail({
   }, [threadId]);
 
   const thread = threadData?.thread ?? null;
-  const bridgeRuns = threadData?.n8nAgentStepRuns ?? [];
   const turns = useMemo(
     () => [...(turnsData?.threadTurns ?? [])].sort(compareTurns),
     [turnsData?.threadTurns],
@@ -453,7 +447,6 @@ export function SettingsActivityThreadDetail({
           <aside className="md:pt-8">
             <ThreadProperties
               thread={thread}
-              bridgeRuns={bridgeRuns}
               latestSystemPrompt={latestSystemPrompt}
               onViewSystemPrompt={() => setSystemPromptOpen(true)}
             />
@@ -516,12 +509,10 @@ function ThreadGoalRuns({
 
 function ThreadProperties({
   thread,
-  bridgeRuns,
   latestSystemPrompt,
   onViewSystemPrompt,
 }: {
   thread: ActivityThread;
-  bridgeRuns: BridgeRunTelemetry[];
   latestSystemPrompt: string | null;
   onViewSystemPrompt: () => void;
 }) {
@@ -564,7 +555,6 @@ function ThreadProperties({
           </PropertyRow>
         </div>
       </div>
-      <BridgeRunTelemetryPanel runs={bridgeRuns} compact />
     </div>
   );
 }
