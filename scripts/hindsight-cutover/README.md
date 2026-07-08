@@ -67,3 +67,30 @@ Unset `hindsight_database_name` and re-apply. The old `hindsight.*` schema
 in the primary database stays intact until the Phase 5 soak completes;
 post-cutover writes land only in the new database, so roll back quickly or
 accept replaying the delta.
+
+## Decommission (old-schema drop, after soak + explicit approval)
+
+Take a final dump first (`pg_dump -Fc -n hindsight`), then verify the old
+schema is frozen (newest `memory_units.created_at` == the cutover freeze
+time) and the new database is live and ahead.
+
+**Extension gotcha (hit on dev, 2026-07-08):** the `pg_trgm` extension was
+homed *inside* the `hindsight` schema, so `DROP SCHEMA hindsight CASCADE`
+also dropped the extension — and with it five trigram indexes on *other*
+schemas (`wiki.idx_pages_title_trgm`, `wiki.idx_page_aliases_alias_trgm`,
+`brain.idx_pages_title_trgm`, `brain.idx_page_aliases_alias_trgm`,
+`public.idx_kg_entities_label_trgm`), silently degrading wiki/brain fuzzy
+matching and KG entity lookup. Before dropping any schema, check for
+extensions homed in it:
+
+```sql
+SELECT e.extname FROM pg_extension e
+JOIN pg_namespace n ON n.oid = e.extnamespace
+WHERE n.nspname = 'hindsight';
+```
+
+Relocate them first (`ALTER EXTENSION pg_trgm SET SCHEMA public;`) — or, if
+the CASCADE already ate them, recreate the extension in `public` and rebuild
+the dependent indexes from their definitions in
+`packages/database-pg/src/schema/{wiki,brain,knowledge-graph}.ts`, then
+smoke `similarity()` / `%` queries against the rebuilt indexes.
