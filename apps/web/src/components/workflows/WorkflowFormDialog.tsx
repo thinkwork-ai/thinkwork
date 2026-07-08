@@ -251,7 +251,11 @@ export function WorkflowFormDialog({
       setJsonError("A schedule trigger needs a rate() or cron() expression.");
       return;
     }
-    const built = buildDefinition();
+    // Edit mode never touches the definition — that's owned by the
+    // Definition tab; the dialog only edits identity + trigger.
+    const built: { definition?: unknown; error?: string } = isEditing
+      ? {}
+      : buildDefinition();
     if (built.error) {
       setJsonError(built.error);
       return;
@@ -262,7 +266,7 @@ export function WorkflowFormDialog({
         id: initialWorkflow?.id ?? null,
         name: name.trim(),
         description: description.trim() || null,
-        definition: built.definition,
+        ...(isEditing ? {} : { definition: built.definition }),
         trigger: {
           family: triggerFamily,
           schedule:
@@ -367,20 +371,22 @@ export function WorkflowFormDialog({
             </div>
           ) : null}
 
-          <div className="flex items-center justify-between border-t border-border/70 pt-4">
-            <label className="text-sm font-medium">Definition</label>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                Advanced (JSON)
-              </span>
-              <Switch
-                checked={advancedMode}
-                onCheckedChange={setAdvancedMode}
-              />
+          {!isEditing ? (
+            <div className="flex items-center justify-between border-t border-border/70 pt-4">
+              <label className="text-sm font-medium">Definition</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Advanced (JSON)
+                </span>
+                <Switch
+                  checked={advancedMode}
+                  onCheckedChange={setAdvancedMode}
+                />
+              </div>
             </div>
-          </div>
+          ) : null}
 
-          {advancedMode ? (
+          {isEditing ? null : advancedMode ? (
             <div className="space-y-1.5">
               <Textarea
                 value={advancedJson}
