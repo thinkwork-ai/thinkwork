@@ -115,6 +115,12 @@ Per-turn runtime evidence of what the agent actually received: which skills, too
 ### Connection
 A workspace-native capability class superseding "MCP server" as the product concept: an external system the agent can reach, of type MCP or API, defined by `connections/<slug>/CONNECTION.md` plus a `.assignment.json` sidecar in the agent workspace. Presence declares the connection; only platform-signed sidecar state (operator action or trust-gate pass) activates it. Sidecars carry enabled state, `permissions.operations`, approval policy, and credential references — never secret values. Distinct from the legacy `connections` DB table (per-user OAuth rows), which becomes the per-principal satisfaction ledger behind this concept.
 
+### Data Source (Analyst)
+A SQL database the Analyst can query, registered as a Connection rather than a new capability class ("reuse Connectors" — THINK-228 decision): a first-party Postgres connection whose registry row holds only ARN references (`service_credential` auth, tenant-wide, never per-user) and whose endpoint is the ThinkWork-hosted query-broker Lambda. Registration is a provisioning ceremony: it also creates the `analyst_reader` read-only DB role (read-only enforced at the database role, never by an app-level SQL validator) and the source's semantic model file. v1 access control is source-level only.
+
+### Analyst
+The seeded built-in `analyst` Agent Profile extended with SQL capability: it consults a data source's semantic model, executes EXPLAIN-gated queries through the connection's broker endpoint, analyzes file-landed results in the sandbox (raw rows never enter model context), and answers with GenUI live components plus live-bound report artifacts that data-refresh headlessly.
+
 ### Tool Kind
 The four-way taxonomy for workspace-defined tools (`tools/<slug>/TOOL.md`): `binding` (declarative wrapper over admitted connection operations — stable verb, preset arguments, model-vs-thread output shaping), `platform` (reference to a runtime-implemented built-in; implementation stays in the container), `extension` (binds an approved dynamic Pi extension tool), and `script` (sandbox-executed tenant content; the only kind requiring a trust-gate pass before registration). Definition files are declarative — never tenant TypeScript — so no tool change requires a container rebuild.
 
