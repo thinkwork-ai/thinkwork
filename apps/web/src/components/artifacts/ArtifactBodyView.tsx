@@ -81,6 +81,7 @@ export function isCanvasArtifactNode(artifact: {
  */
 export function DocumentArtifactBody({
   artifact,
+  historyPlacement = "bottom",
 }: {
   artifact: Pick<
     ArtifactBodyNode,
@@ -95,6 +96,12 @@ export function DocumentArtifactBody({
     | "refreshFailedAt"
     | "versions"
   >;
+  /**
+   * Where "Show all" opens the change log. The full-page route has spare
+   * horizontal room — a right-hand vertical timeline ("side"). The docked
+   * thread panel is narrow and keeps the bottom sheet ("bottom", default).
+   */
+  historyPlacement?: "side" | "bottom";
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   // The pinned version being viewed read-only; null = the living head.
@@ -144,18 +151,80 @@ export function DocumentArtifactBody({
           {statusChip}
         </span>
       </div>
-      {displayHtml ? (
-        <DocumentFrame html={displayHtml} title={artifact.title} fullHeight />
-      ) : (
-        <div className="flex flex-1 items-center justify-center p-6">
-          <p className="text-sm text-muted-foreground">
-            {viewVersion !== null && versionFetching
-              ? "Loading version…"
-              : "This document's render is unavailable. The markdown record is preserved; try re-emitting the document from its thread."}
-          </p>
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {displayHtml ? (
+            <DocumentFrame
+              html={displayHtml}
+              title={artifact.title}
+              fullHeight
+            />
+          ) : (
+            <div className="flex flex-1 items-center justify-center p-6">
+              <p className="text-sm text-muted-foreground">
+                {viewVersion !== null && versionFetching
+                  ? "Loading version…"
+                  : "This document's render is unavailable. The markdown record is preserved; try re-emitting the document from its thread."}
+              </p>
+            </div>
+          )}
         </div>
-      )}
-      {historyOpen && versions.length > 0 ? (
+        {historyOpen && historyPlacement === "side" && versions.length > 0 ? (
+          <aside
+            data-testid="document-history-timeline"
+            className="w-64 shrink-0 overflow-y-auto border-l border-border/70 bg-muted/20 px-4 py-3 motion-safe:animate-in motion-safe:slide-in-from-right-4"
+          >
+            <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+              Change log
+            </p>
+            <ol className="relative ml-1 space-y-4 border-l border-border pl-4">
+              {versions.map((v) => {
+                const isHead = v.version === headVersion;
+                const isViewing =
+                  viewVersion === v.version || (viewVersion === null && isHead);
+                return (
+                  <li key={v.id} className="relative">
+                    <span
+                      aria-hidden
+                      className={`absolute -left-[21.5px] top-1 h-2.5 w-2.5 rounded-full border ${
+                        isViewing
+                          ? "border-foreground bg-foreground"
+                          : "border-muted-foreground/50 bg-background"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      data-testid={`document-history-version-${v.version}`}
+                      onClick={() => setViewVersion(isHead ? null : v.version)}
+                      className="block w-full rounded px-1 py-0.5 text-left hover:bg-muted"
+                    >
+                      <span
+                        className={`block text-xs ${
+                          isViewing
+                            ? "font-medium text-foreground"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        v{v.version}
+                        {isHead ? " · current" : ""}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {v.createdByName ?? "System"}
+                      </span>
+                      {v.createdAt ? (
+                        <span className="block text-[11px] text-muted-foreground/70">
+                          {relativeTime(v.createdAt)}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </aside>
+        ) : null}
+      </div>
+      {historyOpen && historyPlacement === "bottom" && versions.length > 0 ? (
         <div
           data-testid="document-history-panel"
           className="max-h-48 overflow-y-auto border-t border-border/70 bg-muted/30 px-4 py-2 motion-safe:animate-in motion-safe:slide-in-from-bottom-2"

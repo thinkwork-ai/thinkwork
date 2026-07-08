@@ -41,7 +41,7 @@ vi.mock("@/components/artifacts/canvas/CanvasArtifactView", () => ({
   ),
 }));
 
-import { ArtifactBodyView } from "./ArtifactBodyView";
+import { ArtifactBodyView, DocumentArtifactBody } from "./ArtifactBodyView";
 
 const base = {
   id: "artifact-1",
@@ -249,6 +249,28 @@ describe("document change-log footer", () => {
     expect(screen.queryByTestId("document-refreshed-chip")).toBeNull();
     fireEvent.click(screen.getByTestId("document-back-to-latest"));
     expect(screen.getByTestId("document-refreshed-chip")).toBeTruthy();
+  });
+
+  it("full-page placement opens a right-hand vertical timeline instead of the bottom sheet", () => {
+    render(<DocumentArtifactBody artifact={doc} historyPlacement="side" />);
+    fireEvent.click(screen.getByTestId("document-history-toggle"));
+    const timeline = screen.getByTestId("document-history-timeline");
+    expect(screen.queryByTestId("document-history-panel")).toBeNull();
+    expect(timeline.textContent).toContain("Change log");
+    expect(timeline.textContent).toContain("v2");
+    expect(timeline.textContent).toContain("Eric Odom");
+    // Entries stay clickable in the timeline.
+    fireEvent.click(screen.getByTestId("document-history-version-1"));
+    expect(
+      screen.getByTestId("document-back-to-latest").textContent,
+    ).toContain("Viewing v1");
+  });
+
+  it("the docked panel default keeps the bottom sheet — no timeline", () => {
+    render(<ArtifactBodyView artifact={doc} />);
+    fireEvent.click(screen.getByTestId("document-history-toggle"));
+    expect(screen.getByTestId("document-history-panel")).toBeTruthy();
+    expect(screen.queryByTestId("document-history-timeline")).toBeNull();
   });
 
   it("clicking the current version returns to the living head, not a pinned copy", () => {
