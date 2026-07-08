@@ -29,6 +29,9 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   GetSecretValueCommand,
@@ -36,10 +39,22 @@ import {
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 
+import { materializeAnalystConnectionFolder } from "../packages/api/src/lib/analyst/connection-folder";
 import {
   provisionAnalystConnector,
   resolveAnalystProvisionConfig,
 } from "../packages/api/src/lib/analyst/provision-connector";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SCHEMA_MD_PATH = join(
+  HERE,
+  "..",
+  "packages",
+  "database-pg",
+  "generated",
+  "analyst",
+  "SCHEMA.md",
+);
 
 async function ensureBrokerSecretValue(
   secretRef: string,
@@ -105,6 +120,18 @@ async function main() {
   const outcome = await provisionAnalystConnector({ ...config, reApprove });
   console.error(
     `==> Connector row ${outcome.action} (id ${outcome.id}, url ${config.brokerUrl})`,
+  );
+
+  // U5: materialize the workspace connection folder (CONNECTION.md +
+  // signed .assignment.json + the generated SCHEMA.md semantic model).
+  const schemaMarkdown = readFileSync(SCHEMA_MD_PATH, "utf-8");
+  const folder = await materializeAnalystConnectionFolder({
+    tenantId: config.tenantId,
+    tenantMcpServerId: outcome.id,
+    schemaMarkdown,
+  });
+  console.error(
+    `==> Workspace connection folder written for ${folder.agents} agent(s): ${folder.files.join(", ")}`,
   );
 
   process.exit(0);
