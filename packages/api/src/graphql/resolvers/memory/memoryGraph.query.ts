@@ -13,6 +13,7 @@ import { db, sql } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
 import { requireTenantAdmin } from "../core/authz.js";
+import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 /**
  * Enumerate every Hindsight bank in a tenant, tenant-safely. Mirrors the
@@ -67,7 +68,11 @@ export const memoryGraph = async (
   // every bank in the tenant. Otherwise stay scoped to the requester's bank.
   let bankLabels: Map<string, string> | null = null;
   if (args.allTenantBanks) {
-    const tenantId = args.tenantId ?? ctx.auth.tenantId ?? null;
+    // ctx.auth.tenantId is null for Google-federated users; fall back to the
+    // caller-resolved tenant (the documented OAuth pattern) so tenant-wide
+    // graph queries work without the client threading tenantId.
+    const tenantId =
+      args.tenantId ?? ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
     if (!tenantId) throw new Error("Tenant context required");
     await requireTenantAdmin(ctx, tenantId);
     bankLabels = await tenantBankLabels(tenantId);
