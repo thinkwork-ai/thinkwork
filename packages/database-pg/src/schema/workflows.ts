@@ -108,6 +108,10 @@ export const workflows = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     last_run_id: uuid("last_run_id"),
+    // THINK-216: provenance + idempotency link for Automations migrated to
+    // workflows. Plain uuid (no FK) so the eventual agent_loops DROP needs no
+    // dependent-constraint ordering.
+    source_agent_loop_id: uuid("source_agent_loop_id"),
     last_run_at: timestamp("last_run_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
