@@ -352,6 +352,11 @@ extend type Query {
     cursor: String
   ): [Artifact!]!
   artifact(id: ID!): Artifact
+  # Card self-heal (THINK-155 follow-up): resolve the LIVING document by its
+  # logical documentId (metadata.documentId). Thread cards fall back to this
+  # when their recorded artifactId no longer resolves (a fork cleaned up, a
+  # re-homed document). Gated exactly like artifact(id).
+  documentArtifact(documentId: ID!): Artifact
   # Document change log (THINK-155 follow-up): one pinned version's rendered
   # HTML, read from its content-addressed render pin. Precise single-version
   # fetch so the history panel never hydrates every snapshot at once. Gated

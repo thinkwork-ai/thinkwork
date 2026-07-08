@@ -1384,6 +1384,7 @@ export async function handleDocumentEmission(
   // ---- Compact card event (R4) — abstract truncated to the ceiling -------
   const card = buildDocumentCard({
     artifactId,
+    documentId,
     title: doc.title,
     genre: doc.genre,
     abstract: doc.abstract,
@@ -1424,6 +1425,12 @@ export async function handleDocumentEmission(
 /** Build the ≤10KB thread card; truncates the abstract to fit (R4). */
 export function buildDocumentCard(input: {
   artifactId: string;
+  /**
+   * Logical document id — the durable identity. Clients fall back to it when
+   * the card's artifactId no longer resolves (a fork cleaned up, a re-homed
+   * document), so old cards keep opening the living document.
+   */
+  documentId?: string;
   title: string;
   genre: string;
   abstract: string;
@@ -1432,6 +1439,7 @@ export function buildDocumentCard(input: {
 }): Record<string, unknown> {
   const base = {
     artifactId: input.artifactId,
+    ...(input.documentId ? { documentId: input.documentId } : {}),
     title: boundedCanvasText(input.title, 160),
     genre: input.genre,
     status: input.status,

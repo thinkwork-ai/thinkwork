@@ -731,6 +731,17 @@ export function TaskThreadView({
       .find((candidate) => candidate.role.toUpperCase() !== "USER");
     documentCardsByMessageId.set(reply?.id ?? message.id, cards);
   });
+  // Card self-heal: the logical documentId behind each card-recorded
+  // artifactId, from EVERY turn's cards (not just message-anchored ones) —
+  // the docked panel re-resolves by it when the artifactId dangles.
+  const documentIdByArtifactId = new Map<string, string>();
+  (thread.turns ?? []).forEach((turn) => {
+    for (const card of documentCardsForTurn(turn)) {
+      if (card.documentId) {
+        documentIdByArtifactId.set(card.artifactId, card.documentId);
+      }
+    }
+  });
   const infoPanelOpen = infoPanelState?.isOpen ?? false;
 
   return (
@@ -889,6 +900,12 @@ export function TaskThreadView({
               <ThreadArtifactPanel
                 key={canvasPanel.artifactId}
                 artifactId={canvasPanel.artifactId}
+                fallbackDocumentId={
+                  canvasPanel.artifactId
+                    ? (documentIdByArtifactId.get(canvasPanel.artifactId) ??
+                      null)
+                    : null
+                }
                 listArtifacts={panelListArtifacts}
                 onOpenArtifact={canvasPanel.open}
                 onBackToList={
@@ -4487,6 +4504,7 @@ function documentCardsForTurn(turn: TaskThreadTurn): DocumentCardData[] {
     if (!artifactId) continue;
     byArtifact.set(artifactId, {
       artifactId,
+      documentId: stringValue(card.documentId) || undefined,
       title: stringValue(card.title) || "Document",
       genre: stringValue(card.genre) || undefined,
       abstract: stringValue(card.abstract) || undefined,
