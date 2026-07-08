@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { applyCanvasBoundData } from "@thinkwork/thread-json-render";
 import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
 import {
   CanvasVersionHistory,
@@ -35,13 +36,21 @@ export function CanvasArtifactView({
     () => parseLivingCanvasPart(artifact.content),
     [artifact.content],
   );
+  // THINK-228 U7 (AE3 render half): merge headless-refresh bound data into
+  // the bound elements' data props — without this, `refreshCanvasData` would
+  // update `boundData` while the RENDERED numbers stay frozen at emission.
+  const renderData = useMemo(
+    () =>
+      part ? applyCanvasBoundData(part.data, part.boundData ?? null) : null,
+    [part],
+  );
   const versions = artifact.versions ?? [];
 
   return (
     <main className="mx-auto grid w-full max-w-5xl gap-4 p-4 sm:p-6">
       {part ? (
         <section className="grid gap-3" data-testid="canvas-render">
-          <ThreadJsonRenderRenderer data={part.data} partId={part.id} />
+          <ThreadJsonRenderRenderer data={renderData} partId={part.id} />
         </section>
       ) : (
         <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">

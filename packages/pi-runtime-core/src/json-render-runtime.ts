@@ -4,6 +4,7 @@ import {
   THREAD_JSON_RENDER_PART_TYPE,
   THREAD_JSON_RENDER_SCHEMA_VERSION,
   THREAD_JSON_RENDER_STATE_SNAPSHOT_PAYLOAD_KIND,
+  canvasShapeHashForToolResult,
   createThreadJsonRenderSpecHash,
   resultShapeHash,
   threadJsonRenderComponentDefinitions,
@@ -572,6 +573,9 @@ export function buildCanvasDataBinding(input: {
   const frozenArgs = recordValue(source.args) ?? {};
   // Hash the raw MCP response shape when present (what U6's re-invoke returns),
   // else the recorded result — either way the sorted KEY STRUCTURE, not values.
+  // Tool-aware (THINK-228 KTD2): run_query results hash the value-invariant
+  // columns descriptor instead of the type-sensitive structural hash, so
+  // nullable-key churn never breaks refresh.
   const shapeSource = details && "raw" in details ? details.raw : source.result;
 
   return {
@@ -581,7 +585,11 @@ export function buildCanvasDataBinding(input: {
     serverName,
     toolName,
     frozenArgs,
-    resultShapeHash: resultShapeHash(shapeSource),
+    resultShapeHash: canvasShapeHashForToolResult({
+      toolName,
+      raw: shapeSource,
+      genericHash: resultShapeHash,
+    }),
   };
 }
 

@@ -358,3 +358,39 @@ resource "aws_secretsmanager_secret" "compliance_reader" {
     Role = "compliance_reader"
   }
 }
+
+################################################################################
+# Secrets Manager — Analyst Reader Role Credentials (THINK-228 U2)
+#
+# Container for the analyst_reader Aurora role used by the analyst
+# query-broker Lambda. Terraform owns the SECRET CONTAINER; the operator
+# owns the SECRET VALUE (populated by scripts/bootstrap-analyst-roles.sh,
+# which also applies drizzle/0227_analyst_reader_role.sql to create the
+# matching hardened read-only role).
+################################################################################
+
+resource "aws_secretsmanager_secret" "analyst_reader" {
+  count = local.create ? 1 : 0
+  name  = "thinkwork/${var.stage}/analyst/reader-credentials"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-analyst-reader-credentials"
+    Role = "analyst_reader"
+  }
+}
+
+# Broker caller credential for the analyst query broker (THINK-228 U3).
+# The connector row (tenant_mcp_servers, seeded by
+# scripts/provision-analyst-connector.ts) references this ARN as its
+# auth_config.secretRef; the broker Lambda validates incoming Bearer
+# tokens against it. Value shape: JSON {token, tenantId} — populated by
+# the provisioning script, never by Terraform.
+resource "aws_secretsmanager_secret" "analyst_broker" {
+  count = local.create ? 1 : 0
+  name  = "thinkwork/${var.stage}/analyst/broker-credential"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-analyst-broker-credential"
+    Role = "analyst_query_broker"
+  }
+}

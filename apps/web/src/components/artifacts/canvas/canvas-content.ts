@@ -14,6 +14,13 @@ export interface LivingCanvasPart {
   id: string;
   /** The ThreadJsonRenderData payload the renderer validates + renders. */
   data: unknown;
+  /**
+   * Additive bound-data map written by the headless canvas refresh
+   * (`elementId → {payload, fetchedAt, shapeHash}`). The renderer merges it
+   * into bound elements' data props via `applyCanvasBoundData` (THINK-228
+   * U7 — the AE3 render half). Absent on never-refreshed canvases.
+   */
+  boundData?: unknown;
 }
 
 export function parseLivingCanvasPart(
@@ -38,7 +45,11 @@ export function parseLivingCanvasPart(
   ) {
     return null;
   }
-  return { id: record.id, data: record.data };
+  return {
+    id: record.id,
+    data: record.data,
+    ...(record.boundData !== undefined ? { boundData: record.boundData } : {}),
+  };
 }
 
 /** True when the artifact's metadata marks it a living GenUI canvas. */

@@ -756,3 +756,19 @@ variable "capability_signing_private_key_secret" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# THINK-228 U3 — analyst query broker runtime config
+# ---------------------------------------------------------------------------
+
+variable "analyst_reader_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the `analyst_reader` Aurora role credentials (THINK-228 U2). Wired from `module.database.analyst_reader_secret_arn`. The analyst-query-broker Lambda executes model-authored SQL exclusively under this role."
+  type        = string
+  default     = ""
+}
+
+variable "analyst_broker_secret_arn" {
+  description = "ARN of the Secrets Manager secret holding the analyst query-broker caller credential (JSON {token, tenantId}; THINK-228 U3). Wired from `module.database.analyst_broker_secret_arn`. The broker validates incoming Bearer tokens against it; the seeded connector row references it as auth_config.secretRef."
+  type        = string
+  default     = ""
+}

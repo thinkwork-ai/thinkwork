@@ -35,6 +35,8 @@ export interface NormalizedAgentProfileExecutionControls {
   maxRuntimeMs?: number;
   maxTokens?: number;
   costBudgetUsd?: number;
+  /** THINK-228 R9: hard cap on run_query calls per delegated run. */
+  maxQueriesPerRun?: number;
   thinking?: string;
   reviewGate?: boolean;
   maxReviewLoops?: number;
@@ -138,6 +140,7 @@ export function normalizeAgentProfileExecutionControls(
   const costBudgetUsd = positiveNumber(
     execution.costBudgetUsd ?? loopPolicy.costBudgetUsd,
   );
+  const maxQueriesPerRun = positiveInt(execution.maxQueriesPerRun);
   return {
     foreground: true,
     clarify: booleanValue(execution.clarify) ?? false,
@@ -145,6 +148,7 @@ export function normalizeAgentProfileExecutionControls(
     ...(maxRuntimeMs !== undefined ? { maxRuntimeMs } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(costBudgetUsd !== undefined ? { costBudgetUsd } : {}),
+    ...(maxQueriesPerRun !== undefined ? { maxQueriesPerRun } : {}),
     ...optionalString("thinking", execution.thinking),
     ...(loopPolicy.reviewGate ? { reviewGate: true } : {}),
     ...(loopPolicy.maxReviewLoops !== DEFAULT_LOOP_POLICY.maxReviewLoops ||
@@ -166,6 +170,7 @@ export function normalizeExecutionControlsForStorage(
     maxRuntimeMs: normalized.maxRuntimeMs ?? null,
     maxTokens: normalized.maxTokens ?? null,
     costBudgetUsd: normalized.costBudgetUsd ?? null,
+    maxQueriesPerRun: normalized.maxQueriesPerRun ?? null,
     thinking: normalized.thinking ?? null,
     reviewGate: normalized.reviewGate ?? null,
     maxReviewLoops: normalized.maxReviewLoops ?? null,

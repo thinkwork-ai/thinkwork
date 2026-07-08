@@ -11,7 +11,15 @@
 import { GraphQLError } from "graphql";
 import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, and, isNull, artifacts, artifactShares } from "../../utils.js";
+import {
+  db,
+  eq,
+  and,
+  isNull,
+  artifactDataBindings,
+  artifacts,
+  artifactShares,
+} from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
@@ -72,6 +80,28 @@ export const mintArtifactShareLink = async (
     throw new GraphQLError("Only document artifacts can be shared publicly", {
       extensions: { code: "BAD_USER_INPUT" },
     });
+  }
+  // THINK-228 KTD9: analyst-sourced artifacts are excluded from external
+  // share links in v1. A run_query binding means the artifact refreshes
+  // against a data source with no row-level tenant scoping yet — sharing it
+  // externally would turn a bounded in-thread exposure into indefinite
+  // cross-tenant data access by anyone with the URL. Fail closed (explicit
+  // and independent of the document-only gate above, which may widen later).
+  const [runQueryBinding] = await db
+    .select({ id: artifactDataBindings.id })
+    .from(artifactDataBindings)
+    .where(
+      and(
+        eq(artifactDataBindings.artifact_id, artifactId),
+        eq(artifactDataBindings.tool_name, "run_query"),
+      ),
+    )
+    .limit(1);
+  if (runQueryBinding) {
+    throw new GraphQLError(
+      "Artifacts backed by a data-source query cannot be shared externally yet",
+      { extensions: { code: "FORBIDDEN" } },
+    );
   }
 
   const baseUrl = shareUrlBase();

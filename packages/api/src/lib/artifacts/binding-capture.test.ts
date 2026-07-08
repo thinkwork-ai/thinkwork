@@ -265,6 +265,35 @@ describe("upsertBindingFromActivityEvent", () => {
     });
   });
 
+  it("THINK-228 U7: a service_credential connector (run_query) classifies as tenant_mcp", async () => {
+    // Plan assumption made explicit: the analyst broker's service_credential
+    // auth maps to the unattended-refreshable tenant_mcp authContext — a
+    // headless refresh needs no user credential.
+    const part = createTaskReviewJsonRenderFixture();
+    mocks.mcpServerRow = { auth_type: "service_credential" };
+    await upsertBindingFromActivityEvent({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      payload: payloadWithBinding(
+        part,
+        descriptor(part, {
+          serverRef: "postgres-dev",
+          serverName: "postgres-dev",
+          toolName: "run_query",
+          frozenArgs: { sql: "SELECT count(*) FROM threads" },
+          resultShapeHash: "analyst-cols-fnv1a:0000abcd",
+        }),
+      ),
+    });
+    expect(mocks.bindingInserts[0]).toMatchObject({
+      server_name: "postgres-dev",
+      tool_name: "run_query",
+      auth_context: "tenant_mcp",
+      owner_user_id: null,
+      result_shape_hash: "analyst-cols-fnv1a:0000abcd",
+    });
+  });
+
   it("defaults an unresolved server to tenant_mcp with no owner", async () => {
     const part = createTaskReviewJsonRenderFixture();
     mocks.mcpServerRow = null; // server name not in tenant registry

@@ -44,6 +44,8 @@ export interface AgentProfileExecutionControls {
   maxExecutionTimeMs?: number;
   maxTokens?: number;
   costBudgetUsd?: number;
+  /** THINK-228 R9: hard cap on run_query calls per delegated run. */
+  maxQueriesPerRun?: number;
   reviewGate?: boolean;
   maxReviewLoops?: number;
   loopPolicy?: AgentLoopPolicy;
@@ -118,6 +120,8 @@ export interface CompiledAgentProfileRunRequest {
     maxExecutionTimeMs?: number;
     maxTokens?: number;
     costBudgetUsd?: number;
+    /** THINK-228 R9: hard cap on run_query calls per delegated run. */
+    maxQueriesPerRun?: number;
     reviewGate?: boolean;
     maxReviewLoops?: number;
     loopPolicy: AgentLoopPolicy;
@@ -662,6 +666,9 @@ export function compileAgentProfileRunRequest(
         : {}),
       ...(execution.costBudgetUsd !== undefined
         ? { costBudgetUsd: execution.costBudgetUsd }
+        : {}),
+      ...(execution.maxQueriesPerRun !== undefined
+        ? { maxQueriesPerRun: execution.maxQueriesPerRun }
         : {}),
       ...(execution.reviewGate === true ? { reviewGate: true } : {}),
       ...(execution.maxReviewLoops !== undefined

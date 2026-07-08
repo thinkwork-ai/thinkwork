@@ -1241,6 +1241,7 @@ export enum ComplianceEventType {
   AuthSigninSuccess = 'AUTH_SIGNIN_SUCCESS',
   AuthSignout = 'AUTH_SIGNOUT',
   DataExportInitiated = 'DATA_EXPORT_INITIATED',
+  DataQueryExecuted = 'DATA_QUERY_EXECUTED',
   McpAdded = 'MCP_ADDED',
   McpDetached = 'MCP_DETACHED',
   McpGranted = 'MCP_GRANTED',

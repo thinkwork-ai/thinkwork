@@ -593,6 +593,12 @@ build_handler "agentcore-admin" \
 build_handler "admin-ops-mcp" \
   "$REPO_ROOT/packages/lambda/admin-ops-mcp.ts"
 
+# Analyst query broker — first-party MCP server at POST /mcp/analyst
+# (THINK-228 U3). Executes model-authored SQL as the hardened
+# analyst_reader role; standard externalized @aws-sdk/* build.
+build_handler "analyst-query-broker" \
+  "$REPO_ROOT/packages/lambda/analyst-query-broker.ts"
+
 build_handler "mcp-admin-keys" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-admin-keys.ts"
 

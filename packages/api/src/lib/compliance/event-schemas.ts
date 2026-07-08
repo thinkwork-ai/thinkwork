@@ -480,6 +480,23 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   "agent.connection_detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
   "agent.tool_granted": { allowedFields: CAPABILITY_MUTATION_FIELDS },
   "agent.tool_detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
+
+  // ── ThinkWork Analyst query trace (THINK-228 U3, R8) ─────────
+  // The sql text is the audit control for the analyst's static-secret
+  // risk acceptance — it is deliberately retained verbatim.
+  "data.query_executed": {
+    allowedFields: new Set([
+      "sql",
+      "data_source",
+      "rows_returned",
+      "approx_bytes",
+      "duration_ms",
+      "truncated",
+      "result_file",
+      "outcome",
+      "error",
+    ]),
+  },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,
