@@ -1,5 +1,5 @@
 /**
- * Analyst run_query binding helper tests (THINK-228 U7, KTD2).
+ * Analyst query binding helper tests (THINK-228 U7, KTD2).
  */
 
 import { describe, expect, it } from "vitest";
@@ -99,12 +99,12 @@ describe("KTD2 — value-invariant descriptor hash", () => {
     ).not.toEqual(base);
   });
 
-  it("canvasShapeHashForToolResult routes run_query to the descriptor and others to the generic hash", () => {
+  it("canvasShapeHashForToolResult routes query to the descriptor and others to the generic hash", () => {
     const raw = mcpRaw(envelope());
     const generic = (value: unknown) => resultShapeHash(value);
     expect(
       canvasShapeHashForToolResult({
-        toolName: "run_query",
+        toolName: "query",
         raw,
         genericHash: generic,
       }),

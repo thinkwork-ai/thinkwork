@@ -298,7 +298,7 @@ describe("refreshCanvasBindings — no model invocation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// THINK-228 U7 — run_query bindings: value-invariant descriptor + truncation
+// THINK-228 U7 — query bindings: value-invariant descriptor + truncation
 // ---------------------------------------------------------------------------
 
 import {
@@ -333,14 +333,14 @@ function analystBinding(
   return tenantBinding({
     serverName: "postgres-dev",
     serverRef: "postgres-dev",
-    toolName: "run_query",
+    toolName: "query",
     frozenArgs: { sql: "SELECT tenant, count(*) AS n FROM threads GROUP BY 1" },
     resultShapeHash: analystColumnsShapeHash(ANALYST_COLUMNS),
     ...over,
   });
 }
 
-describe("refreshBinding — run_query (THINK-228 KTD2/R14)", () => {
+describe("refreshBinding — query (THINK-228 KTD2/R14)", () => {
   it("KTD2: value churn only (nulls, result_file null→string) does NOT escalate", async () => {
     const { deps, rec } = makeDeps({
       callTool: async () => ({

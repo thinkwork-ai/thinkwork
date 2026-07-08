@@ -35,7 +35,7 @@ export interface NormalizedAgentProfileExecutionControls {
   maxRuntimeMs?: number;
   maxTokens?: number;
   costBudgetUsd?: number;
-  /** THINK-228 R9: hard cap on run_query calls per delegated run. */
+  /** THINK-228 R9: hard cap on query calls per delegated run. */
   maxQueriesPerRun?: number;
   thinking?: string;
   reviewGate?: boolean;

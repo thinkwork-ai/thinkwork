@@ -1,7 +1,7 @@
 /**
  * CanvasArtifactView render-half test (THINK-228 U7, AE3).
  *
- * The load-bearing DOM assertion the plan requires: a `run_query`-bound
+ * The load-bearing DOM assertion the plan requires: a `query`-bound
  * canvas whose headless refresh wrote new `boundData` must show the NEW
  * numbers in the RENDERED widget — not just carry them in the stored JSON.
  */
@@ -73,7 +73,7 @@ describe("CanvasArtifactView (AE3 render half)", () => {
     expect(screen.queryByText("Refreshed row from Postgres")).toBeNull();
   });
 
-  it("renders the REFRESHED numbers once boundData carries a run_query envelope", () => {
+  it("renders the REFRESHED numbers once boundData carries a query envelope", () => {
     render(<CanvasArtifactView artifact={artifact(artifactContent(true))} />);
     // The rendered table shows the refreshed data…
     expect(screen.getByText("Refreshed row from Postgres")).toBeTruthy();

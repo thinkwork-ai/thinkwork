@@ -2,7 +2,7 @@
  * Analyst in-loop query cap + sandbox result-landing tests (THINK-228 U6).
  *
  * The allowlist-trap test runs first per the plan's execution note: a
- * delegated analyst child session must actually see run_query in its
+ * delegated analyst child session must actually see query in its
  * tool surface — grant names are matched on the connector SLUG (the MCP
  * runtime config name), and matching on the display name silently drops
  * every granted tool.
@@ -41,7 +41,7 @@ import type {
 const TMP_ROOT = mkdtempSync(path.join(tmpdir(), "analyst-cap-test-"));
 afterAll(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
-const RUN_QUERY_ENVELOPE = {
+const QUERY_ENVELOPE = {
   columns: [{ name: "n", pg_type: "int8" }],
   rows: [[42]],
   row_count: 1,
@@ -70,20 +70,20 @@ async function analystMcpTools(
     registry,
     connectMcpServer: async (args) => {
       args.registry?.register(args.serverName, {
-        tool: "run_query",
+        tool: "query",
         description: "Run one SQL statement",
         inputSchema: { type: "object" },
       });
       const runQuery: AgentTool<any> = {
-        name: "run_query",
-        label: "run_query",
+        name: "query",
+        label: "query",
         description: "Run one SQL statement",
         parameters: { type: "object", properties: {} },
         execute: vi.fn(
           executeImpl ??
             (async () => ({
               content: [
-                { type: "text", text: JSON.stringify(RUN_QUERY_ENVELOPE) },
+                { type: "text", text: JSON.stringify(QUERY_ENVELOPE) },
               ],
             })),
         ),
@@ -107,7 +107,7 @@ function analystProfile(
     toolPolicy: {
       builtInTools: ["execute_code", "file_read"],
       mcpServers: [
-        { serverName: "postgres-dev", toolWhitelist: ["run_query"] },
+        { serverName: "postgres-dev", toolWhitelist: ["query"] },
       ],
     },
     executionControls: { maxQueriesPerRun: 3 },
@@ -165,7 +165,7 @@ function compiled(options: ProfileDelegationToolOptions) {
 }
 
 describe("allowlist trap (plan execution note — written first)", () => {
-  it("a delegated analyst child session actually sees run_query in its tool surface", async () => {
+  it("a delegated analyst child session actually sees query in its tool surface", async () => {
     let seenTools: string[] = [];
     const { options } = await delegationOptions(async (args) => {
       seenTools = (args.tools ?? []).map((t) => t.name);
@@ -173,7 +173,7 @@ describe("allowlist trap (plan execution note — written first)", () => {
     });
     const runner = createProfileChildRunner(options);
     await runner.runProfile(compiled(options));
-    expect(seenTools).toContain("run_query");
+    expect(seenTools).toContain("query");
   });
 
   it("normalizeAgentProfiles matches grants on the connector slug, not the display name", () => {
@@ -189,19 +189,19 @@ describe("allowlist trap (plan execution note — written first)", () => {
             // Runtime payload shape: display name + slug + allowedTools.
             name: "Postgres (dev)",
             slug: "postgres-dev",
-            allowedTools: ["run_query"],
+            allowedTools: ["query"],
           },
         ],
         executionControls: { maxQueriesPerRun: 5 },
       },
     ]);
     expect(profile!.toolPolicy?.mcpServers).toEqual([
-      { serverName: "postgres-dev", toolWhitelist: ["run_query"] },
+      { serverName: "postgres-dev", toolWhitelist: ["query"] },
     ]);
     expect(profile!.executionControls?.maxQueriesPerRun).toBe(5);
   });
 
-  it("fail-closed: no grant → run_query absent from the child surface", async () => {
+  it("fail-closed: no grant → query absent from the child surface", async () => {
     let seenTools: string[] = [];
     const { options } = await delegationOptions(async (args) => {
       seenTools = (args.tools ?? []).map((t) => t.name);
@@ -212,20 +212,20 @@ describe("allowlist trap (plan execution note — written first)", () => {
     ];
     const runner = createProfileChildRunner(options);
     await runner.runProfile(compiled(options));
-    expect(seenTools).not.toContain("run_query");
+    expect(seenTools).not.toContain("query");
   });
 });
 
 describe("in-loop query cap (KTD3, AE5)", () => {
   it("calls 1..N succeed; the (N+1)th is refused and the delegation ends Verdict: fail", async () => {
-    // Simulate the SDK loop: the model keeps calling run_query; tool
+    // Simulate the SDK loop: the model keeps calling query; tool
     // throws are converted to error results and the loop keeps going —
     // exactly the path a model could try to talk its way past.
     const innerExecute = vi.fn(async () => ({
-      content: [{ type: "text", text: JSON.stringify(RUN_QUERY_ENVELOPE) }],
+      content: [{ type: "text", text: JSON.stringify(QUERY_ENVELOPE) }],
     }));
     const { options } = await delegationOptions(async (args) => {
-      const runQuery = (args.tools ?? []).find((t) => t.name === "run_query")!;
+      const runQuery = (args.tools ?? []).find((t) => t.name === "query")!;
       for (let i = 0; i < 5; i += 1) {
         try {
           await runQuery.execute(`call-${i}`, { sql: "SELECT 1" });
@@ -248,7 +248,7 @@ describe("in-loop query cap (KTD3, AE5)", () => {
 
   it("a propagated cap error also ends as a structured fail, not a crash", async () => {
     const { options } = await delegationOptions(async (args) => {
-      const runQuery = (args.tools ?? []).find((t) => t.name === "run_query")!;
+      const runQuery = (args.tools ?? []).find((t) => t.name === "query")!;
       for (let i = 0; i < 4; i += 1) {
         await runQuery.execute(`call-${i}`, { sql: "SELECT 1" }); // 4th throws
       }
@@ -274,7 +274,7 @@ describe("sandbox result-landing (KTD2 file facet, R7/AE2)", () => {
   it("lands a staged result into the data dir and rewrites the model-visible path", async () => {
     const dataDir = path.join(TMP_ROOT, "landing");
     const envelope = {
-      ...RUN_QUERY_ENVELOPE,
+      ...QUERY_ENVELOPE,
       result_file: "s3://bucket/analyst-staging/tenant-1/abc.csv",
     };
     const rewritten = await landResultFile(JSON.stringify(envelope), {
@@ -290,7 +290,7 @@ describe("sandbox result-landing (KTD2 file facet, R7/AE2)", () => {
   it("passes through null result_file, non-envelope text, and non-staging keys", async () => {
     const dataDir = path.join(TMP_ROOT, "landing2");
     const s3 = fakeS3("x");
-    const untouchedEnvelope = JSON.stringify(RUN_QUERY_ENVELOPE);
+    const untouchedEnvelope = JSON.stringify(QUERY_ENVELOPE);
     expect(
       await landResultFile(untouchedEnvelope, { dataDir, s3Client: s3 }),
     ).toBe(untouchedEnvelope);
@@ -298,7 +298,7 @@ describe("sandbox result-landing (KTD2 file facet, R7/AE2)", () => {
       "plain text",
     );
     const foreign = JSON.stringify({
-      ...RUN_QUERY_ENVELOPE,
+      ...QUERY_ENVELOPE,
       result_file: "s3://bucket/tenants/acme/secrets.csv",
     });
     expect(await landResultFile(foreign, { dataDir, s3Client: s3 })).toBe(
@@ -310,8 +310,8 @@ describe("sandbox result-landing (KTD2 file facet, R7/AE2)", () => {
   it("the wrapped tool rewrites envelope content in place", async () => {
     const dataDir = path.join(TMP_ROOT, "landing3");
     const inner: AgentTool<any> = {
-      name: "run_query",
-      label: "run_query",
+      name: "query",
+      label: "query",
       description: "q",
       parameters: { type: "object", properties: {} },
       execute: async () => ({
@@ -319,7 +319,7 @@ describe("sandbox result-landing (KTD2 file facet, R7/AE2)", () => {
           {
             type: "text",
             text: JSON.stringify({
-              ...RUN_QUERY_ENVELOPE,
+              ...QUERY_ENVELOPE,
               result_file: "s3://bucket/analyst-staging/tenant-1/big.csv",
             }),
           },

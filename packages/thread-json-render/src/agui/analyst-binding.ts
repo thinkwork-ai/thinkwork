@@ -1,15 +1,15 @@
 /**
- * Analyst run_query binding helpers (THINK-228 U7, KTD2).
+ * Analyst query binding helpers (THINK-228 U7, KTD2).
  *
  * The generic `resultShapeHash` is TYPE-SENSITIVE by design: it encodes
  * `null` as a distinct token, so nullable-but-present keys flip the hash on
  * ordinary data churn (`result_file` null→string when a result crosses the
  * staging cap, a `stats.min` null→number, a nullable column's preview
- * gaining/losing a null variant). Binding a run_query widget on that hash
+ * gaining/losing a null variant). Binding a query widget on that hash
  * would trip SCHEMA_STALE on value churn and permanently break refresh
  * (the AE3 demo).
  *
- * run_query bindings therefore hash a purpose-built VALUE-INVARIANT
+ * query bindings therefore hash a purpose-built VALUE-INVARIANT
  * descriptor: the envelope's `columns` array of `{name, pg_type}` only. It
  * changes exactly when the result's column set changes — a genuine schema
  * change — and never on data volume, nullability, or staging churn.
@@ -21,7 +21,7 @@
 
 import { createThreadJsonRenderSpecHash } from "../hash.js";
 
-export const ANALYST_QUERY_TOOL_NAME = "run_query";
+export const ANALYST_QUERY_TOOL_NAME = "query";
 
 export interface AnalystEnvelopeColumn {
   name: string;
@@ -43,7 +43,7 @@ function recordValue(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Parse a run_query envelope out of a raw MCP JSON-RPC tool result
+ * Parse a query envelope out of a raw MCP JSON-RPC tool result
  * (`{content: [{type: "text", text: <envelope JSON>}], ...}`) or out of an
  * already-parsed envelope object. Returns null for anything else.
  */
@@ -114,7 +114,7 @@ export function analystColumnsShapeHash(
 }
 
 /**
- * Tool-aware binding shape hash. run_query results hash the columns
+ * Tool-aware binding shape hash. query results hash the columns
  * descriptor; everything else keeps the generic structural hash supplied by
  * the caller (kept injected so this module stays dependency-free).
  */

@@ -71,8 +71,8 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
       "Use for data, spreadsheet, CRM, database, SQL, and quantitative analysis subtasks.",
     instructions: [
       "Analyze the assigned data or tool results with code when useful, state assumptions, and return decision-ready findings.",
-      "When a registered data source is available (a connections/<slug>/ folder with a run_query tool): ALWAYS read connections/<slug>/SCHEMA.md before writing SQL — only tables and columns listed there are granted, and it carries join hints and enum legends. Write one read-only statement per run_query call; a rejected query returns the verbatim database error — fix the SQL and retry. Prefer aggregated queries (GROUP BY) sized for presentation; large results land as a CSV file path in the tool result — analyze it with execute_code (pandas) instead of asking for raw rows.",
-      "Present quantitative answers as GenUI live components: emit_json_render_ui with chart/table components bound to your run_query results (pass sourceToolCallId so widgets stay refreshable). Never paste ASCII/markdown tables of raw rows into your reply. If emission validation fails (for example the 50-row component cap), re-aggregate to a coarser grain and retry.",
+      "When a registered data source is available (a connections/<slug>/ folder with a query tool): ALWAYS read connections/<slug>/SCHEMA.md before writing SQL — only tables and columns listed there are granted, and it carries join hints and enum legends. Write one read-only statement per query call; a rejected query returns the verbatim database error — fix the SQL and retry. Prefer aggregated queries (GROUP BY) sized for presentation; large results land as a CSV file path in the tool result — analyze it with execute_code (pandas) instead of asking for raw rows.",
+      "Present quantitative answers as GenUI live components: emit_json_render_ui with chart/table components bound to your query results (pass sourceToolCallId so widgets stay refreshable). Never paste ASCII/markdown tables of raw rows into your reply. If emission validation fails (for example the 50-row component cap), re-aggregate to a coarser grain and retry.",
     ].join("\n\n"),
     tool_policy: {
       builtInTools: ["execute_code", "file_read"],
@@ -86,7 +86,7 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
       foreground: true,
       clarify: false,
       maxSubagentDepth: 0,
-      // THINK-228 R9: hard cap on run_query calls per delegated run,
+      // THINK-228 R9: hard cap on query calls per delegated run,
       // enforced in-process by the delegation loop (KTD3).
       maxQueriesPerRun: 12,
       loopPolicy: defaultAgentLoopPolicy(),

@@ -301,18 +301,18 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
     expect(wrongAuth.statusCode).toBe(401);
   });
 
-  it("initialize + tools/list expose exactly run_query", async () => {
+  it("initialize + tools/list expose exactly query", async () => {
     const init = await callBroker(handler, "initialize");
     expect(init.rpc.result).toMatchObject({
       serverInfo: { name: "thinkwork-analyst-query-broker" },
     });
     const list = await callBroker(handler, "tools/list");
-    expect(list.rpc.result?.tools?.map((t) => t.name)).toEqual(["run_query"]);
+    expect(list.rpc.result?.tools?.map((t) => t.name)).toEqual(["query"]);
   });
 
   it("AE1: unknown column fails at the EXPLAIN gate with the verbatim planner error", async () => {
     const result = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: { sql: "SELECT no_such_column FROM analyst_fixture" },
     });
     expect(result.rpc.result?.isError).toBe(true);
@@ -328,7 +328,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
 
   it("AE4: a semicolon inside a string literal is NOT falsely rejected", async () => {
     const result = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: {
         sql: "SELECT count(*) AS n FROM analyst_fixture WHERE note = 'a;b'",
       },
@@ -339,7 +339,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
 
   it("AE4: parameterless two-statement text is rejected server-side", async () => {
     const result = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: {
         sql: "SELECT count(*) FROM analyst_fixture; DELETE FROM analyst_fixture",
       },
@@ -361,7 +361,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
     const hidden =
       "SELECT count(*) FROM analyst_fixture -- comment\n; DROP TABLE analyst_fixture";
     const result = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: { sql: hidden },
     });
     expect(result.rpc.result?.isError).toBe(true);
@@ -373,7 +373,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
 
   it("rejects utility statements (SET) at the gate", async () => {
     const result = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: { sql: "SET statement_timeout = '0'" },
     });
     expect(result.rpc.result?.isError).toBe(true);
@@ -383,7 +383,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
 
   it("happy path: aggregate query returns the full envelope with stats", async () => {
     const result = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: {
         sql: "SELECT tenant, count(*)::int AS n, sum(amount)::int AS total FROM analyst_fixture GROUP BY tenant ORDER BY tenant",
       },
@@ -415,11 +415,11 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
     const sql =
       "SELECT tenant, note FROM analyst_fixture WHERE id <= $CAP ORDER BY id";
     const small = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: { sql: sql.replace("$CAP", "5") }, // no nulls in 1..5, no staging
     });
     const large = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: { sql: sql.replace("$CAP", "400") }, // nulls + S3 staging
     });
     const smallEnv = envelopeFrom(small);
@@ -433,7 +433,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
 
   it("edge: exactly the inline cap → not truncated, no staging; one over → staged with SSE", async () => {
     const atCap = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: {
         sql: `SELECT id FROM analyst_fixture WHERE id <= ${INLINE_ROW_CAP} ORDER BY id`,
       },
@@ -445,7 +445,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
     expect(putObjectInputs).toHaveLength(0);
 
     const overCap = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: {
         sql: `SELECT id FROM analyst_fixture WHERE id <= ${INLINE_ROW_CAP + 1} ORDER BY id`,
       },
@@ -471,7 +471,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
     expect(before.rows[0].statement_timeout).toBe("123s");
 
     await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: { sql: "SELECT 1 AS one" },
     });
 
@@ -482,7 +482,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
   it("R8: an audit-trace write failure surfaces as a tool error (not swallowed)", async () => {
     traceResponder = () => new Response("boom", { status: 500 });
     const result = await callBroker(handler, "tools/call", {
-      name: "run_query",
+      name: "query",
       arguments: { sql: "SELECT 1 AS one" },
     });
     expect(result.rpc.result?.isError).toBe(true);
@@ -497,7 +497,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
       "postgres://nobody:nothing@127.0.0.1:59999/nope";
     try {
       const result = await callBroker(handler, "tools/call", {
-        name: "run_query",
+        name: "query",
         arguments: { sql: "SELECT 1" },
       });
       expect(result.statusCode).toBe(200);
@@ -550,11 +550,11 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
       token: TEST_TOKEN,
     };
     const tools = await mcpListTools(target, { fetchImpl });
-    expect(tools.map((t) => t.name)).toEqual(["run_query"]);
+    expect(tools.map((t) => t.name)).toEqual(["query"]);
 
     const call = await mcpCallTool(
       target,
-      "run_query",
+      "query",
       { sql: "SELECT count(*)::int AS n FROM analyst_fixture" },
       { fetchImpl },
     );

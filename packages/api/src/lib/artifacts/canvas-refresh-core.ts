@@ -302,7 +302,7 @@ export async function refreshBinding(
   // R7 / AE2: a result-shape hash mismatch is a SCHEMA refresh, not a data
   // refresh. Keep last-good rendering, flag SCHEMA_STALE, escalate to an agent
   // turn — the mismatched payload is NEVER applied to the head (no applyHeadData).
-  // Tool-aware hashing (THINK-228 KTD2): run_query hashes the value-invariant
+  // Tool-aware hashing (THINK-228 KTD2): query hashes the value-invariant
   // columns descriptor so nullable-key/staging churn never trips this gate;
   // only a genuine column-set change does.
   const fetchedShapeHash = canvasShapeHashForToolResult({

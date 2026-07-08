@@ -421,7 +421,7 @@ export function createProfileChildRunner(
       const profileExtensionFactories =
         options.profileExtensionFactoriesById?.get(request.profileId) ?? [];
       // THINK-228 U6 (KTD3/R9 + KTD2 file facet): the delegation loop owns
-      // the per-run run_query cap in memory, and staged results land in the
+      // the per-run query cap in memory, and staged results land in the
       // child session's data dir so execute_code can read them.
       const queryCapState = createAnalystQueryCapState(
         request.execution.maxQueriesPerRun ?? DEFAULT_MAX_QUERIES_PER_RUN,
@@ -440,7 +440,7 @@ export function createProfileChildRunner(
       });
       const queryCapFailResult = (): ProfileChildRunResult => {
         const summary =
-          `Delegation stopped: the run_query cap (${queryCapState.cap} queries per ` +
+          `Delegation stopped: the query cap (${queryCapState.cap} queries per ` +
           "delegated run) was exceeded. Failed attempts count toward the cap.";
         return {
           content: summary,

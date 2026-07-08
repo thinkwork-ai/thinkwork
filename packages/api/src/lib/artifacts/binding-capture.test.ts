@@ -265,7 +265,7 @@ describe("upsertBindingFromActivityEvent", () => {
     });
   });
 
-  it("THINK-228 U7: a service_credential connector (run_query) classifies as tenant_mcp", async () => {
+  it("THINK-228 U7: a service_credential connector (query) classifies as tenant_mcp", async () => {
     // Plan assumption made explicit: the analyst broker's service_credential
     // auth maps to the unattended-refreshable tenant_mcp authContext — a
     // headless refresh needs no user credential.
@@ -279,7 +279,7 @@ describe("upsertBindingFromActivityEvent", () => {
         descriptor(part, {
           serverRef: "postgres-dev",
           serverName: "postgres-dev",
-          toolName: "run_query",
+          toolName: "query",
           frozenArgs: { sql: "SELECT count(*) FROM threads" },
           resultShapeHash: "analyst-cols-fnv1a:0000abcd",
         }),
@@ -287,7 +287,7 @@ describe("upsertBindingFromActivityEvent", () => {
     });
     expect(mocks.bindingInserts[0]).toMatchObject({
       server_name: "postgres-dev",
-      tool_name: "run_query",
+      tool_name: "query",
       auth_context: "tenant_mcp",
       owner_user_id: null,
       result_shape_hash: "analyst-cols-fnv1a:0000abcd",

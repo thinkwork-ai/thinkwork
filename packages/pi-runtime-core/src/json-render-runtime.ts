@@ -573,7 +573,7 @@ export function buildCanvasDataBinding(input: {
   const frozenArgs = recordValue(source.args) ?? {};
   // Hash the raw MCP response shape when present (what U6's re-invoke returns),
   // else the recorded result — either way the sorted KEY STRUCTURE, not values.
-  // Tool-aware (THINK-228 KTD2): run_query results hash the value-invariant
+  // Tool-aware (THINK-228 KTD2): query results hash the value-invariant
   // columns descriptor instead of the type-sensitive structural hash, so
   // nullable-key churn never breaks refresh.
   const shapeSource = details && "raw" in details ? details.raw : source.result;
