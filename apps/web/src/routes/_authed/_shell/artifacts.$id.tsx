@@ -502,7 +502,7 @@ function DocumentArtifactContent({
 
   return (
     <main className="flex h-full min-h-0 w-full flex-1 flex-col">
-      <DocumentArtifactBody artifact={artifact} />
+      <DocumentArtifactBody artifact={artifact} historyPlacement="side" />
       <ArtifactShareDialog
         artifactId={artifact.id}
         artifactTitle={artifact.title}
