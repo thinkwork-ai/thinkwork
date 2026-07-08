@@ -25,8 +25,6 @@ function n8nDesiredConfig(extra: Record<string, unknown> = {}) {
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-operator",
     serviceCredentialSecretArn:
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
-    agentStepBridgeCredentialSecretArn:
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-bridge",
     storageBucketName: "thinkwork-dev-n8n",
     publicUrl: "https://n8n.example.com",
     certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/n8n",
@@ -534,10 +532,6 @@ describe("managed app deployment adapters", () => {
           value:
             "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
         },
-        n8n_agent_step_bridge_credential_secret_arn: {
-          value:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-bridge",
-        },
       }),
     ).toEqual(
       expect.objectContaining({
@@ -551,8 +545,6 @@ describe("managed app deployment adapters", () => {
           packageConfigDigest: "package-digest-1",
           serviceCredentialSecretArn:
             "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
-          agentStepBridgeCredentialSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-bridge",
         }),
       }),
     );

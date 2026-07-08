@@ -271,11 +271,6 @@ const N8N_INFRA_COMPONENT: InfrastructureComponent = {
         "Secrets Manager ARN containing the tenant service credential used by the native n8n MCP integration.",
       type: "string",
     },
-    agentStepBridgeCredentialSecretArn: {
-      description:
-        "Secrets Manager ARN containing the inbound credential used by n8n workflows to call the ThinkWork agent-step bridge.",
-      type: "string",
-    },
     storageBucketName: {
       description: "S3 bucket name used for n8n binary data and runtime files.",
       type: "string",

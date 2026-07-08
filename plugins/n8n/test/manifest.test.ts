@@ -91,7 +91,6 @@ describe("n8n plugin manifest", () => {
       "encryptionKeySecretArn",
       "operatorSecretArn",
       "serviceCredentialSecretArn",
-      "agentStepBridgeCredentialSecretArn",
       "storageBucketName",
       "publicUrl",
       "certificateArn",
