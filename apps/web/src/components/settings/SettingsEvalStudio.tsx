@@ -3,7 +3,13 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { Database, Download, Loader2, Plus, Trash2 } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
+import {
+  Badge,
+  Button,
+  DataTable,
+  Input,
+  TooltipIconButton,
+} from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
@@ -183,23 +189,17 @@ export function SettingsEvalStudio() {
     ],
     action: tenantId ? (
       <div className={cn("flex items-center", desktopToolbarGapClassName)}>
-        <Button
+        <TooltipIconButton
           asChild
-          variant="ghost"
-          size="icon-sm"
-          title="Datasets"
-          aria-label="Datasets"
+          label="Datasets"
           className={desktopToolbarButtonClassName}
         >
           <Link to="/settings/evaluations/datasets">
             <Database className="size-4" />
           </Link>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title="Import starter pack"
-          aria-label="Import starter pack"
+        </TooltipIconButton>
+        <TooltipIconButton
+          label="Import starter pack"
           className={desktopToolbarButtonClassName}
           disabled={seedState.fetching}
           onClick={async () => {
@@ -229,19 +229,16 @@ export function SettingsEvalStudio() {
           ) : (
             <Download className="size-4" />
           )}
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           asChild
-          variant="ghost"
-          size="icon-sm"
-          title="New test case"
-          aria-label="New test case"
+          label="New test case"
           className={desktopToolbarButtonClassName}
         >
           <Link to="/settings/evaluations/studio/new">
             <Plus className="size-4" />
           </Link>
-        </Button>
+        </TooltipIconButton>
       </div>
     ) : undefined,
     actionKey: `eval-studio:${tenantId ?? ""}:${seedState.fetching}`,

@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
   Textarea,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
@@ -32,18 +33,15 @@ export function SetAppStyleButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
         className={desktopToolbarButtonClassName}
         onClick={() => setOpen(true)}
-        aria-label="Set app style"
-        title="Set app style"
+        label="Set app style"
         data-testid="set-app-style-trigger"
       >
         <Palette className="size-4" />
-      </Button>
+      </TooltipIconButton>
       <SetAppStyleDialog open={open} onOpenChange={setOpen} />
     </>
   );

@@ -26,6 +26,7 @@ import {
   SheetHeader,
   SheetTitle,
   Spinner,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { Response } from "@/components/ai-elements/response";
@@ -1321,13 +1322,10 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
       <div className={cn("flex items-center", desktopToolbarGapClassName)}>
         {isDraft ? (
           <>
-            <Button
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className={desktopToolbarButtonClassName}
-              aria-label="Publish skill draft"
-              title="Publish skill draft"
+              label="Publish skill draft"
               disabled={
                 publishingDraft ||
                 loadingDrafts ||
@@ -1341,36 +1339,30 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
               ) : (
                 <UploadCloud className="size-4" />
               )}
-            </Button>
-            <Button
+            </TooltipIconButton>
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className={
                 trustSheetOpen
                   ? desktopToolbarActiveButtonClassName
                   : desktopToolbarButtonClassName
               }
-              aria-label="Skill trust"
-              title="Skill trust"
+              label="Skill trust"
               onClick={() => setTrustSheetOpen(true)}
             >
               <ShieldCheck className="size-4" />
-            </Button>
+            </TooltipIconButton>
           </>
         ) : (
           <>
-            <Button
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className={
                 skillCardSheetOpen || skillCardLoading
                   ? desktopToolbarActiveButtonClassName
                   : desktopToolbarButtonClassName
               }
-              aria-label="Skill card"
-              title="Skill card"
+              label="Skill card"
               disabled={skillCardLoading}
               onClick={() => void openSkillCard()}
             >
@@ -1379,62 +1371,50 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
               ) : (
                 <FileText className="size-4" />
               )}
-            </Button>
-            <Button
+            </TooltipIconButton>
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className={
                 evalSheetOpen
                   ? desktopToolbarActiveButtonClassName
                   : desktopToolbarButtonClassName
               }
-              aria-label="Skill evals"
-              title="Skill evals"
+              label="Skill evals"
               onClick={() => setEvalSheetOpen(true)}
             >
               <IconFlask className="size-4" />
-            </Button>
-            <Button
+            </TooltipIconButton>
+            <TooltipIconButton
               type="button"
-              variant="ghost"
-              size="icon-sm"
               className={
                 trustSheetOpen
                   ? desktopToolbarActiveButtonClassName
                   : desktopToolbarButtonClassName
               }
-              aria-label="Skill trust"
-              title="Skill trust"
+              label="Skill trust"
               onClick={() => setTrustSheetOpen(true)}
             >
               <ShieldCheck className="size-4" />
-            </Button>
+            </TooltipIconButton>
           </>
         )}
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
           className={
             infoSheetOpen
               ? desktopToolbarActiveButtonClassName
               : desktopToolbarButtonClassName
           }
-          aria-label="Skill info"
-          title="Skill info"
+          label="Skill info"
           onClick={() => setInfoSheetOpen(true)}
         >
           <Info className="size-4" />
-        </Button>
+        </TooltipIconButton>
         {!isDraft ? (
-          <Button
+          <TooltipIconButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
             className={desktopToolbarButtonClassName}
-            aria-label="Export skill archive"
-            title="Export skill archive"
+            label="Export skill archive"
             disabled={exporting}
             onClick={() => void exportSkill()}
           >
@@ -1443,7 +1423,7 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
             ) : (
               <Download className="size-4" />
             )}
-          </Button>
+          </TooltipIconButton>
         ) : null}
       </div>
     ),

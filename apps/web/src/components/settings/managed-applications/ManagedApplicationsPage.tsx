@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Button } from "@thinkwork/ui";
+import { TooltipIconButton } from "@thinkwork/ui";
 import { RefreshCw } from "lucide-react";
 import { ManagedApplicationRow } from "./ManagedApplicationRow";
 import {
@@ -58,18 +58,11 @@ export function ManagedApplicationsPage() {
         title="Applications"
         description="Legacy managed-application operations. Runtime apps move to Plugins once installed."
         actions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={refreshAll}
-            aria-label="Refresh"
-            title="Refresh"
-          >
+          <TooltipIconButton type="button" label="Refresh" onClick={refreshAll}>
             <RefreshCw
               className={`size-4${refreshing ? " animate-spin" : ""}`}
             />
-          </Button>
+          </TooltipIconButton>
         }
       />
 

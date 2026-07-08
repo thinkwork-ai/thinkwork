@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleCheck, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import { Button, cn } from "@thinkwork/ui";
+import { TooltipIconButton, cn } from "@thinkwork/ui";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -131,14 +131,12 @@ export function WorkItemsPage({
     () => (tenantId ? buildWorkItemsInput(tenantId, state) : undefined),
     [state, tenantId],
   );
-  const [{ data, error }, reexecuteItems] = useQuery<WorkItemsResult>(
-    {
-      query: WorkItemsQuery,
-      variables: { input },
-      pause: !tenantId || !input,
-      requestPolicy: "cache-and-network",
-    },
-  );
+  const [{ data, error }, reexecuteItems] = useQuery<WorkItemsResult>({
+    query: WorkItemsQuery,
+    variables: { input },
+    pause: !tenantId || !input,
+    requestPolicy: "cache-and-network",
+  });
   const [{ data: spacesData }] = useQuery<SpacesResult>({
     query: SpacesQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -375,21 +373,18 @@ export function WorkItemsPage({
     actionKey: `work-items:${showDoneItems ? "done-visible" : "done-hidden"}:${JSON.stringify(state)}`,
     action: (
       <div className="flex items-center gap-1">
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          aria-label="New Work Item"
-          title="New Work Item"
+          label="New Work Item"
           onClick={() => setNewWorkItemOpen(true)}
         >
           <Plus className="size-4" />
-        </Button>
+        </TooltipIconButton>
         {state.view === "list" ? (
-          <Button
+          <TooltipIconButton
             type="button"
-            variant="ghost"
             size="icon"
             className={cn(
               "h-8 w-8 text-muted-foreground hover:text-foreground",
@@ -399,24 +394,22 @@ export function WorkItemsPage({
               showDoneItems ? "Hide Done Work Items" : "Show Done Work Items"
             }
             aria-pressed={showDoneItems}
-            title="Done"
+            label="Done"
             onClick={() => setShowDoneItems((current) => !current)}
           >
             <CircleCheck className="size-4" />
-          </Button>
+          </TooltipIconButton>
         ) : null}
         <WorkItemDisplayHeader state={state} onChange={updateState} />
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          aria-label="Refresh Work Items"
-          title="Refresh Work Items"
+          label="Refresh Work Items"
           onClick={() => reexecuteItems({ requestPolicy: "network-only" })}
         >
           <RefreshCw className="size-4" />
-        </Button>
+        </TooltipIconButton>
       </div>
     ),
   });

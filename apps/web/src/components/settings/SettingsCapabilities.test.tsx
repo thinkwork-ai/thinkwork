@@ -150,6 +150,26 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
   );
   return {
     ...actual,
+    TooltipIconButton: ({
+      children,
+      label,
+      tooltipSide,
+      tooltipAlign,
+      tooltipClassName,
+      tooltipDelayDuration,
+      "aria-label": ariaLabel,
+      ...props
+    }: any) => (
+      <button
+        aria-label={
+          ariaLabel ?? (typeof label === "string" ? label : undefined)
+        }
+        {...props}
+      >
+        {children}
+        {typeof label === "string" ? null : label}
+      </button>
+    ),
     Sheet: ({
       open,
       children,
@@ -520,9 +540,9 @@ describe("capability write actions (sheet rows)", () => {
     // The sync window surfaces in the footer status (lower right), NOT as a
     // ghost node in the tree.
     await waitFor(() =>
-      expect(
-        screen.getByTestId("composer-sync-status").textContent,
-      ).toContain("Syncing skill expenses"),
+      expect(screen.getByTestId("composer-sync-status").textContent).toContain(
+        "Syncing skill expenses",
+      ),
     );
     expect(editorProps()).not.toHaveProperty("pendingSkillSlug", "expenses");
 
@@ -965,8 +985,7 @@ describe("folder capabilities from the manifest (THINK-173 U9)", () => {
     const githubRow = screen.getByTestId("add-mcp-row-github");
     expect(githubRow.textContent).toContain("definition_drift");
     expect(
-      (screen.getByTestId("add-mcp-pick-github") as HTMLButtonElement)
-        .disabled,
+      (screen.getByTestId("add-mcp-pick-github") as HTMLButtonElement).disabled,
     ).toBe(false);
     const slackRow = screen.getByTestId("add-mcp-row-slack");
     expect(slackRow.textContent).toContain("active");

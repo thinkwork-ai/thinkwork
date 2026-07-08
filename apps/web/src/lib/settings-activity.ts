@@ -9,6 +9,18 @@ export type ActivityType =
   | "email"
   | "webhook";
 
+interface ActivityUserRef {
+  id: string;
+  name?: string | null;
+  image?: string | null;
+}
+
+interface ActivityParticipantRef {
+  participantType?: string | null;
+  userId?: string | null;
+  user?: ActivityUserRef | null;
+}
+
 export interface ActivityThreadSummary extends ChatThreadSummary {
   channel?: string | null;
   costSummary?: number | null;
@@ -18,6 +30,15 @@ export interface ActivityThreadSummary extends ChatThreadSummary {
     name?: string | null;
     avatarUrl?: string | null;
   } | null;
+  user?: ActivityUserRef | null;
+  participants?: ActivityParticipantRef[] | null;
+}
+
+/** A human participant surfaced in the activity list (starter + mentioned). */
+export interface ActivityParticipant {
+  id: string;
+  name: string;
+  image?: string | null;
 }
 
 export interface ActivityItem {
@@ -31,6 +52,8 @@ export interface ActivityItem {
   cost?: number | null;
   sourceId: string;
   threadId: string;
+  /** Distinct human participants, thread starter first. */
+  participants: ActivityParticipant[];
 }
 
 export type ActivityRecencyBucket =
@@ -165,6 +188,35 @@ export function activityTitle(thread: ActivityThreadSummary): string {
   return prefix ? `${prefix}: ${title}` : title;
 }
 
+function userLabel(user: ActivityUserRef): string {
+  return user.name?.trim() || "Unknown user";
+}
+
+/**
+ * Distinct human participants for a thread — the starter first, then anyone
+ * else who was mentioned / added (thread_participants rows of type USER).
+ * Agent participants are excluded. Deduped by user id.
+ */
+export function activityParticipants(
+  thread: ActivityThreadSummary,
+): ActivityParticipant[] {
+  const seen = new Set<string>();
+  const result: ActivityParticipant[] = [];
+
+  const push = (user: ActivityUserRef | null | undefined) => {
+    if (!user?.id || seen.has(user.id)) return;
+    seen.add(user.id);
+    result.push({ id: user.id, name: userLabel(user), image: user.image });
+  };
+
+  push(thread.user);
+  for (const participant of thread.participants ?? []) {
+    if ((participant.participantType ?? "").toUpperCase() !== "USER") continue;
+    push(participant.user);
+  }
+  return result;
+}
+
 export function mapThreadToActivityItem(
   thread: ActivityThreadSummary,
 ): ActivityItem {
@@ -180,6 +232,7 @@ export function mapThreadToActivityItem(
     cost: thread.costSummary ?? null,
     sourceId: thread.id,
     threadId: thread.id,
+    participants: activityParticipants(thread),
   };
 }
 

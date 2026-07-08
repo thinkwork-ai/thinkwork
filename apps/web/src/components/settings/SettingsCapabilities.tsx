@@ -77,6 +77,7 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
+  TooltipIconButton,
   cn,
 } from "@thinkwork/ui";
 import { Link } from "@tanstack/react-router";
@@ -1279,60 +1280,46 @@ export function SettingsCapabilities({
   // (Evaluations pattern) — the in-body row keeps only search + filters.
   const composerHeaderActions = (
     <div className={cn("flex items-center", desktopToolbarGapClassName)}>
-      <Button
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        title="Agent configuration"
-        aria-label="Agent configuration"
+        label="Agent configuration"
         className={desktopToolbarButtonClassName}
         onClick={() => requestSheet("config")}
         data-testid="open-config-sheet"
       >
         <SlidersHorizontal className="size-4" />
-      </Button>
-      <Button
+      </TooltipIconButton>
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        title="Agent Profiles"
-        aria-label="Agent Profiles"
+        label="Agent Profiles"
         className={desktopToolbarButtonClassName}
         onClick={() => requestSheet("profiles")}
         data-testid="open-profiles-sheet"
       >
         <Bot className="size-4" />
-      </Button>
-      <Button
+      </TooltipIconButton>
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        title="Extensions"
-        aria-label="Extensions"
+        label="Extensions"
         className={desktopToolbarButtonClassName}
         onClick={() => requestSheet("extensions")}
         data-testid="open-extensions-sheet"
       >
         <Puzzle className="size-4" />
-      </Button>
-      <Button
+      </TooltipIconButton>
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        title="Inspector — read-only capability diagnostics"
+        label="Inspector — read-only capability diagnostics"
         aria-label="Inspector"
         className={desktopToolbarButtonClassName}
         onClick={() => requestSheet("inspector")}
         data-testid="open-inspector-view"
       >
         <ScanSearch className="size-4" />
-      </Button>
-      <Button
+      </TooltipIconButton>
+      <TooltipIconButton
         type="button"
-        variant="ghost"
-        size="icon-sm"
-        title="Refresh"
-        aria-label="Refresh"
+        label="Refresh"
         className={desktopToolbarButtonClassName}
         onClick={() => {
           setManualRefreshing(true);
@@ -1343,20 +1330,16 @@ export function SettingsCapabilities({
         <RefreshCw
           className={cn("size-4", manualRefreshing && "animate-spin")}
         />
-      </Button>
+      </TooltipIconButton>
       <Dialog>
         <DialogTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            title="What am I looking at?"
-            aria-label="What am I looking at?"
+          <TooltipIconButton
+            label="What am I looking at?"
             className={desktopToolbarButtonClassName}
             data-testid="view-info-trigger"
           >
             <Info className="size-4" />
-          </Button>
+          </TooltipIconButton>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>

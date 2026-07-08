@@ -24,7 +24,8 @@ describe("N8nPluginHome", () => {
     expect(home).not.toContain("tabs:");
     expect(home).not.toContain("N8N_WORKFLOWS");
     expect(home).not.toContain("N8N_SETTINGS");
-    expect(home).toContain('aria-label="Open n8n UI"');
+    // TooltipIconButton derives the accessible name from its string `label`.
+    expect(home).toContain('label="Open n8n UI"');
     expect(home).toContain(
       'window.open(launchUrl, "_blank", "noopener,noreferrer")',
     );
@@ -52,7 +53,9 @@ describe("N8nPluginHome", () => {
     expect(home).toContain("Install update");
     expect(home).toContain("componentsHeaderAction");
     expect(home).toContain("{componentsHeaderAction}");
-    expect(home).toContain('className="mb-3 flex items-center justify-between gap-3"');
+    expect(home).toContain(
+      'className="mb-3 flex items-center justify-between gap-3"',
+    );
     expect(
       (home.match(/onClick=\{\(\) => void installN8n\(\)\}/g) ?? []).length,
     ).toBeGreaterThanOrEqual(2);

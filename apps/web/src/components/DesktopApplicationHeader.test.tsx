@@ -49,6 +49,24 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("@thinkwork/ui", () => ({
+  TooltipIconButton: ({
+    children,
+    label,
+    tooltipSide,
+    tooltipAlign,
+    tooltipClassName,
+    tooltipDelayDuration,
+    "aria-label": ariaLabel,
+    ...props
+  }: any) => (
+    <button
+      aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
+      {...props}
+    >
+      {children}
+      {typeof label === "string" ? null : label}
+    </button>
+  ),
   Button: ({
     asChild,
     children,

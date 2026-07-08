@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import { Button, cn } from "@thinkwork/ui";
+import { Button, cn, TooltipIconButton } from "@thinkwork/ui";
 import {
   AppletFailure,
   AppletLoading,
@@ -436,43 +436,37 @@ function DocumentArtifactContent({
   const composedHeaderAction = useMemo<ReactNode>(
     () => (
       <div className="flex items-center gap-1">
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="text-muted-foreground hover:text-foreground"
-          title="Share"
-          aria-label="Share"
+          label="Share"
           onClick={() => setShareOpen(true)}
           data-testid="document-share"
         >
           <Share2 className="size-4" />
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="text-muted-foreground hover:text-foreground"
-          title="Download"
-          aria-label="Download"
+          label="Download"
           onClick={downloadDocument}
           disabled={!artifact.renderHtml}
           data-testid="document-download"
         >
           <Download className="size-4" />
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className="text-muted-foreground hover:text-foreground"
-          title="Delete"
-          aria-label="Delete"
+          label="Delete"
           onClick={() => setDeleteOpen(true)}
           data-testid="document-delete"
         >
           <Trash2 className="size-4" />
-        </Button>
+        </TooltipIconButton>
       </div>
     ),
     [artifact.renderHtml, downloadDocument],

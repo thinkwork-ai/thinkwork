@@ -51,6 +51,7 @@ import {
   SheetHeader,
   SheetTitle,
   Textarea,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { CollapsedFilterSearch } from "@/components/artifacts/CollapsedFilterSearch";
@@ -719,10 +720,10 @@ export function SettingsEvalRunDetail() {
           <span className="text-xs text-muted-foreground">{dateLabel}</span>
         )}
         {isRunning ? (
-          <Button
-            variant="ghost"
+          <TooltipIconButton
+            label="Stop run"
             size="icon"
-            className="text-muted-foreground hover:text-destructive h-8 w-8"
+            className="h-8 w-8 hover:text-destructive"
             onClick={handleCancel}
             disabled={cancelling}
           >
@@ -731,17 +732,17 @@ export function SettingsEvalRunDetail() {
             ) : (
               <Square className="h-4 w-4" />
             )}
-          </Button>
+          </TooltipIconButton>
         ) : (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
+              <TooltipIconButton
+                label="Delete run"
                 size="icon"
-                className="text-muted-foreground hover:text-destructive h-8 w-8"
+                className="h-8 w-8 hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
-              </Button>
+              </TooltipIconButton>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -886,16 +887,14 @@ export function SettingsEvalRunDetail() {
         </span>
       )}
       {runDetail.datasetId && !isRunning && (
-        <Button
-          variant="ghost"
+        <TooltipIconButton
           size="icon"
           className="text-muted-foreground h-8 w-8"
-          title="Compare with previous run"
-          aria-label="Compare with previous run"
+          label="Compare with previous run"
           onClick={() => setCompareOpen(true)}
         >
           <GitCompareArrows className="h-4 w-4" />
-        </Button>
+        </TooltipIconButton>
       )}
       {runDetail.costUsd != null && Number(runDetail.costUsd) > 0 && (
         <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">

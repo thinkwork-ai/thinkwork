@@ -23,6 +23,7 @@ import {
   Button,
   DataTable,
   Switch,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -262,12 +263,10 @@ export function SettingsEvalDatasetDetail() {
             archived
           </Badge>
         )}
-        <Button
-          variant="ghost"
+        <TooltipIconButton
           size="icon"
           className="h-8 w-8 text-muted-foreground"
-          title="Run this dataset"
-          aria-label="Run this dataset"
+          label="Run this dataset"
           disabled={starting || Boolean(dataset.archivedAt)}
           onClick={() => void handleRun()}
         >
@@ -276,7 +275,7 @@ export function SettingsEvalDatasetDetail() {
           ) : (
             <Play className="h-4 w-4" />
           )}
-        </Button>
+        </TooltipIconButton>
       </div>
     ) : undefined,
     actionKey: `eval-dataset:${slug}:${dataset?.version ?? ""}:${starting}`,

@@ -8,7 +8,7 @@ import {
 import { ChevronRight, ExternalLink, FileText, Info } from "lucide-react";
 import { IconFiles } from "@tabler/icons-react";
 import { useQuery, useSubscription } from "urql";
-import { Badge, Button, cn } from "@thinkwork/ui";
+import { Badge, Button, TooltipIconButton, cn } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
@@ -317,9 +317,8 @@ export function SettingsActivityThreadDetail({
     breadcrumbs: [...breadcrumbParents, { label: displayTitle }],
     action: (
       <div className="flex items-center gap-1">
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className={cn(
             "h-8 w-8",
@@ -327,10 +326,7 @@ export function SettingsActivityThreadDetail({
               ? "text-foreground"
               : "text-muted-foreground hover:text-foreground",
           )}
-          aria-label={
-            filesModeOpen ? "Close thread files" : "Open thread files"
-          }
-          title={filesModeOpen ? "Close thread files" : "Open thread files"}
+          label={filesModeOpen ? "Close thread files" : "Open thread files"}
           onClick={() => {
             const nextOpen = !filesModeOpen;
             setFilesModeOpen(nextOpen);
@@ -338,10 +334,9 @@ export function SettingsActivityThreadDetail({
           }}
         >
           <IconFiles className="h-4 w-4" />
-        </Button>
-        <Button
+        </TooltipIconButton>
+        <TooltipIconButton
           type="button"
-          variant="ghost"
           size="icon"
           className={cn(
             "h-8 w-8",
@@ -349,12 +344,7 @@ export function SettingsActivityThreadDetail({
               ? "text-foreground"
               : "text-muted-foreground hover:text-foreground",
           )}
-          aria-label={
-            propertiesOpen
-              ? "Close thread properties"
-              : "Open thread properties"
-          }
-          title={
+          label={
             propertiesOpen
               ? "Close thread properties"
               : "Open thread properties"
@@ -362,7 +352,7 @@ export function SettingsActivityThreadDetail({
           onClick={() => setPropertiesOpen((open) => !open)}
         >
           <Info className="h-4 w-4" />
-        </Button>
+        </TooltipIconButton>
       </div>
     ),
     actionKey: `thread-actions-${filesModeOpen ? "files" : "trace"}-${propertiesOpen ? "props-open" : "props-closed"}`,

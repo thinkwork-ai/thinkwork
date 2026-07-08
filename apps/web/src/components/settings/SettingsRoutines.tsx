@@ -19,7 +19,6 @@ import {
 } from "@tanstack/react-table";
 import {
   Badge,
-  Button,
   DataTable,
   DataTableTokenFilter,
   type DataTableTokenFilterColumn,
@@ -29,6 +28,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { ExternalLink, Settings2 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
@@ -230,17 +230,14 @@ export function SettingsRoutines({
   );
 
   const repoSettingsCog = (
-    <Button
+    <TooltipIconButton
       type="button"
-      variant="ghost"
-      size="icon-sm"
-      aria-label="Routine repo settings"
-      title="Routine repo settings"
+      label="Routine repo settings"
       className="text-muted-foreground hover:text-foreground"
       onClick={() => setConfigOpen(true)}
     >
       <Settings2 className="size-4" />
-    </Button>
+    </TooltipIconButton>
   );
 
   const columns = useMemo<ColumnDef<GitRoutine>[]>(

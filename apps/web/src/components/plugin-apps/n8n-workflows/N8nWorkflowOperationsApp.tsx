@@ -11,6 +11,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import {
   ThinkWorkN8nWorkflowsApp,
@@ -66,47 +67,31 @@ export function N8nWorkflowOperationsApp({
     () => (
       <div className="flex items-center gap-1">
         {nativeBaseUrl ? (
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            asChild
-            title="Open in n8n"
-            aria-label="Open in n8n"
-            className="text-muted-foreground hover:text-foreground"
-          >
+          <TooltipIconButton type="button" asChild label="Open in n8n">
             <a href={nativeBaseUrl} target="_blank" rel="noreferrer">
               <ExternalLink className="size-3.5" />
-              <span className="sr-only">Open in n8n</span>
             </a>
-          </Button>
+          </TooltipIconButton>
         ) : (
-          <Button
+          <TooltipIconButton
             type="button"
-            size="icon-sm"
-            variant="ghost"
-            className="text-muted-foreground hover:text-foreground"
-            disabled
-            title="Open in n8n unavailable until n8n URL is absolute"
+            label="Open in n8n unavailable until n8n URL is absolute"
             aria-label="Open in n8n"
+            disabled
           >
             <ExternalLink className="size-3.5" />
-          </Button>
+          </TooltipIconButton>
         )}
-        <Button
+        <TooltipIconButton
           type="button"
-          size="icon-sm"
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
+          label="Refresh"
           onClick={refresh}
           disabled={result.fetching}
-          title="Refresh"
-          aria-label="Refresh"
         >
           <RefreshCcw
             className={`size-3.5 ${result.fetching ? "animate-spin" : ""}`}
           />
-        </Button>
+        </TooltipIconButton>
       </div>
     ),
     [nativeBaseUrl, refresh, result.fetching],

@@ -12,9 +12,9 @@ import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
   Badge,
-  Button,
   DataTable,
   DataTableTokenFilter,
+  TooltipIconButton,
   dataTableTokenFilterFns,
   type DataTableTokenFilterColumn,
 } from "@thinkwork/ui";
@@ -414,17 +414,13 @@ export function AgentLoopInventory({
         description="Create, run, and inspect recurring or webhook automations."
         loading={loopsResult.fetching && !loopsResult.data}
         headerActions={
-          <Button
+          <TooltipIconButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="New automation"
-            title="New automation"
-            className="text-muted-foreground hover:text-foreground"
+            label="New automation"
             onClick={() => setCreating(true)}
           >
             <Plus className="size-4" />
-          </Button>
+          </TooltipIconButton>
         }
         headerActionKey="agent-loops-create"
         toolbar={

@@ -11,6 +11,26 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
   );
   return {
     ...actual,
+    TooltipIconButton: ({
+      children,
+      label,
+      tooltipSide,
+      tooltipAlign,
+      tooltipClassName,
+      tooltipDelayDuration,
+      "aria-label": ariaLabel,
+      ...props
+    }: any) => (
+      <button
+        aria-label={
+          ariaLabel ?? (typeof label === "string" ? label : undefined)
+        }
+        {...props}
+      >
+        {children}
+        {typeof label === "string" ? null : label}
+      </button>
+    ),
     ResizablePanelGroup: pass,
     ResizablePanel: pass,
     ResizableHandle: () => <div data-testid="resizable-handle" />,

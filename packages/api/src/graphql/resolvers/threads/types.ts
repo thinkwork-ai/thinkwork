@@ -26,7 +26,10 @@ import {
   runtimeTypeFromTurn,
 } from "../triggers/threadTurnRuntime.js";
 import { toGraphqlSpace } from "../spaces/shared.js";
-import { deriveThreadMode, type ThreadMode } from "../../../lib/threads/thread-mode.js";
+import {
+  deriveThreadMode,
+  type ThreadMode,
+} from "../../../lib/threads/thread-mode.js";
 
 const THREAD_PARTICIPANT_ENUM_FIELDS = new Set([
   "participantType",
@@ -69,17 +72,8 @@ export const threadTypeResolvers = {
       .where(and(...conditions));
     return row ? toGraphqlSpace(row) : null;
   },
-  participants: async (thread: any) => {
-    const threadTenantId = thread.tenantId ?? thread.tenant_id ?? null;
-    const conditions = [eq(threadParticipants.thread_id, thread.id)];
-    if (typeof threadTenantId === "string" && threadTenantId.length > 0) {
-      conditions.push(eq(threadParticipants.tenant_id, threadTenantId));
-    }
-    const rows = await db
-      .select()
-      .from(threadParticipants)
-      .where(and(...conditions))
-      .orderBy(asc(threadParticipants.created_at));
+  participants: async (thread: any, _args: any, ctx: GraphQLContext) => {
+    const rows = await ctx.loaders.threadParticipants.load(thread.id);
     return rows.map((row) => threadParticipantToCamel(row));
   },
   user: (thread: any, _args: any, ctx: GraphQLContext) => {

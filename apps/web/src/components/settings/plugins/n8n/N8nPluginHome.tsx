@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Badge, Button } from "@thinkwork/ui";
+import { Badge, Button, TooltipIconButton } from "@thinkwork/ui";
 import {
   Collapsible,
   CollapsibleContent,
@@ -180,19 +180,15 @@ export function N8nPluginHome() {
     ],
     action: launchUrl ? (
       <div className="flex items-center gap-1">
-        <Button
+        <TooltipIconButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Open n8n UI"
-          title="Open n8n UI"
-          className="text-muted-foreground hover:text-foreground"
+          label="Open n8n UI"
           onClick={() => {
             window.open(launchUrl, "_blank", "noopener,noreferrer");
           }}
         >
           <ExternalLink className="size-4" />
-        </Button>
+        </TooltipIconButton>
       </div>
     ) : null,
     actionKey: [install?.id ?? "missing", launchUrl ?? "no-launch-url"].join(
@@ -229,8 +225,8 @@ export function N8nPluginHome() {
               !isOperator
                 ? "Plugin installation is available to workspace operators."
                 : entry
-                ? `Latest version v${entry.latestVersion}.`
-                : "Installs the latest n8n version from the plugin catalog."
+                  ? `Latest version v${entry.latestVersion}.`
+                  : "Installs the latest n8n version from the plugin catalog."
             }
           >
             <Button
@@ -254,8 +250,8 @@ export function N8nPluginHome() {
               !isOperator
                 ? "Plugin updates are available to workspace operators."
                 : newScopes.length > 0
-                ? `This update requests new permissions (${newScopes.join(", ")}). Connected users will need to reconnect.`
-                : "No re-authentication required."
+                  ? `This update requests new permissions (${newScopes.join(", ")}). Connected users will need to reconnect.`
+                  : "No re-authentication required."
             }
           >
             <Button
@@ -309,9 +305,7 @@ export function N8nPluginHome() {
                 <span>Components</span>
                 {components.length ? (
                   <Badge
-                    variant={
-                      allComponentsProvisioned ? "outline" : "secondary"
-                    }
+                    variant={allComponentsProvisioned ? "outline" : "secondary"}
                     className={
                       allComponentsProvisioned
                         ? "border-emerald-500/40 text-emerald-400"
