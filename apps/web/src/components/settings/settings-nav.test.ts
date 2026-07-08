@@ -15,8 +15,8 @@ const BILLING = "/settings/billing";
 const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
 const EVALUATIONS = "/settings/evaluations";
-const AUTOMATIONS = "/settings/automations";
 const ARTIFACTS = "/settings/artifacts";
+const WORKFLOWS = "/settings/workflows";
 
 describe("visibleSettingsNavItems", () => {
   it("no longer lists a standalone Main Agent entry (editor lives on Agents)", () => {
@@ -115,14 +115,23 @@ describe("visibleSettingsNavItems", () => {
     expect(item?.icon).toBe(IconFlask);
   });
 
-  it("uses Automations as the user-facing automation route", () => {
-    const item = SETTINGS_NAV_ITEMS.find((i) => i.label === "Automations");
+  it("collapses Automations and Routines into a single Workflows nav entry (THINK-218)", () => {
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Automations")).toBe(
+      false,
+    );
+    expect(
+      SETTINGS_NAV_ITEMS.some((i) => i.to === "/settings/automations"),
+    ).toBe(false);
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Routines")).toBe(false);
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === "/settings/routines")).toBe(
+      false,
+    );
+
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.label === "Workflows");
     expect(item).toBeDefined();
-    expect(item?.to).toBe(AUTOMATIONS);
+    expect(item?.to).toBe(WORKFLOWS);
     expect(item?.operatorOnly).toBe(true);
-    expect(settingsCrumbForPath(AUTOMATIONS)).toEqual([
-      { label: "Automations" },
-    ]);
+    expect(settingsCrumbForPath(WORKFLOWS)).toEqual([{ label: "Workflows" }]);
   });
 
   it("shows Model Catalog to operators and hides it for members", () => {

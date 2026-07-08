@@ -272,7 +272,63 @@ extend type Query {
   workflowRun(id: ID!): WorkflowRun
 }
 
+"""
+Definition validation error in ThinkWork terms (THINK-214 R4) — step, field,
+reason. Never ASL vocabulary.
+"""
+type WorkflowDefinitionError {
+  stepId: String
+  field: String!
+  reason: String!
+}
+
+input WorkflowScheduleTriggerInput {
+  """
+  EventBridge Scheduler expression: rate(...) or cron(...).
+  """
+  scheduleExpression: String!
+  timezone: String
+  enabled: Boolean
+}
+
+input SaveWorkflowTriggerInput {
+  """
+  manual | schedule | webhook
+  """
+  family: String!
+  schedule: WorkflowScheduleTriggerInput
+}
+
+input SaveWorkflowInput {
+  """
+  Update when present; create otherwise.
+  """
+  id: ID
+  name: String
+  description: String
+  """
+  The versioned workflow definition document (typed steps + optional continuation policy).
+  """
+  definition: AWSJSON
+  trigger: SaveWorkflowTriggerInput
+  enabled: Boolean
+}
+
+"""
+Validation failures return errors with workflow null — form-friendly, never a
+GraphQL throw for definition problems.
+"""
+type SaveWorkflowResult {
+  workflow: Workflow
+  errors: [WorkflowDefinitionError!]!
+  """
+  Present when the workflow has a webhook trigger — the caller-facing URL path (/webhooks/<token>).
+  """
+  webhookToken: String
+}
+
 extend type Mutation {
+  saveWorkflow(input: SaveWorkflowInput!): SaveWorkflowResult!
   deleteWorkflow(id: ID!): ID!
   triggerWorkflowRun(input: TriggerWorkflowRunInput!): WorkflowRun!
   resolveWorkflowApproval(

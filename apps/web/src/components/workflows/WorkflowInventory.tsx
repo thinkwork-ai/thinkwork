@@ -25,7 +25,10 @@ import {
   SettingsDeploymentStatusQuery,
   SettingsPluginCatalogQuery,
 } from "@/lib/settings-queries";
-import { SettingsTablePane } from "@/components/settings/SettingsContent";
+import {
+  SettingsTablePane,
+  settingsLinkActionClassName,
+} from "@/components/settings/SettingsContent";
 import {
   primaryBinding,
   sourceLabel,
@@ -34,6 +37,7 @@ import {
   type WorkflowBinding,
   WorkflowReadinessBadge,
 } from "./workflow-ui";
+import { WorkflowFormDialog } from "./WorkflowFormDialog";
 
 type WorkflowRow = {
   id: string;
@@ -116,10 +120,17 @@ function uniqueOptions(
   return Array.from(new Set(rows.map(getValue).filter(Boolean))).sort();
 }
 
-export function WorkflowInventory() {
+export function WorkflowInventory({
+  embedded = false,
+}: {
+  /** When true, suppress the header-bar breadcrumb — a parent (the Workflows
+   *  tabs page) already owns it. */
+  embedded?: boolean;
+}) {
   const { tenantId } = useTenant();
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const [result] = useQuery<WorkflowsData>({
+  const [result, refetch] = useQuery<WorkflowsData>({
     query: SettingsWorkflowsQuery,
     variables: { tenantId: tenantId ?? "", limit: 100 },
     pause: !tenantId,
@@ -264,6 +275,16 @@ export function WorkflowInventory() {
       title="Workflows"
       description="Monitor workflows imported from routines, plugins, connected apps, and native ThinkWork sources."
       loading={loading}
+      embedded={embedded}
+      actions={
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className={settingsLinkActionClassName}
+        >
+          + New workflow
+        </button>
+      }
     >
       {result.error ? (
         <div className="rounded-md border border-destructive/30 p-4 text-sm text-destructive">
@@ -294,6 +315,11 @@ export function WorkflowInventory() {
           </div>
         </div>
       )}
+      <WorkflowFormDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={() => refetch({ requestPolicy: "network-only" })}
+      />
     </SettingsTablePane>
   );
 }

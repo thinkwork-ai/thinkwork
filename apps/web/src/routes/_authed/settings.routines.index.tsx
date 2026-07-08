@@ -1,11 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsRoutines } from "@/components/settings/SettingsRoutines";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// THINK-218: the Routines list is now the Library tab of the unified
+// Workflows section. Routine *detail* routes (settings.routines.$routineId
+// etc.) keep working unchanged — only the list index redirects.
 export const Route = createFileRoute("/_authed/settings/routines/")({
-  component: () => (
-    <OperatorGuard>
-      <SettingsRoutines />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/workflows", search: { tab: "library" } });
+  },
 });

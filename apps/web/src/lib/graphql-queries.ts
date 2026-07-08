@@ -475,6 +475,29 @@ export const SettingsWorkflowRunQuery = gql`
   }
 `;
 
+export const SaveWorkflowMutation = gql`
+  mutation SaveWorkflow($input: SaveWorkflowInput!) {
+    saveWorkflow(input: $input) {
+      workflow {
+        id
+        name
+        slug
+        description
+        lifecycleStatus
+        primaryTriggerFamily
+        currentVersionNumber
+        updatedAt
+      }
+      errors {
+        stepId
+        field
+        reason
+      }
+      webhookToken
+    }
+  }
+`;
+
 export const ResolveWorkflowApprovalMutation = gql`
   mutation ResolveWorkflowApproval(
     $runId: ID!

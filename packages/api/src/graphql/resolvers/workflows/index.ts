@@ -1,4 +1,5 @@
 import { deleteWorkflow } from "./deleteWorkflow.mutation.js";
+import { saveWorkflow } from "./saveWorkflow.mutation.js";
 import { resolveWorkflowApproval } from "./resolveWorkflowApproval.mutation.js";
 import { triggerWorkflowRun } from "./triggerWorkflowRun.mutation.js";
 import { workflow } from "./workflow.query.js";
@@ -15,6 +16,7 @@ export const workflowQueries = {
 
 export const workflowMutations = {
   deleteWorkflow,
+  saveWorkflow,
   resolveWorkflowApproval,
   triggerWorkflowRun,
 };

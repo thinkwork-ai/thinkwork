@@ -1,18 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { AgentLoopDetail } from "@/components/agent-loops/AgentLoopDetail";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// THINK-218: legacy Agent Loop detail deep links redirect to the unified
+// Workflows list.
 export const Route = createFileRoute(
   "/_authed/settings/agent-loops/$agentLoopId",
 )({
-  component: AgentLoopDetailRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/workflows" });
+  },
 });
-
-function AgentLoopDetailRoute() {
-  const { agentLoopId } = Route.useParams();
-  return (
-    <OperatorGuard>
-      <AgentLoopDetail agentLoopId={agentLoopId} />
-    </OperatorGuard>
-  );
-}

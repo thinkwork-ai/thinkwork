@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -22,7 +22,6 @@ import {
   TabsTrigger,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
-import { RoutineDefinitionPanel } from "@/components/routines/RoutineDefinitionPanel";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -30,11 +29,14 @@ import {
   DeleteWorkflowMutation,
   SettingsWorkflowQuery,
 } from "@/lib/graphql-queries";
+import { DefinitionStepsPanel } from "./DefinitionStepsPanel";
+import { WorkflowFormDialog } from "./WorkflowFormDialog";
 import {
   DefinitionList,
   formatDateTime,
   formatDuration,
   InfoCard,
+  jsonRecord,
   JsonPreview,
   primaryBinding,
   readinessReasonText,
@@ -103,6 +105,7 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
   const [deleteState, deleteWorkflowMutation] = useMutation(
     DeleteWorkflowMutation,
   );
+  const [editOpen, setEditOpen] = useState(false);
 
   const workflow = result.data?.workflow ?? null;
   const binding = primaryBinding(workflow?.bindings);
@@ -111,6 +114,10 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     binding?.bindingType === "step_functions_routine"
       ? binding.routineId
       : null;
+  const primaryTrigger = workflow?.triggers.find(
+    (trigger) => trigger.triggerFamily === workflow.primaryTriggerFamily,
+  );
+  const triggerConfig = jsonRecord(primaryTrigger?.triggerConfig);
 
   async function deleteWorkflow() {
     if (!workflow) return;
@@ -213,6 +220,14 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
         badge={<SourceBadge binding={binding} />}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setEditOpen(true)}
+            >
+              Edit
+            </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
@@ -262,18 +277,13 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
         }
       />
       <Tabs
-        defaultValue={routineId ? "step-functions" : "overview"}
+        defaultValue="overview"
         className="flex min-h-0 flex-1 flex-col gap-4"
       >
         <TabsList variant="line" className="w-full justify-start border-b">
           <TabsTrigger value="overview" className="flex-none px-3">
             Overview
           </TabsTrigger>
-          {routineId ? (
-            <TabsTrigger value="step-functions" className="flex-none px-3">
-              Step Functions
-            </TabsTrigger>
-          ) : null}
           <TabsTrigger value="runs" className="flex-none px-3">
             Runs
           </TabsTrigger>
@@ -377,19 +387,6 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
           </div>
         </TabsContent>
 
-        {routineId ? (
-          <TabsContent
-            value="step-functions"
-            className="min-h-0 flex-1 overflow-hidden"
-          >
-            <RoutineDefinitionPanel
-              routineId={routineId}
-              onPublished={() => refetch({ requestPolicy: "network-only" })}
-              layout="workspace"
-            />
-          </TabsContent>
-        ) : null}
-
         <TabsContent value="runs" className="min-h-0 flex-1 overflow-y-auto">
           <DataTable
             columns={runColumns}
@@ -449,7 +446,12 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
                 }
               />
             </InfoCard>
-            <InfoCard title="Definition" className="xl:col-span-2">
+            <div className="xl:col-span-2">
+              <DefinitionStepsPanel
+                definition={workflow.currentVersion?.definitionSnapshot}
+              />
+            </div>
+            <InfoCard title="Raw definition (JSON)" className="xl:col-span-2">
               <JsonPreview
                 value={workflow.currentVersion?.definitionSnapshot}
               />
@@ -457,6 +459,31 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
           </div>
         </TabsContent>
       </Tabs>
+      <WorkflowFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        initialWorkflow={{
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          trigger: {
+            family: workflow.primaryTriggerFamily,
+            scheduleExpression:
+              typeof triggerConfig.scheduleExpression === "string"
+                ? triggerConfig.scheduleExpression
+                : null,
+            timezone:
+              typeof triggerConfig.timezone === "string"
+                ? triggerConfig.timezone
+                : null,
+          },
+          definition: workflow.currentVersion?.definitionSnapshot,
+        }}
+        onSaved={(_workflow, webhookToken) => {
+          refetch({ requestPolicy: "network-only" });
+          if (!webhookToken) setEditOpen(false);
+        }}
+      />
     </div>
   );
 }

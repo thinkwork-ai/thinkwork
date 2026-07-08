@@ -7,7 +7,7 @@
  * connection in a side sheet (SettingsRoutineRepo, reused).
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
@@ -110,7 +110,13 @@ function moduleUrl(
   return `${base}/blob/${branch ?? "main"}/${modulePath}`;
 }
 
-export function SettingsRoutines() {
+export function SettingsRoutines({
+  embedded = false,
+}: {
+  /** When true, suppress the header-bar breadcrumb and cog action — a parent
+   *  (the Workflows tabs page, Library tab) already owns the page header. */
+  embedded?: boolean;
+}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -223,23 +229,19 @@ export function SettingsRoutines() {
     [],
   );
 
-  usePageHeaderActions({
-    title: "Routines",
-    action: (
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Routine repo settings"
-        title="Routine repo settings"
-        className="text-muted-foreground hover:text-foreground"
-        onClick={() => setConfigOpen(true)}
-      >
-        <Settings2 className="size-4" />
-      </Button>
-    ),
-    actionKey: "routines-config-cog",
-  });
+  const repoSettingsCog = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Routine repo settings"
+      title="Routine repo settings"
+      className="text-muted-foreground hover:text-foreground"
+      onClick={() => setConfigOpen(true)}
+    >
+      <Settings2 className="size-4" />
+    </Button>
+  );
 
   const columns = useMemo<ColumnDef<GitRoutine>[]>(
     () => [
@@ -363,10 +365,12 @@ export function SettingsRoutines() {
 
   return (
     <>
+      {embedded ? null : <RoutinesHeaderAction action={repoSettingsCog} />}
       <SettingsTablePane
         title="Routines"
         description="Reliable, repeatable routines that handle recurring work automatically — ask your agent to create one and it takes care of the rest."
         loading={routinesResult.fetching && routines.length === 0 && !error}
+        embedded={embedded}
         toolbar={
           error ? (
             <p className="text-sm text-destructive">{error.message}</p>
@@ -394,6 +398,7 @@ export function SettingsRoutines() {
                 className="max-w-full"
                 popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
               />
+              {embedded ? repoSettingsCog : null}
             </div>
           )
         }
@@ -449,4 +454,16 @@ export function SettingsRoutines() {
       </Sheet>
     </>
   );
+}
+
+/** Publishes the "Routine repo settings" cog to the page header — split out
+ *  so the non-embedded page can render it conditionally without violating
+ *  the rules of hooks (mirrors SettingsContent's TablePaneHeader pattern). */
+function RoutinesHeaderAction({ action }: { action: ReactNode }) {
+  usePageHeaderActions({
+    title: "Routines",
+    action,
+    actionKey: "routines-config-cog",
+  });
+  return null;
 }
