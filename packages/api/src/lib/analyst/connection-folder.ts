@@ -36,7 +36,7 @@ export const ANALYST_SCHEMA_FILE = "SCHEMA.md";
 
 /** The analyst-specific prose appended to the generated CONNECTION.md. */
 export const ANALYST_CONNECTION_GUIDANCE = `
-## Writing SQL for run_query
+## Writing SQL for the query tool
 
 Read [SCHEMA.md](./SCHEMA.md) in this folder BEFORE writing any SQL — it is
 the generated semantic model for this data source: every granted table with
@@ -167,7 +167,7 @@ export async function materializeAnalystConnectionFolder(input: {
       definition,
       sidecar: {
         enabled: true,
-        permissions: { operations: ["run_query"] },
+        permissions: { operations: ["query"] },
         config: { registryServerId: row.id },
       },
       signedBy,

@@ -112,7 +112,7 @@ describe("analyst connection folder (U5)", () => {
       expect(s3.objects.get(`${base}SCHEMA.md`)).toContain("semantic model");
       const sidecar = JSON.parse(s3.objects.get(`${base}.assignment.json`)!);
       expect(sidecar.enabled).toBe(true);
-      expect(sidecar.permissions).toEqual({ operations: ["run_query"] });
+      expect(sidecar.permissions).toEqual({ operations: ["query"] });
       expect(sidecar.config).toEqual({ registryServerId: ROW.id });
       expect(sidecar.signature.signed_by).toBe(
         "operator:provision-analyst-connector",

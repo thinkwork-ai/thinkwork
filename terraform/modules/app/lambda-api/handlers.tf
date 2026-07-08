@@ -682,7 +682,7 @@ resource "aws_lambda_function" "handler" {
     # @thinkwork/admin-ops package as MCP tools for managed agents.
     "admin-ops-mcp",
     # Analyst query broker — first-party MCP server at POST /mcp/analyst
-    # (THINK-228 U3). One tool, run_query: EXPLAIN-gated, extended-protocol
+    # (THINK-228 U3). One tool, query: EXPLAIN-gated, extended-protocol
     # single-statement SQL as the analyst_reader role; large results stage
     # to S3 under analyst-staging/; every query emits a data.query_executed
     # compliance audit event via POST /api/compliance/events.
@@ -1425,7 +1425,7 @@ locals {
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
 
-      # Analyst query broker — first-party MCP server exposing run_query
+      # Analyst query broker — first-party MCP server exposing query
       # (THINK-228 U3). Callers present the tenant-wide broker service
       # credential as Bearer; SQL executes as the hardened analyst_reader
       # role. The seeded postgres-dev connector row points at this route.

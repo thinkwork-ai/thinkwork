@@ -82,7 +82,7 @@ export const mintArtifactShareLink = async (
     });
   }
   // THINK-228 KTD9: analyst-sourced artifacts are excluded from external
-  // share links in v1. A run_query binding means the artifact refreshes
+  // share links in v1. A query binding means the artifact refreshes
   // against a data source with no row-level tenant scoping yet — sharing it
   // externally would turn a bounded in-thread exposure into indefinite
   // cross-tenant data access by anyone with the URL. Fail closed (explicit
@@ -93,7 +93,7 @@ export const mintArtifactShareLink = async (
     .where(
       and(
         eq(artifactDataBindings.artifact_id, artifactId),
-        eq(artifactDataBindings.tool_name, "run_query"),
+        eq(artifactDataBindings.tool_name, "query"),
       ),
     )
     .limit(1);

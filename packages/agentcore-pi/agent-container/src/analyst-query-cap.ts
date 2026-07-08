@@ -1,15 +1,15 @@
 /**
- * Analyst run_query in-loop cap + sandbox result-landing (THINK-228 U6).
+ * Analyst query in-loop cap + sandbox result-landing (THINK-228 U6).
  *
  * KTD3: the per-delegation query cap lives HERE, in the delegation loop,
  * in-process — no counter store, no run-id injection. The host-side loop
- * counts `run_query` invocations per child session in memory and, once
+ * counts `query` invocations per child session in memory and, once
  * the cap is reached, refuses further calls; the runner then forces the
  * delegation to end with a structured `Verdict: fail`. The model cannot
  * mask or bypass it because the loop, not the model, owns the count —
  * the R6 verbatim-error self-repair loop still counts every attempt.
  *
- * KTD2 file facet (R7/AE2): when a run_query envelope carries a
+ * KTD2 file facet (R7/AE2): when a query envelope carries a
  * `result_file` S3 reference, the wrapper downloads the staged CSV into
  * the child session's local data directory (mirroring the
  * message-attachment staging pattern) and rewrites the model-visible
@@ -26,7 +26,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 import { getMcpAgentToolIdentity } from "./mcp.js";
 
-export const ANALYST_QUERY_TOOL_NAME = "run_query";
+export const ANALYST_QUERY_TOOL_NAME = "query";
 export const DEFAULT_MAX_QUERIES_PER_RUN = 12;
 
 /** Only keys under this prefix are ever fetched (broker staging area). */
@@ -38,7 +38,7 @@ export class AnalystQueryCapError extends Error {
     readonly attempted: number,
   ) {
     super(
-      `Query cap reached: this delegation already ran ${cap} run_query ` +
+      `Query cap reached: this delegation already ran ${cap} query ` +
         "calls (failed attempts count). No further queries are allowed in " +
         "this run — return your findings from the data you have.",
     );
@@ -106,7 +106,7 @@ async function defaultS3Client(): Promise<{
 }
 
 /**
- * Land a run_query envelope's staged result into the session data dir and
+ * Land a query envelope's staged result into the session data dir and
  * return the envelope with `result_file` rewritten to the local path.
  * Non-envelope text, envelopes without a result_file, and non-staging
  * keys pass through untouched.
@@ -155,7 +155,7 @@ export async function landResultFile(
 }
 
 /**
- * Wrap the child tool surface: every MCP `run_query` tool gets (a) the
+ * Wrap the child tool surface: every MCP `query` tool gets (a) the
  * in-loop cap and (b) staged-result landing. Other tools pass through
  * unchanged. Wrapping happens AFTER the childToolSurface allowlist filter,
  * so identity-based filtering has already run.

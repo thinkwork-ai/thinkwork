@@ -1,7 +1,7 @@
 /**
  * Analyst Query Broker — first-party MCP server (THINK-228 U3).
  *
- * Exposes one tool, `run_query`, over the same stateless
+ * Exposes one tool, `query`, over the same stateless
  * Streamable-HTTP-style transport as admin-ops-mcp.ts (hand-rolled
  * JSON-RPC: initialize / tools/list / tools/call / ping — one POST, one
  * response, no session state). Mounted at POST /mcp/analyst; registered
@@ -58,8 +58,8 @@ const MCP_PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "thinkwork-analyst-query-broker";
 const SERVER_VERSION = "0.1.0";
 
-export const RUN_QUERY_TOOL = {
-  name: "run_query",
+export const ANALYST_QUERY_TOOL = {
+  name: "query",
   description:
     "Execute ONE read-only SQL statement (PostgreSQL SELECT / WITH) against the " +
     "registered data source. Consult the connection's SCHEMA.md before writing " +
@@ -254,7 +254,7 @@ async function emitQueryTrace(
       actorType: "system",
       eventType: "data.query_executed",
       source: "lambda",
-      action: "run_query",
+      action: "query",
       outcome: trace.outcome,
       resourceType: "data_source",
       resourceId: trace.data_source,
@@ -270,7 +270,7 @@ async function emitQueryTrace(
 }
 
 // ---------------------------------------------------------------------------
-// run_query
+// query
 // ---------------------------------------------------------------------------
 
 const DATA_SOURCE_SLUG = process.env.ANALYST_DATA_SOURCE_SLUG || "postgres-dev";
@@ -396,9 +396,9 @@ async function dispatch(
           result: {
             tools: [
               {
-                name: RUN_QUERY_TOOL.name,
-                description: RUN_QUERY_TOOL.description,
-                inputSchema: RUN_QUERY_TOOL.inputSchema,
+                name: ANALYST_QUERY_TOOL.name,
+                description: ANALYST_QUERY_TOOL.description,
+                inputSchema: ANALYST_QUERY_TOOL.inputSchema,
               },
             ],
           },
@@ -408,7 +408,7 @@ async function dispatch(
         const params = req.params as
           | { name?: string; arguments?: Record<string, unknown> }
           | undefined;
-        if (params?.name !== RUN_QUERY_TOOL.name) {
+        if (params?.name !== ANALYST_QUERY_TOOL.name) {
           return {
             jsonrpc: "2.0",
             id,
@@ -425,7 +425,7 @@ async function dispatch(
             id,
             error: {
               code: JsonRpcErrorCode.InvalidParams,
-              message: "run_query requires a non-empty string argument: sql",
+              message: "query requires a non-empty string argument: sql",
             },
           };
         }
