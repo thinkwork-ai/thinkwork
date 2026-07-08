@@ -138,6 +138,9 @@ The event-triggered enrichment path that grows the Wiki from outside sources: a 
 ### Research Lot
 The recall unit for externally-sourced knowledge: every research run stamps its observation batch with a lot ID threaded through KG extraction into derived entity/relationship provenance. Recalling a lot tombstones it, removes or downgrades its derived graph state via merge-upsert, recompiles affected wiki pages, and discloses the recall in their coverage line.
 
+### Graph Focus Mode
+The force-graph exploration state entered by clicking a node: the node's 2-degree neighborhood stays at full opacity with node and relationship labels while everything else dims in place — global layout positions never move. Oversized neighborhoods degrade silently to 1 degree with a truncation indicator; clicking a lit neighbor traverses focus, clicking empty canvas returns to the overview.
+
 ## Living Artifacts
 
 ### Living Canvas
@@ -186,6 +189,9 @@ The explicit escape hatch for a required section the model cannot back with data
 
 ### Platform Floor
 The governance rule for tenant customization of a platform plate's content contract (THINK-188): the platform's required sections and declared analyses are a floor — tenants can add sections and analyses, rewrite a floor section's guidance, raise its tier, and add suggested widgets, but never remove or retitle a platform section (the title is the enforcement key), lower its tier, or remove a platform analysis. Enforced server-side at save; contract merge layers tenant deltas over the floor so platform contract improvements keep propagating to customized tenants. Tenant-created plates have no floor — full contract ownership.
+
+### Document Binding
+A first-class link from a scheduled workflow to the one living document it maintains (THINK-155): created on first run or pointed at an existing document, then pinned. Dispatch injects it into the agent turn and emission resolves it deterministically, so a recurring report revises the same head (prior periods survive as Snapshots) instead of forking duplicates through prompt drift. Visible from both sides — the workflow shows the document it maintains; the document's provenance shows the maintaining workflow. Attaches to THINK-213's Workflow noun, not the Automation trigger binding.
 
 ## Skills Distribution
 
@@ -252,16 +258,39 @@ The `@` and `#` sigils are disjoint by target type, not interchangeable delegati
 ### Per-Sender Context Injection
 The rule that an agent turn is contextualized by whoever triggered it: the sending user's workspace projection and memory bank are injected into that turn, on every dispatch path. In multiplayer threads this means consecutive turns can carry different users' contexts.
 
+## Workflows and Runs
+
+### Workflow
+The single product noun for versioned multi-step work: a ThinkWork-owned definition of typed steps with triggers, inputs, outputs, evidence, and a run ledger. "Automation" is not an object — a workflow with a trigger is described as automated (verb/badge), never presented as a separate noun. Step Functions executes workflows as an implementation detail and is not a user-facing concept.
+
+### Continuation Policy
+The optional part of a workflow definition that makes it a loop: an exit signal, budget, autonomy level, and oversight checkpoints. After each iteration the policy decides complete, continue, or human_needed, recorded as a step with evidence. A "Loop" is a workflow with a continuation policy, not a first-class object.
+
+### Run
+One execution of a workflow: a `workflow_runs` record carrying versioned inputs, per-step state, outputs, logs, cost, and evidence. ThinkWork's run ledger is the canonical execution status; backend engine state (such as a Step Functions execution) attaches only as diagnostics evidence.
+
+### Step
+A typed unit in a workflow definition — `agent`, `routine`, `tool`, `approval`, `wait`, `http`, or `emit_event`. A routine step invokes the routine's existing engine unchanged; an approval or wait step suspends the run via task token until resolved.
+
+### Trigger
+The binding that starts a workflow — schedule, webhook, manual, or event. A trigger is a property of the workflow, not an object with its own surface; each run records its trigger family and source.
+
+### Workflow Interpreter
+The single static Step Functions state machine per Stage that executes all interpreter-bound workflows by looping over their definitions: load next step, dispatch it (task-token suspension for agent turns and approvals, timed waits), record the result in the run ledger, advance. Its own execution history is deliberately generic — the run ledger is the observable record — and it survives platform limits via continue-as-new rollover at step boundaries.
+
+### Engine Binding
+The record linking a canonical Workflow to the backend that executes it — binding type, connection reference (such as a state-machine ARN), capability flags, and readiness state. Distinct binding types (per-routine state machine, shared interpreter) let runs of different execution eras coexist under one workflow identity.
+
 ## Deterministic Routines
 
 ### Deterministic Routine
-An agent-authored, token-free Python function that replaces repeated agent-thread work. Its code lives only in the tenant-configured routine git repository (single source of truth — the platform stores metadata and SHA pointers, never a second copy); it is pulled at latest on execution with the commit SHA recorded per run, and is invocable as a "Run routine" action inside an Automation with zero agent turns.
+An agent-authored, token-free Python function that replaces repeated agent-thread work. Its code lives only in the tenant-configured routine git repository (single source of truth — the platform stores metadata and SHA pointers, never a second copy); it is pulled at latest on execution with the commit SHA recorded per run, and is invocable as a `routine` step inside a Workflow with zero agent turns.
 
 ### Validated SHA
 The most recent commit of a routine that has passed that routine's recorded fixtures. A SHA the executor has not seen must pass the Fixture Gate before it becomes the validated SHA; execution falls back to the last validated SHA when a new SHA fails or when the git host is unreachable.
 
 ### Fixture Gate
-The rule that a routine change — agent repair or direct human push — runs the routine's recorded input/expected-output fixtures before first production use, and that a routine cannot be used by an Automation without at least one fixture ("no fixture, no publish").
+The rule that a routine change — agent repair or direct human push — runs the routine's recorded input/expected-output fixtures before first production use, and that a routine cannot be used by a Workflow without at least one fixture ("no fixture, no publish").
 
 ### Repair Ladder
 The budgeted escalation path for routine failures: mechanical tier first at zero token cost (retry once, revert to the last Validated SHA), then a rate-limited agent wakeup that commits a fix which auto-publishes on green fixtures and is recorded in a visible repair log. Exhausting the repair budget disables the routine and notifies the operator rather than looping.
