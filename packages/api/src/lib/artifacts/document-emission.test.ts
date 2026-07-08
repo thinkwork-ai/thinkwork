@@ -117,6 +117,7 @@ function makeDeps(overrides: Partial<DocumentEmissionDeps> = {}): {
       );
     }),
     findThreadDocumentForRevision: vi.fn(async () => null),
+    findDocumentByLogicalId: vi.fn(async () => null),
     upsertDocumentRow: vi.fn(async (input) => {
       recorded.upserts.push(input as unknown as Record<string, unknown>);
     }),
@@ -345,6 +346,80 @@ describe("handleDocumentEmission", () => {
     // The pin advances the SAME document's version chain.
     expect(recorded.pins).toHaveLength(1);
     expect((recorded.pins[0].row as DocumentRow).id).toBe(boundRow.id);
+  });
+
+  it("a carried documentId resolves to the existing document tenant-wide (no per-thread fork)", async () => {
+    // The agent read document_id from the thread history of an automation-
+    // emitted card; the row is homed in the run's own thread. Emitting from
+    // this thread with that documentId must revise that row — the
+    // (tenant, thread, documentId) derivation would mint a copy.
+    const homedElsewhere: DocumentRow = {
+      id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      tenant_id: TENANT_ID,
+      thread_id: "99999999-9999-4999-8999-999999999999",
+      space_id: SPACE_ID,
+      status: "final",
+      head_version: 2,
+      head_write_seq: 2,
+      metadata: { kind: "document", genre: "report", documentId: "doc-1" },
+    };
+    const { deps, recorded } = makeDeps({
+      loadDocumentRow: vi.fn(async (id: string) =>
+        id === homedElsewhere.id ? homedElsewhere : null,
+      ),
+      findDocumentByLogicalId: vi.fn(async ({ documentId }) =>
+        documentId === "doc-1" ? homedElsewhere : null,
+      ),
+    });
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps);
+    expect(result.body.ok).toBe(true);
+    expect(result.body.artifactId).toBe(homedElsewhere.id);
+    expect(recorded.pins).toHaveLength(1);
+    expect((recorded.pins[0].row as DocumentRow).id).toBe(homedElsewhere.id);
+  });
+
+  it("carried-documentId adoption into a space requires write access — else it falls back to the thread-local derivation", async () => {
+    const homedElsewhere: DocumentRow = {
+      id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      tenant_id: TENANT_ID,
+      thread_id: "99999999-9999-4999-8999-999999999999",
+      space_id: SPACE_ID,
+      status: "final",
+      head_version: 2,
+      head_write_seq: 2,
+      metadata: { kind: "document", genre: "report", documentId: "doc-1" },
+    };
+    const { deps } = makeDeps({
+      loadDocumentRow: vi.fn(async (id: string) =>
+        id === homedElsewhere.id ? homedElsewhere : null,
+      ),
+      findDocumentByLogicalId: vi.fn(async () => homedElsewhere),
+      hasSpaceWriteRole: vi.fn(async () => false),
+    });
+    const result = await emit(VALID_DOCUMENT, deps);
+    expect(result.body.ok).toBe(true);
+    expect(result.body.artifactId).toBe(
+      deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
+    );
+  });
+
+  it("run-derived turns never adopt by logical documentId — derivation stays authoritative", async () => {
+    const { deps } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => ({
+        actingUserId: USER_ID,
+        agentLoopId: "loop-1",
+        loopName: "loop",
+        runId: "run-1",
+      })),
+      findDocumentByLogicalId: vi.fn(async () => {
+        throw new Error("must not be called on run-derived turns");
+      }),
+    });
+    const result = await emit(VALID_DOCUMENT, deps, null);
+    expect(result.body.ok).toBe(true);
+    expect(result.body.artifactId).toBe(
+      deriveDocumentArtifactId(TENANT_ID, THREAD_ID, "doc-1"),
+    );
   });
 
   it("finalize pins both bodies and reports the new head version (AE3)", async () => {
