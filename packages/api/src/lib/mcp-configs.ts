@@ -606,6 +606,42 @@ export async function buildMcpConfigs(
       continue;
     }
 
+    // Direct service_credential servers (e.g. the first-party analyst
+    // query broker, THINK-228) resolve tenant-owned credentials exactly
+    // like their plugin-managed counterparts above. Without this branch
+    // the row fell through to `toMcpServerConfig(mcp, undefined)` — no
+    // bearer, no headers — and the Pi container's parseMcpConfigs
+    // silently drops auth-less servers, so the tool never reached the
+    // model despite "MCP configs built" listing the server.
+    if (mcp.auth_type === "service_credential") {
+      if (probe) {
+        const status = probeServiceCredentialConfig(
+          (mcp.auth_config as Record<string, unknown>) || {},
+        );
+        if (status !== "configured") {
+          dropDiag(mcp, "credential_missing", status);
+          continue;
+        }
+        mcpConfigs.push(probeMcpServerConfig(mcp, "configured"));
+        continue;
+      }
+      const resolved = await resolveServiceCredentialAuth(
+        (mcp.auth_config as Record<string, unknown>) || {},
+        logPrefix,
+        mcp.slug ?? mcp.name,
+      );
+      if (!resolved) {
+        dropDiag(
+          mcp,
+          "credential_missing",
+          "service credential did not resolve",
+        );
+        continue;
+      }
+      mcpConfigs.push(toMcpServerConfig(mcp, resolved.token, resolved.headers));
+      continue;
+    }
+
     if (probe) {
       // Probe path (KTD-1): classify from stored metadata only — never a
       // Secrets Manager read, never a token refresh.

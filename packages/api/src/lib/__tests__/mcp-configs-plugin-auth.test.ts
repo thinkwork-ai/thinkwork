@@ -742,3 +742,79 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     warn.mockRestore();
   });
 });
+
+describe("buildMcpConfigs — direct service_credential servers (THINK-228)", () => {
+  it("resolves tenant-owned credentials for a DIRECT service_credential row (the analyst broker shape)", async () => {
+    mockJoinRows.mockReturnValue([
+      directRow({
+        mcp_server_id: "srv-analyst",
+        name: "Postgres (dev)",
+        slug: "postgres-dev",
+        url: "https://broker.example.invalid/mcp/analyst",
+        auth_type: "service_credential",
+        auth_config: {
+          secretRef: "thinkwork/test/analyst/broker-credential",
+          headers: [
+            {
+              name: "Authorization",
+              secretJsonKey: "token",
+              valuePrefix: "Bearer ",
+            },
+          ],
+        },
+        management_source: "manual",
+        plugin_install_id: null,
+      }),
+    ]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ token: "broker-token-1", tenantId: "tenant-1" }),
+    );
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    // Regression: this row previously fell through the direct branch with
+    // no auth material, and the Pi container silently dropped it.
+    expect(configs.map((config) => config.name)).toEqual(["postgres-dev"]);
+    expect(bearerToken(configs[0])).toBe("broker-token-1");
+  });
+
+  it("fails closed (drops the server) when the direct service credential does not resolve", async () => {
+    mockJoinRows.mockReturnValue([
+      directRow({
+        mcp_server_id: "srv-analyst",
+        slug: "postgres-dev",
+        url: "https://broker.example.invalid/mcp/analyst",
+        auth_type: "service_credential",
+        auth_config: {
+          secretRef: "thinkwork/test/analyst/broker-credential",
+          headers: [
+            {
+              name: "Authorization",
+              secretJsonKey: "token",
+              valuePrefix: "Bearer ",
+            },
+          ],
+        },
+        management_source: "manual",
+        plugin_install_id: null,
+      }),
+    ]);
+    mockSecretString.mockReturnValue(""); // secret missing/empty
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(0);
+    warn.mockRestore();
+  });
+});
