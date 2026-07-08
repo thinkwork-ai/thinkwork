@@ -35,7 +35,11 @@ loop verified live), then customer stages. Customer runs use the same kit
 - [x] Maintenance loop verified live (revision 16, 19:50Z+): reconcile /
       retention / mental-model refresh all clean; retains land in the new
       database with nonzero extractedUnitCount (Phase 5 soak clock started)
-- [ ] ≥1 week soak, then old `hindsight` schema dropped (explicit approval)
+- [x] Old `hindsight` schema dropped (2026-07-08, Eric's explicit approval —
+      soak waived). Final dump taken first. CASCADE also dropped the
+      schema-homed `pg_trgm` extension + 5 cross-schema trigram indexes
+      (wiki/brain/KG) — recreated and smoke-verified; see the Decommission
+      section of README.md before repeating this on any other stage.
 
 ## Stage: prod — BLOCKED on deploy-path decision
 
