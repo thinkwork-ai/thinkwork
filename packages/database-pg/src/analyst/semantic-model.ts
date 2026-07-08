@@ -209,6 +209,42 @@ export function auditSensitiveCoverage(): string[] {
   return violations.sort();
 }
 
+/**
+ * The GRANT surface for the `analyst_reader` role (U2), derived from the
+ * same table walk as the semantic model so doc and grants cannot drift.
+ * Explicit per-table grants (never `GRANT ... ON ALL TABLES`) keep the
+ * surface fail-closed: a new table is unreadable until the migration is
+ * regenerated and re-applied. Mixed tables get column-level SELECT, so
+ * `SELECT *` fails there by design — the semantic model only ever names
+ * granted columns.
+ *
+ * The output is embedded in
+ * packages/database-pg/drizzle/0227_analyst_reader_role.sql between the
+ * BEGIN/END GENERATED ANALYST GRANTS markers; a vitest test asserts the
+ * committed migration matches this function's current output.
+ */
+export function analystGrantSql(): string {
+  const lines: string[] = [];
+  for (const table of listAnalystTables()) {
+    if (table.deniedColumns.length === 0) {
+      lines.push(`GRANT SELECT ON public.${table.name} TO analyst_reader;`);
+    } else {
+      const granted = table.columns
+        .map((c) => c.name)
+        .sort()
+        .join(", ");
+      lines.push(
+        `REVOKE ALL PRIVILEGES ON public.${table.name} FROM analyst_reader;`,
+        `GRANT SELECT (${granted}) ON public.${table.name} TO analyst_reader;`,
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
+export const ANALYST_GRANTS_BEGIN_MARKER = "-- BEGIN GENERATED ANALYST GRANTS";
+export const ANALYST_GRANTS_END_MARKER = "-- END GENERATED ANALYST GRANTS";
+
 function formatColumnRow(column: AnalystColumn): string {
   const flags: string[] = [];
   if (column.isPrimaryKey) flags.push("PK");

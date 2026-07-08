@@ -358,3 +358,23 @@ resource "aws_secretsmanager_secret" "compliance_reader" {
     Role = "compliance_reader"
   }
 }
+
+################################################################################
+# Secrets Manager — Analyst Reader Role Credentials (THINK-228 U2)
+#
+# Container for the analyst_reader Aurora role used by the analyst
+# query-broker Lambda. Terraform owns the SECRET CONTAINER; the operator
+# owns the SECRET VALUE (populated by scripts/bootstrap-analyst-roles.sh,
+# which also applies drizzle/0227_analyst_reader_role.sql to create the
+# matching hardened read-only role).
+################################################################################
+
+resource "aws_secretsmanager_secret" "analyst_reader" {
+  count = local.create ? 1 : 0
+  name  = "thinkwork/${var.stage}/analyst/reader-credentials"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-analyst-reader-credentials"
+    Role = "analyst_reader"
+  }
+}

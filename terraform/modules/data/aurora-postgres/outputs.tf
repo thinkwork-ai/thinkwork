@@ -62,3 +62,8 @@ output "compliance_reader_secret_arn" {
   description = "Secrets Manager ARN for the compliance_reader Aurora role (Phase 3 U2). Empty string when create_database = false."
   value       = local.create ? aws_secretsmanager_secret.compliance_reader[0].arn : ""
 }
+
+output "analyst_reader_secret_arn" {
+  description = "Secrets Manager ARN for the analyst_reader Aurora role (THINK-228 U2). Empty string when create_database = false."
+  value       = local.create ? aws_secretsmanager_secret.analyst_reader[0].arn : ""
+}

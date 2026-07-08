@@ -7,6 +7,9 @@ import { describe, expect, it } from "vitest";
 import {
   ANALYST_DENYLISTED_COLUMNS,
   ANALYST_DENYLISTED_TABLES,
+  ANALYST_GRANTS_BEGIN_MARKER,
+  ANALYST_GRANTS_END_MARKER,
+  analystGrantSql,
   auditSensitiveCoverage,
   generateAnalystSchemaMarkdown,
   listAnalystTables,
@@ -14,6 +17,12 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const COMMITTED_PATH = join(HERE, "..", "generated", "analyst", "SCHEMA.md");
+const MIGRATION_PATH = join(
+  HERE,
+  "..",
+  "drizzle",
+  "0227_analyst_reader_role.sql",
+);
 
 describe("analyst semantic model (THINK-228 U1)", () => {
   const doc = generateAnalystSchemaMarkdown();
@@ -89,6 +98,33 @@ describe("analyst semantic model (THINK-228 U1)", () => {
 
   it("is deterministic — regeneration is byte-identical", () => {
     expect(generateAnalystSchemaMarkdown()).toEqual(doc);
+  });
+
+  it("0227 migration grant section matches the current denylist (U2 sync gate)", () => {
+    const migration = readFileSync(MIGRATION_PATH, "utf-8");
+    expect(migration).toContain("-- creates-role: analyst_reader");
+    const begin = migration.indexOf(ANALYST_GRANTS_BEGIN_MARKER);
+    const end = migration.indexOf(ANALYST_GRANTS_END_MARKER);
+    expect(begin).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(begin);
+    const section = migration
+      .slice(begin + ANALYST_GRANTS_BEGIN_MARKER.length, end)
+      .trim();
+    expect(section).toEqual(analystGrantSql());
+  });
+
+  it("grant SQL never grants a denylisted table and column-grants mixed tables", () => {
+    const grants = analystGrantSql();
+    for (const denied of ANALYST_DENYLISTED_TABLES) {
+      expect(grants).not.toContain(`GRANT SELECT ON public.${denied} `);
+    }
+    expect(grants).toContain(
+      "REVOKE ALL PRIVILEGES ON public.users FROM analyst_reader;",
+    );
+    expect(grants).toMatch(
+      /GRANT SELECT \([^)]*\bemail\b[^)]*\) ON public\.users TO analyst_reader;/,
+    );
+    expect(grants).not.toContain("expo_push_token");
   });
 
   it("committed SCHEMA.md matches the current schema (staleness gate, R4)", () => {
