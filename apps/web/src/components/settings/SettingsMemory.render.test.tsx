@@ -61,8 +61,25 @@ vi.mock("@thinkwork/ui", () => ({
   SheetTitle: ({ children }: { children?: React.ReactNode }) => (
     <h2>{children}</h2>
   ),
-  ToggleGroup: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
+  ToggleGroup: ({
+    children,
+    onValueChange,
+  }: {
+    children?: React.ReactNode;
+    onValueChange?: (value: string) => void;
+  }) => (
+    <div>
+      {React.Children.map(children, (child) =>
+        React.isValidElement(child)
+          ? React.cloneElement(child as React.ReactElement<any>, {
+              onClick: () =>
+                onValueChange?.(
+                  (child.props as { value?: string }).value ?? "",
+                ),
+            })
+          : child,
+      )}
+    </div>
   ),
   ToggleGroupItem: ({
     children,
@@ -70,6 +87,12 @@ vi.mock("@thinkwork/ui", () => ({
   }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
+  DataTableTokenFilter: () => null,
+  dataTableTokenFilterFns: {
+    text: () => true,
+    option: () => true,
+    boolean: () => true,
+  },
   AlertDialog: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -250,6 +273,8 @@ describe("SettingsMemory render", () => {
 
   it("renders operator-visible Hindsight rows with bank and owner evidence", () => {
     render(<SettingsMemory embedded />);
+    // Default view is now Graph; switch to Table for the row/table assertions.
+    fireEvent.click(screen.getByText("Table"));
 
     expect(useQueryMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -397,6 +422,8 @@ describe("SettingsMemory render", () => {
     });
 
     render(<SettingsMemory embedded />);
+    // Default view is now Graph; switch to Table for the row/table assertions.
+    fireEvent.click(screen.getByText("Table"));
 
     expect(screen.getByRole("status").textContent).toContain(
       "Memory retain status: 1 retrying, 1 dead-lettered",
@@ -406,6 +433,8 @@ describe("SettingsMemory render", () => {
 
   it("opens operator memory details without the requester forget action", () => {
     render(<SettingsMemory embedded />);
+    // Default view is now Graph; switch to Table for the row/table assertions.
+    fireEvent.click(screen.getByText("Table"));
 
     fireEvent.click(screen.getByTestId("memory-row-space-memory"));
 
@@ -424,6 +453,8 @@ describe("SettingsMemory render", () => {
     });
 
     render(<SettingsMemory embedded />);
+    // Default view is now Graph; switch to Table for the row/table assertions.
+    fireEvent.click(screen.getByText("Table"));
 
     expect(screen.getAllByText("No memory rows found").length).toBe(1);
     expect(
