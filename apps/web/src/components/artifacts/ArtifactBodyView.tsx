@@ -11,6 +11,8 @@
  * composes them into the page header, the thread panel into its own header.
  */
 
+import { useState } from "react";
+import { useQuery } from "urql";
 import { InlineAppletEmbed } from "@/components/apps/InlineAppletEmbed";
 import { CanvasArtifactView } from "@/components/artifacts/canvas/CanvasArtifactView";
 import { isAppArtifact } from "@/components/workbench/GeneratedArtifactCard";
@@ -18,6 +20,7 @@ import type { CanvasVersion } from "@/components/artifacts/canvas/CanvasVersionH
 import type { CanvasBinding } from "@/components/artifacts/canvas/binding-display";
 import { isLivingCanvasMetadata } from "@/components/artifacts/canvas/canvas-content";
 import { DocumentFrame } from "@/components/workbench/DocumentFrame";
+import { DocumentVersionRenderQuery } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 
 export interface ArtifactBodyNode {
@@ -81,6 +84,7 @@ export function DocumentArtifactBody({
 }: {
   artifact: Pick<
     ArtifactBodyNode,
+    | "id"
     | "title"
     | "type"
     | "status"
@@ -89,8 +93,20 @@ export function DocumentArtifactBody({
     | "updatedAt"
     | "lastRefreshAt"
     | "refreshFailedAt"
+    | "versions"
   >;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // The pinned version being viewed read-only; null = the living head.
+  const [viewVersion, setViewVersion] = useState<number | null>(null);
+  const [{ data: versionData, fetching: versionFetching }] = useQuery<{
+    documentVersionRender?: string | null;
+  }>({
+    query: DocumentVersionRenderQuery,
+    variables: { artifactId: artifact.id, version: viewVersion ?? 0 },
+    pause: viewVersion === null,
+  });
+
   const statusChip =
     artifact.status === "FINAL"
       ? `Final · v${artifact.headVersion ?? 0}`
@@ -101,43 +117,122 @@ export function DocumentArtifactBody({
   const failedAt = artifact.refreshFailedAt ?? null;
   const isStale =
     !!failedAt && (!refreshedAt || new Date(failedAt) > new Date(refreshedAt));
+  // Activity lives in the footer, not the header: the header identifies the
+  // document (type + status); timestamps are updates. One freshness entry —
+  // for a scheduled document the refresh IS the update, so "Refreshed"
+  // replaces "Updated" whenever refresh state exists.
+  const freshness = refreshedAt
+    ? `Refreshed ${relativeTime(refreshedAt)}`
+    : `Updated ${relativeTime(artifact.updatedAt)}`;
+
+  const versions = artifact.versions ?? [];
+  const headVersion = artifact.headVersion ?? 0;
+  const versionRender =
+    viewVersion !== null ? (versionData?.documentVersionRender ?? null) : null;
+  const displayHtml =
+    viewVersion !== null && versionRender !== null
+      ? versionRender
+      : artifact.renderHtml;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border/70 px-4 py-1.5 text-xs text-muted-foreground">
-        <span className="rounded-full bg-muted px-2 py-0.5 font-medium capitalize">
+        <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 font-medium capitalize">
           {artifact.type.toLowerCase()}
         </span>
-        <span data-testid="document-status-chip">{statusChip}</span>
-        <span>· Updated {relativeTime(artifact.updatedAt)}</span>
-        {refreshedAt ? (
-          <span data-testid="document-refreshed-chip">
-            · Refreshed {relativeTime(refreshedAt)}
-          </span>
-        ) : null}
-        {isStale && failedAt ? (
-          <span
-            data-testid="document-stale-chip"
-            className="font-medium text-amber-600 dark:text-amber-500"
-          >
-            · Scheduled refresh failed {relativeTime(failedAt)}
-          </span>
-        ) : null}
+        <span className="whitespace-nowrap" data-testid="document-status-chip">
+          {statusChip}
+        </span>
       </div>
-      {artifact.renderHtml ? (
-        <DocumentFrame
-          html={artifact.renderHtml}
-          title={artifact.title}
-          fullHeight
-        />
+      {displayHtml ? (
+        <DocumentFrame html={displayHtml} title={artifact.title} fullHeight />
       ) : (
         <div className="flex flex-1 items-center justify-center p-6">
           <p className="text-sm text-muted-foreground">
-            This document&apos;s render is unavailable. The markdown record is
-            preserved; try re-emitting the document from its thread.
+            {viewVersion !== null && versionFetching
+              ? "Loading version…"
+              : "This document's render is unavailable. The markdown record is preserved; try re-emitting the document from its thread."}
           </p>
         </div>
       )}
+      {historyOpen && versions.length > 0 ? (
+        <div
+          data-testid="document-history-panel"
+          className="max-h-48 overflow-y-auto border-t border-border/70 bg-muted/30 px-4 py-2 motion-safe:animate-in motion-safe:slide-in-from-bottom-2"
+        >
+          <ul className="space-y-0.5">
+            {versions.map((v) => {
+              const isHead = v.version === headVersion;
+              const isViewing =
+                viewVersion === v.version || (viewVersion === null && isHead);
+              return (
+                <li key={v.id}>
+                  <button
+                    type="button"
+                    data-testid={`document-history-version-${v.version}`}
+                    onClick={() => setViewVersion(isHead ? null : v.version)}
+                    className={`flex w-full items-baseline gap-2 rounded px-1.5 py-0.5 text-left text-[11px] hover:bg-muted ${
+                      isViewing
+                        ? "font-medium text-foreground"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    <span className="w-8 shrink-0 tabular-nums">
+                      v{v.version}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {v.createdByName ?? "System"}
+                      {isHead ? " · current" : ""}
+                    </span>
+                    {v.createdAt ? (
+                      <span className="shrink-0 text-muted-foreground/70">
+                        {relativeTime(v.createdAt)}
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      <div className="flex items-center gap-x-3 border-t border-border/70 px-4 py-1 text-[11px] text-muted-foreground/80">
+        {viewVersion !== null ? (
+          <button
+            type="button"
+            data-testid="document-back-to-latest"
+            onClick={() => setViewVersion(null)}
+            className="whitespace-nowrap font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            Viewing v{viewVersion} — back to latest
+          </button>
+        ) : (
+          <span
+            className="whitespace-nowrap"
+            data-testid="document-refreshed-chip"
+          >
+            {freshness}
+          </span>
+        )}
+        {isStale && failedAt && viewVersion === null ? (
+          <span
+            data-testid="document-stale-chip"
+            className="whitespace-nowrap font-medium text-amber-600 dark:text-amber-500"
+          >
+            Scheduled refresh failed {relativeTime(failedAt)}
+          </span>
+        ) : null}
+        {versions.length > 0 ? (
+          <button
+            type="button"
+            data-testid="document-history-toggle"
+            onClick={() => setHistoryOpen((open) => !open)}
+            className="ml-auto whitespace-nowrap text-muted-foreground/60 underline-offset-2 hover:text-muted-foreground hover:underline"
+          >
+            {historyOpen ? "Hide history" : "Show all"}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

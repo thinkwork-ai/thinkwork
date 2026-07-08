@@ -19,6 +19,8 @@ export interface CanvasVersion {
   contentHash?: string | null;
   createdAt?: string | null;
   createdBy?: string | null;
+  /** Snapshot creator's display name (document change-log footer). */
+  createdByName?: string | null;
 }
 
 interface VersionContentResult {
