@@ -70,7 +70,12 @@ const APPROVE: WorkflowResumeInput = {
 };
 
 function waitingRun(overrides: Record<string, unknown> = {}) {
-  return { id: "run-1", tenant_id: "t1", status: "waiting_for_human", ...overrides };
+  return {
+    id: "run-1",
+    tenant_id: "t1",
+    status: "waiting_for_human",
+    ...overrides,
+  };
 }
 
 let fake: FakeDb;
@@ -82,7 +87,10 @@ beforeEach(() => {
 
 describe("resumeWorkflowApproval — approve/deny both SendTaskSuccess", () => {
   it("approve resumes the token with {approved:true}", async () => {
-    fake.selectQueue.push([waitingRun()], [{ iteration: 3 }]);
+    fake.selectQueue.push(
+      [waitingRun()],
+      [{ iteration: 3, step_id: "approval" }],
+    );
     fake.updateQueue.push([{ token: "approval-token-1" }]);
 
     const result = await resumeWorkflowApproval(APPROVE, {
@@ -104,7 +112,10 @@ describe("resumeWorkflowApproval — approve/deny both SendTaskSuccess", () => {
   });
 
   it("deny sends SendTaskSuccess {approved:false} — never SendTaskFailure", async () => {
-    fake.selectQueue.push([waitingRun()], [{ iteration: 1 }]);
+    fake.selectQueue.push(
+      [waitingRun()],
+      [{ iteration: 1, step_id: "sign-off" }],
+    );
     fake.updateQueue.push([{ token: "approval-token-2" }]);
 
     const result = await resumeWorkflowApproval(
@@ -165,7 +176,10 @@ describe("resumeWorkflowApproval — idempotency", () => {
   });
 
   it("is 'already resolved' when the CAS consume loses the race", async () => {
-    fake.selectQueue.push([waitingRun()], [{ iteration: 2 }]);
+    fake.selectQueue.push(
+      [waitingRun()],
+      [{ iteration: 2, step_id: "approval" }],
+    );
     fake.updateQueue.push([]); // consume returns null (already consumed)
     const result = await resumeWorkflowApproval(APPROVE, {
       db: fake.db as never,
