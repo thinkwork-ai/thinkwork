@@ -9,8 +9,8 @@ import { gql } from "@urql/core";
  */
 
 export const MemoryGraphQuery = gql`
-  query MemoryGraph($userId: ID) {
-    memoryGraph(userId: $userId) {
+  query MemoryGraph($userId: ID, $allTenantBanks: Boolean) {
+    memoryGraph(userId: $userId, allTenantBanks: $allTenantBanks) {
       nodes {
         id
         label
@@ -19,6 +19,8 @@ export const MemoryGraphQuery = gql`
         entityType
         edgeCount
         latestThreadId
+        bankId
+        bankName
       }
       edges {
         source

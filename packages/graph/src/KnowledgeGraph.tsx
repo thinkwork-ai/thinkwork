@@ -44,7 +44,11 @@ import { GraphLabelToggles } from "./GraphLabelToggles.js";
 import { useGraphPointer } from "./use-graph-pointer.js";
 
 export type KnowledgeGraphGroundingStatus =
-  "GROUNDED" | "UNAPPROVED_TYPE" | "UNGROUNDED" | "CONFLICT" | "UNKNOWN";
+  | "GROUNDED"
+  | "UNAPPROVED_TYPE"
+  | "UNGROUNDED"
+  | "CONFLICT"
+  | "UNKNOWN";
 
 export type KnowledgeGraphProvenanceStatus = "STRONG" | "WEAK" | "MISSING";
 
@@ -623,9 +627,12 @@ export const KnowledgeGraph = forwardRef<
       const ty = end.y - uy * targetTrim;
       const lineLen = dist - sourceTrim - targetTrim;
 
+      // Mute the connecting lines only while FILTERING (search / facet) —
+      // NOT when a node is merely selected/focused.
+      const filtering = !!matchedIdsRef.current;
       const color = isLinkBright(link)
-        ? `${knowledgeGraphTrustColor(link)}cc`
-        : "rgba(148,163,184,0.15)";
+        ? `${knowledgeGraphTrustColor(link)}${filtering ? "55" : "cc"}`
+        : `rgba(148,163,184,${filtering ? "0.05" : "0.15"})`;
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
       // Constant 1px screen width regardless of zoom.
@@ -879,7 +886,7 @@ export const KnowledgeGraph = forwardRef<
             the interactive controls. */}
       <div className="pointer-events-none absolute inset-0 z-20">
         {focus && selectedNode && (
-          <div className="pointer-events-auto absolute top-3 right-3 flex flex-col items-end gap-1.5">
+          <div className="pointer-events-auto absolute top-3 right-3 z-30 flex flex-col items-end gap-1.5">
             <button
               type="button"
               aria-label={`Open details for ${selectedNode.label}`}
@@ -905,7 +912,7 @@ export const KnowledgeGraph = forwardRef<
         )}
         {tooltip && (
           <div
-            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-background/90 px-2 py-1 text-xs whitespace-nowrap"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md whitespace-nowrap backdrop-blur-sm"
             style={{ left: tooltip.x, top: tooltip.y }}
           >
             {tooltip.text}

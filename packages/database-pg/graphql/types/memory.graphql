@@ -116,6 +116,14 @@ type MemoryGraphNode {
   entityType: String
   edgeCount: Int!
   latestThreadId: String
+  """
+  Hindsight bank the entity belongs to (populated when allTenantBanks is set).
+  """
+  bankId: String
+  """
+  Human label for the bank (space/user/agent name), for the Bank facet.
+  """
+  bankName: String
 }
 
 type MemoryGraphEdge {
@@ -279,7 +287,16 @@ extend type Query {
     query: String!
     limit: Int
   ): MemorySearchResult!
-  memoryGraph(tenantId: ID, userId: ID, assistantId: ID): MemoryGraph!
+  memoryGraph(
+    tenantId: ID
+    userId: ID
+    assistantId: ID
+    """
+    When true (tenant admins only), span every bank in the tenant and tag
+    each node with its bank so the graph can be filtered by bank.
+    """
+    allTenantBanks: Boolean
+  ): MemoryGraph!
   memorySystemConfig: MemorySystemConfig!
   memoryRetainAttempts(
     tenantId: ID

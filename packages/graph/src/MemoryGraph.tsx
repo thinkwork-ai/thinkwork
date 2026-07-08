@@ -52,6 +52,8 @@ export interface MemoryGraphNode {
   entityType: string | null;
   edgeCount: number;
   latestThreadId: string | null;
+  bankId: string | null;
+  bankName: string | null;
 }
 
 export interface MemoryGraphHandle {
@@ -93,6 +95,16 @@ interface MemoryGraphProps {
   ) => void;
   onTypesLoaded?: (types: string[]) => void;
   typeFilter?: string[];
+  /** Dims memory nodes whose `strategy` is not in this set. Mirrors the
+   *  table's Type(strategy) facet so the same selection filters both views. */
+  strategyFilter?: string[];
+  /** Span every bank in the tenant (operator surface) and tag nodes with
+   *  their bank so the graph can be filtered by bank. */
+  allTenantBanks?: boolean;
+  /** Reports the distinct banks present in the graph, for a Bank facet. */
+  onBanksLoaded?: (banks: { id: string; name: string }[]) => void;
+  /** Dims nodes whose `bankId` is not in this set. */
+  bankFilter?: string[];
   searchQuery?: string;
   hideFiltered?: boolean;
   /** Optional render slot for the loading state. */
@@ -119,6 +131,10 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       onNodeClick,
       onTypesLoaded,
       typeFilter,
+      strategyFilter,
+      allTenantBanks,
+      onBanksLoaded,
+      bankFilter,
       searchQuery,
       hideFiltered: _hideFiltered = false,
       loadingFallback,
@@ -146,8 +162,13 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     // Single-agent query (only when not multi-agent)
     const [singleResult, singleReexecute] = useQuery({
       query: MemoryGraphQuery,
-      variables: { userId: effectiveUserId ?? null },
-      pause: isMultiAgent || (!effectiveUserId && !useRequesterScope),
+      variables: {
+        userId: effectiveUserId ?? null,
+        allTenantBanks: allTenantBanks ?? false,
+      },
+      pause:
+        isMultiAgent ||
+        (!effectiveUserId && !useRequesterScope && !allTenantBanks),
     });
 
     // Multi-agent: fetch all graphs manually
@@ -236,6 +257,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               entityType: n.entityType ?? null,
               edgeCount: n.edgeCount ?? 0,
               latestThreadId: n.latestThreadId ?? null,
+              bankId: n.bankId ?? null,
+              bankName: n.bankName ?? null,
             });
           }
         }
@@ -252,6 +275,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               entityType: n.entityType ?? null,
               edgeCount: n.edgeCount ?? 0,
               latestThreadId: n.latestThreadId ?? null,
+              bankId: n.bankId ?? null,
+              bankName: n.bankName ?? null,
             });
           }
         }
@@ -285,8 +310,32 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       }
     }, [allNodes, onTypesLoaded]);
 
+    // Report the distinct banks present (id + human label) for a Bank facet.
+    const prevBanksRef = useRef<string>("");
+    useEffect(() => {
+      if (!onBanksLoaded || allNodes.length === 0) return;
+      const banks = new Map<string, string>();
+      for (const n of allNodes) {
+        if (n.bankId && !banks.has(n.bankId)) {
+          banks.set(n.bankId, n.bankName ?? n.bankId);
+        }
+      }
+      const list = Array.from(banks, ([id, name]) => ({ id, name })).sort(
+        (a, b) => a.name.localeCompare(b.name),
+      );
+      const key = list.map((b) => b.id).join(",");
+      if (key !== prevBanksRef.current) {
+        prevBanksRef.current = key;
+        onBanksLoaded(list);
+      }
+    }, [allNodes, onBanksLoaded]);
+
     // Determine which nodes match filters
-    const hasFilter = (typeFilter && typeFilter.length > 0) || !!searchQuery;
+    const hasFilter =
+      (typeFilter && typeFilter.length > 0) ||
+      (strategyFilter && strategyFilter.length > 0) ||
+      (bankFilter && bankFilter.length > 0) ||
+      !!searchQuery;
 
     const matchedIds = useMemo(() => {
       if (!hasFilter) return null; // null = no filter active, all match
@@ -302,6 +351,18 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           return filterSet.has(et);
         });
       }
+      if (strategyFilter && strategyFilter.length > 0) {
+        const stratSet = new Set(strategyFilter);
+        filtered = filtered.filter(
+          (n) => n.strategy != null && stratSet.has(n.strategy),
+        );
+      }
+      if (bankFilter && bankFilter.length > 0) {
+        const bankSet = new Set(bankFilter);
+        filtered = filtered.filter(
+          (n) => n.bankId != null && bankSet.has(n.bankId),
+        );
+      }
       if (searchQuery) {
         const normalize = (s: string) =>
           s
@@ -313,7 +374,14 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         filtered = filtered.filter((n) => normalize(n.label).includes(q));
       }
       return new Set(filtered.map((n) => n.id));
-    }, [allNodes, typeFilter, searchQuery, hasFilter]);
+    }, [
+      allNodes,
+      typeFilter,
+      strategyFilter,
+      bankFilter,
+      searchQuery,
+      hasFilter,
+    ]);
 
     // Build graph data from raw sources only — filter state is NOT a dep.
     // Mute/highlight on filter changes is applied by mutating material
@@ -641,9 +709,18 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         const ty = end.y - uy * targetTrim;
         const lineLen = dist - sourceTrim - targetTrim;
 
-        const color = isLinkBright(link)
-          ? "rgba(148,163,184,0.9)"
-          : "rgba(148,163,184,0.15)";
+        // Mute the connecting lines only while FILTERING (search / facet) —
+        // NOT when a node is merely selected/focused. Focus keeps the normal
+        // bright/dim treatment so the selected neighborhood stays legible.
+        const filtering = !!matchedIdsRef.current;
+        const bright = isLinkBright(link);
+        const color = filtering
+          ? bright
+            ? "rgba(148,163,184,0.3)"
+            : "rgba(148,163,184,0.05)"
+          : bright
+            ? "rgba(148,163,184,0.9)"
+            : "rgba(148,163,184,0.15)";
         ctx.strokeStyle = color;
         ctx.fillStyle = color;
         // Constant 1px screen width regardless of zoom.
@@ -885,7 +962,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             the interactive controls. */}
         <div className="pointer-events-none absolute inset-0 z-20">
           {focus && selectedNode && (
-            <div className="pointer-events-auto absolute top-3 right-3 flex flex-col items-end gap-1.5">
+            <div className="pointer-events-auto absolute top-3 right-3 z-30 flex flex-col items-end gap-1.5">
               <button
                 type="button"
                 aria-label={`Open details for ${selectedNode.label}`}
@@ -911,7 +988,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           )}
           {tooltip && (
             <div
-              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-border bg-background/90 px-2 py-1 text-xs whitespace-nowrap"
+              className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md whitespace-nowrap backdrop-blur-sm"
               style={{ left: tooltip.x, top: tooltip.y }}
             >
               {tooltip.text}
