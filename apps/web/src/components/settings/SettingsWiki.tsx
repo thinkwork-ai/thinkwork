@@ -1,15 +1,25 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Loader2, Search, Sparkles, X } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
+import { Loader2, Search, Shapes, Sparkles, X } from "lucide-react";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import {
   Badge,
+  Button,
   DataTable,
+  DataTableTokenFilter,
+  dataTableTokenFilterFns,
   Input,
   Sheet,
   SheetContent,
   ToggleGroup,
   ToggleGroupItem,
+  type DataTableTokenFilterColumn,
 } from "@thinkwork/ui";
 import {
   WikiGraph,
@@ -53,6 +63,84 @@ function WikiHeader() {
   return null;
 }
 
+// Collapsible search matching the Workflows toolbar: a search-icon button that
+// expands into an input. Drives the live `searchQuery` (graph) and commits
+// `activeSearch` (table) on Enter.
+function WikiToolbarSearch({
+  searchQuery,
+  onSearchQueryChange,
+  onCommitSearch,
+}: {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  onCommitSearch: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const isOpen = expanded || searchQuery.length > 0;
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
+  const clearSearch = () => {
+    onSearchQueryChange("");
+    onCommitSearch("");
+    setExpanded(false);
+  };
+
+  if (!isOpen) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        className="h-8 w-8 rounded-md"
+        aria-label="Search pages"
+        onClick={() => setExpanded(true)}
+      >
+        <Search className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    );
+  }
+
+  return (
+    <div className="relative flex h-8 w-[min(16rem,calc(100vw-2rem))] items-center">
+      <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+      <Input
+        ref={inputRef}
+        type="search"
+        aria-label="Search pages"
+        placeholder="Search pages..."
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        value={searchQuery}
+        onBlur={() => {
+          if (!searchQuery) setExpanded(false);
+        }}
+        onChange={(e) => onSearchQueryChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onCommitSearch(searchQuery.trim());
+          if (e.key === "Escape") {
+            e.preventDefault();
+            clearSearch();
+          }
+        }}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="absolute right-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+        aria-label="Clear search"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={clearSearch}
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
 function PageTypeBadge({ type }: { type: WikiPageType }) {
   return (
     <Badge variant="outline" className="text-xs font-normal">
@@ -63,7 +151,7 @@ function PageTypeBadge({ type }: { type: WikiPageType }) {
 
 export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
   const { tenantId } = useTenant();
-  const [view, setView] = useState<PagesView>("table");
+  const [view, setView] = useState<PagesView>("graph");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<WikiGraphHandle>(null);
@@ -79,7 +167,8 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
 
   const [searchResult] = useQuery<{
     wikiSearch?:
-      { score: number; matchedAlias: string | null; page: any }[] | null;
+      | { score: number; matchedAlias: string | null; page: any }[]
+      | null;
   }>({
     query: ComputerWikiSearchQuery,
     variables: {
@@ -156,6 +245,61 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
     [],
   );
 
+  // Client-side faceted filtering over the loaded rows (Type facet), mirroring
+  // the Workflows toolbar. A headless filter-only table produces `filteredRows`
+  // for the DataTable; free-text search stays server-side via `activeSearch`.
+  // The Type facet operates on the human display label (e.g. "Place") so the
+  // same selected values drive BOTH the table filter and the graph's
+  // `typeFilter` prop (WikiGraph keys nodes by their display-type label).
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const tokenFilterColumns: DataTableTokenFilterColumn[] = useMemo(
+    () => [
+      {
+        id: "type",
+        label: "Type",
+        type: "option",
+        icon: <Shapes className="size-4" />,
+        options: Array.from(new Set(rows.map((r) => pageTypeLabel(r.type))))
+          .sort()
+          .map((value) => ({ value, label: value })),
+      },
+    ],
+    [rows],
+  );
+  const filterColumns: ColumnDef<WikiRow>[] = useMemo(
+    () => [
+      {
+        id: "type",
+        accessorFn: (row) => pageTypeLabel(row.type),
+        filterFn: dataTableTokenFilterFns.option,
+      },
+    ],
+    [],
+  );
+  const filterTable = useReactTable({
+    data: rows,
+    columns: filterColumns,
+    state: { columnFilters },
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const filteredRows = useMemo(
+    () => filterTable.getFilteredRowModel().rows.map((r) => r.original),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filterTable.getState().columnFilters, rows],
+  );
+  // Selected Type labels, forwarded to the graph so the facet dims
+  // non-matching nodes in the Graph view too.
+  const selectedTypes = useMemo(() => {
+    const raw = columnFilters.find((c) => c.id === "type")?.value as
+      | { value?: unknown }
+      | undefined;
+    const v = raw?.value;
+    const arr = Array.isArray(v) ? v : v != null ? [v] : [];
+    return arr.filter((x): x is string => typeof x === "string");
+  }, [columnFilters]);
+
   const isLoading = activeSearch
     ? searchResult.fetching && !searchResult.data
     : listResult.fetching && !listResult.data;
@@ -166,45 +310,45 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
       <SettingsPageTitle
         title="Wiki Memory"
         description="Browse the wiki compounded from your agents' memories."
-      />
-      <div className="mb-3 flex shrink-0 items-center gap-3">
-        <div className="relative w-fit min-w-56 max-w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search pages..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) =>
-              e.key === "Enter" && setActiveSearch(searchQuery.trim())
-            }
-            className="pl-9"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => {
-                setSearchQuery("");
-                setActiveSearch("");
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
+        badge={
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(v) => v && setView(v as PagesView)}
+            variant="outline"
+            className="ml-4 h-8 overflow-hidden rounded-full border bg-background shadow-sm"
+          >
+            <ToggleGroupItem
+              value="graph"
+              className="h-full rounded-none border-0 px-3 text-sm font-medium"
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(v) => v && setView(v as PagesView)}
-          variant="outline"
-        >
-          <ToggleGroupItem value="table" className="px-3 text-xs">
-            Table
-          </ToggleGroupItem>
-          <ToggleGroupItem value="graph" className="px-3 text-xs">
-            Graph
-          </ToggleGroupItem>
-        </ToggleGroup>
+              Graph
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="table"
+              className="h-full rounded-none border-0 border-l border-border px-3 text-sm font-medium"
+            >
+              Table
+            </ToggleGroupItem>
+          </ToggleGroup>
+        }
+      />
+      <div className="mb-3 flex shrink-0 items-center gap-2">
+        <WikiToolbarSearch
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          onCommitSearch={setActiveSearch}
+        />
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={tokenFilterColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear filters"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
       </div>
 
       <div className="min-h-0 flex-1">
@@ -216,6 +360,7 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
                 tenantId={effectiveTenantId}
                 useRequesterScope
                 searchQuery={searchQuery || undefined}
+                typeFilter={selectedTypes.length ? selectedTypes : undefined}
                 onNodeClick={(node, edges) => {
                   setGraphNode(node);
                   setGraphNodeEdges(edges);
@@ -245,7 +390,12 @@ export function SettingsWiki({ embedded }: { embedded?: boolean } = {}) {
         ) : (
           <DataTable
             columns={columns}
-            data={rows}
+            data={filteredRows}
+            emptyState={
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No pages match the current filters.
+              </div>
+            }
             onRowClick={(row) => {
               setSelectedRow(row);
               setSheetOpen(true);

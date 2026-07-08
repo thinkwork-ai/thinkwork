@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Search, X } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
+import { Database, FolderTree, Search, Shapes, X } from "lucide-react";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import {
   Badge,
+  Button,
   DataTable,
+  DataTableTokenFilter,
+  dataTableTokenFilterFns,
   Input,
   Sheet,
   ToggleGroup,
   ToggleGroupItem,
+  type DataTableTokenFilterColumn,
 } from "@thinkwork/ui";
 import {
   MemoryGraph,
@@ -67,6 +77,84 @@ function MemoryHeader() {
   return null;
 }
 
+// Collapsible search matching the Workflows toolbar: a search-icon button that
+// expands into an input. Drives the live `searchQuery` (graph) and commits
+// `activeSearch` (records query) on Enter.
+function MemoryToolbarSearch({
+  searchQuery,
+  onSearchQueryChange,
+  onCommitSearch,
+}: {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+  onCommitSearch: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const isOpen = expanded || searchQuery.length > 0;
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
+  const clearSearch = () => {
+    onSearchQueryChange("");
+    onCommitSearch("");
+    setExpanded(false);
+  };
+
+  if (!isOpen) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        className="h-8 w-8 rounded-md"
+        aria-label="Search Hindsight records"
+        onClick={() => setExpanded(true)}
+      >
+        <Search className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    );
+  }
+
+  return (
+    <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
+      <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+      <Input
+        ref={inputRef}
+        type="search"
+        aria-label="Search Hindsight records"
+        placeholder="Search Hindsight records..."
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        value={searchQuery}
+        onBlur={() => {
+          if (!searchQuery) setExpanded(false);
+        }}
+        onChange={(e) => onSearchQueryChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onCommitSearch(searchQuery.trim());
+          if (e.key === "Escape") {
+            e.preventDefault();
+            clearSearch();
+          }
+        }}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="absolute right-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+        aria-label="Clear search"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={clearSearch}
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
 function StrategyBadge({ strategy }: { strategy: string | null }) {
   if (!strategy) return null;
   const colors = STRATEGY_COLORS[strategy] || "bg-muted text-muted-foreground";
@@ -91,7 +179,7 @@ export function SettingsMemory({
   ) => void;
 } = {}) {
   const { tenantId } = useTenant();
-  const [view, setView] = useState<MemoryView>("table");
+  const [view, setView] = useState<MemoryView>("graph");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const graphRef = useRef<MemoryGraphHandle>(null);
@@ -313,6 +401,162 @@ export function SettingsMemory({
     [ownerLabels],
   );
 
+  // View-specific facets. The table (memory records) and graph (Hindsight
+  // entities) are different datasets with no shared axis, so each view gets
+  // facets appropriate to its data:
+  //   • Table → Bank / Scope / Type(strategy), filtering the rows.
+  //   • Graph → Entity Type (ontology types reported by the graph), dimming
+  //     non-matching nodes via MemoryGraph's `typeFilter`.
+  const [tableColumnFilters, setTableColumnFilters] =
+    useState<ColumnFiltersState>([]);
+  const tableFacetColumns: DataTableTokenFilterColumn[] = useMemo(() => {
+    const bankOptions = Array.from(
+      new Set(rows.map((r) => formatBankLabel(r, ownerLabels))),
+    )
+      .filter(Boolean)
+      .sort()
+      .map((value) => ({ value, label: value }));
+    const scopeOptions = Array.from(
+      new Set(rows.map((r) => formatOwnerScope(r, ownerLabels))),
+    )
+      .filter(Boolean)
+      .sort()
+      .map((value) => ({ value, label: value }));
+    const typeOptions = Array.from(
+      new Set(rows.map((r) => r.strategy).filter((s): s is string => !!s)),
+    )
+      .sort()
+      .map((value) => ({ value, label: strategyLabel(value) }));
+    return [
+      {
+        id: "bank",
+        label: "Bank",
+        type: "option",
+        icon: <Database className="size-4" />,
+        options: bankOptions,
+      },
+      {
+        id: "scope",
+        label: "Scope",
+        type: "option",
+        icon: <FolderTree className="size-4" />,
+        options: scopeOptions,
+      },
+      {
+        id: "type",
+        label: "Type",
+        type: "option",
+        icon: <Shapes className="size-4" />,
+        options: typeOptions,
+      },
+    ];
+  }, [rows, ownerLabels]);
+  const tableFilterColumns: ColumnDef<MemoryRow>[] = useMemo(
+    () => [
+      {
+        id: "bank",
+        accessorFn: (row) => formatBankLabel(row, ownerLabels),
+        filterFn: dataTableTokenFilterFns.option,
+      },
+      {
+        id: "scope",
+        accessorFn: (row) => formatOwnerScope(row, ownerLabels),
+        filterFn: dataTableTokenFilterFns.option,
+      },
+      {
+        id: "type",
+        accessorFn: (row) => row.strategy ?? "",
+        filterFn: dataTableTokenFilterFns.option,
+      },
+    ],
+    [ownerLabels],
+  );
+  const tableFilterTable = useReactTable({
+    data: rows,
+    columns: tableFilterColumns,
+    state: { columnFilters: tableColumnFilters },
+    onColumnFiltersChange: setTableColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const filteredRows = useMemo(
+    () => tableFilterTable.getFilteredRowModel().rows.map((r) => r.original),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tableFilterTable.getState().columnFilters, rows],
+  );
+
+  // Graph facets: Bank + Entity Type. The graph (tenant-wide) reports its
+  // banks and ontology types via callbacks; a headless filter table stores the
+  // selections, forwarded to MemoryGraph's `bankFilter` / `typeFilter`.
+  const [graphTypes, setGraphTypes] = useState<string[]>([]);
+  const [graphBanks, setGraphBanks] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  const [graphColumnFilters, setGraphColumnFilters] =
+    useState<ColumnFiltersState>([]);
+  const graphFacetColumns: DataTableTokenFilterColumn[] = useMemo(
+    () => [
+      {
+        id: "bank",
+        label: "Bank",
+        type: "option",
+        icon: <Database className="size-4" />,
+        options: graphBanks.map((b) => ({ value: b.id, label: b.name })),
+      },
+      {
+        id: "entityType",
+        label: "Type",
+        type: "option",
+        icon: <Shapes className="size-4" />,
+        options: graphTypes.map((value) => ({ value, label: value })),
+      },
+    ],
+    [graphBanks, graphTypes],
+  );
+  const graphFilterColumns: ColumnDef<{ bank: string; entityType: string }>[] =
+    useMemo(
+      () => [
+        {
+          id: "bank",
+          accessorFn: (row) => row.bank,
+          filterFn: dataTableTokenFilterFns.option,
+        },
+        {
+          id: "entityType",
+          accessorFn: (row) => row.entityType,
+          filterFn: dataTableTokenFilterFns.option,
+        },
+      ],
+      [],
+    );
+  const graphFilterTable = useReactTable({
+    data: [] as { bank: string; entityType: string }[],
+    columns: graphFilterColumns,
+    state: { columnFilters: graphColumnFilters },
+    onColumnFiltersChange: setGraphColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const selectedColumnValues = useCallback(
+    (id: string) => {
+      const raw = graphColumnFilters.find((c) => c.id === id)?.value as
+        | { value?: unknown }
+        | undefined;
+      const v = raw?.value;
+      const arr = Array.isArray(v) ? v : v != null ? [v] : [];
+      return arr.filter((x): x is string => typeof x === "string");
+    },
+    [graphColumnFilters],
+  );
+  const selectedEntityTypes = useMemo(
+    () => selectedColumnValues("entityType"),
+    [selectedColumnValues],
+  );
+  const selectedBanks = useMemo(
+    () => selectedColumnValues("bank"),
+    [selectedColumnValues],
+  );
+
   const isLoading = recordsResult.fetching && !recordsResult.data;
   const isRefreshing =
     (recordsResult.fetching && Boolean(recordsResult.data)) ||
@@ -385,45 +629,58 @@ export function SettingsMemory({
       <SettingsPageTitle
         title="Memory"
         description="Inspect and manage what your agents remember across threads."
-      />
-      <div className="mb-3 flex shrink-0 items-center gap-3">
-        <div className="relative w-fit min-w-56 max-w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search Hindsight records..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) =>
-              e.key === "Enter" && setActiveSearch(searchQuery.trim())
-            }
-            className="pl-9"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => {
-                setSearchQuery("");
-                setActiveSearch("");
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear search"
+        badge={
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(v) => v && setView(v as MemoryView)}
+            variant="outline"
+            className="ml-4 h-8 overflow-hidden rounded-full border bg-background shadow-sm"
+          >
+            <ToggleGroupItem
+              value="graph"
+              className="h-full rounded-none border-0 px-3 text-sm font-medium"
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-        <ToggleGroup
-          type="single"
-          value={view}
-          onValueChange={(v) => v && setView(v as MemoryView)}
-          variant="outline"
-        >
-          <ToggleGroupItem value="table" className="px-3 text-xs">
-            Table
-          </ToggleGroupItem>
-          <ToggleGroupItem value="graph" className="px-3 text-xs">
-            Graph
-          </ToggleGroupItem>
-        </ToggleGroup>
+              Graph
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="table"
+              className="h-full rounded-none border-0 border-l border-border px-3 text-sm font-medium"
+            >
+              Table
+            </ToggleGroupItem>
+          </ToggleGroup>
+        }
+      />
+      <div className="mb-3 flex shrink-0 items-center gap-2">
+        <MemoryToolbarSearch
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          onCommitSearch={setActiveSearch}
+        />
+        {view === "graph" ? (
+          <DataTableTokenFilter
+            table={graphFilterTable}
+            columns={graphFacetColumns}
+            addLabel="Filter"
+            showAddLabel={false}
+            clearLabel="Clear filters"
+            flattenToolbar
+            className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+            popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+          />
+        ) : (
+          <DataTableTokenFilter
+            table={tableFilterTable}
+            columns={tableFacetColumns}
+            addLabel="Filter"
+            showAddLabel={false}
+            clearLabel="Clear filters"
+            flattenToolbar
+            className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+            popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+          />
+        )}
       </div>
       {retainAttention.total > 0 ? (
         <div
@@ -444,7 +701,14 @@ export function SettingsMemory({
               <MemoryGraph
                 ref={graphRef}
                 useRequesterScope
+                allTenantBanks
                 searchQuery={searchQuery || undefined}
+                onTypesLoaded={setGraphTypes}
+                onBanksLoaded={setGraphBanks}
+                typeFilter={
+                  selectedEntityTypes.length ? selectedEntityTypes : undefined
+                }
+                bankFilter={selectedBanks.length ? selectedBanks : undefined}
                 onNodeClick={(node, edges) => {
                   setGraphNode(node);
                   setGraphNodeEdges(edges);
@@ -477,7 +741,12 @@ export function SettingsMemory({
         ) : (
           <DataTable
             columns={columns}
-            data={rows}
+            data={filteredRows}
+            emptyState={
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No memories match the current filters.
+              </div>
+            }
             onRowClick={(row) => {
               setSelectedRecord(row);
               setSheetOpen(true);

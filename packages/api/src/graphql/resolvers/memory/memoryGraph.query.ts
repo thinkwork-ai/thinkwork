@@ -12,16 +12,72 @@ import type { GraphQLContext } from "../../context.js";
 import { db, sql } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
+import { requireTenantAdmin } from "../core/authz.js";
+
+/**
+ * Enumerate every Hindsight bank in a tenant, tenant-safely. Mirrors the
+ * `inspectTenant` adapter path (THINK-220): bank identity is derived from the
+ * thinkwork tables (tenant_members / spaces / agents) scoped by `tenant_id`,
+ * NOT from the Hindsight `banks` table (which carries no tenant_id — a naive
+ * scan there would leak entities across tenants). Returns bank_id → label.
+ */
+async function tenantBankLabels(
+  tenantId: string,
+): Promise<Map<string, string>> {
+  const rows: any = await db.execute(sql`
+    SELECT DISTINCT ('user_' || tm.principal_id::text) AS bank_id,
+      COALESCE(u.name, u.email, tm.principal_id::text) AS name
+    FROM tenant_members tm
+    LEFT JOIN users u ON u.id = tm.principal_id
+    WHERE tm.tenant_id = ${tenantId}
+      AND lower(tm.principal_type) = 'user'
+      AND tm.status = 'active'
+    UNION
+    SELECT DISTINCT ('space_' || s.id::text) AS bank_id,
+      COALESCE(s.name, s.slug, s.id::text) AS name
+    FROM spaces s
+    WHERE s.tenant_id = ${tenantId}
+    UNION
+    SELECT DISTINCT a.id::text AS bank_id,
+      COALESCE(a.name, a.slug, a.id::text) AS name
+    FROM agents a
+    WHERE a.tenant_id = ${tenantId}
+  `);
+  const map = new Map<string, string>();
+  for (const r of (rows.rows ?? []) as Array<{
+    bank_id: string;
+    name: string;
+  }>) {
+    if (r.bank_id) map.set(r.bank_id, r.name || r.bank_id);
+  }
+  return map;
+}
 
 export const memoryGraph = async (
   _parent: unknown,
-  args: { tenantId?: string; userId?: string; assistantId?: string },
+  args: {
+    tenantId?: string;
+    userId?: string;
+    assistantId?: string;
+    allTenantBanks?: boolean;
+  },
   ctx: GraphQLContext,
 ) => {
-  const { userId } = await requireMemoryUserScope(ctx, {
-    ...args,
-    allowTenantAdmin: true,
-  });
+  // Tenant-wide mode is an operator surface: require tenant admin and span
+  // every bank in the tenant. Otherwise stay scoped to the requester's bank.
+  let bankLabels: Map<string, string> | null = null;
+  if (args.allTenantBanks) {
+    const tenantId = args.tenantId ?? ctx.auth.tenantId ?? null;
+    if (!tenantId) throw new Error("Tenant context required");
+    await requireTenantAdmin(ctx, tenantId);
+    bankLabels = await tenantBankLabels(tenantId);
+  } else {
+    const { userId } = await requireMemoryUserScope(ctx, {
+      ...args,
+      allowTenantAdmin: true,
+    });
+    bankLabels = new Map([[`user_${userId}`, "You"]]);
+  }
 
   const { inspect: inspectService } = getMemoryServices();
   const capabilities = await inspectService.capabilities();
@@ -29,7 +85,12 @@ export const memoryGraph = async (
     return { nodes: [], edges: [] };
   }
 
-  const bankId = `user_${userId}`;
+  const bankIds = [...bankLabels.keys()];
+  if (bankIds.length === 0) return { nodes: [], edges: [] };
+  const bankIdArray = sql`ARRAY[${sql.join(
+    bankIds.map((b) => sql`${b}`),
+    sql`, `,
+  )}]::text[]`;
   // Hindsight entity/cooccurrence tables — route to the Hindsight handle
   // (identical to `db` until the cutover env var is set).
   const hdb = resolveHindsightDb(db);
@@ -37,9 +98,9 @@ export const memoryGraph = async (
   let entityRows: any;
   try {
     entityRows = await hdb.execute(sql`
-			SELECT id, canonical_name, mention_count, metadata
+			SELECT id, canonical_name, mention_count, metadata, bank_id
 			FROM ${hindsightSql()}entities
-			WHERE bank_id = ${bankId}
+			WHERE bank_id = ANY(${bankIdArray})
 			ORDER BY mention_count DESC
 			LIMIT 200
 		`);
@@ -55,7 +116,7 @@ export const memoryGraph = async (
 		FROM ${hindsightSql()}entity_cooccurrences ec
 		JOIN ${hindsightSql()}entities e1 ON e1.id = ec.entity_id_1
 		JOIN ${hindsightSql()}entities e2 ON e2.id = ec.entity_id_2
-		WHERE e1.bank_id = ${bankId}
+		WHERE e1.bank_id = ANY(${bankIdArray})
 		ORDER BY ec.cooccurrence_count DESC
 		LIMIT 500
 	`);
@@ -101,6 +162,7 @@ export const memoryGraph = async (
       /* ignore */
     }
     const id = String(r.id);
+    const bankId = r.bank_id ? String(r.bank_id) : null;
     return {
       id,
       label: String(r.canonical_name || ""),
@@ -109,6 +171,8 @@ export const memoryGraph = async (
       entityType: meta.ontology_type || null,
       edgeCount: Number(r.mention_count) || 0,
       latestThreadId: threadByEntity.get(id) || null,
+      bankId,
+      bankName: bankId ? (bankLabels.get(bankId) ?? bankId) : null,
     };
   });
 
