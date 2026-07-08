@@ -29,11 +29,15 @@ export function SettingsHeaderBar() {
   // Optional in-header tab strip (e.g. the unified Memory page). Highlight the
   // deepest tab whose href prefixes the current path so sub-routes stay active.
   const tabs = actions?.tabs ?? [];
-  const activeTab =
-    [...tabs]
-      .reverse()
-      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
-    "";
+  const tabValue = (t: { to: string; search?: Record<string, string> }) =>
+    t.search ? `${t.to}?${JSON.stringify(t.search)}` : t.to;
+  const explicitActive = tabs.find((t) => t.active);
+  const activeTab = explicitActive
+    ? tabValue(explicitActive)
+    : ([...tabs]
+        .reverse()
+        .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))
+        ?.to ?? "");
 
   return (
     <header
@@ -95,12 +99,14 @@ export function SettingsHeaderBar() {
             <TabsList>
               {tabs.map((tab) => (
                 <TabsTrigger
-                  key={tab.to}
-                  value={tab.to}
+                  key={tabValue(tab)}
+                  value={tabValue(tab)}
                   asChild
                   className="px-3"
                 >
-                  <Link to={tab.to}>{tab.label}</Link>
+                  <Link to={tab.to} search={tab.search}>
+                    {tab.label}
+                  </Link>
                 </TabsTrigger>
               ))}
             </TabsList>

@@ -120,4 +120,9 @@ export const sharedPluginTermAllowlist = [
     reason:
       "shared platform database migration for n8n agent-step bridge run state.",
   },
+  {
+    path: "packages/database-pg/drizzle/0226_drop_n8n_agent_step_runs.sql",
+    reason:
+      "shared platform database migration dropping the retired n8n agent-step bridge run table (THINK-217/218).",
+  },
 ];

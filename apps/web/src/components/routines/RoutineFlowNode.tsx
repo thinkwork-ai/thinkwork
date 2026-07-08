@@ -1,15 +1,21 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
   AlertCircle,
+  Bot,
   CheckCircle2,
   Circle,
+  Clock,
   GitBranch,
+  Globe,
   Layers,
   Loader2,
   Map,
   Play,
+  Radio,
   Square,
+  UserCheck,
   Workflow,
+  Wrench,
   XCircle,
 } from "lucide-react";
 import { Badge } from "@thinkwork/ui";
@@ -155,6 +161,56 @@ function nodePresentation(node: RoutineGraphNode) {
         label: "Pass",
         iconClass:
           "border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+      };
+    // ThinkWork workflow-definition step kinds (the typed-steps document the
+    // Workflows Definition canvas renders — not Step Functions ASL).
+    case "agent":
+      return {
+        Icon: Bot,
+        label: "Agent",
+        iconClass: "border-primary/40 bg-primary/10 text-primary",
+      };
+    case "routine":
+      return {
+        Icon: GitBranch,
+        label: "Routine",
+        iconClass:
+          "border-cyan-500/35 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+      };
+    case "tool":
+      return {
+        Icon: Wrench,
+        label: "Tool",
+        iconClass:
+          "border-zinc-500/35 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
+      };
+    case "approval":
+      return {
+        Icon: UserCheck,
+        label: "Approval",
+        iconClass:
+          "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      };
+    case "wait":
+      return {
+        Icon: Clock,
+        label: "Wait",
+        iconClass:
+          "border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+      };
+    case "http":
+      return {
+        Icon: Globe,
+        label: "HTTP",
+        iconClass:
+          "border-violet-500/35 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+      };
+    case "emit_event":
+      return {
+        Icon: Radio,
+        label: "Emit event",
+        iconClass:
+          "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
       };
     default:
       return {

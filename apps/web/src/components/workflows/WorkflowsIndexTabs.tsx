@@ -1,7 +1,9 @@
-import { useNavigate } from "@tanstack/react-router";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@thinkwork/ui";
+import { useState } from "react";
+import { Plus } from "lucide-react";
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { SettingsRoutines } from "@/components/settings/SettingsRoutines";
+import { WorkflowFormDialog } from "./WorkflowFormDialog";
 import { WorkflowInventory } from "./WorkflowInventory";
 import { WorkflowRunsList } from "./WorkflowRunsList";
 
@@ -11,54 +13,76 @@ export type WorkflowsTab = (typeof WORKFLOWS_TABS)[number];
 /**
  * The unified Workflows section (THINK-218): Workflows (inventory), Runs
  * (tenant-wide run ledger), and Library (the git-backed Routines list,
- * reused as the step library). Tab state lives in the `?tab=` search param
- * so links/back-forward behave like every other tabbed settings page.
+ * reused as the step library). Tab state lives in the `?tab=` search param;
+ * the tab strip and the New-workflow action render in the page header like
+ * the unified Memory layout.
  */
 export function WorkflowsIndexTabs({ tab }: { tab: WorkflowsTab }) {
-  const navigate = useNavigate();
+  const [createOpen, setCreateOpen] = useState(false);
+  // Remount the inventory after a create so the fresh workflow shows up.
+  const [inventoryEpoch, setInventoryEpoch] = useState(0);
 
   usePageHeaderActions({
     title: "Workflows",
     breadcrumbs: [{ label: "Workflows" }],
+    tabs: [
+      {
+        to: "/settings/workflows",
+        label: "Workflows",
+        search: {},
+        active: tab === "workflows",
+      },
+      {
+        to: "/settings/workflows",
+        label: "Runs",
+        search: { tab: "runs" },
+        active: tab === "runs",
+      },
+      {
+        to: "/settings/workflows",
+        label: "Library",
+        search: { tab: "library" },
+        active: tab === "library",
+      },
+    ],
+    action: (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            aria-label="New workflow"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="bottom"
+          className="border border-border bg-popover text-popover-foreground shadow-md"
+          arrowClassName="bg-popover fill-popover border-b border-r border-border"
+        >
+          New workflow
+        </TooltipContent>
+      </Tooltip>
+    ),
     actionKey: `workflows-tabs:${tab}`,
   });
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      <Tabs
-        value={tab}
-        onValueChange={(value) =>
-          void navigate({
-            to: "/settings/workflows",
-            search: value === "workflows" ? {} : { tab: value as WorkflowsTab },
-          })
-        }
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <TabsList
-          variant="line"
-          className="mx-6 mt-6 w-auto shrink-0 justify-start border-b"
-        >
-          <TabsTrigger value="workflows" className="flex-none px-3">
-            Workflows
-          </TabsTrigger>
-          <TabsTrigger value="runs" className="flex-none px-3">
-            Runs
-          </TabsTrigger>
-          <TabsTrigger value="library" className="flex-none px-3">
-            Library
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="workflows" className="min-h-0 flex-1">
-          <WorkflowInventory embedded />
-        </TabsContent>
-        <TabsContent value="runs" className="min-h-0 flex-1">
-          <WorkflowRunsList embedded />
-        </TabsContent>
-        <TabsContent value="library" className="min-h-0 flex-1">
-          <SettingsRoutines embedded />
-        </TabsContent>
-      </Tabs>
+      {tab === "workflows" ? (
+        <WorkflowInventory key={inventoryEpoch} embedded />
+      ) : null}
+      {tab === "runs" ? <WorkflowRunsList embedded /> : null}
+      {tab === "library" ? <SettingsRoutines embedded /> : null}
+      <WorkflowFormDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={() => setInventoryEpoch((epoch) => epoch + 1)}
+      />
     </div>
   );
 }

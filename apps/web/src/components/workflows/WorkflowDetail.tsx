@@ -30,6 +30,7 @@ import {
   SettingsWorkflowQuery,
 } from "@/lib/graphql-queries";
 import { DefinitionStepsPanel } from "./DefinitionStepsPanel";
+import { WorkflowDefinitionCanvas } from "./WorkflowDefinitionCanvas";
 import { WorkflowFormDialog } from "./WorkflowFormDialog";
 import {
   DefinitionList,
@@ -446,6 +447,11 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
                 }
               />
             </InfoCard>
+            <div className="xl:col-span-2">
+              <WorkflowDefinitionCanvas
+                definition={workflow.currentVersion?.definitionSnapshot}
+              />
+            </div>
             <div className="xl:col-span-2">
               <DefinitionStepsPanel
                 definition={workflow.currentVersion?.definitionSnapshot}
