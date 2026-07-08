@@ -258,3 +258,7 @@ playwright/.cache/
 
 # Review scratch — large screenshots; keep .md feedback tracked
 .review/*.png
+
+# Ephemeral compound-engineering session output (ideation renders, scratch backups)
+docs/ideation/
+*.local-backup.md
