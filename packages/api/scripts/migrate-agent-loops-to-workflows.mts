@@ -173,6 +173,7 @@ async function upsertWorkflow(
       description:
         loop.description ?? "Migrated from an Automation (THINK-216).",
       lifecycle_status: "active",
+      readiness_state: "ready",
       primary_trigger_family: triggerFamily,
       source_agent_loop_id: loop.id,
     })

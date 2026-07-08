@@ -17,11 +17,15 @@ export function AppTopBar() {
   // Highlight the deepest tab whose href is a prefix of pathname so e.g.
   // /memory/kbs/$kbId still flags "KBs" as active.
   const tabs = actions?.tabs ?? [];
-  const activeTab =
-    [...tabs]
-      .reverse()
-      .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))?.to ??
-    "";
+  const tabValue = (t: { to: string; search?: Record<string, string> }) =>
+    t.search ? `${t.to}?${JSON.stringify(t.search)}` : t.to;
+  const explicitActive = tabs.find((t) => t.active);
+  const activeTab = explicitActive
+    ? tabValue(explicitActive)
+    : ([...tabs]
+        .reverse()
+        .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))
+        ?.to ?? "");
   const handleHistoryBack = () => {
     if (window.history.length > 1) {
       window.history.back();
@@ -158,12 +162,14 @@ export function AppTopBar() {
             <TabsList>
               {tabs.map((tab) => (
                 <TabsTrigger
-                  key={tab.to}
-                  value={tab.to}
+                  key={tabValue(tab)}
+                  value={tabValue(tab)}
                   asChild
                   className="px-3"
                 >
-                  <Link to={tab.to}>{tab.label}</Link>
+                  <Link to={tab.to} search={tab.search}>
+                    {tab.label}
+                  </Link>
                 </TabsTrigger>
               ))}
             </TabsList>

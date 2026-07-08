@@ -8,50 +8,55 @@ function source(path: string): string {
   return readFileSync(join(root, path), "utf8");
 }
 
-describe("Automation settings routing", () => {
-  it("registers first-class Automation settings routes backed by AgentLoop internals", () => {
-    expect(
-      source("src/routes/_authed/settings.automations.index.tsx"),
-    ).toContain('"/_authed/settings/automations/"');
-    expect(
-      source("src/routes/_authed/settings.automations.index.tsx"),
-    ).toContain("AgentLoopInventory");
-    expect(
-      source("src/routes/_authed/settings.agent-loops.index.tsx"),
-    ).toContain('"/_authed/settings/agent-loops/"');
-    expect(
-      source("src/routes/_authed/settings.agent-loops.$agentLoopId.tsx"),
-    ).toContain('"/_authed/settings/agent-loops/$agentLoopId"');
-    expect(
-      source(
-        "src/routes/_authed/settings.agent-loops.$agentLoopId_.runs.$runId.tsx",
-      ),
-    ).toContain('"/_authed/settings/agent-loops/$agentLoopId_/runs/$runId"');
+// THINK-218: Automations and Agent Loops collapse into the unified Workflows
+// section — every legacy Settings route under these families now redirects
+// to /settings/workflows rather than rendering AgentLoop internals directly.
+describe("Automation/Agent Loop settings routing (collapsed into Workflows)", () => {
+  it("redirects the legacy Automation index and detail routes to Workflows", () => {
+    const index = source("src/routes/_authed/settings.automations.index.tsx");
+    expect(index).toContain('"/_authed/settings/automations/"');
+    expect(index).toContain('redirect({ to: "/settings/workflows" })');
+    expect(index).not.toContain("AgentLoopInventory");
+
+    const detail = source(
+      "src/routes/_authed/settings.automations.$automationId.tsx",
+    );
+    expect(detail).toContain('"/_authed/settings/automations/$automationId"');
+    expect(detail).toContain('redirect({ to: "/settings/workflows" })');
+    expect(detail).not.toContain("AgentLoopDetail");
+  });
+
+  it("redirects the legacy Agent Loop index, detail, and run routes to Workflows", () => {
+    const index = source("src/routes/_authed/settings.agent-loops.index.tsx");
+    expect(index).toContain('"/_authed/settings/agent-loops/"');
+    expect(index).toContain('redirect({ to: "/settings/workflows" })');
+
+    const detail = source(
+      "src/routes/_authed/settings.agent-loops.$agentLoopId.tsx",
+    );
+    expect(detail).toContain('"/_authed/settings/agent-loops/$agentLoopId"');
+    expect(detail).toContain('redirect({ to: "/settings/workflows" })');
+    expect(detail).not.toContain("AgentLoopDetail");
+
+    const run = source(
+      "src/routes/_authed/settings.agent-loops.$agentLoopId_.runs.$runId.tsx",
+    );
+    expect(run).toContain(
+      '"/_authed/settings/agent-loops/$agentLoopId_/runs/$runId"',
+    );
+    expect(run).toContain('redirect({ to: "/settings/workflows" })');
+    expect(run).not.toContain("AgentLoopRunDetail");
+
     expect(source("src/routeTree.gen.ts")).toContain(
       'fullPath: "/settings/agent-loops/$agentLoopId/runs/$runId"',
     );
   });
 
-  it("uses Automations as the preferred Settings navigation route", () => {
+  it("no longer lists Automations as a Settings navigation route (collapsed into Workflows)", () => {
     const nav = source("src/components/settings/settings-nav.tsx");
-    expect(nav).toContain('label: "Automations"');
-    expect(nav).toContain('to: "/settings/automations"');
-  });
-
-  it("redirects the legacy AgentLoop index to the preferred Automation route", () => {
-    const route = source("src/routes/_authed/settings.agent-loops.index.tsx");
-    expect(route).toContain('redirect({ to: "/settings/automations" })');
-    expect(route).not.toContain("AgentLoopInventory");
-  });
-
-  it("renders the AgentLoop detail (not the legacy ScheduledJobDetail) at the Automation settings detail route", () => {
-    const route = source(
-      "src/routes/_authed/settings.automations.$automationId.tsx",
-    );
-
-    expect(route).toContain('"/_authed/settings/automations/$automationId"');
-    expect(route).toContain("AgentLoopDetail");
-    expect(route).not.toContain("ScheduledJobDetail");
-    expect(route).not.toContain("$scheduledJobId");
+    expect(nav).not.toContain('label: "Automations"');
+    expect(nav).not.toContain('to: "/settings/automations"');
+    expect(nav).toContain('label: "Workflows"');
+    expect(nav).toContain('to: "/settings/workflows"');
   });
 });

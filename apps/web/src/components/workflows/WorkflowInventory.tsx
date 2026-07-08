@@ -116,7 +116,13 @@ function uniqueOptions(
   return Array.from(new Set(rows.map(getValue).filter(Boolean))).sort();
 }
 
-export function WorkflowInventory() {
+export function WorkflowInventory({
+  embedded = false,
+}: {
+  /** When true, suppress the header-bar breadcrumb — a parent (the Workflows
+   *  tabs page) already owns it. */
+  embedded?: boolean;
+}) {
   const { tenantId } = useTenant();
 
   const [result] = useQuery<WorkflowsData>({
@@ -264,6 +270,7 @@ export function WorkflowInventory() {
       title="Workflows"
       description="Monitor workflows imported from routines, plugins, connected apps, and native ThinkWork sources."
       loading={loading}
+      embedded={embedded}
     >
       {result.error ? (
         <div className="rounded-md border border-destructive/30 p-4 text-sm text-destructive">

@@ -1,8 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
+import { Info, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,29 +12,33 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
   Badge,
   Button,
-  DataTable,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
-import { RoutineDefinitionPanel } from "@/components/routines/RoutineDefinitionPanel";
-import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   DeleteWorkflowMutation,
   SettingsWorkflowQuery,
 } from "@/lib/graphql-queries";
+import { WorkflowDefinitionTab } from "./WorkflowDefinitionTab";
+import { WorkflowExecutionsTab } from "./WorkflowExecutionsTab";
+import { WorkflowFormDialog } from "./WorkflowFormDialog";
 import {
   DefinitionList,
   formatDateTime,
   formatDuration,
   InfoCard,
+  jsonRecord,
   JsonPreview,
   primaryBinding,
   readinessReasonText,
@@ -93,7 +97,15 @@ type WorkflowDetailData = {
   } | null;
 };
 
-export function WorkflowDetail({ workflowId }: { workflowId: string }) {
+export type WorkflowDetailTab = "definition" | "executions";
+
+export function WorkflowDetail({
+  workflowId,
+  tab = "definition",
+}: {
+  workflowId: string;
+  tab?: WorkflowDetailTab;
+}) {
   const navigate = useNavigate();
   const [result, refetch] = useQuery<WorkflowDetailData>({
     query: SettingsWorkflowQuery,
@@ -103,6 +115,9 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
   const [deleteState, deleteWorkflowMutation] = useMutation(
     DeleteWorkflowMutation,
   );
+  const [editOpen, setEditOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const workflow = result.data?.workflow ?? null;
   const binding = primaryBinding(workflow?.bindings);
@@ -111,6 +126,10 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     binding?.bindingType === "step_functions_routine"
       ? binding.routineId
       : null;
+  const primaryTrigger = workflow?.triggers.find(
+    (trigger) => trigger.triggerFamily === workflow.primaryTriggerFamily,
+  );
+  const triggerConfig = jsonRecord(primaryTrigger?.triggerConfig);
 
   async function deleteWorkflow() {
     if (!workflow) return;
@@ -123,67 +142,104 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
     void navigate({ to: "/settings/workflows" });
   }
 
+  const headerIcon =
+    "text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary";
+  const headerTooltip = {
+    side: "bottom" as const,
+    className:
+      "border border-border bg-popover text-popover-foreground shadow-md",
+    arrowClassName: "bg-popover fill-popover border-b border-r border-border",
+  };
+
   usePageHeaderActions({
     title: workflow?.name ?? "Workflow",
     breadcrumbs: [
       { label: "Workflows", href: "/settings/workflows" },
       { label: workflow?.name ?? "Workflow" },
     ],
-    actionKey: `workflow:${workflowId}:${workflow?.updatedAt ?? "loading"}`,
-  });
-
-  const runColumns = useMemo<ColumnDef<WorkflowRunSummary>[]>(
-    () => [
+    tabs: [
       {
-        accessorKey: "status",
-        header: "Status",
-        size: 130,
-        cell: ({ row }) => (
-          <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
-        ),
+        to: `/settings/workflows/${workflowId}`,
+        label: "Definition",
+        search: {},
+        active: tab === "definition",
       },
       {
-        accessorKey: "triggerFamily",
-        header: "Trigger",
-        size: 120,
-        cell: ({ row }) => (
-          <Badge variant="outline" className="text-xs">
-            {titleize(row.original.triggerFamily)}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "triggerSource",
-        header: "Source",
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {row.original.triggerSource ?? "—"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "startedAt",
-        header: "Started",
-        size: 170,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {formatDateTime(row.original.startedAt)}
-          </span>
-        ),
-      },
-      {
-        id: "duration",
-        header: "Duration",
-        size: 110,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {formatDuration(row.original.startedAt, row.original.finishedAt)}
-          </span>
-        ),
+        to: `/settings/workflows/${workflowId}`,
+        label: "Executions",
+        search: { tab: "executions" },
+        active: tab === "executions",
       },
     ],
-    [],
-  );
+    action: workflow ? (
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={headerIcon}
+              aria-label="Workflow information"
+              onClick={() => setInfoOpen(true)}
+            >
+              <Info className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent {...headerTooltip}>
+            Workflow information
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={headerIcon}
+              aria-label="Edit workflow"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent {...headerTooltip}>Edit workflow</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Delete workflow"
+              disabled={deleteState.fetching}
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent {...headerTooltip}>Delete workflow</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={headerIcon}
+              aria-label="Refresh workflow"
+              onClick={() => refetch({ requestPolicy: "network-only" })}
+            >
+              <RefreshCw className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent {...headerTooltip}>Refresh</TooltipContent>
+        </Tooltip>
+      </div>
+    ) : null,
+    actionKey: `workflow:${workflowId}:${workflow?.updatedAt ?? "loading"}:${tab}:${deleteState.fetching ? "deleting" : "idle"}`,
+  });
 
   if (result.fetching && !workflow) {
     return (
@@ -207,86 +263,34 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-6">
-      <SettingsPageTitle
-        title={workflow.name}
-        badge={<SourceBadge binding={binding} />}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  disabled={deleteState.fetching}
-                >
-                  Delete
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this workflow?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {workflow.name} and its ThinkWork workflow records will be
-                    permanently removed. This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={deleteState.fetching}>
-                    Cancel
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    disabled={deleteState.fetching}
-                    className="bg-destructive text-white hover:bg-destructive/90"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      void deleteWorkflow();
-                    }}
-                  >
-                    Delete workflow
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => refetch({ requestPolicy: "network-only" })}
-            >
-              Refresh
-            </Button>
-          </div>
-        }
-      />
-      <Tabs
-        defaultValue={routineId ? "step-functions" : "overview"}
-        className="flex min-h-0 flex-1 flex-col gap-4"
-      >
-        <TabsList variant="line" className="w-full justify-start border-b">
-          <TabsTrigger value="overview" className="flex-none px-3">
-            Overview
-          </TabsTrigger>
-          {routineId ? (
-            <TabsTrigger value="step-functions" className="flex-none px-3">
-              Step Functions
-            </TabsTrigger>
-          ) : null}
-          <TabsTrigger value="runs" className="flex-none px-3">
-            Runs
-          </TabsTrigger>
-          <TabsTrigger value="definition" className="flex-none px-3">
-            Definition
-          </TabsTrigger>
-        </TabsList>
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-4">
+      {tab === "executions" ? (
+        <WorkflowExecutionsTab
+          workflowId={workflow.id}
+          runs={workflow.runs}
+          definition={workflow.currentVersion?.definitionSnapshot}
+        />
+      ) : (
+        <WorkflowDefinitionTab
+          definition={workflow.currentVersion?.definitionSnapshot}
+          version={workflow.currentVersion ?? null}
+        />
+      )}
 
-        <TabsContent
-          value="overview"
-          className="min-h-0 flex-1 overflow-y-auto"
-        >
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+      {/* Workflow information (was the Overview tab) — behind the header
+          info icon. */}
+      <Sheet open={infoOpen} onOpenChange={setInfoOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <span className="min-w-0 truncate">{workflow.name}</span>
+              <SourceBadge binding={binding} />
+            </SheetTitle>
+            <SheetDescription>
+              Identity, source, and triggers for this workflow.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 px-4 pb-6">
             <InfoCard title="Identity">
               <DefinitionList
                 items={[
@@ -305,12 +309,7 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
                     ),
                   },
                   ...(readinessReason
-                    ? [
-                        {
-                          label: "Readiness details",
-                          value: readinessReason,
-                        },
-                      ]
+                    ? [{ label: "Readiness details", value: readinessReason }]
                     : []),
                   {
                     label: "Trigger",
@@ -345,9 +344,9 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
               />
               <SourceLinks binding={binding} />
             </InfoCard>
-            <InfoCard title="Triggers" className="xl:col-span-2">
+            <InfoCard title="Triggers">
               {workflow.triggers.length ? (
-                <div className="grid gap-2 md:grid-cols-2">
+                <div className="grid gap-2">
                   {workflow.triggers.map((trigger) => (
                     <div
                       key={trigger.id}
@@ -375,88 +374,60 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
               )}
             </InfoCard>
           </div>
-        </TabsContent>
+        </SheetContent>
+      </Sheet>
 
-        {routineId ? (
-          <TabsContent
-            value="step-functions"
-            className="min-h-0 flex-1 overflow-hidden"
-          >
-            <RoutineDefinitionPanel
-              routineId={routineId}
-              onPublished={() => refetch({ requestPolicy: "network-only" })}
-              layout="workspace"
-            />
-          </TabsContent>
-        ) : null}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this workflow?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {workflow.name} and its ThinkWork workflow records will be
+              permanently removed. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteState.fetching}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteState.fetching}
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteWorkflow();
+              }}
+            >
+              Delete workflow
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-        <TabsContent value="runs" className="min-h-0 flex-1 overflow-y-auto">
-          <DataTable
-            columns={runColumns}
-            data={workflow.runs}
-            filterValue=""
-            filterColumn="status"
-            scrollable
-            allowHorizontalScroll
-            pageSize={25}
-            tableClassName="table-fixed"
-            onRowClick={(row) =>
-              navigate({
-                to: "/settings/workflows/$workflowId/runs/$runId",
-                params: { workflowId: workflow.id, runId: row.id },
-              })
-            }
-            emptyState={
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                This workflow has not recorded any runs yet.
-              </div>
-            }
-          />
-        </TabsContent>
-
-        <TabsContent
-          value="definition"
-          className="min-h-0 flex-1 overflow-y-auto"
-        >
-          <div className="grid gap-4 xl:grid-cols-2">
-            <InfoCard title="Version snapshot">
-              <DefinitionList
-                items={[
-                  {
-                    label: "Version",
-                    value: workflow.currentVersion?.versionNumber ?? "—",
-                  },
-                  {
-                    label: "Status",
-                    value: titleize(workflow.currentVersion?.versionStatus),
-                  },
-                  {
-                    label: "Source",
-                    value: titleize(workflow.currentVersion?.sourceKind),
-                  },
-                  {
-                    label: "Published",
-                    value: formatDateTime(workflow.currentVersion?.publishedAt),
-                  },
-                ]}
-              />
-            </InfoCard>
-            <InfoCard title="Capabilities">
-              <JsonPreview
-                value={
-                  workflow.currentVersion?.capabilitySnapshot ??
-                  workflow.capabilityFlags
-                }
-              />
-            </InfoCard>
-            <InfoCard title="Definition" className="xl:col-span-2">
-              <JsonPreview
-                value={workflow.currentVersion?.definitionSnapshot}
-              />
-            </InfoCard>
-          </div>
-        </TabsContent>
-      </Tabs>
+      <WorkflowFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        initialWorkflow={{
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          trigger: {
+            family: workflow.primaryTriggerFamily,
+            scheduleExpression:
+              typeof triggerConfig.scheduleExpression === "string"
+                ? triggerConfig.scheduleExpression
+                : null,
+            timezone:
+              typeof triggerConfig.timezone === "string"
+                ? triggerConfig.timezone
+                : null,
+          },
+        }}
+        onSaved={(_workflow, webhookToken) => {
+          refetch({ requestPolicy: "network-only" });
+          if (!webhookToken) setEditOpen(false);
+        }}
+      />
     </div>
   );
 }

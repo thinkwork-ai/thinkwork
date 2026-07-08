@@ -2,10 +2,8 @@ import type { ComponentType } from "react";
 import {
   Bot,
   Brain,
-  Clock,
   FileBox,
   Cpu,
-  GitBranch,
   History,
   Settings as SettingsIcon,
   Sparkles,
@@ -97,18 +95,9 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
-  {
-    label: "Automations",
-    to: "/settings/automations",
-    icon: Clock,
-    operatorOnly: true,
-  },
-  {
-    label: "Routines",
-    to: "/settings/routines",
-    icon: GitBranch,
-    operatorOnly: true,
-  },
+  // Automations and Routines collapsed into the unified Workflows section
+  // (THINK-218): Automations/Routines/Agent Loops surfaces all redirect to
+  // /settings/workflows now — Routines lives on as the Library tab.
   {
     label: "Workflows",
     to: "/settings/workflows",

@@ -3865,6 +3865,7 @@ export type Mutation = {
   saveEmailProviderCredential: EmailProviderInstall;
   saveWorkItemStatuses: Array<WorkItemStatus>;
   saveWorkItemView: WorkItemSavedView;
+  saveWorkflow: SaveWorkflowResult;
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
@@ -4865,6 +4866,10 @@ export type MutationSaveWorkItemStatusesArgs = {
 
 export type MutationSaveWorkItemViewArgs = {
   input: SaveWorkItemViewInput;
+};
+
+export type MutationSaveWorkflowArgs = {
+  input: SaveWorkflowInput;
 };
 
 export type MutationSeedEvalTestCasesArgs = {
@@ -8020,6 +8025,35 @@ export type SaveWorkItemViewInput = {
   viewType: WorkItemViewType;
 };
 
+export type SaveWorkflowInput = {
+  /** The versioned workflow definition document (typed steps + optional continuation policy). */
+  definition?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  /** Update when present; create otherwise. */
+  id?: InputMaybe<Scalars["ID"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  trigger?: InputMaybe<SaveWorkflowTriggerInput>;
+};
+
+/**
+ * Validation failures return errors with workflow null — form-friendly, never a
+ * GraphQL throw for definition problems.
+ */
+export type SaveWorkflowResult = {
+  __typename?: "SaveWorkflowResult";
+  errors: Array<WorkflowDefinitionError>;
+  /** Present when the workflow has a webhook trigger — the caller-facing URL path (/webhooks/<token>). */
+  webhookToken?: Maybe<Scalars["String"]["output"]>;
+  workflow?: Maybe<Workflow>;
+};
+
+export type SaveWorkflowTriggerInput = {
+  /** manual | schedule | webhook */
+  family: Scalars["String"]["input"];
+  schedule?: InputMaybe<WorkflowScheduleTriggerInput>;
+};
+
 export type ScheduledJob = {
   __typename?: "ScheduledJob";
   agentId?: Maybe<Scalars["ID"]["output"]>;
@@ -10824,6 +10858,17 @@ export type WorkflowCatalogItem = {
   tenantId: Scalars["ID"]["output"];
 };
 
+/**
+ * Definition validation error in ThinkWork terms (THINK-214 R4) — step, field,
+ * reason. Never ASL vocabulary.
+ */
+export type WorkflowDefinitionError = {
+  __typename?: "WorkflowDefinitionError";
+  field: Scalars["String"]["output"];
+  reason: Scalars["String"]["output"];
+  stepId?: Maybe<Scalars["String"]["output"]>;
+};
+
 export type WorkflowEngineBinding = {
   __typename?: "WorkflowEngineBinding";
   bindingStatus: WorkflowBindingStatus;
@@ -10960,6 +11005,13 @@ export enum WorkflowRunStatus {
   TimedOut = "timed_out",
   WaitingForHuman = "waiting_for_human",
 }
+
+export type WorkflowScheduleTriggerInput = {
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  /** EventBridge Scheduler expression: rate(...) or cron(...). */
+  scheduleExpression: Scalars["String"]["input"];
+  timezone?: InputMaybe<Scalars["String"]["input"]>;
+};
 
 export type WorkflowTemplateBinding = {
   __typename?: "WorkflowTemplateBinding";

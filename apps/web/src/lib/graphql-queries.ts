@@ -475,6 +475,29 @@ export const SettingsWorkflowRunQuery = gql`
   }
 `;
 
+export const SaveWorkflowMutation = gql`
+  mutation SaveWorkflow($input: SaveWorkflowInput!) {
+    saveWorkflow(input: $input) {
+      workflow {
+        id
+        name
+        slug
+        description
+        lifecycleStatus
+        primaryTriggerFamily
+        currentVersionNumber
+        updatedAt
+      }
+      errors {
+        stepId
+        field
+        reason
+      }
+      webhookToken
+    }
+  }
+`;
+
 export const ResolveWorkflowApprovalMutation = gql`
   mutation ResolveWorkflowApproval(
     $runId: ID!
@@ -723,6 +746,23 @@ export const SettingsGitRoutinesQuery = gql`
       validatedSha
       disabledReason
       lastRunAt
+    }
+  }
+`;
+
+// Routine summary for the Workflow Definition step card (THINK-218): shows
+// what the routine IS (description, module path, validated commit) instead
+// of the raw step JSON.
+export const WorkflowRoutineSummaryQuery = gql`
+  query WorkflowRoutineSummary($id: ID!) {
+    routine(id: $id) {
+      id
+      name
+      description
+      engine
+      status
+      modulePath
+      validatedSha
     }
   }
 `;

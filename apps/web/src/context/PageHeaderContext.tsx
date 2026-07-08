@@ -53,7 +53,17 @@ export interface PageHeaderActions {
    * strip into the page header instead of stacking a sub-header below it.
    * The active tab is highlighted by AppTopBar based on the current pathname.
    */
-  tabs?: { to: string; label: string }[];
+  tabs?: {
+    to: string;
+    label: string;
+    /** Optional search params for tabs that share a path (e.g. `?tab=`). */
+    search?: Record<string, string>;
+    /**
+     * Explicit active flag for search-param tabs. When any tab in the strip
+     * sets this, it wins over the default pathname-prefix highlighting.
+     */
+    active?: boolean;
+  }[];
   /** Optional compact action controls rendered at the right side of AppTopBar. */
   action?: ReactNode;
   /** Stable key used to refresh the header when action controls appear/disappear. */
@@ -102,7 +112,12 @@ export function usePageHeader() {
 export function usePageHeaderActions(actions: PageHeaderActions | null) {
   const ctx = usePageHeader();
   const tabsKey =
-    actions?.tabs?.map((t) => `${t.to}:${t.label}`).join(",") ?? "";
+    actions?.tabs
+      ?.map(
+        (t) =>
+          `${t.to}:${t.label}:${t.search ? JSON.stringify(t.search) : ""}:${t.active === undefined ? "" : t.active ? "on" : "off"}`,
+      )
+      .join(",") ?? "";
   const breadcrumbsKey =
     actions?.breadcrumbs
       ?.map(

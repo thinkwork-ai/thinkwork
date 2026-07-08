@@ -22,6 +22,12 @@ import { RoutineFlowNode } from "./RoutineFlowNode";
 
 interface RoutineFlowCanvasProps extends BuildRoutineAslGraphInput {
   mode: RoutineGraphMode;
+  /**
+   * Prebuilt graph override — used by the Workflows Definition canvas, which
+   * builds its graph from the typed-steps workflow definition instead of ASL.
+   * When set, `aslJson` and the other ASL inputs are ignored.
+   */
+  graph?: RoutineAslGraph;
   selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string | null) => void;
   onAddStepAfter?: (nodeId: string | null) => void;
@@ -35,6 +41,7 @@ const nodeTypes = {
 
 export function RoutineFlowCanvas({
   mode,
+  graph: graphOverride,
   selectedNodeId,
   onSelectNode,
   onAddStepAfter,
@@ -43,7 +50,10 @@ export function RoutineFlowCanvas({
   ...graphInput
 }: RoutineFlowCanvasProps) {
   const { theme } = useTheme();
-  const graph = useMemo(() => buildRoutineAslGraph(graphInput), [graphInput]);
+  const graph = useMemo(
+    () => graphOverride ?? buildRoutineAslGraph(graphInput),
+    [graphOverride, graphInput],
+  );
   const nodes = useMemo(
     () => toFlowNodes(graph, selectedNodeId),
     [graph, selectedNodeId],
