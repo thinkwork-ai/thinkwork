@@ -53,18 +53,32 @@ describe("planNextStep", () => {
     });
   });
 
-  it("returns unsupported_step (never a misrouted wait) for kinds without dispatch", () => {
+  it("routes routine/http/emit_event to execute_step", () => {
     const kinds: WorkflowDefinition["steps"] = [
       { id: "r", kind: "routine", routineId: "r-1" },
-      { id: "t", kind: "tool", tool: "emit_document" },
-      { id: "a", kind: "approval", prompt: "ok?" },
       { id: "h", kind: "http", method: "GET", url: "https://x.dev" },
       { id: "e", kind: "emit_event", eventType: "x.y" },
     ];
     for (const step of kinds) {
       const directive = planNextStep({ version: 1, steps: [step] }, cursor);
-      expect(directive).toEqual({ type: "unsupported_step", step });
+      expect(directive).toEqual({ type: "execute_step", step });
     }
+  });
+
+  it("routes approval to approval_step", () => {
+    const step = { id: "a", kind: "approval", prompt: "ok?" } as const;
+    expect(planNextStep({ version: 1, steps: [step] }, cursor)).toEqual({
+      type: "approval_step",
+      step,
+    });
+  });
+
+  it("returns unsupported_step for tool (no headless runner yet), never a misrouted wait", () => {
+    const step = { id: "t", kind: "tool", tool: "emit_document" } as const;
+    expect(planNextStep({ version: 1, steps: [step] }, cursor)).toEqual({
+      type: "unsupported_step",
+      step,
+    });
   });
 });
 

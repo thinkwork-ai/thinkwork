@@ -297,6 +297,90 @@ export async function recordWorkflowStepEvent(
     .where(eq(workflowRuns.id, input.workflowRunId));
 }
 
+/** Serialized-size ceiling for a stored step output (evidence summary). */
+const MAX_STEP_OUTPUT_CHARS = 16_384;
+
+function boundedStepOutput(output: unknown): unknown {
+  const serialized = JSON.stringify(output ?? null);
+  if (serialized === undefined) return null;
+  if (serialized.length <= MAX_STEP_OUTPUT_CHARS) return output ?? null;
+  return {
+    truncated: true,
+    preview: serialized.slice(0, MAX_STEP_OUTPUT_CHARS),
+  };
+}
+
+/**
+ * Persist an executed step's output as run evidence (THINK-215). Outputs feed
+ * `{{ steps.<id>.output.* }}` template resolution for later steps and render
+ * on the run timeline; they are bounded, never raw blobs.
+ */
+export async function recordWorkflowStepOutput(
+  db: WorkflowDb,
+  input: {
+    tenantId: string;
+    workflowId: string;
+    workflowRunId: string;
+    stepId: string;
+    stepKind: string;
+    iteration: number;
+    output: unknown;
+    now?: Date;
+  },
+): Promise<void> {
+  const now = input.now ?? new Date();
+  await db.insert(workflowEvidence).values({
+    tenant_id: input.tenantId,
+    workflow_id: input.workflowId,
+    workflow_run_id: input.workflowRunId,
+    evidence_type: "step_output",
+    source_system: "workflow_interpreter",
+    source_id: `${input.workflowRunId}:${input.stepId}:${input.iteration}`,
+    summary: {
+      stepId: input.stepId,
+      stepKind: input.stepKind,
+      iteration: input.iteration,
+      output: boundedStepOutput(input.output),
+    },
+    redaction_state: "summary_only",
+    created_at: now,
+  });
+}
+
+/**
+ * Load prior step outputs for a run as a stepId-keyed map (latest wins).
+ * Feeds the `steps` root of the template-resolution context.
+ */
+export async function loadWorkflowStepOutputs(
+  db: WorkflowDb,
+  input: { workflowRunId: string },
+): Promise<Record<string, { output: unknown }>> {
+  const rows = await db
+    .select({
+      summary: workflowEvidence.summary,
+      created_at: workflowEvidence.created_at,
+    })
+    .from(workflowEvidence)
+    .where(
+      and(
+        eq(workflowEvidence.workflow_run_id, input.workflowRunId),
+        eq(workflowEvidence.evidence_type, "step_output"),
+      ),
+    )
+    .orderBy(workflowEvidence.created_at);
+  const outputs: Record<string, { output: unknown }> = {};
+  for (const row of rows) {
+    const summary = row.summary as {
+      stepId?: unknown;
+      output?: unknown;
+    } | null;
+    if (summary && typeof summary.stepId === "string") {
+      outputs[summary.stepId] = { output: summary.output ?? null };
+    }
+  }
+  return outputs;
+}
+
 export async function storeTaskToken(
   db: WorkflowDb,
   input: {

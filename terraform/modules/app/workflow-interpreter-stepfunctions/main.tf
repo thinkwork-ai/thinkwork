@@ -210,8 +210,9 @@ resource "aws_iam_role_policy" "execution_states" {
 # The one static interpreter state machine (Standard).
 #
 # See KTD1 for the loop shape. Directives are the FROZEN protocol the
-# step-dispatch Lambda emits: dispatch_agent, wait_until, await_approval,
-# continue, rollover, terminal_success, terminal_failure, terminal_canceled.
+# step-dispatch Lambda emits: dispatch_agent, wait_until, execute_step,
+# await_approval, continue, rollover, terminal_success, terminal_failure,
+# terminal_canceled.
 ################################################################################
 
 resource "aws_sfn_state_machine" "interpreter" {
@@ -251,6 +252,7 @@ resource "aws_sfn_state_machine" "interpreter" {
         Choices = [
           { Variable = "$.directive", StringEquals = "dispatch_agent", Next = "AgentStep" },
           { Variable = "$.directive", StringEquals = "wait_until", Next = "WaitState" },
+          { Variable = "$.directive", StringEquals = "execute_step", Next = "ExecuteStep" },
           { Variable = "$.directive", StringEquals = "await_approval", Next = "ApprovalStep" },
           { Variable = "$.directive", StringEquals = "continue", Next = "LoadNextStep" },
           { Variable = "$.directive", StringEquals = "rollover", Next = "RolloverStart" },
@@ -285,6 +287,33 @@ resource "aws_sfn_state_machine" "interpreter" {
           Next        = "RecordAdvance"
         }]
         Next = "RecordAdvance"
+      }
+
+      # ---- Executable step: routine / http / emit_event run synchronously in
+      # the Lambda (THINK-215). The phase executes the step, records outcome +
+      # output evidence, evaluates advance/policy itself, and returns the next
+      # directive — so its output feeds DirectiveChoice directly. Application
+      # failures are recorded in the ledger by the Lambda; only an infra-level
+      # crash reaches Catch, where the EventBridge execution-callback
+      # terminalizes the run.
+      ExecuteStep = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = local.step_dispatch_lambda_arn
+          Payload = {
+            phase      = "execute_step"
+            "cursor.$" = "$.cursor"
+          }
+        }
+        OutputPath     = "$.Payload"
+        TimeoutSeconds = 900
+        Retry          = local.lambda_invoke_retry
+        Catch = [{
+          ErrorEquals = ["States.ALL"]
+          Next        = "FailState"
+        }]
+        Next = "DirectiveChoice"
       }
 
       # ---- Wait step: park until the ISO timestamp the Lambda emitted --------

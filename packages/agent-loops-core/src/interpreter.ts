@@ -33,9 +33,20 @@ export const ROLLOVER_CYCLE_THRESHOLD = 250;
 /** Hard guard against a rollover loop that never terminates. */
 export const MAX_ROLLOVERS = 40;
 
+/** Step kinds the execute_step phase runs synchronously in-Lambda. */
+export type ExecutableWorkflowStep = Extract<
+  WorkflowStep,
+  { kind: "routine" | "http" | "emit_event" }
+>;
+
 export type NextStepDirective =
   | { type: "dispatch_agent"; step: Extract<WorkflowStep, { kind: "agent" }> }
   | { type: "wait_until"; step: WorkflowStep; until: string }
+  | { type: "execute_step"; step: ExecutableWorkflowStep }
+  | {
+      type: "approval_step";
+      step: Extract<WorkflowStep, { kind: "approval" }>;
+    }
   | { type: "unsupported_step"; step: WorkflowStep }
   | { type: "iteration_end" };
 
@@ -43,10 +54,10 @@ export type NextStepDirective =
  * Resolve what the interpreter does at the current cursor. `now` is injected
  * so wait resolution is deterministic in tests.
  *
- * Step kinds that validate but have no dispatch path yet (THINK-214 ships the
- * schema ahead of THINK-215's dispatch) return `unsupported_step` so the run
- * fails cleanly in ThinkWork terms instead of misrouting as a zero-second
- * wait.
+ * routine/http/emit_event run synchronously in the step-dispatch Lambda
+ * (execute_step); approval parks on a task token (approval_step). `tool`
+ * validates but has no headless runner yet, so it returns unsupported_step
+ * and the run fails cleanly in ThinkWork terms instead of misrouting.
  */
 export function planNextStep(
   definition: WorkflowDefinition,
@@ -67,10 +78,12 @@ export function planNextStep(
       return { type: "wait_until", step, until };
     }
     case "routine":
-    case "tool":
-    case "approval":
     case "http":
     case "emit_event":
+      return { type: "execute_step", step };
+    case "approval":
+      return { type: "approval_step", step };
+    case "tool":
       return { type: "unsupported_step", step };
     default: {
       const exhaustive: never = step;

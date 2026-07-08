@@ -19,15 +19,20 @@ import {
   planNextStep,
   planRollover,
   readWorkflowDefinition,
+  resolveStepTemplates,
+  type ExecutableWorkflowStep,
   type InterpreterCursor,
+  type StepTemplateContext,
   type WorkflowDefinition,
   type WorkflowGoalEvidence,
 } from "@thinkwork/agent-loops-core";
 import {
   getDb,
   isTerminalWorkflowRunStatus,
+  loadWorkflowStepOutputs,
   recordInterpreterRollover,
   recordWorkflowStepEvent,
+  recordWorkflowStepOutput,
   storeTaskToken,
 } from "@thinkwork/database-pg";
 import {
@@ -48,6 +53,7 @@ type WorkflowDb = ReturnType<typeof getDb>;
 export type WorkflowDirective =
   | "dispatch_agent"
   | "wait_until"
+  | "execute_step"
   | "await_approval"
   | "continue"
   | "rollover"
@@ -78,6 +84,7 @@ export interface AgentStepResult {
 export type WorkflowStepDispatchEvent =
   | { phase: "load_next"; cursor: InterpreterCursor; executionArn: string }
   | { phase: "dispatch_agent"; cursor: InterpreterCursor; taskToken: string }
+  | { phase: "execute_step"; cursor: InterpreterCursor }
   | {
       phase: "record_advance";
       cursor: InterpreterCursor;
@@ -97,6 +104,7 @@ export type WorkflowStepDispatchEvent =
 interface RunRow {
   id: string;
   tenant_id: string;
+  workflow_id: string;
   status: string;
   backend_execution_id: string | null;
   workflow_version_id: string | null;
@@ -111,6 +119,7 @@ async function loadRun(
     .select({
       id: workflowRuns.id,
       tenant_id: workflowRuns.tenant_id,
+      workflow_id: workflowRuns.workflow_id,
       status: workflowRuns.status,
       backend_execution_id: workflowRuns.backend_execution_id,
       workflow_version_id: workflowRuns.workflow_version_id,
@@ -200,10 +209,33 @@ export async function handleLoadNext(
   if (plan.type === "wait_until") {
     return { directive: "wait_until", cursor, until: plan.until };
   }
+  if (plan.type === "execute_step") {
+    return { directive: "execute_step", cursor };
+  }
 
-  // Step kinds that validate but are not yet executable (THINK-214 ships the
-  // schema ahead of THINK-215's dispatch) fail the run cleanly, in ThinkWork
-  // terms — never a silent misroute.
+  // Approval step: mark the run waiting BEFORE the machine parks on the task
+  // token, so operators see the pending decision the moment the step starts.
+  if (plan.type === "approval_step") {
+    await recordWorkflowStepEvent(db, {
+      tenantId: cursor.tenantId,
+      workflowRunId: run.id,
+      eventType: "workflow_step_started",
+      summary: {
+        stepId: plan.step.id,
+        stepKind: "approval",
+        iteration: cursor.iteration,
+        status: "waiting",
+        summary: plan.step.prompt,
+      },
+      runStatus: "waiting_for_human",
+      now,
+    });
+    return { directive: "await_approval", cursor };
+  }
+
+  // Step kinds that validate but are not yet executable (`tool` has no
+  // headless runner yet) fail the run cleanly, in ThinkWork terms — never a
+  // silent misroute.
   if (plan.type === "unsupported_step") {
     await recordWorkflowStepEvent(db, {
       tenantId: cursor.tenantId,
@@ -346,6 +378,326 @@ export async function handleDispatchAgent(
 }
 
 // ---------------------------------------------------------------------------
+// Phase 2b: execute_step — routine / http / emit_event run synchronously here
+// (THINK-215). The step executes, its output lands as run evidence (feeding
+// {{ steps.<id>.output.* }} for later steps), and the shared advance tail
+// emits the next directive.
+// ---------------------------------------------------------------------------
+
+export interface StepExecutionOutcome {
+  turnStatus: "completed" | "failed";
+  errorSummary?: string;
+  output?: unknown;
+}
+
+/** Default / ceiling for http step timeouts (seconds). */
+const HTTP_STEP_DEFAULT_TIMEOUT_S = 30;
+const HTTP_STEP_MAX_TIMEOUT_S = 300;
+const HTTP_BODY_PREVIEW_CHARS = 2_000;
+
+async function buildTemplateContext(
+  db: WorkflowDb,
+  run: RunRow,
+): Promise<StepTemplateContext> {
+  const input = (run.input_summary ?? {}) as Record<string, unknown>;
+  return {
+    // The trigger's caller payload folds into input_summary at trigger time
+    // (buildInputSummary), so both roots read from the same record.
+    trigger: { payload: input },
+    run: { input },
+    steps: await loadWorkflowStepOutputs(db, { workflowRunId: run.id }),
+  };
+}
+
+export async function handleExecuteStep(
+  db: WorkflowDb,
+  event: Extract<WorkflowStepDispatchEvent, { phase: "execute_step" }>,
+  now: Date = new Date(),
+  executors: StepExecutors = defaultStepExecutors,
+): Promise<DirectiveResult> {
+  const { cursor } = event;
+  const run = await loadRun(db, cursor);
+  const definition = await loadDefinition(db, run);
+  const step = definition.steps[cursor.stepPointer];
+  if (
+    !step ||
+    (step.kind !== "routine" &&
+      step.kind !== "http" &&
+      step.kind !== "emit_event")
+  ) {
+    throw new Error(
+      `workflow run ${run.id} step pointer ${cursor.stepPointer} is not an executable step — cannot run it`,
+    );
+  }
+
+  // Idempotent retry: a prior completion event for this (step, iteration)
+  // means the step already ran — do not execute side effects again; replay
+  // the recorded outcome through the shared advance tail.
+  const [priorCompletion] = await db
+    .select({ event_type: workflowRunEvents.event_type })
+    .from(workflowRunEvents)
+    .where(
+      and(
+        eq(workflowRunEvents.workflow_run_id, run.id),
+        sql`${workflowRunEvents.event_type} IN ('workflow_step_finished', 'workflow_step_failed')`,
+        sql`${workflowRunEvents.payload_summary}->>'stepId' = ${step.id}`,
+        sql`${workflowRunEvents.payload_summary}->>'iteration' = ${String(cursor.iteration)}`,
+      ),
+    )
+    .limit(1);
+  if (priorCompletion) {
+    const replayedStatus =
+      priorCompletion.event_type === "workflow_step_finished"
+        ? ("completed" as const)
+        : ("failed" as const);
+    return await advanceAfterStepOutcome(db, {
+      cursor,
+      run,
+      definition,
+      step,
+      turnStatus: replayedStatus,
+      evidence: null,
+      stepErrorSummary:
+        replayedStatus === "failed" ? "step failed (recorded)" : undefined,
+      completionAlreadyRecorded: true,
+      now,
+    });
+  }
+
+  await recordWorkflowStepEvent(db, {
+    tenantId: cursor.tenantId,
+    workflowRunId: run.id,
+    eventType: "workflow_step_started",
+    summary: {
+      stepId: step.id,
+      stepKind: step.kind,
+      iteration: cursor.iteration,
+      status: "running",
+    },
+    runStatus: "running",
+    now,
+  });
+
+  const context = await buildTemplateContext(db, run);
+  const outcome = await executeStep(step, context, executors);
+
+  if (outcome.turnStatus === "completed" && outcome.output !== undefined) {
+    await recordWorkflowStepOutput(db, {
+      tenantId: cursor.tenantId,
+      workflowId: run.workflow_id,
+      workflowRunId: run.id,
+      stepId: step.id,
+      stepKind: step.kind,
+      iteration: cursor.iteration,
+      output: outcome.output,
+      now,
+    });
+  }
+
+  return await advanceAfterStepOutcome(db, {
+    cursor,
+    run,
+    definition,
+    step,
+    turnStatus: outcome.turnStatus,
+    evidence: null,
+    stepErrorSummary: outcome.errorSummary,
+    now,
+  });
+}
+
+/**
+ * Injectable side-effect boundary so unit tests never invoke Lambdas or the
+ * network. Production uses defaultStepExecutors.
+ */
+export interface StepExecutors {
+  invokeRoutine: (input: {
+    routineId: string;
+    input: Record<string, unknown>;
+  }) => Promise<{
+    status: string;
+    executionId?: string | null;
+    outputJson?: unknown;
+    errorClass?: string;
+    errorMessage?: string | null;
+  }>;
+  httpFetch: typeof fetch;
+}
+
+export const defaultStepExecutors: StepExecutors = {
+  invokeRoutine: async ({ routineId, input }) => {
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
+    const lambda = new LambdaClient({});
+    const explicit = process.env.ROUTINE_EXEC_GIT_FUNCTION_NAME;
+    const stage = process.env.STAGE;
+    const fnName =
+      explicit ??
+      (stage ? `thinkwork-${stage}-api-routine-exec-git` : undefined);
+    if (!fnName) {
+      throw new Error(
+        "routine step cannot dispatch: ROUTINE_EXEC_GIT_FUNCTION_NAME / STAGE are unset",
+      );
+    }
+    // RequestResponse and surface errors — never fire-and-forget.
+    const response = await lambda.send(
+      new InvokeCommand({
+        FunctionName: fnName,
+        InvocationType: "RequestResponse",
+        Payload: new TextEncoder().encode(
+          JSON.stringify({ routineId, input, triggerSource: "workflow_step" }),
+        ),
+      }),
+    );
+    if (response.FunctionError) {
+      return {
+        status: "failed",
+        errorClass: "routine_invoke_failed",
+        errorMessage: `executor function error: ${response.FunctionError}`,
+      };
+    }
+    const text = response.Payload
+      ? new TextDecoder().decode(response.Payload)
+      : "";
+    try {
+      return text ? JSON.parse(text) : { status: "failed" };
+    } catch {
+      return {
+        status: "failed",
+        errorClass: "routine_invoke_failed",
+        errorMessage: "executor returned malformed JSON",
+      };
+    }
+  },
+  httpFetch: fetch,
+};
+
+async function executeStep(
+  step: ExecutableWorkflowStep,
+  context: StepTemplateContext,
+  executors: StepExecutors,
+): Promise<StepExecutionOutcome> {
+  if (step.kind === "emit_event") {
+    const resolved = resolveStepTemplates(step.payload ?? {}, context);
+    if (!resolved.ok) return missingTemplates(resolved.missing);
+    return {
+      turnStatus: "completed",
+      output: { eventType: step.eventType, payload: resolved.value },
+    };
+  }
+
+  if (step.kind === "routine") {
+    const resolved = resolveStepTemplates(step.input ?? {}, context);
+    if (!resolved.ok) return missingTemplates(resolved.missing);
+    let result: Awaited<ReturnType<StepExecutors["invokeRoutine"]>>;
+    try {
+      result = await executors.invokeRoutine({
+        routineId: step.routineId,
+        input: (resolved.value ?? {}) as Record<string, unknown>,
+      });
+    } catch (error) {
+      return {
+        turnStatus: "failed",
+        errorSummary: `routine invocation failed: ${boundedMessage(error)}`,
+      };
+    }
+    if (result.status !== "succeeded") {
+      return {
+        turnStatus: "failed",
+        errorSummary:
+          result.errorMessage ??
+          result.errorClass ??
+          `routine ended with status "${result.status}"`,
+      };
+    }
+    return {
+      turnStatus: "completed",
+      output: {
+        executionId: result.executionId ?? null,
+        result: result.outputJson ?? null,
+      },
+    };
+  }
+
+  // http
+  const resolved = resolveStepTemplates(
+    {
+      url: step.url,
+      headers: step.headers ?? {},
+      body: step.body,
+    },
+    context,
+  );
+  if (!resolved.ok) return missingTemplates(resolved.missing);
+  const { url, headers, body } = resolved.value as {
+    url: unknown;
+    headers: Record<string, string>;
+    body?: unknown;
+  };
+  if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+    return {
+      turnStatus: "failed",
+      errorSummary: `http step url did not resolve to an absolute http(s) URL`,
+    };
+  }
+  const timeoutS = Math.min(
+    step.timeoutSeconds ?? HTTP_STEP_DEFAULT_TIMEOUT_S,
+    HTTP_STEP_MAX_TIMEOUT_S,
+  );
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutS * 1000);
+  try {
+    const hasBody = body !== undefined && step.method !== "GET";
+    const response = await executors.httpFetch(url, {
+      method: step.method,
+      headers: {
+        ...(hasBody ? { "content-type": "application/json" } : {}),
+        ...headers,
+      },
+      ...(hasBody
+        ? { body: typeof body === "string" ? body : JSON.stringify(body) }
+        : {}),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    const bodyPreview = text.slice(0, HTTP_BODY_PREVIEW_CHARS);
+    if (!response.ok) {
+      return {
+        turnStatus: "failed",
+        errorSummary: `http step got ${response.status} from the endpoint`,
+        output: { status: response.status, bodyPreview },
+      };
+    }
+    return {
+      turnStatus: "completed",
+      output: { status: response.status, bodyPreview },
+    };
+  } catch (error) {
+    const aborted = controller.signal.aborted;
+    return {
+      turnStatus: "failed",
+      errorSummary: aborted
+        ? `http step timed out after ${timeoutS}s`
+        : `http step request failed: ${boundedMessage(error)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function missingTemplates(missing: string[]): StepExecutionOutcome {
+  return {
+    turnStatus: "failed",
+    errorSummary: `step input references that did not resolve: ${missing.join(", ")}`,
+  };
+}
+
+function boundedMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.slice(0, 500);
+}
+
+// ---------------------------------------------------------------------------
 // Phase 3: record_advance
 // ---------------------------------------------------------------------------
 
@@ -389,6 +741,50 @@ export async function handleRecordAdvance(
     }
   }
 
+  return await advanceAfterStepOutcome(db, {
+    cursor,
+    run,
+    definition,
+    step,
+    turnStatus,
+    evidence,
+    stepErrorSummary,
+    now,
+  });
+}
+
+/**
+ * The shared tail of every step's lifecycle: record the completion, evaluate
+ * the continuation policy at iteration end, and emit the next directive.
+ * Consumed by record_advance (agent/wait), execute_step (routine/http/
+ * emit_event), and record_approval's approval-step path.
+ */
+async function advanceAfterStepOutcome(
+  db: WorkflowDb,
+  input: {
+    cursor: InterpreterCursor;
+    run: RunRow;
+    definition: WorkflowDefinition;
+    step: WorkflowDefinition["steps"][number];
+    turnStatus: "completed" | "failed";
+    evidence: WorkflowGoalEvidence | null;
+    stepErrorSummary: string | undefined;
+    /** Replay path: the completion event already exists — never re-insert it. */
+    completionAlreadyRecorded?: boolean;
+    now: Date;
+  },
+): Promise<DirectiveResult> {
+  const {
+    cursor,
+    run,
+    definition,
+    step,
+    turnStatus,
+    evidence,
+    stepErrorSummary,
+    completionAlreadyRecorded,
+    now,
+  } = input;
   const isLastStep = cursor.stepPointer >= definition.steps.length - 1;
 
   // Idempotency dedupe: a prior policy decision for this (run, step, iteration)
@@ -408,10 +804,30 @@ export async function handleRecordAdvance(
     .limit(1);
   const record = !priorDecision;
 
-  // Non-final step: record completion, advance the pointer, keep going. No
+  // Non-final step: record the outcome, then either fail the run (a failed
+  // step mid-pass must never silently continue) or advance the pointer. No
   // policy evaluation happens mid-pass.
   if (!isLastStep) {
-    if (record) {
+    if (turnStatus === "failed") {
+      if (record && !completionAlreadyRecorded) {
+        await recordWorkflowStepEvent(db, {
+          tenantId: cursor.tenantId,
+          workflowRunId: run.id,
+          eventType: "workflow_step_failed",
+          summary: {
+            stepId: step.id,
+            stepKind: step.kind,
+            iteration: cursor.iteration,
+            status: "failed",
+            errorSummary: stepErrorSummary,
+          },
+          runStatus: "failed",
+          now,
+        });
+      }
+      return { directive: "terminal_failure", cursor };
+    }
+    if (record && !completionAlreadyRecorded) {
       await recordStepCompletion(db, {
         cursor,
         run,
@@ -426,7 +842,7 @@ export async function handleRecordAdvance(
 
   // Iteration end: record step completion, then evaluate the continuation
   // policy.
-  if (record) {
+  if (record && !completionAlreadyRecorded) {
     await recordStepCompletion(db, {
       cursor,
       run,
@@ -597,16 +1013,23 @@ export async function handleAwaitApproval(
 ): Promise<ParkResult> {
   const { cursor, taskToken } = event;
   const run = await loadRun(db, cursor);
+  // An approval STEP stores its definition step id; the policy-driven
+  // human_needed park (no approval step at the cursor) keeps the legacy
+  // "approval" marker. Purpose stays "approval" for both so workflow-resume
+  // finds the token the same way.
+  const definition = await loadDefinition(db, run);
+  const step = definition.steps[cursor.stepPointer];
   await storeTaskToken(db, {
     tenantId: cursor.tenantId,
     workflowRunId: run.id,
-    stepId: "approval",
+    stepId: step?.kind === "approval" ? step.id : "approval",
     iteration: cursor.iteration,
     purpose: "approval",
     token: taskToken,
     now,
   });
-  // Run status stays waiting_for_human (already set by the policy decision).
+  // Run status stays waiting_for_human (set by the policy decision or the
+  // approval step's load_next).
   return { ok: true };
 }
 
@@ -622,6 +1045,12 @@ export async function handleRecordApproval(
   const { cursor, approval } = event;
   const run = await loadRun(db, cursor);
   const definition = await loadDefinition(db, run);
+  // Two distinct approvals share this phase: an approval STEP (the cursor
+  // points at a kind:"approval" step — the workflow moves to the NEXT step on
+  // approve) and the policy-driven human_needed checkpoint (cursor points at
+  // the iteration's last step — approve starts the next ITERATION).
+  const step = definition.steps[cursor.stepPointer];
+  const isApprovalStep = step?.kind === "approval";
 
   if (!approval.approved) {
     await recordWorkflowStepEvent(db, {
@@ -630,6 +1059,7 @@ export async function handleRecordApproval(
       eventType: "workflow_approval_decision",
       provenance: "operator_decision",
       summary: {
+        stepId: isApprovalStep ? step.id : undefined,
         iteration: cursor.iteration,
         decision: "rejected",
         summary: approval.note ?? undefined,
@@ -646,6 +1076,7 @@ export async function handleRecordApproval(
     eventType: "workflow_approval_decision",
     provenance: "operator_decision",
     summary: {
+      stepId: isApprovalStep ? step.id : undefined,
       iteration: cursor.iteration,
       decision: "approved",
       summary: approval.note ?? undefined,
@@ -653,6 +1084,19 @@ export async function handleRecordApproval(
     runStatus: "running",
     now,
   });
+
+  if (isApprovalStep) {
+    return await advanceAfterStepOutcome(db, {
+      cursor,
+      run,
+      definition,
+      step,
+      turnStatus: "completed",
+      evidence: null,
+      stepErrorSummary: undefined,
+      now,
+    });
+  }
 
   return await planContinue(db, {
     definition,
@@ -676,6 +1120,8 @@ export async function handler(
       return await handleLoadNext(db, event);
     case "dispatch_agent":
       return await handleDispatchAgent(db, event);
+    case "execute_step":
+      return await handleExecuteStep(db, event);
     case "record_advance":
       return await handleRecordAdvance(db, event);
     case "await_approval":
