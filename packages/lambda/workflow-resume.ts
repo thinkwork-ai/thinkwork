@@ -20,10 +20,7 @@
  * consumes only @thinkwork/database-pg and the AWS SDK.
  */
 
-import {
-  SendTaskSuccessCommand,
-  SFNClient,
-} from "@aws-sdk/client-sfn";
+import { SendTaskSuccessCommand, SFNClient } from "@aws-sdk/client-sfn";
 import { consumeTaskToken, getDb } from "@thinkwork/database-pg";
 import {
   workflowRuns,
@@ -99,15 +96,19 @@ export async function resumeWorkflowApproval(
     );
   }
 
-  // Find the pending approval token to learn its iteration (the approval token
-  // is stored with a fixed stepId 'approval' at the deciding iteration).
+  // Find the pending approval token by PURPOSE, not step id: an approval STEP
+  // stores its definition step id (THINK-215) while the policy-driven
+  // human_needed park keeps the legacy 'approval' marker — both share
+  // purpose='approval', and a run holds at most one pending approval.
   const [pending] = await db
-    .select({ iteration: workflowTaskTokens.iteration })
+    .select({
+      iteration: workflowTaskTokens.iteration,
+      step_id: workflowTaskTokens.step_id,
+    })
     .from(workflowTaskTokens)
     .where(
       and(
         eq(workflowTaskTokens.workflow_run_id, input.workflowRunId),
-        eq(workflowTaskTokens.step_id, "approval"),
         eq(workflowTaskTokens.purpose, "approval"),
         eq(workflowTaskTokens.status, "pending"),
       ),
@@ -121,7 +122,7 @@ export async function resumeWorkflowApproval(
   // CAS consume so a double-resume is a clean already-resolved result.
   const consumed = await consumeTaskToken(db, {
     workflowRunId: input.workflowRunId,
-    stepId: "approval",
+    stepId: pending.step_id,
     iteration: pending.iteration,
     purpose: "approval",
   });
