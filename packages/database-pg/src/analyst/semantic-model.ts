@@ -224,21 +224,43 @@ export function auditSensitiveCoverage(): string[] {
  * committed migration matches this function's current output.
  */
 export function analystGrantSql(): string {
-  const lines: string[] = [];
+  // Existence-guarded: dev can lag the Drizzle schema (hand-rolled
+  // migration ordering, pending db:push), and a plain GRANT against a
+  // missing table aborts the whole transactional apply. A missing table is
+  // simply not granted (fail-closed) and reported via WARNING; re-running
+  // the migration after the table lands grants it.
+  const lines: string[] = [
+    "DO $$",
+    "DECLARE",
+    "  missing text[] := '{}';",
+    "BEGIN",
+  ];
   for (const table of listAnalystTables()) {
+    lines.push(`  IF to_regclass('public.${table.name}') IS NOT NULL THEN`);
     if (table.deniedColumns.length === 0) {
-      lines.push(`GRANT SELECT ON public.${table.name} TO analyst_reader;`);
+      lines.push(`    GRANT SELECT ON public.${table.name} TO analyst_reader;`);
     } else {
       const granted = table.columns
         .map((c) => c.name)
         .sort()
         .join(", ");
       lines.push(
-        `REVOKE ALL PRIVILEGES ON public.${table.name} FROM analyst_reader;`,
-        `GRANT SELECT (${granted}) ON public.${table.name} TO analyst_reader;`,
+        `    REVOKE ALL PRIVILEGES ON public.${table.name} FROM analyst_reader;`,
+        `    GRANT SELECT (${granted}) ON public.${table.name} TO analyst_reader;`,
       );
     }
+    lines.push(
+      `  ELSE`,
+      `    missing := missing || '${table.name}'::text;`,
+      `  END IF;`,
+    );
   }
+  lines.push(
+    "  IF array_length(missing, 1) > 0 THEN",
+    "    RAISE WARNING 'analyst grants skipped for tables missing on this database: %', missing;",
+    "  END IF;",
+    "END $$;",
+  );
   return lines.join("\n");
 }
 
