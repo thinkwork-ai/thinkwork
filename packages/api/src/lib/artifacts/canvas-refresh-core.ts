@@ -28,7 +28,12 @@
  *     by a spec re-emit           → SKIPPED: quality STALE, no clobber (KTD6).
  */
 
-import { resultShapeHash } from "@thinkwork/thread-json-render";
+import {
+  analystEnvelopeFromRaw,
+  canvasShapeHashForToolResult,
+  resultShapeHash,
+  ANALYST_QUERY_TOOL_NAME,
+} from "@thinkwork/thread-json-render";
 
 /** How a refresh was triggered — provenance only (no behavioral branch). */
 export type CanvasRefreshTrigger = "user" | "schedule" | "agent";
@@ -297,7 +302,14 @@ export async function refreshBinding(
   // R7 / AE2: a result-shape hash mismatch is a SCHEMA refresh, not a data
   // refresh. Keep last-good rendering, flag SCHEMA_STALE, escalate to an agent
   // turn — the mismatched payload is NEVER applied to the head (no applyHeadData).
-  const fetchedShapeHash = resultShapeHash(call.raw);
+  // Tool-aware hashing (THINK-228 KTD2): run_query hashes the value-invariant
+  // columns descriptor so nullable-key/staging churn never trips this gate;
+  // only a genuine column-set change does.
+  const fetchedShapeHash = canvasShapeHashForToolResult({
+    toolName: binding.toolName,
+    raw: call.raw,
+    genericHash: resultShapeHash,
+  });
   if (fetchedShapeHash !== binding.resultShapeHash) {
     await deps.writeBindingQuality({
       bindingId: binding.id,
@@ -313,6 +325,31 @@ export async function refreshBinding(
       reason: "Result shape changed; spec re-emission required.",
       escalate: true,
     };
+  }
+
+  // THINK-228 R14 (truncated drift): the columns descriptor is deliberately
+  // value-invariant, so a `truncated` flip alone never changes the hash — but
+  // silently applying a truncated result would render a PARTIAL aggregate as
+  // if it were complete. Escalate instead (explicit check, per plan KTD2/U7).
+  if (binding.toolName === ANALYST_QUERY_TOOL_NAME) {
+    const envelope = analystEnvelopeFromRaw(call.raw);
+    if (envelope?.truncated) {
+      await deps.writeBindingQuality({
+        bindingId: binding.id,
+        quality: "schema_stale",
+        markFetched: true,
+        markGood: false,
+        now: deps.now(),
+      });
+      return {
+        ...base,
+        outcome: "schema_stale",
+        quality: "schema_stale",
+        reason:
+          "Refreshed result is truncated; re-aggregation by the agent required.",
+        escalate: true,
+      };
+    }
   }
 
   // Hash match: apply the fresh data slice to the head under the KTD6 guard.

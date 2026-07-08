@@ -1,6 +1,7 @@
 export * from "./actions.js";
 export * from "./agui/vocabulary.js";
 export * from "./agui/shape-hash.js";
+export * from "./agui/analyst-binding.js";
 export * from "./agui/redact.js";
 export * from "./catalog.js";
 export * from "./primitive-catalog.js";
