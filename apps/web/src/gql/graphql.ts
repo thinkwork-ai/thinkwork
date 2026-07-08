@@ -6071,6 +6071,7 @@ export type Query = {
   deploymentEvidence: DeploymentEvidence;
   deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
+  documentArtifact?: Maybe<Artifact>;
   documentPlatePreview: DocumentPlatePreview;
   documentPlates: Array<DocumentPlate>;
   documentVersionRender?: Maybe<Scalars["String"]["output"]>;
@@ -6554,6 +6555,10 @@ export type QueryDeploymentEvidenceArgs = {
 
 export type QueryDeploymentReleasesArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
+};
+
+export type QueryDocumentArtifactArgs = {
+  documentId: Scalars["ID"]["input"];
 };
 
 export type QueryDocumentPlatePreviewArgs = {

@@ -2583,6 +2583,47 @@ export const ArtifactDetailForRouteQuery = gql`
   ${CanvasBindingFields}
 `;
 
+// Card self-heal (THINK-155 follow-up): resolve the LIVING document by its
+// logical documentId when a thread card's recorded artifactId no longer
+// resolves (a fork cleaned up, a re-homed document). Same selection as
+// ArtifactDetailForRoute so the panel renders it identically.
+export const DocumentArtifactForPanelQuery = gql`
+  query DocumentArtifactForPanel($documentId: ID!) {
+    documentArtifact(documentId: $documentId) {
+      id
+      tenantId
+      threadId
+      spaceId
+      headVersion
+      title
+      type
+      status
+      content
+      renderHtml
+      summary
+      sourceMessageId
+      metadata
+      favoritedAt
+      lastRefreshAt
+      refreshFailedAt
+      createdAt
+      updatedAt
+      versions {
+        id
+        version
+        contentHash
+        createdBy
+        createdByName
+        createdAt
+      }
+      bindings {
+        ...CanvasBindingFields
+      }
+    }
+  }
+  ${CanvasBindingFields}
+`;
+
 // Document change log (THINK-155 follow-up): one pinned version's rendered
 // HTML — precise single-version fetch when a history entry is clicked, never
 // a hydrate-all sweep.

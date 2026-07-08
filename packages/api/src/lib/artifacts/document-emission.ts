@@ -320,6 +320,16 @@ export interface DocumentEmissionDeps {
     genre: string;
     title: string;
   }) => Promise<DocumentRow | null>;
+  /**
+   * The document row carrying a logical `metadata.documentId` — the token the
+   * agent carries between emits. Tenant-wide: a carried documentId names one
+   * living document no matter which thread emits, so revising from a thread
+   * other than the row's home thread must never fork a per-thread copy.
+   */
+  findDocumentByLogicalId: (input: {
+    tenantId: string;
+    documentId: string;
+  }) => Promise<DocumentRow | null>;
   upsertDocumentRow: (input: {
     artifactId: string;
     tenantId: string;
@@ -516,6 +526,22 @@ function defaultDeps(): DocumentEmissionDeps {
         }
       }
       return null;
+    },
+    findDocumentByLogicalId: async ({ tenantId, documentId }) => {
+      const rows = await db
+        .select()
+        .from(artifacts)
+        .where(
+          and(
+            eq(artifacts.tenant_id, tenantId),
+            inArray(artifacts.status, ["draft", "final"]),
+            sql`${artifacts.metadata}->>'kind' = ${DOCUMENT_METADATA_KIND}`,
+            sql`${artifacts.metadata}->>'documentId' = ${documentId}`,
+          ),
+        )
+        .orderBy(desc(artifacts.updated_at))
+        .limit(1);
+      return (rows[0] as DocumentRow | undefined) ?? null;
     },
     upsertDocumentRow: async (input) => {
       const metadata = {
@@ -879,12 +905,41 @@ export async function handleDocumentEmission(
     documentId = metadataDocumentId(boundArtifact) ?? boundArtifact.id;
     artifactId = boundArtifact.id;
   } else if (doc.documentId) {
+    // A carried documentId names ONE living document tenant-wide. Resolve it
+    // to the existing row wherever it is homed — the (tenant, thread,
+    // documentId) derivation is only for documents born in this thread, and
+    // deriving here for a document homed in another thread (e.g. created by
+    // an automation run) would fork a same-title copy. Adopting a row homed
+    // elsewhere into a space requires the acting user to hold write access
+    // to that space; otherwise fall back to the thread-local derivation.
     documentId = doc.documentId;
-    artifactId = deriveDocumentArtifactId(
+    const derived = deriveDocumentArtifactId(
       input.tenantId,
       input.threadId,
       documentId,
     );
+    let adopted: DocumentRow | null = null;
+    if (!runDerived) {
+      const existing =
+        (await deps.loadDocumentRow(derived)) ??
+        (await deps.findDocumentByLogicalId({
+          tenantId: input.tenantId,
+          documentId,
+        }));
+      if (existing && existing.tenant_id === input.tenantId) {
+        if (existing.id === derived || !existing.space_id) {
+          adopted = existing;
+        } else if (actingUserId) {
+          const allowed = await deps.hasSpaceWriteRole(
+            input.tenantId,
+            existing.space_id,
+            actingUserId,
+          );
+          if (allowed) adopted = existing;
+        }
+      }
+    }
+    artifactId = adopted ? adopted.id : derived;
   } else {
     // THINK-155 U2: run-derived turns never adopt a stray row — continuity
     // rides the documentId the agent carries between emits (or the binding).
@@ -1329,6 +1384,7 @@ export async function handleDocumentEmission(
   // ---- Compact card event (R4) — abstract truncated to the ceiling -------
   const card = buildDocumentCard({
     artifactId,
+    documentId,
     title: doc.title,
     genre: doc.genre,
     abstract: doc.abstract,
@@ -1369,6 +1425,12 @@ export async function handleDocumentEmission(
 /** Build the ≤10KB thread card; truncates the abstract to fit (R4). */
 export function buildDocumentCard(input: {
   artifactId: string;
+  /**
+   * Logical document id — the durable identity. Clients fall back to it when
+   * the card's artifactId no longer resolves (a fork cleaned up, a re-homed
+   * document), so old cards keep opening the living document.
+   */
+  documentId?: string;
   title: string;
   genre: string;
   abstract: string;
@@ -1377,6 +1439,7 @@ export function buildDocumentCard(input: {
 }): Record<string, unknown> {
   const base = {
     artifactId: input.artifactId,
+    ...(input.documentId ? { documentId: input.documentId } : {}),
     title: boundedCanvasText(input.title, 160),
     genre: input.genre,
     status: input.status,
