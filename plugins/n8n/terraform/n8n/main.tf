@@ -74,14 +74,6 @@ locals {
         N8N_MCP_SERVICE_CREDENTIAL = random_password.service_credential.result
       })
     }
-    agent_step_bridge_credential = {
-      enabled     = var.create_secret_placeholders && var.agent_step_bridge_credential_secret_arn == ""
-      name        = "thinkwork/${var.stage}/n8n/agent-step-bridge-credential"
-      description = "Inbound credential used by n8n workflows to call the ThinkWork agent-step bridge"
-      secret_string = jsonencode({
-        THINKWORK_N8N_AGENT_STEP_BRIDGE_TOKEN = random_password.agent_step_bridge_credential.result
-      })
-    }
   }
 
   managed_secrets = {
@@ -108,18 +100,11 @@ locals {
     ? var.service_credential_secret_arn
     : try(aws_secretsmanager_secret.n8n["service_credential"].arn, "")
   )
-  effective_agent_step_bridge_credential_secret_arn = (
-    var.agent_step_bridge_credential_secret_arn != ""
-    ? var.agent_step_bridge_credential_secret_arn
-    : try(aws_secretsmanager_secret.n8n["agent_step_bridge_credential"].arn, "")
-  )
-
   secret_arns = compact([
     local.effective_database_url_secret_arn,
     local.effective_encryption_key_secret_arn,
     local.effective_operator_secret_arn,
     local.effective_service_credential_secret_arn,
-    local.effective_agent_step_bridge_credential_secret_arn,
   ])
 
   base_environment = concat(
@@ -195,11 +180,6 @@ resource "random_password" "operator_password" {
 }
 
 resource "random_password" "service_credential" {
-  length  = 48
-  special = false
-}
-
-resource "random_password" "agent_step_bridge_credential" {
   length  = 48
   special = false
 }
@@ -325,7 +305,6 @@ resource "terraform_data" "configuration_guardrails" {
     encryption_key_secret_arn               = local.effective_encryption_key_secret_arn
     operator_secret_arn                     = local.effective_operator_secret_arn
     service_credential_secret_arn           = local.effective_service_credential_secret_arn
-    agent_step_bridge_credential_secret_arn = local.effective_agent_step_bridge_credential_secret_arn
     storage_bucket_name                     = var.storage_bucket_name
     storage_prefix                          = local.storage_prefix
     queue_mode                              = var.queue_mode
@@ -367,11 +346,6 @@ resource "terraform_data" "configuration_guardrails" {
     precondition {
       condition     = local.effective_service_credential_secret_arn != ""
       error_message = "n8n requires service_credential_secret_arn or create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = local.effective_agent_step_bridge_credential_secret_arn != ""
-      error_message = "n8n requires agent_step_bridge_credential_secret_arn or create_secret_placeholders = true."
     }
 
     precondition {
