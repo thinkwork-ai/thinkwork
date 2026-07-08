@@ -29,8 +29,7 @@ import {
   DeleteWorkflowMutation,
   SettingsWorkflowQuery,
 } from "@/lib/graphql-queries";
-import { DefinitionStepsPanel } from "./DefinitionStepsPanel";
-import { WorkflowDefinitionCanvas } from "./WorkflowDefinitionCanvas";
+import { WorkflowDefinitionTab } from "./WorkflowDefinitionTab";
 import { WorkflowFormDialog } from "./WorkflowFormDialog";
 import {
   DefinitionList,
@@ -412,57 +411,15 @@ export function WorkflowDetail({ workflowId }: { workflowId: string }) {
           />
         </TabsContent>
 
-        <TabsContent
-          value="definition"
-          className="min-h-0 flex-1 overflow-y-auto"
-        >
-          <div className="grid gap-4 xl:grid-cols-2">
-            <InfoCard title="Version snapshot">
-              <DefinitionList
-                items={[
-                  {
-                    label: "Version",
-                    value: workflow.currentVersion?.versionNumber ?? "—",
-                  },
-                  {
-                    label: "Status",
-                    value: titleize(workflow.currentVersion?.versionStatus),
-                  },
-                  {
-                    label: "Source",
-                    value: titleize(workflow.currentVersion?.sourceKind),
-                  },
-                  {
-                    label: "Published",
-                    value: formatDateTime(workflow.currentVersion?.publishedAt),
-                  },
-                ]}
-              />
-            </InfoCard>
-            <InfoCard title="Capabilities">
-              <JsonPreview
-                value={
-                  workflow.currentVersion?.capabilitySnapshot ??
-                  workflow.capabilityFlags
-                }
-              />
-            </InfoCard>
-            <div className="xl:col-span-2">
-              <WorkflowDefinitionCanvas
-                definition={workflow.currentVersion?.definitionSnapshot}
-              />
-            </div>
-            <div className="xl:col-span-2">
-              <DefinitionStepsPanel
-                definition={workflow.currentVersion?.definitionSnapshot}
-              />
-            </div>
-            <InfoCard title="Raw definition (JSON)" className="xl:col-span-2">
-              <JsonPreview
-                value={workflow.currentVersion?.definitionSnapshot}
-              />
-            </InfoCard>
-          </div>
+        <TabsContent value="definition" className="min-h-0 flex-1">
+          <WorkflowDefinitionTab
+            definition={workflow.currentVersion?.definitionSnapshot}
+            version={workflow.currentVersion ?? null}
+            capabilities={
+              workflow.currentVersion?.capabilitySnapshot ??
+              workflow.capabilityFlags
+            }
+          />
         </TabsContent>
       </Tabs>
       <WorkflowFormDialog
