@@ -750,6 +750,23 @@ export const SettingsGitRoutinesQuery = gql`
   }
 `;
 
+// Routine summary for the Workflow Definition step card (THINK-218): shows
+// what the routine IS (description, module path, validated commit) instead
+// of the raw step JSON.
+export const WorkflowRoutineSummaryQuery = gql`
+  query WorkflowRoutineSummary($id: ID!) {
+    routine(id: $id) {
+      id
+      name
+      description
+      engine
+      status
+      modulePath
+      validatedSha
+    }
+  }
+`;
+
 export const SettingsSaveAgentLoopMutation = gql`
   mutation SettingsSaveAgentLoop($input: SaveAgentLoopInput!) {
     saveAgentLoop(input: $input) {

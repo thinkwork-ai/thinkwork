@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { OperatorGuard } from "@/components/settings/OperatorGuard";
 import {
-  WORKFLOWS_TABS,
+  normalizeWorkflowsTab,
   WorkflowsIndexTabs,
   type WorkflowsTab,
 } from "@/components/workflows/WorkflowsIndexTabs";
@@ -10,9 +10,7 @@ export type WorkflowsIndexSearch = { tab?: WorkflowsTab };
 
 export const Route = createFileRoute("/_authed/settings/workflows/")({
   validateSearch: (search: Record<string, unknown>): WorkflowsIndexSearch => ({
-    tab: WORKFLOWS_TABS.includes(search.tab as WorkflowsTab)
-      ? (search.tab as WorkflowsTab)
-      : undefined,
+    tab: normalizeWorkflowsTab(search.tab),
   }),
   component: WorkflowsIndexRoute,
 });

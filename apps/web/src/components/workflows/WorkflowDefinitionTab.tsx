@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "urql";
 import { ExternalLink, X } from "lucide-react";
 import { Badge, Button } from "@thinkwork/ui";
+import { StatusBadge } from "@/components/StatusBadge";
+import { WorkflowRoutineSummaryQuery } from "@/lib/graphql-queries";
 import { WorkflowDefinitionCanvas } from "./WorkflowDefinitionCanvas";
 import {
   DefinitionList,
@@ -25,6 +28,94 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+type RoutineSummary = {
+  id: string;
+  name: string;
+  description?: string | null;
+  engine: string;
+  status: string;
+  modulePath?: string | null;
+  validatedSha?: string | null;
+};
+
+/**
+ * What the routine IS — description, module path in the tenant repo, and the
+ * validated commit — with the jump into the routine editor. Replaces the raw
+ * step JSON for routine steps.
+ */
+function RoutineSummaryCard({ routineId }: { routineId: string }) {
+  const [result] = useQuery<{ routine?: RoutineSummary | null }>({
+    query: WorkflowRoutineSummaryQuery,
+    variables: { id: routineId },
+  });
+  const routine = result.data?.routine ?? null;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-border/70 p-4">
+        {result.fetching ? (
+          <p className="text-sm text-muted-foreground">Loading routine…</p>
+        ) : routine ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                {routine.name}
+              </span>
+              <StatusBadge status={routine.status.toLowerCase()} size="sm" />
+            </div>
+            {routine.description ? (
+              <p className="text-sm text-muted-foreground">
+                {routine.description}
+              </p>
+            ) : null}
+            <DefinitionList
+              items={[
+                ...(routine.modulePath
+                  ? [
+                      {
+                        label: "Module",
+                        value: (
+                          <span className="break-all font-mono text-xs">
+                            {routine.modulePath}
+                          </span>
+                        ),
+                      },
+                    ]
+                  : []),
+                ...(routine.validatedSha
+                  ? [
+                      {
+                        label: "Validated commit",
+                        value: (
+                          <span className="font-mono text-xs">
+                            {routine.validatedSha.slice(0, 10)}
+                          </span>
+                        ),
+                      },
+                    ]
+                  : []),
+                { label: "Engine", value: titleize(routine.engine) },
+              ]}
+            />
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            This routine could not be loaded — it may have been deleted.
+          </p>
+        )}
+      </div>
+      <div className="flex justify-end">
+        <Button asChild size="sm" variant="outline" className="gap-1.5">
+          <Link to="/settings/routines/$routineId" params={{ routineId }}>
+            Open routine editor
+            <ExternalLink className="size-3.5" />
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function definitionSteps(definition: unknown): Record<string, unknown>[] {
   if (!isRecord(definition) || !Array.isArray(definition.steps)) return [];
   return definition.steps.filter(isRecord);
@@ -33,7 +124,6 @@ function definitionSteps(definition: unknown): Record<string, unknown>[] {
 export function WorkflowDefinitionTab({
   definition,
   version,
-  capabilities,
 }: {
   definition: unknown;
   version: {
@@ -42,7 +132,6 @@ export function WorkflowDefinitionTab({
     sourceKind?: string | null;
     publishedAt?: string | null;
   } | null;
-  capabilities: unknown;
 }) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
@@ -126,19 +215,12 @@ export function WorkflowDefinitionTab({
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
               {selectedRoutineId ? (
-                <Button asChild size="sm" className="gap-1.5">
-                  <Link
-                    to="/settings/routines/$routineId"
-                    params={{ routineId: selectedRoutineId }}
-                  >
-                    Open routine editor
-                    <ExternalLink className="size-3.5" />
-                  </Link>
-                </Button>
-              ) : null}
-              <InfoCard title="Step definition">
-                <JsonPreview value={selectedStep} />
-              </InfoCard>
+                <RoutineSummaryCard routineId={selectedRoutineId} />
+              ) : (
+                <InfoCard title="Step definition">
+                  <JsonPreview value={selectedStep} />
+                </InfoCard>
+              )}
             </div>
           </>
         ) : (
@@ -149,29 +231,21 @@ export function WorkflowDefinitionTab({
                 Select a step on the canvas to inspect it.
               </p>
             </div>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-              <InfoCard title="Version snapshot">
-                <DefinitionList
-                  items={[
-                    { label: "Version", value: version?.versionNumber ?? "—" },
-                    {
-                      label: "Status",
-                      value: titleize(version?.versionStatus),
-                    },
-                    { label: "Source", value: titleize(version?.sourceKind) },
-                    {
-                      label: "Published",
-                      value: formatDateTime(version?.publishedAt),
-                    },
-                  ]}
-                />
-              </InfoCard>
-              <InfoCard title="Capabilities">
-                <JsonPreview value={capabilities} />
-              </InfoCard>
-              <InfoCard title="Raw definition (JSON)">
-                <JsonPreview value={definition} />
-              </InfoCard>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <DefinitionList
+                items={[
+                  { label: "Version", value: version?.versionNumber ?? "—" },
+                  {
+                    label: "Status",
+                    value: titleize(version?.versionStatus),
+                  },
+                  { label: "Source", value: titleize(version?.sourceKind) },
+                  {
+                    label: "Published",
+                    value: formatDateTime(version?.publishedAt),
+                  },
+                ]}
+              />
             </div>
           </>
         )}

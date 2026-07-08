@@ -274,10 +274,6 @@ export function WorkflowDetail({
         <WorkflowDefinitionTab
           definition={workflow.currentVersion?.definitionSnapshot}
           version={workflow.currentVersion ?? null}
-          capabilities={
-            workflow.currentVersion?.capabilitySnapshot ??
-            workflow.capabilityFlags
-          }
         />
       )}
 

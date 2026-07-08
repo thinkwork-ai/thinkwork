@@ -61,11 +61,11 @@ describe("Settings workflow routing (unified Workflows section, THINK-218)", () 
     );
   });
 
-  it("redirects the Routines list to the Workflows Library tab, keeping routine detail URLs intact", () => {
+  it("redirects the Routines list to the Workflows Routines tab, keeping routine detail URLs intact", () => {
     // The list index now redirects — Routines lives on as a Workflows tab.
     expect(routinesIndexRoute).toContain("redirect({");
     expect(routinesIndexRoute).toContain('to: "/settings/workflows"');
-    expect(routinesIndexRoute).toContain('tab: "library"');
+    expect(routinesIndexRoute).toContain('tab: "routines"');
     // The detail route still goes through RoutineDetailRouter, which renders
     // the in-app git detail for git_python routines and still falls back to
     // the Workflows redirect for legacy step_functions routines.

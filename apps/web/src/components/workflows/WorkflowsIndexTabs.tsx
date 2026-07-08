@@ -7,15 +7,26 @@ import { WorkflowFormDialog } from "./WorkflowFormDialog";
 import { WorkflowInventory } from "./WorkflowInventory";
 import { WorkflowRunsList } from "./WorkflowRunsList";
 
-export const WORKFLOWS_TABS = ["workflows", "runs", "library"] as const;
+export const WORKFLOWS_TABS = ["workflows", "routines", "executions"] as const;
 export type WorkflowsTab = (typeof WORKFLOWS_TABS)[number];
 
+/** Legacy `?tab=` values from earlier iterations / old redirects. */
+export function normalizeWorkflowsTab(
+  value: unknown,
+): WorkflowsTab | undefined {
+  if (value === "library") return "routines";
+  if (value === "runs") return "executions";
+  return WORKFLOWS_TABS.includes(value as WorkflowsTab)
+    ? (value as WorkflowsTab)
+    : undefined;
+}
+
 /**
- * The unified Workflows section (THINK-218): Workflows (inventory), Runs
- * (tenant-wide run ledger), and Library (the git-backed Routines list,
- * reused as the step library). Tab state lives in the `?tab=` search param;
- * the tab strip and the New-workflow action render in the page header like
- * the unified Memory layout.
+ * The unified Workflows section (THINK-218): Workflows (inventory), Routines
+ * (the git-backed deterministic step library), and Executions (tenant-wide
+ * run ledger). Tab state lives in the `?tab=` search param; the tab strip and
+ * the New-workflow action render in the page header like the unified Memory
+ * layout.
  */
 export function WorkflowsIndexTabs({ tab }: { tab: WorkflowsTab }) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -34,15 +45,15 @@ export function WorkflowsIndexTabs({ tab }: { tab: WorkflowsTab }) {
       },
       {
         to: "/settings/workflows",
-        label: "Runs",
-        search: { tab: "runs" },
-        active: tab === "runs",
+        label: "Routines",
+        search: { tab: "routines" },
+        active: tab === "routines",
       },
       {
         to: "/settings/workflows",
-        label: "Library",
-        search: { tab: "library" },
-        active: tab === "library",
+        label: "Executions",
+        search: { tab: "executions" },
+        active: tab === "executions",
       },
     ],
     action: (
@@ -76,8 +87,8 @@ export function WorkflowsIndexTabs({ tab }: { tab: WorkflowsTab }) {
       {tab === "workflows" ? (
         <WorkflowInventory key={inventoryEpoch} embedded />
       ) : null}
-      {tab === "runs" ? <WorkflowRunsList embedded /> : null}
-      {tab === "library" ? <SettingsRoutines embedded /> : null}
+      {tab === "executions" ? <WorkflowRunsList embedded /> : null}
+      {tab === "routines" ? <SettingsRoutines embedded /> : null}
       <WorkflowFormDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
