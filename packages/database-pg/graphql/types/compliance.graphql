@@ -79,6 +79,7 @@ enum ComplianceEventType {
   AGENT_CONNECTION_DETACHED
   AGENT_TOOL_GRANTED
   AGENT_TOOL_DETACHED
+  DATA_QUERY_EXECUTED
 }
 
 enum ComplianceAnchorState {
