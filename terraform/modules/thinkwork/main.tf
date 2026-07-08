@@ -999,6 +999,11 @@ module "api" {
   compliance_reader_secret_arn                 = module.database.compliance_reader_secret_arn
   compliance_anchor_object_lock_retention_days = var.compliance_anchor_retention_days
 
+  # THINK-228 — analyst query broker: hardened reader role credentials +
+  # the broker caller credential the seeded connector row references.
+  analyst_reader_secret_arn = module.database.analyst_reader_secret_arn
+  analyst_broker_secret_arn = module.database.analyst_broker_secret_arn
+
   # Phase 3 U8b — KMS key + Object Lock mode forwarded as
   # COMPLIANCE_ANCHOR_KMS_KEY_ARN and COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE
   # env vars on the anchor Lambda. The live `_anchor_fn_live` requires

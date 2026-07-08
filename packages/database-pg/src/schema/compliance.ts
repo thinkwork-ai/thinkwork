@@ -375,6 +375,10 @@ export const COMPLIANCE_EVENT_TYPES = [
   "agent.connection_detached",
   "agent.tool_granted",
   "agent.tool_detached",
+  // ThinkWork Analyst query trace (THINK-228 U3, R8). The data. prefix is
+  // already admitted by the prefix-based event-type CHECK constraints
+  // (drizzle/0160 *_v3) — no migration needed.
+  "data.query_executed",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

@@ -108,3 +108,29 @@ output "bucket_arn" {
   description = "ARN of the S3 bucket"
   value       = aws_s3_bucket.main.arn
 }
+
+# Analyst query-broker result staging (THINK-228 U3). Results larger than
+# the inline envelope cap land as CSVs under analyst-staging/<tenantId>/
+# with SSE; they are scratch data consumed by the agent sandbox within the
+# same delegation, so a short TTL bounds both storage cost and the window
+# in which a leaked object key is useful.
+resource "aws_s3_bucket_lifecycle_configuration" "analyst_staging" {
+  bucket = aws_s3_bucket.main.id
+
+  rule {
+    id     = "analyst-staging-ttl"
+    status = "Enabled"
+
+    filter {
+      prefix = "analyst-staging/"
+    }
+
+    expiration {
+      days = 3
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}

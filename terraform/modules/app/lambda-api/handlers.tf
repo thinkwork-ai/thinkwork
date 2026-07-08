@@ -210,6 +210,18 @@ locals {
   }
 
   handler_extra_env = {
+    # Analyst query broker (THINK-228 U3). Reader role + caller credential
+    # secrets, and the workspace bucket's analyst-staging/ prefix for
+    # large-result CSVs (lifecycle TTL lives on the bucket module). The
+    # shared writer DATABASE_SECRET_ARN also lands in this handler's env
+    # via common_env, but the broker code never uses it — SQL runs only as
+    # analyst_reader.
+    "analyst-query-broker" = {
+      ANALYST_READER_SECRET_ARN = var.analyst_reader_secret_arn
+      ANALYST_BROKER_SECRET_ARN = var.analyst_broker_secret_arn
+      ANALYST_STAGING_BUCKET    = var.bucket_name
+      ANALYST_STAGING_PREFIX    = "analyst-staging"
+    }
     "extension-proxy" = {
       EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json
       EXTENSION_PROXY_SIGNING_SECRET = var.extension_proxy_signing_secret
@@ -669,6 +681,12 @@ resource "aws_lambda_function" "handler" {
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
     # @thinkwork/admin-ops package as MCP tools for managed agents.
     "admin-ops-mcp",
+    # Analyst query broker — first-party MCP server at POST /mcp/analyst
+    # (THINK-228 U3). One tool, run_query: EXPLAIN-gated, extended-protocol
+    # single-statement SQL as the analyst_reader role; large results stage
+    # to S3 under analyst-staging/; every query emits a data.query_executed
+    # compliance audit event via POST /api/compliance/events.
+    "analyst-query-broker",
     # MCP admin key management — per-tenant Bearer tokens for admin-ops.
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
     # against tenant_mcp_admin_keys, populated by this handler's routes.
@@ -797,7 +815,11 @@ resource "aws_lambda_function" "handler" {
   # document-conformance-judge is also a single-writer: direct
   # process-and-complete with no in-flight claim status depends on never
   # having two sweepers race the same pending rows (THINK-189 KTD4).
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : -1
+  # analyst-query-broker is capped low: each concurrent execution holds a
+  # dedicated analyst_reader Postgres connection and runs model-authored
+  # SQL — the cap bounds both connection pressure and the blast radius of
+  # a runaway delegation (THINK-228 U3).
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : -1
 
   environment {
     variables = merge(
@@ -1402,6 +1424,12 @@ locals {
       # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
+
+      # Analyst query broker — first-party MCP server exposing run_query
+      # (THINK-228 U3). Callers present the tenant-wide broker service
+      # credential as Bearer; SQL executes as the hardened analyst_reader
+      # role. The seeded postgres-dev connector row points at this route.
+      "POST /mcp/analyst" = "analyst-query-broker"
 
       # MCP admin key management — per-tenant Bearer token CRUD. Tokens
       # are shown ONCE at creation (POST returns raw value); server stores
