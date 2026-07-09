@@ -182,16 +182,27 @@ export async function probeAnalystConnection(
   try {
     // 2. SELECT grant across the granted manifest. A revoked table is a
     //    withhold (the model would otherwise get a runtime permission
-    //    error mid-query and may improvise around it).
+    //    error mid-query and may improvise around it). Tables ABSENT from
+    //    the live DB are skipped, mirroring the grant migration's own
+    //    to_regclass tolerance (0227's generated section): dev drifts
+    //    from the Drizzle schema (crm_work_links, 2026-07-08), a missing
+    //    table was never granted and cannot be queried — it is not a
+    //    grant breach. has_table_privilege THROWS on a nonexistent
+    //    relation, so the guard is load-bearing, not cosmetic.
     const tableNames = granted.map((t) => t.name);
     if (tableNames.length > 0) {
       const privResult = await client.query(
         `SELECT t AS tbl,
-                has_table_privilege($1, format('public.%I', t), 'SELECT') AS can_select
+                to_regclass(format('public.%I', t)) IS NOT NULL AS table_exists,
+                CASE WHEN to_regclass(format('public.%I', t)) IS NOT NULL
+                     THEN has_table_privilege($1, format('public.%I', t), 'SELECT')
+                     ELSE NULL END AS can_select
          FROM unnest($2::text[]) AS t`,
         [role, tableNames],
       );
-      const revoked = privResult.rows.find((r) => r.can_select !== true);
+      const revoked = privResult.rows.find(
+        (r) => r.table_exists === true && r.can_select !== true,
+      );
       if (revoked) {
         return fail(
           "select_revoked",
@@ -242,7 +253,17 @@ export async function probeAnalystConnection(
     // column-denied columns are ungranted and out of the drift contract.
     const liveGranted = new Map<string, Map<string, string>>();
     for (const [table, expectedCols] of expected) {
-      const liveCols = liveByTable.get(table) ?? new Map<string, string>();
+      // A table entirely ABSENT from the live DB is the tolerated
+      // dev-drift class (same to_regclass semantics as the grant
+      // migration and the privilege check above): never granted, never
+      // queryable, not a drift withhold. Exclude it from BOTH sides of
+      // the comparison. A missing/retyped COLUMN on an existing table
+      // remains real drift.
+      const liveCols = liveByTable.get(table);
+      if (liveCols === undefined) {
+        expected.delete(table);
+        continue;
+      }
       const restricted = new Map<string, string>();
       for (const column of expectedCols.keys()) {
         const liveType = liveCols.get(column);
