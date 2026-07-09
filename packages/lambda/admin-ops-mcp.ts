@@ -1072,7 +1072,7 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
             type: "array",
             items: { type: "string" },
             description:
-              "Email addresses that receive each new edition. For non-admin requesters this must be exactly their own address.",
+              "Email addresses that receive each new edition. REQUIRES documentBinding — delivery emails the bound document, so always pass documentBinding alongside this. For non-admin requesters this must be exactly their own address.",
           },
           deliverySubject: { type: "string" },
         },

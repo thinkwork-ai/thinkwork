@@ -1120,6 +1120,7 @@ describe("admin-ops-mcp Lambda", () => {
     scheduleExpression: "cron(0 9 * * ? *)",
     timezone: "America/Chicago",
     spaceId: "space-1",
+    documentBinding: { mode: "existing", artifactId: "art-9" },
     deliveryRecipients: ["bodom@texasenterprises.com"],
   };
 
@@ -1263,16 +1264,14 @@ describe("admin-ops-mcp Lambda", () => {
   it("automation_delete forwards the header identity and returns the archive result", async () => {
     dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
     process.env.AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "true";
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            data: { deleteAgentLoop: { id: "loop-1", ok: true } },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: { deleteAgentLoop: { id: "loop-1", ok: true } },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
     global.fetch = fetchMock as unknown as typeof fetch;
 
     const res = await handler(

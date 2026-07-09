@@ -162,6 +162,22 @@ describe("saveAutomation", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("rejects delivery without a binding before any network call, with binding guidance", async () => {
+    const fetchImpl = mockGraphql(SAVED);
+    const client = createClient({
+      apiUrl: "https://api.example.com",
+      authSecret: "s3cret",
+      fetchImpl,
+    });
+    await expect(
+      saveAutomation(client, {
+        ...baseInput(),
+        documentBinding: undefined,
+      }),
+    ).rejects.toThrow(/deliveryRecipients requires documentBinding/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("surfaces GraphQL errors (e.g. the U11 refusal) verbatim", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(

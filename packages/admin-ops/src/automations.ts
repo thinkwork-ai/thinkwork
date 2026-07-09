@@ -103,6 +103,23 @@ export async function saveAutomation(
   const instructions = input.instructions.trim();
   if (!instructions) throw new Error("instructions are required");
 
+  // Fail here with prescriptive guidance instead of letting the resolver's
+  // "delivery requires a documentBinding" bounce the agent — observed live
+  // (U12 AE6): the model retried the same delivery-without-binding shape
+  // until the turn died.
+  if (
+    input.deliveryRecipients &&
+    input.deliveryRecipients.length > 0 &&
+    !input.documentBinding
+  ) {
+    throw new Error(
+      "deliveryRecipients requires documentBinding — email delivery sends the bound report document. " +
+        "Bind the report already in the thread with documentBinding {mode:'existing', artifactId} " +
+        "(look the artifactId up with the artifact tools), or have the first run create one with " +
+        "documentBinding {mode:'create', genre:'report', title, spaceId}.",
+    );
+  }
+
   const targetSpec: Record<string, unknown> = {
     kind: "agent_thread",
     agentThread: {
