@@ -2312,3 +2312,27 @@ export const SettingsWorkspacePreviewFileQuery = graphql(`
     }
   }
 `);
+
+// ─── Analyst data source (THINK-230) ──────────────────────────────────────
+// Provisions the analyst Postgres connector: approved postgres-dev connector
+// row, broker credential, read-only analyst_reader RDS-IAM chain, analyst
+// profile refresh, and signed workspace connection folder for every agent.
+export const SettingsProvisionAnalystConnectorMutation = graphql(`
+  mutation SettingsProvisionAnalystConnector(
+    $reApprove: Boolean
+    $rotateToken: Boolean
+  ) {
+    provisionAnalystConnector(
+      reApprove: $reApprove
+      rotateToken: $rotateToken
+    ) {
+      connectorId
+      connectorOutcome
+      brokerSecretOutcome
+      rdsIamCredentialOutcome
+      profileRefreshed
+      foldersWritten
+      foldersSkipped
+    }
+  }
+`);

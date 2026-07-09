@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setHeader: vi.fn(),
+  provisionAnalyst: vi.fn(),
   listMcpServers: vi.fn(),
   listUserMcpServers: vi.fn(),
   createMcpServer: vi.fn(),
@@ -44,6 +45,10 @@ vi.mock("@/context/TenantContext", () => ({
   useTenant: () => mocks.tenantContext,
 }));
 
+vi.mock("urql", () => ({
+  useMutation: () => [{ fetching: false }, mocks.provisionAnalyst],
+}));
+
 vi.mock("@/lib/mcp-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/mcp-api")>();
   return {
@@ -60,6 +65,7 @@ import { SettingsMcpServers } from "./SettingsMcpServers";
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setHeader.mockReset();
+  mocks.provisionAnalyst.mockReset();
   mocks.listMcpServers.mockReset();
   mocks.listUserMcpServers.mockReset();
   mocks.createMcpServer.mockReset();
@@ -242,6 +248,120 @@ describe("SettingsMcpServers", () => {
       "cognito-sub-1",
     );
     expect(screen.getByText("connected")).toBeTruthy();
+  });
+
+  it("registers the analyst data source and renders the outcomes", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.provisionAnalyst.mockResolvedValue({
+      data: {
+        provisionAnalystConnector: {
+          connectorId: "conn-analyst",
+          connectorOutcome: "created",
+          brokerSecretOutcome: "created",
+          rdsIamCredentialOutcome: "created",
+          profileRefreshed: true,
+          foldersWritten: 4,
+          foldersSkipped: 1,
+        },
+      },
+    });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+    expect(await screen.findByText("Register data source")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Provision data source" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.provisionAnalyst).toHaveBeenCalledWith({
+        reApprove: false,
+        rotateToken: false,
+      }),
+    );
+    expect(await screen.findByText("Data source provisioned.")).toBeTruthy();
+    expect(screen.getByText("4 written · 1 skipped")).toBeTruthy();
+    expect(screen.getByText("conn-analyst")).toBeTruthy();
+  });
+
+  it("forces re-approve on when rotate broker token is checked", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.provisionAnalyst.mockResolvedValue({
+      data: {
+        provisionAnalystConnector: {
+          connectorId: "conn-analyst",
+          connectorOutcome: "unchanged",
+          brokerSecretOutcome: "rotated",
+          rdsIamCredentialOutcome: null,
+          profileRefreshed: false,
+          foldersWritten: 0,
+          foldersSkipped: 5,
+        },
+      },
+    });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+
+    const reApprove = await screen.findByRole("checkbox", {
+      name: "Re-approve",
+    });
+    const rotate = screen.getByRole("checkbox", {
+      name: "Rotate broker token",
+    });
+    expect(reApprove.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(rotate);
+
+    // Rotate pins re-approve on and disables it.
+    expect(reApprove.getAttribute("aria-checked")).toBe("true");
+    expect(reApprove.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Provision data source" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.provisionAnalyst).toHaveBeenCalledWith({
+        reApprove: true,
+        rotateToken: true,
+      }),
+    );
+  });
+
+  it("surfaces the GraphQL error message verbatim on provision failure", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.provisionAnalyst.mockResolvedValue({
+      error: {
+        message: "[GraphQL] Only tenant admins can register data sources.",
+        graphQLErrors: [
+          { message: "Only tenant admins can register data sources." },
+        ],
+      },
+    });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Provision data source" }),
+    );
+
+    expect(
+      await screen.findByText("Only tenant admins can register data sources."),
+    ).toBeTruthy();
   });
 });
 

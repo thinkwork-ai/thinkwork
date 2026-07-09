@@ -15456,6 +15456,25 @@ export type SettingsWorkspacePreviewFileQuery = {
   };
 };
 
+export type SettingsProvisionAnalystConnectorMutationVariables = Exact<{
+  reApprove?: InputMaybe<Scalars["Boolean"]["input"]>;
+  rotateToken?: InputMaybe<Scalars["Boolean"]["input"]>;
+}>;
+
+export type SettingsProvisionAnalystConnectorMutation = {
+  __typename?: "Mutation";
+  provisionAnalystConnector: {
+    __typename?: "AnalystProvisionResult";
+    connectorId: string;
+    connectorOutcome: string;
+    brokerSecretOutcome: string;
+    rdsIamCredentialOutcome?: string | null;
+    profileRefreshed: boolean;
+    foldersWritten: number;
+    foldersSkipped: number;
+  };
+};
+
 export type TenantSkillCatalogQueryVariables = Exact<{
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
 }>;
@@ -32257,6 +32276,94 @@ export const SettingsWorkspacePreviewFileDocument = {
 } as unknown as DocumentNode<
   SettingsWorkspacePreviewFileQuery,
   SettingsWorkspacePreviewFileQueryVariables
+>;
+export const SettingsProvisionAnalystConnectorDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsProvisionAnalystConnector" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "reApprove" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "rotateToken" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "provisionAnalystConnector" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "reApprove" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "reApprove" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "rotateToken" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "rotateToken" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "connectorId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "connectorOutcome" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "brokerSecretOutcome" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "rdsIamCredentialOutcome" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "profileRefreshed" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "foldersWritten" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "foldersSkipped" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsProvisionAnalystConnectorMutation,
+  SettingsProvisionAnalystConnectorMutationVariables
 >;
 export const TenantSkillCatalogDocument = {
   kind: "Document",
