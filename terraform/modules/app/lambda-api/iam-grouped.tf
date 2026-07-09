@@ -319,88 +319,6 @@ locals {
         ]
       },
     ] : [],
-    # SQS grants live here rather than in the orchestration group purely for
-    # size balance: with every conditional on, orchestration's rendered JSON
-    # would exceed IAM's 6,144-char per-managed-policy cap (R9 rebalance).
-    # Handler-gated SQS grants. Each statement was a count-gated inline
-    # policy whose queue exists only when local.deploy_lambda_handlers.
-    local.deploy_lambda_handlers ? [
-      # (was inline policy "thinkwork-${stage}-wiki-compile-dlq-send")
-      {
-        Sid      = "WikiCompileDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.wiki_compile_dlq[0].arn
-      },
-      # (was inline policy "thinkwork-${stage}-ontology-scan-dlq-send")
-      {
-        Sid      = "OntologyScanDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.ontology_scan_dlq[0].arn
-      },
-      # (was inline policy "thinkwork-${stage}-ontology-reprocess-dlq-send")
-      {
-        Sid      = "OntologyReprocessDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.ontology_reprocess_dlq[0].arn
-      },
-      # (was inline policy "compliance-drainer-dlq-send")
-      {
-        Sid      = "ComplianceDrainerDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
-      },
-      # THINK-229 U5 — analyst-connection-reconciler async on_failure DLQ.
-      {
-        Sid      = "AnalystConnectionReconcilerDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.analyst_connection_reconciler_dlq[0].arn
-      },
-      # (was inline policy "compliance-exports-send")
-      # graphql-http needs sqs:SendMessage on the exports queue to dispatch
-      # jobIds from the createComplianceExport mutation. Attached to the
-      # shared lambda role (which graphql-http assumes); scope is
-      # queue-specific. (The runner's receive grants stay on the dedicated
-      # runner role — see compliance_exports_runner_sqs in handlers.tf.)
-      {
-        Sid      = "ComplianceExportsSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.compliance_exports[0].arn
-      },
-      # (was inline policy "eval-fanout-send")
-      {
-        Sid    = "EvalRunnerSendFanoutMessages"
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage",
-          "sqs:SendMessageBatch",
-        ]
-        Resource = aws_sqs_queue.eval_fanout[0].arn
-      },
-      # (was inline policy "eval-worker-sqs")
-      {
-        Sid    = "EvalWorkerReceiveFanoutMessages"
-        Effect = "Allow"
-        Action = [
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes",
-          "sqs:ChangeMessageVisibility",
-        ]
-        Resource = aws_sqs_queue.eval_fanout[0].arn
-      },
-      {
-        Sid      = "EvalWorkerSendDlqMessages"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.eval_fanout_dlq[0].arn
-      },
-    ] : [],
     # (was inline policy "thinkwork-${stage}-lambda-workspace-events-sqs",
     # count-gated on the same flag)
     local.workspace_event_enabled ? [
@@ -874,7 +792,97 @@ locals {
   # ---------------------------------------------------------------------------
   # Group 4: observability — CloudWatch Logs reads, ECS/ALB health reads.
   # ---------------------------------------------------------------------------
-  api_observability_statements = [
+  # Handler-gated SQS grants moved HERE from the data-plane group
+  # (THINK-229 U5 follow-up): data-plane hit IAM's 6,144-char rendered cap
+  # when the analyst-connection-reconciler DLQ grant landed (live size was
+  # 6,018 before it). Queue plumbing is operational surface; observability
+  # has ~5k headroom. Same statements, different envelope.
+  api_observability_sqs_statements = concat(
+    # SQS grants live here rather than in the orchestration group purely for
+    # size balance: with every conditional on, orchestration's rendered JSON
+    # would exceed IAM's 6,144-char per-managed-policy cap (R9 rebalance).
+    # Handler-gated SQS grants. Each statement was a count-gated inline
+    # policy whose queue exists only when local.deploy_lambda_handlers.
+    local.deploy_lambda_handlers ? [
+      # (was inline policy "thinkwork-${stage}-wiki-compile-dlq-send")
+      {
+        Sid      = "WikiCompileDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.wiki_compile_dlq[0].arn
+      },
+      # (was inline policy "thinkwork-${stage}-ontology-scan-dlq-send")
+      {
+        Sid      = "OntologyScanDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.ontology_scan_dlq[0].arn
+      },
+      # (was inline policy "thinkwork-${stage}-ontology-reprocess-dlq-send")
+      {
+        Sid      = "OntologyReprocessDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.ontology_reprocess_dlq[0].arn
+      },
+      # (was inline policy "compliance-drainer-dlq-send")
+      {
+        Sid      = "ComplianceDrainerDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
+      },
+      # THINK-229 U5 — analyst-connection-reconciler async on_failure DLQ.
+      {
+        Sid      = "AnalystConnectionReconcilerDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.analyst_connection_reconciler_dlq[0].arn
+      },
+      # (was inline policy "compliance-exports-send")
+      # graphql-http needs sqs:SendMessage on the exports queue to dispatch
+      # jobIds from the createComplianceExport mutation. Attached to the
+      # shared lambda role (which graphql-http assumes); scope is
+      # queue-specific. (The runner's receive grants stay on the dedicated
+      # runner role — see compliance_exports_runner_sqs in handlers.tf.)
+      {
+        Sid      = "ComplianceExportsSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.compliance_exports[0].arn
+      },
+      # (was inline policy "eval-fanout-send")
+      {
+        Sid    = "EvalRunnerSendFanoutMessages"
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:SendMessageBatch",
+        ]
+        Resource = aws_sqs_queue.eval_fanout[0].arn
+      },
+      # (was inline policy "eval-worker-sqs")
+      {
+        Sid    = "EvalWorkerReceiveFanoutMessages"
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility",
+        ]
+        Resource = aws_sqs_queue.eval_fanout[0].arn
+      },
+      {
+        Sid      = "EvalWorkerSendDlqMessages"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.eval_fanout_dlq[0].arn
+      },
+    ] : [],
+  )
+
+  api_observability_statements = concat(local.api_observability_sqs_statements, [
     # (was inline policy "cloudwatch-logs-read")
     {
       Effect = "Allow"
@@ -917,7 +925,7 @@ locals {
       ]
       Resource = "*"
     },
-  ]
+  ])
 }
 
 resource "aws_iam_policy" "api_data_plane" {
