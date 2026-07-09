@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Database, Plus } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import {
   Badge,
@@ -24,8 +25,10 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsAnalystInternalClustersQuery,
@@ -42,15 +45,37 @@ import {
   setMcpServerEnabled,
   type McpServer,
 } from "@/lib/mcp-api";
-import {
-  SettingsTablePane,
-  settingsLinkActionClassName,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
+
+const MCP_SERVERS_ROUTE = "/settings/mcp-servers";
+const PLUGIN_MCPS_ROUTE = "/settings/mcp-servers/plugins";
+const DATASOURCE_MCPS_ROUTE = "/settings/mcp-servers/data-sources";
+
+type McpServersTab = "servers" | "plugins" | "data-sources";
+
+function tabForPath(pathname: string): McpServersTab {
+  if (pathname.startsWith(PLUGIN_MCPS_ROUTE)) return "plugins";
+  if (pathname.startsWith(DATASOURCE_MCPS_ROUTE)) return "data-sources";
+  return "servers";
+}
+
+/** "cluster · database" label for a datasource row (null host = workspace cluster). */
+function dataSourceLabel(dataSource: {
+  host: string | null;
+  database: string;
+}): string {
+  const cluster = dataSource.host
+    ? dataSource.host.split(".")[0]
+    : "workspace cluster";
+  return `${cluster} · ${dataSource.database}`;
+}
 
 export function SettingsMcpServers() {
   const { user } = useAuth();
   const { tenant, tenantId, userId } = useTenant();
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const activeTab = tabForPath(pathname);
   const tenantSlug = tenant?.slug ?? null;
   const oauthUserId = userId ?? user?.sub ?? null;
   const [servers, setServers] = useState<McpServer[] | null>(null);
@@ -67,12 +92,19 @@ export function SettingsMcpServers() {
     () => new Set(pluginServers.map((server) => normalizeMcpServerUrl(server))),
     [pluginServers],
   );
+  // THINK-239: analyst connector rows (builtin + registered sources) live on
+  // their own Datasource MCPs tab.
+  const dataSourceServers = useMemo(
+    () => sortMcpServers((servers ?? []).filter(isAnalystDataSourceServer)),
+    [servers],
+  );
   const individualServers = useMemo(
     () =>
       sortMcpServers(
         (servers ?? []).filter(
           (server) =>
             !isPluginInstalledMcpServer(server) &&
+            !isAnalystDataSourceServer(server) &&
             !pluginServerUrls.has(normalizeMcpServerUrl(server)),
         ),
       ),
@@ -153,6 +185,30 @@ export function SettingsMcpServers() {
           );
         },
       },
+      ...(activeTab === "data-sources"
+        ? [
+            {
+              id: "source",
+              header: "Source",
+              size: 280,
+              cell: ({ row }) => {
+                const ds = row.original.dataSource;
+                return ds ? (
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Badge variant="outline" className="shrink-0 capitalize">
+                      {ds.kind}
+                    </Badge>
+                    <span className="truncate font-mono text-xs text-muted-foreground">
+                      {dataSourceLabel(ds)}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                );
+              },
+            } satisfies ColumnDef<McpServer>,
+          ]
+        : []),
       {
         accessorKey: "url",
         header: "URL",
@@ -222,33 +278,78 @@ export function SettingsMcpServers() {
         },
       },
     ],
-    [pending, toggle],
+    [activeTab, pending, toggle],
   );
+
+  usePageHeaderActions({
+    title: "MCP Servers",
+    breadcrumbs: [{ label: "MCP Servers" }],
+    tabs: [
+      { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
+      { to: PLUGIN_MCPS_ROUTE, label: "Plugin MCPs" },
+      { to: DATASOURCE_MCPS_ROUTE, label: "Datasource MCPs" },
+    ],
+    action: (
+      <div className="flex items-center gap-1">
+        <TooltipIconButton
+          label="Register data source — give the analyst a Postgres database to query with a read-only, brokered credential."
+          aria-label="Register data source"
+          onClick={() => setRegisterOpen(true)}
+        >
+          <Database className="size-4" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          label="New MCP Server — register an MCP server for the tenant."
+          aria-label="New MCP Server"
+          onClick={() => setAddOpen(true)}
+        >
+          <Plus className="size-4" />
+        </TooltipIconButton>
+      </div>
+    ),
+    actionKey: `mcp-servers:${activeTab}`,
+  });
+
+  const paneByTab: Record<
+    McpServersTab,
+    {
+      title: string;
+      description: string;
+      servers: McpServer[];
+      emptyText: string;
+    }
+  > = {
+    servers: {
+      title: "MCP Servers",
+      description:
+        "The tenant MCP server registry — register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer.",
+      servers: individualServers,
+      emptyText: "No individual MCP servers configured.",
+    },
+    plugins: {
+      title: "Plugin MCPs",
+      description:
+        "MCP servers installed and managed by plugins. Enable or disable them from the plugin's settings.",
+      servers: pluginServers,
+      emptyText: "No MCP servers installed by plugins.",
+    },
+    "data-sources": {
+      title: "Datasource MCPs",
+      description:
+        "Analyst data sources — databases the agent can query through the read-only broker. Each source shows its cluster and database.",
+      servers: dataSourceServers,
+      emptyText: "No data sources registered.",
+    },
+  };
+  const pane = paneByTab[activeTab];
 
   return (
     <>
       <SettingsTablePane
-        title="MCP Servers"
-        description="The tenant MCP server registry — register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
+        embedded
+        title={pane.title}
+        description={pane.description}
         loading={!servers && !error}
-        actions={
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setRegisterOpen(true)}
-              className={settingsLinkActionClassName}
-            >
-              + Register data source
-            </button>
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className={settingsLinkActionClassName}
-            >
-              + New MCP Server
-            </button>
-          </div>
-        }
         toolbar={
           error ? (
             <p className="text-sm text-destructive">{error}</p>
@@ -262,33 +363,18 @@ export function SettingsMcpServers() {
           )
         }
       >
-        <div className="space-y-8">
-          <McpServerSection
-            columns={columns}
-            servers={individualServers}
-            search={search}
-            emptyText="No individual MCP servers configured."
-            onOpen={(serverId) =>
-              navigate({
-                to: "/settings/mcp-servers/$serverId",
-                params: { serverId },
-              })
-            }
-          />
-          <McpServerSection
-            title="From plugins"
-            columns={columns}
-            servers={pluginServers}
-            search={search}
-            emptyText="No MCP servers installed by plugins."
-            onOpen={(serverId) =>
-              navigate({
-                to: "/settings/mcp-servers/$serverId",
-                params: { serverId },
-              })
-            }
-          />
-        </div>
+        <McpServerSection
+          columns={columns}
+          servers={pane.servers}
+          search={search}
+          emptyText={pane.emptyText}
+          onOpen={(serverId) =>
+            navigate({
+              to: "/settings/mcp-servers/$serverId",
+              params: { serverId },
+            })
+          }
+        />
       </SettingsTablePane>
       <NewMcpServerDialog
         open={addOpen}
@@ -1203,6 +1289,20 @@ function isBuiltinAnalystServer(server: McpServer): boolean {
     return pathname.endsWith("/mcp/analyst");
   } catch {
     return server.url.replace(/\/+$/, "").endsWith("/mcp/analyst");
+  }
+}
+
+// THINK-239: an analyst connector row — the builtin workspace connector or a
+// registered source. The server list stamps `dataSource` on these; the URL
+// check keeps stale rows (pre-dataSource caches) classified correctly.
+function isAnalystDataSourceServer(server: McpServer): boolean {
+  if (server.dataSource) return true;
+  if (isBuiltinAnalystServer(server)) return true;
+  try {
+    const pathname = new URL(server.url).pathname.replace(/\/+$/, "");
+    return /\/mcp\/analyst\/[^/]+$/.test(pathname);
+  } catch {
+    return /\/mcp\/analyst\/[^/]+\/?$/.test(server.url);
   }
 }
 

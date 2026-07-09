@@ -478,6 +478,27 @@ export function SettingsMcpServerDetail() {
             </span>
           </SettingsRow>
           <SettingsRow label="Status">{statusBadge}</SettingsRow>
+          {server.dataSource ? (
+            <>
+              <SettingsRow label="Source type">
+                <Badge variant="outline" className="capitalize">
+                  {server.dataSource.kind}
+                </Badge>
+              </SettingsRow>
+              <SettingsRow label="Cluster">
+                <span className="max-w-md truncate font-mono text-xs">
+                  {server.dataSource.host
+                    ? server.dataSource.host.split(".")[0]
+                    : "workspace cluster"}
+                </span>
+              </SettingsRow>
+              <SettingsRow label="Database">
+                <span className="font-mono text-xs">
+                  {server.dataSource.database}
+                </span>
+              </SettingsRow>
+            </>
+          ) : null}
           {managed ? (
             <SettingsRow
               label={
