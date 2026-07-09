@@ -58,6 +58,7 @@ import {
   parseConnectionPolicyBlock,
   resolveAnalystPolicySource,
 } from "./capabilities/connection-policy.js";
+import { evaluateAnalystProbeGate } from "./analyst/connection-probe.js";
 import type { CapabilitiesManifest } from "./capabilities/manifest-compile.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
 import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
@@ -420,6 +421,20 @@ export async function buildMcpConfigs(
         "mcp_server_not_resolved",
         "url_hash mismatch with (url, auth_config); re-approval required",
       );
+      continue;
+    }
+
+    // THINK-229 U5 (R7/R8, KTD8): the scheduled connection reconciler stamps
+    // a read-only health verdict onto the analyst row's
+    // runtime_metadata.analyst_probe. A failing OR stale verdict withholds
+    // the connection loudly — a drop reason the inspector renders and the
+    // same detail routed to the model — so the model reports the outage
+    // instead of fabricating. Rows with no verdict key (non-analyst servers
+    // and the pre-first-probe window) are never gated here.
+    const probeGate = evaluateAnalystProbeGate(mcp.runtime_metadata, mcp.url);
+    if (probeGate) {
+      console.warn(`${logPrefix} withholding ${mcp.slug}: ${probeGate.detail}`);
+      dropDiag(mcp, "connection_probe_failed", probeGate.detail);
       continue;
     }
 

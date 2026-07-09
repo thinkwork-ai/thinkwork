@@ -353,6 +353,13 @@ locals {
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
       },
+      # THINK-229 U5 — analyst-connection-reconciler async on_failure DLQ.
+      {
+        Sid      = "AnalystConnectionReconcilerDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.analyst_connection_reconciler_dlq[0].arn
+      },
       # (was inline policy "compliance-exports-send")
       # graphql-http needs sqs:SendMessage on the exports queue to dispatch
       # jobIds from the createComplianceExport mutation. Attached to the

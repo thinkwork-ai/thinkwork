@@ -232,6 +232,18 @@ locals {
       ANALYST_DB_NAME                = var.database_name
       ANALYST_DB_USER                = "analyst_reader"
     }
+    # THINK-229 U5 — the connection reconciler probes the analyst_reader
+    # connection EXACTLY as the broker does (getAnalystReaderClient), so it
+    # needs the same IAM-connect config + the password-fallback secret. The
+    # shared lambda execution role already holds rds-db:connect on the
+    # analyst_reader dbuser (iam-grouped.tf, granted in U1), so no extra IAM.
+    "analyst-connection-reconciler" = {
+      ANALYST_READER_SECRET_ARN      = var.analyst_reader_secret_arn
+      ANALYST_DB_CLUSTER_ENDPOINT    = var.analyst_db_cluster_resource_id != "" ? var.db_cluster_endpoint : ""
+      ANALYST_DB_CLUSTER_RESOURCE_ID = var.analyst_db_cluster_resource_id
+      ANALYST_DB_NAME                = var.database_name
+      ANALYST_DB_USER                = "analyst_reader"
+    }
     "extension-proxy" = {
       EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json
       EXTENSION_PROXY_SIGNING_SECRET = var.extension_proxy_signing_secret
@@ -576,6 +588,11 @@ resource "aws_lambda_function" "handler" {
     "webhooks-admin",
     "webhook-deliveries-cleanup",
     "skill-runs-reconciler",
+    # THINK-229 U5 — probes the analyst_reader connection (reachability, IAM
+    # auth, SELECT-grant introspection, schema drift; all read-only) every 30
+    # min and stamps the verdict onto runtime_metadata.analyst_probe so
+    # dispatch can withhold a failing/stale connection loudly.
+    "analyst-connection-reconciler",
     "cron-stall-monitor",
     "webhook-crm-opportunity",
     "webhook-task-event",
@@ -829,7 +846,10 @@ resource "aws_lambda_function" "handler" {
   # dedicated analyst_reader Postgres connection and runs model-authored
   # SQL — the cap bounds both connection pressure and the blast radius of
   # a runaway delegation (THINK-228 U3).
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : -1
+  # analyst-connection-reconciler is capped at 1: the probe holds one
+  # analyst_reader connection and overlapping probes are pointless (the
+  # cluster-global reader has one grant surface / one live schema).
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : each.key == "analyst-connection-reconciler" ? 1 : -1
 
   environment {
     variables = merge(
@@ -1717,6 +1737,64 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
   target {
     arn      = aws_lambda_function.handler["skill-runs-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# analyst_connection_reconciler — probes the analyst_reader connection every
+# 30 min (reachability, IAM auth, SELECT-grant introspection, zero-write
+# assertion, schema-drift hash; all read-only) and stamps the verdict onto
+# tenant_mcp_servers.runtime_metadata.analyst_probe. Dispatch withholds a
+# failing/stale connection loudly (THINK-229 U5, R7/R8, KTD8).
+#
+# retry-0 + DLQ (project_async_retry_idempotency_lessons): the probe is
+# cheap and idempotent — the next 30-minute tick IS the retry, so stacking
+# scheduler retries only adds redundant connections. A failure lands in the
+# DLQ for operator visibility instead.
+# ---------------------------------------------------------------------------
+
+resource "aws_sqs_queue" "analyst_connection_reconciler_dlq" {
+  count                     = local.deploy_lambda_handlers ? 1 : 0
+  name                      = "thinkwork-${var.stage}-analyst-connection-reconciler-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name = "thinkwork-${var.stage}-analyst-connection-reconciler-dlq"
+  }
+}
+
+resource "aws_lambda_function_event_invoke_config" "analyst_connection_reconciler" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["analyst-connection-reconciler"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.analyst_connection_reconciler_dlq[0].arn
+    }
+  }
+}
+
+resource "aws_scheduler_schedule" "analyst_connection_reconciler" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-analyst-connection-reconciler"
+  group_name          = "default"
+  schedule_expression = "rate(30 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["analyst-connection-reconciler"].arn
+    role_arn = aws_iam_role.scheduler.arn
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
   }
 }
 
