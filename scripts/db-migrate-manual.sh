@@ -41,6 +41,7 @@
 #   -- creates-function: public.<function_name>
 #   -- creates-trigger: public.<table_name>.<trigger_name>
 #   -- creates-role: <role_name>               # probes pg_catalog.pg_roles (global, unqualified)
+#   -- creates-role-membership: <role>:<member> # probes pg_catalog.pg_auth_members (GRANT <role> TO <member>)
 #   -- drops: public.<table_or_index_name>      # probes ABSENT (DROPPED/STILL_PRESENT)
 #   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
 #   -- drops-constraint: public.<table_name>.<constraint_name> # probes ABSENT
@@ -278,6 +279,30 @@ probe_trigger() {
   fi
 }
 
+probe_role_membership() {
+  # Accepts <granted_role>:<member_role> (e.g. rds_iam:analyst_reader) —
+  # verifies GRANT <granted_role> TO <member_role> has been applied.
+  # Memberships are cluster-global like roles.
+  local spec="$1"
+  local granted="${spec%%:*}"
+  local member="${spec#*:}"
+  local found
+  found=$(psql "$DATABASE_URL" -tAc "
+    SELECT 1
+      FROM pg_catalog.pg_auth_members m
+      JOIN pg_catalog.pg_roles g ON g.oid = m.roleid
+      JOIN pg_catalog.pg_roles r ON r.oid = m.member
+     WHERE g.rolname = '$granted'
+       AND r.rolname = '$member'
+     LIMIT 1
+  ")
+  if [[ -z "$found" ]]; then
+    echo MISSING
+  else
+    echo "membership:$granted->$member"
+  fi
+}
+
 probe_role() {
   # Accepts a bare role name (e.g. compliance_writer). Postgres roles are
   # cluster-global, not schema-qualified — the marker form mirrors
@@ -364,6 +389,10 @@ for f in "${WALK_FILES[@]}"; do
     grep -oE "^--[[:space:]]+creates-role:[[:space:]]+[A-Za-z0-9_]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  membership_markers=$(
+    grep -oE "^--[[:space:]]+creates-role-membership:[[:space:]]+[A-Za-z0-9_:]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
   drop_col_markers=$(
     grep -oE "^--[[:space:]]+drops-column:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
@@ -377,8 +406,8 @@ for f in "${WALK_FILES[@]}"; do
       | awk '{print $NF}' || true
   )
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- drops:', '-- drops-column:', or '-- drops-constraint:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$membership_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" ]]; then
+    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- creates-role-membership:', '-- drops:', '-- drops-column:', or '-- drops-constraint:' markers in header)"
     any_unverified=1
     continue
   fi
@@ -404,6 +433,9 @@ for f in "${WALK_FILES[@]}"; do
     fi
     if [[ -n "$role_markers" ]]; then
       while IFS= read -r m; do echo "    creates-role: $m"; done <<< "$role_markers"
+    fi
+    if [[ -n "$membership_markers" ]]; then
+      while IFS= read -r m; do echo "    creates-role-membership: $m"; done <<< "$membership_markers"
     fi
     if [[ -n "$drop_col_markers" ]]; then
       while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
@@ -472,6 +504,14 @@ for f in "${WALK_FILES[@]}"; do
       echo "    role $m -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$role_markers"
+  fi
+  if [[ -n "$membership_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_role_membership "$m")
+      echo "    role-membership $m -> $result"
+      [[ "$result" == "MISSING" ]] && any_missing=1
+    done <<< "$membership_markers"
   fi
   if [[ -n "$drop_col_markers" ]]; then
     while IFS= read -r m; do

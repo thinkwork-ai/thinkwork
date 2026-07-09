@@ -117,6 +117,11 @@ resource "aws_rds_cluster" "main" {
   deletion_protection  = local.deletion_protection
   storage_encrypted    = true
 
+  # THINK-229 U1 (R1): the analyst-query-broker Lambda authenticates as
+  # analyst_reader with per-connect RDS IAM auth tokens instead of a
+  # stored password. Cluster-level flag; applies without downtime.
+  iam_database_authentication_enabled = true
+
   serverlessv2_scaling_configuration {
     min_capacity = var.min_capacity
     max_capacity = var.max_capacity
@@ -179,6 +184,10 @@ resource "aws_db_instance" "main" {
   publicly_accessible = true
   skip_final_snapshot = true
   deletion_protection = local.deletion_protection
+
+  # THINK-229 U1 (R1): keep the rds-postgres dev/test engine at parity
+  # with the Aurora cluster — analyst_reader logs in with IAM tokens.
+  iam_database_authentication_enabled = true
 
   tags = {
     Name = "thinkwork-${var.stage}-db"

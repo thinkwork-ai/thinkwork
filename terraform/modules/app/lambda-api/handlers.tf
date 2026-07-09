@@ -221,6 +221,16 @@ locals {
       ANALYST_BROKER_SECRET_ARN = var.analyst_broker_secret_arn
       ANALYST_STAGING_BUCKET    = var.bucket_name
       ANALYST_STAGING_PREFIX    = "analyst-staging"
+      # THINK-229 U1: RDS IAM connect config. Endpoint presence switches
+      # analyst-reader-db.ts to the IAM-token path (password secret above
+      # is the pre-GRANT-rds_iam fallback, retired once IAM is proven).
+      # Gated on the resource ID so a stage without the IAM grant keeps
+      # the password path instead of failing into the fallback every cold
+      # start.
+      ANALYST_DB_CLUSTER_ENDPOINT    = var.analyst_db_cluster_resource_id != "" ? var.db_cluster_endpoint : ""
+      ANALYST_DB_CLUSTER_RESOURCE_ID = var.analyst_db_cluster_resource_id
+      ANALYST_DB_NAME                = var.database_name
+      ANALYST_DB_USER                = "analyst_reader"
     }
     "extension-proxy" = {
       EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json

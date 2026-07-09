@@ -21,7 +21,11 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import { agentProfiles, tenantMcpServers } from "@thinkwork/database-pg/schema";
+import {
+  agentProfiles,
+  tenantCredentials,
+  tenantMcpServers,
+} from "@thinkwork/database-pg/schema";
 
 import { BUILT_IN_PROFILE_SEEDS } from "../../graphql/resolvers/agent-profiles/built-in-agent-profiles.js";
 import { db as defaultDb } from "../../graphql/utils.js";
@@ -217,6 +221,110 @@ export function resolveAnalystProvisionConfig(
     );
   }
   return { tenantId: tenantId!, brokerUrl: brokerUrl!, secretRef: secretRef! };
+}
+
+export const ANALYST_RDS_IAM_CREDENTIAL_SLUG = "analyst-rds-iam";
+
+export interface AnalystRdsIamCredentialInput {
+  tenantId: string;
+  clusterEndpoint: string;
+  port: number;
+  database: string;
+  dbUser: string;
+  clusterResourceId: string;
+}
+
+/**
+ * Resolve the optional rds_iam credential inputs from env (THINK-229 U1 /
+ * R2). Returns null when the IAM env block isn't wired yet (pre-Terraform
+ * runs keep working); throws when it's partially wired — a half-seeded
+ * credential row would misdescribe the connect chain.
+ */
+export function resolveAnalystRdsIamConfig(
+  env: Record<string, string | undefined>,
+  tenantId: string,
+): AnalystRdsIamCredentialInput | null {
+  const clusterEndpoint = env.ANALYST_DB_CLUSTER_ENDPOINT?.trim();
+  const clusterResourceId = env.ANALYST_DB_CLUSTER_RESOURCE_ID?.trim();
+  if (!clusterEndpoint && !clusterResourceId) return null;
+  const missing: string[] = [];
+  if (!clusterEndpoint) missing.push("ANALYST_DB_CLUSTER_ENDPOINT");
+  if (!clusterResourceId) missing.push("ANALYST_DB_CLUSTER_RESOURCE_ID");
+  if (missing.length > 0) {
+    throw new Error(
+      `provision-analyst-connector: partial rds_iam env — missing ${missing.join(", ")}. ` +
+        "Wire both (or neither) before seeding the credential row.",
+    );
+  }
+  const port = Number.parseInt(env.ANALYST_DB_PORT || "5432", 10);
+  return {
+    tenantId,
+    clusterEndpoint: clusterEndpoint!,
+    port: Number.isFinite(port) && port > 0 ? port : 5432,
+    database: env.ANALYST_DB_NAME?.trim() || "thinkwork",
+    dbUser: env.ANALYST_DB_USER?.trim() || "analyst_reader",
+    clusterResourceId: clusterResourceId!,
+  };
+}
+
+/**
+ * Idempotent upsert of the operator-facing `rds_iam` credential row
+ * (THINK-229 U1 / R2, KTD1): metadata only, empty secret_ref sentinel —
+ * no long-lived secret exists for this kind. The broker reads its connect
+ * config from Terraform-supplied env; this row is the record the signed
+ * sidecar's credentialRefs points at.
+ */
+export async function ensureAnalystRdsIamCredential(
+  input: AnalystRdsIamCredentialInput & { db?: DbLike },
+): Promise<"created" | "updated" | "unchanged"> {
+  const db = input.db ?? defaultDb;
+  const metadata = {
+    clusterEndpoint: input.clusterEndpoint,
+    port: input.port,
+    database: input.database,
+    dbUser: input.dbUser,
+    clusterResourceId: input.clusterResourceId,
+  };
+
+  const [existing] = await db
+    .select({
+      id: tenantCredentials.id,
+      metadata_json: tenantCredentials.metadata_json,
+      status: tenantCredentials.status,
+    })
+    .from(tenantCredentials)
+    .where(
+      and(
+        eq(tenantCredentials.tenant_id, input.tenantId),
+        eq(tenantCredentials.slug, ANALYST_RDS_IAM_CREDENTIAL_SLUG),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    await db.insert(tenantCredentials).values({
+      tenant_id: input.tenantId,
+      display_name: "Analyst reader (RDS IAM)",
+      slug: ANALYST_RDS_IAM_CREDENTIAL_SLUG,
+      kind: "rds_iam",
+      status: "active",
+      secret_ref: "",
+      schema_json: {},
+      metadata_json: metadata,
+    });
+    return "created";
+  }
+
+  const unchanged =
+    existing.status === "active" &&
+    JSON.stringify(existing.metadata_json) === JSON.stringify(metadata);
+  if (unchanged) return "unchanged";
+
+  await db
+    .update(tenantCredentials)
+    .set({ metadata_json: metadata, status: "active", updated_at: new Date() })
+    .where(eq(tenantCredentials.id, existing.id));
+  return "updated";
 }
 
 export type ProvisionOutcome =

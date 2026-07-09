@@ -270,6 +270,19 @@ locals {
         Resource = var.plugin_catalog_github_token_secret_arn
       },
     ] : [],
+    # THINK-229 U1 — analyst-query-broker mints RDS IAM auth tokens for the
+    # analyst_reader role. The rds-db ARN keys on the immutable cluster
+    # RESOURCE ID (cluster-XXXX), never the cluster ARN, and the dbuser
+    # segment is the exact-case Postgres role name. aws:SourceIp /
+    # aws:SourceVpc conditions are unsupported on rds-db:connect, so the
+    # narrow Resource IS the control surface.
+    var.analyst_db_cluster_resource_id != "" ? [
+      {
+        Effect   = "Allow"
+        Action   = ["rds-db:connect"]
+        Resource = "arn:aws:rds-db:${var.region}:${var.account_id}:dbuser:${var.analyst_db_cluster_resource_id}/analyst_reader"
+      },
+    ] : [],
     # (was standalone managed policy "lambda_deployment_evidence_read")
     # Access to the deployment evidence bucket: graphql-http's deployments
     # resolvers read deployment/status/current.json (deployed-release pointer

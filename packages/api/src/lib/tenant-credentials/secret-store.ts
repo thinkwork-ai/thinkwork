@@ -13,7 +13,8 @@ export type TenantCredentialKind =
   | "soap_partner"
   | "webhook_signing_secret"
   | "json"
-  | "github_repo";
+  | "github_repo"
+  | "rds_iam";
 
 export type TenantCredentialStatus = "active" | "disabled" | "deleted";
 
@@ -29,7 +30,44 @@ const REQUIRED_FIELDS: Record<TenantCredentialKind, readonly string[]> = {
   // Deterministic routines v1 (R2/KTD-8): the tenant routine repo — URL +
   // pasted fine-grained GitHub token + branch, validated at save time.
   github_repo: ["repoUrl", "token", "branch"],
+  // THINK-229 U1: RDS IAM auth for Thinkwork-owned Aurora. Metadata-only —
+  // no stored secret at all (tokens are minted per-connect in the trusted
+  // broker Lambda); required fields live in metadata_json, validated by
+  // RDS_IAM_REQUIRED_METADATA_FIELDS below, not here.
+  rds_iam: [],
 };
+
+/**
+ * Metadata contract for `rds_iam` credential rows (THINK-229 U1 / R2).
+ * These land in `metadata_json` — there is no Secrets Manager payload.
+ */
+export const RDS_IAM_REQUIRED_METADATA_FIELDS = [
+  "clusterEndpoint",
+  "port",
+  "database",
+  "dbUser",
+  "clusterResourceId",
+] as const;
+
+export function validateRdsIamCredentialMetadata(
+  metadata: Record<string, unknown>,
+): void {
+  const missing = RDS_IAM_REQUIRED_METADATA_FIELDS.filter((field) => {
+    const value = metadata[field];
+    if (field === "port") {
+      return !(
+        (typeof value === "number" && Number.isFinite(value)) ||
+        (typeof value === "string" && value.trim().length > 0)
+      );
+    }
+    return typeof value !== "string" || value.trim().length === 0;
+  });
+  if (missing.length > 0) {
+    throw new Error(
+      `rds_iam credential metadata is missing required field(s): ${missing.join(", ")}`,
+    );
+  }
+}
 
 let smClient: SecretsManagerClient | null = null;
 

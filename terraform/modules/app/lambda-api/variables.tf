@@ -772,3 +772,9 @@ variable "analyst_broker_secret_arn" {
   type        = string
   default     = ""
 }
+
+variable "analyst_db_cluster_resource_id" {
+  description = "Immutable RDS cluster resource ID (cluster-XXXX / db-XXXX) for the stage database (THINK-229 U1). Wired from `module.database.cluster_resource_id`. Keys the broker's `rds-db:connect` IAM grant — the rds-db ARN format requires the resource ID, not the cluster ARN — and gates the IAM connect env on the broker Lambda: when empty, the broker stays on the password path."
+  type        = string
+  default     = ""
+}
