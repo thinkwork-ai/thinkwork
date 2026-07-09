@@ -443,6 +443,17 @@ variable "wiki_source" {
   }
 }
 
+variable "analyst_policy_source" {
+  description = "THINK-229 KTD5 enforcement flip for the analyst connection policy source: 'row' (default — signed sidecar policy is shadow-only) or 'sidecar' (the sidecar block is authoritative). Flip only after clean shadow parity on live traffic."
+  type        = string
+  default     = "row"
+
+  validation {
+    condition     = contains(["row", "sidecar"], var.analyst_policy_source)
+    error_message = "analyst_policy_source must be 'row' or 'sidecar'."
+  }
+}
+
 variable "wiki_aggregation_pass_enabled" {
   description = <<-EOT
     Feature flag for the wiki aggregation pass — the second LLM call
@@ -813,6 +824,7 @@ module "thinkwork" {
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
+  analyst_policy_source                         = var.analyst_policy_source
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
