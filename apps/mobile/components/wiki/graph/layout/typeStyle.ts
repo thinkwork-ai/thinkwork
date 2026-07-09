@@ -1,29 +1,17 @@
-import { COLORS } from "@/lib/theme";
-import type { WikiPageType } from "../types";
-
+/**
+ * Camera scale bounds + a nominal disc radius for fit-padding.
+ *
+ * Node fill color and per-node radius are no longer decided here: the graph
+ * now colors nodes by **Louvain community** and sizes them by **degree**,
+ * both via `@thinkwork/graph-core` (shared with the web renderer). The old
+ * color-by-entity-type palette was retired in THINK-235.
+ */
 export type ColorScheme = "light" | "dark";
 
-export function getNodeColor(
-  pageType: WikiPageType,
-  scheme: ColorScheme = "dark",
-): string {
-  const palette = COLORS[scheme];
-  switch (pageType) {
-    case "ENTITY":
-      return palette.wikiEntity;
-    case "TOPIC":
-      return palette.wikiTopic;
-    case "DECISION":
-      return palette.wikiDecision;
-  }
-}
-
-export function getEdgeColor(scheme: ColorScheme = "dark"): string {
-  return COLORS[scheme].mutedForeground;
-}
-
+/** Upper bound of `degreeRadius` (10 + 14) — used only to pad the fit
+ *  bounds so the largest disc never clips at the viewport edge. */
 export function getNodeRadius(): number {
-  return 14;
+  return 24;
 }
 
 export const SCALE_MIN = 0.2;

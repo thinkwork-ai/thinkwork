@@ -8,8 +8,28 @@ import {
   forceX,
   forceY,
 } from "d3-force";
+import { endpointId } from "@thinkwork/graph-core";
+import type { CommunityAnchor } from "@thinkwork/graph-core";
 import { useEffect, useRef, useState } from "react";
 import type { WikiGraphEdge, WikiGraphNode } from "../types";
+
+/**
+ * Optional community-aware layout inputs. When provided, the simulation
+ * swaps its uniform forces for the same community-anchored config the web
+ * graph uses (`MemoryGraph`/`WikiGraph`): per-community spiral anchors
+ * replace the global center force, springs are short/strong inside a
+ * community and long/weak across bridges, and collide grows with each
+ * node's degree-scaled radius. This is what makes clusters form the same
+ * way on both platforms. Omit it (e.g. the tiny 1-hop detail graph) to
+ * keep the uniform-force behavior.
+ */
+export interface CommunityLayoutInput {
+  communityByNode: ReadonlyMap<string, number>;
+  anchors: ReadonlyMap<number, CommunityAnchor>;
+  /** Disc radius for a node id — drives the collide radius so labels and
+   *  discs don't overlap (mirrors web's `nodeRadius(node) + 14`). */
+  radiusForId: (id: string) => number;
+}
 
 const TARGET_TICK_HZ = 30;
 const FRAME_BUDGET_MS = 1000 / TARGET_TICK_HZ;
@@ -80,6 +100,7 @@ export function useForceSimulation(
   nodes: WikiGraphNode[],
   edges: WikiGraphEdge[],
   config: SimConfig = {},
+  community?: CommunityLayoutInput,
 ): UseForceSimulationResult {
   const {
     linkDistance = 60,
@@ -109,18 +130,63 @@ export function useForceSimulation(
     //   - forceX/forceY pull stragglers toward center so disconnected
     //     components don't drift far off-canvas
     //   - tighter collide so nodes pack densely without overlapping
-    const sim = forceSimulation<WikiGraphNode, WikiGraphEdge>(nodes)
-      .force(
-        "link",
-        forceLink<WikiGraphNode, WikiGraphEdge>(edges)
-          .id((d) => d.id)
-          .distance(linkDistance),
-      )
-      .force("charge", forceManyBody().strength(chargeStrength))
-      .force("center", forceCenter(0, 0))
-      .force("x", forceX(0).strength(xyStrength))
-      .force("y", forceY(0).strength(xyStrength))
-      .force("collide", forceCollide(collideRadius));
+    const sim = forceSimulation<WikiGraphNode, WikiGraphEdge>(nodes);
+
+    if (community) {
+      // Community-anchored config — a 1:1 port of the web graph's force
+      // layout (`MemoryGraph`/`WikiGraph`) so clusters form identically.
+      const { communityByNode, anchors, radiusForId } = community;
+      const nodeCount = nodes.length;
+      const anchorFor = (node: WikiGraphNode) =>
+        anchors.get(communityByNode.get(node.id) ?? -1) ?? { x: 0, y: 0 };
+      const sameCommunity = (link: WikiGraphEdge) => {
+        const s = communityByNode.get(endpointId(link.source));
+        const t = communityByNode.get(endpointId(link.target));
+        return s !== undefined && s === t;
+      };
+      const baseDistance = nodeCount > 50 ? 85 : 65;
+
+      sim
+        .force(
+          "link",
+          forceLink<WikiGraphNode, WikiGraphEdge>(edges)
+            .id((d) => d.id)
+            .distance((link) =>
+              sameCommunity(link) ? baseDistance : baseDistance * 2,
+            )
+            .strength((link) => (sameCommunity(link) ? 0.6 : 0.05)),
+        )
+        .force(
+          "charge",
+          forceManyBody()
+            .strength(nodeCount > 50 ? -120 : -80)
+            .distanceMax(200),
+        )
+        // Per-community anchors replace the global center force — anchors
+        // are packed around the origin so the graph stays framed.
+        .force("x", forceX<WikiGraphNode>((n) => anchorFor(n).x).strength(0.08))
+        .force("y", forceY<WikiGraphNode>((n) => anchorFor(n).y).strength(0.08))
+        .force(
+          "collide",
+          forceCollide<WikiGraphNode>()
+            .radius((n) => radiusForId(n.id) + 14)
+            .strength(0.9),
+        );
+    } else {
+      // Uniform force config (tiny 1-hop detail graphs).
+      sim
+        .force(
+          "link",
+          forceLink<WikiGraphNode, WikiGraphEdge>(edges)
+            .id((d) => d.id)
+            .distance(linkDistance),
+        )
+        .force("charge", forceManyBody().strength(chargeStrength))
+        .force("center", forceCenter(0, 0))
+        .force("x", forceX(0).strength(xyStrength))
+        .force("y", forceY(0).strength(xyStrength))
+        .force("collide", forceCollide(collideRadius));
+    }
 
     // Apply cooling knobs only when the caller opts in. Omitting them
     // leaves d3's defaults (alphaDecay ≈ 0.0228, velocityDecay = 0.4),
@@ -162,6 +228,7 @@ export function useForceSimulation(
     alphaDecay,
     velocityDecay,
     quiesceAlpha,
+    community,
   ]);
 
   return {

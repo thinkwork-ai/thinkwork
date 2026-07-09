@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  LABEL_GATE_ALWAYS_MAX_NODES,
+  computeCommunityLayout,
+  degreeRadius,
+  endpointId,
+  labelsVisibleAtScale,
+} from "@thinkwork/graph-core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   type LayoutChangeEvent,
@@ -6,11 +13,18 @@ import {
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { runOnJS } from "react-native-reanimated";
+import Animated, {
+  runOnJS,
+  useAnimatedReaction,
+} from "react-native-reanimated";
 import { COLORS } from "@/lib/theme";
 import { GraphCanvas } from "./GraphCanvas";
 import { loadGraphState, saveGraphState } from "./graphStateCache";
-import { type SimConfig, useForceSimulation } from "./hooks/useForceSimulation";
+import {
+  type CommunityLayoutInput,
+  type SimConfig,
+  useForceSimulation,
+} from "./hooks/useForceSimulation";
 import { useGraphCamera } from "./hooks/useGraphCamera";
 import { computeFit } from "./layout/fitBounds";
 import { nearestNode } from "./layout/hitTest";
@@ -53,6 +67,13 @@ interface KnowledgeGraphProps {
    * is not persisted and the graph cold-starts on every mount.
    */
   cacheKey?: string;
+  /**
+   * Apply the web graph's community-anchored force layout (Louvain
+   * clusters + spiral anchors) instead of the uniform forces. The main
+   * agent graph opts in for web parity; the tiny 1-hop detail graph
+   * leaves it off and uses its explicit `simConfig`.
+   */
+  useCommunityLayout?: boolean;
 }
 
 const PRE_REVEAL_MS = 1000;
@@ -78,9 +99,54 @@ export function KnowledgeGraph({
   showLabels = false,
   simConfig,
   cacheKey,
+  useCommunityLayout = false,
 }: KnowledgeGraphProps) {
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
+  );
+
+  // Degree (connection count) per node — derived from the edges actually
+  // present so sizing matches what's drawn. Drives `degreeRadius`.
+  const degreeById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of subgraph.nodes) m.set(n.id, 0);
+    for (const e of subgraph.edges) {
+      const s = endpointId(e.source);
+      const t = endpointId(e.target);
+      m.set(s, (m.get(s) ?? 0) + 1);
+      m.set(t, (m.get(t) ?? 0) + 1);
+    }
+    return m;
+  }, [subgraph]);
+
+  const maxDegree = useMemo(() => {
+    let max = 1;
+    for (const v of degreeById.values()) if (v > max) max = v;
+    return max;
+  }, [degreeById]);
+
+  // Louvain community assignment + spiral anchors — computed once per
+  // subgraph identity (never on filter/tick), matching web's cadence.
+  const communityLayout = useMemo(
+    () => computeCommunityLayout(subgraph.nodes, subgraph.edges),
+    [subgraph],
+  );
+
+  const radiusForId = useMemo(() => {
+    const max = Math.max(1, maxDegree);
+    return (id: string) => degreeRadius(degreeById.get(id) ?? 1, max);
+  }, [degreeById, maxDegree]);
+
+  const community = useMemo<CommunityLayoutInput | undefined>(
+    () =>
+      useCommunityLayout
+        ? {
+            communityByNode: communityLayout.communityByNode,
+            anchors: communityLayout.anchors,
+            radiusForId,
+          }
+        : undefined,
+    [useCommunityLayout, communityLayout, radiusForId],
   );
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
@@ -101,7 +167,28 @@ export function KnowledgeGraph({
 
   // Sim runs from mount regardless of reveal — the 1s buffer lets node
   // positions stabilize enough for a sensible fit target.
-  const sim = useForceSimulation(subgraph.nodes, subgraph.edges, simConfig);
+  const sim = useForceSimulation(
+    subgraph.nodes,
+    subgraph.edges,
+    simConfig,
+    community,
+  );
+
+  // Zoom gate for labels — mirror the camera scale onto a JS boolean that
+  // only flips when the threshold is crossed (matching web's
+  // `labelsVisibleAtScale`). Small graphs are always eligible.
+  const nodeCount = subgraph.nodes.length;
+  const [zoomGateOpen, setZoomGateOpen] = useState(
+    nodeCount <= LABEL_GATE_ALWAYS_MAX_NODES,
+  );
+  useAnimatedReaction(
+    () => labelsVisibleAtScale(camera.scale.value, nodeCount),
+    (cur, prev) => {
+      if (cur !== prev) runOnJS(setZoomGateOpen)(cur);
+    },
+    [nodeCount],
+  );
+  const labelsVisible = showLabels && zoomGateOpen;
 
   // When `showLabels` flips, `useForceSimulation`'s effect tears down +
   // rebuilds the sim with the new `simConfig`, but its preseeded branch
@@ -271,7 +358,10 @@ export function KnowledgeGraph({
               selectedNodeId={selectedNodeId}
               transform={camera.transform}
               filter={filter}
-              showLabels={showLabels}
+              communityByNode={communityLayout.communityByNode}
+              degreeById={degreeById}
+              maxDegree={maxDegree}
+              labelsVisible={labelsVisible}
             />
           ) : null}
         </Animated.View>
