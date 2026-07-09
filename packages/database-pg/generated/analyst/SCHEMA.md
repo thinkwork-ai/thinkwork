@@ -4161,11 +4161,13 @@ Join hints:
 
 ## users
 
+Note: End-user account records. Always scope by tenant_id; avoid joining across tenants in ad hoc reports.
+
 | column | type | flags |
 | --- | --- | --- |
 | id | uuid | PK, not null |
 | tenant_id | uuid |  |
-| email | text |  |
+| email | text | Primary contact email for the account., ⚠ PII |
 | cognito_sub | text |  |
 | name | text |  |
 | workspace_folder_name | text |  |
