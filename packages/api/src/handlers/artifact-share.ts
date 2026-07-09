@@ -76,8 +76,12 @@ const ROBOTS_META = '<meta name="robots" content="noindex">';
 
 function footerFragment(title: string): string {
   const safeTitle = escapeHtml(title);
+  // The sticky banner is screen chrome — printed it lands mid-page and
+  // overlaps document content (THINK-227 U8 print smoke), so hide it.
   return (
-    '<footer style="position:sticky;bottom:0;display:flex;align-items:center;' +
+    "<style>@media print{footer.tw-share-chrome{display:none !important}}</style>" +
+    '<footer class="tw-share-chrome" ' +
+    'style="position:sticky;bottom:0;display:flex;align-items:center;' +
     "justify-content:space-between;gap:1rem;padding:0.5rem 1rem;" +
     "font:13px/1.4 system-ui,sans-serif;background:rgba(127,127,127,0.08);" +
     'border-top:1px solid rgba(127,127,127,0.25);backdrop-filter:blur(4px)">' +
