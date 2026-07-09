@@ -1,7 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { agentLoops, db } from "../../utils.js";
+import { workflows } from "@thinkwork/database-pg/schema";
 import { syncAgentLoopScheduleBinding } from "../../../lib/agent-loops/schedule-binding.js";
+import { syncWorkflowScheduleBinding } from "../../../lib/workflows/schedule-binding.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { requireAgentLoopWriteAccess } from "./write-access.js";
 
@@ -43,6 +45,34 @@ export async function deleteAgentLoop(
     },
     loopEnabled: false,
   });
+
+  // THINK-227 U13 follow-through: a report automation converged onto a
+  // linked workflow whose schedule fires independently of the loop rows.
+  // Archiving only the loop leaves EventBridge delivering an archived
+  // automation — disable the workflow schedule and retire the workflow too.
+  const [linked] = await db
+    .select({ id: workflows.id })
+    .from(workflows)
+    .where(
+      and(
+        eq(workflows.tenant_id, row.tenant_id),
+        eq(workflows.source_agent_loop_id, row.id),
+      ),
+    )
+    .limit(1);
+  if (linked) {
+    await syncWorkflowScheduleBinding({
+      tenantId: row.tenant_id,
+      workflowId: linked.id,
+      name: row.name,
+      description: row.description,
+      schedule: null,
+    });
+    await db
+      .update(workflows)
+      .set({ lifecycle_status: "archived", updated_at: new Date() })
+      .where(eq(workflows.id, linked.id));
+  }
 
   await db
     .update(agentLoops)
