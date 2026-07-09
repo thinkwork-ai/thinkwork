@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   selectRows: vi.fn(),
   insertValues: vi.fn(),
   updateValues: vi.fn(),
-  requireAgentLoopAdmin: vi.fn(),
+  requireAgentLoopWriteAccess: vi.fn(),
   resolveCallerUserId: vi.fn(),
   syncAgentLoopScheduleBinding: vi.fn(),
   syncAgentLoopWebhookBinding: vi.fn(),
@@ -129,7 +129,10 @@ vi.mock("./types.js", () => ({
   agentLoopRowToGraphql: (row: unknown) => row,
   parseAwsJsonObject: (value: unknown) =>
     value && typeof value === "object" && !Array.isArray(value) ? value : {},
-  requireAgentLoopAdmin: mocks.requireAgentLoopAdmin,
+}));
+
+vi.mock("./write-access.js", () => ({
+  requireAgentLoopWriteAccess: mocks.requireAgentLoopWriteAccess,
 }));
 
 // eslint-disable-next-line import/first
@@ -152,7 +155,7 @@ beforeEach(() => {
   mocks.selectRows.mockReset();
   mocks.insertValues.mockReset();
   mocks.updateValues.mockReset();
-  mocks.requireAgentLoopAdmin.mockReset().mockResolvedValue(undefined);
+  mocks.requireAgentLoopWriteAccess.mockReset().mockResolvedValue(undefined);
   mocks.resolveCallerUserId.mockReset().mockResolvedValue("user-1");
   mocks.syncAgentLoopScheduleBinding.mockReset().mockResolvedValue(undefined);
   mocks.syncAgentLoopWebhookBinding.mockReset().mockResolvedValue(undefined);
@@ -224,10 +227,13 @@ describe("saveAgentLoop", () => {
       ctx(),
     );
 
-    expect(mocks.requireAgentLoopAdmin).toHaveBeenCalledWith(
+    expect(mocks.requireAgentLoopWriteAccess).toHaveBeenCalledWith(
       expect.anything(),
       "tenant-1",
-      "save_agent_loop",
+      expect.objectContaining({
+        operationName: "save_agent_loop",
+        actorId: "user-1",
+      }),
     );
     expect(mocks.insertValues).toHaveBeenNthCalledWith(
       1,
