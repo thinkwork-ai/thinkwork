@@ -105,6 +105,23 @@ export interface EmitEventWorkflowStep {
   payload?: Record<string, unknown>;
 }
 
+/**
+ * Deliver step (THINK-227 U4, KTD3): email the workflow's maintained document
+ * — an email-safe inline rendering plus a living share link — to the
+ * operator-configured recipient list after the agent step finalizes. Only
+ * meaningful on a definition carrying a `documentBinding` (validated below);
+ * the executor gates on "a new edition landed since the run started" and
+ * records skipped/sent/failed step evidence (KTD4).
+ */
+export interface DeliverWorkflowStep {
+  id: string;
+  kind: "deliver";
+  /** Recipient email addresses (free-form; the operator list is the grant). */
+  recipients: string[];
+  /** Optional subject override; defaults to the document's title line. */
+  subjectTemplate?: string;
+}
+
 export type WorkflowStep =
   | AgentWorkflowStep
   | WaitWorkflowStep
@@ -112,7 +129,8 @@ export type WorkflowStep =
   | ToolWorkflowStep
   | ApprovalWorkflowStep
   | HttpWorkflowStep
-  | EmitEventWorkflowStep;
+  | EmitEventWorkflowStep
+  | DeliverWorkflowStep;
 
 export type WorkflowStepKind = WorkflowStep["kind"];
 
@@ -124,6 +142,7 @@ export const WORKFLOW_STEP_KINDS = [
   "wait",
   "http",
   "emit_event",
+  "deliver",
 ] as const satisfies readonly WorkflowStepKind[];
 
 export interface ContinuationPolicy {
@@ -304,6 +323,8 @@ export function validateWorkflowDefinition(
       validateHttpStep(rawStep, id, index, errors);
     } else if (kind === "emit_event") {
       validateEmitEventStep(rawStep, id, index, errors);
+    } else if (kind === "deliver") {
+      validateDeliverStep(rawStep, id, index, errors, input);
     } else {
       errors.push({
         stepId: id,
@@ -641,6 +662,72 @@ function validateEmitEventStep(
       stepId: id,
       field: `steps[${index}].payload`,
       reason: "payload must be a JSON object when present",
+    });
+  }
+}
+
+const MAX_DELIVER_RECIPIENTS = 50;
+// Same deliberately-loose shape as the target-spec delivery normalizer: no
+// whitespace, exactly one @, a dot in the domain — blocks header injection
+// and obvious junk without re-implementing RFC 5322.
+const DELIVER_RECIPIENT_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateDeliverStep(
+  rawStep: Record<string, unknown>,
+  id: string | null,
+  index: number,
+  errors: DefinitionValidationError[],
+  definition: Record<string, unknown>,
+): void {
+  const recipients = rawStep.recipients;
+  if (!Array.isArray(recipients) || recipients.length === 0) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].recipients`,
+      reason: "deliver step requires a non-empty recipients array",
+    });
+  } else {
+    if (recipients.length > MAX_DELIVER_RECIPIENTS) {
+      errors.push({
+        stepId: id,
+        field: `steps[${index}].recipients`,
+        reason: `deliver step allows at most ${MAX_DELIVER_RECIPIENTS} recipients`,
+      });
+    }
+    recipients.forEach((recipient, position) => {
+      if (
+        typeof recipient !== "string" ||
+        !DELIVER_RECIPIENT_PATTERN.test(recipient)
+      ) {
+        errors.push({
+          stepId: id,
+          field: `steps[${index}].recipients[${position}]`,
+          reason: `"${String(recipient)}" is not a plausible email address`,
+        });
+      }
+    });
+  }
+  if (
+    rawStep.subjectTemplate !== undefined &&
+    (typeof rawStep.subjectTemplate !== "string" ||
+      rawStep.subjectTemplate.length > 300 ||
+      /[\r\n]/.test(rawStep.subjectTemplate))
+  ) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].subjectTemplate`,
+      reason:
+        "subjectTemplate must be a single-line string of at most 300 characters",
+    });
+  }
+  // A deliver step sends the workflow's maintained document — without a
+  // binding there is nothing to deliver.
+  if (definition.documentBinding === undefined) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}]`,
+      reason:
+        "deliver step requires the workflow to carry a documentBinding — it sends the bound document",
     });
   }
 }

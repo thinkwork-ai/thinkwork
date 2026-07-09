@@ -57,6 +57,38 @@ describe("workflowDefinitionFromAgentLoopVersion", () => {
     });
   });
 
+  it("appends a deliver step after the agent step for a report automation with delivery (THINK-227 U4)", () => {
+    const definition = workflowDefinitionFromAgentLoopVersion(
+      version({
+        documentBinding: {
+          mode: "create",
+          genre: "report",
+          title: "Weekly Pipeline Report",
+          spaceId: "space-1",
+        },
+        delivery: {
+          recipients: ["ops@example.com"],
+          subjectTemplate: "Weekly Pipeline Report",
+        },
+      }),
+    );
+    expect(definition.steps.map((s) => s.kind)).toEqual(["agent", "deliver"]);
+    const deliver = definition.steps[1];
+    if (deliver.kind === "deliver") {
+      expect(deliver.recipients).toEqual(["ops@example.com"]);
+      expect(deliver.subjectTemplate).toBe("Weekly Pipeline Report");
+    }
+  });
+
+  it("a binding without delivery converges to the agent step only", () => {
+    const definition = workflowDefinitionFromAgentLoopVersion(
+      version({
+        documentBinding: { mode: "existing", artifactId: "art-1" },
+      }),
+    );
+    expect(definition.steps.map((s) => s.kind)).toEqual(["agent"]);
+  });
+
   it("converges without a binding unchanged — no documentBinding key", () => {
     const definition = workflowDefinitionFromAgentLoopVersion(version());
     expect("documentBinding" in definition).toBe(false);

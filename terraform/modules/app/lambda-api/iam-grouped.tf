@@ -506,6 +506,10 @@ locals {
           # admin-ops-mcp invokes it for agent fixture runs + the
           # synchronous repair gate. Caught live in the U9 sweep.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-routine-exec-git",
+          # artifact-deliver (THINK-227 U5): workflow-step-dispatch's deliver
+          # step RequestResponse-invokes its workflow-delivery mode to email
+          # the maintained report to the operator-configured recipient list.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-artifact-deliver",
           # job-trigger self-target (plan 2026-07-03-004 U5, KTD-3): the
           # manual GraphQL trigger Event-invokes job-trigger with the
           # agent_loop_continue_dispatch event so routine actions never run
