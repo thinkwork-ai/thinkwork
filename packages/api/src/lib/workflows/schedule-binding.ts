@@ -58,11 +58,16 @@ export async function syncWorkflowScheduleBinding(
     if (!existing || existing.enabled === false) {
       return { scheduledJobId: existing?.id ?? null, changed: false };
     }
-    await invokeJobScheduleManager("PUT", {
-      id: existing.id,
+    const disabled = await invokeJobScheduleManager("PUT", {
+      triggerId: existing.id,
       tenantId: input.tenantId,
       enabled: false,
     });
+    if (!disabled.ok) {
+      throw new Error(
+        `Workflow schedule disable failed: ${disabled.error}. Retry save to repair the scheduled_jobs/EventBridge binding.`,
+      );
+    }
     return { scheduledJobId: existing.id, changed: true };
   }
 
@@ -87,11 +92,35 @@ export async function syncWorkflowScheduleBinding(
   };
 
   if (!existing) {
-    const created = (await invokeJobScheduleManager("POST", shared)) as {
-      id?: string;
-    } | null;
-    return { scheduledJobId: created?.id ?? null, changed: true };
+    const created = await invokeJobScheduleManager("POST", shared);
+    if (!created.ok) {
+      throw new Error(
+        `Workflow saved but EventBridge schedule could not be provisioned: ${created.error}. Save again to retry schedule repair.`,
+      );
+    }
+    // The manager creates the scheduled_jobs row itself; its result carries
+    // no id, so re-select for the caller.
+    const [row] = await db
+      .select({ id: scheduledJobs.id })
+      .from(scheduledJobs)
+      .where(
+        and(
+          eq(scheduledJobs.tenant_id, input.tenantId),
+          eq(scheduledJobs.workflow_id, input.workflowId),
+          eq(scheduledJobs.trigger_type, WORKFLOW_SCHEDULE_TRIGGER_TYPE),
+        ),
+      )
+      .limit(1);
+    return { scheduledJobId: row?.id ?? null, changed: true };
   }
-  await invokeJobScheduleManager("PUT", { id: existing.id, ...shared });
+  const updated = await invokeJobScheduleManager("PUT", {
+    triggerId: existing.id,
+    ...shared,
+  });
+  if (!updated.ok) {
+    throw new Error(
+      `Workflow schedule update failed: ${updated.error}. Retry save to repair the scheduled_jobs/EventBridge binding.`,
+    );
+  }
   return { scheduledJobId: existing.id, changed: true };
 }
