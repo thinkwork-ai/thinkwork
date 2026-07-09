@@ -61,6 +61,17 @@ export function NodeDetailModal({
     slug: node?.slug ?? null,
   });
 
+  const hasRelationships = !!relationships && relationships.length > 0;
+  // When the structured relationship pills are shown, drop the page's own
+  // compiled-body "Relationships" markdown section so it isn't duplicated.
+  const bodySections = (page?.sections ?? []).filter(
+    (s) =>
+      !(
+        hasRelationships &&
+        (s.heading ?? "").trim().toLowerCase().startsWith("relationship")
+      ),
+  );
+
   return (
     <Modal
       visible={!!node}
@@ -130,15 +141,15 @@ export function NodeDetailModal({
               {page?.summary ? (
                 <Text style={styles.summary}>{page.summary}</Text>
               ) : null}
-              {node && relationships && relationships.length > 0 ? (
+              {node && hasRelationships ? (
                 <RelationshipsSection
                   currentLabel={node.title}
                   currentColor={currentColor ?? COLORS.dark.mutedForeground}
-                  relationships={relationships}
+                  relationships={relationships!}
                   onSelectOther={onSelectRelated}
                 />
               ) : null}
-              {page?.sections?.map((section) => (
+              {bodySections.map((section) => (
                 <View key={section.id} style={styles.section}>
                   <Text style={styles.sectionHeading}>{section.heading}</Text>
                   <Markdown style={markdownStyles}>{section.bodyMd}</Markdown>
