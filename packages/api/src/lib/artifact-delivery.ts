@@ -10,6 +10,7 @@
 
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
+import { parse as parseYaml } from "yaml";
 import { renderForEmail } from "./channel-rendering/index.js";
 import { stripLeadingFrontmatter } from "./artifacts/document-compositor.js";
 
@@ -55,8 +56,223 @@ function typeLabel(type: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Email delivery
+// Plate directives in email (THINK-227 follow-up)
+//
+// Document markdown carries `tw:*` fenced directives (stats, verdict-grid,
+// chart, timeline, …) that the Document Compositor renders as plate
+// components on the web/share surface. The email renderer knows nothing
+// about them, so they used to leak as literal YAML code blocks. Split them
+// out and render email-safe (inline-styled, table-based) equivalents; a
+// directive we can't render degrades to a "view the live report" note —
+// raw YAML must never reach a recipient.
 // ---------------------------------------------------------------------------
+
+type EmailSegment =
+  | { type: "md"; text: string }
+  | { type: "directive"; kind: string; body: string };
+
+function splitDirectiveFences(markdown: string): EmailSegment[] {
+  const lines = markdown.split("\n");
+  const segments: EmailSegment[] = [];
+  let mdBuf: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const open = /^```tw:([a-z][a-z0-9-]*)\s*$/.exec(lines[i]);
+    if (!open) {
+      mdBuf.push(lines[i]);
+      i += 1;
+      continue;
+    }
+    let j = i + 1;
+    const body: string[] = [];
+    while (j < lines.length && !/^```\s*$/.test(lines[j])) {
+      body.push(lines[j]);
+      j += 1;
+    }
+    if (j >= lines.length) {
+      // Unclosed fence — leave it to the markdown renderer as-is.
+      mdBuf.push(lines[i]);
+      i += 1;
+      continue;
+    }
+    if (mdBuf.length > 0) {
+      segments.push({ type: "md", text: mdBuf.join("\n") });
+      mdBuf = [];
+    }
+    segments.push({ type: "directive", kind: open[1], body: body.join("\n") });
+    i = j + 1;
+  }
+  if (mdBuf.length > 0) segments.push({ type: "md", text: mdBuf.join("\n") });
+  return segments;
+}
+
+function yamlRecord(body: string): Record<string, unknown> | null {
+  try {
+    const data: unknown = parseYaml(body);
+    return data !== null && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function scalarText(v: unknown): string | null {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return null;
+}
+
+const DIRECTIVE_FALLBACK_HTML =
+  '<p style="margin:12px 0;padding:10px 14px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#6b7280">This section contains an interactive component — open the live report to view it.</p>';
+
+/** Render one tw:* directive to email-safe HTML + a plain-text line. */
+function renderDirectiveForEmail(
+  kind: string,
+  body: string,
+): { html: string; text: string } {
+  const root = yamlRecord(body);
+  const fallback = {
+    html: DIRECTIVE_FALLBACK_HTML,
+    text: "[Interactive component — open the live report to view it]",
+  };
+  if (!root) return fallback;
+
+  if (kind === "stats") {
+    const rawItems = Array.isArray(root.items) ? root.items : [];
+    const tiles: Array<{ value: string; label: string }> = [];
+    for (const item of rawItems) {
+      const rec =
+        item && typeof item === "object" && !Array.isArray(item)
+          ? (item as Record<string, unknown>)
+          : null;
+      const value = scalarText(rec?.value);
+      const label = scalarText(rec?.label);
+      if (value !== null && label !== null) tiles.push({ value, label });
+    }
+    if (tiles.length === 0) return fallback;
+    const cells = tiles
+      .map(
+        (t) =>
+          '<td style="border:1px solid #e5e5e5;border-radius:8px;padding:12px 16px;text-align:center">' +
+          `<div style="font-size:20px;font-weight:700;color:#1a1a1a">${escapeHtml(t.value)}</div>` +
+          `<div style="font-size:12px;color:#6b7280;margin-top:2px">${escapeHtml(t.label)}</div>` +
+          "</td>",
+      )
+      .join('<td style="width:8px"></td>');
+    return {
+      html: `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;border-collapse:separate"><tr>${cells}</tr></table>`,
+      text: tiles.map((t) => `${t.value} ${t.label}`).join(" · "),
+    };
+  }
+
+  if (kind === "verdict-grid") {
+    const rawCards = Array.isArray(root.cards) ? root.cards : [];
+    const cards: Array<{ question: string; answer: string; note?: string }> =
+      [];
+    for (const card of rawCards) {
+      const rec =
+        card && typeof card === "object" && !Array.isArray(card)
+          ? (card as Record<string, unknown>)
+          : null;
+      const question = scalarText(rec?.question);
+      const answer = scalarText(rec?.answer);
+      if (question !== null && answer !== null) {
+        cards.push({
+          question,
+          answer,
+          note: scalarText(rec?.note) ?? undefined,
+        });
+      }
+    }
+    if (cards.length === 0) return fallback;
+    const rows = cards
+      .map(
+        (c) =>
+          '<div style="border:1px solid #e5e5e5;border-radius:8px;padding:12px 16px;margin:8px 0">' +
+          `<div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px">${escapeHtml(c.question)}</div>` +
+          `<div style="font-size:15px;font-weight:700;color:#1a1a1a;margin-top:2px">${escapeHtml(c.answer)}</div>` +
+          (c.note
+            ? `<div style="font-size:13px;color:#4b5563;margin-top:4px">${escapeHtml(c.note)}</div>`
+            : "") +
+          "</div>",
+      )
+      .join("");
+    return {
+      html: `<div style="margin:16px 0">${rows}</div>`,
+      text: cards.map((c) => `${c.question}: ${c.answer}`).join(" · "),
+    };
+  }
+
+  if (kind === "timeline") {
+    const rawItems = Array.isArray(root.items) ? root.items : [];
+    const entries: string[] = [];
+    const textEntries: string[] = [];
+    for (const item of rawItems) {
+      const rec =
+        item && typeof item === "object" && !Array.isArray(item)
+          ? (item as Record<string, unknown>)
+          : null;
+      const label = scalarText(rec?.label);
+      if (label === null) continue;
+      const caption = scalarText(rec?.caption);
+      const date = scalarText(rec?.date);
+      const current = rec?.current === true;
+      const detail = [caption, date].filter(Boolean).join(" — ");
+      entries.push(
+        `<li style="margin:4px 0">${current ? "<strong>" : ""}${escapeHtml(label)}${current ? " (current)</strong>" : ""}${detail ? ` <span style="color:#6b7280">— ${escapeHtml(detail)}</span>` : ""}</li>`,
+      );
+      textEntries.push(`${label}${current ? " (current)" : ""}`);
+    }
+    if (entries.length === 0) return fallback;
+    return {
+      html: `<ol style="margin:16px 0;padding-left:20px;font-size:14px;color:#1a1a1a">${entries.join("")}</ol>`,
+      text: textEntries.join(" → "),
+    };
+  }
+
+  if (kind === "chart" || kind === "analysis") {
+    // Charts are SVG on the live surface; email clients strip SVG, so ship
+    // the underlying data table (the same drill-down the doc pairs with
+    // every chart) plus the caption takeaway.
+    const title = scalarText(root.title);
+    const rawSeries = Array.isArray(root.series) ? root.series : [];
+    const points: Array<{ label: string; value: string }> = [];
+    for (const point of rawSeries) {
+      const rec =
+        point && typeof point === "object" && !Array.isArray(point)
+          ? (point as Record<string, unknown>)
+          : null;
+      const label = scalarText(rec?.label);
+      const value = scalarText(rec?.value);
+      if (label !== null && value !== null) points.push({ label, value });
+    }
+    if (points.length === 0) return fallback;
+    const rows = points
+      .map(
+        (p) =>
+          `<tr><td style="border:1px solid #e5e5e5;padding:6px 12px;font-size:13px">${escapeHtml(p.label)}</td><td style="border:1px solid #e5e5e5;padding:6px 12px;font-size:13px;text-align:right">${escapeHtml(p.value)}</td></tr>`,
+      )
+      .join("");
+    const caption = scalarText(root.caption);
+    return {
+      html:
+        '<div style="margin:16px 0">' +
+        (title
+          ? `<div style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:6px">${escapeHtml(title)}</div>`
+          : "") +
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${rows}</table>` +
+        (caption
+          ? `<div style="font-size:12px;color:#6b7280;margin-top:6px">${escapeHtml(caption)}</div>` +
+            ""
+          : "") +
+        "</div>",
+      text: `${title ? `${title}: ` : ""}${points.map((p) => `${p.label} ${p.value}`).join(", ")}`,
+    };
+  }
+
+  return fallback;
+}
 
 /**
  * Render an artifact as an HTML email.
@@ -91,7 +307,25 @@ export function renderEmailDelivery(
   // THINK-154: document digests may lead with compiler frontmatter — not
   // reader-facing content; strip it before rendering.
   const markdownContent = stripLeadingFrontmatter(artifact.content);
-  const contentHtml = renderForEmail(markdownContent).html;
+  // tw:* plate directives render as email-safe components (never raw YAML);
+  // the markdown between them takes the normal email renderer.
+  const segments = splitDirectiveFences(markdownContent);
+  const htmlParts: string[] = [];
+  const textParts: string[] = [];
+  for (const segment of segments) {
+    if (segment.type === "md") {
+      if (segment.text.trim() !== "") {
+        htmlParts.push(renderForEmail(segment.text).html);
+        textParts.push(segment.text);
+      }
+      continue;
+    }
+    const rendered = renderDirectiveForEmail(segment.kind, segment.body);
+    htmlParts.push(rendered.html);
+    textParts.push(rendered.text);
+  }
+  const contentHtml = htmlParts.join("");
+  const textContent = textParts.join("\n");
 
   // Share-link button: href is URL-derived (our own signed share URL), never
   // interpolated into a style attribute; text stays static.
@@ -109,13 +343,14 @@ export function renderEmailDelivery(
     preheader: artifact.summary ?? artifact.title,
   });
 
-  // Plain text fallback: label + title + truncated raw markdown content.
+  // Plain text fallback: label + title + truncated content (directives
+  // already reduced to one-line summaries above).
   const textBody = [
     `${label}: ${artifact.title}`,
     artifact.status === "draft" ? "[DRAFT]" : "",
     "",
-    markdownContent.slice(0, 2000),
-    markdownContent.length > 2000 ? "\n[Content truncated]" : "",
+    textContent.slice(0, 2000),
+    textContent.length > 2000 ? "\n[Content truncated]" : "",
     shareUrl ? `\nView the live report: ${shareUrl}` : "",
   ]
     .filter(Boolean)
