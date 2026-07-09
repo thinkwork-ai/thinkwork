@@ -59,6 +59,8 @@ interface FakeResponses {
   privileges?: Record<string, boolean>; // table -> can_select (default true)
   writeGrants?: { table_name: string; privilege_type: string }[];
   columns?: Record<string, unknown>[];
+  /** Tables in the manifest that do NOT exist on the live DB (dev drift). */
+  absentTables?: string[];
 }
 
 function fakeClient(responses: FakeResponses = {}): ProbePgClient {
@@ -67,10 +69,14 @@ function fakeClient(responses: FakeResponses = {}): ProbePgClient {
       if (text.includes("has_table_privilege")) {
         const tables = (params?.[1] as string[]) ?? [];
         return {
-          rows: tables.map((tbl) => ({
-            tbl,
-            can_select: responses.privileges?.[tbl] ?? true,
-          })),
+          rows: tables.map((tbl) => {
+            const absent = responses.absentTables?.includes(tbl) === true;
+            return {
+              tbl,
+              table_exists: !absent,
+              can_select: absent ? null : (responses.privileges?.[tbl] ?? true),
+            };
+          }),
         };
       }
       if (text.includes("role_table_grants")) {
@@ -109,6 +115,26 @@ describe("probeAnalystConnection", () => {
     expect(verdict.status).toBe("fail");
     expect(verdict.reason).toBe("select_revoked");
     expect(verdict.detail).toContain("messages");
+  });
+
+  it("manifest table ABSENT from the live DB → tolerated (dev drift, to_regclass semantics), verdict ok", async () => {
+    // The grant migration's generated section skips missing tables with
+    // to_regclass guards (dev drifts from the Drizzle schema —
+    // crm_work_links 2026-07-08). The probe mirrors that: an absent table
+    // was never granted and cannot be queried, so it is neither a
+    // privilege breach nor schema drift. Columns for the absent table are
+    // also missing from information_schema.
+    const verdict = await probeAnalystConnection({
+      ...baseDeps,
+      getClient: async () =>
+        fakeClient({
+          absentTables: ["messages"],
+          columns: healthyColumns().filter(
+            (row) => row.table_name !== "messages",
+          ),
+        }),
+    });
+    expect(verdict.status).toBe("ok");
   });
 
   it("unexpected write privilege → fail (grant-surface breach)", async () => {
