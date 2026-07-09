@@ -223,7 +223,6 @@ beforeEach(() => {
 describe("mintArtifactShareLink", () => {
   it("mints on an own-tenant document: row created, URL returned, audit emitted (F1)", async () => {
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([]); // KTD9 gate: no query binding
     mocks.selectQueue.push([]); // no existing active share
     mocks.insertResults.push([shareRow()]);
 
@@ -248,7 +247,6 @@ describe("mintArtifactShareLink", () => {
 
   it("re-mint returns the existing active share without a new row or audit event (R4)", async () => {
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([]); // KTD9 gate: no query binding
     mocks.selectQueue.push([shareRow()]); // existing active share
 
     const result = (await mintArtifactShareLink(
@@ -269,7 +267,6 @@ describe("mintArtifactShareLink", () => {
       tenantId: TENANT_ID,
     });
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([]); // KTD9 gate: no query binding
     mocks.selectQueue.push([shareRow()]); // created by USER_ID
 
     const result = (await mintArtifactShareLink(
@@ -290,15 +287,18 @@ describe("mintArtifactShareLink", () => {
     expect(mocks.insertCalls).toHaveLength(0);
   });
 
-  it("THINK-228 KTD9: fails closed for an artifact with a query binding", async () => {
+  it("THINK-234: mints for an artifact with a query binding (KTD9 gate lifted — refresh is RLS tenant-scoped)", async () => {
     mocks.selectQueue.length = 0;
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([{ id: "binding-1" }]); // query binding exists
-    await expect(
-      mintArtifactShareLink(undefined, { artifactId: ARTIFACT_ID }, ctx),
-    ).rejects.toThrow(/data-source query cannot be shared/i);
-    expect(mocks.insertCalls).toHaveLength(0);
-    expect(mocks.auditEvents).toHaveLength(0);
+    mocks.selectQueue.push([]); // no active share at check time
+    mocks.insertResults.push([shareRow()]);
+    const result = (await mintArtifactShareLink(
+      undefined,
+      { artifactId: ARTIFACT_ID },
+      ctx,
+    )) as { share: { id: string } };
+    expect(result.share.id).toBe(SHARE_ID);
+    expect(mocks.insertCalls).toHaveLength(1);
   });
 
   it("rejects a caller outside the tenant, no row", async () => {
@@ -307,7 +307,6 @@ describe("mintArtifactShareLink", () => {
       tenantId: OTHER_TENANT_ID,
     });
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([]); // KTD9 gate: no query binding
     await expect(
       mintArtifactShareLink(undefined, { artifactId: ARTIFACT_ID }, ctx),
     ).rejects.toThrow(/different tenant/i);
@@ -317,7 +316,6 @@ describe("mintArtifactShareLink", () => {
   it("denies a member who fails the document's read gate, no row", async () => {
     mocks.assertCanvasAccess.mockRejectedValue(new Error("no access"));
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([]); // KTD9 gate: no query binding
     await expect(
       mintArtifactShareLink(undefined, { artifactId: ARTIFACT_ID }, ctx),
     ).rejects.toThrow(/no access/);
@@ -326,7 +324,6 @@ describe("mintArtifactShareLink", () => {
 
   it("losing the create race falls back to the winner's row", async () => {
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([]); // KTD9 gate: no query binding
     mocks.selectQueue.push([]); // no active share at check time
     mocks.insertResults.push([]); // conflict — another minter won
     mocks.selectQueue.push([shareRow({ created_by: OTHER_USER_ID })]);
@@ -405,7 +402,6 @@ describe("re-mint after revoke", () => {
   it("creates a fresh row with a different id (old token no longer valid)", async () => {
     const NEW_SHARE_ID = "99999999-9999-9999-9999-999999999999";
     mocks.selectQueue.push([documentRow()]);
-    mocks.selectQueue.push([]); // KTD9 gate: no query binding
     mocks.selectQueue.push([]); // active-share check misses (old row revoked)
     mocks.insertResults.push([shareRow({ id: NEW_SHARE_ID })]);
 

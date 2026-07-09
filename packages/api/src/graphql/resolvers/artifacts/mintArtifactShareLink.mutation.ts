@@ -16,7 +16,6 @@ import {
   eq,
   and,
   isNull,
-  artifactDataBindings,
   artifacts,
   artifactShares,
 } from "../../utils.js";
@@ -81,28 +80,12 @@ export const mintArtifactShareLink = async (
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
-  // THINK-228 KTD9: analyst-sourced artifacts are excluded from external
-  // share links in v1. A query binding means the artifact refreshes
-  // against a data source with no row-level tenant scoping yet — sharing it
-  // externally would turn a bounded in-thread exposure into indefinite
-  // cross-tenant data access by anyone with the URL. Fail closed (explicit
-  // and independent of the document-only gate above, which may widen later).
-  const [runQueryBinding] = await db
-    .select({ id: artifactDataBindings.id })
-    .from(artifactDataBindings)
-    .where(
-      and(
-        eq(artifactDataBindings.artifact_id, artifactId),
-        eq(artifactDataBindings.tool_name, "query"),
-      ),
-    )
-    .limit(1);
-  if (runQueryBinding) {
-    throw new GraphQLError(
-      "Artifacts backed by a data-source query cannot be shared externally yet",
-      { extensions: { code: "FORBIDDEN" } },
-    );
-  }
+  // THINK-234 lifted the THINK-228 KTD9 query-binding share gate: analyst
+  // refreshes are now row-level tenant-scoped at the database (RLS policies
+  // keyed to the broker's verified-tenant GUC, drizzle/0230), so a shared
+  // snapshot can only ever contain the owning tenant's rows. The public
+  // share route itself never executes queries — it serves the precompiled
+  // render — so scoped refresh closes the last cross-tenant leg.
 
   const baseUrl = shareUrlBase();
 
