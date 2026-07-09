@@ -104,30 +104,32 @@ export function grantedTablesFromModel(): AnalystTableDescriptor[] {
  * modifiers and maps a small set of known equivalent spellings.
  */
 export function normalizePgType(raw: string): string {
-  return String(raw)
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/\(\s*\d+(\s*,\s*\d+)?\s*\)/g, "") // strip length/precision
-    .replace(/^character varying$/, "varchar")
-    .replace(/^character$/, "char")
-    .replace(/^timestamp with time zone$/, "timestamptz")
-    .replace(/^timestamp without time zone$/, "timestamp")
-    .replace(/^time with time zone$/, "timetz")
-    // serial types are DDL macros (bigint/int/smallint + owned sequence);
-    // the catalog only ever reports the base type (dev, 2026-07-09:
-    // agent_workspace_events.id — model bigserial, live bigint).
-    .replace(/^bigserial$/, "bigint")
-    .replace(/^smallserial$/, "smallint")
-    .replace(/^serial$/, "integer")
-    // internal udt spellings (surface via udt_name for array elements)
-    .replace(/^int8\b/, "bigint")
-    .replace(/^int4\b/, "integer")
-    .replace(/^int2\b/, "smallint")
-    .replace(/^bool\b/, "boolean")
-    .replace(/\[\]$/, " array")
-    .replace(/^array$/, " array")
-    .trim();
+  return (
+    String(raw)
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ")
+      .replace(/\(\s*\d+(\s*,\s*\d+)?\s*\)/g, "") // strip length/precision
+      .replace(/^character varying$/, "varchar")
+      .replace(/^character$/, "char")
+      .replace(/^timestamp with time zone$/, "timestamptz")
+      .replace(/^timestamp without time zone$/, "timestamp")
+      .replace(/^time with time zone$/, "timetz")
+      // serial types are DDL macros (bigint/int/smallint + owned sequence);
+      // the catalog only ever reports the base type (dev, 2026-07-09:
+      // agent_workspace_events.id — model bigserial, live bigint).
+      .replace(/^bigserial$/, "bigint")
+      .replace(/^smallserial$/, "smallint")
+      .replace(/^serial$/, "integer")
+      // internal udt spellings (surface via udt_name for array elements)
+      .replace(/^int8\b/, "bigint")
+      .replace(/^int4\b/, "integer")
+      .replace(/^int2\b/, "smallint")
+      .replace(/^bool\b/, "boolean")
+      .replace(/\[\]$/, " array")
+      .replace(/^array$/, " array")
+      .trim()
+  );
 }
 
 /**
@@ -357,10 +359,16 @@ async function defaultGetClient(): Promise<ProbePgClient> {
 
 // ── Dispatch-side gate (R8 / KTD8) ──────────────────────────────────────────
 
-/** True when a row's URL is exactly the analyst broker route. */
+/**
+ * True when a row's URL is an analyst broker route — the builtin
+ * `/mcp/analyst` OR a THINK-239 sourced `/mcp/analyst/{slug}`. Both are
+ * probed and both are withheld on a failing/stale verdict.
+ */
 export function isAnalystBrokerUrl(url: string): boolean {
   try {
-    return new URL(url).pathname === ANALYST_BROKER_PATHNAME;
+    const pathname = new URL(url).pathname.replace(/\/+$/, "");
+    if (pathname === ANALYST_BROKER_PATHNAME) return true;
+    return /^\/mcp\/analyst\/[a-z0-9][a-z0-9-]{1,38}$/.test(pathname);
   } catch {
     return false;
   }

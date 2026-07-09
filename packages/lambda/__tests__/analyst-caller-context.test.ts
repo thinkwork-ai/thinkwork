@@ -189,6 +189,40 @@ describe("analyst caller context (THINK-229 U2)", () => {
     });
   });
 
+  it("THINK-239: sourceClaims round-trip verbatim under the signature", () => {
+    const sourceClaims = {
+      slug: "sales-pg",
+      host: "sales.example.rds.amazonaws.com",
+      port: 5432,
+      database: "sales",
+      dbUser: "analyst_ro",
+      tls: "verify-full" as const,
+      credentialSecretArn:
+        "thinkwork/dev/analyst/tenant-1/sales-pg-reader-credential",
+      tenantScoped: true,
+    };
+    const result = verify(headerFor(sessionPayload({ sourceClaims })));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.sourceClaims).toEqual(sourceClaims);
+  });
+
+  it("THINK-239: a malformed sourceClaims block rejects (typed reason)", () => {
+    const payload = sessionPayload({
+      // Missing host/port/etc — structurally invalid.
+      sourceClaims: { slug: "sales-pg" } as unknown as never,
+    });
+    expect(verify(headerFor(payload))).toEqual({
+      ok: false,
+      reason: "malformed_source_claims",
+    });
+  });
+
+  it("THINK-239: an absent sourceClaims block verifies (builtin back-compat)", () => {
+    const result = verify(headerFor(sessionPayload()));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.sourceClaims).toBeUndefined();
+  });
+
   it("policyClaims round-trip verbatim under the signature", () => {
     const claims = { budgets: { maxQueriesPerRun: 12 }, retain_sql: true };
     const result = verify(headerFor(sessionPayload({ policyClaims: claims })));

@@ -411,6 +411,51 @@ type AnalystProvisionResult {
   foldersSkipped: Int!
 }
 
+"TLS posture for a registered external analyst data source (THINK-239)."
+enum AnalystDataSourceTls {
+  "Encrypt and verify the server certificate (default, recommended)."
+  VERIFY_FULL
+  "Encrypt but skip certificate verification (explicit opt-in downgrade)."
+  REQUIRED
+}
+
+"""
+Input for registerAnalystDataSource (THINK-239) — an external Postgres data
+source the analyst can query through the sourced broker route
+(POST /mcp/analyst/<slug>). The supplied credential must be a read-only
+(SELECT-only) role; registration connects with it, verifies the posture, and
+introspects the granted surface before writing anything.
+"""
+input RegisterAnalystDataSourceInput {
+  "Human-readable display name."
+  name: String!
+  "URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment."
+  slug: String!
+  host: String!
+  port: Int!
+  database: String!
+  "Read-only (SELECT-only) database role to connect as."
+  dbUser: String!
+  "Password for the read-only role. Stored in Secrets Manager, never returned."
+  password: String!
+  "TLS posture (default VERIFY_FULL)."
+  tls: AnalystDataSourceTls
+}
+
+"Outcome of registering an external analyst data source (THINK-239)."
+type AnalystDataSourceResult {
+  "The tenant_mcp_servers row id for the registered source."
+  serverId: ID!
+  "The registered slug."
+  slug: String!
+  "Number of tables introspected into the stored semantic model."
+  tables: Int!
+  "Count of agent workspaces the connection folder was written into."
+  foldersWritten: Int!
+  "Count of agent workspaces skipped (e.g. no workspace prefix)."
+  foldersSkipped: Int!
+}
+
 extend type Mutation {
   bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
@@ -444,6 +489,17 @@ extend type Mutation {
     reApprove: Boolean
     rotateToken: Boolean
   ): AnalystProvisionResult!
+  """
+  Register an EXTERNAL Postgres data source as an analyst connector
+  (THINK-239). Requires tenant owner/admin. Connects with the supplied
+  read-only credential, verifies zero write privileges, introspects the
+  granted surface into a stored semantic model, stores a per-source reader
+  credential, writes model.json + SCHEMA.md to the tenant's S3 prefix, and
+  registers a born-approved connector at POST /mcp/analyst/<slug>.
+  """
+  registerAnalystDataSource(
+    input: RegisterAnalystDataSourceInput!
+  ): AnalystDataSourceResult!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   addManualUser(tenantId: ID!, input: AddManualUserInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!

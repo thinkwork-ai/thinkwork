@@ -96,6 +96,47 @@ function makeEvent(input: {
   } as APIGatewayProxyEventV2;
 }
 
+function makeSourcedEvent(input: {
+  sourceSlug: string;
+  body: unknown;
+  bearer?: string;
+  contextHeader?: string;
+}): APIGatewayProxyEventV2 {
+  const headers: Record<string, string> = {};
+  if (input.bearer) headers.authorization = `Bearer ${input.bearer}`;
+  if (input.contextHeader) {
+    headers[ANALYST_CALLER_CONTEXT_HEADER] = input.contextHeader;
+  }
+  const path = `/mcp/analyst/${input.sourceSlug}`;
+  return {
+    version: "2.0",
+    routeKey: "POST /mcp/analyst/{sourceSlug}",
+    rawPath: path,
+    rawQueryString: "",
+    headers,
+    pathParameters: { sourceSlug: input.sourceSlug },
+    requestContext: {
+      http: { method: "POST", path },
+    } as APIGatewayProxyEventV2["requestContext"],
+    body:
+      typeof input.body === "string" ? input.body : JSON.stringify(input.body),
+    isBase64Encoded: false,
+  } as unknown as APIGatewayProxyEventV2;
+}
+
+function sourceClaimsFor(slug: string) {
+  return {
+    slug,
+    host: "src.example.rds.amazonaws.com",
+    port: 5432,
+    database: "src",
+    dbUser: "analyst_ro",
+    tls: "verify-full" as const,
+    credentialSecretArn: `thinkwork/dev/analyst/${TEST_TENANT}/${slug}-reader-credential`,
+    tenantScoped: true,
+  };
+}
+
 const LIST_BODY = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 
 describe("analyst-query-broker caller-context auth (THINK-229 U2)", () => {
@@ -214,6 +255,95 @@ describe("analyst-query-broker caller-context auth (THINK-229 U2)", () => {
   it("neither context nor bearer → 401", async () => {
     const response = await handler(makeEvent({ body: LIST_BODY }));
     expect(response.statusCode).toBe(401);
+  });
+
+  it("THINK-239: sourced path with matching sourceClaims.slug → 200 (tools/list)", async () => {
+    const response = await handler(
+      makeSourcedEvent({
+        sourceSlug: "sales-pg",
+        body: LIST_BODY,
+        contextHeader: signedHeader(
+          contextPayload({ sourceClaims: sourceClaimsFor("sales-pg") }),
+        ),
+      }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(authLogs()).toEqual([
+      expect.objectContaining({
+        mode: "sourced",
+        outcome: "ok",
+        source: "sales-pg",
+        tenant: TEST_TENANT,
+      }),
+    ]);
+  });
+
+  it("THINK-239: sourced path with a mismatched sourceClaims.slug → 401", async () => {
+    const response = await handler(
+      makeSourcedEvent({
+        sourceSlug: "sales-pg",
+        body: LIST_BODY,
+        contextHeader: signedHeader(
+          contextPayload({ sourceClaims: sourceClaimsFor("other-pg") }),
+        ),
+      }),
+    );
+    expect(response.statusCode).toBe(401);
+    expect(authLogs()).toEqual([
+      expect.objectContaining({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: "slug_mismatch",
+      }),
+    ]);
+  });
+
+  it("THINK-239: sourced path with a context but NO sourceClaims → 401", async () => {
+    const response = await handler(
+      makeSourcedEvent({
+        sourceSlug: "sales-pg",
+        body: LIST_BODY,
+        contextHeader: signedHeader(contextPayload()),
+      }),
+    );
+    expect(response.statusCode).toBe(401);
+    expect(authLogs()).toEqual([
+      expect.objectContaining({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: "missing_source_claims",
+      }),
+    ]);
+  });
+
+  it("THINK-239: the legacy bearer is NEVER accepted on a sourced path → 401", async () => {
+    const response = await handler(
+      makeSourcedEvent({
+        sourceSlug: "sales-pg",
+        body: LIST_BODY,
+        bearer: TEST_TOKEN,
+      }),
+    );
+    expect(response.statusCode).toBe(401);
+    expect(authLogs()).toEqual([
+      expect.objectContaining({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: "missing_context",
+      }),
+    ]);
+  });
+
+  it("THINK-239: the builtin bare path is untouched by the sourced branch", async () => {
+    // Legacy bearer still works on /mcp/analyst (phase-in) — proving the
+    // sourced fail-closed rule did not leak into the builtin route.
+    const response = await handler(
+      makeEvent({ body: LIST_BODY, bearer: TEST_TOKEN }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(authLogs()).toEqual([
+      expect.objectContaining({ mode: "legacy_bearer", outcome: "ok" }),
+    ]);
   });
 
   it("context present but verifier key unavailable → 500, never an auth bypass", async () => {

@@ -38,6 +38,7 @@ import {
   sql,
   artifacts,
   artifactDataBindings,
+  tenantMcpServers,
 } from "../graphql/utils.js";
 import {
   resolveTenantMcpServerTarget,
@@ -47,9 +48,12 @@ import {
 import { mcpCallTool, type McpServerTarget } from "../lib/mcp-client-call.js";
 import {
   ANALYST_CALLER_CONTEXT_HEADER,
+  analystBrokerSourceSlug,
   hashAnalystRequestBody,
   isAnalystBrokerUrl,
   mintAnalystCallerContextHeader,
+  sourceClaimsFromRuntimeMetadata,
+  type AnalystSourceClaims,
 } from "../lib/analyst/caller-context.js";
 import {
   loadCanvasHeadContent,
@@ -488,6 +492,34 @@ export async function handler(
       // Signing unavailable → the legacy bearer on the target carries
       // alone (phase-in).
       if (isAnalystBrokerUrl(callTarget.url)) {
+        // THINK-239: a sourced broker URL needs signed sourceClaims so the
+        // broker connects to the registered external source. Resolve the
+        // row's analyst_source metadata once (not per POST). A sourced row
+        // with missing/invalid metadata is refused rather than dispatched
+        // with a bare context the broker would 401.
+        const sourceSlug = analystBrokerSourceSlug(callTarget.url);
+        let sourceClaims: AnalystSourceClaims | null = null;
+        if (sourceSlug) {
+          const [row] = await db
+            .select({ runtime_metadata: tenantMcpServers.runtime_metadata })
+            .from(tenantMcpServers)
+            .where(
+              and(
+                eq(tenantMcpServers.tenant_id, tenantId),
+                eq(tenantMcpServers.slug, sourceSlug),
+              ),
+            )
+            .limit(1);
+          sourceClaims = sourceClaimsFromRuntimeMetadata(
+            sourceSlug,
+            row?.runtime_metadata,
+          );
+          if (!sourceClaims) {
+            throw new Error(
+              `analyst source "${sourceSlug}" has missing/invalid runtime_metadata.analyst_source — cannot refresh`,
+            );
+          }
+        }
         callTarget = {
           ...callTarget,
           perRequestHeaders: async (body) => {
@@ -496,6 +528,7 @@ export async function handler(
               tenantId,
               refreshId: artifactId,
               bodyHash: hashAnalystRequestBody(body),
+              ...(sourceClaims ? { sourceClaims } : {}),
             }).catch((err) => {
               console.error(
                 `${LOG_PREFIX} analyst caller-context mint threw:`,

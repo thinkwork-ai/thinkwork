@@ -1479,6 +1479,14 @@ locals {
       # role. The seeded postgres-dev connector row points at this route.
       "POST /mcp/analyst" = "analyst-query-broker"
 
+      # Sourced analyst broker route (THINK-239) — the same handler serves a
+      # registered EXTERNAL Postgres source at /mcp/analyst/<slug>. The broker
+      # requires a signed caller context whose sourceClaims.slug matches the
+      # path (the legacy bearer is never accepted here) and connects using the
+      # per-source reader credential (thinkwork/<stage>/analyst/*, covered by
+      # the shared secretsmanager:GetSecretValue on thinkwork/*).
+      "POST /mcp/analyst/{sourceSlug}" = "analyst-query-broker"
+
       # MCP admin key management — per-tenant Bearer token CRUD. Tokens
       # are shown ONCE at creation (POST returns raw value); server stores
       # sha256 hash only. These specific routes take precedence over the

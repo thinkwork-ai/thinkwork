@@ -52,12 +52,17 @@ import {
   DEFAULT_MAX_FETCH_BYTES,
   DEFAULT_MAX_FETCH_ROWS,
 } from "./analyst-query-gate.js";
-import { getAnalystReaderClient } from "./analyst-reader-db.js";
+import {
+  getAnalystReaderClient,
+  connectExternalSource,
+} from "./analyst-reader-db.js";
 import {
   ANALYST_CALLER_CONTEXT_HEADER,
   verifyAnalystCallerContextHeader,
   type AnalystCallerContextPayload,
+  type AnalystSourceClaims,
 } from "./analyst-caller-context.js";
+import type { Client as PgClientType } from "pg";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "thinkwork-analyst-query-broker";
@@ -486,6 +491,62 @@ async function emitQueryTrace(
 
 const DATA_SOURCE_SLUG = process.env.ANALYST_DATA_SOURCE_SLUG || "postgres-dev";
 
+/**
+ * The resolved data source for one invocation (THINK-239). The builtin path
+ * connects via the cluster-global `analyst_reader` chain; a sourced path
+ * (`/mcp/analyst/{sourceSlug}`) connects to the caller's registered external
+ * Postgres via `connectExternalSource`. Everything downstream (gate, budget,
+ * redaction, envelope, compliance trace) is shared — only the slug and the
+ * connect closure differ.
+ */
+interface BrokerSource {
+  slug: string;
+  getClient: () => Promise<PgClientType>;
+}
+
+const BUILTIN_SOURCE: BrokerSource = {
+  slug: DATA_SOURCE_SLUG,
+  getClient: getAnalystReaderClient,
+};
+
+function sourceFromClaims(claims: AnalystSourceClaims): BrokerSource {
+  return {
+    slug: claims.slug,
+    getClient: () =>
+      connectExternalSource({
+        slug: claims.slug,
+        host: claims.host,
+        port: claims.port,
+        database: claims.database,
+        dbUser: claims.dbUser,
+        tls: claims.tls,
+        credentialSecretArn: claims.credentialSecretArn,
+      }),
+  };
+}
+
+/**
+ * Parse the `{sourceSlug}` path parameter (THINK-239). API Gateway HTTP API
+ * supplies it as `pathParameters.sourceSlug`; the raw-path fallback keeps the
+ * handler correct under direct invocation and tests. Returns null for the
+ * bare builtin route.
+ */
+export function analystSourceSlugFromEvent(
+  event: APIGatewayProxyEventV2,
+): string | null {
+  const fromParams = (
+    event as APIGatewayProxyEventV2 & {
+      pathParameters?: Record<string, string | undefined> | null;
+    }
+  ).pathParameters?.sourceSlug;
+  if (typeof fromParams === "string" && fromParams.trim()) {
+    return fromParams.trim();
+  }
+  const path = event.rawPath || event.requestContext?.http?.path || "";
+  const match = path.match(/^\/mcp\/analyst\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
 function envInt(name: string, fallback: number): number {
   const raw = process.env[name];
   const parsed = raw ? Number.parseInt(raw, 10) : NaN;
@@ -508,8 +569,10 @@ export interface RunQueryOutcome {
 async function runQuery(
   sql: string,
   caller: BrokerCallerIdentity,
+  source: BrokerSource,
 ): Promise<RunQueryOutcome> {
   const tenantId = caller.tenantId;
+  const dataSource = source.slug;
   const actorFields = {
     actor_kind: caller.actorKind,
     ...(caller.agentId ? { agent_id: caller.agentId } : {}),
@@ -544,12 +607,12 @@ async function runQuery(
           eventType: "policy.blocked",
           action: "budget_check",
           outcome: "blocked",
-          resourceId: DATA_SOURCE_SLUG,
+          resourceId: dataSource,
           payload: {
             cap_kind: "max_queries_per_tenant_day",
             limit: dayCap,
             observed: state.count,
-            data_source: DATA_SOURCE_SLUG,
+            data_source: dataSource,
             ...actorFields,
           },
         }).catch((err) => {
@@ -566,7 +629,7 @@ async function runQuery(
     }
   }
 
-  const client = await getAnalystReaderClient();
+  const client = await source.getClient();
   let result;
   try {
     result = await gateAndExecute(client, sql, {
@@ -583,7 +646,7 @@ async function runQuery(
       // the in-loop cap (U6) counts them against the delegation.
       await emitQueryTrace(tenantId, {
         ...sqlFields(null),
-        data_source: DATA_SOURCE_SLUG,
+        data_source: dataSource,
         rows_returned: 0,
         approx_bytes: 0,
         duration_ms: 0,
@@ -622,7 +685,7 @@ async function runQuery(
 
   await emitQueryTrace(tenantId, {
     ...sqlFields(sqlShapeFromExplain(sql, result.explainPlan)),
-    data_source: DATA_SOURCE_SLUG,
+    data_source: dataSource,
     rows_returned: preEnvelope.row_count,
     approx_bytes: preEnvelope.approx_bytes,
     duration_ms: result.durationMs,
@@ -652,6 +715,7 @@ async function runQuery(
 async function dispatch(
   req: JsonRpcRequest,
   caller: BrokerCallerIdentity,
+  source: BrokerSource,
 ): Promise<JsonRpcResponse | null> {
   const id = req.id ?? null;
   const isNotification = req.id === undefined;
@@ -716,7 +780,7 @@ async function dispatch(
           };
         }
         try {
-          const outcome = await runQuery(sql, caller);
+          const outcome = await runQuery(sql, caller, source);
           if (outcome.rejection) {
             return {
               jsonrpc: "2.0",
@@ -797,14 +861,76 @@ export async function handler(
     return httpJson(405, { error: "Method not allowed — POST only" });
   }
 
-  // THINK-229 U2 auth order: signed caller context if present -> verify
-  // or 401 (never fall through to the bearer on a broken context); else
-  // legacy bearer (phase-in, marker-logged); else 401.
+  // THINK-239: `/mcp/analyst/{sourceSlug}` targets a registered EXTERNAL
+  // source; the bare `/mcp/analyst` keeps the builtin cluster-global reader.
+  const sourceSlug = analystSourceSlugFromEvent(event);
+
   const headers = event.headers ?? {};
   // API Gateway v2 lowercases header names.
   const contextHeader = headers[ANALYST_CALLER_CONTEXT_HEADER];
   let caller: BrokerCallerIdentity;
-  if (contextHeader) {
+  let source: BrokerSource = BUILTIN_SOURCE;
+
+  if (sourceSlug) {
+    // Sourced paths are fail-closed: they REQUIRE a verified caller context
+    // whose signed sourceClaims.slug exactly matches the path slug. The
+    // legacy tenant-wide bearer is NEVER accepted here — it carries no
+    // per-source binding, so it could point the broker at any registered
+    // source. (Bare-path builtin traffic keeps the bearer during phase-in.)
+    if (!contextHeader) {
+      logAuth({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: "missing_context",
+        source: sourceSlug,
+      });
+      return httpJson(401, { error: "Unauthorized" });
+    }
+    const publicKeyPem = readCapabilityPublicKey();
+    if (!publicKeyPem) {
+      console.error(
+        "analyst-query-broker: CAPABILITY_SIGNING_PUBLIC_KEY unavailable — cannot verify caller contexts",
+      );
+      return httpJson(500, { error: "Caller-context verifier unavailable" });
+    }
+    const verified = verifyAnalystCallerContextHeader({
+      headerValue: contextHeader,
+      requestBody: event.body ?? "",
+      publicKeyPem,
+      nowMs: Date.now(),
+    });
+    if (!verified.ok) {
+      logAuth({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: verified.reason,
+        source: sourceSlug,
+      });
+      return httpJson(401, { error: "Unauthorized" });
+    }
+    const claims = verified.payload.sourceClaims;
+    if (!claims || claims.slug !== sourceSlug) {
+      logAuth({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: claims ? "slug_mismatch" : "missing_source_claims",
+        source: sourceSlug,
+        claimed_slug: claims?.slug,
+      });
+      return httpJson(401, { error: "Unauthorized" });
+    }
+    caller = callerIdentityFromContext(verified.payload);
+    source = sourceFromClaims(claims);
+    logAuth({
+      mode: "sourced",
+      outcome: "ok",
+      actor: caller.actorKind,
+      tenant: caller.tenantId,
+      source: sourceSlug,
+    });
+  } else if (contextHeader) {
+    // THINK-229 U2 auth order: signed caller context if present -> verify
+    // or 401 (never fall through to the bearer on a broken context).
     const publicKeyPem = readCapabilityPublicKey();
     if (!publicKeyPem) {
       console.error(
@@ -834,6 +960,7 @@ export async function handler(
       tenant: caller.tenantId,
     });
   } else {
+    // Legacy bearer (phase-in, marker-logged); else 401. Builtin path only.
     const token = extractBearer(event);
     if (!token) {
       return httpJson(401, { error: "Unauthorized" });
@@ -881,13 +1008,13 @@ export async function handler(
   if (Array.isArray(parsed)) {
     const responses = (
       await Promise.all(
-        (parsed as JsonRpcRequest[]).map((r) => dispatch(r, caller)),
+        (parsed as JsonRpcRequest[]).map((r) => dispatch(r, caller, source)),
       )
     ).filter((r): r is JsonRpcResponse => r !== null);
     return httpJson(200, responses);
   }
 
-  const response = await dispatch(parsed as JsonRpcRequest, caller);
+  const response = await dispatch(parsed as JsonRpcRequest, caller, source);
   if (response === null) {
     return { statusCode: 202, body: "" };
   }

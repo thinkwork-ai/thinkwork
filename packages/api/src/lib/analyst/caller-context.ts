@@ -19,7 +19,10 @@ import {
   hashAnalystRequestBody,
   type AnalystCallerActor,
   type AnalystCallerContextPayload,
+  type AnalystSourceClaims,
 } from "@thinkwork/lambda/analyst-caller-context";
+
+export type { AnalystSourceClaims } from "@thinkwork/lambda/analyst-caller-context";
 
 import {
   resolveConfiguredCapabilitySigner,
@@ -39,6 +42,12 @@ export interface MintAnalystCallerContextInput {
   refreshId?: string;
   /** Sidecar-derived claims (U3/U4); defaults to {} during phase-in. */
   policyClaims?: Record<string, unknown>;
+  /**
+   * External source description (THINK-239). Present only when minting for a
+   * sourced broker route (`/mcp/analyst/{sourceSlug}`); the broker binds the
+   * path slug to `sourceClaims.slug`. Absent = builtin source.
+   */
+  sourceClaims?: AnalystSourceClaims;
   /** Required for system_refresh: sha256 hex of the exact JSON-RPC body. */
   bodyHash?: string;
   /** Override for tests; defaults per actor mode. */
@@ -82,6 +91,7 @@ export async function mintAnalystCallerContextHeader(
     ...(input.threadId ? { threadId: input.threadId } : {}),
     ...(input.refreshId ? { refreshId: input.refreshId } : {}),
     policyClaims: input.policyClaims ?? {},
+    ...(input.sourceClaims ? { sourceClaims: input.sourceClaims } : {}),
     iat: now,
     exp: now + ttl,
     ...(input.bodyHash ? { bodyHash: input.bodyHash } : {}),
@@ -95,15 +105,76 @@ export async function mintAnalystCallerContextHeader(
 }
 
 /**
- * The analyst query broker's fixed route (terraform
- * lambda-api/handlers.tf "POST /mcp/analyst"). Caller contexts are a
- * broker credential — they must NEVER ride to any other MCP server, so
- * both mint sites gate on this predicate.
+ * The analyst query broker's routes (terraform lambda-api/handlers.tf):
+ * the builtin `POST /mcp/analyst` and the THINK-239 sourced
+ * `POST /mcp/analyst/{sourceSlug}`. Caller contexts are a broker credential —
+ * they must NEVER ride to any other MCP server, so both mint sites gate on
+ * this match.
+ *
+ * Returns `{ isBroker, sourceSlug }`: `sourceSlug` is null for the builtin
+ * route and the `<slug>` for a sourced route. The slug shape mirrors the
+ * registration validator (`^[a-z0-9][a-z0-9-]{1,38}$`) so a stray extra path
+ * segment never reads as a source.
  */
-export function isAnalystBrokerUrl(url: string): boolean {
+export function matchAnalystBrokerUrl(url: string): {
+  isBroker: boolean;
+  sourceSlug: string | null;
+} {
   try {
-    return new URL(url).pathname === "/mcp/analyst";
+    const pathname = new URL(url).pathname.replace(/\/+$/, "");
+    if (pathname === "/mcp/analyst")
+      return { isBroker: true, sourceSlug: null };
+    const match = pathname.match(/^\/mcp\/analyst\/([a-z0-9][a-z0-9-]{1,38})$/);
+    if (match) return { isBroker: true, sourceSlug: match[1]! };
+    return { isBroker: false, sourceSlug: null };
   } catch {
-    return false;
+    return { isBroker: false, sourceSlug: null };
   }
+}
+
+/** True for either the builtin or a sourced analyst broker route. */
+export function isAnalystBrokerUrl(url: string): boolean {
+  return matchAnalystBrokerUrl(url).isBroker;
+}
+
+/** The source slug carried by an analyst broker URL, or null (builtin/none). */
+export function analystBrokerSourceSlug(url: string): string | null {
+  return matchAnalystBrokerUrl(url).sourceSlug;
+}
+
+/**
+ * Reconstruct signed {@link AnalystSourceClaims} from a registry row's
+ * `runtime_metadata.analyst_source` block plus its slug (THINK-239). The
+ * stored block is the sourceClaims shape MINUS the slug; returns null when the
+ * block is absent or malformed (builtin rows, or a corrupt row).
+ */
+export function sourceClaimsFromRuntimeMetadata(
+  slug: string,
+  runtimeMetadata: unknown,
+): AnalystSourceClaims | null {
+  if (!runtimeMetadata || typeof runtimeMetadata !== "object") return null;
+  const raw = (runtimeMetadata as Record<string, unknown>).analyst_source;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const m = raw as Record<string, unknown>;
+  const tls = m.tls;
+  if (
+    typeof m.host !== "string" ||
+    typeof m.port !== "number" ||
+    typeof m.database !== "string" ||
+    typeof m.dbUser !== "string" ||
+    (tls !== "verify-full" && tls !== "required") ||
+    typeof m.credentialSecretArn !== "string"
+  ) {
+    return null;
+  }
+  return {
+    slug,
+    host: m.host,
+    port: m.port,
+    database: m.database,
+    dbUser: m.dbUser,
+    tls,
+    credentialSecretArn: m.credentialSecretArn,
+    tenantScoped: m.tenantScoped === true,
+  };
 }
