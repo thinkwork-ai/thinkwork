@@ -431,6 +431,7 @@ export const MessagesQuery = graphql(`
             status
             content
             summary
+            metadata
           }
           createdAt
         }
@@ -1498,6 +1499,7 @@ export const ArtifactsForThreadQuery = graphql(`
       type
       status
       summary
+      metadata
       createdAt
       updatedAt
     }
@@ -1513,11 +1515,12 @@ export const ArtifactDetailQuery = graphql(`
       status
       content
       summary
+      metadata
+      renderHtml
       createdAt
     }
   }
 `);
-
 // ---------------------------------------------------------------------------
 // Memory
 // ---------------------------------------------------------------------------

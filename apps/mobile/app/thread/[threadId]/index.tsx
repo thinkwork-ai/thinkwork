@@ -91,6 +91,7 @@ import {
   ActivityTimeline,
   type SaveRecipeInfo,
 } from "@/components/threads/ActivityTimeline";
+import { ThreadDocumentPlates } from "@/components/threads/ThreadDocumentPlates";
 import { shouldShowThreadWorkingIndicator } from "@/components/threads/activity-timeline-logic";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import {
@@ -834,7 +835,7 @@ export default function ThreadDetailRoute() {
   const visibleTurns = turns;
   const isOptimisticStartRunning = Boolean(
     pendingThreadStart?.expectAssistantResponse &&
-      !hasPendingStartAssistantMessage,
+    !hasPendingStartAssistantMessage,
   );
   useEffect(() => {
     if (!pendingThreadStart) return;
@@ -1293,6 +1294,9 @@ export default function ThreadDetailRoute() {
               refreshing={pullRefreshing}
               onRefresh={handleRefresh}
               currentUserId={currentUser?.id}
+              listFooterComponent={
+                <ThreadDocumentPlates tenantId={tenantId} threadId={threadId} />
+              }
             />
           )
         ) : (

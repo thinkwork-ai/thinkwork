@@ -43,6 +43,8 @@ export interface ChatMessage {
     status: string;
     content?: string;
     summary?: string;
+    /** AWSJSON — document-kind artifacts carry `{"kind":"document",...}`. */
+    metadata?: unknown;
   } | null;
   structuredData?: unknown;
   uiEnvelope?: UiEnvelope | null;

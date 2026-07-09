@@ -4,6 +4,8 @@ import { Text } from "@/components/ui/typography";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ArtifactCard } from "./ArtifactCard";
+import { DocumentPlateCard } from "./DocumentPlateCard";
+import { isDocumentArtifactMetadata } from "@/lib/document-frame";
 import { type UiAction } from "@/lib/ui-envelope-types";
 import {
   parseTypedJson,
@@ -332,12 +334,21 @@ export function ChatBubble({
               )}
             </View>
           ) : message.durableArtifact ? (
-            <ArtifactCard
-              title={message.durableArtifact.title}
-              type={message.durableArtifact.type?.toLowerCase()}
-              status={message.durableArtifact.status?.toLowerCase()}
-              content={message.durableArtifact.content ?? displayContent}
-            />
+            isDocumentArtifactMetadata(message.durableArtifact.metadata) ? (
+              <DocumentPlateCard
+                artifactId={message.durableArtifact.id}
+                title={message.durableArtifact.title}
+                type={message.durableArtifact.type?.toLowerCase()}
+                status={message.durableArtifact.status?.toLowerCase()}
+              />
+            ) : (
+              <ArtifactCard
+                title={message.durableArtifact.title}
+                type={message.durableArtifact.type?.toLowerCase()}
+                status={message.durableArtifact.status?.toLowerCase()}
+                content={message.durableArtifact.content ?? displayContent}
+              />
+            )
           ) : displayContent ? (
             <MarkdownMessage content={displayContent} isUser={isUser} />
           ) : null}
