@@ -30,6 +30,12 @@ The property that Deployment Controller components (including the Deployment Run
 ### Runner Self-Update
 The mechanism by which a successful deploy replaces the Deployment Runner with the version from the release just deployed. It runs only after success, so it cannot rescue a runner too old to complete the current release — that gap is closed manually.
 
+### Migration Ledger
+The per-stage-database record of which schema migration files have been applied there. During a customer deploy, the Deployment Runner sweeps every migration file the ledger does not record and applies each unattended, in filename order, with no inputs beyond the stage name — so a migration that requires any other caller-supplied input fails the first environment whose ledger has not recorded it. Pre-ledger environments were transitioned by recording their history without re-running it.
+
+### Hand-Rolled Migration
+A schema migration authored directly as SQL rather than generated from the ORM schema, used for what generation cannot express (roles, grants, row-level security, partial indexes, precise ordering). Hand-rolled migrations sit outside the generated-migration journal: on vendor stages they are applied manually and checked by a drift gate that verifies their declared objects exist; on customer stages they run unattended through the Migration Ledger sweep, so they must be executable with no caller-supplied inputs and produce no secret material in output.
+
 ### Release Manifest
 The integrity-pinned description of a platform release — its artifact bundles, runtime images, and compatibility floors (including the minimum runner version) — that a Deployment Controller consumes to apply that release.
 
