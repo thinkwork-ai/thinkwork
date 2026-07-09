@@ -57,6 +57,10 @@ function healthyColumns(): Record<string, unknown>[] {
 
 interface FakeResponses {
   privileges?: Record<string, boolean>; // table -> can_select (default true)
+  /** "table.column" -> can_select override (wins over table-level). */
+  columnPrivileges?: Record<string, boolean>;
+  /** Granted columns MISSING from the live table (falls to drift check). */
+  missingColumns?: string[]; // "table.column"
   writeGrants?: { table_name: string; privilege_type: string }[];
   columns?: Record<string, unknown>[];
   /** Tables in the manifest that do NOT exist on the live DB (dev drift). */
@@ -66,15 +70,26 @@ interface FakeResponses {
 function fakeClient(responses: FakeResponses = {}): ProbePgClient {
   return {
     async query(text: string, params?: unknown[]) {
-      if (text.includes("has_table_privilege")) {
+      if (text.includes("has_column_privilege")) {
         const tables = (params?.[1] as string[]) ?? [];
+        const cols = (params?.[2] as string[]) ?? [];
         return {
-          rows: tables.map((tbl) => {
+          rows: tables.map((tbl, i) => {
+            const col = cols[i];
+            const key = `${tbl}.${col}`;
             const absent = responses.absentTables?.includes(tbl) === true;
+            const columnMissing =
+              absent || responses.missingColumns?.includes(key) === true;
             return {
               tbl,
+              col,
               table_exists: !absent,
-              can_select: absent ? null : (responses.privileges?.[tbl] ?? true),
+              column_exists: !columnMissing,
+              can_select: columnMissing
+                ? null
+                : (responses.columnPrivileges?.[key] ??
+                  responses.privileges?.[tbl] ??
+                  true),
             };
           }),
         };
@@ -115,6 +130,40 @@ describe("probeAnalystConnection", () => {
     expect(verdict.status).toBe("fail");
     expect(verdict.reason).toBe("select_revoked");
     expect(verdict.detail).toContain("messages");
+  });
+
+  it("revoked SELECT on a single granted column → fail naming table.column", async () => {
+    // Column-level grants are the migration's shape for tables with denied
+    // columns (0227 grants SELECT (col, ...) on routines). The probe checks
+    // per-column, so a one-column revocation is caught precisely.
+    const verdict = await probeAnalystConnection({
+      ...baseDeps,
+      getClient: async () =>
+        fakeClient({ columnPrivileges: { "messages.body": false } }),
+    });
+    expect(verdict.status).toBe("fail");
+    expect(verdict.reason).toBe("select_revoked");
+    expect(verdict.detail).toContain("messages.body");
+  });
+
+  it("granted column MISSING from an existing live table → drift, not revocation", async () => {
+    // A dropped column has no privilege to check — it must surface as
+    // schema_drift (the model's SQL assumptions are stale), never as
+    // select_revoked.
+    const verdict = await probeAnalystConnection({
+      ...baseDeps,
+      getClient: async () =>
+        fakeClient({
+          missingColumns: ["messages.body"],
+          columns: healthyColumns().filter(
+            (row) =>
+              !(row.table_name === "messages" && row.column_name === "body"),
+          ),
+        }),
+    });
+    expect(verdict.status).toBe("fail");
+    expect(verdict.reason).toBe("schema_drift");
+    expect(verdict.detail).toContain("messages.body");
   });
 
   it("manifest table ABSENT from the live DB → tolerated (dev drift, to_regclass semantics), verdict ok", async () => {
