@@ -255,13 +255,15 @@ function callerIdentityFromContext(
 }
 
 function readCapabilityPublicKey(): string | null {
+  // Document-only key: read via getConfig ONLY (its env-wins merge still
+  // honors a hand-set env var as an incident/test override — a direct
+  // process.env read here would fail the runtime-config fixture gate).
   let value = "";
   try {
     value = getConfig("CAPABILITY_SIGNING_PUBLIC_KEY") || "";
   } catch {
     value = "";
   }
-  if (!value.trim()) value = process.env.CAPABILITY_SIGNING_PUBLIC_KEY || "";
   if (!value.trim()) return null;
   // Terraform/SSM often carries PEMs with literal \n escapes.
   return value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
