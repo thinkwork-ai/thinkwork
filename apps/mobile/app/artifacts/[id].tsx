@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { View, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "urql";
@@ -35,8 +35,12 @@ export default function ArtifactViewScreen() {
     pause: !id,
   });
 
+  const [plateReady, setPlateReady] = useState(false);
+
   const artifact = (data as any)?.artifact;
-  const title = artifact?.title ?? "Artifact";
+  // Blank while loading — a placeholder ("Artifact") flashes and then
+  // switches to the real title once the query resolves.
+  const title = artifact?.title ?? (fetching ? "" : "Artifact");
   const typeLabel = TYPE_LABELS[artifact?.type] ?? artifact?.type ?? "";
 
   // Document-kind artifacts (compiled HTML plates) render the server-built
@@ -55,7 +59,7 @@ export default function ArtifactViewScreen() {
   );
 
   return (
-    <DetailLayout title={title}>
+    <DetailLayout title={title} disableBottomInset={Boolean(plateHtml)}>
       {fetching ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.mutedForeground} />
@@ -65,15 +69,32 @@ export default function ArtifactViewScreen() {
           <Muted>Artifact not found.</Muted>
         </View>
       ) : plateHtml ? (
-        <WebView
-          source={{ html: plateHtml }}
+        <View
           style={{ flex: 1, backgroundColor: isDark ? "#0a0a0a" : "#ffffff" }}
-          javaScriptEnabled={false}
-          originWhitelist={["about:*"]}
-          onShouldStartLoadWithRequest={(req) => req.url.startsWith("about:")}
-          setSupportMultipleWindows={false}
-          allowsLinkPreview={false}
-        />
+        >
+          {!plateReady && (
+            <View className="absolute inset-0 items-center justify-center z-10">
+              <ActivityIndicator size="small" color={colors.mutedForeground} />
+            </View>
+          )}
+          {/* Hidden until onLoadEnd: WKWebView's first paint reflows once
+              layout settles (title flashes at the top, then jumps into
+              place) — only show the settled document. */}
+          <WebView
+            source={{ html: plateHtml }}
+            style={{
+              flex: 1,
+              backgroundColor: isDark ? "#0a0a0a" : "#ffffff",
+              opacity: plateReady ? 1 : 0,
+            }}
+            onLoadEnd={() => setPlateReady(true)}
+            javaScriptEnabled={false}
+            originWhitelist={["about:*"]}
+            onShouldStartLoadWithRequest={(req) => req.url.startsWith("about:")}
+            setSupportMultipleWindows={false}
+            allowsLinkPreview={false}
+          />
+        </View>
       ) : (
         <ScrollView
           className="flex-1"

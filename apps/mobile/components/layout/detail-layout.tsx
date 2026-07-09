@@ -2,7 +2,7 @@ import { View, Pressable } from "react-native";
 import { useRef } from "react";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft } from "lucide-react-native";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { Sidebar } from "./sidebar";
@@ -21,6 +21,13 @@ interface DetailLayoutProps {
     width: number;
     height: number;
   }) => void;
+  /**
+   * Skip the bottom safe-area inset so children reach the physical bottom
+   * of the screen. Full-bleed surfaces (the plate WebView) use this so
+   * their own background fills the home-indicator strip instead of the
+   * app background showing through as a mismatched band.
+   */
+  disableBottomInset?: boolean;
 }
 
 export function DetailLayout({
@@ -29,11 +36,13 @@ export function DetailLayout({
   headerRight,
   showSidebar = true,
   onTitlePress,
+  disableBottomInset = false,
 }: DetailLayoutProps) {
   const router = useRouter();
   const { isWide } = useMediaQuery();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
+  const insets = useSafeAreaInsets();
 
   const titleRef = useRef<View>(null);
 
@@ -108,15 +117,22 @@ export function DetailLayout({
     );
   }
 
-  // Narrow screens: SafeAreaView for top/bottom
+  // Narrow screens: pad for top/bottom safe areas. Insets come from the
+  // context hook (known synchronously on first render) rather than the
+  // native SafeAreaView, whose async measurement makes the header flash
+  // at the physical top for a frame during push transitions before
+  // jumping into place.
   return (
-    <SafeAreaView
+    <View
       className="flex-1 bg-white dark:bg-neutral-950"
-      edges={["top", "bottom"]}
-      style={{ backgroundColor: colors.background }}
+      style={{
+        backgroundColor: colors.background,
+        paddingTop: insets.top,
+        paddingBottom: disableBottomInset ? 0 : insets.bottom,
+      }}
     >
       {headerContent}
       {children}
-    </SafeAreaView>
+    </View>
   );
 }
