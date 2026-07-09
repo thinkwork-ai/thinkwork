@@ -40,6 +40,13 @@ export interface AnalystEnvelope {
   columns: AnalystColumnDescriptor[];
   rows: AnalystCell[][];
   row_count: number;
+  /**
+   * THINK-232: approximate serialized size of the inline `rows` preview, in
+   * bytes (JSON length). Model-visible so the container's per-run cost
+   * accumulator can charge DB cost per query without a second broker round
+   * trip. Same computation the broker uses for its audit trace.
+   */
+  approx_bytes: number;
   truncated: boolean;
   stats: Record<string, AnalystColumnStats>;
   result_file: string | null;
@@ -190,10 +197,14 @@ export function buildEnvelope(input: {
   budget?: { remaining: number; limit: number };
 }): AnalystEnvelope {
   const { columns, rows, fetchExhausted, resultFile } = input;
+  const inlineRows = rows.slice(0, INLINE_ROW_CAP);
   return {
     columns,
-    rows: rows.slice(0, INLINE_ROW_CAP),
+    rows: inlineRows,
     row_count: rows.length,
+    // THINK-232: size of the inline preview (the value the broker also logs
+    // as the trace `approx_bytes`), so container and audit trail agree.
+    approx_bytes: JSON.stringify(inlineRows).length,
     truncated: rows.length > INLINE_ROW_CAP || fetchExhausted,
     stats: computeStats(columns, rows),
     result_file: resultFile,

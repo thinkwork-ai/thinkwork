@@ -624,7 +624,7 @@ async function runQuery(
     ...sqlFields(sqlShapeFromExplain(sql, result.explainPlan)),
     data_source: DATA_SOURCE_SLUG,
     rows_returned: preEnvelope.row_count,
-    approx_bytes: JSON.stringify(preEnvelope.rows).length,
+    approx_bytes: preEnvelope.approx_bytes,
     duration_ms: result.durationMs,
     truncated: preEnvelope.truncated,
     result_file: preEnvelope.result_file,

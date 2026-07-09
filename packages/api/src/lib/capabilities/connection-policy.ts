@@ -20,6 +20,13 @@ export interface ConnectionPolicyBlock {
   budgets?: {
     maxQueriesPerRun?: number;
     maxQueriesPerTenantDay?: number;
+    /**
+     * THINK-232: per-run dollar budget for delegated analyst runs. Additive
+     * and OPTIONAL — existing sidecars that predate it stay valid, and the
+     * parity evaluator does not flag its absence. When present (signed
+     * source), it overrides the profile-config costBudgetUsd (KTD6).
+     */
+    costBudgetUsd?: number;
   };
   retain_sql?: boolean;
   role_tier?: string;
@@ -52,6 +59,16 @@ export function parseConnectionPolicyBlock(
       budgets.maxQueriesPerTenantDay > 0
     ) {
       parsed.maxQueriesPerTenantDay = budgets.maxQueriesPerTenantDay;
+    }
+    // THINK-232: optional per-run dollar budget. Additive — absence is not a
+    // parity fault (see evaluateConnectionPolicyParity, which only requires
+    // the two query-count budgets).
+    if (
+      typeof budgets.costBudgetUsd === "number" &&
+      Number.isFinite(budgets.costBudgetUsd) &&
+      budgets.costBudgetUsd > 0
+    ) {
+      parsed.costBudgetUsd = budgets.costBudgetUsd;
     }
     block.budgets = parsed;
   }

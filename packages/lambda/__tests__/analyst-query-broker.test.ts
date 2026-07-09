@@ -131,6 +131,7 @@ describe("analyst envelope", () => {
     });
     expect(Object.keys(envelope).sort()).toEqual(
       [
+        "approx_bytes",
         "columns",
         "result_file",
         "row_count",
@@ -140,6 +141,29 @@ describe("analyst envelope", () => {
       ].sort(),
     );
     expect(envelope.stats.x).toEqual({ nulls: 0, min: null, max: null });
+  });
+
+  it("THINK-232: approx_bytes measures the inline preview and matches the trace value", () => {
+    const columns = [{ name: "n", pg_type: "int8" }];
+    const rows = Array.from({ length: INLINE_ROW_CAP + 25 }, (_, i) => [i]);
+    const envelope = buildEnvelope({
+      columns,
+      rows,
+      fetchExhausted: false,
+      resultFile: null,
+    });
+    // Only the inline (capped) rows are measured — same as the broker trace's
+    // JSON.stringify(preEnvelope.rows).length.
+    expect(envelope.approx_bytes).toBe(JSON.stringify(envelope.rows).length);
+    expect(envelope.rows.length).toBe(INLINE_ROW_CAP);
+    // Empty result → the JSON of an empty array, "[]".
+    const empty = buildEnvelope({
+      columns,
+      rows: [],
+      fetchExhausted: false,
+      resultFile: null,
+    });
+    expect(empty.approx_bytes).toBe(2);
   });
 
   it("computes per-column stats over all rows", () => {
