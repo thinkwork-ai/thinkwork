@@ -30,6 +30,7 @@ import {
 import { BUILT_IN_PROFILE_SEEDS } from "../../graphql/resolvers/agent-profiles/built-in-agent-profiles.js";
 import { db as defaultDb } from "../../graphql/utils.js";
 import { computeMcpUrlHash } from "../mcp-server-hash.js";
+import { RDS_IAM_REQUIRED_METADATA_FIELDS } from "../tenant-credentials/secret-store.js";
 
 type DbLike = typeof defaultDb;
 
@@ -286,9 +287,13 @@ export async function ensureAnalystRdsIamCredential(
     clusterResourceId: input.clusterResourceId,
   };
 
+  // Kind-filtered match: a slug-colliding credential of another kind must
+  // never be overwritten into a chimera (foreign kind + live secret_ref +
+  // rds_iam metadata) — collide loudly instead.
   const [existing] = await db
     .select({
       id: tenantCredentials.id,
+      kind: tenantCredentials.kind,
       metadata_json: tenantCredentials.metadata_json,
       status: tenantCredentials.status,
     })
@@ -300,6 +305,13 @@ export async function ensureAnalystRdsIamCredential(
       ),
     )
     .limit(1);
+
+  if (existing && existing.kind !== "rds_iam") {
+    throw new Error(
+      `tenant credential slug "${ANALYST_RDS_IAM_CREDENTIAL_SLUG}" is taken by a ` +
+        `${existing.kind} credential — refusing to overwrite it.`,
+    );
+  }
 
   if (!existing) {
     await db.insert(tenantCredentials).values({
@@ -315,14 +327,30 @@ export async function ensureAnalystRdsIamCredential(
     return "created";
   }
 
+  // Field-by-field compare — jsonb normalizes key order, so stringified
+  // equality would report "updated" on every re-run.
+  const existingMeta = (existing.metadata_json ?? {}) as Record<
+    string,
+    unknown
+  >;
   const unchanged =
     existing.status === "active" &&
-    JSON.stringify(existing.metadata_json) === JSON.stringify(metadata);
+    RDS_IAM_REQUIRED_METADATA_FIELDS.every(
+      (field) => existingMeta[field] === metadata[field],
+    );
   if (unchanged) return "unchanged";
 
+  // Re-provisioning is the sanctioned control plane for this row —
+  // reactivating a deleted/disabled row is deliberate (and clears
+  // deleted_at so the row is not active-but-deleted).
   await db
     .update(tenantCredentials)
-    .set({ metadata_json: metadata, status: "active", updated_at: new Date() })
+    .set({
+      metadata_json: metadata,
+      status: "active",
+      deleted_at: null,
+      updated_at: new Date(),
+    })
     .where(eq(tenantCredentials.id, existing.id));
   return "updated";
 }

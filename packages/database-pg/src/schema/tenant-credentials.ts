@@ -51,8 +51,11 @@ export const tenantCredentials = pgTable(
     uniqueIndex("uq_tenant_credentials_slug").on(table.tenant_id, table.slug),
     index("idx_tenant_credentials_tenant").on(table.tenant_id),
     index("idx_tenant_credentials_status").on(table.tenant_id, table.status),
+    // *_v2: renamed by drizzle/0228 so the drift gate's name-presence
+    // probe can distinguish the rds_iam-admitting definition from the
+    // pre-THINK-229 one.
     check(
-      "tenant_credentials_kind_enum",
+      "tenant_credentials_kind_enum_v2",
       sql`${table.kind} IN ('api_key','bearer_token','basic_auth','soap_partner','webhook_signing_secret','json','github_repo','rds_iam')`,
     ),
     check(

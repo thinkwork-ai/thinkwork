@@ -62,7 +62,18 @@ export async function createTenantCredential(
   if (input.kind === "rds_iam") {
     // THINK-229 U1 (R2): metadata-only credential — no Secrets Manager
     // payload exists for this kind (tokens are minted per-connect in the
-    // trusted broker Lambda). secret_ref stays an empty sentinel.
+    // trusted broker Lambda). secret_ref stays an empty sentinel. Reject
+    // a non-empty secretJson loudly: silently discarding a pasted
+    // password would leave the operator believing it was stored.
+    const straySecret = parseAwsJsonObject(
+      input.secretJson ?? {},
+      "secretJson",
+    );
+    if (Object.keys(straySecret).length > 0) {
+      throw new Error(
+        "rds_iam credentials store no secret — leave secretJson empty; connection metadata goes in metadataJson.",
+      );
+    }
     validateRdsIamCredentialMetadata(metadata);
   } else {
     const secretName = tenantCredentialSecretName({

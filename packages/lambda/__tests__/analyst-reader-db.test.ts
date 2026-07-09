@@ -164,9 +164,17 @@ describe("analyst-reader-db (THINK-229 U1)", () => {
     expect(client).toBeDefined();
 
     expect(connectAttempts).toHaveLength(3);
-    // Third attempt is the password path (connection string, no ssl object).
-    expect(connectAttempts[2]!.connectionString).toContain("fallback-pass");
-    expect(connectAttempts[2]!.connectionString).toContain("sslmode=no-verify");
+    // Third attempt is the password path — explicit config with the SAME
+    // verified-TLS posture as the IAM path (no-verify is retired).
+    const fallbackConfig = connectAttempts[2]!;
+    expect(fallbackConfig.password).toBe("fallback-pass");
+    expect(fallbackConfig.host).toBe("db.example.com");
+    const fallbackSsl = fallbackConfig.ssl as {
+      ca: string;
+      rejectUnauthorized: boolean;
+    };
+    expect(fallbackSsl.rejectUnauthorized).toBe(true);
+    expect(fallbackSsl.ca).toContain("BEGIN CERTIFICATE");
     expect(secretsManagerMock.calls).toBe(1);
 
     const logged = (console.log as ReturnType<typeof vi.fn>).mock.calls
@@ -174,6 +182,45 @@ describe("analyst-reader-db (THINK-229 U1)", () => {
       .filter((line) => line.includes("analyst-reader-db.connect"));
     expect(logged.some((l) => l.includes('"strategy":"iam"'))).toBe(true);
     expect(logged.some((l) => l.includes('"strategy":"password"'))).toBe(true);
+  });
+
+  it("downgrade guard: transport-shaped IAM failures rethrow instead of falling back to the password path", async () => {
+    process.env.ANALYST_READER_SECRET_ARN = "arn:aws:secretsmanager:sec";
+    clientBehavior.failures = [
+      "connect ECONNREFUSED 10.0.0.1:5432",
+      "connect ECONNREFUSED 10.0.0.1:5432",
+    ];
+    const mod = await loadModule();
+    await expect(mod.getAnalystReaderClient()).rejects.toThrow("ECONNREFUSED");
+    // Never reached Secrets Manager — the fallback is auth-gated.
+    expect(connectAttempts).toHaveLength(2);
+    expect(secretsManagerMock.calls).toBe(0);
+  });
+
+  it("retry success: transient first failure, second fresh-token attempt carries — no fallback", async () => {
+    process.env.ANALYST_READER_SECRET_ARN = "arn:aws:secretsmanager:sec";
+    clientBehavior.failures = ["PAM authentication failed for user", null];
+    const mod = await loadModule();
+    const client = await mod.getAnalystReaderClient();
+    expect(client).toBeDefined();
+    expect(mintCalls).toHaveLength(2);
+    expect(connectAttempts).toHaveLength(2);
+    expect(connectAttempts[1]!.password).toBe("iam-token-2");
+    expect(secretsManagerMock.calls).toBe(0);
+  });
+
+  it("connect timeout is set on both IAM and password paths", async () => {
+    process.env.ANALYST_READER_SECRET_ARN = "arn:aws:secretsmanager:sec";
+    clientBehavior.failures = [
+      "password authentication failed",
+      "password authentication failed",
+      null,
+    ];
+    const mod = await loadModule();
+    await mod.getAnalystReaderClient();
+    for (const attempt of connectAttempts) {
+      expect(attempt.connectionTimeoutMillis).toBe(5000);
+    }
   });
 
   it("reuse: warm client is returned without re-minting; re-mint happens on reconnect after a connection error", async () => {

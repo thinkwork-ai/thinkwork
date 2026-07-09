@@ -430,13 +430,20 @@ function credentialOptionsFromQuery(
     | null
     | undefined,
 ): RoutineCredentialOption[] {
-  return (credentials ?? []).map((credential) => ({
-    id: credential.id,
-    slug: credential.slug,
-    displayName: credential.displayName,
-    kind: credential.kind,
-    status: credential.status,
-  }));
+  return (
+    (credentials ?? [])
+      // rds_iam rows are broker-internal records with no stored secret
+      // (THINK-229 U1) — nothing to inject into a routine step, so keep
+      // them out of the picker.
+      .filter((credential) => credential.kind !== "rds_iam")
+      .map((credential) => ({
+        id: credential.id,
+        slug: credential.slug,
+        displayName: credential.displayName,
+        kind: credential.kind,
+        status: credential.status,
+      }))
+  );
 }
 
 function stepsForMutation(

@@ -120,7 +120,14 @@ resource "aws_rds_cluster" "main" {
   # THINK-229 U1 (R1): the analyst-query-broker Lambda authenticates as
   # analyst_reader with per-connect RDS IAM auth tokens instead of a
   # stored password. Cluster-level flag; applies without downtime.
+  # apply_immediately is required: the provider default defers cluster
+  # modifications to the maintenance window, and if the GRANT rds_iam
+  # migration (0229) landed inside that pending window the role would
+  # refuse BOTH password (grant applied) and IAM (flag still pending)
+  # login. Deploys on this platform are CLI/CI-driven and expect
+  # immediate semantics.
   iam_database_authentication_enabled = true
+  apply_immediately                   = true
 
   serverlessv2_scaling_configuration {
     min_capacity = var.min_capacity
@@ -187,7 +194,10 @@ resource "aws_db_instance" "main" {
 
   # THINK-229 U1 (R1): keep the rds-postgres dev/test engine at parity
   # with the Aurora cluster — analyst_reader logs in with IAM tokens.
+  # apply_immediately for the same both-paths-stranded reason as the
+  # Aurora cluster block above.
   iam_database_authentication_enabled = true
+  apply_immediately                   = true
 
   tags = {
     Name = "thinkwork-${var.stage}-db"

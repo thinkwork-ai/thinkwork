@@ -104,6 +104,8 @@ async function mintIamAuthToken(
   return signer.getAuthToken();
 }
 
+const CONNECT_TIMEOUT_MS = 5000;
+
 async function connectWithIam(
   config: AnalystIamConnectConfig,
 ): Promise<PgClientType> {
@@ -118,12 +120,34 @@ async function connectWithIam(
     // R3: full TLS verification against the bundled RDS CA. IAM auth
     // requires SSL server-side; no-verify is the retired shortcut.
     ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
+    // A hung connect must fail fast into the retry/fallback chain rather
+    // than eating the whole broker invocation.
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
   });
   await client.connect();
   return client;
 }
 
-async function resolvePasswordDatabaseUrl(): Promise<string> {
+/**
+ * Auth-shaped connect failures (the server authenticated the transport
+ * and rejected the credential) are the ONLY errors that may trigger the
+ * password fallback. Transport/TLS failures rethrow instead — falling
+ * back there would let an on-path attacker force the credential
+ * downgrade by breaking the IAM connection.
+ */
+function isAuthShapedError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: string }).code;
+  // 28000 invalid_authorization_specification, 28P01 invalid_password —
+  // both cover RDS's "PAM authentication failed" IAM rejections.
+  if (code === "28000" || code === "28P01") return true;
+  const message = err instanceof Error ? err.message : "";
+  return /password authentication failed|PAM authentication failed|pg_hba\.conf/i.test(
+    message,
+  );
+}
+
+async function resolvePasswordSecret(): Promise<SecretShape> {
   const secretArn = process.env.ANALYST_READER_SECRET_ARN;
   if (!secretArn) {
     throw new Error(
@@ -137,20 +161,33 @@ async function resolvePasswordDatabaseUrl(): Promise<string> {
   const result = await sm.send(
     new GetSecretValueCommand({ SecretId: secretArn }),
   );
-  const secret = JSON.parse(result.SecretString || "{}") as SecretShape;
-  const user = encodeURIComponent(secret.username);
-  const pass = encodeURIComponent(secret.password);
-  // sslmode=no-verify survives only on this fallback path (the pre-grant
-  // window); the IAM path above carries the verified-CA posture.
-  return `postgresql://${user}:${pass}@${secret.host}:${secret.port}/${secret.dbname}?sslmode=no-verify`;
+  return JSON.parse(result.SecretString || "{}") as SecretShape;
 }
 
 async function connectWithPassword(): Promise<PgClientType> {
-  const url =
-    process.env.ANALYST_READER_DATABASE_URL ||
-    (await resolvePasswordDatabaseUrl());
   const { Client } = await import("pg");
-  const client = new Client({ connectionString: url });
+  if (process.env.ANALYST_READER_DATABASE_URL) {
+    // Test escape hatch — connect verbatim (local Postgres, no TLS).
+    const client = new Client({
+      connectionString: process.env.ANALYST_READER_DATABASE_URL,
+      connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+    });
+    await client.connect();
+    return client;
+  }
+  const secret = await resolvePasswordSecret();
+  const client = new Client({
+    host: secret.host,
+    port: Number(secret.port),
+    database: secret.dbname,
+    user: secret.username,
+    password: secret.password,
+    // Same verified-TLS posture as the IAM path — the bundled CA removed
+    // the original justification for sslmode=no-verify (THINK-228's
+    // Lambda-runtime-doesn't-trust-the-RDS-CA workaround).
+    ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+  });
   await client.connect();
   return client;
 }
@@ -165,7 +202,9 @@ async function establishConnection(): Promise<PgClientType> {
   const iamConfig = resolveIamConnectConfig();
   if (iamConfig) {
     // Two IAM attempts (fresh token each — KTD2's one-retry for PAM
-    // transients), then the password fallback if a secret is wired.
+    // transients), then the password fallback if a secret is wired AND
+    // the failure was auth-shaped (see isAuthShapedError — transport
+    // failures rethrow so a broken network can't force the downgrade).
     let lastErr: unknown;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
@@ -190,7 +229,7 @@ async function establishConnection(): Promise<PgClientType> {
         });
       }
     }
-    if (process.env.ANALYST_READER_SECRET_ARN) {
+    if (process.env.ANALYST_READER_SECRET_ARN && isAuthShapedError(lastErr)) {
       const client = await connectWithPassword();
       logConnect({ strategy: "password", outcome: "ok", fallback: true });
       return client;
