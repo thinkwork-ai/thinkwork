@@ -41,6 +41,36 @@ function parseOperation(body: string | undefined): ParsedOp {
   }
 }
 
+// Lambda rejects synchronous response payloads over 6,291,556 bytes with
+// RequestEntityTooLarge — the invocation fails after the handler "succeeds"
+// and clients see an empty response ("[Network] No Content"). Guard below
+// this ceiling so an oversized GraphQL result degrades into a readable
+// GraphQL error instead of a dead invocation. The limit applies to the
+// JSON-serialized {statusCode, headers, body} return value, where every
+// quote/backslash in the body gains an escape byte — so the guard must
+// measure the JSON-escaped body, not raw body bytes (a quote-dense 5.7MB
+// GraphQL body can serialize past the limit). The remaining headroom
+// covers statusCode + headers.
+export const MAX_RESPONSE_BYTES = 5_800_000;
+
+export function escapedBodyBytes(body: string): number {
+  return Buffer.byteLength(JSON.stringify(body), "utf8");
+}
+
+export function oversizedResponseBody(
+  operationName: string | null,
+  byteLength: number,
+): string {
+  return JSON.stringify({
+    errors: [
+      {
+        message: `Response for ${operationName ?? "operation"} is too large to return (${Math.round(byteLength / 1024)} KB). Try requesting fewer items.`,
+        extensions: { code: "RESPONSE_TOO_LARGE", byteLength },
+      },
+    ],
+  });
+}
+
 function extractFirstErrorCode(responseBody: string): string | null {
   try {
     const parsed = JSON.parse(responseBody) as {
@@ -72,18 +102,33 @@ export async function handler(
   response.headers.forEach((value, key) => {
     responseHeaders[key] = value;
   });
-  const body = await response.text();
-  const errorCode =
-    response.status === 200 ? extractFirstErrorCode(body) : null;
+  let body = await response.text();
+  let status = response.status;
+  const byteLength = escapedBodyBytes(body);
+  if (byteLength > MAX_RESPONSE_BYTES) {
+    console.log(
+      JSON.stringify({
+        msg: "graphql.response_too_large",
+        operationName: op.operationName,
+        byteLength,
+      }),
+    );
+    body = oversizedResponseBody(op.operationName, byteLength);
+    status = 200;
+    responseHeaders["content-type"] = "application/json; charset=utf-8";
+    delete responseHeaders["content-length"];
+    delete responseHeaders["content-encoding"];
+  }
+  const errorCode = status === 200 ? extractFirstErrorCode(body) : null;
   // Single structured log line. Non-200 responses and any coded
   // GraphQL error are flagged so an operator can grep for ok=false.
-  const ok = response.status === 200 && errorCode === null;
+  const ok = status === 200 && errorCode === null;
   console.log(
     JSON.stringify({
       msg: "graphql.request",
       operationName: op.operationName,
       operationType: op.operationType,
-      status: response.status,
+      status,
       duration: Date.now() - started,
       errorCode,
       ok,
@@ -91,7 +136,7 @@ export async function handler(
   );
 
   return {
-    statusCode: response.status,
+    statusCode: status,
     headers: responseHeaders,
     body,
   };
