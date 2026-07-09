@@ -1,0 +1,117 @@
+---
+title: Analyst Data Sources
+description: Give the agent read-only SQL access to PostgreSQL databases — browse internal clusters or register external databases, with automatic schema discovery, budgets, and a full audit trail.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The ThinkWork Analyst lets the agent answer questions from your PostgreSQL data — live counts, revenue breakdowns, trend reports — by writing and executing SQL through a **read-only query broker**. The agent never receives database credentials: every query passes through a ThinkWork-hosted broker that connects with a least-privilege, SELECT-only role, enforces budgets, and writes an audit event for every statement.
+
+Use data sources when you want reports and answers grounded in real database rows, refreshable on a schedule, and safe to expose to an LLM query author.
+
+## How it works
+
+```text
+Operator registers a data source (internal browse or external form)
+    -> ThinkWork verifies the credential is read-only (posture check)
+    -> The schema is introspected AS that role and rendered to SCHEMA.md
+    -> A connector row is created on the broker route /mcp/analyst/<slug>
+    -> Connection folders materialize into every agent workspace
+    -> The agent reads SCHEMA.md before writing SQL for that source
+    -> Queries execute via the broker: read-only, time-limited, audited
+```
+
+Each registered source is an ordinary MCP server row — it appears on the
+**Datasource MCPs** tab of Settings → MCP Servers, shows its source type
+(Internal or External), cluster instance, and database, and can be enabled or
+disabled like any other server.
+
+## Registering a data source
+
+Open **Settings → MCP Servers**, then the **database icon** in the page
+header. The dialog offers two paths:
+
+### Internal — browse the environment's own clusters
+
+For databases on clusters your ThinkWork environment owns, registration is a
+two-dropdown flow with **zero credential entry**:
+
+1. **Cluster** — ThinkWork enumerates the environment's RDS clusters. When
+   there is exactly one, it is pre-selected.
+2. **Database** — the cluster's databases are listed live. Databases that are
+   already registered are marked and disabled. The workspace database itself
+   appears as "Workspace database (built-in)" and routes to the built-in
+   connector provisioning.
+3. Pick a database, accept or edit the suggested display name and slug, and
+   register.
+
+Behind the scenes ThinkWork provisions a hardened read-only role on that
+database automatically: `LOGIN` only, no superuser/createdb/createrole
+attributes, `default_transaction_read_only = on`, a 15-second statement
+timeout, a 30-second idle-transaction timeout, and `SELECT` as its only
+privilege — scoped strictly to the `public` schema. The generated password
+goes directly to the platform's secret store and is never displayed or logged.
+
+### External — databases outside the environment
+
+For customer- or team-owned PostgreSQL that ThinkWork does not administer,
+choose **External** and fill in host, port, database, DB user, password
+(write-only), and TLS mode (Verify full is the default; Required is available
+for hosts without a verifiable certificate chain).
+
+The credential you supply must be a **read-only role provisioned by your
+DBA**. Registration connects as that role and refuses to proceed if the role
+holds any non-SELECT privilege — the write barrier is enforced in the
+database, not in application code.
+
+<Aside type="tip">
+  The role's grant surface is also the agent's visible surface: registration
+  introspects the schema **as the supplied role**, so tables the role cannot
+  SELECT simply do not exist in the agent's schema reference.
+</Aside>
+
+## What registration produces
+
+- **A per-source semantic model** — the introspected tables and columns are
+  stored and rendered into a `SCHEMA.md` the agent is instructed to read
+  before writing any SQL against that source. Each source has its own; the
+  agent only loads the schema for the source it is querying, so registering
+  many databases does not pollute the model's context.
+- **A born-approved connector row** at `/mcp/analyst/<slug>` with its
+  configuration hash pinned — any later change to the URL requires an
+  explicit operator re-approval.
+- **Connection folders** in every agent workspace, carrying the connection
+  instructions, the schema reference, and a signed policy sidecar with the
+  source's default query budgets.
+
+## Safety posture
+
+| Layer | Enforcement |
+| ----- | ----------- |
+| Database role | SELECT-only grants; read-only transactions; statement and idle timeouts set at role level |
+| Broker auth | Every call carries a signed, per-invocation caller context bound to the tenant and delegation — sourced routes reject anything else |
+| Tenant isolation | On the workspace database, row-level security scopes analyst queries to the calling tenant's rows |
+| Budgets | Signed per-source budgets (queries per day, rows, bytes). Exceeding one blocks further queries and the agent reports the block instead of inventing numbers |
+| Audit | Every executed or rejected statement writes a `data.query_executed` compliance event with the source, row counts, and outcome |
+| Drift | A scheduled reconciler probes each source (reachability, credential validity, read-only posture, schema drift). A failing probe withholds only that source, with a visible reason |
+
+<Aside type="note">
+  When a budget blocks a query mid-report, the agent renders the affected
+  items as "could not query (budget exceeded)" rather than estimating.
+  Budgets are operator-editable per source.
+</Aside>
+
+## Managing sources
+
+Open a source from the Datasource MCPs list to see its detail page:
+
+- **Source type, cluster, and database** for at-a-glance identification.
+- **Re-approve connection** — restamps the approval and re-pins the
+  configuration hash after a deliberate change; optionally rotates the broker
+  token.
+- **Enable/disable** — withdrawal from the agent without deleting the
+  registration.
+
+Registered sources are available to the analyst immediately; asking the agent
+a question that names the source (or its data) routes queries through it, and
+several sources can be used in a single conversation.
