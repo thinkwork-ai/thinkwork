@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   resolveCallerUserId: vi.fn(),
   syncAgentLoopScheduleBinding: vi.fn(),
   syncAgentLoopWebhookBinding: vi.fn(),
+  disableAgentLoopScheduleBinding: vi.fn(),
+  syncReportAutomationConvergence: vi.fn(),
 }));
 
 let selectCall = 0;
@@ -112,6 +114,11 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 
 vi.mock("../../../lib/agent-loops/schedule-binding.js", () => ({
   syncAgentLoopScheduleBinding: mocks.syncAgentLoopScheduleBinding,
+  disableAgentLoopScheduleBinding: mocks.disableAgentLoopScheduleBinding,
+}));
+
+vi.mock("../../../lib/agent-loops/report-convergence.js", () => ({
+  syncReportAutomationConvergence: mocks.syncReportAutomationConvergence,
 }));
 
 vi.mock("../../../lib/agent-loops/webhook-binding.js", () => ({
@@ -149,6 +156,12 @@ beforeEach(() => {
   mocks.resolveCallerUserId.mockReset().mockResolvedValue("user-1");
   mocks.syncAgentLoopScheduleBinding.mockReset().mockResolvedValue(undefined);
   mocks.syncAgentLoopWebhookBinding.mockReset().mockResolvedValue(undefined);
+  mocks.disableAgentLoopScheduleBinding.mockReset().mockResolvedValue({
+    scheduledJobId: null,
+    changed: false,
+  });
+  // Default: not report-shaped → legacy schedule binding path.
+  mocks.syncReportAutomationConvergence.mockReset().mockResolvedValue(null);
 });
 
 describe("saveAgentLoop", () => {
@@ -388,6 +401,97 @@ describe("saveAgentLoop", () => {
       ),
     ).rejects.toThrow(/Agent-thread automations need a Space/);
     expect(mocks.insertValues).not.toHaveBeenCalled();
+  });
+
+  // THINK-227 U13: a report-shaped automation converges at save time and its
+  // schedule rides the workflow — the legacy binding goes quiet.
+  it("converges a document-bound automation and disables the legacy schedule binding", async () => {
+    mocks.selectRows.mockImplementation(async (call: number) => {
+      if (call === 1) return [{ id: "space-1" }]; // resolveAgentLoopSpaceId
+      return [
+        {
+          id: "loop-1",
+          tenant_id: "tenant-1",
+          name: "Weekly Pipeline Report",
+          slug: "weekly-pipeline-report",
+          lifecycle_status: "active",
+          enabled: true,
+          primary_trigger_family: "schedule",
+          current_version_id: "version-1",
+          current_version_number: 1,
+          created_at: new Date("2026-06-23T00:00:00Z"),
+          updated_at: new Date("2026-06-23T00:00:00Z"),
+        },
+      ];
+    });
+    mocks.syncReportAutomationConvergence.mockResolvedValue({
+      workflowId: "wf-1",
+      workflowVersionId: "wfv-1",
+      published: true,
+    });
+
+    await saveAgentLoop(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          name: "Weekly Pipeline Report",
+          spaceId: "space-1",
+          lifecycleStatus: "active",
+          enabled: true,
+          triggerSpec: {
+            family: "schedule",
+            enabled: true,
+            config: {
+              scheduleExpression: "cron(0 8 ? * MON *)",
+              timezone: "America/Chicago",
+            },
+          },
+          goalSpec: { objective: "n/a", completionCriteria: ["done"] },
+          workerSpec: {
+            type: "agent",
+            id: "agent-9",
+            toolHints: [],
+            config: {},
+          },
+          targetSpec: {
+            kind: "agent_thread",
+            agentThread: {
+              instructions: "Refresh the pipeline report",
+              workerId: "agent-9",
+              workerType: "agent",
+              threadMode: "new_per_run",
+            },
+            documentBinding: {
+              mode: "create",
+              genre: "report",
+              title: "Weekly Pipeline Report",
+              spaceId: "space-1",
+            },
+            delivery: { recipients: ["ops@example.com"] },
+          },
+        },
+      },
+      ctx(),
+    );
+
+    expect(mocks.syncReportAutomationConvergence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        loop: expect.objectContaining({ id: "loop-1" }),
+        version: expect.objectContaining({
+          targetSpec: expect.objectContaining({
+            documentBinding: expect.objectContaining({ mode: "create" }),
+            delivery: { recipients: ["ops@example.com"] },
+          }),
+        }),
+      }),
+    );
+    expect(mocks.disableAgentLoopScheduleBinding).toHaveBeenCalledWith(
+      "tenant-1",
+      "loop-1",
+    );
+    expect(mocks.syncAgentLoopScheduleBinding).not.toHaveBeenCalled();
   });
 
   it("saves a routine target with no Space (headless is allowed)", async () => {

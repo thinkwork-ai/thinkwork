@@ -546,12 +546,63 @@ export interface TargetGuards {
   maxConcurrentRuns?: number;
 }
 
+export const DOCUMENT_BINDING_MODES = ["create", "existing"] as const;
+export type DocumentBindingMode = (typeof DOCUMENT_BINDING_MODES)[number];
+
+/**
+ * Document binding (THINK-227 U1, KTD1): "this automation maintains document
+ * X". Lives on target_spec — the sole dispatch authority — so the bound
+ * artifact id is resolved at dispatch time and persisted definition snapshots
+ * never go stale.
+ *
+ * - `create` mode: run 1 creates the document (genre/title/spaceId describe
+ *   it); the finalize's artifact id is captured back into
+ *   `capturedArtifactId` (U3, first writer wins).
+ * - `existing` mode: the operator picked an existing document (`artifactId`).
+ */
+export interface DocumentBinding {
+  mode: DocumentBindingMode;
+  genre?: string;
+  title?: string;
+  spaceId?: string;
+  artifactId?: string;
+  capturedArtifactId?: string;
+}
+
+/**
+ * Email delivery config (THINK-227 U1/U4/R6): recipients + subject for the
+ * automation's deliver step. Stored on target_spec beside the binding; the
+ * loop→workflow conversion materializes it as a `deliver` step after the
+ * agent step. Meaningful only when a document binding exists.
+ */
+export interface AgentLoopDeliverySpec {
+  recipients: string[];
+  subjectTemplate?: string;
+}
+
 export interface TargetSpec {
   kind: AgentLoopTargetKind;
   agentThread?: TargetAgentThreadSpec;
   routine?: TargetRoutineRef;
   workflow?: TargetRoutineRef;
   guards?: TargetGuards;
+  documentBinding?: DocumentBinding;
+  delivery?: AgentLoopDeliverySpec;
+}
+
+/**
+ * The bound document's artifact id for dispatch (THINK-227 U2, KTD2): the
+ * captured artifact wins over the operator-picked one (capture only ever
+ * writes on create-mode bindings). Null when the automation is unbound —
+ * every dispatch site threads this into the run payload's
+ * `agentLoop.documentId` slot.
+ */
+export function boundDocumentIdFromTargetSpec(
+  spec: TargetSpec | null | undefined,
+): string | null {
+  const binding = spec?.documentBinding;
+  if (!binding) return null;
+  return binding.capturedArtifactId ?? binding.artifactId ?? null;
 }
 
 /**
@@ -591,11 +642,15 @@ export function normalizeTargetSpec(value: unknown): TargetSpec {
   }
 
   const guards = normalizeTargetGuards(rec.guards);
+  const documentBinding = normalizeDocumentBinding(rec.documentBinding);
+  const delivery = normalizeDeliverySpec(rec.delivery, documentBinding);
   if (kind === "agent_thread") {
     return compact({
       kind,
       agentThread: normalizeTargetAgentThread(rec.agentThread),
       guards,
+      documentBinding,
+      delivery,
     });
   }
   if (kind === "routine") {
@@ -603,12 +658,104 @@ export function normalizeTargetSpec(value: unknown): TargetSpec {
       kind,
       routine: normalizeTargetRoutineRef(rec.routine, "routine"),
       guards,
+      documentBinding,
+      delivery,
     });
   }
   return compact({
     kind,
     workflow: normalizeTargetRoutineRef(rec.workflow, "workflow"),
     guards,
+    documentBinding,
+    delivery,
+  });
+}
+
+const MAX_DELIVERY_RECIPIENTS = 50;
+// Deliberately loose: server-side validation of deliverability belongs to the
+// send path. This guards obvious junk and header injection (no whitespace, one
+// @, no CR/LF) without re-implementing RFC 5322.
+const RECIPIENT_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeDocumentBinding(value: unknown): DocumentBinding | undefined {
+  if (value === undefined || value === null) return undefined;
+  const rec = record(value);
+  const mode = rec.mode;
+  if (!isEnumValue(mode, DOCUMENT_BINDING_MODES)) {
+    throw new Error(
+      `targetSpec.documentBinding.mode '${String(mode)}' is not one of ${DOCUMENT_BINDING_MODES.join(", ")}`,
+    );
+  }
+  const genre = optionalString(rec.genre, { maxLength: 100 });
+  const title = optionalString(rec.title, { maxLength: 300 });
+  const spaceId = optionalString(rec.spaceId, { maxLength: 200 });
+  const artifactId = optionalString(rec.artifactId, { maxLength: 200 });
+  const capturedArtifactId = optionalString(rec.capturedArtifactId, {
+    maxLength: 200,
+  });
+  if (mode === "create") {
+    if (!genre || !title || !spaceId) {
+      throw new Error(
+        "targetSpec.documentBinding create mode requires genre, title, and spaceId",
+      );
+    }
+    if (artifactId) {
+      throw new Error(
+        "targetSpec.documentBinding create mode must not carry artifactId — use existing mode to bind a document that already exists",
+      );
+    }
+  } else {
+    if (!artifactId) {
+      throw new Error(
+        "targetSpec.documentBinding existing mode requires artifactId",
+      );
+    }
+    if (capturedArtifactId) {
+      throw new Error(
+        "targetSpec.documentBinding existing mode must not carry capturedArtifactId — capture applies to create mode only",
+      );
+    }
+  }
+  return compact({
+    mode,
+    genre,
+    title,
+    spaceId,
+    artifactId,
+    capturedArtifactId,
+  });
+}
+
+function normalizeDeliverySpec(
+  value: unknown,
+  binding: DocumentBinding | undefined,
+): AgentLoopDeliverySpec | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!binding) {
+    throw new Error(
+      "targetSpec.delivery requires a documentBinding — delivery sends the bound document",
+    );
+  }
+  const rec = record(value);
+  const recipients = stringArray(
+    rec.recipients,
+    "targetSpec.delivery.recipients",
+    {
+      allowEmpty: false,
+      maxItems: MAX_DELIVERY_RECIPIENTS,
+      maxLength: 320,
+    },
+  );
+  for (const recipient of recipients) {
+    if (!RECIPIENT_SHAPE.test(recipient)) {
+      throw new Error(
+        `targetSpec.delivery.recipients entry '${recipient}' is not a plausible email address`,
+      );
+    }
+  }
+  return compact({
+    recipients,
+    subjectTemplate: optionalString(rec.subjectTemplate, { maxLength: 300 }),
   });
 }
 
