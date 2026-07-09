@@ -25,10 +25,11 @@ export interface AgentLoopFinalizeContext {
   runId: string;
   iterationId: string;
   /**
-   * THINK-155 U3/KTD4: the bound document's artifact id, present only when
-   * the run's wakeup payload carried one (inert until THINK-213's binding
-   * config lands). A terminal run failure for a documentId-carrying run
-   * raises a `document_refresh_failed` inbox item.
+   * THINK-155 U3/KTD4 → THINK-227: the bound document's artifact id,
+   * present when the run's wakeup payload carried one. A terminal run
+   * failure for a documentId-carrying run stamps the document's amber
+   * refresh-failed state; the failure itself is run evidence (the inbox
+   * writer was retired in U6).
    */
   documentId: string | null;
 }
@@ -118,12 +119,11 @@ export interface AgentLoopFinalizeLedger {
     now: Date;
   }): Promise<void>;
   /**
-   * THINK-155 U3: NEW wiring (the finalize ledger had no inbox capability
-   * before) — stamp `artifacts.refresh_failed_at` and raise the deduplicated
-   * `document_refresh_failed` inbox item when a documentId-carrying run ends
-   * in terminal failure. Mirrors the dispatch ledger's
-   * `raiseHeadlessFailureItem` shape; optional so test ledgers without inbox
-   * concerns keep compiling.
+   * THINK-155 U3 → THINK-227 U6: stamp `artifacts.refresh_failed_at` when a
+   * documentId-carrying run ends in terminal failure (the reader's amber
+   * stale state). The deduplicated inbox item this hook used to raise is
+   * retired (R5) — the run row's error fields are the operator-facing
+   * record. Optional so test ledgers keep compiling.
    */
   recordDocumentRefreshFailure?(input: {
     tenantId: string;
@@ -262,10 +262,10 @@ export async function projectAgentLoopFinalize(
     };
   }
 
-  // THINK-155 U3 (KTD5b): a documentId-carrying run that ends in terminal
-  // failure means the scheduled refresh never landed — surface it. Inert
-  // until a dispatch path sets payload documentId (THINK-213 binding).
-  // Best-effort: an inbox fault never fails the projection.
+  // THINK-155 U3 (KTD5b) → THINK-227: a documentId-carrying run that ends
+  // in terminal failure means the scheduled refresh never landed — stamp the
+  // document's amber state (the run row already carries the error fields).
+  // Best-effort: a stamp fault never fails the projection.
   if (
     context.documentId &&
     decision.terminal &&
