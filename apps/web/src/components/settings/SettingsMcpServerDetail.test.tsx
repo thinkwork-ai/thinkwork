@@ -381,7 +381,7 @@ describe("SettingsMcpServerDetail", () => {
       },
     });
 
-    render(<SettingsMcpServerDetail serverId="server-1" />);
+    render(<SettingsMcpServerDetail />);
 
     expect(await screen.findByText("Source type")).toBeTruthy();
     expect(screen.getByText("internal")).toBeTruthy();
