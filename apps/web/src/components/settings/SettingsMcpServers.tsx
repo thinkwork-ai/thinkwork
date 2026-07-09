@@ -59,16 +59,12 @@ function tabForPath(pathname: string): McpServersTab {
   return "servers";
 }
 
-/** "cluster · database" label for a datasource row (null host = workspace cluster). */
-function dataSourceLabel(dataSource: {
-  host: string | null;
-  database: string;
-}): string {
-  const cluster = dataSource.host
-    ? dataSource.host.split(".")[0]
-    : "workspace cluster";
-  return `${cluster} · ${dataSource.database}`;
-}
+// Content-fit column: shrink to the widest cell instead of sharing leftover
+// width (see DataTableColumnMeta docs in @thinkwork/ui data-table).
+const FIT_CONTENT_COLUMN = {
+  headClassName: "w-px whitespace-nowrap",
+  cellClassName: "w-px whitespace-nowrap",
+};
 
 export function SettingsMcpServers() {
   const { user } = useAuth();
@@ -185,39 +181,67 @@ export function SettingsMcpServers() {
           );
         },
       },
+      // Datasource MCPs: no URL column — Source / Instance / Database render
+      // as separate content-fit columns instead.
       ...(activeTab === "data-sources"
-        ? [
+        ? ([
             {
               id: "source",
               header: "Source",
-              size: 280,
+              meta: FIT_CONTENT_COLUMN,
               cell: ({ row }) => {
                 const ds = row.original.dataSource;
                 return ds ? (
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Badge variant="outline" className="shrink-0 capitalize">
-                      {ds.kind}
-                    </Badge>
-                    <span className="truncate font-mono text-xs text-muted-foreground">
-                      {dataSourceLabel(ds)}
-                    </span>
-                  </div>
+                  <Badge variant="outline" className="capitalize">
+                    {ds.kind}
+                  </Badge>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 );
               },
+            },
+            {
+              id: "instance",
+              header: "Instance",
+              meta: FIT_CONTENT_COLUMN,
+              cell: ({ row }) => {
+                const ds = row.original.dataSource;
+                return ds ? (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {ds.host ? ds.host.split(".")[0] : "workspace cluster"}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                );
+              },
+            },
+            {
+              id: "database",
+              header: "Database",
+              meta: FIT_CONTENT_COLUMN,
+              cell: ({ row }) => {
+                const ds = row.original.dataSource;
+                return ds ? (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {ds.database}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                );
+              },
+            },
+          ] satisfies ColumnDef<McpServer>[])
+        : [
+            {
+              accessorKey: "url",
+              header: "URL",
+              cell: ({ row }) => (
+                <span className="block max-w-md truncate font-mono text-xs text-muted-foreground">
+                  {row.original.url}
+                </span>
+              ),
             } satisfies ColumnDef<McpServer>,
-          ]
-        : []),
-      {
-        accessorKey: "url",
-        header: "URL",
-        cell: ({ row }) => (
-          <span className="block max-w-md truncate font-mono text-xs text-muted-foreground">
-            {row.original.url}
-          </span>
-        ),
-      },
+          ]),
       {
         accessorKey: "status",
         header: "Status",
@@ -367,6 +391,7 @@ export function SettingsMcpServers() {
           columns={columns}
           servers={pane.servers}
           search={search}
+          fitContent={activeTab === "data-sources"}
           emptyText={pane.emptyText}
           onOpen={(serverId) =>
             navigate({
@@ -1313,6 +1338,7 @@ function McpServerSection({
   search,
   emptyText,
   onOpen,
+  fitContent,
 }: {
   title?: string;
   columns: ColumnDef<McpServer>[];
@@ -1320,6 +1346,9 @@ function McpServerSection({
   search: string;
   emptyText: string;
   onOpen: (serverId: string) => void;
+  /** Auto table layout so w-px/whitespace-nowrap columns hug their content
+   *  (fixed layout would collapse them to 1px). */
+  fitContent?: boolean;
 }) {
   return (
     <section>
@@ -1334,7 +1363,7 @@ function McpServerSection({
         scrollable
         allowHorizontalScroll={false}
         pageSize={0}
-        tableClassName="table-fixed"
+        tableClassName={fitContent ? "table-auto" : "table-fixed"}
         onRowClick={(row) => onOpen(row.id)}
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">

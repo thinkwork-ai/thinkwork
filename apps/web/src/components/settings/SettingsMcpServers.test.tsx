@@ -379,15 +379,21 @@ describe("SettingsMcpServers", () => {
     expect(screen.queryByText("Analytics Demo")).toBeNull();
     expect(screen.queryByText("Postgres (dev)")).toBeNull();
 
-    // ...and listed with cluster · database on the Datasource MCPs tab.
+    // ...and listed with Source / Instance / Database columns (no URL) on
+    // the Datasource MCPs tab.
     cleanup();
     mocks.pathname = "/settings/mcp-servers/data-sources";
     render(<SettingsMcpServers />);
     expect(await screen.findByText("Analytics Demo")).toBeTruthy();
     expect(screen.getByText("Postgres (dev)")).toBeTruthy();
     expect(screen.queryByText("Manual CRM")).toBeNull();
-    expect(screen.getByText("thinkwork-dev-db · analytics_demo")).toBeTruthy();
-    expect(screen.getByText("workspace cluster · thinkwork")).toBeTruthy();
+    expect(screen.queryByText("URL")).toBeNull();
+    expect(screen.getByText("Instance")).toBeTruthy();
+    expect(screen.getByText("Database")).toBeTruthy();
+    expect(screen.getByText("thinkwork-dev-db")).toBeTruthy();
+    expect(screen.getByText("workspace cluster")).toBeTruthy();
+    expect(screen.getByText("analytics_demo")).toBeTruthy();
+    expect(screen.getByText("thinkwork")).toBeTruthy();
     // Each row carries its Internal/External badge.
     expect(screen.getAllByText("internal")).toHaveLength(2);
   });
