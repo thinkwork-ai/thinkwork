@@ -140,6 +140,24 @@ export async function syncAgentLoopScheduleBinding(
   return { scheduledJobId: existing.id, changed: true };
 }
 
+/**
+ * THINK-227 U13: a report-shaped automation's schedule lives on its converged
+ * workflow (`workflow_schedule`), so any legacy `agent_loop_schedule` row it
+ * had must go quiet — one automation, one schedule, one runner. Disable (not
+ * delete) so history stays attached, mirroring the family-switch path above.
+ */
+export async function disableAgentLoopScheduleBinding(
+  tenantId: string,
+  agentLoopId: string,
+): Promise<SyncAgentLoopScheduleBindingResult> {
+  const existing = await loadScheduledJob(tenantId, agentLoopId);
+  if (!existing || existing.enabled === false) {
+    return { scheduledJobId: existing?.id ?? null, changed: false };
+  }
+  await updateSchedule(existing.id, tenantId, { enabled: false });
+  return { scheduledJobId: existing.id, changed: true };
+}
+
 async function loadScheduledJob(tenantId: string, agentLoopId: string) {
   const [row] = await db
     .select({

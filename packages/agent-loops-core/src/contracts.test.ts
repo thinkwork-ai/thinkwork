@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_LOOP_PHASE1_JUDGE_MODES,
   AGENT_LOOP_PHASE1_TRIGGER_FAMILIES,
+  boundDocumentIdFromTargetSpec,
   DEFAULT_LOOP_POLICY,
   normalizeGoalSpec,
   normalizeJudgeSpec,
@@ -228,6 +229,193 @@ describe("normalizeTargetSpec (THINK-137 U3)", () => {
     expect(() =>
       normalizeTargetSpec({ kind: "routine", routine: { routineId: "nope" } }),
     ).toThrow(/routineId must be a routine id/);
+  });
+});
+
+describe("documentBinding + delivery on target_spec (THINK-227 U1)", () => {
+  const agentThread = {
+    instructions: "Refresh the pipeline report",
+    threadMode: "new_per_run",
+  };
+
+  it("accepts and round-trips a create-mode binding", () => {
+    const spec = normalizeTargetSpec({
+      kind: "agent_thread",
+      agentThread,
+      documentBinding: {
+        mode: "create",
+        genre: "report",
+        title: "  Weekly Pipeline Report ",
+        spaceId: "space-1",
+      },
+    });
+    expect(spec.documentBinding).toEqual({
+      mode: "create",
+      genre: "report",
+      title: "Weekly Pipeline Report",
+      spaceId: "space-1",
+    });
+    expect(normalizeTargetSpec(spec)).toEqual(spec);
+  });
+
+  it("accepts an existing-mode binding and preserves capturedArtifactId on create mode", () => {
+    const existing = normalizeTargetSpec({
+      kind: "agent_thread",
+      agentThread,
+      documentBinding: { mode: "existing", artifactId: "art-9" },
+    });
+    expect(existing.documentBinding).toEqual({
+      mode: "existing",
+      artifactId: "art-9",
+    });
+
+    const captured = normalizeTargetSpec({
+      kind: "agent_thread",
+      agentThread,
+      documentBinding: {
+        mode: "create",
+        genre: "report",
+        title: "T",
+        spaceId: "s",
+        capturedArtifactId: "art-42",
+      },
+    });
+    expect(captured.documentBinding?.capturedArtifactId).toBe("art-42");
+  });
+
+  it("rejects malformed bindings with actionable errors", () => {
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        documentBinding: { mode: "create", genre: "report" },
+      }),
+    ).toThrow(/create mode requires genre, title, and spaceId/);
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        documentBinding: { mode: "existing" },
+      }),
+    ).toThrow(/existing mode requires artifactId/);
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        documentBinding: {
+          mode: "create",
+          genre: "g",
+          title: "t",
+          spaceId: "s",
+          artifactId: "art-1",
+        },
+      }),
+    ).toThrow(/must not carry artifactId/);
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        documentBinding: {
+          mode: "existing",
+          artifactId: "art-1",
+          capturedArtifactId: "art-2",
+        },
+      }),
+    ).toThrow(/capture applies to create mode only/);
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        documentBinding: { mode: "bogus" },
+      }),
+    ).toThrow(/is not one of create, existing/);
+  });
+
+  it("accepts delivery only alongside a binding and validates recipients", () => {
+    const spec = normalizeTargetSpec({
+      kind: "agent_thread",
+      agentThread,
+      documentBinding: { mode: "existing", artifactId: "art-9" },
+      delivery: {
+        recipients: [" a@example.com ", "b@example.com"],
+        subjectTemplate: "Weekly report",
+      },
+    });
+    expect(spec.delivery).toEqual({
+      recipients: ["a@example.com", "b@example.com"],
+      subjectTemplate: "Weekly report",
+    });
+
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        delivery: { recipients: ["a@example.com"] },
+      }),
+    ).toThrow(/requires a documentBinding/);
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        documentBinding: { mode: "existing", artifactId: "art-9" },
+        delivery: { recipients: [] },
+      }),
+    ).toThrow(/at least one item/);
+    expect(() =>
+      normalizeTargetSpec({
+        kind: "agent_thread",
+        agentThread,
+        documentBinding: { mode: "existing", artifactId: "art-9" },
+        delivery: { recipients: ["not-an-email"] },
+      }),
+    ).toThrow(/not a plausible email address/);
+  });
+
+  it("resolves the bound document id — captured wins over configured", () => {
+    expect(boundDocumentIdFromTargetSpec(null)).toBeNull();
+    expect(
+      boundDocumentIdFromTargetSpec(
+        normalizeTargetSpec({ kind: "agent_thread", agentThread }),
+      ),
+    ).toBeNull();
+    expect(
+      boundDocumentIdFromTargetSpec(
+        normalizeTargetSpec({
+          kind: "agent_thread",
+          agentThread,
+          documentBinding: { mode: "existing", artifactId: "art-9" },
+        }),
+      ),
+    ).toBe("art-9");
+    expect(
+      boundDocumentIdFromTargetSpec(
+        normalizeTargetSpec({
+          kind: "agent_thread",
+          agentThread,
+          documentBinding: {
+            mode: "create",
+            genre: "g",
+            title: "t",
+            spaceId: "s",
+            capturedArtifactId: "art-42",
+          },
+        }),
+      ),
+    ).toBe("art-42");
+    expect(
+      boundDocumentIdFromTargetSpec(
+        normalizeTargetSpec({
+          kind: "agent_thread",
+          agentThread,
+          documentBinding: {
+            mode: "create",
+            genre: "g",
+            title: "t",
+            spaceId: "s",
+          },
+        }),
+      ),
+    ).toBeNull();
   });
 });
 

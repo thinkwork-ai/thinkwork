@@ -278,6 +278,12 @@ One execution of a workflow: a `workflow_runs` record carrying versioned inputs,
 ### Step
 A typed unit in a workflow definition — `agent`, `routine`, `tool`, `approval`, `wait`, `http`, or `emit_event`. A routine step invokes the routine's existing engine unchanged; an approval or wait step suspends the run via task token until resolved.
 
+### Delivery Step
+A typed workflow step that sends the workflow's maintained document to an operator-configured recipient list after the agent step finalizes: an email-safe inline rendering plus a share link to the living document (THINK-227). The operator-saved recipient list is the standing send grant (version-audited via automation versions); step outcomes — sent, failed, skipped when no new edition — are run evidence, and sends ride the outbound email ledger.
+
+### Self-Serve Scheduled Report
+An automation a regular (non-admin) member creates conversationally through the agent ("email me this report each day at 9am central"): member-owned, bound to one document, with a delivery recipient list fixed to the member's own address (THINK-227). Created via the Admin Ops MCP automation write tools under a role-split authorization — admins get general automation CRUD through the agent, members only this constrained shape. It is a canonical automation, visible and editable in the Automations editor; adding other recipients requires an operator there.
+
 ### Trigger
 The binding that starts a workflow — schedule, webhook, manual, or event. A trigger is a property of the workflow, not an object with its own surface; each run records its trigger family and source.
 

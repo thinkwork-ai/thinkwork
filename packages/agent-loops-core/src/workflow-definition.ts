@@ -1,3 +1,5 @@
+import type { DocumentBinding } from "./contracts";
+
 /**
  * Workflow definition — the versioned, ThinkWork-owned document the shared
  * Step Functions interpreter executes (THINK-219 thin slice; full step
@@ -143,6 +145,15 @@ export interface WorkflowDefinition {
   version: typeof WORKFLOW_DEFINITION_VERSION;
   steps: WorkflowStep[];
   continuationPolicy?: ContinuationPolicy;
+  /**
+   * THINK-227 U1 (KTD1): snapshot of the automation's document binding at
+   * conversion time, carried for readers that only see the definition. The
+   * binding VALUE consumed at dispatch is always re-resolved from the
+   * automation's live `target_spec` (so first-run capture never leaves a
+   * stale snapshot authoritative); this copy exists so a definition is
+   * self-describing about whether its agent step maintains a document.
+   */
+  documentBinding?: DocumentBinding;
 }
 
 export interface DefinitionValidationError {
@@ -331,6 +342,23 @@ export function validateWorkflowDefinition(
     // rejected alongside forward references.
     if (id && STEP_ID_PATTERN.test(id)) seenIds.add(id);
   });
+
+  const binding = input.documentBinding;
+  if (binding !== undefined) {
+    if (!isRecord(binding)) {
+      errors.push({
+        stepId: null,
+        field: "documentBinding",
+        reason: "documentBinding must be a JSON object when present",
+      });
+    } else if (binding.mode !== "create" && binding.mode !== "existing") {
+      errors.push({
+        stepId: null,
+        field: "documentBinding.mode",
+        reason: 'documentBinding.mode must be "create" or "existing"',
+      });
+    }
+  }
 
   const policy = input.continuationPolicy;
   if (policy !== undefined) {

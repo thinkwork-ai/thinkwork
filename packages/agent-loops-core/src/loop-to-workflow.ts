@@ -78,6 +78,11 @@ export function workflowDefinitionFromAgentLoopVersion(
           },
         }
       : {}),
+    // THINK-227 U1: carry the document binding onto the definition so it is
+    // self-describing. Dispatch re-resolves the live value from target_spec.
+    ...(agentTurn && version.documentBinding
+      ? { documentBinding: version.documentBinding }
+      : {}),
   };
 
   const result = validateWorkflowDefinition(definition);

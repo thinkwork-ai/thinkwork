@@ -23,7 +23,11 @@ import {
   spaces,
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
-import { syncAgentLoopScheduleBinding } from "../../../lib/agent-loops/schedule-binding.js";
+import {
+  disableAgentLoopScheduleBinding,
+  syncAgentLoopScheduleBinding,
+} from "../../../lib/agent-loops/schedule-binding.js";
+import { syncReportAutomationConvergence } from "../../../lib/agent-loops/report-convergence.js";
 import { syncAgentLoopWebhookBinding } from "../../../lib/agent-loops/webhook-binding.js";
 import {
   agentLoopRowToGraphql,
@@ -136,18 +140,41 @@ async function createAgentLoop(
     })
     .where(eq(agentLoops.id, loop.id));
 
-  await syncAgentLoopScheduleBinding({
+  // THINK-227 U13: a report-shaped automation (agent turn + document binding)
+  // is born converged — its schedule rides the linked workflow, not the
+  // legacy agent_loop_schedule binding.
+  const converged = await syncReportAutomationConvergence({
     tenantId: input.tenantId,
-    agentLoopId: loop.id,
-    name: input.name.trim(),
-    description: input.description ?? null,
-    goalObjective: normalized.goalSpec.objective,
-    workerAgentId: workerAgentId(normalized.workerSpec),
-    spaceId,
+    loop: {
+      id: loop.id,
+      name: input.name.trim(),
+      description: input.description,
+    },
+    version: {
+      id: version.id,
+      routineActionsSpec: normalized.routineActionsSpec,
+      targetSpec: normalized.targetSpec,
+    },
     triggerSpec: normalized.triggerSpec,
     loopEnabled: input.enabled ?? true,
     actorId,
   });
+  if (converged) {
+    await disableAgentLoopScheduleBinding(input.tenantId, loop.id);
+  } else {
+    await syncAgentLoopScheduleBinding({
+      tenantId: input.tenantId,
+      agentLoopId: loop.id,
+      name: input.name.trim(),
+      description: input.description ?? null,
+      goalObjective: normalized.goalSpec.objective,
+      workerAgentId: workerAgentId(normalized.workerSpec),
+      spaceId,
+      triggerSpec: normalized.triggerSpec,
+      loopEnabled: input.enabled ?? true,
+      actorId,
+    });
+  }
 
   // R6: a webhook-trigger automation mints/links its inbound endpoint row.
   await syncAgentLoopWebhookBinding({
@@ -255,18 +282,42 @@ async function updateAgentLoop(
     })
     .where(eq(agentLoops.id, existing.id));
 
-  await syncAgentLoopScheduleBinding({
-    tenantId: input.tenantId,
-    agentLoopId: existing.id,
-    name: input.name.trim(),
-    description: input.description ?? null,
-    goalObjective: normalized.goalSpec.objective,
-    workerAgentId: workerAgentId(normalized.workerSpec),
-    spaceId: spaceId === undefined ? existing.space_id : spaceId,
-    triggerSpec: normalized.triggerSpec,
-    loopEnabled: input.enabled ?? existing.enabled,
-    actorId,
-  });
+  // THINK-227 U13: report-shaped saves converge (workflow upsert + publish +
+  // workflow_schedule sync); everything else keeps the legacy binding.
+  const converged = currentVersionId
+    ? await syncReportAutomationConvergence({
+        tenantId: input.tenantId,
+        loop: {
+          id: existing.id,
+          name: input.name.trim(),
+          description: input.description,
+        },
+        version: {
+          id: currentVersionId,
+          routineActionsSpec: normalized.routineActionsSpec,
+          targetSpec: normalized.targetSpec,
+        },
+        triggerSpec: normalized.triggerSpec,
+        loopEnabled: input.enabled ?? existing.enabled,
+        actorId,
+      })
+    : null;
+  if (converged) {
+    await disableAgentLoopScheduleBinding(input.tenantId, existing.id);
+  } else {
+    await syncAgentLoopScheduleBinding({
+      tenantId: input.tenantId,
+      agentLoopId: existing.id,
+      name: input.name.trim(),
+      description: input.description ?? null,
+      goalObjective: normalized.goalSpec.objective,
+      workerAgentId: workerAgentId(normalized.workerSpec),
+      spaceId: spaceId === undefined ? existing.space_id : spaceId,
+      triggerSpec: normalized.triggerSpec,
+      loopEnabled: input.enabled ?? existing.enabled,
+      actorId,
+    });
+  }
 
   // R6: mint/link (or disable, on family switch) the inbound webhook endpoint.
   await syncAgentLoopWebhookBinding({
