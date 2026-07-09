@@ -24,6 +24,10 @@ import { Readable } from "node:stream";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
+import {
+  AnalystCostBudgetError,
+  type AnalystCostBudgetState,
+} from "./analyst-cost-budget.js";
 import { getMcpAgentToolIdentity } from "./mcp.js";
 
 export const ANALYST_QUERY_TOOL_NAME = "query";
@@ -178,14 +182,46 @@ export function resultCarriesTerminalPolicyError(
 }
 
 /**
+ * Read `row_count` and `approx_bytes` from the first envelope-shaped text
+ * block of a query result, for the per-run cost accumulator (THINK-232).
+ * Missing/non-envelope blocks yield zeros — a query that returns no envelope
+ * simply charges nothing.
+ */
+export function envelopeCostFields(
+  content: Array<{ type: string; text?: string }> | undefined,
+): { rowCount: number; approxBytes: number } {
+  for (const block of content ?? []) {
+    if (block.type !== "text" || !block.text) continue;
+    try {
+      const parsed: unknown = JSON.parse(block.text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        continue;
+      }
+      const record = parsed as Record<string, unknown>;
+      if (typeof record.row_count !== "number") continue;
+      const rowCount = record.row_count;
+      const approxBytes =
+        typeof record.approx_bytes === "number" ? record.approx_bytes : 0;
+      return { rowCount, approxBytes };
+    } catch {
+      // non-JSON text blocks are errors, not envelopes — charge nothing.
+    }
+  }
+  return { rowCount: 0, approxBytes: 0 };
+}
+
+/**
  * Wrap the child tool surface: every MCP `query` tool gets (a) the
- * in-loop cap and (b) staged-result landing. Other tools pass through
- * unchanged. Wrapping happens AFTER the childToolSurface allowlist filter,
- * so identity-based filtering has already run.
+ * in-loop cap, (b) the per-run cost budget (THINK-232), and (c) staged-result
+ * landing. Other tools pass through unchanged. Wrapping happens AFTER the
+ * childToolSurface allowlist filter, so identity-based filtering has already
+ * run.
  */
 export function wrapAnalystQueryTools(input: {
   tools: AgentTool<any>[];
   state: AnalystQueryCapState;
+  /** THINK-232: per-run dollar accumulator. Inert when no budget is set. */
+  costBudget?: AnalystCostBudgetState;
   landing: AnalystResultLandingDeps;
 }): AgentTool<any>[] {
   return input.tools.map((tool) => {
@@ -200,8 +236,24 @@ export function wrapAnalystQueryTools(input: {
             input.state.count + 1,
           );
         }
+        // THINK-232: once the accumulated DB cost has crossed the budget,
+        // fail the NEXT query fast — same mechanism as the query cap. The
+        // loop, not the model, owns the verdict.
+        if (input.costBudget?.exceeded) {
+          throw new AnalystCostBudgetError(
+            input.costBudget.budgetUsd ?? 0,
+            input.costBudget.spentUsd,
+          );
+        }
         input.state.count += 1;
         const result = await tool.execute(toolCallId, params, signal, onUpdate);
+        // THINK-232: charge this query's DB cost from the envelope's
+        // row_count + approx_bytes. Crossing the budget flips `exceeded`
+        // so the NEXT query fast-fails above.
+        if (input.costBudget) {
+          const { rowCount, approxBytes } = envelopeCostFields(result.content);
+          input.costBudget.addQueryCost(rowCount, approxBytes);
+        }
         // THINK-229 U4 (R14): a terminal policy error from the broker
         // (budget exhausted / withheld) must not be retried — flip the
         // cap state to exceeded so every further query in this run

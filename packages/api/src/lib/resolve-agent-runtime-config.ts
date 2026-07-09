@@ -150,6 +150,8 @@ export interface McpConfig {
   sidecarBudgets?: {
     maxQueriesPerRun?: number;
     maxQueriesPerTenantDay?: number;
+    /** THINK-232: per-run dollar budget, when the signed sidecar carries it. */
+    costBudgetUsd?: number;
   };
 }
 
@@ -1332,10 +1334,21 @@ export async function loadAgentProfileRuntimeConfigs(input: {
     for (const slug of mcpServerSlugs) {
       const runtimeConfig = mcpConfigByName.get(slug);
       const perRun = runtimeConfig?.sidecarBudgets?.maxQueriesPerRun;
-      if (typeof perRun === "number" && Number.isFinite(perRun) && perRun > 0) {
+      // THINK-232: same signed-source-wins pattern for the per-run dollar
+      // budget — when the sidecar carries costBudgetUsd it overrides the
+      // profile-config value the delegation loop enforces.
+      const costBudgetUsd = runtimeConfig?.sidecarBudgets?.costBudgetUsd;
+      const perRunValid =
+        typeof perRun === "number" && Number.isFinite(perRun) && perRun > 0;
+      const costBudgetValid =
+        typeof costBudgetUsd === "number" &&
+        Number.isFinite(costBudgetUsd) &&
+        costBudgetUsd > 0;
+      if (perRunValid || costBudgetValid) {
         effectiveExecutionControls = {
           ...effectiveExecutionControls,
-          maxQueriesPerRun: perRun,
+          ...(perRunValid ? { maxQueriesPerRun: perRun } : {}),
+          ...(costBudgetValid ? { costBudgetUsd } : {}),
         };
         break;
       }

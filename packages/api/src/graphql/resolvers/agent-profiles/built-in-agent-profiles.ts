@@ -89,6 +89,11 @@ export const BUILT_IN_PROFILE_SEEDS: BuiltInProfileSeed[] = [
       // THINK-228 R9: hard cap on query calls per delegated run,
       // enforced in-process by the delegation loop (KTD3).
       maxQueriesPerRun: 12,
+      // THINK-232: per-run dollar budget, now REAL — enforced in the
+      // delegation loop (DB query cost fast-fails; token cost is checked at
+      // run end). Provisional default; the signed sidecar budget wins when
+      // present (resolve-agent-runtime-config KTD6 override).
+      costBudgetUsd: 0.5,
       loopPolicy: defaultAgentLoopPolicy(),
     },
   },

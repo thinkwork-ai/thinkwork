@@ -106,6 +106,8 @@ export interface McpServerConfig {
   sidecarBudgets?: {
     maxQueriesPerRun?: number;
     maxQueriesPerTenantDay?: number;
+    /** THINK-232: per-run dollar budget, when the signed sidecar carries it. */
+    costBudgetUsd?: number;
   };
 }
 

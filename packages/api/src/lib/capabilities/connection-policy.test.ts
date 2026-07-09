@@ -83,6 +83,60 @@ describe("connection policy block (THINK-229 U3)", () => {
     ).toEqual({ budgets: {} });
   });
 
+  it("THINK-232: costBudgetUsd is parsed when present and dropped when non-positive; absence is fine", () => {
+    // Present + positive → carried through.
+    expect(
+      parseConnectionPolicyBlock({
+        budgets: {
+          maxQueriesPerRun: 12,
+          maxQueriesPerTenantDay: 200,
+          costBudgetUsd: 0.5,
+        },
+      }),
+    ).toEqual({
+      budgets: {
+        maxQueriesPerRun: 12,
+        maxQueriesPerTenantDay: 200,
+        costBudgetUsd: 0.5,
+      },
+    });
+    // Non-positive / non-numeric → dropped, other budgets survive.
+    expect(
+      parseConnectionPolicyBlock({
+        budgets: { maxQueriesPerRun: 12, costBudgetUsd: 0 },
+      }),
+    ).toEqual({ budgets: { maxQueriesPerRun: 12 } });
+    // Absent → block simply has no costBudgetUsd (additive, optional).
+    expect(
+      parseConnectionPolicyBlock({ budgets: { maxQueriesPerRun: 12 } }),
+    ).toEqual({ budgets: { maxQueriesPerRun: 12 } });
+  });
+
+  it("THINK-232: a complete sidecar WITHOUT costBudgetUsd still passes parity (absence is not a fault)", () => {
+    expect(
+      evaluateConnectionPolicyParity({
+        slug: "postgres-dev",
+        sidecar: { enabled: true, operations: ["query"], policy: POLICY },
+        row: { enabled: true, status: "approved" },
+      }).parity,
+    ).toBe("ok");
+    // And a sidecar that DOES carry it also stays clean.
+    expect(
+      evaluateConnectionPolicyParity({
+        slug: "postgres-dev",
+        sidecar: {
+          enabled: true,
+          operations: ["query"],
+          policy: {
+            ...POLICY,
+            budgets: { ...POLICY.budgets, costBudgetUsd: 0.5 },
+          },
+        },
+        row: { enabled: true, status: "approved" },
+      }).parity,
+    ).toBe("ok");
+  });
+
   it("shadow parity: matching sources → ok, no mismatches", () => {
     expect(
       evaluateConnectionPolicyParity({

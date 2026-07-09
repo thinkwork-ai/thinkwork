@@ -1844,6 +1844,132 @@ describe("resolveAgentRuntimeConfig", () => {
     });
   });
 
+  // THINK-229 KTD6 + THINK-232: when the analyst broker MCP config carries a
+  // signed sidecar budget block, the per-run query cap AND the per-run dollar
+  // budget are overridden FROM it (signed source wins over profile config).
+  it("overrides maxQueriesPerRun and costBudgetUsd from the signed sidecar budgets", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    mockBuildMcpConfigs.mockResolvedValueOnce([
+      {
+        name: "postgres-dev",
+        url: "https://broker.example/mcp/analyst",
+        availableTools: ["query"],
+        tools: ["query"],
+        sidecarBudgets: {
+          maxQueriesPerRun: 25,
+          maxQueriesPerTenantDay: 400,
+          costBudgetUsd: 2.5,
+        },
+      },
+    ]);
+    stageProfileRows([
+      {
+        id: "profile-analyst",
+        slug: "analyst",
+        name: "Analyst",
+        description: null,
+        routing_guidance: null,
+        instructions: "Analyze data.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "analyst",
+        tool_policy: { builtInTools: [], mcpServers: ["postgres-dev"] },
+        skill_policy: { skillSlugs: [] },
+        // Profile-config defaults that the signed sidecar must override.
+        execution_controls: { maxQueriesPerRun: 12, costBudgetUsd: 0.5 },
+      },
+    ]);
+    mockListTenantModelCatalogByIds.mockImplementation(async () => [
+      { modelId: PROFILE_MODEL_ID },
+    ]);
+    rowsQueue.push([]); // space assignments
+    rowsQueue.push([
+      {
+        id: "mcp-postgres",
+        slug: "postgres-dev",
+        name: "Postgres (dev)",
+        tools: [{ name: "query" }],
+      },
+    ]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.agentProfilesConfig[0]?.executionControls).toEqual(
+      expect.objectContaining({
+        maxQueriesPerRun: 25,
+        costBudgetUsd: 2.5,
+      }),
+    );
+  });
+
+  // THINK-232: a sidecar carrying ONLY the query cap (no costBudgetUsd) must
+  // override maxQueriesPerRun and LEAVE the profile-config costBudgetUsd intact.
+  it("leaves profile costBudgetUsd intact when the sidecar omits it", async () => {
+    stageAgentRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+    mockBuildMcpConfigs.mockResolvedValueOnce([
+      {
+        name: "postgres-dev",
+        url: "https://broker.example/mcp/analyst",
+        availableTools: ["query"],
+        tools: ["query"],
+        sidecarBudgets: { maxQueriesPerRun: 30, maxQueriesPerTenantDay: 400 },
+      },
+    ]);
+    stageProfileRows([
+      {
+        id: "profile-analyst",
+        slug: "analyst",
+        name: "Analyst",
+        description: null,
+        routing_guidance: null,
+        instructions: "Analyze data.",
+        model_id: PROFILE_MODEL_ID,
+        enabled: true,
+        built_in_key: "analyst",
+        tool_policy: { builtInTools: [], mcpServers: ["postgres-dev"] },
+        skill_policy: { skillSlugs: [] },
+        execution_controls: { maxQueriesPerRun: 12, costBudgetUsd: 0.5 },
+      },
+    ]);
+    mockListTenantModelCatalogByIds.mockImplementation(async () => [
+      { modelId: PROFILE_MODEL_ID },
+    ]);
+    rowsQueue.push([]); // space assignments
+    rowsQueue.push([
+      {
+        id: "mcp-postgres",
+        slug: "postgres-dev",
+        name: "Postgres (dev)",
+        tools: [{ name: "query" }],
+      },
+    ]); // MCP server catalog
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.agentProfilesConfig[0]?.executionControls).toEqual(
+      expect.objectContaining({
+        maxQueriesPerRun: 30,
+        costBudgetUsd: 0.5,
+      }),
+    );
+  });
+
   // Agent page merge (THINK-132 U5): pins the empty-vs-absent policy
   // semantics the tree's profile overlay relies on — an explicitly emptied
   // allowlist and a never-shaped profile resolve to the identical runtime
@@ -1898,9 +2024,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
 
     const emptied = cfg.agentProfilesConfig.find((p) => p.slug === "emptied");
-    const unshaped = cfg.agentProfilesConfig.find(
-      (p) => p.slug === "unshaped",
-    );
+    const unshaped = cfg.agentProfilesConfig.find((p) => p.slug === "unshaped");
     expect(emptied).toBeDefined();
     expect(unshaped).toBeDefined();
     for (const profile of [emptied!, unshaped!]) {
