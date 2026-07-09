@@ -184,6 +184,9 @@ importers:
       '@thinkwork/deployment-profile':
         specifier: workspace:*
         version: link:../../packages/deployment-profile
+      '@thinkwork/graph-core':
+        specifier: workspace:*
+        version: link:../../packages/graph-core
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config
@@ -274,6 +277,12 @@ importers:
       expo-web-browser:
         specifier: ~15.0.10
         version: 15.0.10(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
+      graphology:
+        specifier: ^0.26.0
+        version: 0.26.0(graphology-types@0.24.8)
+      graphology-communities-louvain:
+        specifier: ^2.0.2
+        version: 2.0.2(graphology-types@0.24.8)
       graphql:
         specifier: ^16.10.0
         version: 16.13.2

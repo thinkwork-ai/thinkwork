@@ -9,6 +9,9 @@ const workspacePackages = [
   path.resolve(monorepoRoot, "packages/pi-extensions"),
   path.resolve(monorepoRoot, "packages/thread-json-render"),
   path.resolve(monorepoRoot, "packages/deployment-profile"),
+  // Consumed from .ts source (main -> ./src/index.ts) so Metro transpiles
+  // the shared graph logic in place — must be watched to resolve it.
+  path.resolve(monorepoRoot, "packages/graph-core"),
 ];
 
 /** @type {import('expo/metro-config').MetroConfig} */

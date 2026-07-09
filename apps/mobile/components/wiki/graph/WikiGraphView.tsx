@@ -7,10 +7,11 @@ import {
   type WikiGraphPayload,
   useWikiGraph,
 } from "@thinkwork/react-native-sdk";
+import { computeCommunityLayout } from "@thinkwork/graph-core";
 import { COLORS } from "@/lib/theme";
-import type { SimConfig } from "./hooks/useForceSimulation";
 import { KnowledgeGraph } from "./KnowledgeGraph";
 import { NodeDetailModal, type NodeDetailModalTarget } from "./NodeDetailModal";
+import { buildRelationships, communityColorForId } from "./relationship-badges";
 import { loadGraphState } from "./graphStateCache";
 import type {
   GraphFilter,
@@ -19,28 +20,6 @@ import type {
   WikiPageType,
   WikiSubgraph,
 } from "./types";
-
-// Tuned for browsable label mode on the main agent graph (~100-200 nodes).
-// Loosened from `WikiDetailSubgraph` (which targets ~10-30 nodes): more
-// link distance + collide so ~18-char titles don't crash into adjacent
-// nodes at default zoom.
-//
-// Animation length is driven primarily by the `preTick` call inside
-// `KnowledgeGraph`'s label-toggle effect (see `sim.restart(0.3, 40)`).
-// Pre-ticking advances convergence offscreen, so the scheduler phase
-// here just plays a short low-amplitude settle. `alphaDecay` is a
-// modest bump above d3's default (~0.0228) to keep the tail short
-// without forcing premature quiesce; `velocityDecay` and
-// `quiesceAlpha` stay at their defaults because aggressive values
-// either degrade clustering (velocityDecay too high) or produce an
-// abrupt stop (quiesceAlpha too high).
-const LABEL_MODE_SIM_CONFIG: SimConfig = {
-  linkDistance: 85,
-  chargeStrength: -850,
-  collideRadius: 48,
-  xyStrength: 0.04,
-  alphaDecay: 0.05,
-};
 
 interface WikiGraphViewProps {
   tenantId: string;
@@ -160,6 +139,27 @@ export function WikiGraphView({
     };
   }, [internalSubgraph, selectedNodeId]);
 
+  // Community colors for the relationships section — recomputed at the same
+  // (deterministic) cadence as the canvas so detail pills match node hues.
+  const colorForId = useMemo(() => {
+    if (!internalSubgraph) return () => COLORS.dark.mutedForeground;
+    const { communityByNode } = computeCommunityLayout(
+      internalSubgraph.nodes,
+      internalSubgraph.edges,
+    );
+    return communityColorForId(communityByNode);
+  }, [internalSubgraph]);
+
+  const selectedRelationships = useMemo(() => {
+    if (!internalSubgraph || !selectedNodeId) return [];
+    return buildRelationships(
+      selectedNodeId,
+      internalSubgraph.nodes,
+      internalSubgraph.edges,
+      colorForId,
+    );
+  }, [internalSubgraph, selectedNodeId, colorForId]);
+
   // 3-state filter: matched (full color), 1-hop neighbors of a match
   // (muted + colored outline ring), other (muted only). Edges stay
   // visible; full opacity when touching a match, muted otherwise.
@@ -225,7 +225,7 @@ export function WikiGraphView({
           filter={filter}
           cacheKey={cacheKey}
           showLabels={showLabels}
-          simConfig={showLabels ? LABEL_MODE_SIM_CONFIG : undefined}
+          useCommunityLayout
         />
       )}
 
@@ -235,6 +235,9 @@ export function WikiGraphView({
         node={selectedTarget}
         onClose={() => setSelectedNodeId(null)}
         onOpenFullPage={handleOpenFullPage}
+        relationships={selectedRelationships}
+        currentColor={selectedNodeId ? colorForId(selectedNodeId) : undefined}
+        onSelectRelated={setSelectedNodeId}
       />
     </View>
   );
@@ -267,6 +270,7 @@ function nodeFromPayload(
     slug: p.slug,
     label: p.label,
     pageType: p.entityType as WikiPageType,
+    edgeCount: p.edgeCount,
     lastCompiledAt: now,
     status: "ACTIVE",
     primaryAgentIds: [],
@@ -282,6 +286,7 @@ function edgeFromPayload(
     id: `${e.source}-${e.target}-${idx}`,
     source: e.source,
     target: e.target,
+    label: e.label,
     firstSeenAt: now,
     lastSeenAt: now,
     isCurrent: true,

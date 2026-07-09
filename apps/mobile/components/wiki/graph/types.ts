@@ -24,6 +24,11 @@ export interface WikiGraphNode {
   primaryAgentIds: string[];
   lastTouchedAgentId?: string | null;
 
+  /** Server-reported connection count, used to size the disc by degree
+   *  (mirrors web's `degreeRadius`). Falls back to counting edges when
+   *  absent. */
+  edgeCount?: number;
+
   initialX?: number;
   initialY?: number;
   pinned?: boolean;
@@ -40,6 +45,10 @@ export interface WikiGraphEdge {
   id: string;
   source: string | WikiGraphNode;
   target: string | WikiGraphNode;
+
+  /** Relationship label drawn inline along the edge (e.g. "references",
+   *  "mentions") — matches web's `linkCanvasObject`. */
+  label?: string | null;
 
   sectionSlug?: string;
   contextExcerpt?: string;
