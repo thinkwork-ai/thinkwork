@@ -89,6 +89,12 @@ export interface CapabilitySidecarFields {
   config?: Record<string, unknown>;
   /** Script trust verdict (U8) — signed with the rest of the sidecar. */
   trust?: Record<string, unknown>;
+  /**
+   * Signed policy block (THINK-229 U3 / R10): budgets, retain_sql, and
+   * the reserved role_tier. New fields are tamper-evident for free —
+   * the sidecar payload is what gets signed.
+   */
+  policy?: Record<string, unknown>;
 }
 
 export type FolderWriteResult =
@@ -223,6 +229,7 @@ async function writeSignedSidecar(input: {
     ...(input.sidecar.approval ? { approval: input.sidecar.approval } : {}),
     ...(input.sidecar.config ? { config: input.sidecar.config } : {}),
     ...(input.sidecar.trust ? { trust: input.sidecar.trust } : {}),
+    ...(input.sidecar.policy ? { policy: input.sidecar.policy } : {}),
   };
   const { signed_content_sha, signature } = signCapabilitySidecar({
     signer,

@@ -168,6 +168,8 @@ export interface CapabilityAssignmentSidecar {
   approval?: ApprovalPolicy;
   /** Credential/OAuth wiring — references only, never token values. */
   config?: Record<string, unknown>;
+  /** Signed policy block (THINK-229 U3): budgets, retain_sql, role_tier. */
+  policy?: Record<string, unknown>;
   /** sha256 of the definition file bytes pinned at signing time (R18). */
   signed_content_sha?: string;
   /** Platform signature envelope (absent = unsigned draft/proposal). */

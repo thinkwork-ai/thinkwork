@@ -34,6 +34,17 @@ type DbLike = typeof defaultDb;
 
 export const ANALYST_SCHEMA_FILE = "SCHEMA.md";
 
+/**
+ * Default budget values written into the signed sidecar policy block
+ * (THINK-229 U3 / R12). Per-run mirrors the analyst built-in profile's
+ * `execution.maxQueriesPerRun` seed (KTD6: post-flip, dispatch populates
+ * the profile cap FROM the sidecar, so this constant is the single
+ * origin). Tenant-day is a soft product ceiling — U4 enforces it
+ * broker-side off the compliance-trace day count.
+ */
+export const ANALYST_DEFAULT_MAX_QUERIES_PER_RUN = 12;
+export const ANALYST_DEFAULT_MAX_QUERIES_PER_TENANT_DAY = 200;
+
 /** The analyst-specific prose appended to the generated CONNECTION.md. */
 export const ANALYST_CONNECTION_GUIDANCE = `
 ## Writing SQL for the query tool
@@ -169,6 +180,21 @@ export async function materializeAnalystConnectionFolder(input: {
         enabled: true,
         permissions: { operations: ["query"] },
         config: { registryServerId: row.id },
+        // THINK-229 U3 (R10, R12): the signed sidecar is the policy
+        // source. Budgets: per-run mirrors the analyst built-in profile's
+        // execution cap (KTD6 — dispatch populates the profile cap FROM
+        // this block post-flip, single signed source); tenant-day is the
+        // soft product ceiling U4 enforces broker-side. role_tier is
+        // RESERVED (R9) — enforcement ignores it until a write tier
+        // exists. retain_sql=false is the U6 redaction default.
+        policy: {
+          budgets: {
+            maxQueriesPerRun: ANALYST_DEFAULT_MAX_QUERIES_PER_RUN,
+            maxQueriesPerTenantDay: ANALYST_DEFAULT_MAX_QUERIES_PER_TENANT_DAY,
+          },
+          retain_sql: false,
+          role_tier: "reader",
+        },
       },
       signedBy,
       deps: { ...input.deps, bucket, s3 },

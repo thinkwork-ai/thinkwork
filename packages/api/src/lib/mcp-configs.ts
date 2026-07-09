@@ -53,6 +53,11 @@ import {
   isAnalystBrokerUrl,
   mintAnalystCallerContextHeader,
 } from "./analyst/caller-context.js";
+import {
+  evaluateConnectionPolicyParity,
+  parseConnectionPolicyBlock,
+  resolveAnalystPolicySource,
+} from "./capabilities/connection-policy.js";
 import type { CapabilitiesManifest } from "./capabilities/manifest-compile.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
 import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
@@ -823,6 +828,7 @@ function resolveAttachedRowsFromFolderConnections(input: {
       .filter((row) => row.slug)
       .map((row) => [row.slug as string, row]),
   );
+  const policySource = resolveAnalystPolicySource();
   const rows: McpJoinedRow[] = [];
   for (const entry of input.manifest.active) {
     if (entry.class !== "connection") continue;
@@ -844,11 +850,41 @@ function resolveAttachedRowsFromFolderConnections(input: {
           (operation): operation is string => typeof operation === "string",
         )
       : [];
+
+    // THINK-229 U3 (R11, KTD5): shadow-evaluate sidecar-derived policy
+    // against the row-derived view on EVERY build, log structured parity
+    // records loudly, and — only behind the env flip — let the signed
+    // policy block flow into the dispatch output for enforcement (U4
+    // reads it from assignment_config.sidecarPolicy). Manifest entries
+    // are active by construction, so the sidecar-enabled leg is `true`.
+    const sidecarPolicy = parseConnectionPolicyBlock(entry.policy);
+    const parity = evaluateConnectionPolicyParity({
+      slug: entry.slug,
+      sidecar: { enabled: true, operations: permitted, policy: sidecarPolicy },
+      row: {
+        enabled: registry.server_enabled,
+        status: registry.server_status,
+      },
+    });
+    console.log(
+      JSON.stringify({
+        msg: "analyst-policy-shadow",
+        source: policySource,
+        ...parity,
+      }),
+    );
+
     rows.push({
       ...registry,
       assignment_enabled: true,
-      assignment_config:
-        permitted.length > 0 ? { toolAllowlist: permitted } : null,
+      assignment_config: {
+        ...(permitted.length > 0 ? { toolAllowlist: permitted } : {}),
+        // Enforcement reads the sidecar only post-flip — pre-flip the
+        // block stays shadow-only so a wrong value cannot enforce.
+        ...(policySource === "sidecar" && sidecarPolicy
+          ? { sidecarPolicy }
+          : {}),
+      },
     });
   }
   return rows;

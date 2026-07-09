@@ -91,6 +91,9 @@ describe("readConnectionAssignment", () => {
       registryServerId: "srv-1",
       enabled: true,
       operations: ["issues_read", "pulls_read"],
+      // Pre-THINK-229 sidecar: no policy block yet (a parity FAIL in the
+      // U3 shadow evaluator, but the read itself stays fail-soft).
+      policy: null,
       updated_at: "2026-07-06T00:00:00.000Z",
     });
   });
@@ -110,7 +113,9 @@ describe("readConnectionAssignment", () => {
       `${PREFIX}connections/api-thing/.assignment.json`,
       sidecar({ slug: "api-thing", config: {} }),
     );
-    expect(await readConnectionAssignment(PREFIX, "api-thing", DEPS)).toBeNull();
+    expect(
+      await readConnectionAssignment(PREFIX, "api-thing", DEPS),
+    ).toBeNull();
   });
 
   it("fails soft on absent or malformed sidecars", async () => {
@@ -139,10 +144,7 @@ describe("listConnectionAssignments", () => {
     store.set(`${PREFIX}connections/github/CONNECTION.md`, "---\n---\n");
 
     const records = await listConnectionAssignments(PREFIX, DEPS);
-    expect(records?.map((record) => record.slug)).toEqual([
-      "github",
-      "linear",
-    ]);
+    expect(records?.map((record) => record.slug)).toEqual(["github", "linear"]);
   });
 
   it("returns [] when no records exist and null when the store is down", async () => {

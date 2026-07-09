@@ -59,7 +59,10 @@ export const CAPABILITIES_MANIFEST_VERSION = 1;
  * plugin-namespaced `<key>--<slug>` backfill folders that compiled as
  * invalid_definition under rev 1).
  */
-export const CAPABILITY_COMPILE_REVISION = 2;
+// rev 3: connection entries carry the signed sidecar `policy` block
+// (THINK-229 U3) — previously rendered manifests must recompile so the
+// block reaches dispatch.
+export const CAPABILITY_COMPILE_REVISION = 3;
 export const CAPABILITIES_LATEST_PATH = "capabilities.json";
 
 export function capabilitiesManifestPath(fingerprint: string): string {
@@ -105,6 +108,12 @@ export interface CapabilityManifestEntry {
   permittedOperations?: string[] | null;
   /** Sidecar credential wiring — references only, never values (R2). */
   credentialRefs?: Record<string, unknown>;
+  /**
+   * Signed sidecar policy block (THINK-229 U3): budgets, retain_sql,
+   * reserved role_tier — carried through so dispatch can shadow-compare
+   * and (post-flip) enforce from the sidecar source.
+   */
+  policy?: Record<string, unknown>;
 }
 
 export interface WithheldCapabilityEntry {
@@ -560,6 +569,7 @@ function connectionEntry(
       ? (sidecar.permissions.operations as string[])
       : null,
     ...(sidecar.config ? { credentialRefs: sidecar.config } : {}),
+    ...(sidecar.policy ? { policy: sidecar.policy } : {}),
   };
 }
 

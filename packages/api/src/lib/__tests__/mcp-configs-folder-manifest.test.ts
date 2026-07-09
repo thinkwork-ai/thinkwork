@@ -227,6 +227,85 @@ describe("buildMcpConfigs — folder-manifest resolution (THINK-173 U5)", () => 
     expect(configs[0]?.tools).toEqual(["opportunities_list"]);
   });
 
+  it("U3 shadow: every folder connection emits a structured parity record (policy_block_missing on legacy sidecars)", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await buildMcpConfigs("agent-1", null, "[test]", {
+        folderCapabilities: { manifest: manifest([connectionEntry()]) },
+      });
+      const shadow = logSpy.mock.calls
+        .map((call) => {
+          try {
+            return JSON.parse(String(call[0])) as Record<string, unknown>;
+          } catch {
+            return null;
+          }
+        })
+        .filter((entry) => entry?.msg === "analyst-policy-shadow");
+      expect(shadow).toEqual([
+        expect.objectContaining({
+          slug: "test-server",
+          source: "row",
+          parity: "fail",
+          mismatches: ["policy_block_missing"],
+        }),
+      ]);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("U3 shadow: a complete policy block on an approved row reads parity ok", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await buildMcpConfigs("agent-1", null, "[test]", {
+        folderCapabilities: {
+          manifest: manifest([
+            connectionEntry({
+              policy: {
+                budgets: { maxQueriesPerRun: 12, maxQueriesPerTenantDay: 200 },
+                retain_sql: false,
+                role_tier: "reader",
+              },
+            }),
+          ]),
+        },
+      });
+      const shadow = logSpy.mock.calls
+        .map((call) => {
+          try {
+            return JSON.parse(String(call[0])) as Record<string, unknown>;
+          } catch {
+            return null;
+          }
+        })
+        .filter((entry) => entry?.msg === "analyst-policy-shadow");
+      expect(shadow).toEqual([
+        expect.objectContaining({ parity: "ok", mismatches: [] }),
+      ]);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("U3 flip: ANALYST_POLICY_SOURCE unset keeps behavior identical (row enforces even when sidecar differs)", async () => {
+    delete process.env.ANALYST_POLICY_SOURCE;
+    const configs = await buildMcpConfigs("agent-1", null, "[test]", {
+      folderCapabilities: {
+        manifest: manifest([
+          connectionEntry({
+            policy: {
+              budgets: { maxQueriesPerRun: 1, maxQueriesPerTenantDay: 1 },
+            },
+          }),
+        ]),
+      },
+    });
+    // Pre-flip the connection still dispatches exactly as before.
+    expect(configs).toHaveLength(1);
+    expect(configs[0]?.name).toBe("test-server");
+  });
+
   it("flag on: api-type connections do not produce MCP configs", async () => {
     const configs = await buildMcpConfigs("agent-1", null, "[test]", {
       folderCapabilities: {
