@@ -53,6 +53,11 @@ import {
   DEFAULT_MAX_FETCH_ROWS,
 } from "./analyst-query-gate.js";
 import { getAnalystReaderClient } from "./analyst-reader-db.js";
+import {
+  ANALYST_CALLER_CONTEXT_HEADER,
+  verifyAnalystCallerContextHeader,
+  type AnalystCallerContextPayload,
+} from "./analyst-caller-context.js";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "thinkwork-analyst-query-broker";
@@ -215,6 +220,53 @@ async function stageResultCsv(tenantId: string, csv: string): Promise<string> {
 // R8 audit trace — POST /api/compliance/events (surfaced, never swallowed)
 // ---------------------------------------------------------------------------
 
+/**
+ * Verified caller identity for this invocation (THINK-229 U2). Signed
+ * caller contexts carry per-caller identity; the legacy tenant-wide
+ * bearer maps to `legacy_bearer` and emits a structured marker so bearer
+ * retirement is gated on observed-zero bearer traffic, not assumption.
+ */
+export interface BrokerCallerIdentity {
+  tenantId: string;
+  actorKind: "agent" | "delegation" | "system_refresh" | "legacy_bearer";
+  agentId?: string;
+  threadId?: string;
+  refreshId?: string;
+  policyClaims: Record<string, unknown>;
+}
+
+function logAuth(fields: Record<string, unknown>): void {
+  // Structured auth audit (R6): identity evidence only — never header or
+  // token material.
+  console.log(JSON.stringify({ msg: "analyst-broker.auth", ...fields }));
+}
+
+function callerIdentityFromContext(
+  payload: AnalystCallerContextPayload,
+): BrokerCallerIdentity {
+  return {
+    tenantId: payload.tenantId,
+    actorKind: payload.actor,
+    ...(payload.agentId ? { agentId: payload.agentId } : {}),
+    ...(payload.threadId ? { threadId: payload.threadId } : {}),
+    ...(payload.refreshId ? { refreshId: payload.refreshId } : {}),
+    policyClaims: payload.policyClaims,
+  };
+}
+
+function readCapabilityPublicKey(): string | null {
+  let value = "";
+  try {
+    value = getConfig("CAPABILITY_SIGNING_PUBLIC_KEY") || "";
+  } catch {
+    value = "";
+  }
+  if (!value.trim()) value = process.env.CAPABILITY_SIGNING_PUBLIC_KEY || "";
+  if (!value.trim()) return null;
+  // Terraform/SSM often carries PEMs with literal \n escapes.
+  return value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
+}
+
 interface QueryTrace {
   sql: string;
   data_source: string;
@@ -225,6 +277,11 @@ interface QueryTrace {
   result_file: string | null;
   outcome: "ok" | "rejected";
   error?: string;
+  /** Verified caller identity (THINK-229 U2). */
+  actor_kind: BrokerCallerIdentity["actorKind"];
+  agent_id?: string;
+  thread_id?: string;
+  refresh_id?: string;
 }
 
 async function emitQueryTrace(
@@ -294,8 +351,15 @@ export interface RunQueryOutcome {
 
 async function runQuery(
   sql: string,
-  tenantId: string,
+  caller: BrokerCallerIdentity,
 ): Promise<RunQueryOutcome> {
+  const tenantId = caller.tenantId;
+  const actorFields = {
+    actor_kind: caller.actorKind,
+    ...(caller.agentId ? { agent_id: caller.agentId } : {}),
+    ...(caller.threadId ? { thread_id: caller.threadId } : {}),
+    ...(caller.refreshId ? { refresh_id: caller.refreshId } : {}),
+  };
   const client = await getAnalystReaderClient();
   let result;
   try {
@@ -317,6 +381,7 @@ async function runQuery(
         result_file: null,
         outcome: "rejected",
         error: err.message,
+        ...actorFields,
       });
       return {
         rejection: {
@@ -354,6 +419,7 @@ async function runQuery(
     truncated: envelope.truncated,
     result_file: envelope.result_file,
     outcome: "ok",
+    ...actorFields,
   });
 
   return { envelope };
@@ -365,7 +431,7 @@ async function runQuery(
 
 async function dispatch(
   req: JsonRpcRequest,
-  tenantId: string,
+  caller: BrokerCallerIdentity,
 ): Promise<JsonRpcResponse | null> {
   const id = req.id ?? null;
   const isNotification = req.id === undefined;
@@ -430,7 +496,7 @@ async function dispatch(
           };
         }
         try {
-          const outcome = await runQuery(sql, tenantId);
+          const outcome = await runQuery(sql, caller);
           if (outcome.rejection) {
             return {
               jsonrpc: "2.0",
@@ -511,19 +577,65 @@ export async function handler(
     return httpJson(405, { error: "Method not allowed — POST only" });
   }
 
-  const token = extractBearer(event);
-  if (!token) {
-    return httpJson(401, { error: "Unauthorized" });
-  }
-  let credential: BrokerCredential;
-  try {
-    credential = await getBrokerCredential();
-  } catch (err) {
-    console.error("analyst-query-broker: credential resolution failed", err);
-    return httpJson(500, { error: "Broker credential unavailable" });
-  }
-  if (!constantTimeEquals(token, credential.token)) {
-    return httpJson(401, { error: "Unauthorized" });
+  // THINK-229 U2 auth order: signed caller context if present -> verify
+  // or 401 (never fall through to the bearer on a broken context); else
+  // legacy bearer (phase-in, marker-logged); else 401.
+  const headers = event.headers ?? {};
+  // API Gateway v2 lowercases header names.
+  const contextHeader = headers[ANALYST_CALLER_CONTEXT_HEADER];
+  let caller: BrokerCallerIdentity;
+  if (contextHeader) {
+    const publicKeyPem = readCapabilityPublicKey();
+    if (!publicKeyPem) {
+      console.error(
+        "analyst-query-broker: CAPABILITY_SIGNING_PUBLIC_KEY unavailable — cannot verify caller contexts",
+      );
+      return httpJson(500, { error: "Caller-context verifier unavailable" });
+    }
+    const verified = verifyAnalystCallerContextHeader({
+      headerValue: contextHeader,
+      requestBody: event.body ?? "",
+      publicKeyPem,
+      nowMs: Date.now(),
+    });
+    if (!verified.ok) {
+      logAuth({
+        mode: "caller_context",
+        outcome: "rejected",
+        reason: verified.reason,
+      });
+      return httpJson(401, { error: "Unauthorized" });
+    }
+    caller = callerIdentityFromContext(verified.payload);
+    logAuth({
+      mode: "caller_context",
+      outcome: "ok",
+      actor: caller.actorKind,
+      tenant: caller.tenantId,
+    });
+  } else {
+    const token = extractBearer(event);
+    if (!token) {
+      return httpJson(401, { error: "Unauthorized" });
+    }
+    let credential: BrokerCredential;
+    try {
+      credential = await getBrokerCredential();
+    } catch (err) {
+      console.error("analyst-query-broker: credential resolution failed", err);
+      return httpJson(500, { error: "Broker credential unavailable" });
+    }
+    if (!constantTimeEquals(token, credential.token)) {
+      return httpJson(401, { error: "Unauthorized" });
+    }
+    caller = {
+      tenantId: credential.tenantId,
+      actorKind: "legacy_bearer",
+      policyClaims: {},
+    };
+    // Bearer-retirement gate (R5): observed-zero traffic on this marker,
+    // not assumption.
+    logAuth({ mode: "legacy_bearer", outcome: "ok", tenant: caller.tenantId });
   }
 
   let parsed: unknown;
@@ -540,18 +652,13 @@ export async function handler(
   if (Array.isArray(parsed)) {
     const responses = (
       await Promise.all(
-        (parsed as JsonRpcRequest[]).map((r) =>
-          dispatch(r, credential.tenantId),
-        ),
+        (parsed as JsonRpcRequest[]).map((r) => dispatch(r, caller)),
       )
     ).filter((r): r is JsonRpcResponse => r !== null);
     return httpJson(200, responses);
   }
 
-  const response = await dispatch(
-    parsed as JsonRpcRequest,
-    credential.tenantId,
-  );
+  const response = await dispatch(parsed as JsonRpcRequest, caller);
   if (response === null) {
     return { statusCode: 202, body: "" };
   }

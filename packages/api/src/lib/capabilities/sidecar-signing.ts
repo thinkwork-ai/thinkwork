@@ -50,7 +50,11 @@ export type CapabilitySignedBy =
   | `operator:${string}`
   | "backfill"
   | "plugin-reconciler"
-  | "render";
+  | "render"
+  // THINK-229 U2: analyst caller contexts minted by trusted API handlers
+  // at dispatch/refresh time. Domain separation from sidecars is the
+  // in-payload `kind` tag (signed bytes), not this transport field.
+  | "api-dispatch";
 
 export interface CapabilitySignatureEnvelope {
   version: number;
@@ -294,6 +298,7 @@ export function parseCapabilitySignatureEnvelope(
     record.signed_by !== "backfill" &&
     record.signed_by !== "plugin-reconciler" &&
     record.signed_by !== "render" &&
+    record.signed_by !== "api-dispatch" &&
     !record.signed_by.startsWith("operator:")
   ) {
     return null;

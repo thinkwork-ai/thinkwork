@@ -63,6 +63,16 @@ export interface McpServerTarget {
   headers?: Record<string, string>;
   /** Display name; used only in error messages. */
   name?: string;
+  /**
+   * Per-request header hook (THINK-229 U2): invoked with the EXACT
+   * serialized JSON-RPC body of each POST so callers can mint
+   * request-bound credentials (e.g. the analyst caller context, whose
+   * signed payload pins sha256(body)). Merged over static headers;
+   * Authorization is still owned by `token`.
+   */
+  perRequestHeaders?: (
+    body: string,
+  ) => Record<string, string> | Promise<Record<string, string>>;
 }
 
 /** Raised on transport-level failure (non-2xx, network error, JSON-RPC error). */
@@ -118,13 +128,22 @@ async function post(
   const headers = baseHeaders(target);
   if (sessionId) headers[SESSION_HEADER] = sessionId;
 
+  const body = JSON.stringify(payload);
+  if (target.perRequestHeaders) {
+    const extra = await target.perRequestHeaders(body);
+    for (const [key, value] of Object.entries(extra)) {
+      if (key.toLowerCase() === "authorization") continue;
+      headers[key] = value;
+    }
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetchImpl(target.url, {
       method: "POST",
       headers,
-      body: JSON.stringify(payload),
+      body,
       signal: controller.signal,
     });
   } catch (err) {
