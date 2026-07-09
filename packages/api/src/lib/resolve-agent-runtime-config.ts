@@ -207,6 +207,14 @@ export interface AgentProfileRuntimeConfig {
   builtInTools: string[];
   mcpServers: AgentProfileRuntimeMcpServer[];
   mcpToolAllowlist: Record<string, string[]>;
+  /**
+   * Raw tool_policy.mcpServers slugs, retained even when config resolution
+   * was deferred (folder-dispatch resolves profiles against zero MCP
+   * configs and rebuilds them post-render) — the late
+   * `applySidecarBudgetOverrides` pass keys on these, since `mcpServers`
+   * above is empty in that path.
+   */
+  toolPolicyMcpSlugs: string[];
   skillSlugs: string[];
   piExtensions: AgentRuntimePiExtension[];
   executionControls: {
@@ -215,12 +223,58 @@ export interface AgentProfileRuntimeConfig {
     maxSubagentDepth: number;
     maxRuntimeMs?: number;
     maxTokens?: number;
+    maxQueriesPerRun?: number;
     costBudgetUsd?: number;
     thinking?: string;
     reviewGate?: boolean;
     maxReviewLoops?: number;
     loopPolicy: AgentLoopPolicy;
   };
+}
+
+/**
+ * Re-apply the KTD6/THINK-232 signed-sidecar budget overrides
+ * (maxQueriesPerRun, costBudgetUsd) to already-resolved profile configs.
+ *
+ * Needed because chat-agent-invoke's folder-dispatch path resolves
+ * profiles BEFORE the rendered-manifest MCP build exists (the early
+ * resolution sees zero configs, so the in-resolver override loop never
+ * fires — observed live on dev 2026-07-09: `mcp=0` at resolution,
+ * `mcp=4` at invoke, sidecar costBudgetUsd silently ignored). Call this
+ * with the FINAL rebuilt configs; profiles whose tool_policy names a
+ * config carrying sidecarBudgets get the signed values, everything else
+ * is returned untouched. Idempotent — safe to call after a resolution
+ * that already applied the override.
+ */
+export function applySidecarBudgetOverrides(
+  profiles: AgentProfileRuntimeConfig[],
+  mcpConfigs: Pick<McpConfig, "name" | "sidecarBudgets">[],
+): AgentProfileRuntimeConfig[] {
+  const bySlug = new Map(mcpConfigs.map((cfg) => [cfg.name, cfg]));
+  return profiles.map((profile) => {
+    for (const slug of profile.toolPolicyMcpSlugs ?? []) {
+      const budgets = bySlug.get(slug)?.sidecarBudgets;
+      const perRun = budgets?.maxQueriesPerRun;
+      const costBudgetUsd = budgets?.costBudgetUsd;
+      const perRunValid =
+        typeof perRun === "number" && Number.isFinite(perRun) && perRun > 0;
+      const costBudgetValid =
+        typeof costBudgetUsd === "number" &&
+        Number.isFinite(costBudgetUsd) &&
+        costBudgetUsd > 0;
+      if (perRunValid || costBudgetValid) {
+        return {
+          ...profile,
+          executionControls: {
+            ...profile.executionControls,
+            ...(perRunValid ? { maxQueriesPerRun: perRun } : {}),
+            ...(costBudgetValid ? { costBudgetUsd } : {}),
+          },
+        };
+      }
+    }
+    return profile;
+  });
 }
 
 export interface AgentRuntimePiExtension {
@@ -1375,6 +1429,7 @@ export async function loadAgentProfileRuntimeConfigs(input: {
       builtInTools,
       mcpServers,
       mcpToolAllowlist,
+      toolPolicyMcpSlugs: mcpServerSlugs,
       skillSlugs,
       piExtensions: [],
       executionControls: effectiveExecutionControls,

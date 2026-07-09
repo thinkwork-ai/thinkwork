@@ -45,6 +45,7 @@ import {
 } from "../lib/sandbox-preflight.js";
 import {
   AgentNotFoundError,
+  applySidecarBudgetOverrides,
   resolveAgentRuntimeConfig,
   tenantCatalogSkillS3Key,
 } from "../lib/resolve-agent-runtime-config.js";
@@ -1326,6 +1327,15 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           // outage instead of estimating.
           withheldNotices: withheldConnections,
         },
+      );
+      // THINK-232/KTD6: profiles above were resolved against ZERO MCP
+      // configs (the folder-dispatch deferral), so the in-resolver
+      // signed-sidecar budget override never fired — re-apply it against
+      // the rebuilt configs so maxQueriesPerRun/costBudgetUsd from the
+      // signed sidecar actually reach the delegation loop.
+      runtimeConfig.agentProfilesConfig = applySidecarBudgetOverrides(
+        runtimeConfig.agentProfilesConfig,
+        mcpConfigs,
       );
     }
 
