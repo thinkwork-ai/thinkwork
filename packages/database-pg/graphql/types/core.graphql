@@ -456,6 +456,57 @@ type AnalystDataSourceResult {
   foldersSkipped: Int!
 }
 
+"""
+One database on an internal (environment-owned) RDS cluster (THINK-239).
+`alreadyRegistered` is true when the tenant already has an analyst connector
+covering this database (the built-in postgres-dev row covers `thinkwork`;
+sourced rows cover their runtime_metadata.analyst_source.database on a matching
+cluster endpoint).
+"""
+type AnalystInternalDatabase {
+  name: String!
+  alreadyRegistered: Boolean!
+}
+
+"""
+An internal (environment-owned) RDS cluster the analyst can browse and register
+a database from with zero credential entry — the backend auto-provisions a
+hardened read-only role (THINK-239). A cluster with no resolvable admin
+credential (or an unreachable endpoint) returns an empty `databases` list.
+"""
+type AnalystInternalCluster {
+  clusterId: ID!
+  endpoint: String!
+  port: Int!
+  databases: [AnalystInternalDatabase!]!
+}
+
+"""
+Input for registerInternalAnalystDataSource (THINK-239) — register a database
+on an internal RDS cluster as an analyst connector with zero credential entry.
+The backend auto-provisions a hardened read-only role on the cluster+database,
+then runs the same registration ceremony as an external source.
+"""
+input RegisterInternalAnalystDataSourceInput {
+  "DBClusterIdentifier of the internal cluster (from analystInternalClusters)."
+  clusterId: ID!
+  "Database on that cluster to register (must appear in its enumeration)."
+  database: String!
+  "Human-readable display name."
+  name: String!
+  "URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment."
+  slug: String!
+}
+
+extend type Query {
+  """
+  List the environment's own RDS clusters and their databases so an operator
+  can register one as an analyst data source without entering any credential
+  (THINK-239). Requires tenant owner/admin.
+  """
+  analystInternalClusters: [AnalystInternalCluster!]!
+}
+
 extend type Mutation {
   bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
@@ -499,6 +550,16 @@ extend type Mutation {
   """
   registerAnalystDataSource(
     input: RegisterAnalystDataSourceInput!
+  ): AnalystDataSourceResult!
+  """
+  Register a database on an INTERNAL (environment-owned) RDS cluster as an
+  analyst connector with ZERO credential entry (THINK-239). Requires tenant
+  owner/admin. Auto-provisions a hardened read-only role on the cluster+database
+  (the runbook posture applied programmatically), then runs the same
+  registration ceremony as registerAnalystDataSource.
+  """
+  registerInternalAnalystDataSource(
+    input: RegisterInternalAnalystDataSourceInput!
   ): AnalystDataSourceResult!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   addManualUser(tenantId: ID!, input: AddManualUserInput!): TenantMember!

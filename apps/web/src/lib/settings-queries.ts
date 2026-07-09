@@ -2356,3 +2356,37 @@ export const SettingsRegisterAnalystDataSourceMutation = graphql(`
     }
   }
 `);
+
+// ─── Internal cluster browser (THINK-239) ─────────────────────────────────
+// Lists the environment's own RDS clusters + databases so an operator can
+// register one as an analyst data source with ZERO credential entry — the
+// backend auto-provisions a hardened read-only role. Tenant-admin only.
+export const SettingsAnalystInternalClustersQuery = graphql(`
+  query SettingsAnalystInternalClusters {
+    analystInternalClusters {
+      clusterId
+      endpoint
+      port
+      databases {
+        name
+        alreadyRegistered
+      }
+    }
+  }
+`);
+
+// Registers a database on an internal cluster. No credential is entered — the
+// backend provisions the reader role, then runs the external ceremony.
+export const SettingsRegisterInternalAnalystDataSourceMutation = graphql(`
+  mutation SettingsRegisterInternalAnalystDataSource(
+    $input: RegisterInternalAnalystDataSourceInput!
+  ) {
+    registerInternalAnalystDataSource(input: $input) {
+      serverId
+      slug
+      tables
+      foldersWritten
+      foldersSkipped
+    }
+  }
+`);

@@ -734,6 +734,33 @@ export enum AnalystDataSourceTls {
 }
 
 /**
+ * An internal (environment-owned) RDS cluster the analyst can browse and register
+ * a database from with zero credential entry — the backend auto-provisions a
+ * hardened read-only role (THINK-239). A cluster with no resolvable admin
+ * credential (or an unreachable endpoint) returns an empty `databases` list.
+ */
+export type AnalystInternalCluster = {
+  __typename?: 'AnalystInternalCluster';
+  clusterId: Scalars['ID']['output'];
+  databases: Array<AnalystInternalDatabase>;
+  endpoint: Scalars['String']['output'];
+  port: Scalars['Int']['output'];
+};
+
+/**
+ * One database on an internal (environment-owned) RDS cluster (THINK-239).
+ * `alreadyRegistered` is true when the tenant already has an analyst connector
+ * covering this database (the built-in postgres-dev row covers `thinkwork`;
+ * sourced rows cover their runtime_metadata.analyst_source.database on a matching
+ * cluster endpoint).
+ */
+export type AnalystInternalDatabase = {
+  __typename?: 'AnalystInternalDatabase';
+  alreadyRegistered: Scalars['Boolean']['output'];
+  name: Scalars['String']['output'];
+};
+
+/**
  * Outcome of running the analyst connector provisioning ceremony (THINK-230):
  * the operator-facing equivalent of scripts/provision-analyst-connector.mts.
  * Reproduces the script's born-approved + re-approve semantics (KTD4 / SI-5
@@ -3875,6 +3902,14 @@ export type Mutation = {
    * registers a born-approved connector at POST /mcp/analyst/<slug>.
    */
   registerAnalystDataSource: AnalystDataSourceResult;
+  /**
+   * Register a database on an INTERNAL (environment-owned) RDS cluster as an
+   * analyst connector with ZERO credential entry (THINK-239). Requires tenant
+   * owner/admin. Auto-provisions a hardened read-only role on the cluster+database
+   * (the runbook posture applied programmatically), then runs the same
+   * registration ceremony as registerAnalystDataSource.
+   */
+  registerInternalAnalystDataSource: AnalystDataSourceResult;
   registerPushToken: Scalars['Boolean']['output'];
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
@@ -4880,6 +4915,11 @@ export type MutationRegenerateWebhookTokenArgs = {
 
 export type MutationRegisterAnalystDataSourceArgs = {
   input: RegisterAnalystDataSourceInput;
+};
+
+
+export type MutationRegisterInternalAnalystDataSourceArgs = {
+  input: RegisterInternalAnalystDataSourceInput;
 };
 
 
@@ -6350,6 +6390,12 @@ export type Query = {
   agentWorkspaceReview?: Maybe<AgentWorkspaceReview>;
   agentWorkspaceReviews: Array<AgentWorkspaceReview>;
   agentWorkspaceRuns: Array<AgentWorkspaceRun>;
+  /**
+   * List the environment's own RDS clusters and their databases so an operator
+   * can register one as an analyst data source without entering any credential
+   * (THINK-239). Requires tenant owner/admin.
+   */
+  analystInternalClusters: Array<AnalystInternalCluster>;
   applet?: Maybe<AppletPayload>;
   appletState?: Maybe<AppletState>;
   applets: AppletConnection;
@@ -7990,6 +8036,23 @@ export type RegisterAnalystDataSourceInput = {
   slug: Scalars['String']['input'];
   /** TLS posture (default VERIFY_FULL). */
   tls?: InputMaybe<AnalystDataSourceTls>;
+};
+
+/**
+ * Input for registerInternalAnalystDataSource (THINK-239) — register a database
+ * on an internal RDS cluster as an analyst connector with zero credential entry.
+ * The backend auto-provisions a hardened read-only role on the cluster+database,
+ * then runs the same registration ceremony as an external source.
+ */
+export type RegisterInternalAnalystDataSourceInput = {
+  /** DBClusterIdentifier of the internal cluster (from analystInternalClusters). */
+  clusterId: Scalars['ID']['input'];
+  /** Database on that cluster to register (must appear in its enumeration). */
+  database: Scalars['String']['input'];
+  /** Human-readable display name. */
+  name: Scalars['String']['input'];
+  /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
+  slug: Scalars['String']['input'];
 };
 
 export type RegisterPushTokenInput = {

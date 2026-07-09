@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMutation } from "urql";
+import { useMutation, useQuery } from "urql";
 import {
   Badge,
   Button,
@@ -28,8 +28,10 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 import {
+  SettingsAnalystInternalClustersQuery,
   SettingsProvisionAnalystConnectorMutation,
   SettingsRegisterAnalystDataSourceMutation,
+  SettingsRegisterInternalAnalystDataSourceMutation,
 } from "@/lib/settings-queries";
 import { AnalystDataSourceTls } from "@/gql/graphql";
 import {
@@ -307,15 +309,18 @@ export function SettingsMcpServers() {
   );
 }
 
-// THINK-230 / THINK-239: analyst Postgres data-source registration. Two paths
+// THINK-230 / THINK-239: analyst Postgres data-source registration. Two tabs
 // live side by side in one dialog:
-//   • "Built-in cluster" drives `provisionAnalystConnector` — the born-approved
-//     `postgres-dev` connector chain. Re-approve / rotate-broker-token actions
-//     are NOT here; they live on the existing server's detail surface.
-//   • "External PostgreSQL database" drives `registerAnalystDataSource` — an
-//     arbitrary external Postgres registered as a first-party analyst connector
-//     through the sourced broker route (POST /mcp/analyst/<slug>).
-// Backend re-enforces tenant-admin on both; non-admins get a GraphQL error.
+//   • "Internal" browses the environment's OWN RDS clusters → pick a database →
+//     register with ZERO credential entry (`registerInternalAnalystDataSource`
+//     auto-provisions a hardened read-only role). Picking the `thinkwork`
+//     workspace database routes to the built-in `provisionAnalystConnector`
+//     chain instead (BuiltinDataSourceForm). Re-approve / rotate-broker-token
+//     actions are NOT here; they live on the existing server's detail surface.
+//   • "External" drives `registerAnalystDataSource` — an arbitrary external
+//     Postgres registered as a first-party analyst connector through the sourced
+//     broker route (POST /mcp/analyst/<slug>).
+// Backend re-enforces tenant-admin on all paths; non-admins get a GraphQL error.
 const ANALYST_PROVISION_STEPS = [
   "Approved postgres-dev connector row",
   "Broker credential secret",
@@ -327,6 +332,17 @@ const ANALYST_PROVISION_STEPS = [
 const RESERVED_ANALYST_SLUG = "postgres-dev";
 // Client-side mirror of the backend slug rule (^[a-z0-9][a-z0-9-]{0,38}$).
 const ANALYST_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,38}$/;
+// The app database is registered through the built-in connector path, never as
+// a normal internal source (mirrors the backend's hard reject).
+const WORKSPACE_DATABASE = "thinkwork";
+
+type AnalystInternalDatabase = { name: string; alreadyRegistered: boolean };
+type AnalystInternalCluster = {
+  clusterId: string;
+  endpoint: string;
+  port: number;
+  databases: AnalystInternalDatabase[];
+};
 
 type AnalystProvisionOutcome = {
   connectorId: string;
@@ -398,11 +414,11 @@ function RegisterDataSourceDialog({
           onValueChange={(v) => setTab(v as "builtin" | "external")}
         >
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="builtin">Built-in cluster</TabsTrigger>
-            <TabsTrigger value="external">External PostgreSQL</TabsTrigger>
+            <TabsTrigger value="builtin">Internal</TabsTrigger>
+            <TabsTrigger value="external">External</TabsTrigger>
           </TabsList>
           <TabsContent value="builtin">
-            <BuiltinDataSourceForm
+            <InternalDataSourceForm
               onOpenChange={onOpenChange}
               onProvisioned={onProvisioned}
               builtinAnalystExists={builtinAnalystExists}
@@ -422,6 +438,350 @@ function RegisterDataSourceDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// THINK-239: the "Internal" tab. Browses the environment's own RDS clusters →
+// pick a database → register with zero credential entry. Picking the
+// `thinkwork` workspace database renders the built-in provisioning form.
+function InternalDataSourceForm({
+  onOpenChange,
+  onProvisioned,
+  builtinAnalystExists,
+  active,
+  dialogOpen,
+}: {
+  onOpenChange: (open: boolean) => void;
+  onProvisioned: () => void;
+  builtinAnalystExists: boolean;
+  active: boolean;
+  dialogOpen: boolean;
+}) {
+  const [clusterId, setClusterId] = useState("");
+  const [database, setDatabase] = useState("");
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [result, setResult] = useState<AnalystRegisterOutcome | null>(null);
+  const [, registerInternal] = useMutation(
+    SettingsRegisterInternalAnalystDataSourceMutation,
+  );
+
+  // Only query the clusters while the dialog is open on this tab.
+  const [{ data, fetching, error }, refetchClusters] = useQuery({
+    query: SettingsAnalystInternalClustersQuery,
+    pause: !dialogOpen || !active,
+  });
+  const clusters: AnalystInternalCluster[] = useMemo(
+    () => (data?.analystInternalClusters as AnalystInternalCluster[]) ?? [],
+    [data],
+  );
+
+  // Reset when the dialog reopens or the caller switches to this tab.
+  useEffect(() => {
+    if (dialogOpen && active) {
+      setClusterId("");
+      setDatabase("");
+      setName("");
+      setSlug("");
+      setSlugEdited(false);
+      setErrorMsg(null);
+      setResult(null);
+      setSubmitting(false);
+    }
+  }, [dialogOpen, active]);
+
+  // Auto-select when exactly one cluster is available.
+  useEffect(() => {
+    if (!clusterId && clusters.length === 1) {
+      setClusterId(clusters[0]!.clusterId);
+    }
+  }, [clusters, clusterId]);
+
+  const selectedCluster = useMemo(
+    () => clusters.find((c) => c.clusterId === clusterId) ?? null,
+    [clusters, clusterId],
+  );
+  const selectedDatabase = useMemo(
+    () => selectedCluster?.databases.find((d) => d.name === database) ?? null,
+    [selectedCluster, database],
+  );
+  const isWorkspaceDatabase = database === WORKSPACE_DATABASE;
+
+  const trimmedSlug = slug.trim();
+  const slugFormatValid = ANALYST_SLUG_PATTERN.test(trimmedSlug);
+  const slugReserved = trimmedSlug === RESERVED_ANALYST_SLUG;
+  const slugError = !trimmedSlug
+    ? null
+    : slugReserved
+      ? `"${RESERVED_ANALYST_SLUG}" is reserved for the built-in data source — choose another.`
+      : !slugFormatValid
+        ? "Use 1–39 chars: lowercase letters, digits and hyphens, starting with a letter or digit."
+        : null;
+
+  const canSubmit =
+    !!selectedCluster &&
+    !!database &&
+    !isWorkspaceDatabase &&
+    name.trim().length > 0 &&
+    trimmedSlug.length > 0 &&
+    slugFormatValid &&
+    !slugReserved &&
+    !submitting;
+
+  function onClusterChange(value: string) {
+    setClusterId(value);
+    setDatabase("");
+    setName("");
+    setSlug("");
+    setSlugEdited(false);
+    setErrorMsg(null);
+  }
+
+  function onDatabaseChange(value: string) {
+    setDatabase(value);
+    setErrorMsg(null);
+    if (value && value !== WORKSPACE_DATABASE) {
+      const suggested = prettifyDatabaseName(value);
+      setName(suggested);
+      if (!slugEdited) setSlug(suggestAnalystSlug(value));
+    } else {
+      setName("");
+      setSlug("");
+      setSlugEdited(false);
+    }
+  }
+
+  async function onSubmit() {
+    if (!canSubmit || !selectedCluster) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    setResult(null);
+    try {
+      const response = await registerInternal({
+        input: {
+          clusterId: selectedCluster.clusterId,
+          database,
+          name: name.trim(),
+          slug: trimmedSlug,
+        },
+      });
+      if (response.error) {
+        setErrorMsg(graphqlErrorMessage(response.error));
+        return;
+      }
+      const outcome = response.data?.registerInternalAnalystDataSource;
+      if (!outcome) {
+        setErrorMsg("Registration returned no result.");
+        return;
+      }
+      setResult(outcome);
+      onProvisioned();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to register");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="space-y-4 py-2">
+        <p className="text-sm text-emerald-500">Data source registered.</p>
+        <dl className="divide-y divide-border rounded-md border border-border text-sm">
+          <ProvisionResultRow label="Slug" value={result.slug} />
+          <ProvisionResultRow label="Tables" value={`${result.tables}`} />
+          <ProvisionResultRow
+            label="Connection folders"
+            value={`${result.foldersWritten} written · ${result.foldersSkipped} skipped`}
+          />
+        </dl>
+        <p className="font-mono text-xs text-muted-foreground">
+          {result.serverId}
+        </p>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-2">
+      <p className="text-sm text-muted-foreground">
+        Browse this environment&apos;s own database clusters and register a
+        database. No credential is entered — a hardened read-only role is
+        provisioned automatically.
+      </p>
+
+      {fetching ? (
+        <p className="text-sm text-muted-foreground">Loading clusters…</p>
+      ) : error ? (
+        <div className="space-y-2">
+          <p className="text-sm text-destructive">
+            Failed to load clusters:{" "}
+            {error.message.replace(/^\[[^\]]*\]\s*/, "")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetchClusters({ requestPolicy: "network-only" })}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : clusters.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No internal database clusters were found in this environment.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="int-cluster">Cluster</Label>
+            <Select
+              value={clusterId}
+              onValueChange={onClusterChange}
+              aria-label="Cluster"
+            >
+              <SelectTrigger id="int-cluster">
+                <SelectValue placeholder="Select a cluster" />
+              </SelectTrigger>
+              <SelectContent>
+                {clusters.map((cluster) => (
+                  <SelectItem
+                    key={cluster.clusterId}
+                    value={cluster.clusterId}
+                    disabled={cluster.databases.length === 0}
+                  >
+                    {cluster.clusterId}
+                    {cluster.databases.length === 0
+                      ? " (no admin credential)"
+                      : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedCluster && selectedCluster.databases.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No admin credential is available for this cluster — its
+                databases can&apos;t be listed.
+              </p>
+            ) : null}
+          </div>
+
+          {selectedCluster && selectedCluster.databases.length > 0 ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="int-database">Database</Label>
+              <Select
+                value={database}
+                onValueChange={onDatabaseChange}
+                aria-label="Database"
+              >
+                <SelectTrigger id="int-database">
+                  <SelectValue placeholder="Select a database" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedCluster.databases.map((db) =>
+                    db.name === WORKSPACE_DATABASE ? (
+                      <SelectItem key={db.name} value={db.name}>
+                        Workspace database (built-in)
+                      </SelectItem>
+                    ) : (
+                      <SelectItem
+                        key={db.name}
+                        value={db.name}
+                        disabled={db.alreadyRegistered}
+                      >
+                        {db.name}
+                        {db.alreadyRegistered ? " (registered)" : ""}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedDatabase?.alreadyRegistered ? (
+                <p className="text-xs text-muted-foreground">
+                  This database is already registered for the analyst.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {isWorkspaceDatabase ? (
+            <BuiltinDataSourceForm
+              onOpenChange={onOpenChange}
+              onProvisioned={onProvisioned}
+              builtinAnalystExists={builtinAnalystExists}
+              active={active}
+              dialogOpen={dialogOpen}
+            />
+          ) : database ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="int-name">Display name</Label>
+                <Input
+                  id="int-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Sales Postgres"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="int-slug">Slug</Label>
+                <Input
+                  id="int-slug"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlugEdited(true);
+                    setSlug(e.target.value);
+                  }}
+                  placeholder="sales-postgres"
+                  aria-invalid={slugError ? true : undefined}
+                />
+                {slugError ? (
+                  <p className="text-xs text-destructive">{slugError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Broker route segment:{" "}
+                    <code className="font-mono">
+                      /mcp/analyst/{trimmedSlug || "…"}
+                    </code>
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {errorMsg ? (
+            <p className="text-sm text-destructive">{errorMsg}</p>
+          ) : null}
+
+          {!isWorkspaceDatabase ? (
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button onClick={onSubmit} disabled={!canSubmit}>
+                {submitting ? "Registering…" : "Register data source"}
+              </Button>
+            </DialogFooter>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Prettify a raw database name into a display name (e.g. sales_prod → Sales Prod).
+function prettifyDatabaseName(dbName: string): string {
+  return dbName
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function BuiltinDataSourceForm({
