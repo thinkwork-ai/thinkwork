@@ -408,6 +408,65 @@ describe("dispatch_agent", () => {
     expect(payload.goalMode.goalRunId).toBe("run-1:1");
   });
 
+  // THINK-227 U2 (KTD2): a workflow converged from a bound automation carries
+  // the bound artifact id on the wakeup payload's agentLoop compat block,
+  // resolved LIVE from the source automation's target_spec.
+  it("emits agentLoop.documentId for a run whose source automation is bound", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow()],
+      [], // no existing wakeup
+      [{ source_agent_loop_id: "loop-1" }], // workflows row
+      [{ current_version_id: "alv-1" }], // agent_loops row
+      [
+        {
+          target_spec: {
+            kind: "agent_thread",
+            agentThread: {
+              instructions: "Refresh the report",
+              threadMode: "new_per_run",
+            },
+            documentBinding: {
+              mode: "create",
+              genre: "report",
+              title: "Weekly",
+              spaceId: "sp1",
+              capturedArtifactId: "art-42",
+            },
+          },
+        },
+      ], // agent_loop_versions row
+    );
+    await handleDispatchAgent(
+      fake.db as never,
+      { phase: "dispatch_agent", cursor: cursor(), taskToken: "tok-9" },
+      NOW,
+    );
+    const wakeup = fake.inserts.find((i) => i.source === "workflow_step");
+    const payload = wakeup?.payload as {
+      agentLoop?: { documentId: string };
+    };
+    expect(payload.agentLoop).toEqual({ documentId: "art-42" });
+  });
+
+  it("emits no agentLoop block for a plain workflow (no source automation)", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow()],
+      [], // no existing wakeup
+      [{ source_agent_loop_id: null }], // workflows row — plain workflow
+    );
+    await handleDispatchAgent(
+      fake.db as never,
+      { phase: "dispatch_agent", cursor: cursor(), taskToken: "tok-10" },
+      NOW,
+    );
+    const wakeup = fake.inserts.find((i) => i.source === "workflow_step");
+    expect("agentLoop" in (wakeup?.payload as Record<string, unknown>)).toBe(
+      false,
+    );
+  });
+
   it("reuses an existing wakeup — no second insert", async () => {
     fake.selectQueue.push([runRow()], [versionRow()], [{ id: "wakeup-1" }]);
     await handleDispatchAgent(

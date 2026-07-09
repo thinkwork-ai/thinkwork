@@ -600,7 +600,15 @@ export interface TargetSpec {
 export function boundDocumentIdFromTargetSpec(
   spec: TargetSpec | null | undefined,
 ): string | null {
-  const binding = spec?.documentBinding;
+  return boundDocumentIdFromBinding(spec?.documentBinding);
+}
+
+/** Same resolution for call sites holding the binding directly (e.g. a
+ * DispatchableAgentLoopVersion). One resolver — the payload-parity tests
+ * assert every dispatch site goes through it. */
+export function boundDocumentIdFromBinding(
+  binding: DocumentBinding | null | undefined,
+): string | null {
   if (!binding) return null;
   return binding.capturedArtifactId ?? binding.artifactId ?? null;
 }

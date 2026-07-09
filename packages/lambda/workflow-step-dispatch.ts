@@ -14,8 +14,10 @@
 
 import {
   advanceCursor,
+  boundDocumentIdFromTargetSpec,
   buildWorkflowStepWakeupPayload,
   decideWorkflowContinuation,
+  normalizeTargetSpec,
   planNextStep,
   planRollover,
   readWorkflowDefinition,
@@ -36,10 +38,13 @@ import {
   storeTaskToken,
 } from "@thinkwork/database-pg";
 import {
+  agentLoopVersions,
+  agentLoops,
   agentWakeupRequests,
   workflowRunEvents,
   workflowRuns,
   workflowVersions,
+  workflows,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -354,6 +359,10 @@ export async function handleDispatchAgent(
       exitSignal: definition.continuationPolicy?.exitSignal,
       maxIterations: definition.continuationPolicy?.maxIterations,
       spaceId: typeof spaceId === "string" ? spaceId : null,
+      // THINK-227 U2 (KTD2): the bound document rides the wakeup payload so
+      // the emission reader enforces it — resolved LIVE from the source
+      // automation's target_spec (KTD1), never from a definition snapshot.
+      documentId: await resolveBoundDocumentId(db, run),
     });
     await db.insert(agentWakeupRequests).values({
       tenant_id: cursor.tenantId,
@@ -375,6 +384,51 @@ export async function handleDispatchAgent(
   }
 
   return { ok: true };
+}
+
+/**
+ * THINK-227 U2: resolve the bound document for a workflow run — the live
+ * `target_spec.documentBinding` of the automation this workflow converged
+ * from (`workflows.source_agent_loop_id`, U13). Live resolution means run 1's
+ * capture (U3) is visible to run 2 without republishing the definition.
+ * Returns null for workflows with no source automation or no binding; a
+ * malformed spec logs and degrades to unbound rather than failing the step.
+ */
+export async function resolveBoundDocumentId(
+  db: WorkflowDb,
+  run: Pick<RunRow, "id" | "workflow_id">,
+): Promise<string | null> {
+  const [workflow] = await db
+    .select({ source_agent_loop_id: workflows.source_agent_loop_id })
+    .from(workflows)
+    .where(eq(workflows.id, run.workflow_id))
+    .limit(1);
+  if (!workflow?.source_agent_loop_id) return null;
+
+  const [loop] = await db
+    .select({ current_version_id: agentLoops.current_version_id })
+    .from(agentLoops)
+    .where(eq(agentLoops.id, workflow.source_agent_loop_id))
+    .limit(1);
+  if (!loop?.current_version_id) return null;
+
+  const [version] = await db
+    .select({ target_spec: agentLoopVersions.target_spec })
+    .from(agentLoopVersions)
+    .where(eq(agentLoopVersions.id, loop.current_version_id))
+    .limit(1);
+  if (!version?.target_spec) return null;
+
+  try {
+    return boundDocumentIdFromTargetSpec(
+      normalizeTargetSpec(version.target_spec),
+    );
+  } catch (error) {
+    console.warn(
+      `[workflow-step-dispatch] run ${run.id}: source automation target_spec did not normalize (${(error as Error).message}); dispatching unbound`,
+    );
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -526,8 +580,9 @@ export interface StepExecutors {
 
 export const defaultStepExecutors: StepExecutors = {
   invokeRoutine: async ({ routineId, input }) => {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const explicit = process.env.ROUTINE_EXEC_GIT_FUNCTION_NAME;
     const stage = process.env.STAGE;

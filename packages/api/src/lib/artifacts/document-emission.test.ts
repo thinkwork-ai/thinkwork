@@ -410,6 +410,7 @@ describe("handleDocumentEmission", () => {
         agentLoopId: "loop-1",
         loopName: "loop",
         runId: "run-1",
+        runKind: "agent_loop" as const,
       })),
       findDocumentByLogicalId: vi.fn(async () => {
         throw new Error("must not be called on run-derived turns");
@@ -480,6 +481,7 @@ function runContext(actingUserId: string | null = RUN_AS_USER_ID) {
     agentLoopId: LOOP_ID,
     loopName: "Weekly pipeline report",
     actingUserId,
+    runKind: "agent_loop" as const,
   };
 }
 
@@ -752,6 +754,63 @@ describe("atomic keep-last-good for run-derived emission (THINK-155 U2)", () => 
     expect(ops.indexOf("s3:digest")).toBeLessThan(ops.indexOf("db:upsert"));
     expect(ops.indexOf("db:upsert")).toBeLessThan(ops.indexOf("db:pin"));
     expect(recorded.upserts[0].preserveHeadOnConflict).toBeUndefined();
+  });
+});
+
+describe("first-run binding capture (THINK-227 U3)", () => {
+  it("run-derived finalize captures against the automation that ran", async () => {
+    const capture = vi.fn(async () => ({ captured: true }));
+    const { deps } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      captureBindingArtifact: capture,
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(true);
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(capture).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      agentLoopId: LOOP_ID,
+      artifactId: result.body.artifactId,
+    });
+  });
+
+  it("run-derived DRAFT emits never capture (finalize only)", async () => {
+    const capture = vi.fn(async () => ({ captured: true }));
+    const { deps } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      captureBindingArtifact: capture,
+    });
+    const result = await emit(VALID_DOCUMENT, deps, null); // draft
+    expect(result.body.ok).toBe(true);
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it("interactive (human-turn) finalize never captures", async () => {
+    const capture = vi.fn(async () => ({ captured: true }));
+    const { deps } = makeDeps({ captureBindingArtifact: capture });
+    const result = await emit({ ...VALID_DOCUMENT, status: "final" }, deps);
+    expect(result.body.ok).toBe(true);
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it("a capture fault never fails an otherwise-successful finalize (best-effort)", async () => {
+    const { deps } = makeDeps({
+      resolveTurnRunContext: vi.fn(async () => runContext()),
+      captureBindingArtifact: vi.fn(async () => {
+        throw new Error("capture db down");
+      }),
+    });
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+    );
+    expect(result.body.ok).toBe(true);
+    expect(result.body.status).toBe("final");
   });
 });
 
