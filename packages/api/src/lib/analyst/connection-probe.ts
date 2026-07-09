@@ -180,33 +180,54 @@ export async function probeAnalystConnection(
   }
 
   try {
-    // 2. SELECT grant across the granted manifest. A revoked table is a
-    //    withhold (the model would otherwise get a runtime permission
-    //    error mid-query and may improvise around it). Tables ABSENT from
-    //    the live DB are skipped, mirroring the grant migration's own
-    //    to_regclass tolerance (0227's generated section): dev drifts
-    //    from the Drizzle schema (crm_work_links, 2026-07-08), a missing
-    //    table was never granted and cannot be queried — it is not a
-    //    grant breach. has_table_privilege THROWS on a nonexistent
-    //    relation, so the guard is load-bearing, not cosmetic.
+    // 2. SELECT grant across the granted (table, column) manifest. A revoked
+    //    grant is a withhold (the model would otherwise get a runtime
+    //    permission error mid-query and may improvise around it). The check
+    //    is per-COLUMN, not per-table: the grant migration (0227) issues
+    //    column-level GRANT SELECT (col, ...) on tables with denied columns,
+    //    and has_table_privilege(..., 'SELECT') is false for column-only
+    //    grants — a table-level check reads every column-granted table as
+    //    revoked (routines, observed on dev 2026-07-09). has_column_privilege
+    //    subsumes both grant shapes. Tables ABSENT from the live DB are
+    //    skipped, mirroring the migration's own to_regclass tolerance (dev
+    //    drifts from the Drizzle schema — crm_work_links, 2026-07-08); a
+    //    granted column missing from an existing table falls through to the
+    //    schema-drift check below rather than reading as a revocation. The
+    //    pg_attribute join resolves (attrelid, attnum) so the privilege call
+    //    can never throw on a nonexistent relation or column.
     const tableNames = granted.map((t) => t.name);
-    if (tableNames.length > 0) {
+    const pairTables: string[] = [];
+    const pairColumns: string[] = [];
+    for (const table of granted) {
+      for (const column of table.columns) {
+        pairTables.push(table.name);
+        pairColumns.push(column.name);
+      }
+    }
+    if (pairTables.length > 0) {
       const privResult = await client.query(
-        `SELECT t AS tbl,
-                to_regclass(format('public.%I', t)) IS NOT NULL AS table_exists,
-                CASE WHEN to_regclass(format('public.%I', t)) IS NOT NULL
-                     THEN has_table_privilege($1, format('public.%I', t), 'SELECT')
+        `SELECT u.t AS tbl, u.c AS col,
+                to_regclass(format('public.%I', u.t)) IS NOT NULL AS table_exists,
+                a.attnum IS NOT NULL AS column_exists,
+                CASE WHEN a.attnum IS NOT NULL
+                     THEN has_column_privilege($1, a.attrelid, a.attnum, 'SELECT')
                      ELSE NULL END AS can_select
-         FROM unnest($2::text[]) AS t`,
-        [role, tableNames],
+         FROM unnest($2::text[], $3::text[]) AS u(t, c)
+         LEFT JOIN pg_attribute a
+           ON a.attrelid = to_regclass(format('public.%I', u.t))
+          AND a.attname = u.c AND a.attnum > 0 AND NOT a.attisdropped`,
+        [role, pairTables, pairColumns],
       );
       const revoked = privResult.rows.find(
-        (r) => r.table_exists === true && r.can_select !== true,
+        (r) =>
+          r.table_exists === true &&
+          r.column_exists === true &&
+          r.can_select !== true,
       );
       if (revoked) {
         return fail(
           "select_revoked",
-          `analyst_reader lost SELECT on granted table "${String(revoked.tbl)}" — connection withheld until the grant is restored`,
+          `analyst_reader lost SELECT on granted column "${String(revoked.tbl)}.${String(revoked.col)}" — connection withheld until the grant is restored`,
         );
       }
     }
