@@ -299,6 +299,7 @@ vi.mock("../builtin-tools/web-extract.js", () => ({
 
 import {
   AgentNotFoundError,
+  applySidecarBudgetOverrides,
   loadAgentProfileRuntimeConfigs,
   resolveAgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
@@ -2621,5 +2622,74 @@ describe("capability diagnostics channel (U1)", () => {
         detail: expect.stringContaining("pi extension table unavailable"),
       }),
     ]);
+  });
+});
+
+describe("applySidecarBudgetOverrides", () => {
+  const baseProfile = {
+    id: "p1",
+    slug: "analyst",
+    name: "Analyst",
+    description: null,
+    routingGuidance: null,
+    instructions: "x",
+    modelId: "m",
+    builtInKey: "analyst",
+    enabled: true as const,
+    availability: { scope: "global" as const, spaceIds: [] },
+    sourceSpaceId: null,
+    shadowedCentralProfileId: null,
+    builtInTools: [],
+    mcpServers: [],
+    mcpToolAllowlist: {},
+    toolPolicyMcpSlugs: ["postgres-dev"],
+    skillSlugs: [],
+    piExtensions: [],
+    executionControls: {
+      foreground: true as const,
+      clarify: false,
+      maxSubagentDepth: 0,
+      costBudgetUsd: 0.5,
+      loopPolicy: { mode: "open", enabled: false } as never,
+    },
+  };
+
+  it("applies signed sidecar budgets when the profile's tool_policy names the config (folder-dispatch late pass)", () => {
+    const out = applySidecarBudgetOverrides(
+      [baseProfile],
+      [
+        {
+          name: "postgres-dev",
+          sidecarBudgets: { maxQueriesPerRun: 7, costBudgetUsd: 0.000000001 },
+        },
+      ],
+    );
+    expect(out[0]!.executionControls.maxQueriesPerRun).toBe(7);
+    expect(out[0]!.executionControls.costBudgetUsd).toBe(0.000000001);
+    // untouched fields preserved (incl. piExtensions already stitched on)
+    expect(out[0]!.piExtensions).toEqual([]);
+    expect(out[0]!.executionControls.clarify).toBe(false);
+  });
+
+  it("leaves profiles untouched when no named config carries budgets", () => {
+    const out = applySidecarBudgetOverrides(
+      [baseProfile],
+      [{ name: "postgres-dev", sidecarBudgets: undefined }],
+    );
+    expect(out[0]).toBe(baseProfile);
+  });
+
+  it("ignores invalid budget values (zero/negative/NaN) and configs the profile does not name", () => {
+    const out = applySidecarBudgetOverrides(
+      [baseProfile],
+      [
+        { name: "postgres-dev", sidecarBudgets: { costBudgetUsd: 0 } },
+        {
+          name: "other-server",
+          sidecarBudgets: { maxQueriesPerRun: 3, costBudgetUsd: 1 },
+        },
+      ],
+    );
+    expect(out[0]).toBe(baseProfile);
   });
 });
