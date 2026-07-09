@@ -1371,6 +1371,7 @@ jobs:
             -var "agentcore_memory_id=${{ vars.AGENTCORE_MEMORY_ID || '' }}"
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}"
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
+            -var "analyst_policy_source=${{ vars.ANALYST_POLICY_SOURCE || 'row' }}"
           )
 
           resolve_existing_api_id() {
