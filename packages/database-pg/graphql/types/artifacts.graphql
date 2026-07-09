@@ -107,6 +107,25 @@ type CanvasRefreshSchedule {
   scheduleExpression: String!
 }
 
+# THINK-233 analyst-report sentinel. Opt-in material-shift detection layered on
+# a scheduled canvas refresh: when a scheduled refresh applies data that differs
+# materially from the prior payload (or a bound widget comes back schema-stale),
+# the sentinel escalates ONE agent turn on the report's thread to re-narrate
+# what changed and notify the Space. Omitting `sentinel` leaves the schedule
+# behaving exactly as before (headless refresh only, no escalation).
+input CanvasRefreshSentinelInput {
+  # Master switch. false/absent → no escalation (pure refresh).
+  enabled: Boolean!
+  # Escalation policy. Only "any_change" is defined in v1 (escalate on any
+  # materially-changed bound widget). Defaults to "any_change" server-side.
+  mode: String
+  # Minimum minutes between escalations for this schedule (cooldown). Floored
+  # server-side; defaults to 360 (6h) when omitted.
+  cooldownMinutes: Int
+  # Optional extra guidance appended to the generated re-narration prompt.
+  prompt: String
+}
+
 # Per-binding outcome of a headless canvas data-refresh (THINK-145 U6).
 enum CanvasRefreshOutcome {
   # Fresh data applied to the head; quality flipped to GOOD.
@@ -414,6 +433,10 @@ extend type Mutation {
     artifactId: ID!
     intervalMinutes: Int!
     partId: String
+    # THINK-233: optional material-shift sentinel. When enabled, the schedule
+    # escalates a re-narration agent turn on the report's thread whenever a
+    # refresh changes bound data (or a widget goes schema-stale).
+    sentinel: CanvasRefreshSentinelInput
   ): CanvasRefreshSchedule!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!

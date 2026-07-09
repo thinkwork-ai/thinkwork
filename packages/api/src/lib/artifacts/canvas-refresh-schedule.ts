@@ -36,6 +36,36 @@ export const CANVAS_REFRESH_MIN_INTERVAL_MINUTES = 15;
 /** Max ACTIVE canvas-refresh schedules per tenant — bounds background fan-out. */
 export const CANVAS_REFRESH_MAX_SCHEDULES_PER_TENANT = 200;
 
+/** Default cooldown (minutes) between sentinel escalations (THINK-233). */
+export const CANVAS_REFRESH_SENTINEL_DEFAULT_COOLDOWN_MINUTES = 360;
+
+/** The only sentinel mode defined in v1. */
+export const CANVAS_REFRESH_SENTINEL_DEFAULT_MODE = "any_change" as const;
+
+/**
+ * Opt-in material-shift sentinel config (THINK-233), persisted on the
+ * `scheduled_jobs.config.sentinel` slice of a canvas_refresh job. `lastAlertAt`
+ * is stamped back by job-trigger after each escalation and is NOT part of the
+ * creation input.
+ */
+export interface CanvasRefreshSentinelInput {
+  enabled: boolean;
+  /** Escalation policy; defaults to "any_change". */
+  mode?: string | null;
+  /** Minutes between escalations; floored + defaulted server-side. */
+  cooldownMinutes?: number | null;
+  /** Extra guidance appended to the generated re-narration prompt. */
+  prompt?: string | null;
+}
+
+/** Normalized sentinel config as stored on the job (THINK-233). */
+export interface CanvasRefreshSentinelConfig {
+  enabled: boolean;
+  mode: string;
+  cooldownMinutes: number;
+  prompt?: string;
+}
+
 export interface CreateCanvasRefreshScheduleInput {
   tenantId: string;
   artifactId: string;
@@ -47,6 +77,40 @@ export interface CreateCanvasRefreshScheduleInput {
   /** Acting user id (null → created_by system). */
   actorId?: string | null;
   name?: string | null;
+  /** THINK-233: optional material-shift sentinel (omit → refresh only). */
+  sentinel?: CanvasRefreshSentinelInput | null;
+}
+
+/**
+ * Normalize a raw sentinel input into the stored config, or `null` when the
+ * sentinel is absent/disabled (a disabled sentinel is stored as nothing so the
+ * schedule is byte-identical to a pre-THINK-233 refresh-only schedule). The
+ * cooldown is floored at 0 and defaulted; an unrecognized mode falls back to
+ * "any_change".
+ */
+export function normalizeSentinelConfig(
+  input: CanvasRefreshSentinelInput | null | undefined,
+): CanvasRefreshSentinelConfig | null {
+  if (!input || input.enabled !== true) return null;
+  const rawCooldown =
+    typeof input.cooldownMinutes === "number" &&
+    Number.isFinite(input.cooldownMinutes)
+      ? Math.max(0, Math.floor(input.cooldownMinutes))
+      : CANVAS_REFRESH_SENTINEL_DEFAULT_COOLDOWN_MINUTES;
+  const mode =
+    typeof input.mode === "string" && input.mode.trim().length > 0
+      ? input.mode.trim()
+      : CANVAS_REFRESH_SENTINEL_DEFAULT_MODE;
+  const prompt =
+    typeof input.prompt === "string" && input.prompt.trim().length > 0
+      ? input.prompt.trim()
+      : undefined;
+  return {
+    enabled: true,
+    mode,
+    cooldownMinutes: rawCooldown,
+    ...(prompt ? { prompt } : {}),
+  };
 }
 
 export interface CreateCanvasRefreshScheduleResult {
@@ -94,11 +158,15 @@ export async function createCanvasRefreshSchedule(
 
   const scheduleExpression = `rate(${interval} minutes)`;
   const name = input.name?.trim() || "Canvas data refresh";
+  const sentinel = normalizeSentinelConfig(input.sentinel);
   const config = {
     internal: true,
     product: "canvas_refresh",
     artifactId: input.artifactId,
     partId: input.partId ?? null,
+    // THINK-233: only present when the sentinel is enabled, so refresh-only
+    // schedules keep their exact pre-sentinel config shape.
+    ...(sentinel ? { sentinel } : {}),
   };
 
   const [row] = await db

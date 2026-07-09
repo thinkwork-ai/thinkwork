@@ -83,6 +83,54 @@ export interface CanvasRefreshBindingResult {
    */
   serverName: string;
   toolName: string;
+  /**
+   * THINK-233 sentinel signal: true when a SUCCESSFUL refresh produced a
+   * payload that differs materially from the head's previous bound payload for
+   * this element. False on every non-refreshed outcome and when there was no
+   * prior payload (first population is never a "change"). Consumed headlessly
+   * by the scheduled-refresh sentinel to decide whether to escalate a
+   * re-narration turn — it is NOT a per-binding quality transition.
+   */
+  payloadChanged: boolean;
+}
+
+/**
+ * Recursively normalize a JSON value into a canonical form for
+ * order-INSENSITIVE deep comparison: object keys are sorted; object properties
+ * that are `undefined` are dropped (a key present-as-undefined equals an absent
+ * key); arrays keep their order (row/element order is semantically meaningful
+ * for tabular widget payloads); primitives pass through. There is no
+ * fetchedAt/refresh-metadata to strip here because the comparison operates on
+ * the bound PAYLOAD (the tool result `raw`), not the head's `boundData`
+ * wrapper — the freshness timestamps live on the wrapper, never inside `raw`.
+ */
+function normalizeForCompare(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeForCompare);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      const v = (value as Record<string, unknown>)[key];
+      if (v === undefined) continue;
+      out[key] = normalizeForCompare(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * True when `next` differs materially from `previous` after normalization. A
+ * refresh with NO prior payload (`previous === undefined`) is NOT a change —
+ * the sentinel fires on a genuine value shift, never on first population.
+ * Key ordering and present-as-undefined properties are ignored; array order is
+ * significant. Pure + side-effect free (unit-tested).
+ */
+export function payloadChanged(previous: unknown, next: unknown): boolean {
+  if (previous === undefined) return false;
+  return (
+    JSON.stringify(normalizeForCompare(previous)) !==
+    JSON.stringify(normalizeForCompare(next))
+  );
 }
 
 /** Result of resolving a tenant MCP server target for headless execution. */
@@ -149,6 +197,18 @@ export interface CanvasRefreshDeps {
     fetchedShapeHash: string;
     fetchedAt: Date;
   }): Promise<ApplyHeadDataOutcome>;
+  /**
+   * THINK-233: read the head's CURRENT bound payload for this element BEFORE
+   * applyHeadData overwrites it, so the core can report `payloadChanged` on a
+   * successful refresh. Optional — unset (or returning `undefined`) means no
+   * prior payload is known, so `payloadChanged` reads false. Never throws for a
+   * missing head/element; returns `undefined`.
+   */
+  readPreviousPayload?(input: {
+    bindingId: string;
+    partId: string;
+    elementId: string;
+  }): Promise<unknown>;
   /** Persist the binding's new quality + freshness timestamps. */
   writeBindingQuality(input: {
     bindingId: string;
@@ -177,6 +237,9 @@ export async function refreshBinding(
     elementId: binding.elementId,
     serverName: binding.serverName,
     toolName: binding.toolName,
+    // Default: no material change. Only the successful-apply path recomputes
+    // this against the prior head payload (THINK-233 sentinel signal).
+    payloadChanged: false,
   };
 
   // R9 / AE1: per-user OAuth bindings are excluded from UNATTENDED refresh.
@@ -352,6 +415,20 @@ export async function refreshBinding(
     }
   }
 
+  // THINK-233 sentinel: capture the PRIOR head payload for this element before
+  // applyHeadData overwrites it, so a successful refresh can report whether the
+  // fresh payload materially changed. Best-effort — an unreadable head reads as
+  // "no prior payload" (→ not a change), never a refresh failure.
+  const previousPayload = deps.readPreviousPayload
+    ? await deps
+        .readPreviousPayload({
+          bindingId: binding.id,
+          partId: binding.partId,
+          elementId: binding.elementId,
+        })
+        .catch(() => undefined)
+    : undefined;
+
   // Hash match: apply the fresh data slice to the head under the KTD6 guard.
   const fetchedAt = deps.now();
   const applied = await deps.applyHeadData({
@@ -395,6 +472,7 @@ export async function refreshBinding(
     quality: "good",
     reason: null,
     escalate: false,
+    payloadChanged: payloadChanged(previousPayload, call.raw),
   };
 }
 

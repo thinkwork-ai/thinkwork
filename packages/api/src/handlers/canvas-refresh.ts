@@ -109,6 +109,15 @@ export interface CanvasRefreshResultPayload {
   artifactId: string;
   error?: string;
   bindings: CanvasRefreshBindingResult[];
+  /**
+   * THINK-233: the artifact's originating thread + agent + title, returned so a
+   * scheduled caller (job-trigger's sentinel leg) can dispatch a re-narration
+   * turn onto the report's thread without a second query. Null when the canvas
+   * has no home thread/agent (e.g. never checked out).
+   */
+  threadId?: string | null;
+  agentId?: string | null;
+  artifactTitle?: string | null;
 }
 
 /**
@@ -224,6 +233,45 @@ function makeApplyHeadData(
       return "applied";
     }
     return "stale";
+  };
+}
+
+/**
+ * THINK-233: read the head's current bound payload for an element so the core
+ * can report `payloadChanged` on a successful refresh. Reads the same additive
+ * `boundData[elementId].payload` slice that makeApplyHeadData writes. Returns
+ * `undefined` for a missing/unparseable head or an element with no prior
+ * payload — the core treats that as "no change".
+ */
+function makeReadPreviousPayload(
+  artifactRow: CanvasArtifactRow,
+): NonNullable<CanvasRefreshDeps["readPreviousPayload"]> {
+  return async ({ elementId }) => {
+    const raw = await loadCanvasHeadContent(artifactRow);
+    if (!raw) return undefined;
+    let headDoc: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return undefined;
+      }
+      headDoc = parsed as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+    const boundData = headDoc.boundData;
+    if (
+      !boundData ||
+      typeof boundData !== "object" ||
+      Array.isArray(boundData)
+    ) {
+      return undefined;
+    }
+    const slice = (boundData as Record<string, unknown>)[elementId];
+    if (!slice || typeof slice !== "object" || Array.isArray(slice)) {
+      return undefined;
+    }
+    return (slice as Record<string, unknown>).payload;
   };
 }
 
@@ -358,6 +406,7 @@ export async function handler(
       head_write_seq: artifacts.head_write_seq,
       thread_id: artifacts.thread_id,
       agent_id: artifacts.agent_id,
+      title: artifacts.title,
       metadata: artifacts.metadata,
     })
     .from(artifacts)
@@ -467,6 +516,9 @@ export async function handler(
       tenantId,
       artifactRow as CanvasArtifactRow,
     ),
+    readPreviousPayload: makeReadPreviousPayload(
+      artifactRow as CanvasArtifactRow,
+    ),
     writeBindingQuality,
     now: () => new Date(),
   };
@@ -492,5 +544,12 @@ export async function handler(
     });
   }
 
-  return { ok: true, artifactId, bindings: results };
+  return {
+    ok: true,
+    artifactId,
+    bindings: results,
+    threadId: (artifactRow.thread_id as string | null) ?? null,
+    agentId: (artifactRow.agent_id as string | null) ?? null,
+    artifactTitle: (artifactRow.title as string | null) ?? null,
+  };
 }

@@ -40,6 +40,7 @@ import {
 } from "@thinkwork/database-pg";
 import {
   agents,
+  agentWakeupRequests,
   artifacts,
   agentLoopRuns,
   agentLoopVersions,
@@ -53,6 +54,7 @@ import {
   scheduledJobs,
   skillRuns,
   tenants,
+  tenantMembers,
   tenantSettings,
   threadIdleLearningRuns,
   threadIdleLearningState,
@@ -65,7 +67,7 @@ import {
   workflowVersions,
   workflows,
 } from "@thinkwork/database-pg/schema";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
@@ -1294,6 +1296,225 @@ export async function handleWorkflowSchedule(input: {
   );
 }
 
+// ---------------------------------------------------------------------------
+// THINK-233 — analyst-report sentinel (material-shift escalation).
+//
+// Layered on the scheduled canvas_refresh leg: after the headless refresh
+// Lambda returns, if the job's config carries an enabled `sentinel` AND the
+// refresh materially changed bound data (payloadChanged) OR left a widget
+// schema-stale, dispatch ONE agent turn on the report's own thread to
+// re-narrate what changed and notify the Space. A cooldown (config.sentinel.
+// cooldownMinutes, stamped via config.sentinel.lastAlertAt) rate-limits the
+// escalations. Refresh-only schedules (no sentinel) never reach this path.
+//
+// packages/lambda cannot import @thinkwork/api, so this mirrors the in-package
+// wakeup-dispatch pattern used by routine-repair-dispatch / workflow-step-
+// dispatch: a lookup-or-insert agent_wakeup_requests row (idempotency key +
+// human invoker identity + payload.threadId targeting the EXISTING report
+// thread). Source "trigger" routes payload.message straight to the turn prompt
+// (wakeup-processor). The escalated turn posting its message on the thread is
+// the Space notification — no new notification primitive.
+// ---------------------------------------------------------------------------
+
+interface CanvasSentinelConfig {
+  enabled?: boolean;
+  mode?: string;
+  cooldownMinutes?: number;
+  prompt?: string;
+  lastAlertAt?: string;
+}
+
+interface CanvasRefreshLambdaResult {
+  ok?: boolean;
+  artifactId?: string;
+  threadId?: string | null;
+  agentId?: string | null;
+  artifactTitle?: string | null;
+  bindings?: Array<{
+    outcome?: string;
+    payloadChanged?: boolean;
+    escalate?: boolean;
+  }>;
+}
+
+/** Default cooldown between sentinel escalations (mirrors the api-side default). */
+const CANVAS_SENTINEL_DEFAULT_COOLDOWN_MINUTES = 360;
+
+/**
+ * Resolve the human invoker for a sentinel turn: the schedule's creating user
+ * when it was user-created, else the tenant's earliest active operator (the
+ * same delegation scheduled Automations / routine repairs use). Pi requires a
+ * user identity on every invocation; `null` means we cannot dispatch.
+ */
+async function resolveCanvasSentinelActor(
+  db: JobTriggerDb,
+  tenantId: string,
+  job: { created_by_type?: string | null; created_by_id?: string | null },
+): Promise<string | null> {
+  if (job.created_by_type === "user" && job.created_by_id) {
+    return job.created_by_id;
+  }
+  const [operator] = await db
+    .select({ principal_id: tenantMembers.principal_id })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.tenant_id, tenantId),
+        eq(tenantMembers.status, "active"),
+        inArray(tenantMembers.role, ["owner", "admin"]),
+      ),
+    )
+    .orderBy(asc(tenantMembers.created_at))
+    .limit(1);
+  return operator?.principal_id ?? null;
+}
+
+/**
+ * Build the re-narration prompt for a sentinel escalation. `schemaStale` swings
+ * the framing from "summarize what changed" to "re-emit the spec" (the dormant
+ * `escalate` flag's first headless consumer). Any operator-supplied
+ * `sentinel.prompt` is appended verbatim.
+ */
+function buildCanvasSentinelPrompt(input: {
+  title: string;
+  schemaStale: boolean;
+  extraPrompt?: string;
+}): string {
+  const title = input.title || "your report";
+  const lines = input.schemaStale
+    ? [
+        `A scheduled refresh of report "${title}" returned data whose shape changed, so one or more bound widgets are stale and could not be updated automatically.`,
+        "Review the affected widgets, re-run the underlying queries, and re-emit the report spec so the widgets render the new shape. Then post a short note for the Space explaining what changed.",
+      ]
+    : [
+        `A scheduled refresh of report "${title}" detected changed data.`,
+        "Review the updated widgets, summarize what materially changed and why it matters, and post that summary for the Space.",
+      ];
+  if (input.extraPrompt) lines.push("", input.extraPrompt);
+  return lines.join("\n");
+}
+
+/**
+ * Sentinel decision + dispatch. Returns the config patch to persist (a stamped
+ * `lastAlertAt`) when an escalation was enqueued, or `null` when nothing fired
+ * (disabled, no material change, cooldown, or no dispatchable target/identity).
+ */
+async function maybeEscalateCanvasSentinel(input: {
+  db: JobTriggerDb;
+  tenantId: string;
+  triggerId: string;
+  job: { created_by_type?: string | null; created_by_id?: string | null };
+  sentinel: CanvasSentinelConfig;
+  result: CanvasRefreshLambdaResult;
+  now: Date;
+}): Promise<{ lastAlertAt: string } | null> {
+  const { db, tenantId, triggerId, job, sentinel, result, now } = input;
+  if (sentinel.enabled !== true) return null;
+
+  const bindings = result.bindings ?? [];
+  const anyChanged = bindings.some(
+    (b) => b.outcome === "refreshed" && b.payloadChanged === true,
+  );
+  const anySchemaStale = bindings.some(
+    (b) => b.outcome === "schema_stale" || b.escalate === true,
+  );
+  if (!anyChanged && !anySchemaStale) return null;
+
+  // Cooldown: suppress when the last escalation is within the window.
+  const cooldownMinutes =
+    typeof sentinel.cooldownMinutes === "number" &&
+    Number.isFinite(sentinel.cooldownMinutes) &&
+    sentinel.cooldownMinutes >= 0
+      ? sentinel.cooldownMinutes
+      : CANVAS_SENTINEL_DEFAULT_COOLDOWN_MINUTES;
+  if (sentinel.lastAlertAt) {
+    const last = Date.parse(sentinel.lastAlertAt);
+    if (
+      Number.isFinite(last) &&
+      now.getTime() - last < cooldownMinutes * 60_000
+    ) {
+      console.log(
+        `[job-trigger] canvas_refresh ${triggerId} sentinel in cooldown; not escalating`,
+      );
+      return null;
+    }
+  }
+
+  const threadId = result.threadId ?? null;
+  const agentId = result.agentId ?? null;
+  if (!threadId || !agentId) {
+    console.warn(
+      `[job-trigger] canvas_refresh ${triggerId} sentinel: report has no thread/agent to escalate onto; skipping`,
+    );
+    return null;
+  }
+
+  const actorId = await resolveCanvasSentinelActor(db, tenantId, job);
+  if (!actorId) {
+    console.warn(
+      `[job-trigger] canvas_refresh ${triggerId} sentinel: no operator identity to invoke as; skipping`,
+    );
+    return null;
+  }
+
+  const message = buildCanvasSentinelPrompt({
+    title: result.artifactTitle ?? "",
+    schemaStale: anySchemaStale && !anyChanged,
+    extraPrompt: sentinel.prompt,
+  });
+
+  // Idempotency: bucket by minute so an EventBridge redelivery of the same fire
+  // does not enqueue a second turn, while a later cooldown-cleared fire does.
+  const bucket = Math.floor(now.getTime() / 60_000);
+  const idempotencyKey = `canvas-sentinel:${triggerId}:${bucket}`;
+
+  const [existing] = await db
+    .select({ id: agentWakeupRequests.id })
+    .from(agentWakeupRequests)
+    .where(
+      and(
+        eq(agentWakeupRequests.tenant_id, tenantId),
+        eq(agentWakeupRequests.idempotency_key, idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (existing) {
+    console.log(
+      `[job-trigger] canvas_refresh ${triggerId} sentinel already enqueued for this fire`,
+    );
+    return null;
+  }
+
+  await db.insert(agentWakeupRequests).values({
+    tenant_id: tenantId,
+    agent_id: agentId,
+    source: "trigger",
+    trigger_detail: `canvas_sentinel:${triggerId}`,
+    reason: "Analyst report material-shift review",
+    payload: {
+      threadId,
+      spaceId: undefined,
+      message,
+      canvasSentinel: {
+        scheduledJobId: triggerId,
+        artifactId: result.artifactId ?? null,
+        schemaStale: anySchemaStale,
+        payloadChanged: anyChanged,
+      },
+    },
+    status: "queued",
+    idempotency_key: idempotencyKey,
+    requested_by_actor_type: "user",
+    requested_by_actor_id: actorId,
+    requested_at: now,
+    created_at: now,
+  });
+  console.log(
+    `[job-trigger] canvas_refresh ${triggerId} sentinel escalated a review turn on thread ${threadId}`,
+  );
+  return { lastAlertAt: now.toISOString() };
+}
+
 export async function handler(event: JobTriggerEvent): Promise<void> {
   const {
     triggerId,
@@ -1930,6 +2151,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       const cfg = (job?.config ?? {}) as {
         artifactId?: string;
         partId?: string;
+        sentinel?: CanvasSentinelConfig;
+        [key: string]: unknown;
       };
       const artifactId = cfg.artifactId;
       if (!artifactId) {
@@ -2003,6 +2226,54 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           console.log(
             `[job-trigger] canvas_refresh ${triggerId} refreshed artifact ${artifactId}`,
           );
+          // THINK-233 sentinel leg: only parses/dispatches when the schedule
+          // opted in. A refresh-only schedule (no config.sentinel) skips this
+          // entirely and behaves exactly as before.
+          if (cfg.sentinel?.enabled === true) {
+            let result: CanvasRefreshLambdaResult | null = null;
+            if (res.Payload) {
+              try {
+                result = JSON.parse(
+                  new TextDecoder().decode(res.Payload),
+                ) as CanvasRefreshLambdaResult;
+              } catch {
+                result = null;
+              }
+            }
+            if (result?.ok === true) {
+              try {
+                const patch = await maybeEscalateCanvasSentinel({
+                  db,
+                  tenantId,
+                  triggerId,
+                  job: {
+                    created_by_type: job?.created_by_type,
+                    created_by_id: job?.created_by_id,
+                  },
+                  sentinel: cfg.sentinel,
+                  result,
+                  now: new Date(),
+                });
+                if (patch) {
+                  await db
+                    .update(scheduledJobs)
+                    .set({
+                      updated_at: new Date(),
+                      config: {
+                        ...cfg,
+                        sentinel: { ...cfg.sentinel, ...patch },
+                      },
+                    })
+                    .where(eq(scheduledJobs.id, triggerId));
+                }
+              } catch (sentinelErr) {
+                console.error(
+                  `[job-trigger] canvas_refresh ${triggerId} sentinel escalation failed (best-effort):`,
+                  sentinelErr,
+                );
+              }
+            }
+          }
         }
       } catch (invokeErr) {
         console.error(
