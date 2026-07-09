@@ -38,7 +38,9 @@ export default function ArtifactViewScreen() {
   const [plateReady, setPlateReady] = useState(false);
 
   const artifact = (data as any)?.artifact;
-  const title = artifact?.title ?? "Artifact";
+  // Blank while loading — a placeholder ("Artifact") flashes and then
+  // switches to the real title once the query resolves.
+  const title = artifact?.title ?? (fetching ? "" : "Artifact");
   const typeLabel = TYPE_LABELS[artifact?.type] ?? artifact?.type ?? "";
 
   // Document-kind artifacts (compiled HTML plates) render the server-built
@@ -57,7 +59,7 @@ export default function ArtifactViewScreen() {
   );
 
   return (
-    <DetailLayout title={title}>
+    <DetailLayout title={title} disableBottomInset={Boolean(plateHtml)}>
       {fetching ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.mutedForeground} />
