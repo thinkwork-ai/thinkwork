@@ -106,8 +106,11 @@ locals {
     # merge — the read flag above has been live stage-wide since THINK-137,
     # so reusing it would pre-activate writes on every already-assigned
     # tenant. Flipped per-stage as the U12 rollout step (dev dogfood first,
-    # then TEI) after the pre-deploy assignment enumeration.
-    AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "false"
+    # then TEI) after the pre-deploy assignment enumeration. Flipped for dev
+    # 2026-07-09: enumeration found admin-ops assigned to two internal
+    # tenants only (sleek-squirrel-230, academic-bobcat-897); AE1-AE4 smokes
+    # green on the deployed U1-U11 stack.
+    AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "true"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled
