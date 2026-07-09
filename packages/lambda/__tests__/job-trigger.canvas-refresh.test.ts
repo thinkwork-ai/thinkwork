@@ -31,6 +31,7 @@ const selectChain = (rows: Rows) => ({
       const resolved = Promise.resolve(rows);
       return {
         limit: () => resolved,
+        orderBy: () => ({ limit: () => resolved }),
         then: (
           resolve: (value: Rows) => unknown,
           reject?: (reason: unknown) => unknown,
@@ -110,6 +111,18 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     last_run_at: "scheduled_jobs.last_run_at",
     updated_at: "scheduled_jobs.updated_at",
   },
+  agentWakeupRequests: {
+    id: "agent_wakeup_requests.id",
+    tenant_id: "agent_wakeup_requests.tenant_id",
+    idempotency_key: "agent_wakeup_requests.idempotency_key",
+  },
+  tenantMembers: {
+    tenant_id: "tenant_members.tenant_id",
+    status: "tenant_members.status",
+    role: "tenant_members.role",
+    principal_id: "tenant_members.principal_id",
+    created_at: "tenant_members.created_at",
+  },
   skillRuns: { id: "skill_runs.id" },
   tenants: { id: "tenants.id" },
   tenantSettings: { tenant_id: "tenant_settings.tenant_id" },
@@ -129,6 +142,8 @@ vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => ({ _and: args }),
   eq: (...args: unknown[]) => ({ _eq: args }),
   gte: (...args: unknown[]) => ({ _gte: args }),
+  asc: (...args: unknown[]) => ({ _asc: args }),
+  inArray: (...args: unknown[]) => ({ _inArray: args }),
   sql: (...args: unknown[]) => ({ _sql: args }),
   relations: () => ({}),
 }));
@@ -159,7 +174,10 @@ const jobRow = (config: Record<string, unknown>) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.STAGE = "dev";
-  mockLambdaSend.mockResolvedValue({ FunctionError: undefined, Payload: undefined });
+  mockLambdaSend.mockResolvedValue({
+    FunctionError: undefined,
+    Payload: undefined,
+  });
 });
 
 describe("job-trigger canvas_refresh", () => {
@@ -172,7 +190,11 @@ describe("job-trigger canvas_refresh", () => {
 
     expect(mockLambdaSend).toHaveBeenCalledTimes(1);
     const cmd = mockLambdaSend.mock.calls[0]![0] as {
-      input: { FunctionName: string; InvocationType: string; Payload: Uint8Array };
+      input: {
+        FunctionName: string;
+        InvocationType: string;
+        Payload: Uint8Array;
+      };
     };
     expect(cmd.input.FunctionName).toBe("thinkwork-dev-api-canvas-refresh");
     expect(cmd.input.InvocationType).toBe("RequestResponse");
@@ -213,7 +235,9 @@ describe("job-trigger canvas_refresh", () => {
     const setArg = mockUpdateSet.mock.calls[0]![0] as Record<string, unknown>;
     expect(setArg.enabled).toBe(false);
     expect(setArg.config).toMatchObject({
-      lastCanvasRefreshPause: { reason: "artifact reverted to draft (unsaved)" },
+      lastCanvasRefreshPause: {
+        reason: "artifact reverted to draft (unsaved)",
+      },
     });
   });
 
@@ -223,5 +247,159 @@ describe("job-trigger canvas_refresh", () => {
     await handler(EVENT);
 
     expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-233 — sentinel escalation on a scheduled refresh.
+// ---------------------------------------------------------------------------
+
+/** Encode a canvas-refresh Lambda result as the RequestResponse Payload. */
+const lambdaResult = (result: Record<string, unknown>) => ({
+  FunctionError: undefined,
+  Payload: new TextEncoder().encode(JSON.stringify({ ok: true, ...result })),
+});
+
+const CHANGED_BINDINGS = [
+  { outcome: "refreshed", payloadChanged: true, escalate: false },
+];
+const UNCHANGED_BINDINGS = [
+  { outcome: "refreshed", payloadChanged: false, escalate: false },
+];
+const SCHEMA_STALE_BINDINGS = [
+  { outcome: "schema_stale", payloadChanged: false, escalate: true },
+];
+
+const sentinelConfig = (over: Record<string, unknown> = {}) => ({
+  artifactId: "art-1",
+  sentinel: {
+    enabled: true,
+    mode: "any_change",
+    cooldownMinutes: 360,
+    ...over,
+  },
+});
+
+describe("job-trigger canvas_refresh — sentinel (THINK-233)", () => {
+  it("dispatches ONE review turn when a binding materially changed", async () => {
+    mockSelect
+      .mockReturnValueOnce([jobRow(sentinelConfig())]) // job
+      .mockReturnValueOnce([{ id: "art-1", status: "final" }]) // artifact
+      .mockReturnValueOnce([{ principal_id: "op-1" }]) // operator identity
+      .mockReturnValueOnce([]); // no existing wakeup
+    mockInsert.mockReturnValue([{ id: "wk-1" }]);
+    mockLambdaSend.mockResolvedValue(
+      lambdaResult({
+        artifactId: "art-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        artifactTitle: "Weekly Revenue",
+        bindings: CHANGED_BINDINGS,
+      }),
+    );
+
+    await handler(EVENT);
+
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+    // lastAlertAt stamped back into config.sentinel (a later last_run_at stamp
+    // is a separate update — find the config-carrying one).
+    const stamp = mockUpdateSet.mock.calls
+      .map((c) => c[0] as { config?: { sentinel?: { lastAlertAt?: string } } })
+      .find((set) => set.config?.sentinel?.lastAlertAt);
+    expect(stamp?.config?.sentinel?.lastAlertAt).toBeTruthy();
+  });
+
+  it("does NOT dispatch when no binding changed", async () => {
+    mockSelect
+      .mockReturnValueOnce([jobRow(sentinelConfig())])
+      .mockReturnValueOnce([{ id: "art-1", status: "final" }]);
+    mockLambdaSend.mockResolvedValue(
+      lambdaResult({
+        threadId: "thread-1",
+        agentId: "agent-1",
+        bindings: UNCHANGED_BINDINGS,
+      }),
+    );
+
+    await handler(EVENT);
+
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("dispatches on a schema_stale binding (dormant escalate flag consumer)", async () => {
+    mockSelect
+      .mockReturnValueOnce([jobRow(sentinelConfig())])
+      .mockReturnValueOnce([{ id: "art-1", status: "final" }])
+      .mockReturnValueOnce([{ principal_id: "op-1" }])
+      .mockReturnValueOnce([]);
+    mockInsert.mockReturnValue([{ id: "wk-1" }]);
+    mockLambdaSend.mockResolvedValue(
+      lambdaResult({
+        threadId: "thread-1",
+        agentId: "agent-1",
+        artifactTitle: "Weekly Revenue",
+        bindings: SCHEMA_STALE_BINDINGS,
+      }),
+    );
+
+    await handler(EVENT);
+
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("suppresses the dispatch when still inside the cooldown window", async () => {
+    const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+    mockSelect
+      .mockReturnValueOnce([
+        jobRow(sentinelConfig({ cooldownMinutes: 360, lastAlertAt: recent })),
+      ])
+      .mockReturnValueOnce([{ id: "art-1", status: "final" }]);
+    mockLambdaSend.mockResolvedValue(
+      lambdaResult({
+        threadId: "thread-1",
+        agentId: "agent-1",
+        bindings: CHANGED_BINDINGS,
+      }),
+    );
+
+    await handler(EVENT);
+
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it("never dispatches when the sentinel is disabled (refresh-only schedule)", async () => {
+    mockSelect
+      .mockReturnValueOnce([jobRow({ artifactId: "art-1" })])
+      .mockReturnValueOnce([{ id: "art-1", status: "final" }]);
+    // Even if the Lambda reports changes, an absent sentinel means no parse.
+    mockLambdaSend.mockResolvedValue(
+      lambdaResult({
+        threadId: "thread-1",
+        agentId: "agent-1",
+        bindings: CHANGED_BINDINGS,
+      }),
+    );
+
+    await handler(EVENT);
+
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not dispatch when the report has no thread/agent to escalate onto", async () => {
+    mockSelect
+      .mockReturnValueOnce([jobRow(sentinelConfig())])
+      .mockReturnValueOnce([{ id: "art-1", status: "final" }]);
+    mockLambdaSend.mockResolvedValue(
+      lambdaResult({
+        threadId: null,
+        agentId: null,
+        bindings: CHANGED_BINDINGS,
+      }),
+    );
+
+    await handler(EVENT);
+
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 });

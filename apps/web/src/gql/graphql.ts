@@ -1094,6 +1094,13 @@ export type CanvasRefreshSchedule = {
   scheduledJobId: Scalars["ID"]["output"];
 };
 
+export type CanvasRefreshSentinelInput = {
+  cooldownMinutes?: InputMaybe<Scalars["Int"]["input"]>;
+  enabled: Scalars["Boolean"]["input"];
+  mode?: InputMaybe<Scalars["String"]["input"]>;
+  prompt?: InputMaybe<Scalars["String"]["input"]>;
+};
+
 export type CanvasSummary = {
   __typename?: "CanvasSummary";
   artifactId: Scalars["ID"]["output"];
@@ -4227,6 +4234,7 @@ export type MutationCreateCanvasRefreshScheduleArgs = {
   artifactId: Scalars["ID"]["input"];
   intervalMinutes: Scalars["Int"]["input"];
   partId?: InputMaybe<Scalars["String"]["input"]>;
+  sentinel?: InputMaybe<CanvasRefreshSentinelInput>;
 };
 
 export type MutationCreateComplianceExportArgs = {

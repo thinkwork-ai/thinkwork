@@ -14,13 +14,17 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, artifacts } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
-import { createCanvasRefreshSchedule as createSchedule } from "../../../lib/artifacts/canvas-refresh-schedule.js";
+import {
+  createCanvasRefreshSchedule as createSchedule,
+  type CanvasRefreshSentinelInput,
+} from "../../../lib/artifacts/canvas-refresh-schedule.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 
 interface Args {
   artifactId: string;
   intervalMinutes: number;
   partId?: string | null;
+  sentinel?: CanvasRefreshSentinelInput | null;
 }
 
 export const createCanvasRefreshSchedule = async (
@@ -63,16 +67,16 @@ export const createCanvasRefreshSchedule = async (
     intervalMinutes: args.intervalMinutes,
     spaceId: (row.space_id as string | null) ?? null,
     actorId: caller.userId,
+    sentinel: args.sentinel ?? null,
   });
   return result;
 };
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new GraphQLError(
-      `createCanvasRefreshSchedule ${field} is required`,
-      { extensions: { code: "BAD_USER_INPUT" } },
-    );
+    throw new GraphQLError(`createCanvasRefreshSchedule ${field} is required`, {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
   }
   return value.trim();
 }

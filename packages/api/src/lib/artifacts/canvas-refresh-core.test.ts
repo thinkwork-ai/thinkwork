@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { resultShapeHash } from "@thinkwork/thread-json-render";
 import {
+  payloadChanged,
   refreshBinding,
   refreshCanvasBindings,
   type CanvasRefreshBinding,
@@ -73,6 +74,102 @@ function makeDeps(over: Partial<CanvasRefreshDeps> = {}): {
   };
   return { deps, rec };
 }
+
+describe("payloadChanged — sentinel comparator (THINK-233)", () => {
+  it("no prior payload is NOT a change (first population)", () => {
+    expect(payloadChanged(undefined, { a: 1 })).toBe(false);
+  });
+
+  it("identical payloads are unchanged", () => {
+    expect(payloadChanged({ a: 1, b: [1, 2] }, { a: 1, b: [1, 2] })).toBe(
+      false,
+    );
+  });
+
+  it("is object-key-ORDER insensitive", () => {
+    expect(payloadChanged({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(false);
+    expect(
+      payloadChanged(
+        { outer: { x: 1, y: 2 }, list: [{ p: 1, q: 2 }] },
+        { list: [{ q: 2, p: 1 }], outer: { y: 2, x: 1 } },
+      ),
+    ).toBe(false);
+  });
+
+  it("a key present-as-undefined equals an absent key", () => {
+    expect(payloadChanged({ a: 1, b: undefined }, { a: 1 })).toBe(false);
+  });
+
+  it("a changed scalar value IS a change", () => {
+    expect(payloadChanged({ a: 1 }, { a: 2 })).toBe(true);
+  });
+
+  it("a changed nested value IS a change", () => {
+    expect(payloadChanged({ a: { b: 1 } }, { a: { b: 2 } })).toBe(true);
+  });
+
+  it("array ORDER is significant (tabular rows)", () => {
+    expect(payloadChanged([1, 2, 3], [3, 2, 1])).toBe(true);
+  });
+
+  it("a new/removed key IS a change", () => {
+    expect(payloadChanged({ a: 1 }, { a: 1, c: 3 })).toBe(true);
+    expect(payloadChanged({ a: 1, c: 3 }, { a: 1 })).toBe(true);
+  });
+
+  it("null payload (explicit null) compares as a real value, not 'no prior'", () => {
+    expect(payloadChanged(null, null)).toBe(false);
+    expect(payloadChanged(null, { a: 1 })).toBe(true);
+  });
+});
+
+describe("refreshBinding — payloadChanged wiring (THINK-233)", () => {
+  it("reports payloadChanged=true when the fresh payload differs from the prior head payload", async () => {
+    const { deps } = makeDeps({
+      // Prior head payload differs from the RAW_RESULT the tool now returns.
+      readPreviousPayload: async () => ({
+        content: [{ type: "text", text: "OLD" }],
+      }),
+    });
+    const result = await refreshBinding(tenantBinding(), deps);
+    expect(result.outcome).toBe("refreshed");
+    expect(result.payloadChanged).toBe(true);
+  });
+
+  it("reports payloadChanged=false when the fresh payload equals the prior head payload", async () => {
+    const { deps } = makeDeps({
+      readPreviousPayload: async () => RAW_RESULT,
+    });
+    const result = await refreshBinding(tenantBinding(), deps);
+    expect(result.outcome).toBe("refreshed");
+    expect(result.payloadChanged).toBe(false);
+  });
+
+  it("reports payloadChanged=false when there was no prior payload", async () => {
+    const { deps } = makeDeps({
+      readPreviousPayload: async () => undefined,
+    });
+    const result = await refreshBinding(tenantBinding(), deps);
+    expect(result.outcome).toBe("refreshed");
+    expect(result.payloadChanged).toBe(false);
+  });
+
+  it("defaults payloadChanged=false when no readPreviousPayload dep is wired", async () => {
+    const { deps } = makeDeps();
+    const result = await refreshBinding(tenantBinding(), deps);
+    expect(result.payloadChanged).toBe(false);
+  });
+
+  it("payloadChanged is false on a non-refreshed outcome (schema_stale)", async () => {
+    const { deps } = makeDeps({
+      readPreviousPayload: async () => ({ anything: "prior" }),
+      callTool: async () => ({ isError: false, raw: { totallyDifferent: 1 } }),
+    });
+    const result = await refreshBinding(tenantBinding(), deps);
+    expect(result.outcome).toBe("schema_stale");
+    expect(result.payloadChanged).toBe(false);
+  });
+});
 
 describe("refreshBinding — per-user OAuth (AE1, R9)", () => {
   it("never invokes and degrades to STALE with a needs-user affordance", async () => {
