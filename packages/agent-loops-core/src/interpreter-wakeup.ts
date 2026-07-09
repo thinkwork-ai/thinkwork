@@ -35,6 +35,17 @@ export interface WorkflowStepWakeupPayload {
       maxIterations: number | null;
     };
   };
+  /**
+   * THINK-227 U2 (KTD2): compat block for the bound-document emission reader.
+   * The turn's context_snapshot spreads the wakeup payload verbatim, and the
+   * emission enforcement reads `context_snapshot.agentLoop.documentId` — the
+   * same slot the legacy agent-loop payload carries. Present only when the
+   * workflow's source automation has a document binding, so unbound workflow
+   * payloads are unchanged.
+   */
+  agentLoop?: {
+    documentId: string;
+  };
 }
 
 export function buildWorkflowStepWakeupPayload(input: {
@@ -47,6 +58,9 @@ export function buildWorkflowStepWakeupPayload(input: {
   exitSignal?: string | null;
   maxIterations?: number | null;
   spaceId?: string | null;
+  /** THINK-227 U2: the bound document's artifact id, resolved from the source
+   * automation's live target_spec at dispatch. Null/absent when unbound. */
+  documentId?: string | null;
 }): WorkflowStepWakeupPayload {
   return {
     message: input.objective,
@@ -71,5 +85,10 @@ export function buildWorkflowStepWakeupPayload(input: {
         maxIterations: input.maxIterations ?? null,
       },
     },
+    // KTD2 compat block: present only when bound, so unbound workflow payloads
+    // are byte-identical to the pre-THINK-227 shape.
+    ...(input.documentId
+      ? { agentLoop: { documentId: input.documentId } }
+      : {}),
   };
 }

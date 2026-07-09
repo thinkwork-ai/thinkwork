@@ -15,6 +15,7 @@
 import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import {
   AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
+  boundDocumentIdFromBinding,
   continueAgentLoopDispatch,
   dispatchNeedsThread,
   isRepairableHalfBuiltStart,
@@ -525,8 +526,9 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -624,8 +626,9 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -669,8 +672,9 @@ type JobTriggerDb = ReturnType<typeof getDb>;
 const runRoutineActionHook: NonNullable<
   AgentLoopDispatchLedger["runRoutineAction"]
 > = async (input) => {
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "ROUTINE_EXEC_GIT_FUNCTION_NAME",
@@ -805,6 +809,7 @@ async function handleAgentLoopContinueDispatch(input: {
   // source / delivery provenance + the webhook body as the routine input
   // override. Absent fields fall back to the manual-trigger continuation.
   const isWebhookContinuation = event.triggerFamily === "webhook";
+  const continuationVersion = resolveDispatchableVersion(version);
   const result = await continueAgentLoopDispatch(
     {
       tenantId,
@@ -815,7 +820,7 @@ async function handleAgentLoopContinueDispatch(input: {
         enabled: loop.enabled,
         lifecycleStatus: loop.lifecycle_status,
       },
-      version: resolveDispatchableVersion(version),
+      version: continuationVersion,
       trigger: {
         family: isWebhookContinuation ? "webhook" : "manual",
         source: event.triggerSource ?? "manual_run",
@@ -825,9 +830,11 @@ async function handleAgentLoopContinueDispatch(input: {
         // the run-as identity must ride here too. The tenant cross-check
         // already ran in the mutation's dispatchAgentLoop before deferral.
         runAsUserId: loop.run_as_user_id ?? null,
-        // THINK-155 U5 (KTD4): bound document — null until THINK-213's
-        // binding config exists (ship-inert; payload-parity rule).
-        documentId: null,
+        // THINK-155 U5 (KTD4) → THINK-227 U2: the bound document, resolved
+        // from target_spec via the ONE shared resolver (payload-parity).
+        documentId: boundDocumentIdFromBinding(
+          continuationVersion.documentBinding,
+        ),
         threadId: event.threadId ?? null,
         spaceId: event.spaceId ?? null,
         webhookDelivery: event.webhookDelivery ?? null,
@@ -1030,9 +1037,11 @@ async function handleAgentLoopSchedule(input: {
         // context injection (workspace projection + memory bank). Null ⇒
         // system-actor run, no identity injected.
         runAsUserId: loop.run_as_user_id ?? null,
-        // THINK-155 U5 (KTD4): bound document — null until THINK-213's
-        // binding config exists (ship-inert; payload-parity rule).
-        documentId: null,
+        // THINK-155 U5 (KTD4) → THINK-227 U2: the bound document, resolved
+        // from target_spec via the ONE shared resolver (payload-parity).
+        documentId: boundDocumentIdFromBinding(
+          dispatchVersion?.documentBinding,
+        ),
         threadId: executionThread?.threadId ?? null,
         spaceId: executionSpaceId,
         scheduledJobId: triggerId,
@@ -1861,8 +1870,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } =
-          await import("@aws-sdk/client-lambda");
+        const { LambdaClient, InvokeCommand } = await import(
+          "@aws-sdk/client-lambda"
+        );
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -2198,8 +2208,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         process.env.CANVAS_REFRESH_FN_ARN ||
         `thinkwork-${stage}-api-canvas-refresh`;
       try {
-        const { LambdaClient, InvokeCommand } =
-          await import("@aws-sdk/client-lambda");
+        const { LambdaClient, InvokeCommand } = await import(
+          "@aws-sdk/client-lambda"
+        );
         const lambda = new LambdaClient({});
         const res = await lambda.send(
           new InvokeCommand({
@@ -2457,8 +2468,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } =
-          await import("@aws-sdk/client-scheduler");
+        const { SchedulerClient, DeleteScheduleCommand } = await import(
+          "@aws-sdk/client-scheduler"
+        );
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({
