@@ -773,6 +773,16 @@ variable "analyst_broker_secret_arn" {
   default     = ""
 }
 
+variable "analyst_policy_source" {
+  description = "THINK-229 KTD5 enforcement flip: 'row' (default — sidecar policy is shadow-only) or 'sidecar' (the signed sidecar policy block is authoritative: budgets + retain_sql flow into dispatch and the broker). Flip only after clean analyst-policy-shadow parity on live traffic AND a provision refresh so every connection sidecar carries a policy block."
+  type        = string
+  default     = "row"
+  validation {
+    condition     = contains(["row", "sidecar"], var.analyst_policy_source)
+    error_message = "analyst_policy_source must be 'row' or 'sidecar'."
+  }
+}
+
 variable "analyst_db_cluster_resource_id" {
   description = "Immutable RDS cluster resource ID (cluster-XXXX / db-XXXX) for the stage database (THINK-229 U1). Wired from `module.database.cluster_resource_id`. Keys the broker's `rds-db:connect` IAM grant — the rds-db ARN format requires the resource ID, not the cluster ARN — and gates the IAM connect env on the broker Lambda: when empty, the broker stays on the password path."
   type        = string

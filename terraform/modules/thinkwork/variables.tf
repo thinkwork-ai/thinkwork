@@ -1310,6 +1310,17 @@ variable "compliance_anchor_object_lock_mode" {
   }
 }
 
+variable "analyst_policy_source" {
+  description = "THINK-229 KTD5 enforcement flip for the analyst connection policy source: 'row' (default — signed sidecar policy is shadow-only) or 'sidecar' (the sidecar block is authoritative). Flip only after clean shadow parity on live traffic."
+  type        = string
+  default     = "row"
+
+  validation {
+    condition     = contains(["row", "sidecar"], var.analyst_policy_source)
+    error_message = "analyst_policy_source must be 'row' or 'sidecar'."
+  }
+}
+
 variable "compliance_anchor_retention_days" {
   description = "Default Object Lock retention in days for the compliance audit-anchor bucket. SOC2 Type 1 baseline is 12 months (365)."
   type        = number
