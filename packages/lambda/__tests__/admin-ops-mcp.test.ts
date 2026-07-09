@@ -66,14 +66,21 @@ const { handler } = await import("../admin-ops-mcp.js");
 
 function makeEvent(
   body: unknown,
-  opts: { authHeader?: string; method?: string } = {},
+  opts: {
+    authHeader?: string;
+    method?: string;
+    headers?: Record<string, string>;
+  } = {},
 ): APIGatewayProxyEventV2 {
   return {
     version: "2.0",
     routeKey: "POST /mcp/admin",
     rawPath: "/mcp/admin",
     rawQueryString: "",
-    headers: opts.authHeader ? { authorization: opts.authHeader } : {},
+    headers: {
+      ...(opts.authHeader ? { authorization: opts.authHeader } : {}),
+      ...(opts.headers ?? {}),
+    },
     requestContext: {
       accountId: "123",
       apiId: "test",
@@ -118,6 +125,7 @@ describe("admin-ops-mcp Lambda", () => {
     delete process.env.ROUTINES_AGENT_TOOLS_ENABLED;
     delete process.env.WORKFLOWS_AGENT_TOOLS_ENABLED;
     delete process.env.AUTOMATIONS_AGENT_TOOLS_ENABLED;
+    delete process.env.AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED;
   });
 
   it("rejects non-POST methods", async () => {
@@ -250,6 +258,10 @@ describe("admin-ops-mcp Lambda", () => {
       // here = tools silently never reach the model.
       "automations_list",
       "automation_get",
+      // Automation WRITE tools (THINK-227 U10). Absent names here = the
+      // conversational scheduling surface silently never reaches the model.
+      "automation_save",
+      "automation_delete",
     ];
     for (const n of mustHave) {
       expect(names, `missing tool: ${n}`).toContain(n);
@@ -1096,6 +1108,198 @@ describe("admin-ops-mcp Lambda", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body ?? "{}");
     expect(body.error?.code).toBe(-32700);
+  });
+
+  // -------------------------------------------------------------------------
+  // Automation WRITE tools (THINK-227 U10)
+  // -------------------------------------------------------------------------
+
+  const SAVE_ARGS = {
+    name: "Daily GWO Report",
+    instructions: "Refresh the GWO report",
+    scheduleExpression: "cron(0 9 * * ? *)",
+    timezone: "America/Chicago",
+    spaceId: "space-1",
+    deliveryRecipients: ["bodom@texasenterprises.com"],
+  };
+
+  it("automation_save stays inert behind its DEDICATED write flag (read flag alone is not enough)", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    process.env.AUTOMATIONS_AGENT_TOOLS_ENABLED = "true"; // read flag ON
+    global.fetch = vi.fn() as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 60,
+          method: "tools/call",
+          params: { name: "automation_save", arguments: SAVE_ARGS },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body ?? "{}");
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload).toMatchObject({
+      error: "not_yet_enabled",
+      tool: "automation_save",
+    });
+  });
+
+  it("automation_save refuses without the platform-injected acting-user header (KTD10)", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    process.env.AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "true";
+    global.fetch = vi.fn() as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 61,
+          method: "tools/call",
+          params: {
+            name: "automation_save",
+            // A crafted principalId argument must NOT substitute for the header.
+            arguments: { ...SAVE_ARGS, principalId: "spoofed-admin" },
+          },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toContain("acting-user identity");
+  });
+
+  it("automation_save sends the header-threaded principal + agent id downstream, never args", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "pinned-tenant-uuid" }];
+    process.env.AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "true";
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            saveAgentLoop: {
+              id: "loop-1",
+              name: "Daily GWO Report",
+              slug: "daily-gwo-report",
+              lifecycleStatus: "active",
+              enabled: true,
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 62,
+          method: "tools/call",
+          params: {
+            name: "automation_save",
+            arguments: { ...SAVE_ARGS, tenantId: "caller-supplied-tenant" },
+          },
+        },
+        {
+          authHeader: "Bearer tkm_abc",
+          headers: {
+            "x-thinkwork-acting-user": "member-user-1",
+            "x-thinkwork-agent-id": "agent-1",
+          },
+        },
+      ),
+    );
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(false);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload).toMatchObject({ id: "loop-1" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/graphql");
+    const headers = (init as { headers: Record<string, string> }).headers;
+    expect(headers["x-principal-id"]).toBe("member-user-1");
+    expect(headers["x-agent-id"]).toBe("agent-1");
+    // Tenant pinning: the key wins over the caller-supplied tenantId.
+    expect(headers["x-tenant-id"]).toBe("pinned-tenant-uuid");
+    const gql = JSON.parse((init as { body: string }).body);
+    expect(gql.variables.input.tenantId).toBe("pinned-tenant-uuid");
+  });
+
+  it("automation_save rejects rate() schedules with a cron-naming error (R14)", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    process.env.AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "true";
+    global.fetch = vi.fn() as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 63,
+          method: "tools/call",
+          params: {
+            name: "automation_save",
+            arguments: { ...SAVE_ARGS, scheduleExpression: "rate(1 day)" },
+          },
+        },
+        {
+          authHeader: "Bearer tkm_abc",
+          headers: { "x-thinkwork-acting-user": "member-user-1" },
+        },
+      ),
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toContain("cron()");
+  });
+
+  it("automation_delete forwards the header identity and returns the archive result", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    process.env.AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "true";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: { deleteAgentLoop: { id: "loop-1", ok: true } },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 64,
+          method: "tools/call",
+          params: {
+            name: "automation_delete",
+            arguments: { automationId: "loop-1" },
+          },
+        },
+        {
+          authHeader: "Bearer tkm_abc",
+          headers: { "x-thinkwork-acting-user": "member-user-1" },
+        },
+      ),
+    );
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(false);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload).toEqual({ id: "loop-1", ok: true });
+    const headers = (
+      fetchMock.mock.calls[0][1] as { headers: Record<string, string> }
+    ).headers;
+    expect(headers["x-principal-id"]).toBe("member-user-1");
   });
 
   it("tools/call tenants_update enforces at-least-one-field", async () => {

@@ -508,6 +508,17 @@ export function fenceWebhookPayload(payloadJson: string): string {
   ].join("\n");
 }
 
+/**
+ * THINK-227 U10 (KTD10): server-threaded identity headers for the admin-ops
+ * MCP surface. `buildMcpConfigs` injects them into the admin-ops server's
+ * connection headers from the TURN's resolved identity — the model cannot
+ * set connection headers, so the automation write tools' authorization pivot
+ * is never a tool argument. Shared here because packages/api (injector) and
+ * packages/lambda (reader) both import agent-loops-core.
+ */
+export const ADMIN_OPS_ACTING_USER_HEADER = "x-thinkwork-acting-user";
+export const ADMIN_OPS_AGENT_ID_HEADER = "x-thinkwork-agent-id";
+
 export const AGENT_LOOP_TARGET_KINDS = [
   "agent_thread",
   "routine",

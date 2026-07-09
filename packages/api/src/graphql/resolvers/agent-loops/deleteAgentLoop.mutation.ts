@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { agentLoops, db } from "../../utils.js";
 import { syncAgentLoopScheduleBinding } from "../../../lib/agent-loops/schedule-binding.js";
-import { requireAgentLoopAdmin } from "./types.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { requireAgentLoopWriteAccess } from "./write-access.js";
 
 export async function deleteAgentLoop(
   _parent: unknown,
@@ -17,7 +18,16 @@ export async function deleteAgentLoop(
 
   if (!row) return { id: args.id, ok: false };
 
-  await requireAgentLoopAdmin(ctx, row.tenant_id, "delete_agent_loop");
+  // THINK-227 U11 (KTD10): admins keep general delete; a member may only
+  // archive automations they own.
+  await requireAgentLoopWriteAccess(ctx, row.tenant_id, {
+    operationName: "delete_agent_loop",
+    actorId: await resolveCallerUserId(ctx),
+    existing: {
+      ownerUserId: row.owner_user_id ?? null,
+      runAsUserId: row.run_as_user_id ?? null,
+    },
+  });
 
   await syncAgentLoopScheduleBinding({
     tenantId: row.tenant_id,
