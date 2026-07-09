@@ -114,6 +114,17 @@ export function normalizePgType(raw: string): string {
     .replace(/^timestamp with time zone$/, "timestamptz")
     .replace(/^timestamp without time zone$/, "timestamp")
     .replace(/^time with time zone$/, "timetz")
+    // serial types are DDL macros (bigint/int/smallint + owned sequence);
+    // the catalog only ever reports the base type (dev, 2026-07-09:
+    // agent_workspace_events.id — model bigserial, live bigint).
+    .replace(/^bigserial$/, "bigint")
+    .replace(/^smallserial$/, "smallint")
+    .replace(/^serial$/, "integer")
+    // internal udt spellings (surface via udt_name for array elements)
+    .replace(/^int8\b/, "bigint")
+    .replace(/^int4\b/, "integer")
+    .replace(/^int2\b/, "smallint")
+    .replace(/^bool\b/, "boolean")
     .replace(/\[\]$/, " array")
     .replace(/^array$/, " array")
     .trim();
@@ -255,8 +266,16 @@ export async function probeAnalystConnection(
     //    semantic model. A column type change on a granted table means the
     //    model's SQL assumptions are stale.
     const expected = expectedDescriptors(granted);
+    // information_schema.data_type reports bare 'ARRAY' for array columns —
+    // the element type only survives in udt_name ('_text' → text array).
+    // Resolve it here so the model's 'text[]' spelling and the live catalog
+    // normalize to the same descriptor (dev, 2026-07-09: eval_runs.categories
+    // — model text[], live ARRAY).
     const columnsResult = await client.query(
-      `SELECT table_name, column_name, data_type
+      `SELECT table_name, column_name,
+              CASE WHEN data_type = 'ARRAY'
+                   THEN ltrim(udt_name, '_') || ' array'
+                   ELSE data_type END AS data_type
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = ANY($1::text[])`,
       [tableNames],

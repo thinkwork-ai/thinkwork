@@ -12,11 +12,27 @@ import { describe, expect, it } from "vitest";
 
 import {
   evaluateAnalystProbeGate,
+  normalizePgType,
   probeAnalystConnection,
   PROBE_STALE_AFTER_MS,
   type AnalystTableDescriptor,
   type ProbePgClient,
 } from "./connection-probe.js";
+
+describe("normalizePgType", () => {
+  it("collapses serial macros to their catalog base types", () => {
+    expect(normalizePgType("bigserial")).toBe("bigint");
+    expect(normalizePgType("serial")).toBe("integer");
+    expect(normalizePgType("smallserial")).toBe("smallint");
+  });
+
+  it("maps internal udt spellings and array element types", () => {
+    expect(normalizePgType("text[]")).toBe("text array");
+    expect(normalizePgType("int4 array")).toBe("integer array");
+    expect(normalizePgType("int8")).toBe("bigint");
+    expect(normalizePgType("bool")).toBe("boolean");
+  });
+});
 
 const GRANTED: AnalystTableDescriptor[] = [
   {
@@ -227,6 +243,38 @@ describe("probeAnalystConnection", () => {
     expect(verdict.status).toBe("fail");
     expect(verdict.reason).toBe("unreachable");
     expect(verdict.detail).toContain("ECONNREFUSED");
+  });
+
+  it("serial-macro and array-element spellings are NOT drift", async () => {
+    // Model spellings come from Drizzle getSQLType (bigserial, text[]);
+    // the live catalog reports the base type (bigint) and, after the
+    // probe's udt_name CASE, 'text array'. Both observed as false drift
+    // on dev 2026-07-09.
+    const granted: AnalystTableDescriptor[] = [
+      {
+        name: "events",
+        columns: [
+          { name: "id", type: "bigserial" },
+          { name: "tags", type: "text[]" },
+        ],
+      },
+    ];
+    const verdict = await probeAnalystConnection({
+      ...baseDeps,
+      grantedTables: granted,
+      getClient: async () =>
+        fakeClient({
+          columns: [
+            { table_name: "events", column_name: "id", data_type: "bigint" },
+            {
+              table_name: "events",
+              column_name: "tags",
+              data_type: "text array",
+            },
+          ],
+        }),
+    });
+    expect(verdict.status).toBe("ok");
   });
 
   it("benign type-spelling difference is NOT drift", async () => {
