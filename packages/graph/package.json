@@ -13,9 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@thinkwork/graph-core": "workspace:*",
     "d3-force": "^3.0.0",
-    "graphology": "^0.26.0",
-    "graphology-communities-louvain": "^2.0.2",
     "react-force-graph-2d": "^1.29.1"
   },
   "peerDependencies": {
