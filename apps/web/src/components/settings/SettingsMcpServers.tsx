@@ -391,6 +391,7 @@ export function SettingsMcpServers() {
           columns={columns}
           servers={pane.servers}
           search={search}
+          fitContent={activeTab === "data-sources"}
           emptyText={pane.emptyText}
           onOpen={(serverId) =>
             navigate({
@@ -1337,6 +1338,7 @@ function McpServerSection({
   search,
   emptyText,
   onOpen,
+  fitContent,
 }: {
   title?: string;
   columns: ColumnDef<McpServer>[];
@@ -1344,6 +1346,9 @@ function McpServerSection({
   search: string;
   emptyText: string;
   onOpen: (serverId: string) => void;
+  /** Auto table layout so w-px/whitespace-nowrap columns hug their content
+   *  (fixed layout would collapse them to 1px). */
+  fitContent?: boolean;
 }) {
   return (
     <section>
@@ -1358,7 +1363,7 @@ function McpServerSection({
         scrollable
         allowHorizontalScroll={false}
         pageSize={0}
-        tableClassName="table-fixed"
+        tableClassName={fitContent ? "table-auto" : "table-fixed"}
         onRowClick={(row) => onOpen(row.id)}
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
