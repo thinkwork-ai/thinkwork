@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   cleanup,
   fireEvent,
@@ -12,10 +13,18 @@ const mocks = vi.hoisted(() => ({
   setHeader: vi.fn(),
   provisionAnalyst: vi.fn(),
   registerDataSource: vi.fn(),
+  registerInternal: vi.fn(),
+  reexecuteClusters: vi.fn(),
   listMcpServers: vi.fn(),
   listUserMcpServers: vi.fn(),
   createMcpServer: vi.fn(),
   setMcpServerEnabled: vi.fn(),
+  // The analystInternalClusters query result the Internal tab renders.
+  clustersQuery: { data: undefined, fetching: false, error: undefined } as {
+    data: unknown;
+    fetching: boolean;
+    error: { message: string } | undefined;
+  },
   tenantContext: {
     tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
     tenantId: "tenant-1",
@@ -47,9 +56,10 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("urql", () => ({
-  // Two mutations share this dialog; route each mock by operation name so the
-  // built-in (provisionAnalystConnector) and external (registerAnalystDataSource)
-  // paths can be asserted independently.
+  // Three mutations share this dialog; route each mock by operation name so the
+  // built-in (provisionAnalystConnector), external (registerAnalystDataSource),
+  // and internal (registerInternalAnalystDataSource) paths can be asserted
+  // independently.
   useMutation: (document: {
     definitions?: { name?: { value?: string } }[];
   }) => {
@@ -57,9 +67,61 @@ vi.mock("urql", () => ({
     if (opName === "SettingsRegisterAnalystDataSource") {
       return [{ fetching: false }, mocks.registerDataSource];
     }
+    if (opName === "SettingsRegisterInternalAnalystDataSource") {
+      return [{ fetching: false }, mocks.registerInternal];
+    }
     return [{ fetching: false }, mocks.provisionAnalyst];
   },
+  // The Internal tab reads analystInternalClusters via useQuery.
+  useQuery: () => [mocks.clustersQuery, mocks.reexecuteClusters],
 }));
+
+// Render the @thinkwork/ui Select as a native <select> keyed by aria-label so
+// the cluster/database pickers are driveable in jsdom (Radix Select's pointer
+// capture doesn't work here). Everything else stays the real component.
+vi.mock("@thinkwork/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@thinkwork/ui")>();
+  return {
+    ...actual,
+    Select: ({
+      children,
+      onValueChange,
+      value,
+      "aria-label": ariaLabel,
+    }: {
+      children: React.ReactNode;
+      onValueChange: (value: string) => void;
+      value: string;
+      "aria-label"?: string;
+    }) => (
+      <select
+        aria-label={ariaLabel}
+        value={value}
+        onChange={(event) => onValueChange(event.target.value)}
+      >
+        {children}
+      </select>
+    ),
+    SelectContent: ({ children }: { children: React.ReactNode }) => (
+      <>{children}</>
+    ),
+    SelectItem: ({
+      children,
+      value,
+      disabled,
+    }: {
+      children: React.ReactNode;
+      value: string;
+      disabled?: boolean;
+    }) => (
+      <option value={value} disabled={disabled}>
+        {children}
+      </option>
+    ),
+    SelectTrigger: () => null,
+    SelectValue: () => null,
+  };
+});
 
 vi.mock("@/lib/mcp-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/mcp-api")>();
@@ -74,11 +136,40 @@ vi.mock("@/lib/mcp-api", async (importOriginal) => {
 
 import { SettingsMcpServers } from "./SettingsMcpServers";
 
+// Default internal-cluster enumeration: one cluster with the workspace
+// database, an unregistered candidate, and an already-registered source.
+const DEFAULT_CLUSTERS = [
+  {
+    clusterId: "thinkwork-dev-db",
+    endpoint: "thinkwork-dev-db.cluster-x.us-east-1.rds.amazonaws.com",
+    port: 5432,
+    databases: [
+      { name: "thinkwork", alreadyRegistered: true },
+      { name: "thinkwork_hindsight", alreadyRegistered: false },
+      { name: "analytics_demo", alreadyRegistered: true },
+    ],
+  },
+];
+
+// Drive the Internal tab's database picker (cluster auto-selects when single).
+function selectInternalDatabase(name: string) {
+  fireEvent.change(screen.getByRole("combobox", { name: "Database" }), {
+    target: { value: name },
+  });
+}
+
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setHeader.mockReset();
   mocks.provisionAnalyst.mockReset();
   mocks.registerDataSource.mockReset();
+  mocks.registerInternal.mockReset();
+  mocks.reexecuteClusters.mockReset();
+  mocks.clustersQuery = {
+    data: { analystInternalClusters: DEFAULT_CLUSTERS },
+    fetching: false,
+    error: undefined,
+  };
   mocks.listMcpServers.mockReset();
   mocks.listUserMcpServers.mockReset();
   mocks.createMcpServer.mockReset();
@@ -285,10 +376,15 @@ describe("SettingsMcpServers", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
-    expect(await screen.findByText("Register data source")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "Register data source" }),
+    ).toBeTruthy();
 
+    // The built-in provisioning form renders after picking the workspace
+    // database in the Internal browser.
+    selectInternalDatabase("thinkwork");
     fireEvent.click(
-      screen.getByRole("button", { name: "Provision data source" }),
+      await screen.findByRole("button", { name: "Provision data source" }),
     );
 
     await waitFor(() =>
@@ -311,7 +407,9 @@ describe("SettingsMcpServers", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
-    expect(await screen.findByText("Register data source")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: "Register data source" }),
+    ).toBeTruthy();
 
     // The re-approve / rotate-broker-token affordances live on the connector
     // detail surface, never in the create dialog.
@@ -344,6 +442,7 @@ describe("SettingsMcpServers", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
+    selectInternalDatabase("thinkwork");
 
     expect(
       await screen.findByRole("button", { name: "Refresh data source" }),
@@ -363,7 +462,7 @@ describe("SettingsMcpServers", () => {
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
     const externalTab = screen.getByRole("tab", {
-      name: "External PostgreSQL",
+      name: "External",
     });
     fireEvent.mouseDown(externalTab);
     fireEvent.click(externalTab);
@@ -437,7 +536,7 @@ describe("SettingsMcpServers", () => {
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
     const externalTab = screen.getByRole("tab", {
-      name: "External PostgreSQL",
+      name: "External",
     });
     fireEvent.mouseDown(externalTab);
     fireEvent.click(externalTab);
@@ -513,7 +612,7 @@ describe("SettingsMcpServers", () => {
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
     const externalTab = screen.getByRole("tab", {
-      name: "External PostgreSQL",
+      name: "External",
     });
     fireEvent.mouseDown(externalTab);
     fireEvent.click(externalTab);
@@ -562,13 +661,135 @@ describe("SettingsMcpServers", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
+    selectInternalDatabase("thinkwork");
     fireEvent.click(
-      screen.getByRole("button", { name: "Provision data source" }),
+      await screen.findByRole("button", { name: "Provision data source" }),
     );
 
     expect(
       await screen.findByText("Only tenant admins can register data sources."),
     ).toBeTruthy();
+  });
+
+  it("registers an internal database through the cluster browser", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.registerInternal.mockResolvedValue({
+      data: {
+        registerInternalAnalystDataSource: {
+          serverId: "srv-hindsight",
+          slug: "thinkwork-hindsight",
+          tables: 9,
+          foldersWritten: 2,
+          foldersSkipped: 0,
+        },
+      },
+    });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+    // The single cluster auto-selects; pick an unregistered database.
+    selectInternalDatabase("thinkwork_hindsight");
+
+    // Name and slug are auto-suggested from the database name.
+    expect(
+      (screen.getByLabelText("Display name") as HTMLInputElement).value,
+    ).toBe("Thinkwork Hindsight");
+    expect((screen.getByLabelText("Slug") as HTMLInputElement).value).toBe(
+      "thinkwork-hindsight",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Register data source" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.registerInternal).toHaveBeenCalledWith({
+        input: {
+          clusterId: "thinkwork-dev-db",
+          database: "thinkwork_hindsight",
+          name: "Thinkwork Hindsight",
+          slug: "thinkwork-hindsight",
+        },
+      }),
+    );
+    expect(await screen.findByText("Data source registered.")).toBeTruthy();
+    expect(screen.getByText("thinkwork-hindsight")).toBeTruthy();
+    expect(screen.getByText("9")).toBeTruthy();
+  });
+
+  it("disables already-registered databases in the internal browser", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+
+    const registered = screen.getByRole("option", {
+      name: "analytics_demo (registered)",
+    }) as HTMLOptionElement;
+    expect(registered.disabled).toBe(true);
+    const available = screen.getByRole("option", {
+      name: "thinkwork_hindsight",
+    }) as HTMLOptionElement;
+    expect(available.disabled).toBe(false);
+  });
+
+  it("surfaces an internal registration error verbatim", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.registerInternal.mockResolvedValue({
+      error: {
+        message: '[GraphQL] slug "taken" is already in use for this tenant.',
+        graphQLErrors: [
+          { message: 'slug "taken" is already in use for this tenant.' },
+        ],
+      },
+    });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+    selectInternalDatabase("thinkwork_hindsight");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Register data source" }),
+    );
+
+    expect(
+      await screen.findByText(
+        'slug "taken" is already in use for this tenant.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows loading and error states for the cluster enumeration", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.clustersQuery = {
+      data: undefined,
+      fetching: false,
+      error: { message: "[GraphQL] RDS describe failed" },
+    };
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+
+    expect(
+      await screen.findByText(/Failed to load clusters: RDS describe failed/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.reexecuteClusters).toHaveBeenCalled();
   });
 });
 

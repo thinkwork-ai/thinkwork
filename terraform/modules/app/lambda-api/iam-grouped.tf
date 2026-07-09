@@ -59,6 +59,16 @@ locals {
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = var.graphql_db_secret_arn
       },
+      # THINK-239 — analystInternalClusters enumerates the environment's own
+      # RDS clusters (filtered to thinkwork-<stage>-* in code) so operators can
+      # register a database with zero credential entry. Describe-only; the
+      # admin credential read is covered by graphql_db_secret_arn above.
+      {
+        Sid      = "AnalystInternalClustersDescribe"
+        Effect   = "Allow"
+        Action   = ["rds:DescribeDBClusters"]
+        Resource = "*"
+      },
       {
         Effect = "Allow"
         Action = [
