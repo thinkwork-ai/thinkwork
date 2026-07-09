@@ -570,6 +570,10 @@ async function runQuery(
   let result;
   try {
     result = await gateAndExecute(client, sql, {
+      // THINK-234: scope every query to the VERIFIED caller tenant via the
+      // gate's row-level GUC. tenantId was validated non-empty at auth (both
+      // the signed-context and legacy-bearer paths carry one).
+      tenantId,
       maxRows: envInt("ANALYST_MAX_FETCH_ROWS", DEFAULT_MAX_FETCH_ROWS),
       maxBytes: envInt("ANALYST_MAX_FETCH_BYTES", DEFAULT_MAX_FETCH_BYTES),
     });
@@ -852,6 +856,15 @@ export async function handler(
     // Bearer-retirement gate (R5): observed-zero traffic on this marker,
     // not assumption.
     logAuth({ mode: "legacy_bearer", outcome: "ok", tenant: caller.tenantId });
+  }
+
+  // THINK-234: both auth paths must carry a tenant to row-scope the query.
+  // Fail closed here — never dispatch a query that could run unscoped (the
+  // gate re-validates the UUID shape, but reject a missing tenant at the
+  // auth boundary rather than as a per-query tool error).
+  if (!caller.tenantId) {
+    logAuth({ mode: "tenant_scope", outcome: "rejected", reason: "no_tenant" });
+    return httpJson(401, { error: "Unauthorized" });
   }
 
   let parsed: unknown;
