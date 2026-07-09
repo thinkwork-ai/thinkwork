@@ -340,9 +340,6 @@ export function ChatBubble({
                 title={message.durableArtifact.title}
                 type={message.durableArtifact.type?.toLowerCase()}
                 status={message.durableArtifact.status?.toLowerCase()}
-                fallbackContent={
-                  message.durableArtifact.content ?? displayContent
-                }
               />
             ) : (
               <ArtifactCard

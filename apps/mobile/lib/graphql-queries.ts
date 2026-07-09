@@ -1521,20 +1521,6 @@ export const ArtifactDetailQuery = graphql(`
     }
   }
 `);
-
-// Lean render-only fetch for the in-thread plate card. renderHtml is a
-// lazy S3-backed field resolver, so it's fetched per-card on demand
-// instead of inside the Messages query (which would fan out one S3 read
-// per artifact on every thread load).
-export const DocumentArtifactRenderQuery = graphql(`
-  query DocumentArtifactRender($id: ID!) {
-    artifact(id: $id) {
-      id
-      renderHtml
-    }
-  }
-`);
-
 // ---------------------------------------------------------------------------
 // Memory
 // ---------------------------------------------------------------------------

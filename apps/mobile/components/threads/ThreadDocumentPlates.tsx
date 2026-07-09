@@ -57,7 +57,6 @@ export function ThreadDocumentPlates({
           title={doc.title}
           type={doc.type?.toLowerCase()}
           status={doc.status?.toLowerCase()}
-          fallbackContent={doc.summary ?? undefined}
         />
       ))}
     </View>
