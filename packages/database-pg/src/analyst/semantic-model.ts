@@ -16,6 +16,12 @@
 import { getTableConfig, PgDialect, PgTable } from "drizzle-orm/pg-core";
 
 import * as schema from "../schema";
+import {
+  ANALYST_SCHEMA_ANNOTATIONS,
+  type AnalystColumnAnnotation,
+  type AnalystSchemaAnnotations,
+  type AnalystTableAnnotation,
+} from "./annotations";
 
 const dialect = new PgDialect();
 
@@ -267,18 +273,71 @@ export function analystGrantSql(): string {
 export const ANALYST_GRANTS_BEGIN_MARKER = "-- BEGIN GENERATED ANALYST GRANTS";
 export const ANALYST_GRANTS_END_MARKER = "-- END GENERATED ANALYST GRANTS";
 
-function formatColumnRow(column: AnalystColumn): string {
+function formatColumnRow(
+  column: AnalystColumn,
+  annotation: AnalystColumnAnnotation | undefined,
+): string {
   const flags: string[] = [];
   if (column.isPrimaryKey) flags.push("PK");
   if (column.notNull) flags.push("not null");
+  if (annotation?.note) flags.push(annotation.note);
+  // Additive-only: a PII flag can only append this warning token to the
+  // column's rendered row. It has no path to auditSensitiveCoverage and can
+  // never mark a column as reviewed/safe — that audit's fail-closed
+  // guarantee comes solely from the denylists/AUDITED_SAFE_COLUMNS above.
+  if (annotation?.pii) flags.push("⚠ PII");
   return `| ${column.name} | ${column.pgType} | ${flags.join(", ")} |`;
+}
+
+/**
+ * Validate that every table/column referenced by the annotation overlay
+ * actually exists in the generated model's manifest (typo guard). Throws a
+ * descriptive Error naming the bad table/column on the first mismatch found
+ * (deterministic order: tables as declared in the overlay object).
+ */
+function validateAnnotations(
+  annotations: AnalystSchemaAnnotations,
+  tables: AnalystTable[],
+): void {
+  const tableByName = new Map(tables.map((t) => [t.name, t]));
+  for (const [tableName, tableAnnotation] of Object.entries(annotations)) {
+    const table = tableByName.get(tableName);
+    if (!table) {
+      throw new Error(
+        `analyst schema annotations: table "${tableName}" in ANALYST_SCHEMA_ANNOTATIONS ` +
+          "(packages/database-pg/src/analyst/annotations.ts) does not exist in the analyst " +
+          "semantic model — check for a typo, or a table that is denylisted/not granted.",
+      );
+    }
+    if (!tableAnnotation.columns) continue;
+    const columnNames = new Set(table.columns.map((c) => c.name));
+    for (const columnName of Object.keys(tableAnnotation.columns)) {
+      if (!columnNames.has(columnName)) {
+        throw new Error(
+          `analyst schema annotations: column "${tableName}.${columnName}" in ` +
+            "ANALYST_SCHEMA_ANNOTATIONS (packages/database-pg/src/analyst/annotations.ts) does " +
+            "not exist in the analyst semantic model — check for a typo, or a column that is " +
+            "denylisted/not granted.",
+        );
+      }
+    }
+  }
 }
 
 /**
  * Generate the semantic model markdown. Deterministic: same schema input →
  * byte-identical output. Throws if the sensitive-column audit fails.
+ *
+ * `annotations` is the operator overlay (THINK-229 U7, KTD9) merged into the
+ * rendered doc: a table note under each `## table` heading, and per-column
+ * notes/PII warnings appended to that column's row. It defaults to the
+ * committed `ANALYST_SCHEMA_ANNOTATIONS`; callers (tests) may pass `{}` to
+ * get the un-annotated baseline. Annotations never affect
+ * `auditSensitiveCoverage` — that call above takes no annotation input.
  */
-export function generateAnalystSchemaMarkdown(): string {
+export function generateAnalystSchemaMarkdown(
+  annotations: AnalystSchemaAnnotations = ANALYST_SCHEMA_ANNOTATIONS,
+): string {
   const violations = auditSensitiveCoverage();
   if (violations.length > 0) {
     throw new Error(
@@ -288,6 +347,7 @@ export function generateAnalystSchemaMarkdown(): string {
   }
 
   const tables = listAnalystTables();
+  validateAnnotations(annotations, tables);
   const lines: string[] = [
     "# ThinkWork dev Postgres — semantic model",
     "",
@@ -316,11 +376,18 @@ export function generateAnalystSchemaMarkdown(): string {
   ];
 
   for (const table of tables) {
+    const tableAnnotation: AnalystTableAnnotation | undefined =
+      annotations[table.name];
     lines.push(`## ${table.name}`, "");
+    if (tableAnnotation?.note) {
+      lines.push(`Note: ${tableAnnotation.note}`, "");
+    }
     lines.push("| column | type | flags |");
     lines.push("| --- | --- | --- |");
     for (const column of table.columns) {
-      lines.push(formatColumnRow(column));
+      lines.push(
+        formatColumnRow(column, tableAnnotation?.columns?.[column.name]),
+      );
     }
     lines.push("");
 

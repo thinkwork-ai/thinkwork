@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { ANALYST_SCHEMA_ANNOTATIONS } from "../src/analyst/annotations";
 import {
   ANALYST_DENYLISTED_COLUMNS,
   ANALYST_DENYLISTED_TABLES,
@@ -133,5 +134,65 @@ describe("analyst semantic model (THINK-228 U1)", () => {
     // regen fails here. Fix: npx tsx scripts/generate-analyst-schema.ts
     const committed = readFileSync(COMMITTED_PATH, "utf-8");
     expect(committed).toEqual(doc);
+  });
+
+  describe("operator annotation overlay (THINK-229 U7)", () => {
+    it("renders the seeded table note and column note/PII warning in the expected sections", () => {
+      const usersAnnotation = ANALYST_SCHEMA_ANNOTATIONS.users;
+      expect(usersAnnotation).toBeDefined();
+      expect(usersAnnotation!.note).toBeDefined();
+
+      const start = doc.indexOf("## users\n");
+      expect(start).toBeGreaterThan(-1);
+      const end = doc.indexOf("\n## ", start + 1);
+      const usersSection = doc.slice(start, end === -1 ? undefined : end);
+
+      expect(usersSection).toContain(`Note: ${usersAnnotation!.note}`);
+      const emailAnnotation = usersAnnotation!.columns!.email;
+      expect(usersSection).toContain(emailAnnotation.note!);
+      expect(usersSection).toContain("⚠ PII");
+      // Both land in the same row.
+      expect(usersSection).toMatch(/\| email \| text \| [^|]*⚠ PII[^|]*\|/);
+    });
+
+    it("an empty overlay produces the un-annotated baseline (no seeded note/PII markers)", () => {
+      const bare = generateAnalystSchemaMarkdown({});
+      expect(bare).not.toContain("⚠ PII");
+      expect(bare).not.toContain(ANALYST_SCHEMA_ANNOTATIONS.users!.note);
+      // Same table/column manifest — only the annotation-derived lines differ.
+      expect(bare).toContain("## users");
+      expect(bare).toContain("| email | text |  |");
+    });
+
+    it("throws a descriptive error for an annotation referencing an unknown table", () => {
+      expect(() =>
+        generateAnalystSchemaMarkdown({
+          not_a_real_table: { note: "typo guard" },
+        }),
+      ).toThrow(/not_a_real_table/);
+    });
+
+    it("throws a descriptive error for an annotation referencing an unknown column", () => {
+      expect(() =>
+        generateAnalystSchemaMarkdown({
+          users: { columns: { not_a_real_column: { note: "typo guard" } } },
+        }),
+      ).toThrow(/users\.not_a_real_column/);
+    });
+
+    it("a PII annotation never changes auditSensitiveCoverage's result", () => {
+      // auditSensitiveCoverage takes no annotation input at all; assert the
+      // result is identical regardless of whether the PII-flagged overlay
+      // is in play, proving annotations have no path into the audit.
+      const withoutAnnotations = auditSensitiveCoverage();
+      generateAnalystSchemaMarkdown({}); // exercise the no-overlay path
+      const withAnnotations = auditSensitiveCoverage();
+      generateAnalystSchemaMarkdown(ANALYST_SCHEMA_ANNOTATIONS); // exercise the seeded PII overlay
+      const afterSeededOverlay = auditSensitiveCoverage();
+
+      expect(withAnnotations).toEqual(withoutAnnotations);
+      expect(afterSeededOverlay).toEqual(withoutAnnotations);
+      expect(withoutAnnotations).toEqual([]);
+    });
   });
 });
