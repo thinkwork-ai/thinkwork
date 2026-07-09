@@ -321,7 +321,20 @@ export const EVENT_PAYLOAD_SHAPES: Record<
 
   "policy.evaluated": { allowedFields: new Set() },
   "policy.allowed": { allowedFields: new Set() },
-  "policy.blocked": { allowedFields: new Set() },
+  // THINK-229 U4 (R14): analyst budget blocks — which cap, the limit,
+  // the observed count, and the verified caller identity.
+  "policy.blocked": {
+    allowedFields: new Set([
+      "cap_kind",
+      "limit",
+      "observed",
+      "data_source",
+      "actor_kind",
+      "agent_id",
+      "thread_id",
+      "refresh_id",
+    ]),
+  },
   "policy.bypassed": { allowedFields: new Set() },
   "approval.recorded": { allowedFields: new Set() },
 
@@ -482,11 +495,19 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   "agent.tool_detached": { allowedFields: CAPABILITY_MUTATION_FIELDS },
 
   // ── ThinkWork Analyst query trace (THINK-228 U3, R8) ─────────
-  // The sql text is the audit control for the analyst's static-secret
-  // risk acceptance — it is deliberately retained verbatim.
+  // THINK-229 U6 (R16): verbatim `sql` retention becomes the signed
+  // sidecar opt-in; the default payload carries `sql_sha256` +
+  // `sql_shape` + `sql_length`. The schema allows both shapes — the
+  // BROKER decides which fields to send based on the signed retain_sql
+  // claim; the schema's job is only to keep everything else out.
+  // THINK-229 U2/U4: verified caller identity + budget fields.
   "data.query_executed": {
     allowedFields: new Set([
       "sql",
+      "sql_sha256",
+      "sql_shape",
+      "sql_length",
+      "payload_schema_version",
       "data_source",
       "rows_returned",
       "approx_bytes",
@@ -495,6 +516,10 @@ export const EVENT_PAYLOAD_SHAPES: Record<
       "result_file",
       "outcome",
       "error",
+      "actor_kind",
+      "agent_id",
+      "thread_id",
+      "refresh_id",
     ]),
   },
 };

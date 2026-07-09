@@ -43,6 +43,15 @@ export interface AnalystEnvelope {
   truncated: boolean;
   stats: Record<string, AnalystColumnStats>;
   result_file: string | null;
+  /**
+   * THINK-229 U4 (R13): remaining tenant-day query budget, surfaced
+   * per-call so the model self-paces. Present only when the signed
+   * caller context carried a day cap. `remaining` decrements for every
+   * attempt including rejected ones (matching the in-loop cap
+   * semantics); the live counter is broker/ledger-owned — never a
+   * workspace file.
+   */
+  budget?: { remaining: number; limit: number };
 }
 
 /**
@@ -177,6 +186,8 @@ export function buildEnvelope(input: {
   /** True when the fetch stopped at a broker cap with rows remaining. */
   fetchExhausted: boolean;
   resultFile: string | null;
+  /** THINK-229 U4: tenant-day budget view, when a cap is in force. */
+  budget?: { remaining: number; limit: number };
 }): AnalystEnvelope {
   const { columns, rows, fetchExhausted, resultFile } = input;
   return {
@@ -186,5 +197,6 @@ export function buildEnvelope(input: {
     truncated: rows.length > INLINE_ROW_CAP || fetchExhausted,
     stats: computeStats(columns, rows),
     result_file: resultFile,
+    ...(input.budget ? { budget: input.budget } : {}),
   };
 }

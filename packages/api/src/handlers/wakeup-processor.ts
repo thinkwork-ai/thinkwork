@@ -1948,6 +1948,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // → requested_by_actor_id, i.e. the thread/job owner). System/agent
   // actors leave requesterUserId null → plugin servers drop (fail
   // closed). Direct per_user_oauth servers keep human-pair semantics.
+  const withheldConnections: Array<{ slug: string; detail: string }> = [];
   const mcpConfigsRaw = await buildMcpConfigs(
     wakeup.agent_id,
     {
@@ -1956,6 +1957,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     },
     "[wakeup-processor]",
     {
+      // THINK-229 U4 (R8): withheld analyst connections reach the child.
+      withheldNotices: withheldConnections,
       // THINK-173 U5: the wakeup path renders before this call, so a
       // folder-dispatch agent resolves straight from the manifest. A
       // missing manifest throws — flag-on turns fail loudly (R9), never
@@ -2226,6 +2229,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       // includeFinalizeCallback stays false: this path invokes
       // RequestResponse and owns writeback from the synchronous body.
       ...buildAgentDispatchControlFields({
+        withheldConnections,
         documentPlates: effectiveDocumentPlates,
         thinkworkApiUrl: thinkworkApiUrl(),
         apiAuthSecret: getApiAuthSecret(),
@@ -2908,6 +2912,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             // above — the re-invoked turn must not lose extension tools or
             // model governance mid-loop (#2395 bug class).
             ...buildAgentDispatchControlFields({
+              withheldConnections,
               documentPlates: effectiveDocumentPlates,
               thinkworkApiUrl: thinkworkApiUrl(),
               apiAuthSecret: getApiAuthSecret(),

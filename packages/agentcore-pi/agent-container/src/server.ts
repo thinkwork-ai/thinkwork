@@ -3331,6 +3331,22 @@ export async function handleInvocation(
         : message,
     );
   const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
+  // THINK-229 U4 (R8): withheld-connection notices from the dispatch's
+  // MCP build — injected into delegated-child context so the model names
+  // the outage instead of estimating.
+  const withheldConnections = Array.isArray(args.payload.withheld_connections)
+    ? (args.payload.withheld_connections as unknown[])
+        .map((entry) => {
+          const record = (entry ?? {}) as { slug?: unknown; detail?: unknown };
+          return typeof record.slug === "string" &&
+            typeof record.detail === "string"
+            ? { slug: record.slug, detail: record.detail }
+            : null;
+        })
+        .filter((entry): entry is { slug: string; detail: string } =>
+          Boolean(entry),
+        )
+    : [];
   const profileChildExtensionFactories = [...bundle.extensionFactories];
   const profileChildExtensionToolNames = [...bundle.extensionToolNames];
   const dynamicDefaultExtensions = loadDynamicPiExtensions({
@@ -3407,6 +3423,7 @@ export async function handleInvocation(
     parentModelId: string,
   ): ProfileDelegationToolOptions => ({
     profiles: agentProfiles,
+    withheldConnections,
     parentThreadTurnId: threadTurnId || identity.threadId,
     parentModelId,
     tools: bundle.tools,

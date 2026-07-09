@@ -487,7 +487,7 @@ describe.skipIf(!TEST_DB_URL)("broker integration (real Postgres)", () => {
     });
     expect(result.rpc.result?.isError).toBe(true);
     expect(result.rpc.result?.content?.[0]?.text).toContain(
-      "audit trace write failed",
+      "audit event write failed",
     );
   });
 
