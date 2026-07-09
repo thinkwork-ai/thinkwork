@@ -1157,6 +1157,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // MCP configs already resolved by runtimeConfig — except for
     // folder-dispatch agents (THINK-173 U5), whose configs rebuild from
     // the capabilities manifest after the workspace render below.
+    const withheldConnections: Array<{ slug: string; detail: string }> = [];
     let mcpConfigs = runtimeConfig.mcpConfigs;
     let effectiveBlockedTools = runtimeConfig.blockedTools;
     let effectiveToolPolicy: EffectiveWorkspacePolicy = {
@@ -1320,6 +1321,10 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               ? (renderedWorkspace.capabilities?.manifest ?? null)
               : null,
           },
+          // THINK-229 U4 (R8): analyst connections withheld by this
+          // build reach the container so delegated children name the
+          // outage instead of estimating.
+          withheldNotices: withheldConnections,
         },
       );
     }
@@ -1616,6 +1621,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         apiAuthSecret,
         threadId,
         threadTurnId: turnId,
+        withheldConnections,
         agentProfiles: runtimeConfig.agentProfilesConfig,
         piExtensions: runtimeConfig.piExtensions,
         modelRoutingPolicy,

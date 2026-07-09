@@ -461,10 +461,11 @@ describe("redactPayload", () => {
   });
 
   describe("Phase 6 reservations (R14) — throw on emit attempt", () => {
+    // policy.blocked left this list in THINK-229 U4: the analyst budget
+    // gate defines its emit path (see the schema's allowedFields).
     const phase6Types = [
       "policy.evaluated",
       "policy.allowed",
-      "policy.blocked",
       "policy.bypassed",
       "approval.recorded",
     ] as const;

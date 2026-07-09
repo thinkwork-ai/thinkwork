@@ -37,7 +37,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { uuidv7 } from "uuidv7";
 
 import {
@@ -73,7 +73,12 @@ export const ANALYST_QUERY_TOOL = {
     "total row count, per-column stats, and — for larger results — a result_file " +
     "reference that is landed into your sandbox for analysis with execute_code. " +
     "Prefer aggregated queries (GROUP BY) sized to fit charts and tables. " +
-    "Multi-statement input, writes, and DDL are rejected.",
+    "Multi-statement input, writes, and DDL are rejected. " +
+    "Query budgets apply: a per-run cap and a per-tenant-day cap (every " +
+    "attempt counts, including rejected ones). The result envelope reports " +
+    "budget.remaining when a day cap is in force — pace your queries to it. " +
+    "A budget-exhausted error is TERMINAL: stop querying and report findings " +
+    "from the data you already have.",
   inputSchema: {
     type: "object",
     properties: {
@@ -270,7 +275,13 @@ function readCapabilityPublicKey(): string | null {
 }
 
 interface QueryTrace {
-  sql: string;
+  /** Verbatim SQL — ONLY under the signed retain_sql claim (U6/R16). */
+  sql?: string;
+  /** Default redacted shape (U6): hash + coarse shape + length. */
+  sql_sha256?: string;
+  sql_shape?: string;
+  sql_length?: number;
+  payload_schema_version: number;
   data_source: string;
   rows_returned: number;
   approx_bytes: number;
@@ -286,16 +297,127 @@ interface QueryTrace {
   refresh_id?: string;
 }
 
-async function emitQueryTrace(
-  tenantId: string,
-  trace: QueryTrace,
-): Promise<void> {
+// ---------------------------------------------------------------------------
+// Tenant-day budget (THINK-229 U4 / KTD6)
+//
+// The count is host/ledger-owned: the synchronous trace write to the
+// compliance endpoint returns `tenantDayCount` (post-increment — includes
+// the row just written), cached here per warm container. The broker
+// blocks the NEXT query once the cap is reached. Residual overshoot is
+// bounded by reserved concurrency (4): concurrent invocations can each
+// pass the pre-check before any of their counts land — acceptable for a
+// soft product budget, not a security boundary.
+// ---------------------------------------------------------------------------
+
+interface TenantBudgetState {
+  dayKey: string;
+  count: number;
+  blockedEmitted: boolean;
+}
+
+const _budgetState = new Map<string, TenantBudgetState>();
+
+function utcDayKey(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function budgetStateFor(tenantId: string): TenantBudgetState {
+  const day = utcDayKey();
+  const existing = _budgetState.get(tenantId);
+  if (existing && existing.dayKey === day) return existing;
+  const fresh: TenantBudgetState = {
+    dayKey: day,
+    count: 0,
+    blockedEmitted: false,
+  };
+  _budgetState.set(tenantId, fresh);
+  return fresh;
+}
+
+/** Test-only. */
+export function _resetBudgetState(): void {
+  _budgetState.clear();
+}
+
+/** Test-only: seed the ledger-derived count for one tenant. */
+export function _seedBudgetState(tenantId: string, count: number): void {
+  const state = budgetStateFor(tenantId);
+  state.count = count;
+}
+
+function dayCapFromClaims(caller: BrokerCallerIdentity): number | null {
+  const budgets = (caller.policyClaims as { budgets?: unknown }).budgets;
+  if (!budgets || typeof budgets !== "object") return null;
+  const cap = (budgets as { maxQueriesPerTenantDay?: unknown })
+    .maxQueriesPerTenantDay;
+  return typeof cap === "number" && Number.isFinite(cap) && cap > 0
+    ? cap
+    : null;
+}
+
+function retainSqlFromClaims(caller: BrokerCallerIdentity): boolean {
+  return (caller.policyClaims as { retain_sql?: unknown }).retain_sql === true;
+}
+
+/**
+ * Coarse SQL shape for the redacted audit payload (THINK-229 U6): leading
+ * verb + the relation names already parsed by the EXPLAIN gate — no new
+ * SQL parsing.
+ */
+export function sqlShapeFromExplain(sql: string, explainPlan: unknown): string {
+  const verb = (sql.trim().split(/\s+/)[0] ?? "").toUpperCase() || "UNKNOWN";
+  const relations = new Set<string>();
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const record = node as Record<string, unknown>;
+    if (typeof record["Relation Name"] === "string") {
+      relations.add(record["Relation Name"] as string);
+    }
+    for (const value of Object.values(record)) {
+      if (value && typeof value === "object") walk(value);
+    }
+  };
+  walk(explainPlan);
+  const list = [...relations].sort().join(",");
+  return list ? `${verb} ${list}` : verb;
+}
+
+/**
+ * The terminal (non-retryable) error shape (R14): distinct from the
+ * verbatim retryable SQL rejection so the model stops instead of burning
+ * budget on unfixable retries. The text is the anti-fabrication phrasing
+ * that already works in AnalystQueryCapError.
+ */
+function terminalBudgetRejection(cap: number, observed: number) {
+  return {
+    stage: "policy",
+    terminal: true,
+    message:
+      `Tenant-day query budget reached (${observed}/${cap} queries today). ` +
+      "This is a policy limit, not a SQL error — retrying will not succeed. " +
+      "Stop querying and report findings from the data you already have; " +
+      "state clearly which questions could not be answered.",
+  } as const;
+}
+
+async function emitComplianceEvent(input: {
+  tenantId: string;
+  eventType: string;
+  action: string;
+  outcome: string;
+  resourceId: string;
+  payload: Record<string, unknown>;
+}): Promise<Record<string, unknown> | null> {
   const apiUrl = getConfig("THINKWORK_API_URL");
   const authSecret = getApiAuthSecret();
   if (!apiUrl || !authSecret) {
     throw new Error(
       "analyst-query-broker: THINKWORK_API_URL / API auth secret unavailable — " +
-        "cannot write the query audit trace (R8).",
+        "cannot write the audit event.",
     );
   }
   const eventId = uuidv7();
@@ -308,23 +430,49 @@ async function emitQueryTrace(
     },
     body: JSON.stringify({
       event_id: eventId,
-      tenantId,
+      tenantId: input.tenantId,
       actorUserId: "analyst-query-broker",
       actorType: "system",
-      eventType: "data.query_executed",
+      eventType: input.eventType,
       source: "lambda",
-      action: "query",
-      outcome: trace.outcome,
+      action: input.action,
+      outcome: input.outcome,
       resourceType: "data_source",
-      resourceId: trace.data_source,
-      payload: trace as unknown as Record<string, unknown>,
+      resourceId: input.resourceId,
+      payload: input.payload,
     }),
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(
-      `analyst-query-broker: audit trace write failed (HTTP ${response.status}): ${body.slice(0, 300)}`,
+      `analyst-query-broker: audit event write failed (HTTP ${response.status}): ${body.slice(0, 300)}`,
     );
+  }
+  return (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+}
+
+async function emitQueryTrace(
+  tenantId: string,
+  trace: QueryTrace,
+): Promise<void> {
+  const result = await emitComplianceEvent({
+    tenantId,
+    eventType: "data.query_executed",
+    action: "query",
+    outcome: trace.outcome,
+    resourceId: trace.data_source,
+    payload: trace as unknown as Record<string, unknown>,
+  });
+  // KTD6: the endpoint counts the tenant-day ledger in the same
+  // transaction as the insert (post-increment — includes this trace);
+  // cache it so the NEXT query's pre-check sees it.
+  const count = result?.tenantDayCount;
+  if (typeof count === "number" && Number.isFinite(count)) {
+    const state = budgetStateFor(tenantId);
+    state.count = Math.max(state.count, count);
   }
 }
 
@@ -348,6 +496,8 @@ export interface RunQueryOutcome {
     message: string;
     code?: string;
     position?: string;
+    /** THINK-229 U4 (R14): terminal errors must not be retried. */
+    terminal?: boolean;
   };
 }
 
@@ -362,6 +512,56 @@ async function runQuery(
     ...(caller.threadId ? { thread_id: caller.threadId } : {}),
     ...(caller.refreshId ? { refresh_id: caller.refreshId } : {}),
   };
+  const retainSql = retainSqlFromClaims(caller);
+  const sqlFields = (shape: string | null) =>
+    retainSql
+      ? { sql, payload_schema_version: 2 }
+      : {
+          sql_sha256: createHash("sha256").update(sql, "utf8").digest("hex"),
+          ...(shape ? { sql_shape: shape } : {}),
+          sql_length: sql.length,
+          payload_schema_version: 2,
+        };
+
+  // THINK-229 U4 (R14/KTD6): tenant-day budget pre-check. The count is
+  // ledger-derived (returned by the synchronous trace write); the cap
+  // arrives ONLY via the signed policyClaims — no claims, no day cap
+  // (phase-in: the claims flow once ANALYST_POLICY_SOURCE flips).
+  // This applies to EVERY caller including system_refresh (R15 —
+  // headless refresh shares the tenant cap).
+  const dayCap = dayCapFromClaims(caller);
+  if (dayCap !== null) {
+    const state = budgetStateFor(tenantId);
+    if (state.count >= dayCap) {
+      if (!state.blockedEmitted) {
+        state.blockedEmitted = true;
+        await emitComplianceEvent({
+          tenantId,
+          eventType: "policy.blocked",
+          action: "budget_check",
+          outcome: "blocked",
+          resourceId: DATA_SOURCE_SLUG,
+          payload: {
+            cap_kind: "max_queries_per_tenant_day",
+            limit: dayCap,
+            observed: state.count,
+            data_source: DATA_SOURCE_SLUG,
+            ...actorFields,
+          },
+        }).catch((err) => {
+          // The block itself must not depend on the event landing — but
+          // let the next blocked call retry the emission.
+          state.blockedEmitted = false;
+          console.error(
+            "analyst-query-broker: policy.blocked emission failed",
+            err,
+          );
+        });
+      }
+      return { rejection: terminalBudgetRejection(dayCap, state.count) };
+    }
+  }
+
   const client = await getAnalystReaderClient();
   let result;
   try {
@@ -374,7 +574,7 @@ async function runQuery(
       // Rejections are traced too — the R8 stream records attempts, and
       // the in-loop cap (U6) counts them against the delegation.
       await emitQueryTrace(tenantId, {
-        sql,
+        ...sqlFields(null),
         data_source: DATA_SOURCE_SLUG,
         rows_returned: 0,
         approx_bytes: 0,
@@ -405,7 +605,7 @@ async function runQuery(
     );
   }
 
-  const envelope = buildEnvelope({
+  const preEnvelope = buildEnvelope({
     columns: result.columns,
     rows: result.rows,
     fetchExhausted: result.fetchExhausted,
@@ -413,18 +613,28 @@ async function runQuery(
   });
 
   await emitQueryTrace(tenantId, {
-    sql,
+    ...sqlFields(sqlShapeFromExplain(sql, result.explainPlan)),
     data_source: DATA_SOURCE_SLUG,
-    rows_returned: envelope.row_count,
-    approx_bytes: JSON.stringify(envelope.rows).length,
+    rows_returned: preEnvelope.row_count,
+    approx_bytes: JSON.stringify(preEnvelope.rows).length,
     duration_ms: result.durationMs,
-    truncated: envelope.truncated,
-    result_file: envelope.result_file,
+    truncated: preEnvelope.truncated,
+    result_file: preEnvelope.result_file,
     outcome: "ok",
     ...actorFields,
   });
 
-  return { envelope };
+  // Budget view AFTER the trace write so `remaining` reflects the
+  // post-increment count that included this query (R13).
+  if (dayCap !== null) {
+    const state = budgetStateFor(tenantId);
+    preEnvelope.budget = {
+      remaining: Math.max(0, dayCap - state.count),
+      limit: dayCap,
+    };
+  }
+
+  return { envelope: preEnvelope };
 }
 
 // ---------------------------------------------------------------------------

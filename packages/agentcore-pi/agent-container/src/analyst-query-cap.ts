@@ -154,6 +154,29 @@ export async function landResultFile(
   return JSON.stringify({ ...envelope, result_file: localPath });
 }
 
+/** True when a tool result carries the broker's terminal policy error. */
+export function resultCarriesTerminalPolicyError(
+  content: Array<{ type: string; text?: string }> | undefined,
+): boolean {
+  for (const block of content ?? []) {
+    if (block.type !== "text" || !block.text) continue;
+    try {
+      const parsed: unknown = JSON.parse(block.text);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        (parsed as { terminal?: unknown }).terminal === true &&
+        (parsed as { stage?: unknown }).stage === "policy"
+      ) {
+        return true;
+      }
+    } catch {
+      // non-JSON text blocks are envelopes or errors — not terminal.
+    }
+  }
+  return false;
+}
+
 /**
  * Wrap the child tool surface: every MCP `query` tool gets (a) the
  * in-loop cap and (b) staged-result landing. Other tools pass through
@@ -179,6 +202,14 @@ export function wrapAnalystQueryTools(input: {
         }
         input.state.count += 1;
         const result = await tool.execute(toolCallId, params, signal, onUpdate);
+        // THINK-229 U4 (R14): a terminal policy error from the broker
+        // (budget exhausted / withheld) must not be retried — flip the
+        // cap state to exceeded so every further query in this run
+        // refuses in-loop, exactly like the per-run cap. The model still
+        // sees the broker's anti-fabrication text from THIS result.
+        if (resultCarriesTerminalPolicyError(result.content)) {
+          input.state.exceeded = true;
+        }
         const content = await Promise.all(
           (result.content ?? []).map(async (block) => {
             const text = (block as TextBlock).text;

@@ -146,6 +146,11 @@ export interface McpConfig {
   recordLinkHints?: McpRuntimeRecordLinkHints;
   /** Probe-mode only (U3): stored token status; never set on runtime resolutions. */
   tokenStatus?: "active" | "expired" | "configured";
+  /** THINK-229 U4 (KTD6): signed sidecar budgets — analyst broker, post-flip only. */
+  sidecarBudgets?: {
+    maxQueriesPerRun?: number;
+    maxQueriesPerTenantDay?: number;
+  };
 }
 
 export type WebSearchConfig = WebSearchRuntimeConfig;
@@ -1318,6 +1323,24 @@ export async function loadAgentProfileRuntimeConfigs(input: {
       mcpServers.map((server) => [server.slug, server.allowedTools]),
     );
 
+    // THINK-229 U4 (KTD6): when a profile carries the analyst broker and
+    // the dispatch attached the signed sidecar budget block (post-flip
+    // only), the per-run cap is overridden FROM that block — the in-loop
+    // counter and the broker's policyClaims then draw from one signed
+    // source instead of a profile-config value that can drift.
+    let effectiveExecutionControls = executionControls;
+    for (const slug of mcpServerSlugs) {
+      const runtimeConfig = mcpConfigByName.get(slug);
+      const perRun = runtimeConfig?.sidecarBudgets?.maxQueriesPerRun;
+      if (typeof perRun === "number" && Number.isFinite(perRun) && perRun > 0) {
+        effectiveExecutionControls = {
+          ...effectiveExecutionControls,
+          maxQueriesPerRun: perRun,
+        };
+        break;
+      }
+    }
+
     configs.push({
       id: profile.id,
       slug: profile.slug,
@@ -1341,7 +1364,7 @@ export async function loadAgentProfileRuntimeConfigs(input: {
       mcpToolAllowlist,
       skillSlugs,
       piExtensions: [],
-      executionControls,
+      executionControls: effectiveExecutionControls,
     });
   }
 

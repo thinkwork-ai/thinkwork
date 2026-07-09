@@ -48,6 +48,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "activity_callback_secret",
   "okf_wiki_navigator_enabled",
   "document_plates",
+  "withheld_connections",
 ] as const;
 
 export type RequiredDispatchField = (typeof REQUIRED_DISPATCH_FIELDS)[number];
@@ -126,6 +127,14 @@ export interface AgentDispatchControlFieldArgs {
    * without it fails the turn loudly at the runtime (R9).
    */
   capabilitiesManifestFingerprint?: string;
+  /**
+   * THINK-229 U4 (R8): analyst connections WITHHELD by this dispatch's
+   * MCP build (probe failure, credential missing…), with the same
+   * human-readable detail the capability inspector shows. The container
+   * injects them into delegated-child context so the model names the
+   * outage instead of estimating.
+   */
+  withheldConnections?: Array<{ slug: string; detail: string }>;
 }
 
 export function buildAgentDispatchControlFields(
@@ -148,6 +157,10 @@ export function buildAgentDispatchControlFields(
       args.capabilitiesManifestFingerprint || undefined,
     // Always an array — `[]` (not absent) when the tenant has no profiles.
     agent_profiles: args.agentProfiles,
+    withheld_connections:
+      args.withheldConnections && args.withheldConnections.length > 0
+        ? args.withheldConnections
+        : undefined,
     // Dynamic Pi extensions are resolved at invocation time from approved,
     // enabled assignments. Keep this beside agent_profiles so every dispatch
     // path carries the same runtime extension set.

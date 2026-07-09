@@ -58,6 +58,14 @@ export interface ProfileDelegationToolOptions {
   identity: unknown;
   parentHistory?: RunAgentLoopArgs["history"];
   contextPreamble?: string;
+  /**
+   * THINK-229 U4 (R8): connections the dispatch WITHHELD (probe failure,
+   * credential missing…) with the same human-readable detail the
+   * capability inspector shows. Injected into the child systemPrompt so
+   * the model names the outage instead of estimating — the THINK-228
+   * dogfood fabrication class.
+   */
+  withheldConnections?: Array<{ slug: string; detail: string }>;
   runLoop?: typeof runAgentLoop;
   emitActivity?: (event: ActivityEmitEvent) => void;
   now?: () => Date;
@@ -457,8 +465,22 @@ export function createProfileChildRunner(
         };
       };
       try {
+        const withheldNotice =
+          options.withheldConnections && options.withheldConnections.length > 0
+            ? [
+                "CAPABILITY NOTICE — data connections currently WITHHELD:",
+                ...options.withheldConnections.map(
+                  (entry) => `- ${entry.slug}: ${entry.detail}`,
+                ),
+                "Their tools are unavailable this run. Do NOT estimate, " +
+                  "reconstruct, or fabricate data that would have come from " +
+                  "them — state the outage plainly in your findings and " +
+                  "answer only what other sources support.",
+              ].join("\n")
+            : "";
         const systemPrompt = [
           profileSystemPrompt(request),
+          withheldNotice,
           options.contextPreamble
             ? [
                 "Inherited parent turn context:",

@@ -27,7 +27,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { eq } from "drizzle-orm";
+import { and, eq, gte, sql as dsql } from "drizzle-orm";
 import { auditOutbox, users } from "@thinkwork/database-pg/schema";
 import {
   emitAuditEvent,
@@ -72,6 +72,35 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+
+/**
+ * THINK-229 U4 (KTD6): tenant-day count for `data.query_executed`,
+ * computed on the SAME ledger the trace write lands in — no counter
+ * table, no parallel vocabulary. Called inside the emit transaction so
+ * the count INCLUDES the current write (atomic post-increment-and-return
+ * semantics); the broker blocks the NEXT query once the cap is reached.
+ * Outbox rows are marked drained, never deleted, so same-day counting is
+ * stable across drains. UTC day boundary.
+ */
+async function tenantDayQueryCount(
+  executor: Pick<typeof db, "select">,
+  tenantId: string,
+): Promise<number> {
+  const [row] = await executor
+    .select({ count: dsql<number>`count(*)::int` })
+    .from(auditOutbox)
+    .where(
+      and(
+        eq(auditOutbox.tenant_id, tenantId),
+        eq(auditOutbox.event_type, "data.query_executed"),
+        gte(
+          auditOutbox.occurred_at,
+          dsql`date_trunc('day', now() AT TIME ZONE 'utc') AT TIME ZONE 'utc'`,
+        ),
+      ),
+    );
+  return row?.count ?? 0;
 }
 
 export async function handler(
@@ -201,6 +230,9 @@ export async function handler(
       eventId: existing.event_id,
       outboxId: existing.outbox_id,
       redactedFields: [],
+      ...(eventType === "data.query_executed"
+        ? { tenantDayCount: await tenantDayQueryCount(db, tenantId) }
+        : {}),
     });
   }
 
@@ -229,8 +261,18 @@ export async function handler(
   };
 
   try {
-    const result = await db.transaction(async (tx) => {
-      return await emitAuditEvent(tx, emitInput);
+    const { result, tenantDayCount } = await db.transaction(async (tx) => {
+      const emitted = await emitAuditEvent(tx, emitInput);
+      // Same-transaction count sees the row just inserted — the returned
+      // count includes the current write (KTD6).
+      const count =
+        eventType === "data.query_executed"
+          ? await tenantDayQueryCount(
+              tx as unknown as Pick<typeof db, "select">,
+              tenantId,
+            )
+          : undefined;
+      return { result: emitted, tenantDayCount: count };
     });
     return json({
       dispatched: true,
@@ -238,6 +280,7 @@ export async function handler(
       eventId: result.eventId,
       outboxId: result.outboxId,
       redactedFields: result.redactedFields,
+      ...(tenantDayCount !== undefined ? { tenantDayCount } : {}),
     });
   } catch (err: unknown) {
     // pg unique-violation race: a concurrent request with the same

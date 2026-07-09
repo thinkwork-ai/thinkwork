@@ -96,6 +96,17 @@ export interface McpServerConfig {
    *   - "configured" tenant/service credential reference is present
    */
   tokenStatus?: "active" | "expired" | "configured";
+  /**
+   * THINK-229 U4 (KTD6): signed sidecar budget block, attached ONLY for
+   * the analyst broker and ONLY post-flip (ANALYST_POLICY_SOURCE=sidecar).
+   * loadAgentProfileRuntimeConfigs overrides the analyst profile's
+   * execution.maxQueriesPerRun from it so both enforcement points draw
+   * from the single signed policy source.
+   */
+  sidecarBudgets?: {
+    maxQueriesPerRun?: number;
+    maxQueriesPerTenantDay?: number;
+  };
 }
 
 export interface McpRuntimeRecordLinkHints {
@@ -175,6 +186,14 @@ export interface BuildMcpConfigsDeps {
     manifest?: CapabilitiesManifest | null;
     defer?: boolean;
   };
+  /**
+   * THINK-229 U4 (R8): collector for analyst-broker connections this
+   * build WITHHELD (probe failure, credential missing, drift…). Dispatch
+   * payload builders forward the notices to the container so a delegated
+   * child can NAME the outage instead of estimating — the same detail
+   * string the capability inspector shows.
+   */
+  withheldNotices?: Array<{ slug: string; detail: string }>;
 }
 
 /**
@@ -241,11 +260,17 @@ export async function buildMcpConfigs(
   const requesterUserId = requester?.requesterUserId ?? null;
   const probe = deps.tokenMode === "probe";
   const diagnostics = deps.diagnostics ?? null;
+  const withheldNotices = deps.withheldNotices;
   const dropDiag = (
-    mcp: { slug: string | null; name: string },
+    mcp: { slug: string | null; name: string; url?: string },
     reason: Parameters<CapabilityDiagnosticsCollector["add"]>[0]["reason"],
     detail: string,
   ) => {
+    // R8: analyst-broker drops are ALSO surfaced to the model via the
+    // dispatch payload (same human-readable detail as the inspector).
+    if (withheldNotices && mcp.url && isAnalystBrokerUrl(mcp.url)) {
+      withheldNotices.push({ slug: mcp.slug ?? mcp.name, detail });
+    }
     diagnostics?.add({
       capabilityClass: "mcp_server",
       capabilityId: mcp.slug ?? mcp.name,
@@ -670,11 +695,35 @@ export async function buildMcpConfigs(
       // keeps them off every other MCP server. Signing unavailable →
       // legacy bearer carries alone, loudly.
       let contextHeaders = resolved.headers;
+      let sidecarBudgets: McpServerConfig["sidecarBudgets"];
       if (isAnalystBrokerUrl(mcp.url)) {
+        // THINK-229 U4 (KTD6/KTD7): post-flip, the signed sidecar policy
+        // block attached by the folder-manifest resolution
+        // (assignment_config.sidecarPolicy — only present when
+        // ANALYST_POLICY_SOURCE=sidecar) becomes the policyClaims the
+        // broker enforces AND the per-run cap override for the analyst
+        // profile — one signed source, one read. Pre-flip: claims stay
+        // empty and broker budget enforcement is dormant by design.
+        const assignCfg =
+          (mcp.assignment_config as Record<string, unknown>) || {};
+        const sidecarPolicy = parseConnectionPolicyBlock(
+          assignCfg.sidecarPolicy,
+        );
+        const policyClaims: Record<string, unknown> = {};
+        if (sidecarPolicy) {
+          if (sidecarPolicy.budgets) {
+            policyClaims.budgets = sidecarPolicy.budgets;
+            sidecarBudgets = sidecarPolicy.budgets;
+          }
+          if (sidecarPolicy.retain_sql !== undefined) {
+            policyClaims.retain_sql = sidecarPolicy.retain_sql;
+          }
+        }
         const contextHeader = await mintAnalystCallerContextHeader({
           actor: "agent",
           tenantId: agentRow.tenant_id,
           agentId,
+          policyClaims,
         }).catch((err) => {
           console.error(
             `${logPrefix} analyst caller-context mint threw for ${mcp.slug}:`,
@@ -693,7 +742,13 @@ export async function buildMcpConfigs(
           );
         }
       }
-      mcpConfigs.push(toMcpServerConfig(mcp, resolved.token, contextHeaders));
+      const directConfig = toMcpServerConfig(
+        mcp,
+        resolved.token,
+        contextHeaders,
+      );
+      if (sidecarBudgets) directConfig.sidecarBudgets = sidecarBudgets;
+      mcpConfigs.push(directConfig);
       continue;
     }
 
