@@ -46,6 +46,12 @@ import {
 } from "../lib/mcp-configs.js";
 import { mcpCallTool, type McpServerTarget } from "../lib/mcp-client-call.js";
 import {
+  ANALYST_CALLER_CONTEXT_HEADER,
+  hashAnalystRequestBody,
+  isAnalystBrokerUrl,
+  mintAnalystCallerContextHeader,
+} from "../lib/analyst/caller-context.js";
+import {
   loadCanvasHeadContent,
   type CanvasArtifactRow,
 } from "../lib/artifacts/canvas-lifecycle.js";
@@ -425,11 +431,36 @@ export async function handler(
         logPrefix: LOG_PREFIX,
       }),
     callTool: async ({ target, toolName, args }) => {
-      const result = await mcpCallTool(
-        target as McpServerTarget,
-        toolName,
-        args,
-      );
+      let callTarget = target as McpServerTarget;
+      // THINK-229 U2 (R15): the analyst broker gets a request-bound
+      // system_refresh caller context per POST — threadless by design
+      // (headless refresh has no thread), bodyHash pins the exact
+      // JSON-RPC body so a captured context replays nothing else.
+      // Signing unavailable → the legacy bearer on the target carries
+      // alone (phase-in).
+      if (isAnalystBrokerUrl(callTarget.url)) {
+        callTarget = {
+          ...callTarget,
+          perRequestHeaders: async (body) => {
+            const header = await mintAnalystCallerContextHeader({
+              actor: "system_refresh",
+              tenantId,
+              refreshId: artifactId,
+              bodyHash: hashAnalystRequestBody(body),
+            }).catch((err) => {
+              console.error(
+                `${LOG_PREFIX} analyst caller-context mint threw:`,
+                err,
+              );
+              return null;
+            });
+            const extra: Record<string, string> = {};
+            if (header) extra[ANALYST_CALLER_CONTEXT_HEADER] = header;
+            return extra;
+          },
+        };
+      }
+      const result = await mcpCallTool(callTarget, toolName, args);
       return { isError: result.isError, raw: result.raw };
     },
     applyHeadData: makeApplyHeadData(

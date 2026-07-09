@@ -48,6 +48,11 @@ import {
   UpdateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { mcpHashMatches } from "./mcp-server-hash.js";
+import {
+  ANALYST_CALLER_CONTEXT_HEADER,
+  isAnalystBrokerUrl,
+  mintAnalystCallerContextHeader,
+} from "./analyst/caller-context.js";
 import type { CapabilitiesManifest } from "./capabilities/manifest-compile.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
 import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
@@ -638,7 +643,37 @@ export async function buildMcpConfigs(
         );
         continue;
       }
-      mcpConfigs.push(toMcpServerConfig(mcp, resolved.token, resolved.headers));
+      // THINK-229 U2 (R5): the analyst broker additionally gets a signed
+      // session caller context alongside the legacy bearer (phase-in —
+      // the broker accepts both until observed bearer traffic hits
+      // zero). Caller contexts are a broker credential; the URL gate
+      // keeps them off every other MCP server. Signing unavailable →
+      // legacy bearer carries alone, loudly.
+      let contextHeaders = resolved.headers;
+      if (isAnalystBrokerUrl(mcp.url)) {
+        const contextHeader = await mintAnalystCallerContextHeader({
+          actor: "agent",
+          tenantId: agentRow.tenant_id,
+          agentId,
+        }).catch((err) => {
+          console.error(
+            `${logPrefix} analyst caller-context mint threw for ${mcp.slug}:`,
+            err,
+          );
+          return null;
+        });
+        if (contextHeader) {
+          contextHeaders = {
+            ...(resolved.headers ?? {}),
+            [ANALYST_CALLER_CONTEXT_HEADER]: contextHeader,
+          };
+        } else {
+          console.error(
+            `${logPrefix} analyst caller-context signing unavailable for ${mcp.slug} — dispatching with legacy bearer only`,
+          );
+        }
+      }
+      mcpConfigs.push(toMcpServerConfig(mcp, resolved.token, contextHeaders));
       continue;
     }
 

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./github-workspace": "./github-workspace.ts"
+    "./github-workspace": "./github-workspace.ts",
+    "./analyst-caller-context": "./analyst-caller-context.ts"
   },
   "scripts": {
     "build": "tsc --build",
