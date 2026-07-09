@@ -27,6 +27,7 @@ import { webhookQueries } from "./webhooks/index.js";
 import { memoryQueries, memoryMutations } from "./memory/index.js";
 import { recipeQueries, recipeMutations } from "./recipes/index.js";
 import { coreMutations } from "./core/index.js";
+import { analystMutations } from "./analyst/index.js";
 import { messageMutations } from "./messages/index.js";
 import {
   messageMentionTypeResolvers,
@@ -210,6 +211,7 @@ export const mutationResolvers: Record<string, any> = {
   ...capabilityMutations,
   ...goalMutations,
   ...coreMutations,
+  ...analystMutations,
   ...messageMutations,
   ...triggerMutations,
   ...threadMutations,

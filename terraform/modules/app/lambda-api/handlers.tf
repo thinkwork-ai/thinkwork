@@ -58,9 +58,22 @@ locals {
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
     # ONLY after clean shadow parity on live traffic.
     ANALYST_POLICY_SOURCE = var.analyst_policy_source
-    DATABASE_SECRET_ARN   = var.graphql_db_secret_arn
-    DATABASE_HOST         = var.db_cluster_endpoint
-    DATABASE_NAME         = var.database_name
+    # THINK-230 — the operator-facing provisionAnalystConnector mutation runs
+    # the analyst connector provisioning ceremony inside graphql-http, so the
+    # shared api handlers read the same broker-secret ARN + rds_iam connect
+    # config the analyst-query-broker handler carries per-handler. Read via
+    # getConfig() (env-wins), never process.env (runtime-config fixture gate).
+    # ANALYST_DB_CLUSTER_ENDPOINT gates on the resource id so a stage without
+    # the IAM grant leaves rds_iam provisioning off (resolveAnalystRdsIamConfig
+    # returns null) instead of half-seeding a credential row.
+    ANALYST_BROKER_SECRET_ARN      = var.analyst_broker_secret_arn
+    ANALYST_DB_CLUSTER_ENDPOINT    = var.analyst_db_cluster_resource_id != "" ? var.db_cluster_endpoint : ""
+    ANALYST_DB_CLUSTER_RESOURCE_ID = var.analyst_db_cluster_resource_id
+    ANALYST_DB_NAME                = var.database_name
+    ANALYST_DB_USER                = "analyst_reader"
+    DATABASE_SECRET_ARN            = var.graphql_db_secret_arn
+    DATABASE_HOST                  = var.db_cluster_endpoint
+    DATABASE_NAME                  = var.database_name
     # BUCKET_NAME and USER_POOL_ID were duplicate aliases of WORKSPACE_BUCKET
     # and COGNITO_USER_POOL_ID; GRAPHQL_API_KEY duplicated APPSYNC_API_KEY;
     # THINKWORK_API_SECRET and EMAIL_HMAC_SECRET duplicated API_AUTH_SECRET

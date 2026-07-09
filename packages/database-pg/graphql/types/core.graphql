@@ -388,6 +388,29 @@ type BootstrapResult {
   isNew: Boolean!
 }
 
+"""
+Outcome of running the analyst connector provisioning ceremony (THINK-230):
+the operator-facing equivalent of scripts/provision-analyst-connector.mts.
+Reproduces the script's born-approved + re-approve semantics (KTD4 / SI-5
+hash pinning).
+"""
+type AnalystProvisionResult {
+  "The tenant_mcp_servers row id for the analyst connector."
+  connectorId: ID!
+  "Registry-row action: created | unchanged | re_approved."
+  connectorOutcome: String!
+  "Broker credential secret action: created | unchanged | updated."
+  brokerSecretOutcome: String!
+  "rds_iam credential row action, or null when the IAM env block is not wired."
+  rdsIamCredentialOutcome: String
+  "True once the tenant's analyst profile was refreshed from the built-in seed."
+  profileRefreshed: Boolean!
+  "Count of agent workspaces the connection folder was written into."
+  foldersWritten: Int!
+  "Count of agent workspaces skipped (e.g. no workspace prefix)."
+  foldersSkipped: Int!
+}
+
 extend type Mutation {
   bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
@@ -409,6 +432,18 @@ extend type Mutation {
   installManagedApplicationMcpServer(
     key: String!
   ): ManagedApplicationMcpRegistration!
+  """
+  Run the analyst connector provisioning ceremony for the caller's tenant
+  (THINK-230) — the operator-facing action that replaces the
+  scripts/provision-analyst-connector.mts CLI ceremony. Requires tenant
+  owner/admin. `reApprove` rewrites url/auth_config and restamps approval
+  after a drift (SI-5); `rotateToken` mints a fresh broker token and forces
+  re-approval.
+  """
+  provisionAnalystConnector(
+    reApprove: Boolean
+    rotateToken: Boolean
+  ): AnalystProvisionResult!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   addManualUser(tenantId: ID!, input: AddManualUserInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!

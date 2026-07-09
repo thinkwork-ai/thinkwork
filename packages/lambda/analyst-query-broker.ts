@@ -144,7 +144,11 @@ async function getBrokerCredential(): Promise<BrokerCredential> {
     _credential = { value, fetchedAt: Date.now() };
     return value;
   }
-  const secretArn = process.env.ANALYST_BROKER_SECRET_ARN;
+  // Document-only key once THINK-230 added it to the runtime-config
+  // document (config_env): read via getConfig ONLY (its env-wins merge still
+  // honors the broker's per-handler env override). A direct process.env read
+  // here would fail the runtime-config fixture gate.
+  const secretArn = getConfig("ANALYST_BROKER_SECRET_ARN");
   if (!secretArn) {
     throw new Error(
       "analyst-query-broker: ANALYST_BROKER_SECRET_ARN is unset — the broker " +
