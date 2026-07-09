@@ -25,6 +25,18 @@ import {
 } from "@aws-sdk/client-s3";
 import { getConfig } from "@thinkwork/runtime-config";
 import { parseCapabilitySidecar } from "./definition-schemas.js";
+import {
+  parseConnectionPolicyBlock,
+  type ConnectionPolicyBlock,
+} from "./connection-policy.js";
+
+export {
+  evaluateConnectionPolicyParity,
+  parseConnectionPolicyBlock,
+  resolveAnalystPolicySource,
+  type ConnectionPolicyBlock,
+  type ConnectionPolicyParityRecord,
+} from "./connection-policy.js";
 
 const LOG_PREFIX = "[connection-assignments]";
 
@@ -38,6 +50,13 @@ export interface ConnectionAssignmentRecord {
   enabled: boolean;
   /** `permissions.operations` — the tool allowlist ([] = all tools). */
   operations: string[];
+  /**
+   * Signed policy block (THINK-229 U3); null = the sidecar predates the
+   * policy schema. A missing block is a PARITY FAILURE in the shadow
+   * evaluator — never a silent row-authoritative fallback — so a stale
+   * sidecar cannot read clean and then enforce defaults after the flip.
+   */
+  policy: ConnectionPolicyBlock | null;
   updated_at: string | null;
 }
 
@@ -70,6 +89,7 @@ function recordFromSidecar(
   sidecar: {
     enabled?: boolean;
     permissions?: { operations?: string[] };
+    policy?: unknown;
     config?: Record<string, unknown>;
     updated_at?: string;
   },
@@ -90,6 +110,7 @@ function recordFromSidecar(
     registryServerId,
     enabled: sidecar.enabled !== false,
     operations,
+    policy: parseConnectionPolicyBlock(sidecar.policy),
     updated_at: sidecar.updated_at ?? null,
   };
 }
