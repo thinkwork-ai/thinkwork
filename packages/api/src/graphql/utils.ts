@@ -156,6 +156,7 @@ import {
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
 import { agentRuntimeToGraphqlEnum } from "./resolvers/tenant-agent/runtime.js";
+import { capMessagePayloads } from "../lib/messages/payload-cap.js";
 
 // Re-export everything resolvers need
 export {
@@ -885,7 +886,10 @@ export function messageToCamel(
   const senderId = typeof result.senderId === "string" ? result.senderId : null;
   result.ownerType = normalizeMessageOwnerType(senderType, result.role);
   result.ownerId = senderId;
-  return result;
+  // Bound payload fields so a heavy thread can never push the Lambda
+  // response past its 6MB limit (which kills the invocation and renders
+  // as "[Network] No Content" in clients). See lib/messages/payload-cap.ts.
+  return capMessagePayloads(result);
 }
 
 function normalizeMessageOwnerType(senderType: string | null, role: unknown) {
