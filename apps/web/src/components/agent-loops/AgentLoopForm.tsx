@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "urql";
 import { ChevronDown, Clock, Copy } from "lucide-react";
+import {
+  DocumentPlatesListQuery,
+  TenantArtifactsListQuery,
+} from "@/lib/graphql-queries";
 import {
   Button,
   Dialog,
@@ -32,6 +37,7 @@ import type {
 import {
   customSchedulePatch,
   defaultAgentLoopDraft,
+  deliveryRecipientsError,
   draftFromVersion,
   draftToPayload,
   formatTimeOfDay,
@@ -363,6 +369,13 @@ export function AgentLoopForm({
                   />
                 </DetailRow>
               ) : null}
+
+              <DocumentBindingSection
+                tenantId={tenantId}
+                draft={draft}
+                patch={patch}
+                spaceOptions={spaceOptions}
+              />
             </>
           ) : null}
         </div>
@@ -383,6 +396,239 @@ export function AgentLoopForm({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * THINK-227 U7: "Maintains a document" + "Email delivery" configuration.
+ * Binding modes: off (default) | create on first run (genre from the plate
+ * registry, title, target Space) | an existing document (picker over the
+ * tenant's document artifacts). Delivery renders only when a binding exists —
+ * it emails the maintained document after each new edition.
+ */
+function DocumentBindingSection({
+  tenantId,
+  draft,
+  patch,
+  spaceOptions,
+}: {
+  tenantId: string;
+  draft: AgentLoopDraft;
+  patch: (next: Partial<AgentLoopDraft>) => void;
+  spaceOptions: AgentLoopSpaceOption[];
+}) {
+  const bindingOn = draft.bindingMode !== "off";
+  const deliveryError = draft.deliveryEnabled
+    ? deliveryRecipientsError(draft.deliveryRecipients)
+    : null;
+
+  return (
+    <>
+      <DetailRow label="Maintains document">
+        <GhostSelect
+          ariaLabel="Maintains document"
+          value={draft.bindingMode}
+          onValueChange={(value) =>
+            patch({
+              bindingMode: value as AgentLoopDraft["bindingMode"],
+              ...(value === "off" ? { deliveryEnabled: false } : {}),
+            })
+          }
+          placeholder="Off"
+        >
+          <SelectItem value="off">Off</SelectItem>
+          <SelectItem value="create">Create on first run</SelectItem>
+          <SelectItem value="existing">An existing document</SelectItem>
+        </GhostSelect>
+      </DetailRow>
+
+      {draft.bindingMode === "create" ? (
+        <>
+          <DetailRow label="Genre">
+            <GenrePicker
+              tenantId={tenantId}
+              value={draft.bindingGenre}
+              onChange={(value) => patch({ bindingGenre: value })}
+            />
+          </DetailRow>
+          <DetailRow label="Document title">
+            <input
+              aria-label="Document title"
+              value={draft.bindingTitle}
+              onChange={(e) => patch({ bindingTitle: e.target.value })}
+              placeholder="Weekly Pipeline Report"
+              className="w-48 bg-transparent px-3 py-2 text-right text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+            />
+          </DetailRow>
+          <DetailRow label="Document space">
+            <GhostSelect
+              ariaLabel="Document space"
+              value={draft.bindingSpaceId || draft.spaceId}
+              onValueChange={(value) => patch({ bindingSpaceId: value })}
+              placeholder="Same as automation"
+            >
+              {spaceOptions.map((space) => (
+                <SelectItem key={space.id} value={space.id}>
+                  {space.name}
+                </SelectItem>
+              ))}
+            </GhostSelect>
+          </DetailRow>
+        </>
+      ) : null}
+
+      {draft.bindingMode === "existing" ? (
+        <DetailRow label="Document">
+          <ExistingDocumentPicker
+            tenantId={tenantId}
+            value={draft.bindingArtifactId}
+            onChange={(value) => patch({ bindingArtifactId: value })}
+          />
+        </DetailRow>
+      ) : null}
+
+      {bindingOn ? (
+        <>
+          <DetailRow label="Email delivery">
+            <GhostSelect
+              ariaLabel="Email delivery"
+              value={draft.deliveryEnabled ? "on" : "off"}
+              onValueChange={(value) =>
+                patch({ deliveryEnabled: value === "on" })
+              }
+              placeholder="Off"
+            >
+              <SelectItem value="off">Off</SelectItem>
+              <SelectItem value="on">Email each new edition</SelectItem>
+            </GhostSelect>
+          </DetailRow>
+          {draft.deliveryEnabled ? (
+            <div className="space-y-2 py-1.5" data-testid="delivery-panel">
+              <Input
+                aria-label="Delivery recipients"
+                value={draft.deliveryRecipients}
+                onChange={(e) => patch({ deliveryRecipients: e.target.value })}
+                placeholder="ops@company.com, ceo@company.com"
+                className="text-sm"
+              />
+              {deliveryError && draft.deliveryRecipients.trim() ? (
+                <p className="text-xs text-destructive">{deliveryError}</p>
+              ) : null}
+              <Input
+                aria-label="Email subject"
+                value={draft.deliverySubject}
+                onChange={(e) => patch({ deliverySubject: e.target.value })}
+                placeholder="Subject (optional — defaults to the document title)"
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Recipients get the report inline plus a link to the living
+                document. Saving this list authorizes the standing sends.
+              </p>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/** Genre options from the plate registry. Mounted only in create mode so the
+ * form renders query-free otherwise (and in provider-less unit tests). */
+function GenrePicker({
+  tenantId,
+  value,
+  onChange,
+}: {
+  tenantId: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [platesResult] = useQuery<{
+    documentPlates?: {
+      slug: string;
+      displayName?: string | null;
+      hidden?: boolean | null;
+    }[];
+  }>({
+    query: DocumentPlatesListQuery,
+    variables: { tenantId },
+  });
+  const genreOptions = useMemo(() => {
+    const plates = (platesResult.data?.documentPlates ?? []).filter(
+      (plate) => !plate.hidden,
+    );
+    if (plates.length === 0) {
+      return [{ slug: value || "report", displayName: null }];
+    }
+    return plates;
+  }, [platesResult.data?.documentPlates, value]);
+  return (
+    <GhostSelect
+      ariaLabel="Document genre"
+      value={value}
+      onValueChange={onChange}
+      placeholder="Report"
+    >
+      {genreOptions.map((plate) => (
+        <SelectItem key={plate.slug} value={plate.slug}>
+          {plate.displayName || plate.slug}
+        </SelectItem>
+      ))}
+    </GhostSelect>
+  );
+}
+
+/** Existing-document picker scoped to document-kind artifacts. Mounted only
+ * in existing mode (same provider-free reasoning as GenrePicker). */
+function ExistingDocumentPicker({
+  tenantId,
+  value,
+  onChange,
+}: {
+  tenantId: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [artifactsResult] = useQuery<{
+    artifacts?: { id: string; title: string; metadata?: unknown }[];
+  }>({
+    query: TenantArtifactsListQuery,
+    variables: { tenantId },
+  });
+  const documentOptions = useMemo(
+    () =>
+      (artifactsResult.data?.artifacts ?? []).filter((artifact) => {
+        const metadata =
+          artifact.metadata && typeof artifact.metadata === "object"
+            ? (artifact.metadata as Record<string, unknown>)
+            : null;
+        return metadata?.kind === "document";
+      }),
+    [artifactsResult.data?.artifacts],
+  );
+  if (documentOptions.length === 0) {
+    return (
+      <span className="px-3 py-2 text-sm text-muted-foreground">
+        {artifactsResult.fetching
+          ? "Loading documents…"
+          : "No documents yet — use “Create on first run”."}
+      </span>
+    );
+  }
+  return (
+    <GhostSelect
+      ariaLabel="Document"
+      value={value}
+      onValueChange={onChange}
+      placeholder="Choose a document…"
+    >
+      {documentOptions.map((doc) => (
+        <SelectItem key={doc.id} value={doc.id}>
+          {doc.title}
+        </SelectItem>
+      ))}
+    </GhostSelect>
   );
 }
 

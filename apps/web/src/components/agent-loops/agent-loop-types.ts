@@ -61,11 +61,33 @@ export interface AgentLoopTargetRoutineRef {
   label?: string | null;
 }
 
+// THINK-227 U1/U7: the automation's maintained document + email delivery.
+// Mirrors packages/agent-loops-core `DocumentBinding` / `AgentLoopDeliverySpec`.
+export type AgentLoopDocumentBindingMode = "create" | "existing";
+
+export interface AgentLoopDocumentBinding {
+  mode: AgentLoopDocumentBindingMode;
+  genre?: string;
+  title?: string;
+  spaceId?: string;
+  artifactId?: string;
+  /** Written by first-run capture (server-side); the form preserves it
+   * verbatim so a re-save never drops the captured binding. */
+  capturedArtifactId?: string;
+}
+
+export interface AgentLoopDeliverySpec {
+  recipients: string[];
+  subjectTemplate?: string;
+}
+
 export interface AgentLoopTargetSpec {
   kind: AgentLoopTargetKind;
   agentThread?: AgentLoopTargetAgentThread;
   routine?: AgentLoopTargetRoutineRef;
   workflow?: AgentLoopTargetRoutineRef;
+  documentBinding?: AgentLoopDocumentBinding;
+  delivery?: AgentLoopDeliverySpec;
 }
 
 export interface AgentLoopVersionSummary {
@@ -261,6 +283,18 @@ export interface AgentLoopDraft {
   // Run identity + Space
   runAsUserId: string;
   spaceId: string;
+  // THINK-227 U7: maintained document + email delivery (agent_thread only).
+  bindingMode: "off" | AgentLoopDocumentBindingMode;
+  bindingGenre: string;
+  bindingTitle: string;
+  bindingSpaceId: string;
+  bindingArtifactId: string;
+  /** Server-captured; carried through the draft so edits round-trip it. */
+  bindingCapturedArtifactId: string;
+  deliveryEnabled: boolean;
+  /** Comma/space-separated recipient emails as typed. */
+  deliveryRecipients: string;
+  deliverySubject: string;
 }
 
 export interface SaveAgentLoopPayload {

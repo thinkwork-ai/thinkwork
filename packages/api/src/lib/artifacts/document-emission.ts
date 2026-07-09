@@ -303,10 +303,11 @@ export interface DocumentEmissionDeps {
     artifactId: string;
   }) => Promise<{ captured: boolean }>;
   /**
-   * THINK-155 U3: record a failed scheduled refresh — stamps
-   * `artifacts.refresh_failed_at` and raises the deduplicated
-   * `document_refresh_failed` inbox item (one OPEN item per automation).
-   * Best-effort; called only on the run-derived path.
+   * THINK-155 U3 → THINK-227 U6: record a failed scheduled refresh — stamps
+   * `artifacts.refresh_failed_at` (the reader's amber stale state). The
+   * inbox writer is retired (R5); the failure's run-facing record is the run
+   * ledger/step evidence the finalize path persists. Best-effort; called
+   * only on the run-derived path.
    */
   recordRefreshFailure: (input: {
     tenantId: string;

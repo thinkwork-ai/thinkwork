@@ -2792,6 +2792,23 @@ export const DeleteArtifactMutation = gql`
   }
 `;
 
+// THINK-227 U6 (AE5): the automation detail's bound-document card — title,
+// current version, refresh state. Deliberately slim (no content/renderHtml).
+export const BoundDocumentCardQuery = gql`
+  query BoundDocumentCard($id: ID!) {
+    artifact(id: $id) {
+      id
+      title
+      type
+      status
+      headVersion
+      lastRefreshAt
+      refreshFailedAt
+      updatedAt
+    }
+  }
+`;
+
 // Public artifact share links (THINK-208). Mint is get-or-create: re-sharing
 // returns the existing active link's URL. Queries never carry a signed token.
 export const MintArtifactShareLinkMutation = gql`

@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   customSchedulePatch,
   defaultAgentLoopDraft,
+  deliveryRecipientsError,
   draftFromVersion,
   draftToPayload,
+  parseDeliveryRecipients,
   parseScheduleFromDraft,
   readTargetSpec,
   schedulePatch,
   scheduleValueLabel,
   spaceFieldError,
+  targetSpecFromDraft,
   validateDraft,
 } from "./agent-loop-utils";
 import type {
@@ -308,5 +311,160 @@ describe("schedule popover helpers", () => {
     expect(
       scheduleValueLabel({ ...draft, triggerFamily: "manual" as const }),
     ).toBe("Manual");
+  });
+});
+
+// THINK-227 U7: maintained document + email delivery round-trip.
+describe("document binding + delivery (THINK-227 U7)", () => {
+  const base = defaultAgentLoopDraft(workers, spaces, "space-1", "user-1");
+
+  it("bindingMode off emits no binding or delivery blocks", () => {
+    const spec = targetSpecFromDraft(
+      { ...base, instructions: "Refresh" },
+      workers,
+    );
+    expect(spec.documentBinding).toBeUndefined();
+    expect(spec.delivery).toBeUndefined();
+  });
+
+  it("create mode emits genre/title/space and preserves a captured id", () => {
+    const spec = targetSpecFromDraft(
+      {
+        ...base,
+        instructions: "Refresh",
+        bindingMode: "create",
+        bindingGenre: "report",
+        bindingTitle: "Weekly Pipeline Report",
+        bindingSpaceId: "",
+        bindingCapturedArtifactId: "art-42",
+      },
+      workers,
+    );
+    expect(spec.documentBinding).toEqual({
+      mode: "create",
+      genre: "report",
+      title: "Weekly Pipeline Report",
+      // Falls back to the automation's Space when no explicit doc space.
+      spaceId: "space-1",
+      capturedArtifactId: "art-42",
+    });
+  });
+
+  it("existing mode emits the picked artifact id", () => {
+    const spec = targetSpecFromDraft(
+      {
+        ...base,
+        instructions: "Refresh",
+        bindingMode: "existing",
+        bindingArtifactId: "art-9",
+      },
+      workers,
+    );
+    expect(spec.documentBinding).toEqual({
+      mode: "existing",
+      artifactId: "art-9",
+    });
+  });
+
+  it("delivery emits parsed recipients + optional subject, only when enabled", () => {
+    const spec = targetSpecFromDraft(
+      {
+        ...base,
+        instructions: "Refresh",
+        bindingMode: "existing",
+        bindingArtifactId: "art-9",
+        deliveryEnabled: true,
+        deliveryRecipients: "ops@x.com, ceo@x.com;  cfo@x.com",
+        deliverySubject: "Weekly report",
+      },
+      workers,
+    );
+    expect(spec.delivery).toEqual({
+      recipients: ["ops@x.com", "ceo@x.com", "cfo@x.com"],
+      subjectTemplate: "Weekly report",
+    });
+  });
+
+  it("round-trips a bound version back into the draft (captured id survives)", () => {
+    const version = {
+      id: "v-1",
+      versionNumber: 1,
+      triggerSpec: { family: "schedule", enabled: true, config: {} },
+      targetSpec: {
+        kind: "agent_thread",
+        agentThread: { instructions: "Refresh", threadMode: "new_per_run" },
+        documentBinding: {
+          mode: "create",
+          genre: "report",
+          title: "Weekly",
+          spaceId: "space-1",
+          capturedArtifactId: "art-42",
+        },
+        delivery: { recipients: ["ops@x.com"], subjectTemplate: "Weekly" },
+      },
+    };
+    const target = readTargetSpec(version);
+    expect(target.documentBinding?.capturedArtifactId).toBe("art-42");
+    expect(target.delivery?.recipients).toEqual(["ops@x.com"]);
+
+    const draft = draftFromVersion(
+      {
+        name: "Weekly",
+        lifecycleStatus: "active",
+        enabled: true,
+        currentVersion: version,
+      },
+      workers,
+      spaces,
+      "space-1",
+      "user-1",
+    );
+    expect(draft.bindingMode).toBe("create");
+    expect(draft.bindingCapturedArtifactId).toBe("art-42");
+    expect(draft.deliveryEnabled).toBe(true);
+    expect(draft.deliveryRecipients).toBe("ops@x.com");
+
+    // Re-save without touching binding fields keeps the captured id.
+    const respec = targetSpecFromDraft(draft, workers);
+    expect(respec.documentBinding?.capturedArtifactId).toBe("art-42");
+  });
+
+  it("validates binding + recipients at save", () => {
+    const bound = {
+      ...base,
+      instructions: "Refresh",
+      bindingMode: "create" as const,
+      bindingGenre: "",
+    };
+    expect(validateDraft(bound)).toMatch(/genre/i);
+    expect(
+      validateDraft({
+        ...base,
+        instructions: "Refresh",
+        bindingMode: "existing",
+      }),
+    ).toMatch(/document/i);
+    expect(
+      validateDraft({
+        ...base,
+        instructions: "Refresh",
+        bindingMode: "existing",
+        bindingArtifactId: "art-9",
+        deliveryEnabled: true,
+        deliveryRecipients: "not-an-email",
+      }),
+    ).toMatch(/email address/);
+    expect(
+      validateDraft({
+        ...base,
+        instructions: "Refresh",
+        deliveryEnabled: true,
+      }),
+    ).toMatch(/needs a maintained document/);
+    expect(parseDeliveryRecipients(" a@x.com,, b@x.com ")).toEqual([
+      "a@x.com",
+      "b@x.com",
+    ]);
+    expect(deliveryRecipientsError("a@x.com")).toBeNull();
   });
 });
