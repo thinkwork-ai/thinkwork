@@ -21,6 +21,7 @@ import {
   type AnalystColumnAnnotation,
   type AnalystSchemaAnnotations,
   type AnalystTableAnnotation,
+  type AnalystTenantScope,
 } from "./annotations";
 
 const dialect = new PgDialect();
@@ -33,6 +34,13 @@ const dialect = new PgDialect();
 export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "agent_api_keys", // API key hashes
   "auth_provider_resources", // client_secret_ref + provider auth wiring
+  // THINK-234: platform billing/infra ledgers with no tenant-analytics value.
+  // These carry no `tenant_id`, so they cannot be row-scoped; rather than
+  // grant them tenant-wide they are dropped from the analyst surface entirely.
+  "billing_export_imports", // platform billing-export ingest ledger — no tenant dimension
+  "customer_deployment_session_events", // parent customer_deployment_sessions is denylisted (bearer material)
+  "stripe_events", // raw Stripe webhook event ledger — platform-global
+  "webhook_idempotency", // platform webhook de-dup ledger — no tenant dimension
   "bootstrap_credential_leases", // secret ARNs + fingerprints
   "connect_providers", // OAuth provider config (may embed client secrets)
   "credentials", // encrypted_value — raw encrypted credentials
@@ -273,6 +281,122 @@ export function analystGrantSql(): string {
 export const ANALYST_GRANTS_BEGIN_MARKER = "-- BEGIN GENERATED ANALYST GRANTS";
 export const ANALYST_GRANTS_END_MARKER = "-- END GENERATED ANALYST GRANTS";
 
+export const ANALYST_RLS_BEGIN_MARKER = "-- BEGIN GENERATED ANALYST RLS";
+export const ANALYST_RLS_END_MARKER = "-- END GENERATED ANALYST RLS";
+
+/** Single name for every per-table analyst tenant-isolation policy. */
+export const ANALYST_RLS_POLICY_NAME = "analyst_tenant_isolation";
+
+/**
+ * The verified tenant the broker pins on the connection after every
+ * `DISCARD ALL`, read back inside each policy. `missing_ok = true` (the
+ * second arg) makes an unset GUC return NULL rather than erroring; a NULL
+ * cast to uuid yields NULL, and every `= NULL` comparison is false — so an
+ * un-primed connection sees zero rows (fail-closed) instead of erroring or
+ * leaking. Migration precedent: drizzle/0076_scheduled_jobs_marco_backfill.sql.
+ */
+const ANALYST_TENANT_GUC =
+  "current_setting('thinkwork.analyst_tenant', true)::uuid";
+
+/**
+ * Build the `USING (...)` predicate for a table's RLS policy from its
+ * resolved tenant scope.
+ */
+function tenantScopeUsingExpr(
+  table: AnalystTable,
+  scope: Exclude<AnalystTenantScope, "global">,
+): string {
+  if (scope === "self") {
+    // The tenant dimension itself: the row's own id is the tenant id.
+    return `id = ${ANALYST_TENANT_GUC}`;
+  }
+  if (scope === "column") {
+    return `tenant_id = ${ANALYST_TENANT_GUC}`;
+  }
+  const { via, parentTable, parentColumn = "id" } = scope.join;
+  return (
+    `EXISTS (SELECT 1 FROM public.${parentTable} p ` +
+    `WHERE p.${parentColumn} = public.${table.name}.${via} ` +
+    `AND p.tenant_id = ${ANALYST_TENANT_GUC})`
+  );
+}
+
+/**
+ * The row-level-security surface for `analyst_reader` (THINK-234), derived
+ * from the same table walk as the grants so the two cannot drift. For every
+ * granted table EXCEPT "global" reference tables it enables RLS and emits a
+ * single `analyst_tenant_isolation` policy scoped `TO analyst_reader` and
+ * `FOR SELECT`, filtering rows to the tenant the broker pins on the
+ * connection (see ANALYST_TENANT_GUC).
+ *
+ * Safety of `ENABLE ROW LEVEL SECURITY`: the policies are `TO analyst_reader`,
+ * but enabling RLS on a table default-denies EVERY non-owner role that lacks
+ * a matching policy. This is safe here because no other non-owner role holds
+ * SELECT on any `public.*` table — the compliance_* roles are scoped entirely
+ * to the `compliance.*` schema (drizzle/0070, 0073, 0222). The application's
+ * writer connects as the table OWNER (master/migration user), which bypasses
+ * RLS entirely (no FORCE is applied). "global" tables are left with RLS
+ * DISABLED on purpose, so even that theoretical surface stays untouched.
+ *
+ * Existence-guarded with the same idiom as analystGrantSql: a table missing
+ * on a lagging dev DB is skipped (fail-closed — unenabled, hence still only
+ * reachable via its grant) and reported via WARNING; re-running after the
+ * table lands enables it. DROP POLICY IF EXISTS before CREATE keeps re-runs
+ * idempotent.
+ *
+ * The output is embedded in
+ * packages/database-pg/drizzle/0230_analyst_rls.sql between the
+ * BEGIN/END GENERATED ANALYST RLS markers; a vitest test asserts the
+ * committed migration matches this function's current output.
+ */
+export function analystRlsSql(
+  annotations: AnalystSchemaAnnotations = ANALYST_SCHEMA_ANNOTATIONS,
+): string {
+  const tables = listAnalystTables();
+  validateAnnotations(annotations, tables);
+
+  const globals: string[] = [];
+  const lines: string[] = [
+    "DO $$",
+    "DECLARE",
+    "  missing text[] := '{}';",
+    "BEGIN",
+  ];
+  for (const table of tables) {
+    const scope = resolveTenantScope(table, annotations[table.name]);
+    if (scope === "global") {
+      globals.push(table.name);
+      continue;
+    }
+    const usingExpr = tenantScopeUsingExpr(table, scope);
+    lines.push(
+      `  IF to_regclass('public.${table.name}') IS NOT NULL THEN`,
+      `    ALTER TABLE public.${table.name} ENABLE ROW LEVEL SECURITY;`,
+      `    DROP POLICY IF EXISTS ${ANALYST_RLS_POLICY_NAME} ON public.${table.name};`,
+      `    CREATE POLICY ${ANALYST_RLS_POLICY_NAME} ON public.${table.name}`,
+      `      FOR SELECT TO analyst_reader`,
+      `      USING (${usingExpr});`,
+      `  ELSE`,
+      `    missing := missing || '${table.name}'::text;`,
+      `  END IF;`,
+    );
+  }
+  lines.push(
+    "  IF array_length(missing, 1) > 0 THEN",
+    "    RAISE WARNING 'analyst RLS skipped for tables missing on this database: %', missing;",
+    "  END IF;",
+    "END $$;",
+  );
+
+  // Global (RLS intentionally NOT enabled — see analystRlsSql docstring):
+  //   <table>, <table>, ...
+  const header = [
+    "-- Global reference tables — granted but RLS intentionally NOT enabled",
+    `-- (no tenant dimension): ${globals.join(", ") || "(none)"}.`,
+  ];
+  return [...header, ...lines].join("\n");
+}
+
 function formatColumnRow(
   column: AnalystColumn,
   annotation: AnalystColumnAnnotation | undefined,
@@ -309,6 +433,9 @@ function validateAnnotations(
           "semantic model — check for a typo, or a table that is denylisted/not granted.",
       );
     }
+    // THINK-234: validate the tenant-scope classification's join wiring
+    // (typo guard against non-existent FK/parent columns).
+    validateTenantScopeAnnotation(table, tableAnnotation, tableByName);
     if (!tableAnnotation.columns) continue;
     const columnNames = new Set(table.columns.map((c) => c.name));
     for (const columnName of Object.keys(tableAnnotation.columns)) {
@@ -322,6 +449,70 @@ function validateAnnotations(
       }
     }
   }
+}
+
+function tableHasColumn(table: AnalystTable, name: string): boolean {
+  return table.columns.some((c) => c.name === name);
+}
+
+/**
+ * Validate a table's `tenantScope` annotation (THINK-234): a join spec must
+ * name a real FK column on the child, a granted parent table that carries
+ * `tenant_id`, and a real parent key column. "column"/"self"/"global" carry
+ * no references to check here (classification coverage is enforced by
+ * `resolveTenantScope`).
+ */
+function validateTenantScopeAnnotation(
+  table: AnalystTable,
+  annotation: AnalystTableAnnotation,
+  tableByName: Map<string, AnalystTable>,
+): void {
+  const scope = annotation.tenantScope;
+  if (!scope || typeof scope === "string") return;
+  const { via, parentTable, parentColumn = "id" } = scope.join;
+  const where = `ANALYST_SCHEMA_ANNOTATIONS["${table.name}"].tenantScope.join (packages/database-pg/src/analyst/annotations.ts)`;
+  if (!tableHasColumn(table, via)) {
+    throw new Error(
+      `analyst tenant scope: ${where} references FK column "${table.name}.${via}", which does not exist in the analyst semantic model.`,
+    );
+  }
+  const parent = tableByName.get(parentTable);
+  if (!parent) {
+    throw new Error(
+      `analyst tenant scope: ${where} references parent table "${parentTable}", which is not a granted analyst table.`,
+    );
+  }
+  if (!tableHasColumn(parent, parentColumn)) {
+    throw new Error(
+      `analyst tenant scope: ${where} references parent key "${parentTable}.${parentColumn}", which does not exist.`,
+    );
+  }
+  if (!tableHasColumn(parent, "tenant_id")) {
+    throw new Error(
+      `analyst tenant scope: ${where} joins to parent "${parentTable}", which has no tenant_id column to scope by.`,
+    );
+  }
+}
+
+/**
+ * Resolve a granted table's effective tenant scope (THINK-234). The explicit
+ * `tenantScope` annotation wins; absent it, a table with a `tenant_id` column
+ * defaults to "column" scope. A table with neither is a hard error — it must
+ * be explicitly classified (self/global/join) or denylisted.
+ */
+export function resolveTenantScope(
+  table: AnalystTable,
+  annotation: AnalystTableAnnotation | undefined,
+): AnalystTenantScope {
+  const explicit = annotation?.tenantScope;
+  if (explicit) return explicit;
+  if (tableHasColumn(table, "tenant_id")) return "column";
+  throw new Error(
+    `analyst tenant scope: granted table "${table.name}" has no tenant_id column and no explicit ` +
+      'tenantScope classification. Add a tenantScope ("self" | "global" | { join }) in ' +
+      "ANALYST_SCHEMA_ANNOTATIONS (packages/database-pg/src/analyst/annotations.ts), or denylist the " +
+      "table in ANALYST_DENYLISTED_TABLES (packages/database-pg/src/analyst/semantic-model.ts).",
+  );
 }
 
 /**

@@ -43,7 +43,6 @@ Conventions:
 - [artifact_shares](#artifact-shares)
 - [artifact_versions](#artifact-versions)
 - [artifacts](#artifacts)
-- [billing_export_imports](#billing-export-imports)
 - [billing_export_line_items](#billing-export-line-items)
 - [brain_dream_actions](#brain-dream-actions)
 - [brain_dream_runs](#brain-dream-runs)
@@ -52,7 +51,6 @@ Conventions:
 - [connections](#connections)
 - [cost_events](#cost-events)
 - [crm_work_links](#crm-work-links)
-- [customer_deployment_session_events](#customer-deployment-session-events)
 - [document_conformance_reports](#document-conformance-reports)
 - [document_plates](#document-plates)
 - [document_section_waivers](#document-section-waivers)
@@ -139,7 +137,6 @@ Conventions:
 - [space_members](#space-members)
 - [spaces](#spaces)
 - [stripe_customers](#stripe-customers)
-- [stripe_events](#stripe-events)
 - [stripe_subscriptions](#stripe-subscriptions)
 - [tenant_builtin_tools](#tenant-builtin-tools)
 - [tenant_context_provider_settings](#tenant-context-provider-settings)
@@ -172,7 +169,6 @@ Conventions:
 - [user_quick_actions](#user-quick-actions)
 - [users](#users)
 - [wakeup_requests](#wakeup-requests)
-- [webhook_idempotency](#webhook-idempotency)
 - [work_item_comments](#work-item-comments)
 - [work_item_documents](#work-item-documents)
 - [work_item_events](#work-item-events)
@@ -812,29 +808,6 @@ Join hints:
 - `artifacts.tenant_id` → `tenants.id`
 - `artifacts.thread_id` → `threads.id`
 
-## billing_export_imports
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| provider | text | not null |
-| source_type | text | not null |
-| manifest_bucket | text | not null |
-| manifest_key | text | not null |
-| billing_period_start | timestamp with time zone | not null |
-| billing_period_end | timestamp with time zone | not null |
-| status | text | not null |
-| row_count | integer | not null |
-| error_count | integer | not null |
-| error_summary | text |  |
-| metadata | jsonb | not null |
-| imported_at | timestamp with time zone | not null |
-| created_at | timestamp with time zone | not null |
-
-Enum values:
-
-- `status`: `imported`, `imported_with_errors`, `failed`
-
 ## billing_export_line_items
 
 | column | type | flags |
@@ -936,6 +909,8 @@ Join hints:
 - `budget_policies.user_id` → `users.id`
 
 ## capability_catalog
+
+Note: Platform-global capability reference data — not tenant-scoped. RLS is intentionally not enabled (THINK-234).
 
 | column | type | flags |
 | --- | --- | --- |
@@ -1067,23 +1042,6 @@ Join hints:
 - `crm_work_links.space_id` → `spaces.id`
 - `crm_work_links.tenant_id` → `tenants.id`
 - `crm_work_links.thread_id` → `threads.id`
-
-## customer_deployment_session_events
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| session_id | uuid | not null |
-| event_type | text | not null |
-| step_key | text |  |
-| message | text | not null |
-| payload | jsonb | not null |
-| idempotency_key | text |  |
-| created_at | timestamp with time zone | not null |
-
-Join hints:
-
-- `customer_deployment_session_events.session_id` → `customer_deployment_sessions.id`
 
 ## document_conformance_reports
 
@@ -2287,6 +2245,8 @@ Join hints:
 
 ## model_catalog
 
+Note: Platform-global model reference data — not tenant-scoped. RLS is intentionally not enabled (THINK-234).
+
 | column | type | flags |
 | --- | --- | --- |
 | id | uuid | PK, not null |
@@ -3369,14 +3329,6 @@ Join hints:
 
 - `stripe_customers.tenant_id` → `tenants.id`
 
-## stripe_events
-
-| column | type | flags |
-| --- | --- | --- |
-| stripe_event_id | text | PK, not null |
-| event_type | text | not null |
-| processed_at | timestamp with time zone | not null |
-
 ## stripe_subscriptions
 
 | column | type | flags |
@@ -4204,20 +4156,6 @@ Join hints:
 
 - `wakeup_requests.agent_id` → `agents.id`
 - `wakeup_requests.tenant_id` → `tenants.id`
-
-## webhook_idempotency
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| webhook_id | uuid | not null |
-| idempotency_key | text | not null |
-| turn_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-
-Join hints:
-
-- `webhook_idempotency.webhook_id` → `webhooks.id`
 
 ## work_item_comments
 

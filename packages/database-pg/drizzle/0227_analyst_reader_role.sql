@@ -302,11 +302,6 @@ BEGIN
   ELSE
     missing := missing || 'artifacts'::text;
   END IF;
-  IF to_regclass('public.billing_export_imports') IS NOT NULL THEN
-    GRANT SELECT ON public.billing_export_imports TO analyst_reader;
-  ELSE
-    missing := missing || 'billing_export_imports'::text;
-  END IF;
   IF to_regclass('public.billing_export_line_items') IS NOT NULL THEN
     GRANT SELECT ON public.billing_export_line_items TO analyst_reader;
   ELSE
@@ -346,11 +341,6 @@ BEGIN
     GRANT SELECT ON public.crm_work_links TO analyst_reader;
   ELSE
     missing := missing || 'crm_work_links'::text;
-  END IF;
-  IF to_regclass('public.customer_deployment_session_events') IS NOT NULL THEN
-    GRANT SELECT ON public.customer_deployment_session_events TO analyst_reader;
-  ELSE
-    missing := missing || 'customer_deployment_session_events'::text;
   END IF;
   IF to_regclass('public.document_conformance_reports') IS NOT NULL THEN
     GRANT SELECT ON public.document_conformance_reports TO analyst_reader;
@@ -785,11 +775,6 @@ BEGIN
   ELSE
     missing := missing || 'stripe_customers'::text;
   END IF;
-  IF to_regclass('public.stripe_events') IS NOT NULL THEN
-    GRANT SELECT ON public.stripe_events TO analyst_reader;
-  ELSE
-    missing := missing || 'stripe_events'::text;
-  END IF;
   IF to_regclass('public.stripe_subscriptions') IS NOT NULL THEN
     GRANT SELECT ON public.stripe_subscriptions TO analyst_reader;
   ELSE
@@ -952,11 +937,6 @@ BEGIN
     GRANT SELECT ON public.wakeup_requests TO analyst_reader;
   ELSE
     missing := missing || 'wakeup_requests'::text;
-  END IF;
-  IF to_regclass('public.webhook_idempotency') IS NOT NULL THEN
-    GRANT SELECT ON public.webhook_idempotency TO analyst_reader;
-  ELSE
-    missing := missing || 'webhook_idempotency'::text;
   END IF;
   IF to_regclass('public.work_item_comments') IS NOT NULL THEN
     GRANT SELECT ON public.work_item_comments TO analyst_reader;
