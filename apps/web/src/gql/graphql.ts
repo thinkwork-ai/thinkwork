@@ -15542,6 +15542,22 @@ export type SettingsProvisionAnalystConnectorMutation = {
   };
 };
 
+export type SettingsRegisterAnalystDataSourceMutationVariables = Exact<{
+  input: RegisterAnalystDataSourceInput;
+}>;
+
+export type SettingsRegisterAnalystDataSourceMutation = {
+  __typename?: "Mutation";
+  registerAnalystDataSource: {
+    __typename?: "AnalystDataSourceResult";
+    serverId: string;
+    slug: string;
+    tables: number;
+    foldersWritten: number;
+    foldersSkipped: number;
+  };
+};
+
 export type TenantSkillCatalogQueryVariables = Exact<{
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
 }>;
@@ -32431,6 +32447,70 @@ export const SettingsProvisionAnalystConnectorDocument = {
 } as unknown as DocumentNode<
   SettingsProvisionAnalystConnectorMutation,
   SettingsProvisionAnalystConnectorMutationVariables
+>;
+export const SettingsRegisterAnalystDataSourceDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRegisterAnalystDataSource" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "RegisterAnalystDataSourceInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "registerAnalystDataSource" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "serverId" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "tables" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "foldersWritten" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "foldersSkipped" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRegisterAnalystDataSourceMutation,
+  SettingsRegisterAnalystDataSourceMutationVariables
 >;
 export const TenantSkillCatalogDocument = {
   kind: "Document",
