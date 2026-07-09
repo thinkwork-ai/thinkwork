@@ -61,7 +61,25 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '120s';
+
+-- The reader password is OPTIONAL. Supplied (-v reader_pass=...) it is used
+-- verbatim (dev bootstrap path, which also stores it in Secrets Manager).
+-- Absent — the customer deployment runner's migration sweep passes only
+-- `stage` — a random throwaway password is generated instead: since
+-- THINK-229 the broker authenticates via RDS IAM tokens (0229 grants
+-- rds_iam), the password is a dormant fallback, and operator provisioning
+-- (`provisionAnalystConnector`) rotates it with a stored value on demand.
+\if :{?reader_pass}
 SET LOCAL "thinkwork.analyst_reader_pass" = :'reader_pass';
+\else
+-- DO block so the generated value never echoes into psql output (runner
+-- stdout is shipped to CloudWatch).
+DO $$
+BEGIN
+  PERFORM set_config('thinkwork.analyst_reader_pass',
+                     md5(random()::text) || md5(random()::text), true);
+END $$;
+\endif
 
 -- Refuse to apply against an unexpected DB (stale DATABASE_URL guard).
 DO $$
