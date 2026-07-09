@@ -7,6 +7,8 @@
  * consumers.
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
+
 /**
  * The signed sidecar policy block (THINK-229 U3 / R10, R12): budgets,
  * audit-retention toggle, and the reserved role tier. Tamper-evident for
@@ -133,9 +135,21 @@ export function evaluateConnectionPolicyParity(input: {
  * behavior, sidecar policy is shadow-only. "sidecar" = sidecar-derived
  * policy (budgets, retain_sql) flows into dispatch outputs for
  * enforcement (U4 consumes). Never flip before live parity is proven.
+ *
+ * Resolved through the SSM runtime-config document (getConfig) so the
+ * flip is a document edit, not a Lambda-env redeploy — with getConfig's
+ * env-wins merge as the test/incident override. The terraform variable
+ * `analyst_policy_source` (default "row") feeds the document.
  */
 export function resolveAnalystPolicySource(
-  env: NodeJS.ProcessEnv = process.env,
+  env?: NodeJS.ProcessEnv,
 ): "row" | "sidecar" {
-  return env.ANALYST_POLICY_SOURCE === "sidecar" ? "sidecar" : "row";
+  if (env) return env.ANALYST_POLICY_SOURCE === "sidecar" ? "sidecar" : "row";
+  let value = "";
+  try {
+    value = getConfig("ANALYST_POLICY_SOURCE") || "";
+  } catch {
+    value = "";
+  }
+  return value === "sidecar" ? "sidecar" : "row";
 }

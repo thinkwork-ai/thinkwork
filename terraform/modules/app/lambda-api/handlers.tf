@@ -53,9 +53,14 @@ locals {
     # the PEM itself never enters the env or the String document).
     CAPABILITY_SIGNING_PUBLIC_KEY         = var.capability_signing_public_key
     CAPABILITY_SIGNING_PRIVATE_KEY_SECRET = var.capability_signing_private_key_secret
-    DATABASE_SECRET_ARN                   = var.graphql_db_secret_arn
-    DATABASE_HOST                         = var.db_cluster_endpoint
-    DATABASE_NAME                         = var.database_name
+    # THINK-229 U3/KTD5 — the analyst policy-source enforcement flip.
+    # "row" (default) keeps sidecar policy shadow-only; "sidecar" makes the
+    # signed sidecar block authoritative (budgets/policyClaims flow). Flip
+    # ONLY after clean shadow parity on live traffic.
+    ANALYST_POLICY_SOURCE = var.analyst_policy_source
+    DATABASE_SECRET_ARN   = var.graphql_db_secret_arn
+    DATABASE_HOST         = var.db_cluster_endpoint
+    DATABASE_NAME         = var.database_name
     # BUCKET_NAME and USER_POOL_ID were duplicate aliases of WORKSPACE_BUCKET
     # and COGNITO_USER_POOL_ID; GRAPHQL_API_KEY duplicated APPSYNC_API_KEY;
     # THINKWORK_API_SECRET and EMAIL_HMAC_SECRET duplicated API_AUTH_SECRET
