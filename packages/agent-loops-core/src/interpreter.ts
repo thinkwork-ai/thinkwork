@@ -36,7 +36,7 @@ export const MAX_ROLLOVERS = 40;
 /** Step kinds the execute_step phase runs synchronously in-Lambda. */
 export type ExecutableWorkflowStep = Extract<
   WorkflowStep,
-  { kind: "routine" | "http" | "emit_event" }
+  { kind: "routine" | "http" | "emit_event" | "deliver" }
 >;
 
 export type NextStepDirective =
@@ -80,6 +80,7 @@ export function planNextStep(
     case "routine":
     case "http":
     case "emit_event":
+    case "deliver":
       return { type: "execute_step", step };
     case "approval":
       return { type: "approval_step", step };
@@ -93,7 +94,11 @@ export function planNextStep(
 }
 
 export type WorkflowContinuationDecision =
-  "complete" | "continue" | "human_needed" | "failed" | "budget_stopped";
+  | "complete"
+  | "continue"
+  | "human_needed"
+  | "failed"
+  | "budget_stopped";
 
 export interface WorkflowGoalEvidence {
   /** Goal runtime status projected from the finalized turn. */

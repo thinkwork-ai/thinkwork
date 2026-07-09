@@ -66,6 +66,14 @@ function typeLabel(type: string): string {
  */
 export function renderEmailDelivery(
   artifact: ArtifactPayload,
+  options: {
+    /**
+     * THINK-227 U5 (R7): public share URL for the LIVING document. When set,
+     * the email gains a prominent "View the live report" button after the
+     * inline content and the link joins the plain-text fallback.
+     */
+    shareUrl?: string | null;
+  } = {},
 ): EmailDeliveryResult {
   const label = typeLabel(artifact.type);
   const subject = `${label}: ${artifact.title}`;
@@ -85,7 +93,18 @@ export function renderEmailDelivery(
   const markdownContent = stripLeadingFrontmatter(artifact.content);
   const contentHtml = renderForEmail(markdownContent).html;
 
-  const htmlBody = wrapEmailDocument(headerHtml + contentHtml, {
+  // Share-link button: href is URL-derived (our own signed share URL), never
+  // interpolated into a style attribute; text stays static.
+  const shareUrl = options.shareUrl?.trim();
+  const shareHtml = shareUrl
+    ? `
+<div style="margin:24px 0 8px;text-align:center">
+  <a href="${escapeHtml(shareUrl)}" style="display:inline-block;background:#1a1a1a;color:#ffffff;font-size:14px;font-weight:600;padding:10px 24px;border-radius:6px;text-decoration:none">View the live report</a>
+  <p style="font-size:12px;color:#6b7280;margin:8px 0 0">This link always shows the latest edition.</p>
+</div>`
+    : "";
+
+  const htmlBody = wrapEmailDocument(headerHtml + contentHtml + shareHtml, {
     title: artifact.title,
     preheader: artifact.summary ?? artifact.title,
   });
@@ -97,6 +116,7 @@ export function renderEmailDelivery(
     "",
     markdownContent.slice(0, 2000),
     markdownContent.length > 2000 ? "\n[Content truncated]" : "",
+    shareUrl ? `\nView the live report: ${shareUrl}` : "",
   ]
     .filter(Boolean)
     .join("\n");
