@@ -30,6 +30,19 @@ operator registrations. Managed applications and application plugins can also
 reconcile system-managed rows, such as the **Twenty CRM** MCP server that
 appears automatically when the Twenty managed application is running.
 
+### The MCP Servers page
+
+Settings → MCP Servers organizes the registry into three tabs:
+
+| Tab | Contents |
+| --- | -------- |
+| **MCP Servers** | Manually registered servers |
+| **Plugin MCPs** | Servers installed and managed by plugins and managed applications |
+| **Datasource MCPs** | Analyst data sources — PostgreSQL databases the agent queries through the read-only broker, each showing its source type (Internal/External), cluster instance, and database. See [Analyst Data Sources](/concepts/analyst-data-sources/) |
+
+The header actions register a new MCP server (plus icon) or a new analyst
+data source (database icon).
+
 Typical config includes:
 
 | Field     | Description                                                              |
@@ -126,6 +139,7 @@ MCP usage is tracked in the thread timeline, including:
 ## Related pages
 
 - [Integrations](/concepts/integrations/)
+- [Analyst Data Sources](/concepts/analyst-data-sources/)
 - [Admin: Tenant MCP Servers](/applications/admin/mcp-servers/)
 - [Managed Applications](/applications/admin/managed-applications/)
 - [Mobile: Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/)

@@ -419,6 +419,10 @@ export default defineConfig({
                 { label: "Overview", slug: "concepts/integrations" },
                 { label: "Slack Workspace App", slug: "integrations/slack" },
                 { label: "MCP Tools", slug: "concepts/mcp-tools" },
+                {
+                  label: "Analyst Data Sources",
+                  slug: "concepts/analyst-data-sources",
+                },
               ],
             },
             {
