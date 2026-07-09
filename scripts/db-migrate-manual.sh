@@ -42,6 +42,7 @@
 #   -- creates-trigger: public.<table_name>.<trigger_name>
 #   -- creates-role: <role_name>               # probes pg_catalog.pg_roles (global, unqualified)
 #   -- creates-role-membership: <role>:<member> # probes pg_catalog.pg_auth_members (GRANT <role> TO <member>)
+#   -- creates-policy: public.<table_name>.<policy_name> # probes pg_catalog.pg_policies
 #   -- drops: public.<table_or_index_name>      # probes ABSENT (DROPPED/STILL_PRESENT)
 #   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
 #   -- drops-constraint: public.<table_name>.<constraint_name> # probes ABSENT
@@ -321,6 +322,31 @@ probe_role() {
   fi
 }
 
+probe_policy() {
+  # Accepts public.table.policy. Row-level-security policies are attached to a
+  # table in a schema, mirroring the constraint/trigger probe shape but read
+  # from pg_catalog.pg_policies (schemaname, tablename, policyname).
+  local qualified="$1"
+  local schema="${qualified%%.*}"
+  local rest="${qualified#*.}"
+  local tbl="${rest%%.*}"
+  local policy="${rest#*.}"
+  local found
+  found=$(psql "$DATABASE_URL" -tAc "
+    SELECT 1
+      FROM pg_catalog.pg_policies
+     WHERE schemaname = '$schema'
+       AND tablename  = '$tbl'
+       AND policyname = '$policy'
+     LIMIT 1
+  ")
+  if [[ -z "$found" ]]; then
+    echo MISSING
+  else
+    echo "$schema.$tbl.$policy"
+  fi
+}
+
 any_missing=0
 any_unverified=0
 
@@ -393,6 +419,10 @@ for f in "${WALK_FILES[@]}"; do
     grep -oE "^--[[:space:]]+creates-role-membership:[[:space:]]+[A-Za-z0-9_:]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  policy_markers=$(
+    grep -oE "^--[[:space:]]+creates-policy:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
   drop_col_markers=$(
     grep -oE "^--[[:space:]]+drops-column:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
@@ -406,8 +436,8 @@ for f in "${WALK_FILES[@]}"; do
       | awk '{print $NF}' || true
   )
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$membership_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- creates-role-membership:', '-- drops:', '-- drops-column:', or '-- drops-constraint:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$membership_markers" && -z "$policy_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" ]]; then
+    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- creates-role-membership:', '-- creates-policy:', '-- drops:', '-- drops-column:', or '-- drops-constraint:' markers in header)"
     any_unverified=1
     continue
   fi
@@ -436,6 +466,9 @@ for f in "${WALK_FILES[@]}"; do
     fi
     if [[ -n "$membership_markers" ]]; then
       while IFS= read -r m; do echo "    creates-role-membership: $m"; done <<< "$membership_markers"
+    fi
+    if [[ -n "$policy_markers" ]]; then
+      while IFS= read -r m; do echo "    creates-policy: $m"; done <<< "$policy_markers"
     fi
     if [[ -n "$drop_col_markers" ]]; then
       while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
@@ -512,6 +545,14 @@ for f in "${WALK_FILES[@]}"; do
       echo "    role-membership $m -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$membership_markers"
+  fi
+  if [[ -n "$policy_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_policy "$m")
+      echo "    policy $m -> $result"
+      [[ "$result" == "MISSING" ]] && any_missing=1
+    done <<< "$policy_markers"
   fi
   if [[ -n "$drop_col_markers" ]]; then
     while IFS= read -r m; do
