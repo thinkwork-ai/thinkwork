@@ -1,7 +1,10 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, tenantCredentials } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
-import { parseAwsJsonObject } from "../../../lib/tenant-credentials/secret-store.js";
+import {
+  parseAwsJsonObject,
+  validateRdsIamCredentialMetadata,
+} from "../../../lib/tenant-credentials/secret-store.js";
 import {
   assertKnownStatus,
   assertSlugAvailable,
@@ -53,10 +56,17 @@ export async function updateTenantCredential(
     updates.deleted_at = args.input.status === "deleted" ? new Date() : null;
   }
   if (args.input.metadataJson !== undefined) {
-    updates.metadata_json = parseAwsJsonObject(
+    const metadata = parseAwsJsonObject(
       args.input.metadataJson ?? {},
       "metadataJson",
     );
+    // rds_iam metadata IS the credential (THINK-229 U1) — updates must
+    // keep the connect-chain contract whole (rotate points operators
+    // here, so this is the sanctioned edit path).
+    if (current.kind === "rds_iam") {
+      validateRdsIamCredentialMetadata(metadata);
+    }
+    updates.metadata_json = metadata;
   }
 
   const [row] = await db

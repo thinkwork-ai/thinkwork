@@ -21,11 +21,16 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import { agentProfiles, tenantMcpServers } from "@thinkwork/database-pg/schema";
+import {
+  agentProfiles,
+  tenantCredentials,
+  tenantMcpServers,
+} from "@thinkwork/database-pg/schema";
 
 import { BUILT_IN_PROFILE_SEEDS } from "../../graphql/resolvers/agent-profiles/built-in-agent-profiles.js";
 import { db as defaultDb } from "../../graphql/utils.js";
 import { computeMcpUrlHash } from "../mcp-server-hash.js";
+import { RDS_IAM_REQUIRED_METADATA_FIELDS } from "../tenant-credentials/secret-store.js";
 
 type DbLike = typeof defaultDb;
 
@@ -217,6 +222,137 @@ export function resolveAnalystProvisionConfig(
     );
   }
   return { tenantId: tenantId!, brokerUrl: brokerUrl!, secretRef: secretRef! };
+}
+
+export const ANALYST_RDS_IAM_CREDENTIAL_SLUG = "analyst-rds-iam";
+
+export interface AnalystRdsIamCredentialInput {
+  tenantId: string;
+  clusterEndpoint: string;
+  port: number;
+  database: string;
+  dbUser: string;
+  clusterResourceId: string;
+}
+
+/**
+ * Resolve the optional rds_iam credential inputs from env (THINK-229 U1 /
+ * R2). Returns null when the IAM env block isn't wired yet (pre-Terraform
+ * runs keep working); throws when it's partially wired — a half-seeded
+ * credential row would misdescribe the connect chain.
+ */
+export function resolveAnalystRdsIamConfig(
+  env: Record<string, string | undefined>,
+  tenantId: string,
+): AnalystRdsIamCredentialInput | null {
+  const clusterEndpoint = env.ANALYST_DB_CLUSTER_ENDPOINT?.trim();
+  const clusterResourceId = env.ANALYST_DB_CLUSTER_RESOURCE_ID?.trim();
+  if (!clusterEndpoint && !clusterResourceId) return null;
+  const missing: string[] = [];
+  if (!clusterEndpoint) missing.push("ANALYST_DB_CLUSTER_ENDPOINT");
+  if (!clusterResourceId) missing.push("ANALYST_DB_CLUSTER_RESOURCE_ID");
+  if (missing.length > 0) {
+    throw new Error(
+      `provision-analyst-connector: partial rds_iam env — missing ${missing.join(", ")}. ` +
+        "Wire both (or neither) before seeding the credential row.",
+    );
+  }
+  const port = Number.parseInt(env.ANALYST_DB_PORT || "5432", 10);
+  return {
+    tenantId,
+    clusterEndpoint: clusterEndpoint!,
+    port: Number.isFinite(port) && port > 0 ? port : 5432,
+    database: env.ANALYST_DB_NAME?.trim() || "thinkwork",
+    dbUser: env.ANALYST_DB_USER?.trim() || "analyst_reader",
+    clusterResourceId: clusterResourceId!,
+  };
+}
+
+/**
+ * Idempotent upsert of the operator-facing `rds_iam` credential row
+ * (THINK-229 U1 / R2, KTD1): metadata only, empty secret_ref sentinel —
+ * no long-lived secret exists for this kind. The broker reads its connect
+ * config from Terraform-supplied env; this row is the record the signed
+ * sidecar's credentialRefs points at.
+ */
+export async function ensureAnalystRdsIamCredential(
+  input: AnalystRdsIamCredentialInput & { db?: DbLike },
+): Promise<"created" | "updated" | "unchanged"> {
+  const db = input.db ?? defaultDb;
+  const metadata = {
+    clusterEndpoint: input.clusterEndpoint,
+    port: input.port,
+    database: input.database,
+    dbUser: input.dbUser,
+    clusterResourceId: input.clusterResourceId,
+  };
+
+  // Kind-filtered match: a slug-colliding credential of another kind must
+  // never be overwritten into a chimera (foreign kind + live secret_ref +
+  // rds_iam metadata) — collide loudly instead.
+  const [existing] = await db
+    .select({
+      id: tenantCredentials.id,
+      kind: tenantCredentials.kind,
+      metadata_json: tenantCredentials.metadata_json,
+      status: tenantCredentials.status,
+    })
+    .from(tenantCredentials)
+    .where(
+      and(
+        eq(tenantCredentials.tenant_id, input.tenantId),
+        eq(tenantCredentials.slug, ANALYST_RDS_IAM_CREDENTIAL_SLUG),
+      ),
+    )
+    .limit(1);
+
+  if (existing && existing.kind !== "rds_iam") {
+    throw new Error(
+      `tenant credential slug "${ANALYST_RDS_IAM_CREDENTIAL_SLUG}" is taken by a ` +
+        `${existing.kind} credential — refusing to overwrite it.`,
+    );
+  }
+
+  if (!existing) {
+    await db.insert(tenantCredentials).values({
+      tenant_id: input.tenantId,
+      display_name: "Analyst reader (RDS IAM)",
+      slug: ANALYST_RDS_IAM_CREDENTIAL_SLUG,
+      kind: "rds_iam",
+      status: "active",
+      secret_ref: "",
+      schema_json: {},
+      metadata_json: metadata,
+    });
+    return "created";
+  }
+
+  // Field-by-field compare — jsonb normalizes key order, so stringified
+  // equality would report "updated" on every re-run.
+  const existingMeta = (existing.metadata_json ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const unchanged =
+    existing.status === "active" &&
+    RDS_IAM_REQUIRED_METADATA_FIELDS.every(
+      (field) => existingMeta[field] === metadata[field],
+    );
+  if (unchanged) return "unchanged";
+
+  // Re-provisioning is the sanctioned control plane for this row —
+  // reactivating a deleted/disabled row is deliberate (and clears
+  // deleted_at so the row is not active-but-deleted).
+  await db
+    .update(tenantCredentials)
+    .set({
+      metadata_json: metadata,
+      status: "active",
+      deleted_at: null,
+      updated_at: new Date(),
+    })
+    .where(eq(tenantCredentials.id, existing.id));
+  return "updated";
 }
 
 export type ProvisionOutcome =

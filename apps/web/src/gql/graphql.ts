@@ -3249,6 +3249,10 @@ export type MemoryGraphEdge = {
 
 export type MemoryGraphNode = {
   __typename?: "MemoryGraphNode";
+  /** Hindsight bank the entity belongs to (populated when allTenantBanks is set). */
+  bankId?: Maybe<Scalars["String"]["output"]>;
+  /** Human label for the bank (space/user/agent name), for the Bank facet. */
+  bankName?: Maybe<Scalars["String"]["output"]>;
   edgeCount: Scalars["Int"]["output"];
   entityType?: Maybe<Scalars["String"]["output"]>;
   id: Scalars["ID"]["output"];
@@ -6744,6 +6748,7 @@ export type QueryManagedApplicationHealthCheckArgs = {
 };
 
 export type QueryMemoryGraphArgs = {
+  allTenantBanks?: InputMaybe<Scalars["Boolean"]["input"]>;
   assistantId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   userId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -8907,6 +8912,7 @@ export enum TenantCredentialKind {
   BearerToken = "bearer_token",
   GithubRepo = "github_repo",
   Json = "json",
+  RdsIam = "rds_iam",
   SoapPartner = "soap_partner",
   WebhookSigningSecret = "webhook_signing_secret",
 }

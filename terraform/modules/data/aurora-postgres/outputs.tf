@@ -8,6 +8,11 @@ output "db_cluster_arn" {
   value       = local.db_cluster_arn
 }
 
+output "cluster_resource_id" {
+  description = "Immutable RDS cluster resource ID (cluster-XXXX / db-XXXX), the identifier IAM rds-db:connect policies key on — NOT the ARN (THINK-229 U1). Empty string when create_database = false."
+  value       = local.use_aurora ? aws_rds_cluster.main[0].cluster_resource_id : (local.use_rds ? aws_db_instance.main[0].resource_id : "")
+}
+
 output "graphql_db_secret_arn" {
   description = "Secrets Manager ARN for DB credentials (created or existing)"
   value       = local.graphql_db_secret_arn

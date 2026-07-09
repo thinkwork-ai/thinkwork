@@ -33,6 +33,14 @@ export async function rotateTenantCredential(
     "manage_tenant_credentials",
   );
 
+  if (current.kind === "rds_iam") {
+    // THINK-229 U1: nothing to rotate — no stored secret exists for this
+    // kind; auth tokens are minted per-connect in the broker Lambda.
+    throw new Error(
+      "rds_iam credentials have no stored secret to rotate; update metadata instead.",
+    );
+  }
+
   const secret = normalizeCredentialSecret(current.kind, args.input.secretJson);
   // Rotations revalidate the connection like first save (R2) — the secret
   // in Secrets Manager is only replaced by a working repo/token/branch.

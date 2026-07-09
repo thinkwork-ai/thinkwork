@@ -116,9 +116,13 @@ ALTER ROLE analyst_reader SET statement_timeout = '15s';
 ALTER ROLE analyst_reader SET idle_in_transaction_session_timeout = '30s';
 ALTER ROLE analyst_reader SET search_path = public;
 
--- Assert the role holds no memberships (SET ROLE escalation surface). This
--- migration never grants any; if one appears out-of-band, fail the apply
--- loudly rather than proceeding with a widened surface.
+-- Assert the role holds no memberships beyond the allowlist (SET ROLE
+-- escalation surface). This migration never grants any; the single
+-- allowlisted membership is rds_iam (THINK-229 U1, granted by
+-- drizzle/0229_analyst_reader_rds_iam_grant.sql — a marker role that
+-- flips the login path to IAM tokens and carries no privileges to
+-- inherit). Anything else appearing out-of-band fails the apply loudly
+-- rather than proceeding with a widened surface.
 DO $$
 DECLARE
   membership text;
@@ -127,7 +131,8 @@ BEGIN
   FROM pg_auth_members m
   JOIN pg_roles r ON r.oid = m.roleid
   JOIN pg_roles member ON member.oid = m.member
-  WHERE member.rolname = 'analyst_reader';
+  WHERE member.rolname = 'analyst_reader'
+    AND r.rolname <> 'rds_iam';
   IF membership IS NOT NULL THEN
     RAISE EXCEPTION 'analyst_reader unexpectedly holds role memberships: %', membership;
   END IF;

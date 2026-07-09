@@ -1003,6 +1003,9 @@ module "api" {
   # the broker caller credential the seeded connector row references.
   analyst_reader_secret_arn = module.database.analyst_reader_secret_arn
   analyst_broker_secret_arn = module.database.analyst_broker_secret_arn
+  # THINK-229 U1 — keys the broker's rds-db:connect grant and switches the
+  # reader connection to per-connect RDS IAM auth tokens.
+  analyst_db_cluster_resource_id = module.database.cluster_resource_id
 
   # Phase 3 U8b — KMS key + Object Lock mode forwarded as
   # COMPLIANCE_ANCHOR_KMS_KEY_ARN and COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE

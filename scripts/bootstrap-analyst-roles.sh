@@ -179,7 +179,28 @@ echo "==> Verifying role" >&2
 psql "$DATABASE_URL" -tAc \
   "SELECT rolname FROM pg_roles WHERE rolname = 'analyst_reader'" | grep -q analyst_reader
 
-READER_URL="postgres://analyst_reader:$(printf '%s' "$ANALYST_READER_PASS" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
+# THINK-229 U1 (KTD2): once drizzle/0229 grants rds_iam, password login for
+# analyst_reader stops working — smoke through a minted IAM auth token
+# instead (the same path the broker Lambda uses). Pre-grant, the password
+# path still carries.
+HAS_RDS_IAM="$(psql "$DATABASE_URL" -tAc "
+  SELECT 1 FROM pg_auth_members m
+  JOIN pg_roles g ON g.oid = m.roleid
+  JOIN pg_roles r ON r.oid = m.member
+  WHERE g.rolname = 'rds_iam' AND r.rolname = 'analyst_reader'
+  LIMIT 1" | tr -d '[:space:]')"
+
+if [[ "$HAS_RDS_IAM" == "1" ]]; then
+  echo "==> rds_iam membership detected — smoking via IAM auth token" >&2
+  IAM_TOKEN="$(aws rds generate-db-auth-token \
+    --region "$AWS_REGION" \
+    --hostname "$DB_HOST" \
+    --port "$DB_PORT" \
+    --username analyst_reader)"
+  READER_URL="postgres://analyst_reader:$(printf '%s' "$IAM_TOKEN" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
+else
+  READER_URL="postgres://analyst_reader:$(printf '%s' "$ANALYST_READER_PASS" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require"
+fi
 
 echo "==> Smoke: SELECT allowed" >&2
 psql "$READER_URL" -tAc "SELECT count(*) FROM tenants" >/dev/null

@@ -9,6 +9,7 @@ import {
   putTenantCredentialSecret,
   scheduleTenantCredentialSecretDeletion,
   tenantCredentialSecretName,
+  validateRdsIamCredentialMetadata,
 } from "../../../lib/tenant-credentials/secret-store.js";
 import {
   validateGithubRepoConnection,
@@ -55,24 +56,44 @@ export async function createTenantCredential(
   await assertSlugAvailable({ tenantId: input.tenantId, slug });
 
   const credentialId = randomUUID();
-  const secretName = tenantCredentialSecretName({
-    tenantId: input.tenantId,
-    credentialId,
-  });
-  const secret = normalizeCredentialSecret(input.kind, input.secretJson);
-  // Routine-repo credentials are validated end to end (repo reachable with
-  // the token, branch exists) before anything is stored (R2) — a rejected
-  // save writes neither the secret nor the row.
-  if (input.kind === "github_repo") {
-    await validateGithubRepoConnection(
-      secret as unknown as GithubRepoCredentialPayload,
-    );
-  }
-  const secretRef = await putTenantCredentialSecret({
-    secretName,
-    payload: secret,
-  });
   const metadata = parseAwsJsonObject(input.metadataJson ?? {}, "metadataJson");
+
+  let secretRef = "";
+  if (input.kind === "rds_iam") {
+    // THINK-229 U1 (R2): metadata-only credential — no Secrets Manager
+    // payload exists for this kind (tokens are minted per-connect in the
+    // trusted broker Lambda). secret_ref stays an empty sentinel. Reject
+    // a non-empty secretJson loudly: silently discarding a pasted
+    // password would leave the operator believing it was stored.
+    const straySecret = parseAwsJsonObject(
+      input.secretJson ?? {},
+      "secretJson",
+    );
+    if (Object.keys(straySecret).length > 0) {
+      throw new Error(
+        "rds_iam credentials store no secret — leave secretJson empty; connection metadata goes in metadataJson.",
+      );
+    }
+    validateRdsIamCredentialMetadata(metadata);
+  } else {
+    const secretName = tenantCredentialSecretName({
+      tenantId: input.tenantId,
+      credentialId,
+    });
+    const secret = normalizeCredentialSecret(input.kind, input.secretJson);
+    // Routine-repo credentials are validated end to end (repo reachable with
+    // the token, branch exists) before anything is stored (R2) — a rejected
+    // save writes neither the secret nor the row.
+    if (input.kind === "github_repo") {
+      await validateGithubRepoConnection(
+        secret as unknown as GithubRepoCredentialPayload,
+      );
+    }
+    secretRef = await putTenantCredentialSecret({
+      secretName,
+      payload: secret,
+    });
+  }
   const actorId = await resolveCallerUserId(ctx);
 
   try {
@@ -94,6 +115,7 @@ export async function createTenantCredential(
 
     return credentialToGraphql(row);
   } catch (err) {
+    if (!secretRef) throw err;
     await scheduleTenantCredentialSecretDeletion(secretRef).catch(
       (cleanupErr) => {
         console.error(

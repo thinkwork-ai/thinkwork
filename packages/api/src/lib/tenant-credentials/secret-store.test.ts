@@ -16,6 +16,7 @@ import {
   rotateTenantCredentialSecret,
   scheduleTenantCredentialSecretDeletion,
   tenantCredentialSecretName,
+  validateRdsIamCredentialMetadata,
 } from "./secret-store";
 
 const sm = mockClient(SecretsManagerClient);
@@ -35,6 +36,36 @@ describe("tenant credential secret store", () => {
         credentialId: "cred-1",
       }),
     ).toBe("thinkwork/dev/routines/tenant-1/credentials/cred-1");
+  });
+
+  it("rds_iam: metadata-only kind — no secret fields required, metadata contract enforced (THINK-229 U1)", () => {
+    // No Secrets Manager payload exists for this kind.
+    expect(normalizeCredentialSecret("rds_iam", {})).toEqual({});
+
+    const metadata = {
+      clusterEndpoint:
+        "thinkwork-dev-db.cluster-abc.us-east-1.rds.amazonaws.com",
+      port: 5432,
+      database: "thinkwork",
+      dbUser: "analyst_reader",
+      clusterResourceId: "cluster-ABC123",
+    };
+    expect(() => validateRdsIamCredentialMetadata(metadata)).not.toThrow();
+    expect(() =>
+      validateRdsIamCredentialMetadata({ ...metadata, clusterResourceId: "" }),
+    ).toThrow(/clusterResourceId/);
+    expect(() => validateRdsIamCredentialMetadata({})).toThrow(
+      /clusterEndpoint, port, database, dbUser, clusterResourceId/,
+    );
+    // Port accepts numeric or non-empty string forms.
+    expect(() =>
+      validateRdsIamCredentialMetadata({ ...metadata, port: "5432" }),
+    ).not.toThrow();
+
+    // Other kinds still require their secret fields.
+    expect(() => normalizeCredentialSecret("bearer_token", {})).toThrow(
+      /token/,
+    );
   });
 
   it("validates required fields for SOAP partner credentials", () => {

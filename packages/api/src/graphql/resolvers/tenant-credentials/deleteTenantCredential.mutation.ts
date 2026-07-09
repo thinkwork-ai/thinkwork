@@ -16,7 +16,10 @@ export async function deleteTenantCredential(
     "manage_tenant_credentials",
   );
 
-  await scheduleTenantCredentialSecretDeletion(current.secret_ref);
+  // rds_iam rows carry no stored secret (empty secret_ref sentinel).
+  if (current.secret_ref) {
+    await scheduleTenantCredentialSecretDeletion(current.secret_ref);
+  }
   await db
     .update(tenantCredentials)
     .set({

@@ -35,9 +35,11 @@ import { fileURLToPath } from "node:url";
 import { materializeAnalystConnectionFolder } from "../packages/api/src/lib/analyst/connection-folder";
 import {
   ensureAnalystBrokerSecret,
+  ensureAnalystRdsIamCredential,
   provisionAnalystConnector,
   refreshAnalystProfileFromSeed,
   resolveAnalystProvisionConfig,
+  resolveAnalystRdsIamConfig,
 } from "../packages/api/src/lib/analyst/provision-connector";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -78,6 +80,19 @@ async function main() {
     rotate: rotateToken,
   });
   console.error(`==> Broker credential secret ${secretOutcome}`);
+
+  // THINK-229 U1 (R2): the operator-facing rds_iam credential row —
+  // metadata-only record of the IAM connect chain. Seeded only when the
+  // Terraform env block is wired (pre-IAM stages keep provisioning).
+  const rdsIamConfig = resolveAnalystRdsIamConfig(process.env, config.tenantId);
+  if (rdsIamConfig) {
+    const credOutcome = await ensureAnalystRdsIamCredential(rdsIamConfig);
+    console.error(`==> rds_iam credential row ${credOutcome}`);
+  } else {
+    console.error(
+      "==> rds_iam env not wired (ANALYST_DB_CLUSTER_ENDPOINT/RESOURCE_ID) — credential row skipped",
+    );
+  }
 
   const outcome = await provisionAnalystConnector({ ...config, reApprove });
   console.error(
