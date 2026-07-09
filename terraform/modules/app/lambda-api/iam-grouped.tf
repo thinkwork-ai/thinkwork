@@ -65,7 +65,16 @@ locals {
           "secretsmanager:CreateSecret",
           "secretsmanager:UpdateSecret",
           "secretsmanager:DeleteSecret",
-          "secretsmanager:GetSecretValue"
+          "secretsmanager:GetSecretValue",
+          # THINK-230 — provisionAnalystConnector writes the broker credential
+          # secret value (thinkwork/<stage>/analyst/broker-credential, under
+          # this thinkwork/* prefix) via ensureAnalystBrokerSecret's
+          # PutSecretValue. GetSecretValue above already covers the read; this
+          # role already holds Create/Update/Delete on the same prefix, so
+          # PutSecretValue grants no capability beyond the existing delete +
+          # recreate. Kept on the existing statement to stay under the 6,144
+          # rendered-char managed-policy cap.
+          "secretsmanager:PutSecretValue"
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"
       },

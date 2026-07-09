@@ -721,6 +721,30 @@ export type AgentWorkspaceWait = {
   waitingRunId: Scalars["ID"]["output"];
 };
 
+/**
+ * Outcome of running the analyst connector provisioning ceremony (THINK-230):
+ * the operator-facing equivalent of scripts/provision-analyst-connector.mts.
+ * Reproduces the script's born-approved + re-approve semantics (KTD4 / SI-5
+ * hash pinning).
+ */
+export type AnalystProvisionResult = {
+  __typename?: "AnalystProvisionResult";
+  /** Broker credential secret action: created | unchanged | updated. */
+  brokerSecretOutcome: Scalars["String"]["output"];
+  /** The tenant_mcp_servers row id for the analyst connector. */
+  connectorId: Scalars["ID"]["output"];
+  /** Registry-row action: created | unchanged | re_approved. */
+  connectorOutcome: Scalars["String"]["output"];
+  /** Count of agent workspaces skipped (e.g. no workspace prefix). */
+  foldersSkipped: Scalars["Int"]["output"];
+  /** Count of agent workspaces the connection folder was written into. */
+  foldersWritten: Scalars["Int"]["output"];
+  /** True once the tenant's analyst profile was refreshed from the built-in seed. */
+  profileRefreshed: Scalars["Boolean"]["output"];
+  /** rds_iam credential row action, or null when the IAM env block is not wired. */
+  rdsIamCredentialOutcome?: Maybe<Scalars["String"]["output"]>;
+};
+
 export type Applet = {
   __typename?: "Applet";
   agentVersion?: Maybe<Scalars["String"]["output"]>;
@@ -3786,6 +3810,15 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
+  /**
+   * Run the analyst connector provisioning ceremony for the caller's tenant
+   * (THINK-230) — the operator-facing action that replaces the
+   * scripts/provision-analyst-connector.mts CLI ceremony. Requires tenant
+   * owner/admin. `reApprove` rewrites url/auth_config and restamps approval
+   * after a drift (SI-5); `rotateToken` mints a fresh broker token and forces
+   * re-approval.
+   */
+  provisionAnalystConnector: AnalystProvisionResult;
   publishRoutineVersion: RoutineAslVersion;
   /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
   publishSkillDraft: SkillDraft;
@@ -4623,6 +4656,11 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
+};
+
+export type MutationProvisionAnalystConnectorArgs = {
+  reApprove?: InputMaybe<Scalars["Boolean"]["input"]>;
+  rotateToken?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
 export type MutationPublishRoutineVersionArgs = {
