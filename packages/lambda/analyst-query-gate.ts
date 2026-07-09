@@ -46,6 +46,16 @@ export const DEFAULT_MAX_FETCH_BYTES = 5 * 1024 * 1024;
 
 const CURSOR_BATCH_SIZE = 500;
 
+/**
+ * Canonical UUID shape (any version/variant, case-insensitive). The tenant
+ * id is set into a Postgres GUC that RLS policies cast to `uuid`; validating
+ * the shape here fails closed BEFORE any query runs and keeps a hostile
+ * (LLM-authored) call site from smuggling non-UUID text toward the DB even
+ * though the value is only ever bound as a parameter, never interpolated.
+ */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** A rejected query. `detail` is the verbatim server error (R6). */
 export class AnalystQueryRejection extends Error {
   constructor(
@@ -101,14 +111,42 @@ function approximateRowBytes(row: AnalystCell[]): number {
 export async function gateAndExecute(
   client: PgClientType,
   sql: string,
-  options?: { maxRows?: number; maxBytes?: number },
+  options: { tenantId: string; maxRows?: number; maxBytes?: number },
 ): Promise<GatedQueryResult> {
-  const maxRows = options?.maxRows ?? DEFAULT_MAX_FETCH_ROWS;
-  const maxBytes = options?.maxBytes ?? DEFAULT_MAX_FETCH_BYTES;
+  const maxRows = options.maxRows ?? DEFAULT_MAX_FETCH_ROWS;
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_FETCH_BYTES;
+  const tenantId = options.tenantId;
   const startedAt = Date.now();
+
+  // Fail closed BEFORE any statement runs — a missing/invalid tenant must
+  // never execute unscoped (THINK-234). The value is only ever bound as a
+  // parameter below, but we still reject non-UUID text up front.
+  if (typeof tenantId !== "string" || !UUID_RE.test(tenantId)) {
+    throw new Error(
+      "analyst-query-gate: gateAndExecute requires a valid UUID tenantId to " +
+        `scope the query (thinkwork.analyst_tenant GUC); got ${JSON.stringify(
+          tenantId,
+        )}`,
+    );
+  }
 
   // 1. Session reset — KTD7. Broker-authored constant, simple protocol ok.
   await client.query("DISCARD ALL");
+
+  // 1a. Row-level tenant scope (THINK-234). Set the GUC that the (future)
+  // RLS policies read: `USING (tenant_id = current_setting(
+  // 'thinkwork.analyst_tenant', true)::uuid)`. `missing_ok = true` policies
+  // fail CLOSED — an unset GUC yields NULL and matches zero rows — so this
+  // must be re-set on EVERY call, immediately after DISCARD ALL wipes all
+  // session GUCs (KTD7). `is_local = false` scopes it to the session, not a
+  // transaction (queries run outside an explicit BEGIN). ALWAYS parameterized
+  // — the SQL author is an LLM, so the tenant value is bound, never
+  // interpolated. INERT until the RLS migration lands: with no policies on
+  // the granted tables, setting this GUC changes nothing.
+  await client.query(
+    "SELECT set_config('thinkwork.analyst_tenant', $1, false)",
+    [tenantId],
+  );
 
   // 2. EXPLAIN gate — cursor forces the extended protocol (unnamed Parse).
   let explainPlan: unknown;
