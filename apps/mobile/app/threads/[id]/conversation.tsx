@@ -65,6 +65,7 @@ import { COLORS } from "@/lib/theme";
 import { WebContent } from "@/components/layout/web-content";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { isSystemMessage } from "@/components/chat/system-message";
+import { ThreadDocumentPlates } from "@/components/threads/ThreadDocumentPlates";
 
 // Discriminated union for FlatList items
 type MessageItem = {
@@ -379,11 +380,19 @@ export default function ThreadConversationScreen() {
               </View>
             }
             ListHeaderComponent={
-              isStreaming ? (
-                <View className="ml-2 mb-2">
-                  <TypingIndicator />
-                </View>
-              ) : null
+              <>
+                {isStreaming ? (
+                  <View className="ml-2 mb-2">
+                    <TypingIndicator />
+                  </View>
+                ) : null}
+                {/* Inverted list: the header renders at the visual bottom —
+                    the thread's document plates live there, like web. */}
+                <ThreadDocumentPlates
+                  tenantId={currentUser?.tenantId}
+                  threadId={id}
+                />
+              </>
             }
           />
 

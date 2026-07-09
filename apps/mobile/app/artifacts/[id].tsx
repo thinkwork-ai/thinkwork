@@ -1,13 +1,19 @@
+import { useMemo } from "react";
 import { View, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "urql";
 import { useColorScheme } from "nativewind";
+import { WebView } from "react-native-webview";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { stripLeadingFrontmatter } from "../../lib/markdown-frontmatter";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { ArtifactDetailQuery } from "@/lib/graphql-queries";
+import {
+  isDocumentArtifactMetadata,
+  withDocumentFrameEnvelope,
+} from "@/lib/document-frame";
 
 const TYPE_LABELS: Record<string, string> = {
   DATA_VIEW: "Data View",
@@ -33,6 +39,21 @@ export default function ArtifactViewScreen() {
   const title = artifact?.title ?? "Artifact";
   const typeLabel = TYPE_LABELS[artifact?.type] ?? artifact?.type ?? "";
 
+  // Document-kind artifacts (compiled HTML plates) render the server-built
+  // house-style HTML in a scriptless WebView — the RN analog of web's
+  // sandboxed DocumentFrame iframe — instead of the markdown digest.
+  const isDark = colorScheme === "dark";
+  const plateHtml = useMemo(
+    () =>
+      artifact?.renderHtml && isDocumentArtifactMetadata(artifact.metadata)
+        ? withDocumentFrameEnvelope(
+            artifact.renderHtml,
+            isDark ? "dark" : "light",
+          )
+        : null,
+    [artifact, isDark],
+  );
+
   return (
     <DetailLayout title={title}>
       {fetching ? (
@@ -43,6 +64,16 @@ export default function ArtifactViewScreen() {
         <View className="flex-1 items-center justify-center">
           <Muted>Artifact not found.</Muted>
         </View>
+      ) : plateHtml ? (
+        <WebView
+          source={{ html: plateHtml }}
+          style={{ flex: 1, backgroundColor: isDark ? "#0a0a0a" : "#ffffff" }}
+          javaScriptEnabled={false}
+          originWhitelist={["about:*"]}
+          onShouldStartLoadWithRequest={(req) => req.url.startsWith("about:")}
+          setSupportMultipleWindows={false}
+          allowsLinkPreview={false}
+        />
       ) : (
         <ScrollView
           className="flex-1"

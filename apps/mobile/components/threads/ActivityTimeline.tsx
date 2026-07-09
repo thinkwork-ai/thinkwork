@@ -5,12 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  View,
-  Pressable,
-  FlatList,
-  RefreshControl,
-} from "react-native";
+import { View, Pressable, FlatList, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
 import {
@@ -59,7 +54,6 @@ const RESPONSE_COLOR = "#06b6d4";
 // ---------------------------------------------------------------------------
 // Spinning refresh icon
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Types
@@ -168,6 +162,11 @@ export interface ActivityTimelineProps {
   onLinkPress?: (url: string) => void;
   onSaveRecipe?: (info: SaveRecipeInfo) => void;
   listHeaderComponent?: React.ReactElement | null;
+  /**
+   * Rendered at the bottom of the timeline, above the typing indicator —
+   * e.g. the thread's document plate cards (ThreadDocumentPlates).
+   */
+  listFooterComponent?: React.ReactElement | null;
   /**
    * Suppress the centered "No activity yet" placeholder. The Task Detail
    * page uses this because the pinned external-task card already fills the
@@ -1004,7 +1003,9 @@ function GenUIContent({
         <View style={{ position: "relative" }}>
           {/* ... menu trigger — aligned with card header row */}
           {hasToolInfo && (
-            <View style={{ position: "absolute", top: 6, right: 8, zIndex: 10 }}>
+            <View
+              style={{ position: "absolute", top: 6, right: 8, zIndex: 10 }}
+            >
               <HeaderContextMenu
                 trigger={
                   <MoreHorizontal size={22} color={colors.mutedForeground} />
@@ -1105,6 +1106,7 @@ export function ActivityTimeline({
   onLinkPress,
   onSaveRecipe,
   listHeaderComponent,
+  listFooterComponent,
   hideEmptyState,
   currentUserId,
   refreshing,
@@ -1378,7 +1380,12 @@ export function ActivityTimeline({
       renderItem={renderItem}
       keyExtractor={keyExtractor}
       ListHeaderComponent={listHeaderComponent}
-      ListFooterComponent={isAgentRunning ? <TypingIndicator /> : null}
+      ListFooterComponent={
+        <>
+          {listFooterComponent}
+          {isAgentRunning ? <TypingIndicator /> : null}
+        </>
+      }
       ListEmptyComponent={
         hideEmptyState ? null : (
           <View className="items-center justify-center py-12">
