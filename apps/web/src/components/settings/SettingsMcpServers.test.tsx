@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setHeader: vi.fn(),
+  pathname: "/settings/mcp-servers",
   provisionAnalyst: vi.fn(),
   registerDataSource: vi.fn(),
   registerInternal: vi.fn(),
@@ -39,6 +40,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
+  useLocation: (opts?: {
+    select?: (location: { pathname: string }) => unknown;
+  }) => {
+    const location = { pathname: mocks.pathname };
+    return opts?.select ? opts.select(location) : location;
+  },
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
@@ -158,9 +165,21 @@ function selectInternalDatabase(name: string) {
   });
 }
 
+// The dialog-opening actions live in the page header (TooltipIconButtons
+// passed to usePageHeaderActions) — render the latest captured action node
+// and click the named icon button.
+function clickHeaderAction(name: "Register data source" | "New MCP Server") {
+  const action = mocks.setHeader.mock.calls.at(-1)?.[0]?.action;
+  expect(action).toBeTruthy();
+  const { getByRole, unmount } = render(<>{action}</>);
+  fireEvent.click(getByRole("button", { name }));
+  unmount();
+}
+
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setHeader.mockReset();
+  mocks.pathname = "/settings/mcp-servers";
   mocks.provisionAnalyst.mockReset();
   mocks.registerDataSource.mockReset();
   mocks.registerInternal.mockReset();
@@ -267,13 +286,36 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
+    // The MCP Servers tab shows only manual, non-plugin, non-datasource rows.
+    expect(await screen.findByText("Manual CRM")).toBeTruthy();
+    expect(screen.queryByText("Twenty CRM")).toBeNull();
+    expect(screen.queryByText("LastMile Tasks")).toBeNull();
+    expect(screen.queryByText("From plugins")).toBeNull();
+    // The manual duplicate of a plugin URL stays filtered out.
+    expect(screen.queryByText("LastMile CRM")).toBeNull();
+    expect(screen.queryByText("Rows per page")).toBeNull();
+    expect(screen.queryByText(/Page\s+1\s+of/i)).toBeNull();
+    // The inline Remove/System column is gone — removal lives in the detail view.
+    expect(screen.queryByText("System")).toBeNull();
+    expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
+
+    // Header carries the three-tab strip.
+    const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
+    expect(headerConfig?.title).toBe("MCP Servers");
+    expect(headerConfig?.tabs).toEqual([
+      { to: "/settings/mcp-servers", label: "MCP Servers" },
+      { to: "/settings/mcp-servers/plugins", label: "Plugin MCPs" },
+      { to: "/settings/mcp-servers/data-sources", label: "Datasource MCPs" },
+    ]);
+
+    // The Plugin MCPs tab shows the plugin-installed servers, sorted.
+    cleanup();
+    mocks.pathname = "/settings/mcp-servers/plugins";
+    render(<SettingsMcpServers />);
     expect(await screen.findByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getByText("LastMile CRM")).toBeTruthy();
-    expect(screen.getByText("Manual CRM")).toBeTruthy();
-    expect(screen.queryByText("Individual servers")).toBeNull();
-    expect(screen.getByText("From plugins")).toBeTruthy();
     expect(screen.getAllByText("LastMile CRM")).toHaveLength(1);
     expect(screen.getAllByText("plugin")).toHaveLength(4);
+    expect(screen.queryByText("Manual CRM")).toBeNull();
     expect(textAppearsBefore("LastMile CRM", "LastMile Tasks")).toBe(true);
     expect(textAppearsBefore("LastMile Tasks", "n8n workflow management")).toBe(
       true,
@@ -281,14 +323,70 @@ describe("SettingsMcpServers", () => {
     expect(textAppearsBefore("n8n workflow management", "Twenty CRM")).toBe(
       true,
     );
-    expect(textAppearsBefore("LastMile Tasks", "Twenty CRM")).toBe(true);
-    expect(screen.queryByText("Rows per page")).toBeNull();
-    expect(screen.queryByText(/Page\s+1\s+of/i)).toBeNull();
-    // The inline Remove/System column is gone — removal lives in the detail view.
-    expect(screen.queryByText("System")).toBeNull();
-    expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
     expect(screen.getByText("not connected")).toBeTruthy();
     expect(screen.getByText("connected")).toBeTruthy();
+  });
+
+  it("lists analyst connectors on the Datasource MCPs tab with cluster · database", async () => {
+    mocks.listMcpServers.mockResolvedValue({
+      servers: [
+        {
+          id: "postgres-dev",
+          name: "Postgres (dev)",
+          slug: "postgres-dev",
+          url: "https://api.thinkwork.test/mcp/analyst",
+          enabled: true,
+          authType: "service_credential",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+          dataSource: { host: null, database: "thinkwork" },
+        },
+        {
+          id: "analytics-demo",
+          name: "Analytics Demo",
+          slug: "analytics-demo",
+          url: "https://api.thinkwork.test/mcp/analyst/analytics-demo",
+          enabled: true,
+          authType: "service_credential",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+          dataSource: {
+            host: "thinkwork-dev-db.cluster-x.us-east-1.rds.amazonaws.com",
+            database: "analytics_demo",
+          },
+        },
+        {
+          id: "manual",
+          name: "Manual CRM",
+          slug: "manual-crm",
+          url: "https://manual.example/mcp",
+          enabled: true,
+          authType: "none",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+        },
+      ],
+    });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    // Datasource rows are excluded from the MCP Servers tab...
+    render(<SettingsMcpServers />);
+    expect(await screen.findByText("Manual CRM")).toBeTruthy();
+    expect(screen.queryByText("Analytics Demo")).toBeNull();
+    expect(screen.queryByText("Postgres (dev)")).toBeNull();
+
+    // ...and listed with cluster · database on the Datasource MCPs tab.
+    cleanup();
+    mocks.pathname = "/settings/mcp-servers/data-sources";
+    render(<SettingsMcpServers />);
+    expect(await screen.findByText("Analytics Demo")).toBeTruthy();
+    expect(screen.getByText("Postgres (dev)")).toBeTruthy();
+    expect(screen.queryByText("Manual CRM")).toBeNull();
+    expect(screen.getByText("thinkwork-dev-db · analytics_demo")).toBeTruthy();
+    expect(screen.getByText("workspace cluster · thinkwork")).toBeTruthy();
   });
 
   it("adds a server through the New MCP Server dialog", async () => {
@@ -302,7 +400,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(screen.getByRole("button", { name: "+ New MCP Server" }));
+    await screen.findByPlaceholderText("Search servers…");
+    clickHeaderAction("New MCP Server");
     expect(await screen.findByText("New MCP server")).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText("My MCP server"), {
@@ -373,9 +472,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     expect(
       await screen.findByRole("heading", { name: "Register data source" }),
     ).toBeTruthy();
@@ -404,9 +502,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     expect(
       await screen.findByRole("heading", { name: "Register data source" }),
     ).toBeTruthy();
@@ -439,9 +536,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     selectInternalDatabase("thinkwork");
 
     expect(
@@ -458,9 +554,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     const externalTab = screen.getByRole("tab", {
       name: "External",
     });
@@ -532,9 +627,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     const externalTab = screen.getByRole("tab", {
       name: "External",
     });
@@ -608,9 +702,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     const externalTab = screen.getByRole("tab", {
       name: "External",
     });
@@ -658,9 +751,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     selectInternalDatabase("thinkwork");
     fireEvent.click(
       await screen.findByRole("button", { name: "Provision data source" }),
@@ -688,9 +780,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     // The single cluster auto-selects; pick an unregistered database.
     selectInternalDatabase("thinkwork_hindsight");
 
@@ -727,9 +818,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
 
     const registered = screen.getByRole("option", {
       name: "analytics_demo (registered)",
@@ -755,9 +845,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
     selectInternalDatabase("thinkwork_hindsight");
     fireEvent.click(
       screen.getByRole("button", { name: "Register data source" }),
@@ -781,9 +870,8 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "+ Register data source" }),
-    );
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
 
     expect(
       await screen.findByText(/Failed to load clusters: RDS describe failed/),

@@ -21,6 +21,11 @@ export type McpServer = {
   managedApplicationKey?: string | null;
   runtimeAssigned?: boolean;
   runtimeEnabled?: boolean;
+  /**
+   * THINK-239: analyst data-source coordinates — present only on analyst
+   * connector rows. `host` is null for the builtin workspace connector.
+   */
+  dataSource?: { host: string | null; database: string } | null;
 };
 
 export type McpServiceCredentialStatus = {

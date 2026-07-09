@@ -1282,6 +1282,36 @@ async function saveSkillCredentials(
 // MCP Server — Tenant Registry (uses tenant_mcp_servers table)
 // ---------------------------------------------------------------------------
 
+/**
+ * THINK-239: the analyst data-source coordinates for a server row, so list
+ * surfaces can show "cluster · database". Sourced rows carry them on
+ * runtime_metadata.analyst_source; the builtin postgres-dev connector is the
+ * workspace database (its host isn't stored on the row — null host renders as
+ * the workspace cluster client-side). Non-analyst rows return null.
+ */
+function analystDataSourceForRow(row: {
+  slug: string | null;
+  runtime_metadata: unknown;
+}): { host: string | null; database: string } | null {
+  const meta =
+    row.runtime_metadata && typeof row.runtime_metadata === "object"
+      ? (row.runtime_metadata as Record<string, unknown>)
+      : null;
+  const source =
+    meta && typeof meta.analyst_source === "object" && meta.analyst_source
+      ? (meta.analyst_source as Record<string, unknown>)
+      : null;
+  if (
+    source &&
+    typeof source.host === "string" &&
+    typeof source.database === "string"
+  ) {
+    return { host: source.host, database: source.database };
+  }
+  if (row.slug === "postgres-dev") return { host: null, database: "thinkwork" };
+  return null;
+}
+
 async function mcpListTenantServers(
   tenantSlug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
@@ -1328,6 +1358,9 @@ async function mcpListTenantServers(
       approvedBy: r.approved_by,
       approvedAt: r.approved_at,
       createdAt: r.created_at,
+      // THINK-239: analyst rows carry their cluster/database coordinates so
+      // the Datasource MCPs list can label them.
+      dataSource: analystDataSourceForRow(r),
     })),
   });
 }
@@ -2504,9 +2537,8 @@ async function readAgentMcpAssignments(agentId: string): Promise<Array<{
     // THINK-190: the connection sidecar is the single assignment record.
     // Synthesize the state shape callers consume (enabled/enabledTools);
     // display fields come from the registry join below either way.
-    const { listConnectionAssignments } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { listConnectionAssignments } =
+      await import("../lib/capabilities/connection-assignments.js");
     const records = await listConnectionAssignments(targetPrefix);
     if (records === null) return null;
     for (const record of records) {
@@ -2645,9 +2677,8 @@ async function mcpAssignToAgent(
     : null;
   let existed = false;
   if (flipped && connectionSlug) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     existed =
       (await readConnectionAssignment(targetPrefix, connectionSlug)) != null;
   } else if (folderSlug != null) {
@@ -2697,9 +2728,8 @@ async function mcpAssignToAgent(
     // The shared writer is best-effort by contract (it swallows per-agent
     // failures), but for a flipped agent this write IS the assignment —
     // read the record back and fail the request if it did not land.
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     const landed = connectionSlug
       ? await readConnectionAssignment(targetPrefix, connectionSlug)
       : null;
@@ -2737,13 +2767,10 @@ async function mcpUnassignFromAgent(
     return notFound("MCP server assignment not found");
   }
   const flipped = await agentUsesFolderDispatch(agentId);
-  const connectionSlug = folderSlug
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-");
+  const connectionSlug = folderSlug.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   if (flipped) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     const existing = await readConnectionAssignment(
       targetPrefix,
       connectionSlug,
@@ -2778,14 +2805,10 @@ async function mcpUnassignFromAgent(
     );
   }
   if (flipped) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     if (await readConnectionAssignment(targetPrefix, connectionSlug)) {
-      return error(
-        "Failed to remove MCP assignment from agent workspace",
-        500,
-      );
+      return error("Failed to remove MCP assignment from agent workspace", 500);
     }
   }
 
