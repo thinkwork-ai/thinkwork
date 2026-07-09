@@ -72,6 +72,15 @@ export const CAPABILITY_DROP_REASONS = [
   "extension_runner_disabled",
   /** A resolution step errored and degraded (e.g. extension assignment query failed → zero extensions). */
   "resolution_fault",
+  /**
+   * The scheduled connection reconciler (THINK-229 U5) probed this connection
+   * and returned a failing — or stale — verdict (reachability, IAM auth, a
+   * revoked SELECT grant, a write-privilege breach, or schema drift). The
+   * connection is withheld until the next successful probe; `detail` carries
+   * the human-readable verdict surfaced identically in the model-visible
+   * context (R8).
+   */
+  "connection_probe_failed",
 ] as const;
 
 export type CapabilityDropReason = (typeof CAPABILITY_DROP_REASONS)[number];

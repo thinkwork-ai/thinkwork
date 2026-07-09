@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./github-workspace": "./github-workspace.ts",
-    "./analyst-caller-context": "./analyst-caller-context.ts"
+    "./analyst-caller-context": "./analyst-caller-context.ts",
+    "./analyst-reader-db": "./analyst-reader-db.ts"
   },
   "scripts": {
     "build": "tsc --build",
