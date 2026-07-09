@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setHeader: vi.fn(),
   useQuery: vi.fn(),
+  provisionAnalyst: vi.fn(),
   listMcpServers: vi.fn(),
   listUserMcpServers: vi.fn(),
   listRuntimeMcpTools: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock("@/context/AuthContext", () => ({
 
 vi.mock("urql", () => ({
   useQuery: mocks.useQuery,
+  useMutation: () => [{ fetching: false }, mocks.provisionAnalyst],
 }));
 
 vi.mock("@/lib/mcp-api", async (importOriginal) => {
@@ -81,6 +83,7 @@ beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setHeader.mockReset();
   mocks.useQuery.mockReset();
+  mocks.provisionAnalyst.mockReset();
   mocks.listMcpServers.mockReset();
   mocks.listUserMcpServers.mockReset();
   mocks.listRuntimeMcpTools.mockReset();
@@ -363,6 +366,121 @@ describe("SettingsMcpServerDetail", () => {
       );
     });
     expect(await screen.findByText("Service credential saved.")).toBeTruthy();
+  });
+
+  it("re-approves the analyst connector and surfaces the outcome", async () => {
+    mockServerState("not_connected", {
+      name: "Analyst Postgres",
+      slug: "postgres-dev",
+      url: "https://mcp.thinkwork.ai/mcp/analyst",
+      authType: "service_credential",
+    });
+    mocks.provisionAnalyst.mockResolvedValue({
+      data: {
+        provisionAnalystConnector: {
+          connectorId: "conn-analyst",
+          connectorOutcome: "re_approved",
+          brokerSecretOutcome: "unchanged",
+          rdsIamCredentialOutcome: "unchanged",
+          profileRefreshed: true,
+          foldersWritten: 3,
+          foldersSkipped: 0,
+        },
+      },
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    const button = await screen.findByRole("button", {
+      name: /re-approve connection/i,
+    });
+    fireEvent.click(button);
+
+    await waitFor(() =>
+      expect(mocks.provisionAnalyst).toHaveBeenCalledWith({
+        reApprove: true,
+        rotateToken: false,
+      }),
+    );
+    expect(
+      await screen.findByText(/Re-approved — connector re_approved/i),
+    ).toBeTruthy();
+  });
+
+  it("passes rotateToken when the analyst rotate checkbox is set", async () => {
+    mockServerState("not_connected", {
+      name: "Analyst Postgres",
+      slug: "postgres-dev",
+      url: "https://mcp.thinkwork.ai/mcp/analyst",
+      authType: "service_credential",
+    });
+    mocks.provisionAnalyst.mockResolvedValue({
+      data: {
+        provisionAnalystConnector: {
+          connectorId: "conn-analyst",
+          connectorOutcome: "unchanged",
+          brokerSecretOutcome: "rotated",
+          rdsIamCredentialOutcome: null,
+          profileRefreshed: false,
+          foldersWritten: 0,
+          foldersSkipped: 3,
+        },
+      },
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /rotate broker token/i }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /re-approve connection/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.provisionAnalyst).toHaveBeenCalledWith({
+        reApprove: true,
+        rotateToken: true,
+      }),
+    );
+  });
+
+  it("surfaces the GraphQL error message verbatim on re-approve failure", async () => {
+    mockServerState("not_connected", {
+      name: "Analyst Postgres",
+      slug: "postgres-dev",
+      url: "https://mcp.thinkwork.ai/mcp/analyst",
+      authType: "service_credential",
+    });
+    mocks.provisionAnalyst.mockResolvedValue({
+      error: {
+        message: "[GraphQL] URL changed — re-approve to accept the new config.",
+        graphQLErrors: [
+          { message: "URL changed — re-approve to accept the new config." },
+        ],
+      },
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /re-approve connection/i }),
+    );
+
+    expect(
+      await screen.findByText(
+        "URL changed — re-approve to accept the new config.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("does not show the analyst re-approve section for non-analyst servers", async () => {
+    mockServerState("active");
+
+    render(<SettingsMcpServerDetail />);
+
+    expect(await screen.findByText("Twenty CRM")).toBeTruthy();
+    expect(screen.queryByText("Analyst connection")).toBeNull();
   });
 });
 

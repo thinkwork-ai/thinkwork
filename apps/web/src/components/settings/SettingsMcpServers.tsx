@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMutation } from "urql";
 import {
   Badge,
   Button,
+  Checkbox,
   DataTable,
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,6 +23,7 @@ import {
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
+import { SettingsProvisionAnalystConnectorMutation } from "@/lib/settings-queries";
 import {
   createMcpServer,
   isPluginInstalledMcpServer,
@@ -44,6 +48,7 @@ export function SettingsMcpServers() {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(false);
   const pluginServers = useMemo(
     () => sortMcpServers((servers ?? []).filter(isPluginInstalledMcpServer)),
     [servers],
@@ -211,13 +216,22 @@ export function SettingsMcpServers() {
         description="The tenant MCP server registry — register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
         loading={!servers && !error}
         actions={
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className={settingsLinkActionClassName}
-          >
-            + New MCP Server
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setRegisterOpen(true)}
+              className={settingsLinkActionClassName}
+            >
+              + Register data source
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className={settingsLinkActionClassName}
+            >
+              + New MCP Server
+            </button>
+          </div>
         }
         toolbar={
           error ? (
@@ -269,7 +283,235 @@ export function SettingsMcpServers() {
           load();
         }}
       />
+      <RegisterDataSourceDialog
+        open={registerOpen}
+        onOpenChange={setRegisterOpen}
+        onProvisioned={load}
+      />
     </>
+  );
+}
+
+// THINK-230: analyst Postgres data-source registration. Provisions (and, when
+// asked, re-approves or rotates) the read-only analyst connector chain via the
+// `provisionAnalystConnector` mutation and surfaces the per-resource outcomes
+// inline. Backend re-enforces tenant-admin; non-admins get a GraphQL error.
+const ANALYST_PROVISION_STEPS = [
+  "Approved postgres-dev connector row",
+  "Broker credential secret",
+  "Read-only analyst_reader RDS-IAM chain",
+  "Analyst profile refresh",
+  "Signed workspace connection folder for every agent",
+];
+
+type AnalystProvisionOutcome = {
+  connectorId: string;
+  connectorOutcome: string;
+  brokerSecretOutcome: string;
+  rdsIamCredentialOutcome?: string | null;
+  profileRefreshed: boolean;
+  foldersWritten: number;
+  foldersSkipped: number;
+};
+
+function RegisterDataSourceDialog({
+  open,
+  onOpenChange,
+  onProvisioned,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onProvisioned: () => void;
+}) {
+  const [reApprove, setReApprove] = useState(false);
+  const [rotateToken, setRotateToken] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [result, setResult] = useState<AnalystProvisionOutcome | null>(null);
+  const [, provisionAnalystConnector] = useMutation(
+    SettingsProvisionAnalystConnectorMutation,
+  );
+
+  // Reset the form each time the dialog opens.
+  useEffect(() => {
+    if (open) {
+      setReApprove(false);
+      setRotateToken(false);
+      setErrorMsg(null);
+      setResult(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  // Rotating the broker token forces a re-approval, so keep re-approve pinned
+  // on (and disabled) whenever rotate is selected.
+  const effectiveReApprove = rotateToken || reApprove;
+
+  async function onConfirm() {
+    if (submitting) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    setResult(null);
+    try {
+      const response = await provisionAnalystConnector({
+        reApprove: effectiveReApprove,
+        rotateToken,
+      });
+      if (response.error) {
+        // Surface the GraphQL error message verbatim (e.g. the re-approval
+        // instruction the backend returns when a URL/secret changed).
+        setErrorMsg(
+          response.error.graphQLErrors[0]?.message ??
+            response.error.message.replace(/^\[[^\]]*\]\s*/, ""),
+        );
+        return;
+      }
+      const outcome = response.data?.provisionAnalystConnector;
+      if (!outcome) {
+        setErrorMsg("Provisioning returned no result.");
+        return;
+      }
+      setResult(outcome);
+      onProvisioned();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to provision");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Register data source</DialogTitle>
+          <DialogDescription>
+            Provision the analyst Postgres connector so agents can query the
+            warehouse with a read-only, brokered credential.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {result ? (
+            <div className="space-y-3">
+              <p className="text-sm text-emerald-500">
+                Data source provisioned.
+              </p>
+              <dl className="divide-y divide-border rounded-md border border-border text-sm">
+                <ProvisionResultRow
+                  label="Connector"
+                  value={result.connectorOutcome}
+                />
+                <ProvisionResultRow
+                  label="Broker secret"
+                  value={result.brokerSecretOutcome}
+                />
+                <ProvisionResultRow
+                  label="RDS-IAM credential"
+                  value={result.rdsIamCredentialOutcome ?? "not wired"}
+                />
+                <ProvisionResultRow
+                  label="Analyst profile"
+                  value={result.profileRefreshed ? "refreshed" : "unchanged"}
+                />
+                <ProvisionResultRow
+                  label="Connection folders"
+                  value={`${result.foldersWritten} written · ${result.foldersSkipped} skipped`}
+                />
+              </dl>
+              <p className="font-mono text-xs text-muted-foreground">
+                {result.connectorId}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  This provisions:
+                </p>
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  {ANALYST_PROVISION_STEPS.map((step) => (
+                    <li key={step} className="flex gap-2">
+                      <span aria-hidden className="text-muted-foreground">
+                        •
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="space-y-3 rounded-md border border-border p-3">
+                <label className="flex items-start gap-3 text-sm">
+                  <Checkbox
+                    checked={effectiveReApprove}
+                    disabled={rotateToken || submitting}
+                    onCheckedChange={(v) => setReApprove(v === true)}
+                    aria-label="Re-approve"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-foreground">
+                      Re-approve
+                    </span>
+                    <span className="block text-muted-foreground">
+                      Restamp the approval and re-pin the config hash.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 text-sm">
+                  <Checkbox
+                    checked={rotateToken}
+                    disabled={submitting}
+                    onCheckedChange={(v) => {
+                      const next = v === true;
+                      setRotateToken(next);
+                      if (next) setReApprove(true);
+                    }}
+                    aria-label="Rotate broker token"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-foreground">
+                      Rotate broker token
+                    </span>
+                    <span className="block text-muted-foreground">
+                      Issue a fresh broker secret. Forces re-approval.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </>
+          )}
+          {errorMsg ? (
+            <p className="text-sm text-destructive">{errorMsg}</p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            {result ? "Close" : "Cancel"}
+          </Button>
+          {result ? null : (
+            <Button onClick={onConfirm} disabled={submitting}>
+              {submitting ? "Provisioning…" : "Provision data source"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProvisionResultRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-3 py-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-mono text-xs text-foreground">{value}</dd>
+    </div>
   );
 }
 

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useQuery } from "urql";
-import { Badge, Button, Input, Switch, TooltipIconButton } from "@thinkwork/ui";
+import { useMutation, useQuery } from "urql";
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Input,
+  Switch,
+  TooltipIconButton,
+} from "@thinkwork/ui";
 import {
   KeyRound,
   Loader2,
@@ -9,6 +16,7 @@ import {
   LogOut,
   RefreshCw,
   Save,
+  ShieldCheck,
 } from "lucide-react";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useAuth } from "@/context/AuthContext";
@@ -29,7 +37,10 @@ import {
   type McpServiceCredentialStatus,
   type RuntimeMcpTool,
 } from "@/lib/mcp-api";
-import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
+import {
+  SettingsProvisionAnalystConnectorMutation,
+  SettingsTenantAgentQuery,
+} from "@/lib/settings-queries";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
   SettingsPageTitle,
@@ -79,6 +90,14 @@ export function SettingsMcpServerDetail() {
   const [serviceCredentialError, setServiceCredentialError] = useState<
     string | null
   >(null);
+  // THINK-230: analyst connector re-approval.
+  const [reApproveRotate, setReApproveRotate] = useState(false);
+  const [reApproveNotice, setReApproveNotice] = useState<string | null>(null);
+  const [reApproveError, setReApproveError] = useState<string | null>(null);
+  const [reApproving, setReApproving] = useState(false);
+  const [, provisionAnalystConnector] = useMutation(
+    SettingsProvisionAnalystConnectorMutation,
+  );
 
   const [{ data: agentData }] = useQuery({
     query: SettingsTenantAgentQuery,
@@ -352,6 +371,41 @@ export function SettingsMcpServerDetail() {
     }
   }
 
+  async function reApproveAnalyst() {
+    if (reApproving) return;
+    setReApproving(true);
+    setReApproveNotice(null);
+    setReApproveError(null);
+    try {
+      const response = await provisionAnalystConnector({
+        reApprove: true,
+        rotateToken: reApproveRotate,
+      });
+      if (response.error) {
+        // Surface the GraphQL error message verbatim.
+        setReApproveError(
+          response.error.graphQLErrors[0]?.message ??
+            response.error.message.replace(/^\[[^\]]*\]\s*/, ""),
+        );
+        return;
+      }
+      const outcome = response.data?.provisionAnalystConnector;
+      setReApproveNotice(
+        outcome
+          ? `Re-approved — connector ${outcome.connectorOutcome}, broker secret ${outcome.brokerSecretOutcome}, ${outcome.foldersWritten} folder(s) written.`
+          : "Connection re-approved.",
+      );
+      setReApproveRotate(false);
+      load();
+    } catch (e) {
+      setReApproveError(
+        e instanceof Error ? e.message : "Failed to re-approve connection",
+      );
+    } finally {
+      setReApproving(false);
+    }
+  }
+
   if (!servers && !error) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -387,6 +441,7 @@ export function SettingsMcpServerDetail() {
   const visibleTools = filteredTools.slice(0, toolLimit);
   const hasMoreTools = filteredTools.length > visibleTools.length;
   const managed = isPluginInstalledMcpServer(server);
+  const isAnalystConnector = isAnalystServer(server);
   const authUnavailableReason = !tenantId
     ? "Tenant identity is still loading."
     : !oauthUserId
@@ -588,6 +643,58 @@ export function SettingsMcpServerDetail() {
           </SettingsSection>
         ) : null}
 
+        {isAnalystConnector ? (
+          <SettingsSection label="Analyst connection">
+            <SettingsRow
+              label="Re-approve connection"
+              description="Restamp the approval and re-pin the config hash for the analyst Postgres connector. Optionally rotate the broker token."
+              layout="stacked"
+            >
+              <div className="w-full space-y-3">
+                {reApproveError ? (
+                  <p className="text-sm text-destructive">{reApproveError}</p>
+                ) : null}
+                {reApproveNotice ? (
+                  <p className="text-sm text-emerald-500">{reApproveNotice}</p>
+                ) : null}
+                <label className="flex items-start gap-3 text-sm">
+                  <Checkbox
+                    checked={reApproveRotate}
+                    disabled={reApproving}
+                    onCheckedChange={(v) => setReApproveRotate(v === true)}
+                    aria-label="Rotate broker token"
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-foreground">
+                      Rotate broker token
+                    </span>
+                    <span className="block text-muted-foreground">
+                      Issue a fresh broker secret as part of the re-approval.
+                    </span>
+                  </span>
+                </label>
+                <div className="flex justify-start">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={reApproving}
+                    onClick={() => void reApproveAnalyst()}
+                    className="gap-2"
+                  >
+                    {reApproving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4" />
+                    )}
+                    Re-approve connection
+                  </Button>
+                </div>
+              </div>
+            </SettingsRow>
+          </SettingsSection>
+        ) : null}
+
         <SettingsSection
           label={`Tools${tools.length ? ` (${tools.length})` : ""}`}
           action={
@@ -690,6 +797,18 @@ export function SettingsMcpServerDetail() {
       </div>
     </div>
   );
+}
+
+// THINK-230: the analyst Postgres connector is identified by its `postgres-dev`
+// slug, or — more robustly — by a URL whose path ends in `/mcp/analyst`.
+function isAnalystServer(server: McpServer): boolean {
+  if (server.slug === "postgres-dev") return true;
+  try {
+    const pathname = new URL(server.url).pathname.replace(/\/+$/, "");
+    return pathname.endsWith("/mcp/analyst");
+  } catch {
+    return server.url.replace(/\/+$/, "").endsWith("/mcp/analyst");
+  }
 }
 
 function runtimeToolMatchesServer(tool: RuntimeMcpTool, server: McpServer) {
