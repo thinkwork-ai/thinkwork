@@ -7,9 +7,11 @@ import {
   type WikiGraphPayload,
   useWikiGraph,
 } from "@thinkwork/react-native-sdk";
+import { computeCommunityLayout } from "@thinkwork/graph-core";
 import { COLORS } from "@/lib/theme";
 import { KnowledgeGraph } from "./KnowledgeGraph";
 import { NodeDetailModal, type NodeDetailModalTarget } from "./NodeDetailModal";
+import { buildRelationships, communityColorForId } from "./relationship-badges";
 import { loadGraphState } from "./graphStateCache";
 import type {
   GraphFilter,
@@ -137,6 +139,27 @@ export function WikiGraphView({
     };
   }, [internalSubgraph, selectedNodeId]);
 
+  // Community colors for the relationships section — recomputed at the same
+  // (deterministic) cadence as the canvas so detail pills match node hues.
+  const colorForId = useMemo(() => {
+    if (!internalSubgraph) return () => COLORS.dark.mutedForeground;
+    const { communityByNode } = computeCommunityLayout(
+      internalSubgraph.nodes,
+      internalSubgraph.edges,
+    );
+    return communityColorForId(communityByNode);
+  }, [internalSubgraph]);
+
+  const selectedRelationships = useMemo(() => {
+    if (!internalSubgraph || !selectedNodeId) return [];
+    return buildRelationships(
+      selectedNodeId,
+      internalSubgraph.nodes,
+      internalSubgraph.edges,
+      colorForId,
+    );
+  }, [internalSubgraph, selectedNodeId, colorForId]);
+
   // 3-state filter: matched (full color), 1-hop neighbors of a match
   // (muted + colored outline ring), other (muted only). Edges stay
   // visible; full opacity when touching a match, muted otherwise.
@@ -212,6 +235,9 @@ export function WikiGraphView({
         node={selectedTarget}
         onClose={() => setSelectedNodeId(null)}
         onOpenFullPage={handleOpenFullPage}
+        relationships={selectedRelationships}
+        currentColor={selectedNodeId ? colorForId(selectedNodeId) : undefined}
+        onSelectRelated={setSelectedNodeId}
       />
     </View>
   );

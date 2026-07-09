@@ -11,6 +11,10 @@ import Markdown from "react-native-markdown-display";
 import { IconExternalLink, IconX } from "@tabler/icons-react-native";
 import { useWikiPage, type WikiPageType } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
+import {
+  type GraphRelationship,
+  RelationshipsSection,
+} from "./relationship-badges";
 
 export interface NodeDetailModalTarget {
   id: string;
@@ -25,6 +29,13 @@ interface NodeDetailModalProps {
   node: NodeDetailModalTarget | null;
   onClose: () => void;
   onOpenFullPage: (node: NodeDetailModalTarget) => void;
+  /** Connected edges of the tapped node, rendered as community-colored
+   *  `[source] ── VERB ──▶ [target]` pills (mirrors web). */
+  relationships?: GraphRelationship[];
+  /** Community hue for the tapped node, so its own pill matches the canvas. */
+  currentColor?: string;
+  /** Re-anchor the detail to a connected node when its pill is tapped. */
+  onSelectRelated?: (nodeId: string) => void;
 }
 
 /**
@@ -39,6 +50,9 @@ export function NodeDetailModal({
   node,
   onClose,
   onOpenFullPage,
+  relationships,
+  currentColor,
+  onSelectRelated,
 }: NodeDetailModalProps) {
   const { page, loading } = useWikiPage({
     tenantId,
@@ -115,6 +129,14 @@ export function NodeDetailModal({
               ) : null}
               {page?.summary ? (
                 <Text style={styles.summary}>{page.summary}</Text>
+              ) : null}
+              {node && relationships && relationships.length > 0 ? (
+                <RelationshipsSection
+                  currentLabel={node.title}
+                  currentColor={currentColor ?? COLORS.dark.mutedForeground}
+                  relationships={relationships}
+                  onSelectOther={onSelectRelated}
+                />
               ) : null}
               {page?.sections?.map((section) => (
                 <View key={section.id} style={styles.section}>

@@ -1,9 +1,9 @@
 import {
   LABEL_GATE_ALWAYS_MAX_NODES,
+  LABEL_GATE_MIN_SCALE,
   computeCommunityLayout,
   degreeRadius,
   endpointId,
-  labelsVisibleAtScale,
 } from "@thinkwork/graph-core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -175,14 +175,19 @@ export function KnowledgeGraph({
   );
 
   // Zoom gate for labels — mirror the camera scale onto a JS boolean that
-  // only flips when the threshold is crossed (matching web's
-  // `labelsVisibleAtScale`). Small graphs are always eligible.
+  // only flips when the threshold is crossed (the same rule as graph-core's
+  // `labelsVisibleAtScale`). The prepare/react bodies run as reanimated
+  // worklets on the UI runtime, so they can't call an imported JS function
+  // (that aborts in Release); the rule is inlined here using graph-core's
+  // exported numeric constants, which the worklet closure captures by value.
   const nodeCount = subgraph.nodes.length;
   const [zoomGateOpen, setZoomGateOpen] = useState(
     nodeCount <= LABEL_GATE_ALWAYS_MAX_NODES,
   );
   useAnimatedReaction(
-    () => labelsVisibleAtScale(camera.scale.value, nodeCount),
+    () =>
+      nodeCount <= LABEL_GATE_ALWAYS_MAX_NODES ||
+      camera.scale.value >= LABEL_GATE_MIN_SCALE,
     (cur, prev) => {
       if (cur !== prev) runOnJS(setZoomGateOpen)(cur);
     },
