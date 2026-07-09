@@ -254,6 +254,51 @@ describe("requireAgentLoopWriteAccess (THINK-227 U11)", () => {
     );
   });
 
+  it("admin binding a nonexistent existing artifact → rejected at save time", async () => {
+    mocks.selectQueue.push([]); // artifact lookup: no row
+    const spec = normalizeTargetSpec({
+      kind: "agent_thread",
+      agentThread: { instructions: "Refresh", threadMode: "new_per_run" },
+      documentBinding: { mode: "existing", artifactId: "no-such-artifact" },
+      delivery: { recipients: ["anyone@x.com"] },
+    });
+    await expect(
+      requireAgentLoopWriteAccess(cognitoCtx(), TENANT, {
+        operationName: "save_agent_loop",
+        actorId: "any-admin",
+        targetSpec: spec,
+      }),
+    ).rejects.toThrow(/not found in this tenant.*no-such-artifact/is);
+    expect(mocks.assertCanvasAccess).not.toHaveBeenCalled();
+  });
+
+  it("admin apikey caller gets the same existence check; a real artifact passes without a canvas-read gate", async () => {
+    const spec = normalizeTargetSpec({
+      kind: "agent_thread",
+      agentThread: { instructions: "Refresh", threadMode: "new_per_run" },
+      documentBinding: { mode: "existing", artifactId: "art-1" },
+    });
+
+    mocks.selectQueue.push([{ role: "admin" }]); // role lookup
+    mocks.selectQueue.push([]); // artifact lookup: no row
+    await expect(
+      requireAgentLoopWriteAccess(apikeyCtx("admin-user"), TENANT, {
+        operationName: "save_agent_loop",
+        actorId: "admin-user",
+        targetSpec: spec,
+      }),
+    ).rejects.toThrow(/not found in this tenant/i);
+
+    mocks.selectQueue.push([{ role: "admin" }]);
+    mocks.selectQueue.push([{ id: "art-1", tenant_id: TENANT }]);
+    await requireAgentLoopWriteAccess(apikeyCtx("admin-user"), TENANT, {
+      operationName: "save_agent_loop",
+      actorId: "admin-user",
+      targetSpec: spec,
+    });
+    expect(mocks.assertCanvasAccess).not.toHaveBeenCalled();
+  });
+
   it("bare service callers are refused on these mutations (KTD10)", async () => {
     await expect(
       requireAgentLoopWriteAccess(serviceCtx(), TENANT, {

@@ -11,6 +11,10 @@
  *     recipient equal to the caller's email as stored on `users` (never
  *     trusted from tool input), and — for existing-mode bindings — a bound
  *     artifact the caller can read.
+ *   - Existing-mode document bindings are existence-checked for EVERY role:
+ *     saves referencing an artifactId not in the tenant are rejected at save
+ *     time instead of failing (or silently clobbering the binding) at run
+ *     time.
  *   - Bare `service` classification (no asserted principal) is EXCLUDED for
  *     these two mutations. A headerless service call must not silently hold
  *     general write access on the surface a member-scoped rule guards — the
@@ -62,11 +66,18 @@ export async function requireAgentLoopWriteAccess(
   input: AgentLoopWriteAccessInput,
 ): Promise<void> {
   if (ctx.auth.authType === "cognito") {
+    let isAdmin = true;
     try {
       await requireTenantAdmin(ctx, tenantId);
-      return; // admin/owner: general access, unchanged.
     } catch {
-      // Plain member — fall through to the member-scope check.
+      isAdmin = false; // Plain member — member-scope check below.
+    }
+    if (isAdmin) {
+      // Admin/owner: general access, but an existing-mode binding must still
+      // reference a real document — outside the try so a not-found error is
+      // surfaced, not swallowed into the member fallback.
+      await requireBoundArtifactInTenant(tenantId, input);
+      return;
     }
     await requireMemberScope(ctx, tenantId, input);
     return;
@@ -82,7 +93,10 @@ export async function requireAgentLoopWriteAccess(
       throw forbidden("Invoker identity required (x-principal-id missing)");
     }
     const role = await memberRole(tenantId, principalId);
-    if (role === "owner" || role === "admin") return; // general access.
+    if (role === "owner" || role === "admin") {
+      await requireBoundArtifactInTenant(tenantId, input);
+      return; // general access.
+    }
     if (!role) {
       throw forbidden("Invoker is not a member of the target tenant");
     }
@@ -197,24 +211,46 @@ async function requireMemberScope(
     }
   }
 
-  // Existing-mode binding: the member must be able to READ the document they
-  // are binding — otherwise delivery would mail them (and publicly share) a
-  // document outside their visibility.
-  const binding = spec?.documentBinding;
-  if (binding?.mode === "existing" && binding.artifactId) {
-    const [row] = await db
-      .select()
-      .from(artifacts)
-      .where(
-        and(
-          eq(artifacts.id, binding.artifactId),
-          eq(artifacts.tenant_id, tenantId),
-        ),
-      )
-      .limit(1);
-    if (!row) {
-      throw forbidden("The document to maintain was not found in this tenant.");
-    }
+  // Existing-mode binding: beyond the shared existence check, the member
+  // must be able to READ the document they are binding — otherwise delivery
+  // would mail them (and publicly share) a document outside their visibility.
+  const row = await requireBoundArtifactInTenant(tenantId, input);
+  if (row) {
     await assertCanvasAccess(ctx, row, "read");
   }
+}
+
+/**
+ * A save that binds an EXISTING document must reference a real artifact in
+ * the tenant — for every role, admins included. Without this, an admin save
+ * carrying a fabricated artifactId passes silently, clobbers the binding,
+ * and delivery fails at run time instead of at save time. Returns the row
+ * (or null when no existing-mode binding is present) so the member path can
+ * additionally check read access.
+ */
+async function requireBoundArtifactInTenant(
+  tenantId: string,
+  input: AgentLoopWriteAccessInput,
+): Promise<typeof artifacts.$inferSelect | null> {
+  if (input.operationName !== "save_agent_loop") return null;
+  const binding = input.targetSpec?.documentBinding;
+  if (binding?.mode !== "existing" || !binding.artifactId) return null;
+  const [row] = await db
+    .select()
+    .from(artifacts)
+    .where(
+      and(
+        eq(artifacts.id, binding.artifactId),
+        eq(artifacts.tenant_id, tenantId),
+      ),
+    )
+    .limit(1);
+  if (!row) {
+    throw new GraphQLError(
+      `The document to maintain was not found in this tenant (artifactId ${binding.artifactId}). ` +
+        'Bind an existing document by its real id, or use mode "create" to start a new one.',
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
+  }
+  return row;
 }
