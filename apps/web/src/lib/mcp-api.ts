@@ -23,9 +23,14 @@ export type McpServer = {
   runtimeEnabled?: boolean;
   /**
    * THINK-239: analyst data-source coordinates — present only on analyst
-   * connector rows. `host` is null for the builtin workspace connector.
+   * connector rows. `host` is null for the builtin workspace connector;
+   * `kind` says whether the database lives on an environment-owned cluster.
    */
-  dataSource?: { host: string | null; database: string } | null;
+  dataSource?: {
+    kind: "internal" | "external";
+    host: string | null;
+    database: string;
+  } | null;
 };
 
 export type McpServiceCredentialStatus = {

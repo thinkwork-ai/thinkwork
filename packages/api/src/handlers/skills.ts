@@ -1284,15 +1284,22 @@ async function saveSkillCredentials(
 
 /**
  * THINK-239: the analyst data-source coordinates for a server row, so list
- * surfaces can show "cluster · database". Sourced rows carry them on
- * runtime_metadata.analyst_source; the builtin postgres-dev connector is the
- * workspace database (its host isn't stored on the row — null host renders as
- * the workspace cluster client-side). Non-analyst rows return null.
+ * and detail surfaces can show Internal/External + cluster + database.
+ * Sourced rows carry host/database on runtime_metadata.analyst_source; the
+ * builtin postgres-dev connector is the workspace database (its host isn't
+ * stored on the row — null host renders as the workspace cluster
+ * client-side). `kind` is derived from the host: the environment's own
+ * clusters are named `thinkwork-<stage>-*`, everything else is external.
+ * Non-analyst rows return null.
  */
 function analystDataSourceForRow(row: {
   slug: string | null;
   runtime_metadata: unknown;
-}): { host: string | null; database: string } | null {
+}): {
+  kind: "internal" | "external";
+  host: string | null;
+  database: string;
+} | null {
   const meta =
     row.runtime_metadata && typeof row.runtime_metadata === "object"
       ? (row.runtime_metadata as Record<string, unknown>)
@@ -1306,9 +1313,17 @@ function analystDataSourceForRow(row: {
     typeof source.host === "string" &&
     typeof source.database === "string"
   ) {
-    return { host: source.host, database: source.database };
+    return {
+      kind: source.host.startsWith(`thinkwork-${STAGE}-`)
+        ? "internal"
+        : "external",
+      host: source.host,
+      database: source.database,
+    };
   }
-  if (row.slug === "postgres-dev") return { host: null, database: "thinkwork" };
+  if (row.slug === "postgres-dev") {
+    return { kind: "internal", host: null, database: "thinkwork" };
+  }
   return null;
 }
 

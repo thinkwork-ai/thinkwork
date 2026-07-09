@@ -368,6 +368,29 @@ describe("SettingsMcpServerDetail", () => {
     expect(await screen.findByText("Service credential saved.")).toBeTruthy();
   });
 
+  it("shows source type, cluster and database for a datasource server", async () => {
+    mockServerState("active", {
+      name: "Analytics Demo",
+      slug: "analytics-demo",
+      url: "https://api.thinkwork.test/mcp/analyst/analytics-demo",
+      authType: "service_credential",
+      dataSource: {
+        kind: "internal",
+        host: "thinkwork-dev-db.cluster-x.us-east-1.rds.amazonaws.com",
+        database: "analytics_demo",
+      },
+    });
+
+    render(<SettingsMcpServerDetail serverId="server-1" />);
+
+    expect(await screen.findByText("Source type")).toBeTruthy();
+    expect(screen.getByText("internal")).toBeTruthy();
+    expect(screen.getByText("Cluster")).toBeTruthy();
+    expect(screen.getByText("thinkwork-dev-db")).toBeTruthy();
+    expect(screen.getByText("Database")).toBeTruthy();
+    expect(screen.getByText("analytics_demo")).toBeTruthy();
+  });
+
   it("re-approves the analyst connector and surfaces the outcome", async () => {
     mockServerState("not_connected", {
       name: "Analyst Postgres",

@@ -340,7 +340,7 @@ describe("SettingsMcpServers", () => {
           status: "approved",
           managementSource: "manual",
           managedApplicationKey: null,
-          dataSource: { host: null, database: "thinkwork" },
+          dataSource: { kind: "internal", host: null, database: "thinkwork" },
         },
         {
           id: "analytics-demo",
@@ -353,6 +353,7 @@ describe("SettingsMcpServers", () => {
           managementSource: "manual",
           managedApplicationKey: null,
           dataSource: {
+            kind: "internal",
             host: "thinkwork-dev-db.cluster-x.us-east-1.rds.amazonaws.com",
             database: "analytics_demo",
           },
@@ -387,6 +388,8 @@ describe("SettingsMcpServers", () => {
     expect(screen.queryByText("Manual CRM")).toBeNull();
     expect(screen.getByText("thinkwork-dev-db · analytics_demo")).toBeTruthy();
     expect(screen.getByText("workspace cluster · thinkwork")).toBeTruthy();
+    // Each row carries its Internal/External badge.
+    expect(screen.getAllByText("internal")).toHaveLength(2);
   });
 
   it("adds a server through the New MCP Server dialog", async () => {

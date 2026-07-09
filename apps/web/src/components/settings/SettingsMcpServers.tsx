@@ -190,13 +190,18 @@ export function SettingsMcpServers() {
             {
               id: "source",
               header: "Source",
-              size: 220,
+              size: 280,
               cell: ({ row }) => {
                 const ds = row.original.dataSource;
                 return ds ? (
-                  <span className="block truncate font-mono text-xs text-muted-foreground">
-                    {dataSourceLabel(ds)}
-                  </span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Badge variant="outline" className="shrink-0 capitalize">
+                      {ds.kind}
+                    </Badge>
+                    <span className="truncate font-mono text-xs text-muted-foreground">
+                      {dataSourceLabel(ds)}
+                    </span>
+                  </div>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 );
