@@ -21,8 +21,11 @@ import {
   capabilitySignerFromKey,
 } from "../capabilities/sidecar-signing.js";
 import {
+  analystBrokerSourceSlug,
   isAnalystBrokerUrl,
+  matchAnalystBrokerUrl,
   mintAnalystCallerContextHeader,
+  sourceClaimsFromRuntimeMetadata,
 } from "./caller-context.js";
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -144,16 +147,117 @@ describe("analyst caller-context minting (THINK-229 U2)", () => {
     expect(boundPayload.exp - boundPayload.iat).toBe(5 * 60 * 1000);
   });
 
-  it("isAnalystBrokerUrl gates on the fixed broker route only", () => {
+  it("isAnalystBrokerUrl matches the builtin AND sourced routes (THINK-239)", () => {
     expect(
       isAnalystBrokerUrl(
         "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/mcp/analyst",
       ),
     ).toBe(true);
+    // THINK-239: a sourced route is also a broker route.
+    expect(isAnalystBrokerUrl("https://example.com/mcp/analyst/sales-pg")).toBe(
+      true,
+    );
     expect(isAnalystBrokerUrl("https://example.com/mcp/other")).toBe(false);
-    expect(isAnalystBrokerUrl("https://example.com/mcp/analyst/extra")).toBe(
+    // A second path segment is not a valid single-slug source.
+    expect(isAnalystBrokerUrl("https://example.com/mcp/analyst/sales/pg")).toBe(
       false,
     );
     expect(isAnalystBrokerUrl("not a url")).toBe(false);
+  });
+
+  it("matchAnalystBrokerUrl returns the source slug (THINK-239)", () => {
+    expect(matchAnalystBrokerUrl("https://x.test/mcp/analyst")).toEqual({
+      isBroker: true,
+      sourceSlug: null,
+    });
+    expect(
+      matchAnalystBrokerUrl("https://x.test/mcp/analyst/sales-pg"),
+    ).toEqual({ isBroker: true, sourceSlug: "sales-pg" });
+    expect(matchAnalystBrokerUrl("https://x.test/mcp/other")).toEqual({
+      isBroker: false,
+      sourceSlug: null,
+    });
+    expect(analystBrokerSourceSlug("https://x.test/mcp/analyst/sales-pg")).toBe(
+      "sales-pg",
+    );
+    expect(analystBrokerSourceSlug("https://x.test/mcp/analyst")).toBeNull();
+  });
+
+  it("sourceClaimsFromRuntimeMetadata reconstructs claims minus slug (THINK-239)", () => {
+    const runtimeMetadata = {
+      analyst_probe: { status: "ok", checkedAt: "2026-07-09T00:00:00Z" },
+      analyst_source: {
+        host: "sales.example.rds.amazonaws.com",
+        port: 5432,
+        database: "sales",
+        dbUser: "analyst_ro",
+        tls: "verify-full",
+        credentialSecretArn:
+          "thinkwork/dev/analyst/t1/sales-pg-reader-credential",
+        tenantScoped: true,
+      },
+    };
+    expect(
+      sourceClaimsFromRuntimeMetadata("sales-pg", runtimeMetadata),
+    ).toEqual({
+      slug: "sales-pg",
+      host: "sales.example.rds.amazonaws.com",
+      port: 5432,
+      database: "sales",
+      dbUser: "analyst_ro",
+      tls: "verify-full",
+      credentialSecretArn:
+        "thinkwork/dev/analyst/t1/sales-pg-reader-credential",
+      tenantScoped: true,
+    });
+    // Builtin rows (no analyst_source) → null.
+    expect(sourceClaimsFromRuntimeMetadata("sales-pg", {})).toBeNull();
+    // Malformed block → null.
+    expect(
+      sourceClaimsFromRuntimeMetadata("sales-pg", {
+        analyst_source: { host: "h" },
+      }),
+    ).toBeNull();
+  });
+
+  it("mints sourceClaims into the context, verifiable cross-package (THINK-239)", async () => {
+    const sourceClaims = {
+      slug: "sales-pg",
+      host: "sales.example.rds.amazonaws.com",
+      port: 5432,
+      database: "sales",
+      dbUser: "analyst_ro",
+      tls: "verify-full" as const,
+      credentialSecretArn:
+        "thinkwork/dev/analyst/t1/sales-pg-reader-credential",
+      tenantScoped: true,
+    };
+    const header = await mintAnalystCallerContextHeader({
+      actor: "agent",
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sourceClaims,
+      signer,
+    });
+    const result = verifyAnalystCallerContextHeader({
+      headerValue: header!,
+      requestBody: "irrelevant",
+      publicKeyPem: PUBLIC_PEM,
+      nowMs: Date.now(),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.payload.sourceClaims).toEqual(sourceClaims);
+  });
+
+  it("builtin mint attaches NO sourceClaims (back-compat)", async () => {
+    const header = await mintAnalystCallerContextHeader({
+      actor: "agent",
+      tenantId: "tenant-1",
+      signer,
+    });
+    const decoded = JSON.parse(
+      Buffer.from(header!, "base64url").toString("utf8"),
+    );
+    expect(decoded.payload.sourceClaims).toBeUndefined();
   });
 });

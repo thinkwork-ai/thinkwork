@@ -721,6 +721,29 @@ export type AgentWorkspaceWait = {
   waitingRunId: Scalars["ID"]["output"];
 };
 
+/** Outcome of registering an external analyst data source (THINK-239). */
+export type AnalystDataSourceResult = {
+  __typename?: "AnalystDataSourceResult";
+  /** Count of agent workspaces skipped (e.g. no workspace prefix). */
+  foldersSkipped: Scalars["Int"]["output"];
+  /** Count of agent workspaces the connection folder was written into. */
+  foldersWritten: Scalars["Int"]["output"];
+  /** The tenant_mcp_servers row id for the registered source. */
+  serverId: Scalars["ID"]["output"];
+  /** The registered slug. */
+  slug: Scalars["String"]["output"];
+  /** Number of tables introspected into the stored semantic model. */
+  tables: Scalars["Int"]["output"];
+};
+
+/** TLS posture for a registered external analyst data source (THINK-239). */
+export enum AnalystDataSourceTls {
+  /** Encrypt but skip certificate verification (explicit opt-in downgrade). */
+  Required = "REQUIRED",
+  /** Encrypt and verify the server certificate (default, recommended). */
+  VerifyFull = "VERIFY_FULL",
+}
+
 /**
  * Outcome of running the analyst connector provisioning ceremony (THINK-230):
  * the operator-facing equivalent of scripts/provision-analyst-connector.mts.
@@ -3854,6 +3877,15 @@ export type Mutation = {
   refreshThreadProgress: RefreshThreadProgressPayload;
   regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;
+  /**
+   * Register an EXTERNAL Postgres data source as an analyst connector
+   * (THINK-239). Requires tenant owner/admin. Connects with the supplied
+   * read-only credential, verifies zero write privileges, introspects the
+   * granted surface into a stored semantic model, stores a per-source reader
+   * credential, writes model.json + SCHEMA.md to the tenant's S3 prefix, and
+   * registers a born-approved connector at POST /mcp/analyst/<slug>.
+   */
+  registerAnalystDataSource: AnalystDataSourceResult;
   registerPushToken: Scalars["Boolean"]["output"];
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
@@ -4716,6 +4748,10 @@ export type MutationRegenerateAppletArgs = {
 
 export type MutationRegenerateWebhookTokenArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type MutationRegisterAnalystDataSourceArgs = {
+  input: RegisterAnalystDataSourceInput;
 };
 
 export type MutationRegisterPushTokenArgs = {
@@ -7484,6 +7520,29 @@ export type RefreshThreadProgressInput = {
 export type RefreshThreadProgressPayload = {
   __typename?: "RefreshThreadProgressPayload";
   threadGoalFiles?: Maybe<ThreadGoalFiles>;
+};
+
+/**
+ * Input for registerAnalystDataSource (THINK-239) — an external Postgres data
+ * source the analyst can query through the sourced broker route
+ * (POST /mcp/analyst/<slug>). The supplied credential must be a read-only
+ * (SELECT-only) role; registration connects with it, verifies the posture, and
+ * introspects the granted surface before writing anything.
+ */
+export type RegisterAnalystDataSourceInput = {
+  database: Scalars["String"]["input"];
+  /** Read-only (SELECT-only) database role to connect as. */
+  dbUser: Scalars["String"]["input"];
+  host: Scalars["String"]["input"];
+  /** Human-readable display name. */
+  name: Scalars["String"]["input"];
+  /** Password for the read-only role. Stored in Secrets Manager, never returned. */
+  password: Scalars["String"]["input"];
+  port: Scalars["Int"]["input"];
+  /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
+  slug: Scalars["String"]["input"];
+  /** TLS posture (default VERIFY_FULL). */
+  tls?: InputMaybe<AnalystDataSourceTls>;
 };
 
 export type RegisterPushTokenInput = {

@@ -50,8 +50,10 @@ import {
 import { mcpHashMatches } from "./mcp-server-hash.js";
 import {
   ANALYST_CALLER_CONTEXT_HEADER,
+  analystBrokerSourceSlug,
   isAnalystBrokerUrl,
   mintAnalystCallerContextHeader,
+  sourceClaimsFromRuntimeMetadata,
 } from "./analyst/caller-context.js";
 import {
   evaluateConnectionPolicyParity,
@@ -721,11 +723,32 @@ export async function buildMcpConfigs(
             policyClaims.retain_sql = sidecarPolicy.retain_sql;
           }
         }
+        // THINK-239: a sourced row (`/mcp/analyst/<slug>`) carries the signed
+        // external-source description on runtime_metadata.analyst_source. Mint
+        // it into sourceClaims so the broker connects to the registered source
+        // (and rejects any path/slug mismatch). Builtin rows mint no
+        // sourceClaims (back-compat).
+        const sourceSlug = analystBrokerSourceSlug(mcp.url);
+        const sourceClaims = sourceSlug
+          ? sourceClaimsFromRuntimeMetadata(sourceSlug, mcp.runtime_metadata)
+          : null;
+        if (sourceSlug && !sourceClaims) {
+          console.error(
+            `${logPrefix} analyst sourced row ${mcp.slug} is missing/invalid runtime_metadata.analyst_source — dropping (broker would reject it)`,
+          );
+          dropDiag(
+            mcp,
+            "credential_missing",
+            "analyst source metadata missing or malformed",
+          );
+          continue;
+        }
         const contextHeader = await mintAnalystCallerContextHeader({
           actor: "agent",
           tenantId: agentRow.tenant_id,
           agentId,
           policyClaims,
+          ...(sourceClaims ? { sourceClaims } : {}),
         }).catch((err) => {
           console.error(
             `${logPrefix} analyst caller-context mint threw for ${mcp.slug}:`,

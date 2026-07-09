@@ -48,6 +48,35 @@ export const ANALYST_REQUEST_CONTEXT_TTL_MS = 5 * 60 * 1000;
 
 export type AnalystCallerActor = "agent" | "delegation" | "system_refresh";
 
+/** TLS posture for an external analyst data source (THINK-239). */
+export type AnalystSourceTls = "verify-full" | "required";
+
+/**
+ * Source claims (THINK-239) — the signed description of the EXTERNAL Postgres
+ * data source a sourced broker request (`POST /mcp/analyst/{sourceSlug}`) must
+ * connect to. Absent on builtin (`POST /mcp/analyst`) requests, which keep
+ * connecting via the cluster-global `analyst_reader` chain (back-compat).
+ *
+ * These ride inside the signed caller-context payload, so a caller cannot
+ * point the broker at an attacker-controlled host/credential without the
+ * platform signing key: the broker rejects a sourced path whose signed
+ * `sourceClaims.slug` does not exactly match the path slug.
+ */
+export interface AnalystSourceClaims {
+  /** Registry slug; MUST equal the `{sourceSlug}` path parameter. */
+  slug: string;
+  host: string;
+  port: number;
+  database: string;
+  dbUser: string;
+  /** `verify-full` (default) or `required` (encrypt, skip cert verification). */
+  tls: AnalystSourceTls;
+  /** Secrets Manager ARN/name of the source's reader credential. */
+  credentialSecretArn: string;
+  /** Whether the source is scoped to a single tenant (informational). */
+  tenantScoped: boolean;
+}
+
 export interface AnalystCallerContextPayload {
   /** In-payload domain-separation tag (KTD3) — always the KIND constant. */
   kind: typeof ANALYST_CALLER_CONTEXT_KIND;
@@ -61,6 +90,12 @@ export interface AnalystCallerContextPayload {
    * populated by U3/U4; empty object until then.
    */
   policyClaims: Record<string, unknown>;
+  /**
+   * External data-source description (THINK-239). Present only for sourced
+   * requests (`POST /mcp/analyst/{sourceSlug}`); absent = builtin source.
+   * Canonicalized/signed like every other payload field.
+   */
+  sourceClaims?: AnalystSourceClaims;
   /** Epoch milliseconds. */
   iat: number;
   exp: number;
@@ -223,6 +258,15 @@ export function verifyAnalystCallerContextHeader(input: {
     return { ok: false, reason: "malformed_policy_claims" };
   }
 
+  // THINK-239: source claims are optional (absent = builtin), but a present
+  // block must be well-formed — the broker binds the path slug to it.
+  if (
+    record.sourceClaims !== undefined &&
+    !isValidSourceClaims(record.sourceClaims)
+  ) {
+    return { ok: false, reason: "malformed_source_claims" };
+  }
+
   // Request binding: required for system_refresh, enforced when present.
   if (record.actor === "system_refresh" && !record.bodyHash) {
     return { ok: false, reason: "missing_body_hash" };
@@ -238,6 +282,30 @@ export function verifyAnalystCallerContextHeader(input: {
   }
 
   return { ok: true, payload: record as AnalystCallerContextPayload };
+}
+
+/** Structural validation of a present sourceClaims block (THINK-239). */
+export function isValidSourceClaims(
+  value: unknown,
+): value is AnalystSourceClaims {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const c = value as Record<string, unknown>;
+  return (
+    typeof c.slug === "string" &&
+    c.slug.length > 0 &&
+    typeof c.host === "string" &&
+    c.host.length > 0 &&
+    typeof c.port === "number" &&
+    Number.isFinite(c.port) &&
+    typeof c.database === "string" &&
+    c.database.length > 0 &&
+    typeof c.dbUser === "string" &&
+    c.dbUser.length > 0 &&
+    (c.tls === "verify-full" || c.tls === "required") &&
+    typeof c.credentialSecretArn === "string" &&
+    c.credentialSecretArn.length > 0 &&
+    typeof c.tenantScoped === "boolean"
+  );
 }
 
 function parseSignatureEnvelope(

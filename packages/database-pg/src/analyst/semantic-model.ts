@@ -526,6 +526,97 @@ export function resolveTenantScope(
  * get the un-annotated baseline. Annotations never affect
  * `auditSensitiveCoverage` — that call above takes no annotation input.
  */
+// ---------------------------------------------------------------------------
+// External data sources (THINK-239)
+//
+// A registered external Postgres source has no Drizzle definition to walk —
+// its schema is INTROSPECTED at registration time and persisted as a stored
+// model (model.json). The renderer below produces the same-shaped SCHEMA.md
+// the analyst reads before writing SQL, generalized to any stored model. The
+// probe/reconciler read the same stored model back for drift detection.
+// ---------------------------------------------------------------------------
+
+export interface StoredAnalystColumn {
+  name: string;
+  /** Postgres type spelling as introspected (data_type, arrays as `x array`). */
+  pgType: string;
+}
+
+export interface StoredAnalystTable {
+  name: string;
+  columns: StoredAnalystColumn[];
+}
+
+export interface StoredAnalystModel {
+  version: 1;
+  tables: StoredAnalystTable[];
+}
+
+/**
+ * Build a deterministic stored model from introspected `(table, column,
+ * pgType)` rows (information_schema.columns of the reader-granted surface).
+ * Tables and columns are sorted so the same live schema always yields a
+ * byte-identical model.json — the drift check hashes it.
+ */
+export function storedModelFromColumns(
+  rows: Array<{ table: string; column: string; pgType: string }>,
+): StoredAnalystModel {
+  const byTable = new Map<string, StoredAnalystColumn[]>();
+  for (const row of rows) {
+    const cols = byTable.get(row.table) ?? [];
+    cols.push({ name: row.column, pgType: row.pgType });
+    byTable.set(row.table, cols);
+  }
+  const tables: StoredAnalystTable[] = [...byTable.entries()]
+    .map(([name, columns]) => ({
+      name,
+      columns: [...columns].sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { version: 1, tables };
+}
+
+/**
+ * Render SCHEMA.md for a stored (introspected) analyst model — the external
+ * counterpart of {@link generateAnalystSchemaMarkdown}. Same table/column
+ * layout so the analyst's SQL-authoring guidance is identical across builtin
+ * and registered sources.
+ */
+export function renderStoredAnalystSchemaMarkdown(
+  model: StoredAnalystModel,
+  opts: { sourceName: string },
+): string {
+  const tables = [...model.tables].sort((a, b) => a.name.localeCompare(b.name));
+  const lines: string[] = [
+    `# ${opts.sourceName} — semantic model`,
+    "",
+    "<!-- GENERATED FILE — do not edit by hand. -->",
+    "<!-- Regenerate by re-registering this data source. -->",
+    "",
+    "This document describes every table you are permitted to query on this",
+    "data source. It was introspected from the source's granted reader surface;",
+    "tables and columns not listed here are not granted to your database role,",
+    "so do not query them (and avoid `SELECT *` — name the columns you need).",
+    "",
+    "## Tables",
+    "",
+    ...tables.map((t) => `- [${t.name}](#${t.name.replace(/_/g, "-")})`),
+    "",
+  ];
+  for (const table of tables) {
+    lines.push(`## ${table.name}`, "");
+    lines.push("| column | type |");
+    lines.push("| --- | --- |");
+    for (const column of [...table.columns].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      lines.push(`| ${column.name} | ${column.pgType} |`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
 export function generateAnalystSchemaMarkdown(
   annotations: AnalystSchemaAnnotations = ANALYST_SCHEMA_ANNOTATIONS,
 ): string {

@@ -257,6 +257,164 @@ export async function getAnalystReaderClient(): Promise<PgClientType> {
   return client;
 }
 
+// ---------------------------------------------------------------------------
+// External analyst data sources (THINK-239)
+//
+// A registered external Postgres source (POST /mcp/analyst/{sourceSlug})
+// connects with a per-source reader credential resolved from Secrets Manager,
+// NOT the cluster-global analyst_reader IAM chain. The credential is minted at
+// registration time (registerAnalystDataSource) and stored under
+// thinkwork/<stage>/analyst/<tenantId>/<slug>-reader-credential. TLS posture
+// rides the signed sourceClaims: `verify-full` verifies the server cert
+// (against the bundled RDS CA for *.rds.amazonaws.com hosts, else system CAs);
+// `required` encrypts but skips verification — a documented, explicitly
+// opt-in downgrade, never the default.
+// ---------------------------------------------------------------------------
+
+export interface ExternalSourceConnectParams {
+  host: string;
+  port: number;
+  database: string;
+  dbUser: string;
+  tls: "verify-full" | "required";
+  password: string;
+}
+
+function externalSourceSslConfig(
+  host: string,
+  tls: "verify-full" | "required",
+): { ca?: string; rejectUnauthorized: boolean } {
+  const isRds = /\.rds\.amazonaws\.com$/i.test(host);
+  // `required`: encrypt, but DO NOT verify the server certificate. This is the
+  // only path that sets rejectUnauthorized:false, and only when the operator
+  // explicitly registered the source with tls=required.
+  const rejectUnauthorized = tls === "verify-full";
+  return isRds
+    ? { ca: RDS_CA_BUNDLE, rejectUnauthorized }
+    : { rejectUnauthorized };
+}
+
+/**
+ * Open a fresh (uncached) client against an external source with an explicit
+ * password — used by registration/probe ceremonies that already hold the
+ * credential and manage the client lifecycle themselves (`client.end()`).
+ */
+export async function openExternalSourceClient(
+  params: ExternalSourceConnectParams,
+): Promise<PgClientType> {
+  const { Client } = await import("pg");
+  const client = new Client({
+    host: params.host,
+    port: params.port,
+    database: params.database,
+    user: params.dbUser,
+    password: params.password,
+    ssl: externalSourceSslConfig(params.host, params.tls),
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+  });
+  await client.connect();
+  return client;
+}
+
+/** The signed source description the broker/reconciler connect against. */
+export interface ExternalSourceDescriptor {
+  slug: string;
+  host: string;
+  port: number;
+  database: string;
+  dbUser: string;
+  tls: "verify-full" | "required";
+  credentialSecretArn: string;
+}
+
+async function resolveExternalSourcePassword(
+  credentialSecretArn: string,
+): Promise<string> {
+  // Test escape hatch — mirrors ANALYST_READER_DATABASE_URL. Lets broker
+  // sourced-path tests inject a password without a Secrets Manager call.
+  const testPassword = process.env.ANALYST_EXTERNAL_SOURCE_TEST_PASSWORD;
+  if (testPassword) return testPassword;
+  const sm = getSecretsManagerClient();
+  const result = await sm.send(
+    new GetSecretValueCommand({ SecretId: credentialSecretArn }),
+  );
+  const raw = result.SecretString ?? "";
+  // The secret is JSON {password, dbUser, host} OR a raw password string.
+  try {
+    const parsed = JSON.parse(raw) as { password?: unknown };
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.password === "string"
+    ) {
+      return parsed.password;
+    }
+  } catch {
+    // Not JSON — treat the whole SecretString as the raw password.
+  }
+  if (!raw) {
+    throw new Error(
+      `analyst-reader-db: external source credential ${credentialSecretArn} has an empty SecretString`,
+    );
+  }
+  return raw;
+}
+
+/** Per-source lazy client cache, keyed by credential secret ARN. */
+const _externalClients = new Map<string, PgClientType>();
+
+/**
+ * Lazily connect (and cache) a client for an external analyst source. Reused
+ * across warm invocations exactly like the builtin reader client; the gate
+ * issues `DISCARD ALL` before every query so session state never leaks.
+ */
+export async function connectExternalSource(
+  source: ExternalSourceDescriptor,
+): Promise<PgClientType> {
+  const cacheKey = source.credentialSecretArn;
+  const cached = _externalClients.get(cacheKey);
+  if (cached) return cached;
+  const password = await resolveExternalSourcePassword(
+    source.credentialSecretArn,
+  );
+  const client = await openExternalSourceClient({
+    host: source.host,
+    port: source.port,
+    database: source.database,
+    dbUser: source.dbUser,
+    tls: source.tls,
+    password,
+  });
+  client.on("error", () => {
+    _externalClients.delete(cacheKey);
+  });
+  _externalClients.set(cacheKey, client);
+  logConnect({
+    strategy: "external",
+    outcome: "ok",
+    source: source.slug,
+    host: source.host,
+    user: source.dbUser,
+    tls: source.tls,
+  });
+  return client;
+}
+
+/** Test-only: close + clear all cached external-source clients. */
+export async function _resetExternalSourceClients(): Promise<void> {
+  const clients = [..._externalClients.values()];
+  _externalClients.clear();
+  await Promise.all(
+    clients.map(async (c) => {
+      try {
+        await c.end();
+      } catch {
+        // best-effort close
+      }
+    }),
+  );
+}
+
 /** Test-only: close + clear the cached client. */
 export async function _resetAnalystReaderClient(): Promise<void> {
   const existing = _client;
