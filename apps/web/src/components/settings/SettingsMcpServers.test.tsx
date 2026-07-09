@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setHeader: vi.fn(),
   provisionAnalyst: vi.fn(),
+  registerDataSource: vi.fn(),
   listMcpServers: vi.fn(),
   listUserMcpServers: vi.fn(),
   createMcpServer: vi.fn(),
@@ -46,7 +47,18 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("urql", () => ({
-  useMutation: () => [{ fetching: false }, mocks.provisionAnalyst],
+  // Two mutations share this dialog; route each mock by operation name so the
+  // built-in (provisionAnalystConnector) and external (registerAnalystDataSource)
+  // paths can be asserted independently.
+  useMutation: (document: {
+    definitions?: { name?: { value?: string } }[];
+  }) => {
+    const opName = document?.definitions?.[0]?.name?.value;
+    if (opName === "SettingsRegisterAnalystDataSource") {
+      return [{ fetching: false }, mocks.registerDataSource];
+    }
+    return [{ fetching: false }, mocks.provisionAnalyst];
+  },
 }));
 
 vi.mock("@/lib/mcp-api", async (importOriginal) => {
@@ -66,6 +78,7 @@ beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setHeader.mockReset();
   mocks.provisionAnalyst.mockReset();
+  mocks.registerDataSource.mockReset();
   mocks.listMcpServers.mockReset();
   mocks.listUserMcpServers.mockReset();
   mocks.createMcpServer.mockReset();
@@ -289,19 +302,131 @@ describe("SettingsMcpServers", () => {
     expect(screen.getByText("conn-analyst")).toBeTruthy();
   });
 
-  it("forces re-approve on when rotate broker token is checked", async () => {
+  it("keeps rotate/re-approve controls out of the create dialog", async () => {
     mocks.listMcpServers.mockResolvedValue({ servers: [] });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
-    mocks.provisionAnalyst.mockResolvedValue({
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+    expect(await screen.findByText("Register data source")).toBeTruthy();
+
+    // The re-approve / rotate-broker-token affordances live on the connector
+    // detail surface, never in the create dialog.
+    expect(screen.queryByRole("checkbox", { name: "Re-approve" })).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", { name: "Rotate broker token" }),
+    ).toBeNull();
+  });
+
+  it("labels the primary action Refresh when the built-in connector exists", async () => {
+    mocks.listMcpServers.mockResolvedValue({
+      servers: [
+        {
+          id: "postgres-dev",
+          name: "Analyst Postgres",
+          slug: "postgres-dev",
+          url: "https://api.thinkwork.test/mcp/analyst",
+          enabled: true,
+          authType: "service_credential",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+        },
+      ],
+    });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Refresh data source" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Provision data source" }),
+    ).toBeNull();
+  });
+
+  it("rejects a bad slug pattern and the reserved postgres-dev slug", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+    const externalTab = screen.getByRole("tab", {
+      name: "External PostgreSQL",
+    });
+    fireEvent.mouseDown(externalTab);
+    fireEvent.click(externalTab);
+
+    const register = await screen.findByRole("button", {
+      name: "Register data source",
+    });
+
+    // Fill everything but the slug so only slug validity gates submission.
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Sales Postgres" },
+    });
+    fireEvent.change(screen.getByLabelText("Host"), {
+      target: { value: "db.internal.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Database"), {
+      target: { value: "sales" },
+    });
+    fireEvent.change(screen.getByLabelText("DB user"), {
+      target: { value: "analyst_reader" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "s3cret" },
+    });
+
+    // A bad pattern (uppercase / leading hyphen) is rejected inline.
+    fireEvent.change(screen.getByLabelText("Slug"), {
+      target: { value: "-Bad_Slug" },
+    });
+    expect(
+      screen.getByText(/lowercase letters, digits and hyphens/i),
+    ).toBeTruthy();
+    expect((register as HTMLButtonElement).disabled).toBe(true);
+
+    // The reserved built-in slug is rejected with its own message.
+    fireEvent.change(screen.getByLabelText("Slug"), {
+      target: { value: "postgres-dev" },
+    });
+    expect(
+      screen.getByText(/reserved for the built-in data source/i),
+    ).toBeTruthy();
+    expect((register as HTMLButtonElement).disabled).toBe(true);
+
+    // A valid slug clears the error and enables submission.
+    fireEvent.change(screen.getByLabelText("Slug"), {
+      target: { value: "sales-postgres" },
+    });
+    expect((register as HTMLButtonElement).disabled).toBe(false);
+
+    expect(mocks.registerDataSource).not.toHaveBeenCalled();
+  });
+
+  it("registers an external Postgres data source and renders the summary", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.registerDataSource.mockResolvedValue({
       data: {
-        provisionAnalystConnector: {
-          connectorId: "conn-analyst",
-          connectorOutcome: "unchanged",
-          brokerSecretOutcome: "rotated",
-          rdsIamCredentialOutcome: null,
-          profileRefreshed: false,
-          foldersWritten: 0,
-          foldersSkipped: 5,
+        registerAnalystDataSource: {
+          serverId: "srv-sales",
+          slug: "sales-postgres",
+          tables: 12,
+          foldersWritten: 3,
+          foldersSkipped: 1,
         },
       },
     });
@@ -311,31 +436,113 @@ describe("SettingsMcpServers", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "+ Register data source" }),
     );
-
-    const reApprove = await screen.findByRole("checkbox", {
-      name: "Re-approve",
+    const externalTab = screen.getByRole("tab", {
+      name: "External PostgreSQL",
     });
-    const rotate = screen.getByRole("checkbox", {
-      name: "Rotate broker token",
+    fireEvent.mouseDown(externalTab);
+    fireEvent.click(externalTab);
+
+    // Display name auto-suggests the kebab-case slug.
+    fireEvent.change(await screen.findByLabelText("Display name"), {
+      target: { value: "Sales Postgres" },
     });
-    expect(reApprove.getAttribute("aria-checked")).toBe("false");
+    expect((screen.getByLabelText("Slug") as HTMLInputElement).value).toBe(
+      "sales-postgres",
+    );
 
-    fireEvent.click(rotate);
-
-    // Rotate pins re-approve on and disables it.
-    expect(reApprove.getAttribute("aria-checked")).toBe("true");
-    expect(reApprove.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Host"), {
+      target: { value: "db.internal.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Database"), {
+      target: { value: "sales" },
+    });
+    fireEvent.change(screen.getByLabelText("DB user"), {
+      target: { value: "analyst_reader" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "s3cret" },
+    });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Provision data source" }),
+      screen.getByRole("button", { name: "Register data source" }),
     );
 
     await waitFor(() =>
-      expect(mocks.provisionAnalyst).toHaveBeenCalledWith({
-        reApprove: true,
-        rotateToken: true,
+      expect(mocks.registerDataSource).toHaveBeenCalledWith({
+        input: {
+          name: "Sales Postgres",
+          slug: "sales-postgres",
+          host: "db.internal.example.com",
+          port: 5432,
+          database: "sales",
+          dbUser: "analyst_reader",
+          password: "s3cret",
+          tls: "VERIFY_FULL",
+        },
       }),
     );
+
+    expect(await screen.findByText("Data source registered.")).toBeTruthy();
+    expect(screen.getByText("sales-postgres")).toBeTruthy();
+    expect(screen.getByText("12")).toBeTruthy();
+    expect(screen.getByText("3 written · 1 skipped")).toBeTruthy();
+    expect(screen.getByText("srv-sales")).toBeTruthy();
+    // The list refetches after a successful registration (initial load + reload).
+    expect(mocks.listMcpServers.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("surfaces the external registration error verbatim", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.registerDataSource.mockResolvedValue({
+      error: {
+        message:
+          "[GraphQL] role analyst_reader has non-SELECT grants; provision a read-only role.",
+        graphQLErrors: [
+          {
+            message:
+              "role analyst_reader has non-SELECT grants; provision a read-only role.",
+          },
+        ],
+      },
+    });
+
+    render(<SettingsMcpServers />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Register data source" }),
+    );
+    const externalTab = screen.getByRole("tab", {
+      name: "External PostgreSQL",
+    });
+    fireEvent.mouseDown(externalTab);
+    fireEvent.click(externalTab);
+
+    fireEvent.change(await screen.findByLabelText("Display name"), {
+      target: { value: "Sales Postgres" },
+    });
+    fireEvent.change(screen.getByLabelText("Host"), {
+      target: { value: "db.internal.example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Database"), {
+      target: { value: "sales" },
+    });
+    fireEvent.change(screen.getByLabelText("DB user"), {
+      target: { value: "analyst_reader" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "s3cret" },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Register data source" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "role analyst_reader has non-SELECT grants; provision a read-only role.",
+      ),
+    ).toBeTruthy();
   });
 
   it("surfaces the GraphQL error message verbatim on provision failure", async () => {

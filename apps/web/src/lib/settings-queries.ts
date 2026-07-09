@@ -2336,3 +2336,23 @@ export const SettingsProvisionAnalystConnectorMutation = graphql(`
     }
   }
 `);
+
+// ─── External analyst data source (THINK-239) ─────────────────────────────
+// Registers an external PostgreSQL database as a first-party analyst connector
+// (a born-approved tenant_mcp_servers row on the sourced broker route
+// POST /mcp/analyst/<slug>). Distinct from provisionAnalystConnector, which
+// only drives the built-in `postgres-dev` cluster path. The supplied
+// credential must be a read-only (SELECT-only) role provisioned by the DBA.
+export const SettingsRegisterAnalystDataSourceMutation = graphql(`
+  mutation SettingsRegisterAnalystDataSource(
+    $input: RegisterAnalystDataSourceInput!
+  ) {
+    registerAnalystDataSource(input: $input) {
+      serverId
+      slug
+      tables
+      foldersWritten
+      foldersSkipped
+    }
+  }
+`);

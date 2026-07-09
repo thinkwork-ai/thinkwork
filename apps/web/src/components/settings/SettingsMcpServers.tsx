@@ -5,7 +5,6 @@ import { useMutation } from "urql";
 import {
   Badge,
   Button,
-  Checkbox,
   DataTable,
   Dialog,
   DialogContent,
@@ -14,16 +13,25 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
   Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
-import { SettingsProvisionAnalystConnectorMutation } from "@/lib/settings-queries";
+import {
+  SettingsProvisionAnalystConnectorMutation,
+  SettingsRegisterAnalystDataSourceMutation,
+} from "@/lib/settings-queries";
+import { AnalystDataSourceTls } from "@/gql/graphql";
 import {
   createMcpServer,
   isPluginInstalledMcpServer,
@@ -67,6 +75,12 @@ export function SettingsMcpServers() {
         ),
       ),
     [pluginServerUrls, servers],
+  );
+  // THINK-239: the built-in `postgres-dev` connector, if already provisioned,
+  // flips the built-in path's primary action to "Refresh data source".
+  const builtinAnalystExists = useMemo(
+    () => (servers ?? []).some(isBuiltinAnalystServer),
+    [servers],
   );
 
   const load = useCallback(() => {
@@ -287,15 +301,21 @@ export function SettingsMcpServers() {
         open={registerOpen}
         onOpenChange={setRegisterOpen}
         onProvisioned={load}
+        builtinAnalystExists={builtinAnalystExists}
       />
     </>
   );
 }
 
-// THINK-230: analyst Postgres data-source registration. Provisions (and, when
-// asked, re-approves or rotates) the read-only analyst connector chain via the
-// `provisionAnalystConnector` mutation and surfaces the per-resource outcomes
-// inline. Backend re-enforces tenant-admin; non-admins get a GraphQL error.
+// THINK-230 / THINK-239: analyst Postgres data-source registration. Two paths
+// live side by side in one dialog:
+//   • "Built-in cluster" drives `provisionAnalystConnector` — the born-approved
+//     `postgres-dev` connector chain. Re-approve / rotate-broker-token actions
+//     are NOT here; they live on the existing server's detail surface.
+//   • "External PostgreSQL database" drives `registerAnalystDataSource` — an
+//     arbitrary external Postgres registered as a first-party analyst connector
+//     through the sourced broker route (POST /mcp/analyst/<slug>).
+// Backend re-enforces tenant-admin on both; non-admins get a GraphQL error.
 const ANALYST_PROVISION_STEPS = [
   "Approved postgres-dev connector row",
   "Broker credential secret",
@@ -303,6 +323,10 @@ const ANALYST_PROVISION_STEPS = [
   "Analyst profile refresh",
   "Signed workspace connection folder for every agent",
 ];
+
+const RESERVED_ANALYST_SLUG = "postgres-dev";
+// Client-side mirror of the backend slug rule (^[a-z0-9][a-z0-9-]{0,38}$).
+const ANALYST_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,38}$/;
 
 type AnalystProvisionOutcome = {
   connectorId: string;
@@ -314,17 +338,105 @@ type AnalystProvisionOutcome = {
   foldersSkipped: number;
 };
 
+type AnalystRegisterOutcome = {
+  serverId: string;
+  slug: string;
+  tables: number;
+  foldersWritten: number;
+  foldersSkipped: number;
+};
+
+// Derive a kebab-case slug suggestion from a display name.
+function suggestAnalystSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 39);
+}
+
+function graphqlErrorMessage(error: {
+  graphQLErrors: readonly { message: string }[];
+  message: string;
+}): string {
+  return (
+    error.graphQLErrors[0]?.message ??
+    error.message.replace(/^\[[^\]]*\]\s*/, "")
+  );
+}
+
 function RegisterDataSourceDialog({
   open,
   onOpenChange,
   onProvisioned,
+  builtinAnalystExists,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onProvisioned: () => void;
+  builtinAnalystExists: boolean;
 }) {
-  const [reApprove, setReApprove] = useState(false);
-  const [rotateToken, setRotateToken] = useState(false);
+  const [tab, setTab] = useState<"builtin" | "external">("builtin");
+
+  // Reset the tab each time the dialog opens.
+  useEffect(() => {
+    if (open) setTab("builtin");
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Register data source</DialogTitle>
+          <DialogDescription>
+            Give the analyst a Postgres data source to query with a read-only,
+            brokered credential.
+          </DialogDescription>
+        </DialogHeader>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as "builtin" | "external")}
+        >
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="builtin">Built-in cluster</TabsTrigger>
+            <TabsTrigger value="external">External PostgreSQL</TabsTrigger>
+          </TabsList>
+          <TabsContent value="builtin">
+            <BuiltinDataSourceForm
+              onOpenChange={onOpenChange}
+              onProvisioned={onProvisioned}
+              builtinAnalystExists={builtinAnalystExists}
+              active={tab === "builtin"}
+              dialogOpen={open}
+            />
+          </TabsContent>
+          <TabsContent value="external">
+            <ExternalDataSourceForm
+              onOpenChange={onOpenChange}
+              onProvisioned={onProvisioned}
+              active={tab === "external"}
+              dialogOpen={open}
+            />
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BuiltinDataSourceForm({
+  onOpenChange,
+  onProvisioned,
+  builtinAnalystExists,
+  active,
+  dialogOpen,
+}: {
+  onOpenChange: (open: boolean) => void;
+  onProvisioned: () => void;
+  builtinAnalystExists: boolean;
+  active: boolean;
+  dialogOpen: boolean;
+}) {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<AnalystProvisionOutcome | null>(null);
@@ -332,20 +444,18 @@ function RegisterDataSourceDialog({
     SettingsProvisionAnalystConnectorMutation,
   );
 
-  // Reset the form each time the dialog opens.
+  // Reset when the dialog reopens or the caller switches back to this tab.
   useEffect(() => {
-    if (open) {
-      setReApprove(false);
-      setRotateToken(false);
+    if (dialogOpen && active) {
       setErrorMsg(null);
       setResult(null);
       setSubmitting(false);
     }
-  }, [open]);
+  }, [dialogOpen, active]);
 
-  // Rotating the broker token forces a re-approval, so keep re-approve pinned
-  // on (and disabled) whenever rotate is selected.
-  const effectiveReApprove = rotateToken || reApprove;
+  const primaryLabel = builtinAnalystExists
+    ? "Refresh data source"
+    : "Provision data source";
 
   async function onConfirm() {
     if (submitting) return;
@@ -354,16 +464,11 @@ function RegisterDataSourceDialog({
     setResult(null);
     try {
       const response = await provisionAnalystConnector({
-        reApprove: effectiveReApprove,
-        rotateToken,
+        reApprove: false,
+        rotateToken: false,
       });
       if (response.error) {
-        // Surface the GraphQL error message verbatim (e.g. the re-approval
-        // instruction the backend returns when a URL/secret changed).
-        setErrorMsg(
-          response.error.graphQLErrors[0]?.message ??
-            response.error.message.replace(/^\[[^\]]*\]\s*/, ""),
-        );
+        setErrorMsg(graphqlErrorMessage(response.error));
         return;
       }
       const outcome = response.data?.provisionAnalystConnector;
@@ -381,122 +486,335 @@ function RegisterDataSourceDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Register data source</DialogTitle>
-          <DialogDescription>
-            Provision the analyst Postgres connector so agents can query the
-            warehouse with a read-only, brokered credential.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          {result ? (
-            <div className="space-y-3">
-              <p className="text-sm text-emerald-500">
-                Data source provisioned.
-              </p>
-              <dl className="divide-y divide-border rounded-md border border-border text-sm">
-                <ProvisionResultRow
-                  label="Connector"
-                  value={result.connectorOutcome}
-                />
-                <ProvisionResultRow
-                  label="Broker secret"
-                  value={result.brokerSecretOutcome}
-                />
-                <ProvisionResultRow
-                  label="RDS-IAM credential"
-                  value={result.rdsIamCredentialOutcome ?? "not wired"}
-                />
-                <ProvisionResultRow
-                  label="Analyst profile"
-                  value={result.profileRefreshed ? "refreshed" : "unchanged"}
-                />
-                <ProvisionResultRow
-                  label="Connection folders"
-                  value={`${result.foldersWritten} written · ${result.foldersSkipped} skipped`}
-                />
-              </dl>
-              <p className="font-mono text-xs text-muted-foreground">
-                {result.connectorId}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  This provisions:
-                </p>
-                <ul className="space-y-1 text-sm text-muted-foreground">
-                  {ANALYST_PROVISION_STEPS.map((step) => (
-                    <li key={step} className="flex gap-2">
-                      <span aria-hidden className="text-muted-foreground">
-                        •
-                      </span>
-                      <span>{step}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="space-y-3 rounded-md border border-border p-3">
-                <label className="flex items-start gap-3 text-sm">
-                  <Checkbox
-                    checked={effectiveReApprove}
-                    disabled={rotateToken || submitting}
-                    onCheckedChange={(v) => setReApprove(v === true)}
-                    aria-label="Re-approve"
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="font-medium text-foreground">
-                      Re-approve
-                    </span>
-                    <span className="block text-muted-foreground">
-                      Restamp the approval and re-pin the config hash.
-                    </span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3 text-sm">
-                  <Checkbox
-                    checked={rotateToken}
-                    disabled={submitting}
-                    onCheckedChange={(v) => {
-                      const next = v === true;
-                      setRotateToken(next);
-                      if (next) setReApprove(true);
-                    }}
-                    aria-label="Rotate broker token"
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="font-medium text-foreground">
-                      Rotate broker token
-                    </span>
-                    <span className="block text-muted-foreground">
-                      Issue a fresh broker secret. Forces re-approval.
-                    </span>
-                  </span>
-                </label>
-              </div>
-            </>
-          )}
-          {errorMsg ? (
-            <p className="text-sm text-destructive">{errorMsg}</p>
+    <div className="space-y-4 py-2">
+      {result ? (
+        <div className="space-y-3">
+          <p className="text-sm text-emerald-500">Data source provisioned.</p>
+          <dl className="divide-y divide-border rounded-md border border-border text-sm">
+            <ProvisionResultRow
+              label="Connector"
+              value={result.connectorOutcome}
+            />
+            <ProvisionResultRow
+              label="Broker secret"
+              value={result.brokerSecretOutcome}
+            />
+            <ProvisionResultRow
+              label="RDS-IAM credential"
+              value={result.rdsIamCredentialOutcome ?? "not wired"}
+            />
+            <ProvisionResultRow
+              label="Analyst profile"
+              value={result.profileRefreshed ? "refreshed" : "unchanged"}
+            />
+            <ProvisionResultRow
+              label="Connection folders"
+              value={`${result.foldersWritten} written · ${result.foldersSkipped} skipped`}
+            />
+          </dl>
+          <p className="font-mono text-xs text-muted-foreground">
+            {result.connectorId}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            The built-in <code className="font-mono">postgres-dev</code>{" "}
+            cluster. This provisions:
+          </p>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {ANALYST_PROVISION_STEPS.map((step) => (
+              <li key={step} className="flex gap-2">
+                <span aria-hidden className="text-muted-foreground">
+                  •
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+          {builtinAnalystExists ? (
+            <p className="text-xs text-muted-foreground">
+              Already provisioned — refreshing re-runs provisioning
+              idempotently. Re-approve and broker-token rotation live on the
+              connector&apos;s detail page.
+            </p>
           ) : null}
         </div>
+      )}
+      {errorMsg ? <p className="text-sm text-destructive">{errorMsg}</p> : null}
+      <DialogFooter>
+        <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          {result ? "Close" : "Cancel"}
+        </Button>
+        {result ? null : (
+          <Button onClick={onConfirm} disabled={submitting}>
+            {submitting ? "Provisioning…" : primaryLabel}
+          </Button>
+        )}
+      </DialogFooter>
+    </div>
+  );
+}
+
+function ExternalDataSourceForm({
+  onOpenChange,
+  onProvisioned,
+  active,
+  dialogOpen,
+}: {
+  onOpenChange: (open: boolean) => void;
+  onProvisioned: () => void;
+  active: boolean;
+  dialogOpen: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("5432");
+  const [database, setDatabase] = useState("");
+  const [dbUser, setDbUser] = useState("");
+  const [password, setPassword] = useState("");
+  const [tls, setTls] = useState<AnalystDataSourceTls>(
+    AnalystDataSourceTls.VerifyFull,
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [result, setResult] = useState<AnalystRegisterOutcome | null>(null);
+  const [, registerAnalystDataSource] = useMutation(
+    SettingsRegisterAnalystDataSourceMutation,
+  );
+
+  // Reset the form when the dialog reopens or the caller switches to this tab.
+  useEffect(() => {
+    if (dialogOpen && active) {
+      setName("");
+      setSlug("");
+      setSlugEdited(false);
+      setHost("");
+      setPort("5432");
+      setDatabase("");
+      setDbUser("");
+      setPassword("");
+      setTls(AnalystDataSourceTls.VerifyFull);
+      setErrorMsg(null);
+      setResult(null);
+      setSubmitting(false);
+    }
+  }, [dialogOpen, active]);
+
+  const trimmedSlug = slug.trim();
+  const slugFormatValid = ANALYST_SLUG_PATTERN.test(trimmedSlug);
+  const slugReserved = trimmedSlug === RESERVED_ANALYST_SLUG;
+  const slugError = !trimmedSlug
+    ? null
+    : slugReserved
+      ? `"${RESERVED_ANALYST_SLUG}" is reserved for the built-in data source — choose another.`
+      : !slugFormatValid
+        ? "Use 1–39 chars: lowercase letters, digits and hyphens, starting with a letter or digit."
+        : null;
+
+  const portNumber = Number.parseInt(port, 10);
+  const portValid = Number.isInteger(portNumber) && portNumber > 0;
+
+  const canSubmit =
+    name.trim().length > 0 &&
+    trimmedSlug.length > 0 &&
+    slugFormatValid &&
+    !slugReserved &&
+    host.trim().length > 0 &&
+    portValid &&
+    database.trim().length > 0 &&
+    dbUser.trim().length > 0 &&
+    password.length > 0 &&
+    !submitting;
+
+  function onNameChange(value: string) {
+    setName(value);
+    if (!slugEdited) setSlug(suggestAnalystSlug(value));
+  }
+
+  async function onSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    setResult(null);
+    try {
+      const response = await registerAnalystDataSource({
+        input: {
+          name: name.trim(),
+          slug: trimmedSlug,
+          host: host.trim(),
+          port: portNumber,
+          database: database.trim(),
+          dbUser: dbUser.trim(),
+          password,
+          tls,
+        },
+      });
+      if (response.error) {
+        setErrorMsg(graphqlErrorMessage(response.error));
+        return;
+      }
+      const outcome = response.data?.registerAnalystDataSource;
+      if (!outcome) {
+        setErrorMsg("Registration returned no result.");
+        return;
+      }
+      // Drop the password from state as soon as the request succeeds — the
+      // backend never echoes it back and we never re-render it.
+      setPassword("");
+      setResult(outcome);
+      onProvisioned();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to register");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="space-y-4 py-2">
+        <p className="text-sm text-emerald-500">Data source registered.</p>
+        <dl className="divide-y divide-border rounded-md border border-border text-sm">
+          <ProvisionResultRow label="Slug" value={result.slug} />
+          <ProvisionResultRow label="Tables" value={`${result.tables}`} />
+          <ProvisionResultRow
+            label="Connection folders"
+            value={`${result.foldersWritten} written · ${result.foldersSkipped} skipped`}
+          />
+        </dl>
+        <p className="font-mono text-xs text-muted-foreground">
+          {result.serverId}
+        </p>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {result ? "Close" : "Cancel"}
+            Close
           </Button>
-          {result ? null : (
-            <Button onClick={onConfirm} disabled={submitting}>
-              {submitting ? "Provisioning…" : "Provision data source"}
-            </Button>
-          )}
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-2">
+      <p className="text-sm text-muted-foreground">
+        Register an external PostgreSQL database. The credential must be a
+        read-only (SELECT-only) role provisioned by your DBA — registration
+        connects with it, verifies the posture, and introspects the granted
+        tables.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="ext-name">Display name</Label>
+          <Input
+            id="ext-name"
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            placeholder="Sales Postgres"
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="ext-slug">Slug</Label>
+          <Input
+            id="ext-slug"
+            value={slug}
+            onChange={(e) => {
+              setSlugEdited(true);
+              setSlug(e.target.value);
+            }}
+            placeholder="sales-postgres"
+            aria-invalid={slugError ? true : undefined}
+          />
+          {slugError ? (
+            <p className="text-xs text-destructive">{slugError}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Broker route segment:{" "}
+              <code className="font-mono">
+                /mcp/analyst/{trimmedSlug || "…"}
+              </code>
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ext-host">Host</Label>
+          <Input
+            id="ext-host"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            placeholder="db.internal.example.com"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ext-port">Port</Label>
+          <Input
+            id="ext-port"
+            value={port}
+            inputMode="numeric"
+            onChange={(e) => setPort(e.target.value)}
+            placeholder="5432"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ext-database">Database</Label>
+          <Input
+            id="ext-database"
+            value={database}
+            onChange={(e) => setDatabase(e.target.value)}
+            placeholder="sales"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ext-dbuser">DB user</Label>
+          <Input
+            id="ext-dbuser"
+            value={dbUser}
+            onChange={(e) => setDbUser(e.target.value)}
+            placeholder="analyst_reader"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ext-password">Password</Label>
+          <Input
+            id="ext-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ext-tls">TLS mode</Label>
+          <Select
+            value={tls}
+            onValueChange={(v) => setTls(v as AnalystDataSourceTls)}
+          >
+            <SelectTrigger id="ext-tls">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={AnalystDataSourceTls.VerifyFull}>
+                Verify full
+              </SelectItem>
+              <SelectItem value={AnalystDataSourceTls.Required}>
+                Required
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {errorMsg ? <p className="text-sm text-destructive">{errorMsg}</p> : null}
+      <DialogFooter>
+        <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button onClick={onSubmit} disabled={!canSubmit}>
+          {submitting ? "Registering…" : "Register data source"}
+        </Button>
+      </DialogFooter>
+    </div>
   );
 }
 
@@ -513,6 +831,19 @@ function ProvisionResultRow({
       <dd className="font-mono text-xs text-foreground">{value}</dd>
     </div>
   );
+}
+
+// THINK-239: the built-in analyst connector is the `postgres-dev` slug (or a URL
+// whose path ends exactly in `/mcp/analyst`). External sources register under
+// `/mcp/analyst/<slug>` and are ordinary rows, so they must NOT match here.
+function isBuiltinAnalystServer(server: McpServer): boolean {
+  if (server.slug === RESERVED_ANALYST_SLUG) return true;
+  try {
+    const pathname = new URL(server.url).pathname.replace(/\/+$/, "");
+    return pathname.endsWith("/mcp/analyst");
+  } catch {
+    return server.url.replace(/\/+$/, "").endsWith("/mcp/analyst");
+  }
 }
 
 function McpServerSection({
