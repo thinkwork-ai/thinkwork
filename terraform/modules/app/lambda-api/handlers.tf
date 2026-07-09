@@ -101,6 +101,13 @@ locals {
     # automation_get). Read via getConfig() in admin-ops-mcp.ts; without
     # this the tools are listed but every call returns not_yet_enabled.
     AUTOMATIONS_AGENT_TOOLS_ENABLED = "true"
+    # THINK-227 U10 (KTD11): DEDICATED inert gate for the automation WRITE
+    # tools (automation_save, automation_delete). Deliberately "false" at
+    # merge — the read flag above has been live stage-wide since THINK-137,
+    # so reusing it would pre-activate writes on every already-assigned
+    # tenant. Flipped per-stage as the U12 rollout step (dev dogfood first,
+    # then TEI) after the pre-deploy assignment enumeration.
+    AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "false"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled

@@ -14,8 +14,10 @@
 
 import {
   advanceCursor,
+  boundDocumentIdFromTargetSpec,
   buildWorkflowStepWakeupPayload,
   decideWorkflowContinuation,
+  normalizeTargetSpec,
   planNextStep,
   planRollover,
   readWorkflowDefinition,
@@ -36,10 +38,14 @@ import {
   storeTaskToken,
 } from "@thinkwork/database-pg";
 import {
+  agentLoopVersions,
+  agentLoops,
   agentWakeupRequests,
+  artifacts as artifactsTable,
   workflowRunEvents,
   workflowRuns,
   workflowVersions,
+  workflows,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, sql } from "drizzle-orm";
 
@@ -109,6 +115,9 @@ interface RunRow {
   backend_execution_id: string | null;
   workflow_version_id: string | null;
   input_summary: Record<string, unknown> | null;
+  /** THINK-227 U4: the deliver step's new-edition gate compares the bound
+   * document's last successful refresh against this. */
+  started_at: Date | string | null;
 }
 
 async function loadRun(
@@ -124,6 +133,7 @@ async function loadRun(
       backend_execution_id: workflowRuns.backend_execution_id,
       workflow_version_id: workflowRuns.workflow_version_id,
       input_summary: workflowRuns.input_summary,
+      started_at: workflowRuns.started_at,
     })
     .from(workflowRuns)
     .where(eq(workflowRuns.id, cursor.workflowRunId))
@@ -354,6 +364,10 @@ export async function handleDispatchAgent(
       exitSignal: definition.continuationPolicy?.exitSignal,
       maxIterations: definition.continuationPolicy?.maxIterations,
       spaceId: typeof spaceId === "string" ? spaceId : null,
+      // THINK-227 U2 (KTD2): the bound document rides the wakeup payload so
+      // the emission reader enforces it — resolved LIVE from the source
+      // automation's target_spec (KTD1), never from a definition snapshot.
+      documentId: await resolveBoundDocumentId(db, run),
     });
     await db.insert(agentWakeupRequests).values({
       tenant_id: cursor.tenantId,
@@ -375,6 +389,51 @@ export async function handleDispatchAgent(
   }
 
   return { ok: true };
+}
+
+/**
+ * THINK-227 U2: resolve the bound document for a workflow run — the live
+ * `target_spec.documentBinding` of the automation this workflow converged
+ * from (`workflows.source_agent_loop_id`, U13). Live resolution means run 1's
+ * capture (U3) is visible to run 2 without republishing the definition.
+ * Returns null for workflows with no source automation or no binding; a
+ * malformed spec logs and degrades to unbound rather than failing the step.
+ */
+export async function resolveBoundDocumentId(
+  db: WorkflowDb,
+  run: Pick<RunRow, "id" | "workflow_id">,
+): Promise<string | null> {
+  const [workflow] = await db
+    .select({ source_agent_loop_id: workflows.source_agent_loop_id })
+    .from(workflows)
+    .where(eq(workflows.id, run.workflow_id))
+    .limit(1);
+  if (!workflow?.source_agent_loop_id) return null;
+
+  const [loop] = await db
+    .select({ current_version_id: agentLoops.current_version_id })
+    .from(agentLoops)
+    .where(eq(agentLoops.id, workflow.source_agent_loop_id))
+    .limit(1);
+  if (!loop?.current_version_id) return null;
+
+  const [version] = await db
+    .select({ target_spec: agentLoopVersions.target_spec })
+    .from(agentLoopVersions)
+    .where(eq(agentLoopVersions.id, loop.current_version_id))
+    .limit(1);
+  if (!version?.target_spec) return null;
+
+  try {
+    return boundDocumentIdFromTargetSpec(
+      normalizeTargetSpec(version.target_spec),
+    );
+  } catch (error) {
+    console.warn(
+      `[workflow-step-dispatch] run ${run.id}: source automation target_spec did not normalize (${(error as Error).message}); dispatching unbound`,
+    );
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +482,8 @@ export async function handleExecuteStep(
     !step ||
     (step.kind !== "routine" &&
       step.kind !== "http" &&
-      step.kind !== "emit_event")
+      step.kind !== "emit_event" &&
+      step.kind !== "deliver")
   ) {
     throw new Error(
       `workflow run ${run.id} step pointer ${cursor.stepPointer} is not an executable step — cannot run it`,
@@ -479,7 +539,10 @@ export async function handleExecuteStep(
   });
 
   const context = await buildTemplateContext(db, run);
-  const outcome = await executeStep(step, context, executors);
+  const outcome =
+    step.kind === "deliver"
+      ? await executeDeliverStep(db, { run, step, executors, now })
+      : await executeStep(step, context, executors);
 
   if (outcome.turnStatus === "completed" && outcome.output !== undefined) {
     await recordWorkflowStepOutput(db, {
@@ -522,12 +585,30 @@ export interface StepExecutors {
     errorMessage?: string | null;
   }>;
   httpFetch: typeof fetch;
+  /** THINK-227 U5 (KTD3): RequestResponse invoke of the artifact-deliver
+   * Lambda's workflow-delivery mode. Never fire-and-forget. */
+  invokeArtifactDeliver: (input: {
+    tenantId: string;
+    artifactId: string;
+    recipients: string[];
+    subjectTemplate?: string | null;
+    idempotencyKey: string;
+    workflowRunId: string;
+  }) => Promise<{
+    ok: boolean;
+    delivery?: string;
+    recipients?: string[];
+    subject?: string | null;
+    shareUrl?: string | null;
+    error?: string | null;
+  }>;
 }
 
 export const defaultStepExecutors: StepExecutors = {
   invokeRoutine: async ({ routineId, input }) => {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const explicit = process.env.ROUTINE_EXEC_GIT_FUNCTION_NAME;
     const stage = process.env.STAGE;
@@ -570,10 +651,156 @@ export const defaultStepExecutors: StepExecutors = {
     }
   },
   httpFetch: fetch,
+  invokeArtifactDeliver: async (input) => {
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
+    const lambda = new LambdaClient({});
+    const explicit = process.env.ARTIFACT_DELIVER_FUNCTION_NAME;
+    const stage = process.env.STAGE;
+    const fnName =
+      explicit ??
+      (stage ? `thinkwork-${stage}-api-artifact-deliver` : undefined);
+    if (!fnName) {
+      throw new Error(
+        "deliver step cannot dispatch: ARTIFACT_DELIVER_FUNCTION_NAME / STAGE are unset",
+      );
+    }
+    // RequestResponse and surface errors — never fire-and-forget (KTD3/KTD8).
+    const response = await lambda.send(
+      new InvokeCommand({
+        FunctionName: fnName,
+        InvocationType: "RequestResponse",
+        Payload: new TextEncoder().encode(
+          JSON.stringify({ workflowDelivery: input }),
+        ),
+      }),
+    );
+    if (response.FunctionError) {
+      return {
+        ok: false,
+        error: `delivery function error: ${response.FunctionError}`,
+      };
+    }
+    const text = response.Payload
+      ? new TextDecoder().decode(response.Payload)
+      : "";
+    try {
+      return text ? JSON.parse(text) : { ok: false, error: "empty response" };
+    } catch {
+      return { ok: false, error: "delivery returned malformed JSON" };
+    }
+  },
 };
 
+/**
+ * Deliver step (THINK-227 U4/U5). Sequence:
+ *   1. Resolve the bound document from the source automation's live
+ *      target_spec — no binding is a definition-level defect (validated at
+ *      publish), so a missing one here fails loudly.
+ *   2. New-edition gate (KTD4): the document's last successful refresh must
+ *      postdate the run's start — a run whose agent step never finalized a
+ *      new edition records `skipped_no_new_edition` and SUCCEEDS the step
+ *      without sending (no new edition ⇒ nothing to mail; readers keep the
+ *      last good edition).
+ *   3. Invoke the artifact-deliver Lambda (RequestResponse) with the run id
+ *      as idempotency key (KTD8) and convert its response into step evidence.
+ */
+async function executeDeliverStep(
+  db: WorkflowDb,
+  input: {
+    run: RunRow;
+    step: Extract<ExecutableWorkflowStep, { kind: "deliver" }>;
+    executors: StepExecutors;
+    now: Date;
+  },
+): Promise<StepExecutionOutcome> {
+  const { run, step, executors } = input;
+  const artifactId = await resolveBoundDocumentId(db, run);
+  if (!artifactId) {
+    return {
+      turnStatus: "failed",
+      errorSummary:
+        "deliver step found no bound document — the automation's binding is unset or not yet captured",
+    };
+  }
+
+  const [artifact] = await db
+    .select({ last_refresh_at: artifactsTable.last_refresh_at })
+    .from(artifactsTable)
+    .where(
+      and(
+        eq(artifactsTable.id, artifactId),
+        eq(artifactsTable.tenant_id, run.tenant_id),
+      ),
+    )
+    .limit(1);
+  if (!artifact) {
+    return {
+      turnStatus: "failed",
+      errorSummary: `deliver step's bound document ${artifactId} no longer exists`,
+    };
+  }
+
+  const startedAt = run.started_at ? new Date(run.started_at) : null;
+  const refreshedAt = artifact.last_refresh_at
+    ? new Date(artifact.last_refresh_at)
+    : null;
+  const hasNewEdition = Boolean(
+    refreshedAt && (!startedAt || refreshedAt >= startedAt),
+  );
+  if (!hasNewEdition) {
+    return {
+      turnStatus: "completed",
+      output: {
+        delivery: "skipped_no_new_edition",
+        artifactId,
+        recipients: step.recipients.length,
+      },
+    };
+  }
+
+  let result: Awaited<ReturnType<StepExecutors["invokeArtifactDeliver"]>>;
+  try {
+    result = await executors.invokeArtifactDeliver({
+      tenantId: run.tenant_id,
+      artifactId,
+      recipients: step.recipients,
+      subjectTemplate: step.subjectTemplate ?? null,
+      idempotencyKey: `workflow-run:${run.id}`,
+      workflowRunId: run.id,
+    });
+  } catch (error) {
+    return {
+      turnStatus: "failed",
+      errorSummary: `delivery invocation failed: ${boundedMessage(error)}`,
+    };
+  }
+  if (!result.ok) {
+    return {
+      turnStatus: "failed",
+      errorSummary: result.error ?? "delivery failed",
+      output: {
+        delivery: "failed",
+        artifactId,
+        recipients: step.recipients.length,
+      },
+    };
+  }
+  return {
+    turnStatus: "completed",
+    output: {
+      delivery: result.delivery ?? "sent",
+      artifactId,
+      recipients: result.recipients?.length ?? step.recipients.length,
+      subject: result.subject ?? null,
+      shareUrl: result.shareUrl ?? null,
+    },
+  };
+}
+
 async function executeStep(
-  step: ExecutableWorkflowStep,
+  step: Exclude<ExecutableWorkflowStep, { kind: "deliver" }>,
   context: StepTemplateContext,
   executors: StepExecutors,
 ): Promise<StepExecutionOutcome> {

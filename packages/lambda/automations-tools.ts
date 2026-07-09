@@ -26,9 +26,41 @@ import {
   type TargetSpec,
 } from "@thinkwork/agent-loops-core";
 
-const { agentLoops, agentLoopVersions, agentLoopRuns } = schema;
+const { agentLoops, agentLoopVersions, agentLoopRuns, tenantMembers } = schema;
 
 type Db = ReturnType<typeof getDb>;
+
+/**
+ * THINK-227 U10 (R12): the read tools become principal-aware. Members see
+ * only automations they own; admins/owners keep the tenant-wide view. The
+ * split must live HERE — these reads go straight to Aurora, bypassing the
+ * GraphQL authz seam entirely. Returns the owner filter to apply, or null
+ * for the unrestricted (admin) view. An unknown/absent principal reads as
+ * member-of-nothing: filter to an impossible owner so nothing leaks.
+ */
+export async function resolveAutomationReadScope(input: {
+  tenantId: string;
+  principalId: string | null | undefined;
+  db?: Db;
+}): Promise<{ ownerUserId: string } | null> {
+  const db = input.db ?? getDb();
+  if (!input.principalId) {
+    return { ownerUserId: "00000000-0000-0000-0000-000000000000" };
+  }
+  const [member] = await db
+    .select({ role: tenantMembers.role })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.tenant_id, input.tenantId),
+        eq(tenantMembers.principal_id, input.principalId),
+      ),
+    )
+    .limit(1);
+  const role = member?.role;
+  if (role === "owner" || role === "admin") return null;
+  return { ownerUserId: input.principalId };
+}
 
 // ---------------------------------------------------------------------------
 // Presented shapes
@@ -170,6 +202,8 @@ async function loadVersionsById(
 
 export async function listAutomations(input: {
   tenantId: string;
+  /** THINK-227 U10 (R12): owner filter for member principals; null = tenant-wide. */
+  scope?: { ownerUserId: string } | null;
   db?: Db;
 }): Promise<AutomationListItem[]> {
   const db = input.db ?? getDb();
@@ -187,7 +221,14 @@ export async function listAutomations(input: {
       last_run_at: agentLoops.last_run_at,
     })
     .from(agentLoops)
-    .where(eq(agentLoops.tenant_id, input.tenantId));
+    .where(
+      input.scope
+        ? and(
+            eq(agentLoops.tenant_id, input.tenantId),
+            eq(agentLoops.owner_user_id, input.scope.ownerUserId),
+          )
+        : eq(agentLoops.tenant_id, input.tenantId),
+    );
 
   const versions = await loadVersionsById(
     db,
@@ -223,6 +264,8 @@ export async function listAutomations(input: {
 export async function getAutomation(input: {
   tenantId: string;
   automationId: string;
+  /** THINK-227 U10 (R12): owner filter for member principals; null = tenant-wide. */
+  scope?: { ownerUserId: string } | null;
   db?: Db;
 }): Promise<AutomationDetail> {
   const db = input.db ?? getDb();
@@ -236,6 +279,7 @@ export async function getAutomation(input: {
       run_as_user_id: agentLoops.run_as_user_id,
       space_id: agentLoops.space_id,
       current_version_id: agentLoops.current_version_id,
+      owner_user_id: agentLoops.owner_user_id,
       last_run_id: agentLoops.last_run_id,
       last_run_status: agentLoops.last_run_status,
       last_run_at: agentLoops.last_run_at,
@@ -250,6 +294,11 @@ export async function getAutomation(input: {
     .limit(1);
 
   if (!loop) {
+    throw new Error(`automation ${input.automationId} not found in tenant`);
+  }
+  // Member scope: not-owned reads collapse to the same not-found as a
+  // nonexistent id — no existence oracle for other people's automations.
+  if (input.scope && loop.owner_user_id !== input.scope.ownerUserId) {
     throw new Error(`automation ${input.automationId} not found in tenant`);
   }
 

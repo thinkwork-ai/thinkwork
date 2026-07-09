@@ -192,6 +192,88 @@ describe("validateWorkflowDefinition — full step taxonomy (THINK-214)", () => 
     expect(result).toMatchObject({ ok: true });
   });
 
+  // THINK-227 U4: deliver step
+  it("accepts a deliver step on a binding-carrying definition", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      documentBinding: { mode: "existing", artifactId: "art-1" },
+      steps: [
+        { id: "work", kind: "agent", objective: "Refresh the report" },
+        {
+          id: "deliver",
+          kind: "deliver",
+          recipients: ["ops@example.com", "ceo@example.com"],
+          subjectTemplate: "Weekly Pipeline Report",
+        },
+      ],
+    });
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it("rejects a deliver step with bad recipients or missing binding", () => {
+    const noRecipients = validateWorkflowDefinition({
+      version: 1,
+      documentBinding: { mode: "existing", artifactId: "art-1" },
+      steps: [{ id: "d1", kind: "deliver", recipients: [] }],
+    });
+    expect(noRecipients.ok).toBe(false);
+    if (!noRecipients.ok) {
+      expect(noRecipients.errors[0]?.field).toBe("steps[0].recipients");
+    }
+
+    const badRecipient = validateWorkflowDefinition({
+      version: 1,
+      documentBinding: { mode: "existing", artifactId: "art-1" },
+      steps: [{ id: "d1", kind: "deliver", recipients: ["not-an-email"] }],
+    });
+    expect(badRecipient.ok).toBe(false);
+    if (!badRecipient.ok) {
+      expect(badRecipient.errors[0]?.field).toBe("steps[0].recipients[0]");
+    }
+
+    const noBinding = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "d1", kind: "deliver", recipients: ["ops@example.com"] }],
+    });
+    expect(noBinding.ok).toBe(false);
+    if (!noBinding.ok) {
+      expect(noBinding.errors[0]?.reason).toMatch(
+        /requires the workflow to carry a documentBinding/,
+      );
+    }
+
+    const multilineSubject = validateWorkflowDefinition({
+      version: 1,
+      documentBinding: { mode: "existing", artifactId: "art-1" },
+      steps: [
+        {
+          id: "d1",
+          kind: "deliver",
+          recipients: ["ops@example.com"],
+          subjectTemplate: "hi\r\nBcc: evil@example.com",
+        },
+      ],
+    });
+    expect(multilineSubject.ok).toBe(false);
+    if (!multilineSubject.ok) {
+      expect(multilineSubject.errors[0]?.field).toBe(
+        "steps[0].subjectTemplate",
+      );
+    }
+  });
+
+  it("rejects a malformed documentBinding on the definition", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      documentBinding: { mode: "bogus" },
+      steps: [{ id: "work", kind: "agent", objective: "x" }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.field).toBe("documentBinding.mode");
+    }
+  });
+
   it("rejects a routine step without routineId", () => {
     const result = validateWorkflowDefinition({
       version: 1,

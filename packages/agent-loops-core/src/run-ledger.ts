@@ -1,5 +1,7 @@
 import type {
+  AgentLoopDeliverySpec,
   AgentLoopTargetKind,
+  DocumentBinding,
   GoalSpec,
   LoopPolicy,
   RoutineActionResult,
@@ -72,6 +74,13 @@ export interface DispatchableAgentLoopVersion {
   /** R11 run guards carried on target_spec — max concurrent runs + monthly
    * cost cap. Enforced at the dispatcher start-gate (THINK-137 U4). */
   guards?: TargetGuards | null;
+  /** THINK-227 U1 (KTD1): the document this automation maintains, carried
+   * verbatim from target_spec so dispatch sites can resolve the bound
+   * artifact id (`boundDocumentIdFromTargetSpec`). Null when unbound. */
+  documentBinding?: DocumentBinding | null;
+  /** THINK-227 U1 (R6): email delivery config for the deliver step. Null when
+   * the automation has no delivery. */
+  delivery?: AgentLoopDeliverySpec | null;
 }
 
 /**
@@ -602,6 +611,8 @@ export function resolveDispatchableVersion(
     routineActionsSpec,
     targetKind: targetSpec.kind,
     guards: targetSpec.guards ?? null,
+    documentBinding: targetSpec.documentBinding ?? null,
+    delivery: targetSpec.delivery ?? null,
   };
 }
 

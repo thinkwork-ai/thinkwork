@@ -85,6 +85,7 @@ import {
   resolveTurnRunContext,
   type TurnRunContext,
 } from "../agent-loops/run-acting-user.js";
+import { captureDocumentBindingArtifact } from "../agent-loops/document-binding-capture.js";
 import { recordDocumentRefreshFailure } from "@thinkwork/database-pg";
 
 /** `artifacts.metadata.kind` for dual-body document artifacts. */
@@ -290,10 +291,23 @@ export interface DocumentEmissionDeps {
     artifactId: string;
   }) => Promise<void>;
   /**
-   * THINK-155 U3: record a failed scheduled refresh — stamps
-   * `artifacts.refresh_failed_at` and raises the deduplicated
-   * `document_refresh_failed` inbox item (one OPEN item per automation).
-   * Best-effort; called only on the run-derived path.
+   * THINK-227 U3: first-run capture — after a run-derived finalize pins the
+   * document, write the artifact id back into the automation's create-mode
+   * binding (`target_spec.documentBinding.capturedArtifactId`, first writer
+   * wins; no-op for existing-mode or already-captured bindings). Best-effort;
+   * optional so test harnesses without capture concerns keep compiling.
+   */
+  captureBindingArtifact?: (input: {
+    tenantId: string;
+    agentLoopId: string;
+    artifactId: string;
+  }) => Promise<{ captured: boolean }>;
+  /**
+   * THINK-155 U3 → THINK-227 U6: record a failed scheduled refresh — stamps
+   * `artifacts.refresh_failed_at` (the reader's amber stale state). The
+   * inbox writer is retired (R5); the failure's run-facing record is the run
+   * ledger/step evidence the finalize path persists. Best-effort; called
+   * only on the run-derived path.
    */
   recordRefreshFailure: (input: {
     tenantId: string;
@@ -458,6 +472,7 @@ function defaultDeps(): DocumentEmissionDeps {
           and(eq(artifacts.id, artifactId), eq(artifacts.tenant_id, tenantId)),
         );
     },
+    captureBindingArtifact: (input) => captureDocumentBindingArtifact(input),
     recordRefreshFailure: (input) =>
       recordDocumentRefreshFailure(getDb(), { ...input, now: new Date() }),
     findThreadDocumentForRevision: async ({
@@ -1274,6 +1289,23 @@ export async function handleDocumentEmission(
         "[document-emission] refresh-success stamp failed (best-effort):",
         err,
       );
+    }
+    // THINK-227 U3: first-run capture — a create-mode binding locks onto the
+    // artifact its first successful finalize produced (first writer wins;
+    // the capture module guards mode + already-captured). Best-effort.
+    if (runContext && deps.captureBindingArtifact) {
+      try {
+        await deps.captureBindingArtifact({
+          tenantId: input.tenantId,
+          agentLoopId: runContext.agentLoopId,
+          artifactId,
+        });
+      } catch (err) {
+        console.error(
+          "[document-emission] binding capture failed (best-effort):",
+          err,
+        );
+      }
     }
   } else {
     await writeHeadBodies();

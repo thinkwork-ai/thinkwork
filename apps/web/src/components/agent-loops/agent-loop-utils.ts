@@ -1,4 +1,6 @@
 import type {
+  AgentLoopDeliverySpec,
+  AgentLoopDocumentBinding,
   AgentLoopDraft,
   AgentLoopFormTriggerFamily,
   AgentLoopGoalSpec,
@@ -139,6 +141,15 @@ export function defaultAgentLoopDraft(
     workflowId: "",
     runAsUserId,
     spaceId: selectDefaultSpaceId(spaceOptions, defaultSpaceId),
+    bindingMode: "off",
+    bindingGenre: "report",
+    bindingTitle: "",
+    bindingSpaceId: "",
+    bindingArtifactId: "",
+    bindingCapturedArtifactId: "",
+    deliveryEnabled: false,
+    deliveryRecipients: "",
+    deliverySubject: "",
   };
 }
 
@@ -151,6 +162,8 @@ export function readTargetSpec(
 ): AgentLoopTargetSpec {
   const target = jsonRecord(version?.targetSpec);
   const kind = target.kind;
+  const documentBinding = readDocumentBinding(target.documentBinding);
+  const delivery = readDeliverySpec(target.delivery);
   if (kind === "routine" || kind === "workflow") {
     return {
       kind,
@@ -162,11 +175,48 @@ export function readTargetSpec(
         kind === "workflow"
           ? { routineId: stringValue(jsonRecord(target.workflow).routineId) }
           : undefined,
+      documentBinding,
+      delivery,
     };
   }
   return {
     kind: "agent_thread",
     agentThread: normalizeAgentThreadRead(jsonRecord(target.agentThread)),
+    documentBinding,
+    delivery,
+  };
+}
+
+// THINK-227 U7: read the maintained-document binding + delivery config.
+function readDocumentBinding(
+  value: unknown,
+): AgentLoopDocumentBinding | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const rec = jsonRecord(value);
+  const mode = rec.mode;
+  if (mode !== "create" && mode !== "existing") return undefined;
+  return {
+    mode,
+    genre: stringValue(rec.genre) || undefined,
+    title: stringValue(rec.title) || undefined,
+    spaceId: stringValue(rec.spaceId) || undefined,
+    artifactId: stringValue(rec.artifactId) || undefined,
+    capturedArtifactId: stringValue(rec.capturedArtifactId) || undefined,
+  };
+}
+
+function readDeliverySpec(value: unknown): AgentLoopDeliverySpec | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const rec = jsonRecord(value);
+  const recipients = Array.isArray(rec.recipients)
+    ? rec.recipients.filter(
+        (entry): entry is string => typeof entry === "string" && !!entry,
+      )
+    : [];
+  if (recipients.length === 0) return undefined;
+  return {
+    recipients,
+    subjectTemplate: stringValue(rec.subjectTemplate) || undefined,
   };
 }
 
@@ -238,7 +288,34 @@ export function draftFromVersion(
     workflowId: stringValue(target.workflow?.routineId),
     runAsUserId: loop.runAsUserId ?? runAsUserId,
     spaceId: loop.spaceId ?? fallback.spaceId,
+    // THINK-227 U7: maintained document + delivery round-trip.
+    bindingMode: target.documentBinding?.mode ?? "off",
+    bindingGenre: target.documentBinding?.genre ?? fallback.bindingGenre,
+    bindingTitle: target.documentBinding?.title ?? "",
+    bindingSpaceId: target.documentBinding?.spaceId ?? "",
+    bindingArtifactId: target.documentBinding?.artifactId ?? "",
+    bindingCapturedArtifactId: target.documentBinding?.capturedArtifactId ?? "",
+    deliveryEnabled: Boolean(target.delivery),
+    deliveryRecipients: target.delivery?.recipients.join(", ") ?? "",
+    deliverySubject: target.delivery?.subjectTemplate ?? "",
   };
+}
+
+/** Parse the free-typed recipients field into a clean address list. */
+export function parseDeliveryRecipients(value: string): string[] {
+  return value
+    .split(/[\s,;]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+const RECIPIENT_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function deliveryRecipientsError(value: string): string | null {
+  const recipients = parseDeliveryRecipients(value);
+  if (recipients.length === 0) return "Add at least one recipient email.";
+  const bad = recipients.find((entry) => !RECIPIENT_SHAPE.test(entry));
+  return bad ? `“${bad}” doesn't look like an email address.` : null;
 }
 
 export function targetSpecFromDraft(
@@ -265,6 +342,43 @@ export function targetSpecFromDraft(
         draft.threadMode === "fixed" && draft.fixedThreadId.trim()
           ? draft.fixedThreadId.trim()
           : undefined,
+    },
+    ...documentBindingFromDraft(draft),
+  };
+}
+
+/** THINK-227 U7: the binding + delivery blocks the draft emits. Preserves the
+ * server-captured artifact id on create-mode round-trips so an editor re-save
+ * never unbinds a captured document. */
+function documentBindingFromDraft(draft: AgentLoopDraft): {
+  documentBinding?: AgentLoopDocumentBinding;
+  delivery?: AgentLoopDeliverySpec;
+} {
+  if (draft.bindingMode === "off") return {};
+  const documentBinding: AgentLoopDocumentBinding =
+    draft.bindingMode === "create"
+      ? {
+          mode: "create",
+          genre: draft.bindingGenre.trim(),
+          title: draft.bindingTitle.trim(),
+          spaceId: (draft.bindingSpaceId || draft.spaceId).trim(),
+          ...(draft.bindingCapturedArtifactId.trim()
+            ? { capturedArtifactId: draft.bindingCapturedArtifactId.trim() }
+            : {}),
+        }
+      : {
+          mode: "existing",
+          artifactId: draft.bindingArtifactId.trim(),
+        };
+  if (!draft.deliveryEnabled) return { documentBinding };
+  const recipients = parseDeliveryRecipients(draft.deliveryRecipients);
+  return {
+    documentBinding,
+    delivery: {
+      recipients,
+      ...(draft.deliverySubject.trim()
+        ? { subjectTemplate: draft.deliverySubject.trim() }
+        : {}),
     },
   };
 }
@@ -351,6 +465,25 @@ export function validateDraft(draft: AgentLoopDraft): string | null {
   }
   if (draft.triggerFamily === "schedule" && !draft.scheduleExpression.trim()) {
     return "Scheduled automations require a schedule.";
+  }
+  // THINK-227 U7: maintained document + delivery.
+  if (draft.targetKind === "agent_thread" && draft.bindingMode !== "off") {
+    if (draft.bindingMode === "create") {
+      if (!draft.bindingGenre.trim()) return "Choose a document genre.";
+      if (!draft.bindingTitle.trim()) return "Give the document a title.";
+      if (!(draft.bindingSpaceId || draft.spaceId).trim()) {
+        return "Choose a Space for the document.";
+      }
+    } else if (!draft.bindingArtifactId.trim()) {
+      return "Choose the document this automation maintains.";
+    }
+    if (draft.deliveryEnabled) {
+      const recipientsError = deliveryRecipientsError(draft.deliveryRecipients);
+      if (recipientsError) return recipientsError;
+    }
+  }
+  if (draft.deliveryEnabled && draft.bindingMode === "off") {
+    return "Email delivery needs a maintained document.";
   }
   return null;
 }

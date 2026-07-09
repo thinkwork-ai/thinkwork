@@ -53,3 +53,10 @@ export type {
   TriggerWorkflowRunInput,
   WorkflowVisibilityCheckResult,
 } from "./workflows.js";
+
+export * as automations from "./automations.js";
+export type {
+  AutomationDocumentBindingInput,
+  SaveAutomationInput,
+  SavedAutomation,
+} from "./automations.js";

@@ -1,4 +1,5 @@
 import {
+  boundDocumentIdFromBinding,
   dispatchAgentLoop,
   dispatchNeedsThread,
   resolveDispatchableVersion,
@@ -134,9 +135,12 @@ export async function triggerAgentLoopRun(
         // automation's run_as_user_id (defaults to the creator; U3), not the
         // triggering operator. Null ⇒ system-actor run, no identity injected.
         runAsUserId: loop.run_as_user_id ?? null,
-        // THINK-155 U5 (KTD4): bound document — null until THINK-213's
-        // binding config exists (ship-inert; payload-parity rule).
-        documentId: null,
+        // THINK-155 U5 (KTD4) → THINK-227 U2: the bound document this run
+        // maintains, resolved from target_spec via the ONE shared resolver
+        // (captured id wins). Null for unbound automations (payload-parity).
+        documentId: boundDocumentIdFromBinding(
+          dispatchVersion?.documentBinding,
+        ),
         threadId: executionThread?.threadId ?? null,
         spaceId: executionSpaceId,
         idempotencyKey,
@@ -192,8 +196,9 @@ async function invokeAgentLoopContinueDispatch(input: {
   threadId: string | null;
   spaceId: string | null;
 }): Promise<void> {
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const stage = process.env.STAGE;
   const fnName =

@@ -42,6 +42,7 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { InfoCard } from "@/components/workflows/workflow-ui";
 import {
+  BoundDocumentCardQuery,
   SpacesQuery,
   SettingsAgentLoopQuery,
   SettingsDeleteAgentLoopMutation,
@@ -49,6 +50,7 @@ import {
   SettingsSaveAgentLoopMutation,
   SettingsTriggerAgentLoopRunMutation,
 } from "@/lib/graphql-queries";
+import { ArtifactShareDialog } from "@/components/artifacts/ArtifactShareDialog";
 import {
   SettingsAgentProfilesQuery,
   SettingsTenantAgentQuery,
@@ -447,6 +449,10 @@ export function AgentLoopDetailContent({
                 </div>
               </section>
 
+              {target.documentBinding ? (
+                <BoundDocumentCard binding={target.documentBinding} />
+              ) : null}
+
               {webhookEndpoint ? (
                 <AutomationWebhookEndpointPanel endpoint={webhookEndpoint} />
               ) : null}
@@ -477,6 +483,111 @@ export function AgentLoopDetailContent({
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/**
+ * THINK-227 U6 (AE5): the maintained document at a glance — title (linked to
+ * the reader), current version, refresh state — plus the existing share-link
+ * management (mint/copy/revoke via ArtifactShareDialog) so a leaked emailed
+ * link can be cut off from the same surface.
+ */
+function BoundDocumentCard({
+  binding,
+}: {
+  binding: NonNullable<ReturnType<typeof readTargetSpec>["documentBinding"]>;
+}) {
+  const artifactId = binding.capturedArtifactId ?? binding.artifactId ?? null;
+  const [shareOpen, setShareOpen] = useState(false);
+  const [result] = useQuery<{
+    artifact?: {
+      id: string;
+      title: string;
+      status: string;
+      headVersion: number;
+      lastRefreshAt?: string | null;
+      refreshFailedAt?: string | null;
+    } | null;
+  }>({
+    query: BoundDocumentCardQuery,
+    variables: { id: artifactId ?? "" },
+    pause: !artifactId,
+  });
+  const artifact = result.data?.artifact ?? null;
+
+  const stale = Boolean(
+    artifact?.refreshFailedAt &&
+      (!artifact.lastRefreshAt ||
+        new Date(artifact.refreshFailedAt) > new Date(artifact.lastRefreshAt)),
+  );
+
+  return (
+    <section data-testid="bound-document-card">
+      <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+        Maintained document
+      </h2>
+      <div className="rounded-md border border-border/70 bg-muted/20 p-4">
+        {!artifactId ? (
+          <p className="text-sm text-muted-foreground">
+            Created on the first run
+            {binding.title ? (
+              <>
+                {": "}
+                <span className="text-foreground">{binding.title}</span>
+              </>
+            ) : null}
+            {binding.genre ? ` (${binding.genre})` : null}. The binding locks
+            onto it automatically.
+          </p>
+        ) : artifact ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <a
+                className="truncate text-sm font-medium text-primary hover:underline"
+                href={`/artifacts/${artifact.id}`}
+              >
+                {artifact.title}
+              </a>
+              <p className="mt-1 text-xs text-muted-foreground">
+                v{artifact.headVersion}
+                {stale ? (
+                  <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-600 dark:text-amber-400">
+                    Last refresh failed — showing the last good edition
+                  </span>
+                ) : artifact.lastRefreshAt ? (
+                  <span className="ml-2">
+                    refreshed{" "}
+                    {new Date(artifact.lastRefreshAt).toLocaleString()}
+                  </span>
+                ) : null}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShareOpen(true)}
+            >
+              Share link
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {result.fetching
+              ? "Loading the bound document…"
+              : "The bound document could not be loaded — it may have been deleted."}
+          </p>
+        )}
+      </div>
+      {artifact ? (
+        <ArtifactShareDialog
+          artifactId={artifact.id}
+          artifactTitle={artifact.title}
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+        />
+      ) : null}
+    </section>
   );
 }
 

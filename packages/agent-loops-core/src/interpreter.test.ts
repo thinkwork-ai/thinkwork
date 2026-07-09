@@ -53,11 +53,12 @@ describe("planNextStep", () => {
     });
   });
 
-  it("routes routine/http/emit_event to execute_step", () => {
+  it("routes routine/http/emit_event/deliver to execute_step", () => {
     const kinds: WorkflowDefinition["steps"] = [
       { id: "r", kind: "routine", routineId: "r-1" },
       { id: "h", kind: "http", method: "GET", url: "https://x.dev" },
       { id: "e", kind: "emit_event", eventType: "x.y" },
+      { id: "d", kind: "deliver", recipients: ["ops@example.com"] },
     ];
     for (const step of kinds) {
       const directive = planNextStep({ version: 1, steps: [step] }, cursor);

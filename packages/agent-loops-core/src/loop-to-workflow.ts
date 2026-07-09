@@ -46,6 +46,7 @@ export function workflowDefinitionFromAgentLoopVersion(
   });
 
   const agentTurn = version.routineActionsSpec?.agentTurn !== false;
+  const reportShape = Boolean(agentTurn && version.documentBinding);
   if (agentTurn) {
     const criteria = version.goalSpec.completionCriteria.filter((entry) =>
       entry.trim(),
@@ -65,6 +66,21 @@ export function workflowDefinitionFromAgentLoopVersion(
     });
   }
 
+  // THINK-227 U4 (KTD3): a report automation with delivery config gains a
+  // deliver step AFTER the agent step — the run's timeline shows the email
+  // send as its own evidenced step. Delivery without a binding is rejected by
+  // the target-spec normalizer, so this only fires on the report shape.
+  if (reportShape && version.delivery?.recipients?.length) {
+    steps.push({
+      id: "deliver",
+      kind: "deliver",
+      recipients: version.delivery.recipients,
+      ...(version.delivery.subjectTemplate
+        ? { subjectTemplate: version.delivery.subjectTemplate }
+        : {}),
+    });
+  }
+
   const definition: WorkflowDefinition = {
     version: WORKFLOW_DEFINITION_VERSION,
     steps,
@@ -77,6 +93,11 @@ export function workflowDefinitionFromAgentLoopVersion(
             maxIterations: version.loopPolicy.maxIterations,
           },
         }
+      : {}),
+    // THINK-227 U1: carry the document binding onto the definition so it is
+    // self-describing. Dispatch re-resolves the live value from target_spec.
+    ...(reportShape && version.documentBinding
+      ? { documentBinding: version.documentBinding }
       : {}),
   };
 

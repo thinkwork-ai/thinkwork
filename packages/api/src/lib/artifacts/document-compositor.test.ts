@@ -83,6 +83,16 @@ describe("compileDocument", () => {
     expect(renderHtml).toContain("<strong>date</strong> 2026-07-05");
   });
 
+  // THINK-227 U8 (R8): the house render prints cleanly — the share page
+  // serves this exact document, so print-to-PDF needs no extra work.
+  it("ships the print stylesheet in every compiled render", () => {
+    const { renderHtml } = compileOk(REPORT_MARKDOWN);
+    expect(renderHtml).toContain("@page{margin:18mm 16mm}");
+    expect(renderHtml).toContain("@media print{");
+    expect(renderHtml).toContain("break-inside:avoid");
+    expect(renderHtml).toContain("break-after:avoid");
+  });
+
   it("is deterministic: same input compiles byte-identical", () => {
     const a = compileOk(REPORT_MARKDOWN).renderHtml;
     const b = compileOk(REPORT_MARKDOWN).renderHtml;

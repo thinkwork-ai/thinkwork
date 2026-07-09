@@ -23,13 +23,14 @@ import {
   spaces,
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
-import { syncAgentLoopScheduleBinding } from "../../../lib/agent-loops/schedule-binding.js";
-import { syncAgentLoopWebhookBinding } from "../../../lib/agent-loops/webhook-binding.js";
 import {
-  agentLoopRowToGraphql,
-  parseAwsJsonObject,
-  requireAgentLoopAdmin,
-} from "./types.js";
+  disableAgentLoopScheduleBinding,
+  syncAgentLoopScheduleBinding,
+} from "../../../lib/agent-loops/schedule-binding.js";
+import { syncReportAutomationConvergence } from "../../../lib/agent-loops/report-convergence.js";
+import { syncAgentLoopWebhookBinding } from "../../../lib/agent-loops/webhook-binding.js";
+import { agentLoopRowToGraphql, parseAwsJsonObject } from "./types.js";
+import { requireAgentLoopWriteAccess } from "./write-access.js";
 import {
   normalizeAutomationDraft,
   promptFirstDraftNeedsDefaultWorker,
@@ -65,10 +66,25 @@ export async function saveAgentLoop(
   ctx: GraphQLContext,
 ): Promise<unknown> {
   const input = args.input;
-  await requireAgentLoopAdmin(ctx, input.tenantId, "save_agent_loop");
-
   const normalized = await normalizeSpecs(input);
   const actorId = await resolveCallerUserId(ctx);
+
+  // THINK-227 U11 (KTD10): role-split write access — admins keep general
+  // CRUD; members pass only for member-scoped automations (own, self
+  // run-as, self-recipient delivery, readable bound artifact). Replaces the
+  // bare requireAgentLoopAdmin gate.
+  const existingIdentities = input.id
+    ? await loadExistingLoopIdentities(input.id, input.tenantId)
+    : null;
+  await requireAgentLoopWriteAccess(ctx, input.tenantId, {
+    operationName: "save_agent_loop",
+    actorId,
+    submittedOwnerUserId: input.ownerUserId,
+    submittedRunAsUserId: input.runAsUserId,
+    targetSpec: normalized.targetSpec,
+    existing: existingIdentities,
+  });
+
   const spaceId =
     input.spaceId === undefined
       ? undefined
@@ -78,6 +94,29 @@ export async function saveAgentLoop(
     return updateAgentLoop(input.id, input, normalized, actorId, spaceId);
   }
   return createAgentLoop(input, normalized, actorId, spaceId ?? null);
+}
+
+async function loadExistingLoopIdentities(
+  id: string,
+  tenantId: string,
+): Promise<{ ownerUserId: string | null; runAsUserId: string | null }> {
+  const [row] = await db
+    .select({
+      owner_user_id: agentLoops.owner_user_id,
+      run_as_user_id: agentLoops.run_as_user_id,
+      tenant_id: agentLoops.tenant_id,
+    })
+    .from(agentLoops)
+    .where(eq(agentLoops.id, id))
+    .limit(1);
+  if (!row) throw new Error(`AgentLoop ${id} not found`);
+  if (row.tenant_id !== tenantId) {
+    throw new Error("AgentLoop does not belong to this tenant");
+  }
+  return {
+    ownerUserId: row.owner_user_id ?? null,
+    runAsUserId: row.run_as_user_id ?? null,
+  };
 }
 
 async function createAgentLoop(
@@ -136,18 +175,41 @@ async function createAgentLoop(
     })
     .where(eq(agentLoops.id, loop.id));
 
-  await syncAgentLoopScheduleBinding({
+  // THINK-227 U13: a report-shaped automation (agent turn + document binding)
+  // is born converged — its schedule rides the linked workflow, not the
+  // legacy agent_loop_schedule binding.
+  const converged = await syncReportAutomationConvergence({
     tenantId: input.tenantId,
-    agentLoopId: loop.id,
-    name: input.name.trim(),
-    description: input.description ?? null,
-    goalObjective: normalized.goalSpec.objective,
-    workerAgentId: workerAgentId(normalized.workerSpec),
-    spaceId,
+    loop: {
+      id: loop.id,
+      name: input.name.trim(),
+      description: input.description,
+    },
+    version: {
+      id: version.id,
+      routineActionsSpec: normalized.routineActionsSpec,
+      targetSpec: normalized.targetSpec,
+    },
     triggerSpec: normalized.triggerSpec,
     loopEnabled: input.enabled ?? true,
     actorId,
   });
+  if (converged) {
+    await disableAgentLoopScheduleBinding(input.tenantId, loop.id);
+  } else {
+    await syncAgentLoopScheduleBinding({
+      tenantId: input.tenantId,
+      agentLoopId: loop.id,
+      name: input.name.trim(),
+      description: input.description ?? null,
+      goalObjective: normalized.goalSpec.objective,
+      workerAgentId: workerAgentId(normalized.workerSpec),
+      spaceId,
+      triggerSpec: normalized.triggerSpec,
+      loopEnabled: input.enabled ?? true,
+      actorId,
+    });
+  }
 
   // R6: a webhook-trigger automation mints/links its inbound endpoint row.
   await syncAgentLoopWebhookBinding({
@@ -255,18 +317,42 @@ async function updateAgentLoop(
     })
     .where(eq(agentLoops.id, existing.id));
 
-  await syncAgentLoopScheduleBinding({
-    tenantId: input.tenantId,
-    agentLoopId: existing.id,
-    name: input.name.trim(),
-    description: input.description ?? null,
-    goalObjective: normalized.goalSpec.objective,
-    workerAgentId: workerAgentId(normalized.workerSpec),
-    spaceId: spaceId === undefined ? existing.space_id : spaceId,
-    triggerSpec: normalized.triggerSpec,
-    loopEnabled: input.enabled ?? existing.enabled,
-    actorId,
-  });
+  // THINK-227 U13: report-shaped saves converge (workflow upsert + publish +
+  // workflow_schedule sync); everything else keeps the legacy binding.
+  const converged = currentVersionId
+    ? await syncReportAutomationConvergence({
+        tenantId: input.tenantId,
+        loop: {
+          id: existing.id,
+          name: input.name.trim(),
+          description: input.description,
+        },
+        version: {
+          id: currentVersionId,
+          routineActionsSpec: normalized.routineActionsSpec,
+          targetSpec: normalized.targetSpec,
+        },
+        triggerSpec: normalized.triggerSpec,
+        loopEnabled: input.enabled ?? existing.enabled,
+        actorId,
+      })
+    : null;
+  if (converged) {
+    await disableAgentLoopScheduleBinding(input.tenantId, existing.id);
+  } else {
+    await syncAgentLoopScheduleBinding({
+      tenantId: input.tenantId,
+      agentLoopId: existing.id,
+      name: input.name.trim(),
+      description: input.description ?? null,
+      goalObjective: normalized.goalSpec.objective,
+      workerAgentId: workerAgentId(normalized.workerSpec),
+      spaceId: spaceId === undefined ? existing.space_id : spaceId,
+      triggerSpec: normalized.triggerSpec,
+      loopEnabled: input.enabled ?? existing.enabled,
+      actorId,
+    });
+  }
 
   // R6: mint/link (or disable, on family switch) the inbound webhook endpoint.
   await syncAgentLoopWebhookBinding({
@@ -403,6 +489,19 @@ async function normalizeSpecs(
           workerSpec: normalizedWorker,
           routineActionsSpec,
         });
+
+  // THINK-227 U10: conversational creates (admin-ops MCP) supply an explicit
+  // targetSpec but no worker — backfill the inferred default worker so an
+  // agent_thread dispatch always has an agent to wake.
+  if (
+    targetSpec.kind === "agent_thread" &&
+    targetSpec.agentThread &&
+    !targetSpec.agentThread.workerId &&
+    normalizedWorker.id
+  ) {
+    targetSpec.agentThread.workerId = normalizedWorker.id;
+    targetSpec.agentThread.workerType = normalizedWorker.type;
+  }
 
   return {
     triggerSpec: normalizeTriggerSpec(triggerSpec),

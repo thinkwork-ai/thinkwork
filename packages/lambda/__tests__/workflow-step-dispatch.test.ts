@@ -408,6 +408,65 @@ describe("dispatch_agent", () => {
     expect(payload.goalMode.goalRunId).toBe("run-1:1");
   });
 
+  // THINK-227 U2 (KTD2): a workflow converged from a bound automation carries
+  // the bound artifact id on the wakeup payload's agentLoop compat block,
+  // resolved LIVE from the source automation's target_spec.
+  it("emits agentLoop.documentId for a run whose source automation is bound", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow()],
+      [], // no existing wakeup
+      [{ source_agent_loop_id: "loop-1" }], // workflows row
+      [{ current_version_id: "alv-1" }], // agent_loops row
+      [
+        {
+          target_spec: {
+            kind: "agent_thread",
+            agentThread: {
+              instructions: "Refresh the report",
+              threadMode: "new_per_run",
+            },
+            documentBinding: {
+              mode: "create",
+              genre: "report",
+              title: "Weekly",
+              spaceId: "sp1",
+              capturedArtifactId: "art-42",
+            },
+          },
+        },
+      ], // agent_loop_versions row
+    );
+    await handleDispatchAgent(
+      fake.db as never,
+      { phase: "dispatch_agent", cursor: cursor(), taskToken: "tok-9" },
+      NOW,
+    );
+    const wakeup = fake.inserts.find((i) => i.source === "workflow_step");
+    const payload = wakeup?.payload as {
+      agentLoop?: { documentId: string };
+    };
+    expect(payload.agentLoop).toEqual({ documentId: "art-42" });
+  });
+
+  it("emits no agentLoop block for a plain workflow (no source automation)", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow()],
+      [], // no existing wakeup
+      [{ source_agent_loop_id: null }], // workflows row — plain workflow
+    );
+    await handleDispatchAgent(
+      fake.db as never,
+      { phase: "dispatch_agent", cursor: cursor(), taskToken: "tok-10" },
+      NOW,
+    );
+    const wakeup = fake.inserts.find((i) => i.source === "workflow_step");
+    expect("agentLoop" in (wakeup?.payload as Record<string, unknown>)).toBe(
+      false,
+    );
+  });
+
   it("reuses an existing wakeup — no second insert", async () => {
     fake.selectQueue.push([runRow()], [versionRow()], [{ id: "wakeup-1" }]);
     await handleDispatchAgent(
@@ -447,9 +506,178 @@ function makeExecutors(overrides: Partial<StepExecutors> = {}): StepExecutors {
       status: 200,
       text: async () => '{"echo":true}',
     })) as unknown as typeof fetch,
+    invokeArtifactDeliver: async () => ({
+      ok: true,
+      delivery: "sent",
+      recipients: ["ops@example.com"],
+      subject: "Report",
+      shareUrl: "https://api.example.com/share/tok",
+    }),
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------------------
+// deliver step (THINK-227 U4/U5)
+// ---------------------------------------------------------------------------
+
+const DELIVER_DEF: WorkflowDefinition = {
+  version: 1,
+  documentBinding: {
+    mode: "create",
+    genre: "report",
+    title: "Weekly",
+    spaceId: "sp1",
+    capturedArtifactId: "art-42",
+  },
+  steps: [{ id: "deliver", kind: "deliver", recipients: ["ops@example.com"] }],
+};
+
+const BOUND_SPEC_ROWS = [
+  [{ source_agent_loop_id: "loop-1" }], // workflows
+  [{ current_version_id: "alv-1" }], // agent_loops
+  [
+    {
+      target_spec: {
+        kind: "agent_thread",
+        agentThread: { instructions: "x", threadMode: "new_per_run" },
+        documentBinding: {
+          mode: "create",
+          genre: "report",
+          title: "Weekly",
+          spaceId: "sp1",
+          capturedArtifactId: "art-42",
+        },
+      },
+    },
+  ], // agent_loop_versions
+];
+
+describe("execute_step — deliver (THINK-227)", () => {
+  function queueDeliverSelects(artifactRow: Rows) {
+    fake.selectQueue.push(
+      [runRow({ started_at: new Date("2026-07-07T11:00:00.000Z") })],
+      [versionRow(DELIVER_DEF)],
+      [], // no prior completion
+      [], // no prior step outputs (template context)
+      ...BOUND_SPEC_ROWS,
+      artifactRow, // artifacts row (new-edition gate)
+      [], // no prior policy decision (advance tail)
+    );
+  }
+
+  it("sends when a new edition landed since run start and records sent evidence", async () => {
+    const calls: unknown[] = [];
+    queueDeliverSelects([
+      { last_refresh_at: new Date("2026-07-07T11:30:00.000Z") },
+    ]);
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors({
+        invokeArtifactDeliver: async (input) => {
+          calls.push(input);
+          return {
+            ok: true,
+            delivery: "sent",
+            recipients: ["ops@example.com"],
+            subject: "Report: Weekly",
+            shareUrl: "https://api.example.com/share/tok",
+          };
+        },
+      }),
+    );
+    expect(result.directive).toBe("terminal_success");
+    expect(calls).toEqual([
+      expect.objectContaining({
+        tenantId: "t1",
+        artifactId: "art-42",
+        recipients: ["ops@example.com"],
+        idempotencyKey: "workflow-run:run-1",
+        workflowRunId: "run-1",
+      }),
+    ]);
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as { summary?: { output?: { delivery?: string; shareUrl?: string } } };
+    expect(output?.summary?.output?.delivery).toBe("sent");
+    expect(output?.summary?.output?.shareUrl).toBe(
+      "https://api.example.com/share/tok",
+    );
+  });
+
+  it("skips without sending when no new edition landed (KTD4)", async () => {
+    const calls: unknown[] = [];
+    queueDeliverSelects([
+      { last_refresh_at: new Date("2026-07-07T09:00:00.000Z") }, // before run start
+    ]);
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors({
+        invokeArtifactDeliver: async (input) => {
+          calls.push(input);
+          return { ok: true };
+        },
+      }),
+    );
+    expect(result.directive).toBe("terminal_success");
+    expect(calls).toHaveLength(0);
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as { summary?: { output?: { delivery?: string } } };
+    expect(output?.summary?.output?.delivery).toBe("skipped_no_new_edition");
+    const types = fake.inserts.map((r) => r.event_type);
+    expect(types).toContain("workflow_step_finished");
+    expect(types).not.toContain("workflow_step_failed");
+  });
+
+  it("records failed step evidence when the delivery Lambda reports failure (AE4)", async () => {
+    queueDeliverSelects([
+      { last_refresh_at: new Date("2026-07-07T11:30:00.000Z") },
+    ]);
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors({
+        invokeArtifactDeliver: async () => ({
+          ok: false,
+          error: "Email address is not verified (SES sandbox)",
+        }),
+      }),
+    );
+    expect(result.directive).toBe("terminal_failure");
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toMatch(/not verified/);
+  });
+
+  it("fails loudly when the workflow has no bound document", async () => {
+    fake.selectQueue.push(
+      [runRow({ started_at: new Date("2026-07-07T11:00:00.000Z") })],
+      [versionRow(DELIVER_DEF)],
+      [], // no prior completion
+      [], // no prior step outputs
+      [{ source_agent_loop_id: null }], // plain workflow — no source automation
+      [], // no prior policy decision
+    );
+    const result = await handleExecuteStep(
+      fake.db as never,
+      { phase: "execute_step", cursor: cursor() },
+      NOW,
+      makeExecutors(),
+    );
+    expect(result.directive).toBe("terminal_failure");
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toMatch(/no bound document/);
+  });
+});
 
 describe("execute_step", () => {
   it("emit_event: records started/output/finished and completes a single-step run", async () => {

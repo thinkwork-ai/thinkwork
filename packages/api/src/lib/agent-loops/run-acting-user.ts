@@ -26,6 +26,9 @@ import {
   agentLoopRuns,
   agentLoops,
   tenantMembers,
+  threadTurns,
+  workflowRuns,
+  workflows,
 } from "@thinkwork/database-pg/schema";
 
 /** The automation run a turn belongs to, plus its membership-checked run-as user. */
@@ -35,6 +38,13 @@ export interface TurnRunContext {
   loopName: string | null;
   /** Membership-checked `agent_loops.run_as_user_id`; null when unset or stale. */
   actingUserId: string | null;
+  /**
+   * THINK-227 U2: which runner produced this turn. `agent_loop` = the legacy
+   * iteration ledger; `workflow` = a converged interpreter run whose workflow
+   * links back to the automation via `workflows.source_agent_loop_id` (U13).
+   * On the workflow branch `runId` is the WORKFLOW run id.
+   */
+  runKind: "agent_loop" | "workflow";
 }
 
 interface TurnRunRow {
@@ -48,6 +58,16 @@ interface TurnRunRow {
 export interface RunActingUserQueries {
   /** The run linked to this turn, or null when the turn has no run linkage. */
   findRunForTurn(input: {
+    tenantId: string;
+    turnId: string;
+  }): Promise<TurnRunRow | null>;
+  /**
+   * THINK-227 U2: the converged-runner equivalent — a turn dispatched by a
+   * workflow agent step (context_snapshot.workflowRun.runId) whose workflow
+   * converged from an automation. Null for plain workflows with no source
+   * automation (they have no run-as identity or binding to derive).
+   */
+  findWorkflowRunForTurn(input: {
     tenantId: string;
     turnId: string;
   }): Promise<TurnRunRow | null>;
@@ -83,6 +103,51 @@ export function drizzleRunActingUserQueries(): RunActingUserQueries {
         .limit(1);
       return rows[0] ?? null;
     },
+    findWorkflowRunForTurn: async ({ tenantId, turnId }) => {
+      // The workflow-step wakeup payload spreads into the turn's
+      // context_snapshot, so the run linkage is the snapshot's
+      // workflowRun.runId (same source workflow-step-finalize consumes).
+      const [turn] = await getDb()
+        .select({ context_snapshot: threadTurns.context_snapshot })
+        .from(threadTurns)
+        .where(
+          and(eq(threadTurns.id, turnId), eq(threadTurns.tenant_id, tenantId)),
+        )
+        .limit(1);
+      const snapshot =
+        turn?.context_snapshot && typeof turn.context_snapshot === "object"
+          ? (turn.context_snapshot as Record<string, unknown>)
+          : null;
+      const workflowRun =
+        snapshot?.workflowRun && typeof snapshot.workflowRun === "object"
+          ? (snapshot.workflowRun as Record<string, unknown>)
+          : null;
+      const workflowRunId =
+        typeof workflowRun?.runId === "string" ? workflowRun.runId : null;
+      if (!workflowRunId) return null;
+
+      const rows = await getDb()
+        .select({
+          runId: workflowRuns.id,
+          agentLoopId: agentLoops.id,
+          loopName: agentLoops.name,
+          runAsUserId: agentLoops.run_as_user_id,
+        })
+        .from(workflowRuns)
+        .innerJoin(workflows, eq(workflowRuns.workflow_id, workflows.id))
+        .innerJoin(
+          agentLoops,
+          eq(workflows.source_agent_loop_id, agentLoops.id),
+        )
+        .where(
+          and(
+            eq(workflowRuns.id, workflowRunId),
+            eq(workflowRuns.tenant_id, tenantId),
+          ),
+        )
+        .limit(1);
+      return rows[0] ?? null;
+    },
     isActiveTenantMember: async ({ tenantId, userId }) => {
       const rows = await getDb()
         .select({ status: tenantMembers.status })
@@ -110,8 +175,17 @@ export async function resolveTurnRunContext(
   input: { tenantId: string; turnId: string },
   queries: RunActingUserQueries = drizzleRunActingUserQueries(),
 ): Promise<TurnRunContext | null> {
-  const run = await queries.findRunForTurn(input);
-  if (!run) return null;
+  let runKind: TurnRunContext["runKind"] = "agent_loop";
+  let run = await queries.findRunForTurn(input);
+  if (!run) {
+    // THINK-227 U2: converged automations run on the interpreter — the turn
+    // links through the workflow run instead of an agent-loop iteration, but
+    // the run-as identity, binding enforcement, keep-last-good ordering, and
+    // refresh stamps must behave identically on both runners.
+    run = await queries.findWorkflowRunForTurn(input);
+    if (!run) return null;
+    runKind = "workflow";
+  }
   let actingUserId: string | null = null;
   if (run.runAsUserId) {
     const isMember = await queries.isActiveTenantMember({
@@ -125,5 +199,6 @@ export async function resolveTurnRunContext(
     agentLoopId: run.agentLoopId,
     loopName: run.loopName,
     actingUserId,
+    runKind,
   };
 }

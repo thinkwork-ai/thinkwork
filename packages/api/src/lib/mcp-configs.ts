@@ -49,6 +49,19 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { mcpHashMatches } from "./mcp-server-hash.js";
 import {
+  ADMIN_OPS_ACTING_USER_HEADER,
+  ADMIN_OPS_AGENT_ID_HEADER,
+} from "@thinkwork/agent-loops-core";
+
+/** The tenant's admin-ops MCP surface (provisioned at `/mcp/admin`). */
+function isAdminOpsUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.replace(/\/+$/, "").endsWith("/mcp/admin");
+  } catch {
+    return false;
+  }
+}
+import {
   ANALYST_CALLER_CONTEXT_HEADER,
   analystBrokerSourceSlug,
   isAnalystBrokerUrl,
@@ -860,7 +873,23 @@ export async function buildMcpConfigs(
       continue;
     }
 
-    mcpConfigs.push(toMcpServerConfig(mcp, token));
+    // THINK-227 U10 (KTD10): the admin-ops surface gets the TURN's identity
+    // as connection headers, injected HERE — server-side, per invocation —
+    // so the automation write tools' authorization pivot is never a
+    // model-controllable tool argument. Same per-server injection pattern as
+    // the analyst broker's caller context above.
+    let identityHeaders: Record<string, string> | undefined;
+    if (mcp.auth_type === "tenant_api_key" && isAdminOpsUrl(mcp.url)) {
+      const actingUserId = requesterUserId ?? humanPairId ?? null;
+      identityHeaders = {
+        ...(actingUserId
+          ? { [ADMIN_OPS_ACTING_USER_HEADER]: actingUserId }
+          : {}),
+        [ADMIN_OPS_AGENT_ID_HEADER]: agentId,
+      };
+    }
+
+    mcpConfigs.push(toMcpServerConfig(mcp, token, identityHeaders));
   }
 
   if (mcpConfigs.length > 0) {

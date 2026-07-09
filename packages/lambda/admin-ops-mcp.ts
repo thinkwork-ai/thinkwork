@@ -38,15 +38,25 @@ import {
   runRoutineFixtures,
   type CommitRoutineInput,
 } from "./routine-repo-tools.js";
-import { getAutomation, listAutomations } from "./automations-tools.js";
+import {
+  getAutomation,
+  listAutomations,
+  resolveAutomationReadScope,
+} from "./automations-tools.js";
+import {
+  ADMIN_OPS_ACTING_USER_HEADER,
+  ADMIN_OPS_AGENT_ID_HEADER,
+} from "@thinkwork/agent-loops-core";
 import {
   AdminOpsError,
   createClient,
+  automations as automationOps,
   tenants as tenantOps,
   users as userOps,
   artifacts as artifactOps,
   routines as routineOps,
   workflows as workflowOps,
+  type SaveAutomationInput,
 } from "@thinkwork/admin-ops";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
@@ -129,6 +139,39 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
           : undefined,
       tenantId,
       agentId: typeof args.agentId === "string" ? args.agentId : undefined,
+    });
+  };
+
+  // Read-scope principal (R12): the injected acting-user header is the most
+  // trustworthy signal; the model-supplied arg and the key-mint user remain
+  // as fallbacks so pre-injection operator tooling keeps its admin view.
+  const readPrincipalFor = (args: Record<string, unknown>): string | null =>
+    auth.actingUserId ??
+    (typeof args.principalId === "string" ? args.principalId : undefined) ??
+    auth.createdByUserId ??
+    null;
+
+  // THINK-227 U10 (KTD10): the automation WRITE tools honor ONLY the
+  // server-threaded identity headers. No `args.principalId`, no
+  // `createdByUserId` fallback (that silently escalates a member turn to the
+  // key-mint admin) — an absent acting-user header fails closed. The agent
+  // id rides the same injection so the per-agent operation allowlist can
+  // evaluate downstream.
+  const writeClientFor = (args: Record<string, unknown>) => {
+    if (!auth.actingUserId) {
+      throw new Error(
+        `automation write tools require the platform-injected acting-user identity (${ADMIN_OPS_ACTING_USER_HEADER} header); this connection carries none. Ask an operator to make the change in the Automations editor.`,
+      );
+    }
+    const pinnedTenantId = auth.tenantId;
+    const argTenantId =
+      typeof args.tenantId === "string" ? args.tenantId : undefined;
+    return createClient({
+      apiUrl,
+      authSecret,
+      principalId: auth.actingUserId,
+      tenantId: pinnedTenantId ?? argTenantId,
+      agentId: auth.actingAgentId,
     });
   };
 
@@ -907,7 +950,14 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
           return notYetEnabled("automations_list");
         }
         const tenantId = requireTenantId(clientFor(args));
-        return listAutomations({ tenantId });
+        // THINK-227 U10 (R12): members list only automations they own. The
+        // injected acting-user header wins; the legacy arg/key fallbacks
+        // keep admin tooling working.
+        const scope = await resolveAutomationReadScope({
+          tenantId,
+          principalId: readPrincipalFor(args),
+        });
+        return listAutomations({ tenantId, scope });
       },
     },
     {
@@ -939,7 +989,155 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
         }
         const a = args as { automationId: string };
         const tenantId = requireTenantId(clientFor(args));
-        return getAutomation({ tenantId, automationId: a.automationId });
+        const scope = await resolveAutomationReadScope({
+          tenantId,
+          principalId: readPrincipalFor(args),
+        });
+        return getAutomation({
+          tenantId,
+          automationId: a.automationId,
+          scope,
+        });
+      },
+    },
+
+    // -------------------------------------------------------------------
+    // Automations — WRITE tools (THINK-227 U10, KTD9/KTD10). These un-defer
+    // THINK-137's write surface so "email me this report every day at 9am
+    // central" can be fulfilled conversationally. Identity is server-
+    // threaded: the acting principal comes from the connection header the
+    // platform injects per turn, NEVER from a tool argument, and there is
+    // no createdByUserId fallback (that would silently escalate a member
+    // turn to the key-mint admin). Server-side, the writes ride the same
+    // saveAgentLoop/deleteAgentLoop mutations the editor uses — the U11
+    // role-split predicate is the wall: admins get general CRUD; members
+    // only self-owned, self-recipient scheduled reports. Gated by a
+    // DEDICATED flag (AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED) so the
+    // already-live read flag does not pre-activate writes.
+    // -------------------------------------------------------------------
+    {
+      name: "automation_save",
+      description:
+        "Create or update a scheduled report Automation: an agent runs your instructions on a CRON schedule, maintains ONE living document, and can email each new edition. Time-of-day schedules MUST be cron() with an explicit IANA timezone — resolve requests like '9am central' to cron(0 9 * * ? *) + timezone America/Chicago, and confirm cadence + local time back to the user before saving. Regular (non-admin) members can only create automations they own, with themselves as the only email recipient; adding other recipients needs an operator (relay refusals politely). Admins may edit any automation — when a request would add recipients other than the requester, confirm the exact recipient list in chat FIRST. Disabled until AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description: "Tenant UUID (omit with a tenant-pinned key).",
+          },
+          automationId: {
+            type: "string",
+            description:
+              "Automation UUID to update (from automations_list). Omit to create.",
+          },
+          name: { type: "string", description: "Automation name." },
+          description: { type: "string" },
+          instructions: {
+            type: "string",
+            description:
+              "What the agent should do each run (e.g. 'Refresh the GWO pipeline report from the CRM').",
+          },
+          scheduleExpression: {
+            type: "string",
+            description:
+              "EventBridge cron() expression, e.g. cron(0 9 * * ? *) for daily 9:00. rate() is rejected for timed schedules — timezones only apply to cron.",
+          },
+          timezone: {
+            type: "string",
+            description:
+              "REQUIRED IANA timezone the cron evaluates in, e.g. America/Chicago.",
+          },
+          spaceId: {
+            type: "string",
+            description:
+              "Space UUID the automation (and a created document) lives in — use the current space.",
+          },
+          enabled: { type: "boolean" },
+          documentBinding: {
+            type: "object",
+            description:
+              "The living document this automation maintains. mode 'existing' + artifactId binds the report already in the thread; mode 'create' + genre/title/spaceId creates it on the first run.",
+            properties: {
+              mode: { type: "string", enum: ["create", "existing"] },
+              genre: { type: "string" },
+              title: { type: "string" },
+              spaceId: { type: "string" },
+              artifactId: { type: "string" },
+            },
+            required: ["mode"],
+            additionalProperties: false,
+          },
+          deliveryRecipients: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Email addresses that receive each new edition. For non-admin requesters this must be exactly their own address.",
+          },
+          deliverySubject: { type: "string" },
+        },
+        required: [
+          "name",
+          "instructions",
+          "scheduleExpression",
+          "timezone",
+          "spaceId",
+        ],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!automationsAgentWriteToolsEnabled()) {
+          return notYetEnabled("automation_save");
+        }
+        const client = writeClientFor(args);
+        const a = args as unknown as Omit<SaveAutomationInput, "tenantId"> & {
+          tenantId?: string;
+        };
+        return automationOps.saveAutomation(client, {
+          tenantId: requireTenantId(client),
+          automationId: a.automationId,
+          name: a.name,
+          description: a.description,
+          instructions: a.instructions,
+          scheduleExpression: a.scheduleExpression,
+          timezone: a.timezone,
+          spaceId: a.spaceId,
+          enabled: a.enabled,
+          documentBinding: a.documentBinding,
+          deliveryRecipients: a.deliveryRecipients,
+          deliverySubject: a.deliverySubject,
+        });
+      },
+    },
+    {
+      name: "automation_delete",
+      description:
+        "Archive an Automation (stop its schedule and future sends). Use when the user asks to stop/cancel a scheduled report. Regular members can only delete automations they own. Disabled until AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description: "Tenant UUID (omit with a tenant-pinned key).",
+          },
+          automationId: {
+            type: "string",
+            description: "Automation UUID to archive.",
+          },
+        },
+        required: ["automationId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!automationsAgentWriteToolsEnabled()) {
+          return notYetEnabled("automation_delete");
+        }
+        const client = writeClientFor(args);
+        const a = args as { automationId: string };
+        requireTenantId(client);
+        return automationOps.deleteAutomation(client, {
+          automationId: a.automationId,
+        });
       },
     },
   ];
@@ -974,6 +1172,15 @@ function workflowsAgentToolsEnabled(): boolean {
 // config_env map (handlers.tf).
 function automationsAgentToolsEnabled(): boolean {
   return getConfig("AUTOMATIONS_AGENT_TOOLS_ENABLED") === "true";
+}
+
+// THINK-227 U10 (KTD11): the WRITE tools ship behind their OWN flag — the
+// read flag has been live stage-wide since THINK-137, so reusing it would
+// pre-activate writes on every already-assigned tenant the moment this
+// deploys. Default unset (inert); flipped per-stage as part of the U12
+// rollout.
+function automationsAgentWriteToolsEnabled(): boolean {
+  return getConfig("AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED") === "true";
 }
 
 function notYetEnabled(toolName: string): {
@@ -1141,6 +1348,18 @@ export interface AuthResult {
   createdByUserId?: string;
   /** True when the caller used the shared API_AUTH_SECRET (cross-tenant access). */
   superuser: boolean;
+  /**
+   * THINK-227 U10 (KTD10): the TURN's acting user, read from the
+   * `x-thinkwork-acting-user` connection header that `buildMcpConfigs`
+   * injects server-side for the admin-ops surface. The model cannot set
+   * connection headers, so this is the only principal the automation WRITE
+   * tools honor — never `args.principalId`, never `createdByUserId` (whose
+   * fallback silently escalates a member turn to the key-mint admin).
+   */
+  actingUserId?: string;
+  /** Calling agent id from the injected `x-thinkwork-agent-id` header —
+   * feeds the per-agent operation allowlist on the write path. */
+  actingAgentId?: string;
 }
 
 /**
@@ -1158,6 +1377,13 @@ async function authenticate(
 ): Promise<AuthResult | null> {
   const token = extractBearer(event);
   if (!token) return null;
+
+  // Server-injected identity headers (THINK-227 U10). Header names are
+  // lower-cased by API Gateway.
+  const actingUserId =
+    event.headers?.[ADMIN_OPS_ACTING_USER_HEADER]?.trim() || undefined;
+  const actingAgentId =
+    event.headers?.[ADMIN_OPS_AGENT_ID_HEADER]?.trim() || undefined;
 
   const hash = createHash("sha256").update(token).digest("hex");
   try {
@@ -1190,6 +1416,8 @@ async function authenticate(
         keyId: row.id,
         createdByUserId: row.created_by_user_id ?? undefined,
         superuser: false,
+        actingUserId,
+        actingAgentId,
       };
     }
   } catch (err: unknown) {
@@ -1204,7 +1432,7 @@ async function authenticate(
 
   const superSecret = getApiAuthSecret();
   if (superSecret && token === superSecret) {
-    return { ok: true, superuser: true };
+    return { ok: true, superuser: true, actingUserId, actingAgentId };
   }
   return null;
 }

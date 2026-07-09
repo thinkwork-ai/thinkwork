@@ -38,6 +38,75 @@ describe("workflowDefinitionFromAgentLoopVersion", () => {
     expect(definition.continuationPolicy).toBeUndefined();
   });
 
+  it("carries the document binding onto the definition (THINK-227 U1)", () => {
+    const definition = workflowDefinitionFromAgentLoopVersion(
+      version({
+        documentBinding: {
+          mode: "create",
+          genre: "report",
+          title: "Weekly Pipeline Report",
+          spaceId: "space-1",
+        },
+      }),
+    );
+    expect(definition.documentBinding).toEqual({
+      mode: "create",
+      genre: "report",
+      title: "Weekly Pipeline Report",
+      spaceId: "space-1",
+    });
+  });
+
+  it("appends a deliver step after the agent step for a report automation with delivery (THINK-227 U4)", () => {
+    const definition = workflowDefinitionFromAgentLoopVersion(
+      version({
+        documentBinding: {
+          mode: "create",
+          genre: "report",
+          title: "Weekly Pipeline Report",
+          spaceId: "space-1",
+        },
+        delivery: {
+          recipients: ["ops@example.com"],
+          subjectTemplate: "Weekly Pipeline Report",
+        },
+      }),
+    );
+    expect(definition.steps.map((s) => s.kind)).toEqual(["agent", "deliver"]);
+    const deliver = definition.steps[1];
+    if (deliver.kind === "deliver") {
+      expect(deliver.recipients).toEqual(["ops@example.com"]);
+      expect(deliver.subjectTemplate).toBe("Weekly Pipeline Report");
+    }
+  });
+
+  it("a binding without delivery converges to the agent step only", () => {
+    const definition = workflowDefinitionFromAgentLoopVersion(
+      version({
+        documentBinding: { mode: "existing", artifactId: "art-1" },
+      }),
+    );
+    expect(definition.steps.map((s) => s.kind)).toEqual(["agent"]);
+  });
+
+  it("converges without a binding unchanged — no documentBinding key", () => {
+    const definition = workflowDefinitionFromAgentLoopVersion(version());
+    expect("documentBinding" in definition).toBe(false);
+  });
+
+  it("does not carry a binding for a headless (agentTurn:false) version", () => {
+    const definition = workflowDefinitionFromAgentLoopVersion(
+      version({
+        routineActionsSpec: {
+          actions: [{ routineId: "33333333-3333-4333-8333-333333333333" }],
+          agentTurn: false,
+        },
+        documentBinding: { mode: "existing", artifactId: "art-1" },
+      }),
+    );
+    expect("documentBinding" in definition).toBe(false);
+  });
+
   it("folds completion criteria into the objective", () => {
     const definition = workflowDefinitionFromAgentLoopVersion(
       version({
