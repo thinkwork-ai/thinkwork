@@ -1002,6 +1002,11 @@ module "api" {
 
   # THINK-228 — analyst query broker: hardened reader role credentials +
   # the broker caller credential the seeded connector row references.
+  # THINK-246 — artifact email delivery sender: customer stages send from
+  # their own verified domain (noreply@<customer_domain>); dev keeps the
+  # code fallback via the empty default.
+  artifact_delivery_from_email = var.customer_domain != "" ? "noreply@${var.customer_domain}" : ""
+
   analyst_reader_secret_arn = module.database.analyst_reader_secret_arn
   analyst_broker_secret_arn = module.database.analyst_broker_secret_arn
   # THINK-229 U1 — keys the broker's rds-db:connect grant and switches the

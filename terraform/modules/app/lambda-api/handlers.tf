@@ -272,6 +272,12 @@ locals {
       ANALYST_DB_NAME                = var.database_name
       ANALYST_DB_USER                = "analyst_reader"
     }
+    # THINK-246: customer stages cannot send as the dev fallback domain
+    # (noreply@agents.thinkwork.ai is only verified in the dev account) —
+    # observed live on TEI as ses_send_failed on the deliver step.
+    "artifact-deliver" = {
+      ARTIFACT_DELIVERY_FROM_EMAIL = var.artifact_delivery_from_email
+    }
     "extension-proxy" = {
       EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json
       EXTENSION_PROXY_SIGNING_SECRET = var.extension_proxy_signing_secret

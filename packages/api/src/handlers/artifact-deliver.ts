@@ -37,6 +37,13 @@ import {
 import { getOrCreateArtifactShare } from "../lib/artifacts/share-links.js";
 import { signShareToken } from "../lib/artifacts/share-tokens.js";
 
+// THINK-246: the hardcoded dev fallback (noreply@agents.thinkwork.ai) is
+// only a verified SES identity in the ThinkWork dev account — customer
+// stages set ARTIFACT_DELIVERY_FROM_EMAIL (terraform derives it from their
+// verified customer domain) or every delivery fails at SES.
+const DEFAULT_FROM_ADDRESS =
+  process.env.ARTIFACT_DELIVERY_FROM_EMAIL || "noreply@agents.thinkwork.ai";
+
 const db = getDb();
 
 interface DeliverRequest {
@@ -195,7 +202,7 @@ async function handleApiGatewayDeliver(event: APIGatewayProxyEventV2) {
     const subject = req.subject ?? delivery.subject;
 
     // Resolve sender address from agent's email channel config
-    let fromAddress = "noreply@agents.thinkwork.ai";
+    let fromAddress = DEFAULT_FROM_ADDRESS;
     if (artifact.agent_id) {
       const [cap] = await db
         .select()
@@ -212,9 +219,8 @@ async function handleApiGatewayDeliver(event: APIGatewayProxyEventV2) {
 
     // Send via SES
     try {
-      const { SESClient, SendRawEmailCommand } = await import(
-        "@aws-sdk/client-ses"
-      );
+      const { SESClient, SendRawEmailCommand } =
+        await import("@aws-sdk/client-ses");
       const ses = new SESClient({});
 
       const recipients = req.to
@@ -460,7 +466,7 @@ async function handleWorkflowDelivery(
 
   // Resolve sender address from the agent's email channel config (same
   // from-address model as the API-gateway path).
-  let fromAddress = "noreply@agents.thinkwork.ai";
+  let fromAddress = DEFAULT_FROM_ADDRESS;
   if (artifact.agent_id) {
     const [cap] = await db
       .select()
@@ -491,9 +497,8 @@ async function handleWorkflowDelivery(
   });
 
   try {
-    const { SESClient, SendRawEmailCommand } = await import(
-      "@aws-sdk/client-ses"
-    );
+    const { SESClient, SendRawEmailCommand } =
+      await import("@aws-sdk/client-ses");
     const ses = new SESClient({});
     const boundary = `----=_Part_${Date.now()}`;
     const rawEmail = [
