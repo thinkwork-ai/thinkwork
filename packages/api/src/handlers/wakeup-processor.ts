@@ -17,6 +17,7 @@ import {
   getAppsyncApiKey,
 } from "@thinkwork/runtime-config";
 import { randomBytes } from "crypto";
+import { jsonSafePreview } from "../lib/json-safe-text.js";
 import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -847,8 +848,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Resolve Bedrock guardrail: class-level → tenant default → none
   let guardrailPayload:
-    | { guardrailIdentifier: string; guardrailVersion: string }
-    | undefined;
+    { guardrailIdentifier: string; guardrailVersion: string } | undefined;
   if (agent.guardrail_id) {
     const [gr] = await db
       .select({
@@ -2555,8 +2555,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     ) {
       // Route response to email thread (create or reuse based on reply token context)
       const replyTokenContextId = payload?.replyTokenContextId as
-        | string
-        | undefined;
+        string | undefined;
       const emailSubject = (payload?.subject as string) || "(no subject)";
       let emailThreadId = replyTokenContextId || "";
 
@@ -2857,7 +2856,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             user_id: invokerUserId,
             current_user_email: currentUserEmail || undefined,
             current_user_name: currentUserName || undefined,
-            message: `Continue working. Previous response:\n${loopMessage.slice(0, 2000)}`,
+            message: `Continue working. Previous response:\n${jsonSafePreview(loopMessage, 2000)}`,
             use_memory: true,
             tenant_slug: tenantSlug || undefined,
             instance_id: agentSlug || undefined,
@@ -3044,7 +3043,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         status: "succeeded",
         finished_at: new Date(),
         system_prompt: capturedSystemPrompt || undefined,
-        result_json: { response: responseText.slice(0, 10000) },
+        result_json: { response: jsonSafePreview(responseText, 10000) },
         usage_json: {
           duration_ms: durationMs,
           runtime_type: runtimeType,
@@ -3437,7 +3436,7 @@ async function completeAgentLoopIterationForWakeup(input: {
     .set({
       status: "completed",
       output_summary: {
-        responsePreview: input.responseText.slice(0, 1_000),
+        responsePreview: jsonSafePreview(input.responseText, 1_000),
       },
       finished_at: input.now,
       updated_at: input.now,
