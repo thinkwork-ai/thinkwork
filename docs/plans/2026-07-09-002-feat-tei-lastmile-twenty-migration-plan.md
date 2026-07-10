@@ -412,6 +412,29 @@ every migrated note paired to exactly one target, no orphan owners.
 | Parity sign-off    | **BLOCKED** — follows the seed                                                                                                                                                                   |
 | Login proof        | **BLOCKED** — 89 logins exist and one (`scoulson@`) is verified at the row/hash level and visible via Twenty's API; the in-UI login and "sees their opportunities" half awaits the seed and Eric |
 
+## Open Blockers and Out-of-Scope Findings
+
+- **B1 (blocker, needs Eric): the browser sign-in path is unverifiable from
+  outside.** This deployment serves no auth GraphQL schema to any credential we
+  hold — `getLoginTokenFromCredentials`, `signIn`, and `signUpInWorkspace` are
+  absent from the schema (GraphQL returns no "did you mean" suggestion for
+  near-miss names, so they truly do not exist there), and `/auth/*` and REST
+  offer nothing. Eric is demonstrably signed in, so the browser reaches an auth
+  path we cannot. **If a rep sign-in fails, the 89 provisioned accounts are
+  unusable and member provisioning needs a different approach** — that is the
+  one outcome that would reopen S5. A 30-second UI test as Jake Moyers settles
+  it.
+- **OOS1 (out of scope): the ThinkWork report's pipeline totals are 1,000×
+  too large.** Verified against Twenty's GraphQL: true open pipeline is
+  **$4,875,147.92**, the report says "$4.9B+"; Formulate Offer is
+  **$1,361,667.05**, the report says 1,361,667,050. Per-deal amounts in the same
+  report are correct (MSP-Texas DPS $800,000 = the stored 800000000000
+  `amountMicros`), so only the aggregate path is wrong — `amountMicros` scaled
+  by 1e3 instead of 1e6, most likely in a `group_by_opportunities` sum. The
+  report also counts 1,685 opportunities where Twenty holds 2,032. **The stored
+  CRM data is correct; the defect is in the reporting path, not this
+  migration.** Tracked separately; no change belongs in this plan.
+
 ## Definition of Done
 
 - All seven units land; the seed run has completed against TEI's Twenty with a reconciled parity report and passed spot checks.
