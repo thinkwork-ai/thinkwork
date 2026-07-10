@@ -352,18 +352,31 @@ export async function fetchBedrockInvocationLogsForWindow(input: {
     input.cloudWatch ?? (defaultCloudWatch as CloudWatchLogsClientLike);
   const logGroupName =
     input.logGroupName ?? DEFAULT_BEDROCK_INVOCATION_LOG_GROUP;
-  const response = await cloudWatch.send(
-    new FilterLogEventsCommand({
-      logGroupName,
-      startTime: input.startMs,
-      endTime: input.endMs,
-      limit: input.limit ?? 20,
-    }),
-  );
-  return (response.events ?? []).flatMap((event) => {
-    const record = parseBedrockInvocationLogEvent(event, logGroupName);
-    return record ? [record] : [];
-  });
+  // Invocation-log events carry full request/response bodies, so a single
+  // FilterLogEvents page (1MB) holds only a few dozen records — an
+  // unpaginated read silently truncates busy windows, which under-sums
+  // provider truth (THINK-245 dogfood finding). Paginate to `limit` records.
+  const maxRecords = input.limit ?? 20;
+  const records: BedrockInvocationLogRecord[] = [];
+  let nextToken: string | undefined;
+  do {
+    const response = await cloudWatch.send(
+      new FilterLogEventsCommand({
+        logGroupName,
+        startTime: input.startMs,
+        endTime: input.endMs,
+        limit: Math.min(maxRecords, 10_000),
+        nextToken,
+      }),
+    );
+    for (const event of response.events ?? []) {
+      const record = parseBedrockInvocationLogEvent(event, logGroupName);
+      if (record) records.push(record);
+      if (records.length >= maxRecords) return records;
+    }
+    nextToken = response.nextToken;
+  } while (nextToken);
+  return records;
 }
 
 export async function loadTurnInvocationReconciliationInput(
