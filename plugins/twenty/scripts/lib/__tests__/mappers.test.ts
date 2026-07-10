@@ -9,6 +9,7 @@ import type {
 import {
   buildOwnerIndex,
   contentHash,
+  deriveRepEmail,
   mapAccount,
   mapContact,
   mapCrmComment,
@@ -379,5 +380,48 @@ describe("buildOwnerIndex / resolveOwner", () => {
   it("unknown refs resolve to null", () => {
     expect(resolveOwner("Data Migration", index)).toBeNull();
     expect(resolveOwner(null, index)).toBeNull();
+  });
+});
+
+describe("deriveRepEmail", () => {
+  const domain = "texasenterprises.com";
+
+  it("derives first-initial + lastname for real people", () => {
+    expect(deriveRepEmail("Daniel", "Emblen", domain)).toBe(
+      "demblen@texasenterprises.com",
+    );
+    expect(deriveRepEmail("Sal", "Carrizales", domain)).toBe(
+      "scarrizales@texasenterprises.com",
+    );
+    expect(deriveRepEmail("Aaron", "Anderson", domain)).toBe(
+      "aanderson@texasenterprises.com",
+    );
+  });
+
+  it("strips hyphens and apostrophes from the last name", () => {
+    expect(deriveRepEmail("Mary", "O'Brien", domain)).toBe(
+      "mobrien@texasenterprises.com",
+    );
+    expect(deriveRepEmail("Jean", "Smith-Jones", domain)).toBe(
+      "jsmithjones@texasenterprises.com",
+    );
+  });
+
+  it("refuses house, intercompany, and placeholder rows", () => {
+    expect(deriveRepEmail("House", "Mighty", domain)).toBeNull();
+    expect(deriveRepEmail("House", "Golden West Laredo", domain)).toBeNull();
+    expect(deriveRepEmail("Hotsy Austin", "House", domain)).toBeNull();
+    expect(deriveRepEmail("Intercompany", "GWPP", domain)).toBeNull();
+    expect(deriveRepEmail("TBD", "TBD", domain)).toBeNull();
+    expect(deriveRepEmail("undefined", "undefined", domain)).toBeNull();
+    expect(deriveRepEmail("UNKNOWN", "SALES REP", domain)).toBeNull();
+    expect(deriveRepEmail("Buyback", "Unassigned", domain)).toBeNull();
+    expect(deriveRepEmail("Oil", "Hauling", domain)).toBeNull();
+  });
+
+  it("refuses names with digits or underscores", () => {
+    expect(deriveRepEmail("Chelsea", "Ervi_2", domain)).toBeNull();
+    expect(deriveRepEmail("Bob", "Loa2", domain)).toBeNull();
+    expect(deriveRepEmail(null, "Smith", domain)).toBeNull();
   });
 });

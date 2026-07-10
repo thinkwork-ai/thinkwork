@@ -15,6 +15,8 @@
  *                          outside the repo). ROTATE OR DEACTIVATE every rep account at
  *                          cutover, on abort, or if the validation window drags on.
  *   TWENTY_WORKSPACE_ID    Optional override; otherwise resolved from the admin session
+ *   TWENTY_REP_EMAIL_DOMAIN  Domain for reps with no LastMile email
+ *                          (default texasenterprises.com; <first-initial><lastname>@)
  *   AWS_PROFILE / AWS_REGION  Needed for attachment binaries (LastMile S3 bucket)
  *
  * Invocations (dry-run is the default; nothing is written without --apply):
@@ -58,6 +60,7 @@ import {
 } from "./lib/load-records";
 import {
   buildOwnerIndex,
+  deriveRepEmail,
   mapAccount,
   mapContact,
   mapCrmComment,
@@ -222,15 +225,33 @@ async function runMigration(options: {
 
   // Phase C: members --------------------------------------------------------
   log("members: ensuring workspace members...");
+  const repEmailDomain =
+    process.env.TWENTY_REP_EMAIL_DOMAIN ?? "texasenterprises.com";
+  const derivedEmails: string[] = [];
   const repsToProvision: RepToProvision[] = reps
     .filter((rep) => !rep.archived)
-    .map((rep) => ({
-      repId: rep.id,
-      email: rep.email,
-      firstName: rep.firstName,
-      lastName: rep.lastName,
-      archived: rep.archived,
-    }));
+    .map((rep) => {
+      let email = rep.email;
+      if (!email) {
+        // Reps with no LastMile email get <first-initial><lastname>@<domain>;
+        // house/intercompany/placeholder rows derive to null and stay
+        // unprovisionable.
+        email = deriveRepEmail(rep.firstName, rep.lastName, repEmailDomain);
+        if (email) derivedEmails.push(`${rep.id} -> ${email}`);
+      }
+      return {
+        repId: rep.id,
+        email,
+        firstName: rep.firstName,
+        lastName: rep.lastName,
+        archived: rep.archived,
+      };
+    });
+  report.derivedRepEmails = {
+    domain: repEmailDomain,
+    count: derivedEmails.length,
+    sample: derivedEmails.slice(0, 20),
+  };
 
   let adminClient: TwentyClient | null = null;
   let workspaceId = process.env.TWENTY_WORKSPACE_ID ?? null;

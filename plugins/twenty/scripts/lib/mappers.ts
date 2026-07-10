@@ -120,6 +120,52 @@ export function normalizeEmail(raw: string | null | undefined): string | null {
   return EMAIL_RE.test(email) ? email : null;
 }
 
+/** Non-person sales_rep rows: house/dealer buckets, intercompany ledgers, and
+ * placeholders. They must never receive a login. */
+const NON_PERSON_REP_TOKENS = new Set([
+  "house",
+  "intercompany",
+  "tbd",
+  "undefined",
+  "unknown",
+  "unassigned",
+  "buyback",
+  "asc",
+  "salesrep",
+  "company",
+  "fuel",
+  "oil",
+  "transport",
+  "transportation",
+  "hauling",
+]);
+
+/** A person's name part: letters, optionally hyphenated/apostrophed. Rejects
+ * multi-word buckets ("Golden West Laredo"), digits, and underscores
+ * ("Ervi_2"). */
+const NAME_PART_RE = /^[a-z]+(?:['-][a-z]+)*$/;
+
+/**
+ * Reps missing an email in LastMile get `<first-initial><lastname>@<domain>`
+ * (Eric's rule, 2026-07-10) — but only when both name parts look like a real
+ * person's. 60 of 131 active reps have no email; most are house/intercompany
+ * rows that must stay unprovisionable. Returns null for those.
+ */
+export function deriveRepEmail(
+  firstName: string | null,
+  lastName: string | null,
+  domain: string,
+): string | null {
+  const first = (firstName ?? "").trim().toLowerCase();
+  const last = (lastName ?? "").trim().toLowerCase();
+  if (!NAME_PART_RE.test(first) || !NAME_PART_RE.test(last)) return null;
+  if (NON_PERSON_REP_TOKENS.has(first) || NON_PERSON_REP_TOKENS.has(last)) {
+    return null;
+  }
+  const localPart = `${first[0]}${last.replace(/['-]/g, "")}`;
+  return normalizeEmail(`${localPart}@${domain}`);
+}
+
 export interface NormalizedPhone {
   primaryPhoneNumber: string;
   primaryPhoneCallingCode: string;
