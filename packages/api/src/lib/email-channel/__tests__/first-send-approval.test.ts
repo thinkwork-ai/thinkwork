@@ -15,13 +15,15 @@ import {
 import { evaluateOutboundEmailPolicy } from "../outbound-policy.js";
 
 describe("first-send email approval", () => {
-  it("fails closed when production readiness is incomplete", async () => {
+  it("fails closed when third-party production readiness is incomplete", async () => {
+    // Built-in SES bypasses the readiness gate (see outbound-policy.test.ts),
+    // so the fail-closed contract is exercised with a third-party provider.
     const db = fakeEmailDb({
       providerRows: [
         {
           id: "provider-1",
           tenant_id: "tenant-1",
-          provider: "ses",
+          provider: "resend",
           status: "pending",
           active_for_production: true,
         },
@@ -108,6 +110,57 @@ describe("first-send email approval", () => {
         .rowsFor(emailLedgerEvents)
         .map((row: Record<string, any>) => row.event_type),
     ).toEqual(["draft_created", "approval_requested"]);
+  });
+
+  it("reuses a pending conversation instead of inserting a duplicate row", async () => {
+    // Regression: uq_email_conversations_thread_participants forbids two
+    // rows per (tenant, thread, participants). Asking the agent to send
+    // again before the first review is decided must raise a fresh review
+    // on the same conversation, not crash with a 23505 duplicate key.
+    const db = fakeEmailDb();
+    const request = {
+      db,
+      tenantId: "tenant-1",
+      providerInstallId: "provider-1",
+      provider: "ses" as const,
+      agentId: "agent-1",
+      spaceId: "space-1",
+      threadId: "thread-1",
+      from: "sales@acme.thinkwork.ai",
+      to: ["buyer@example.com"],
+      subject: "Pipeline follow-up",
+      body: "Original draft",
+    };
+
+    await requestFirstSendApproval(request);
+    await expect(
+      requestFirstSendApproval({
+        ...request,
+        providerInstallId: "provider-2",
+        subject: "Pipeline follow-up (v2)",
+        body: "Revised draft",
+      }),
+    ).resolves.toMatchObject({
+      status: "pending_review",
+      conversationId: "conversation-1",
+    });
+
+    expect(db.rowsFor(emailConversations)).toHaveLength(1);
+    expect(db.rowsFor(inboxItems)).toHaveLength(2);
+    // The reuse refreshes every mutable field to the latest request —
+    // a stale provider_install_id must not survive on the row.
+    expect(db.updatedRowsFor(emailConversations)).toMatchObject([
+      {
+        subject: "Pipeline follow-up (v2)",
+        status: "pending_approval",
+        provider_install_id: "provider-2",
+      },
+    ]);
+    // The prior undecided review is superseded so it can't send the old
+    // draft alongside the new one.
+    expect(db.updatedRowsFor(inboxItems)).toMatchObject([
+      { status: "cancelled" },
+    ]);
   });
 
   it("sends the edited draft on approval and records the decision", async () => {
@@ -377,11 +430,14 @@ function fakeEmailDb(
             id: values.id ?? `${name}-${nextId[name]}`,
           };
           rows.set(table, [...(rows.get(table) ?? []), row]);
-          return {
+          const result = {
             returning() {
               return [row];
             },
           };
+          // The conversation insert chains .onConflictDoUpdate(); the fake
+          // has no unique indexes so it behaves as a plain insert.
+          return { ...result, onConflictDoUpdate: () => result };
         },
       };
     },
