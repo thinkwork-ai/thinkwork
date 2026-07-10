@@ -97,6 +97,9 @@ export const FIELD_SPECS: Array<{
     isUnique: true,
   },
   { object: "note", name: "sourceHash", label: "Source Hash", type: "TEXT" },
+  // Twenty's createdBy actor is not settable through the API, so the LastMile
+  // author rides on the note itself.
+  { object: "note", name: "author", label: "Author", type: "TEXT" },
   {
     object: "attachment",
     name: "sourceId",

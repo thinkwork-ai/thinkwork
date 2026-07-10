@@ -8,6 +8,7 @@ import type {
 import {
   buildOwnerIndex,
   contentHash,
+  dedupeContactEmails,
   deriveRepEmail,
   isMobilBrand,
   mapAccount,
@@ -25,6 +26,7 @@ import {
   sourceId,
   stableStringify,
   toAmountMicros,
+  toIsoTimestamp,
   toQuantity,
 } from "../mappers";
 
@@ -159,6 +161,7 @@ describe("notes mapping", () => {
       content: "Called the buyer.\nFollow up Friday.",
       isDeleted: false,
       createdAt: null,
+      authorName: null,
     });
     expect(mapped).toMatchObject({
       sourceId: "task_comment:tc_1",
@@ -166,6 +169,22 @@ describe("notes mapping", () => {
       targetSourceId: "opportunity:opp_1",
       targetKind: "opportunity",
     });
+  });
+
+  it("carries the LastMile authored-at time and author onto the note", () => {
+    const mapped = mapCrmComment({
+      id: "tc_2",
+      entityType: "opportunity",
+      entityId: "opp_1",
+      content: "Sold them some products on cash account.",
+      isDeleted: false,
+      createdAt: new Date("2026-07-10T02:27:10.507Z"),
+      authorName: "Reyes Valdez",
+    });
+    // Twenty's activity feed sorts on createdAt; without this the whole history
+    // collapses onto the day the import ran.
+    expect(mapped.createdAt).toBe("2026-07-10T02:27:10.507Z");
+    expect(mapped.authorName).toBe("Reyes Valdez");
   });
 
   it("maps a customer note only when the customer uniquely matches an account", () => {
@@ -179,6 +198,22 @@ describe("notes mapping", () => {
     };
     expect(mapCustomerNote(base)?.targetSourceId).toBe("account:acct_1");
     expect(mapCustomerNote({ ...base, matchedAccountId: null })).toBeNull();
+  });
+});
+
+describe("toIsoTimestamp", () => {
+  it("converts a Date to ISO-8601 and passes through parseable strings", () => {
+    expect(toIsoTimestamp(new Date("2025-07-21T12:00:00Z"))).toBe(
+      "2025-07-21T12:00:00.000Z",
+    );
+    expect(toIsoTimestamp("2026-07-10T02:27:10.507Z")).toBe(
+      "2026-07-10T02:27:10.507Z",
+    );
+  });
+
+  it("returns null for missing or unparseable values", () => {
+    expect(toIsoTimestamp(null)).toBeNull();
+    expect(toIsoTimestamp("not a date")).toBeNull();
   });
 });
 
@@ -504,5 +539,40 @@ describe("mapOrganization", () => {
       archived: false,
     });
     expect(mapped.input.name).toBe("UNKNOWN");
+  });
+});
+
+describe("dedupeContactEmails", () => {
+  it("gives a shared address to the first contact by id and clears the rest", () => {
+    const result = dedupeContactEmails([
+      { id: "cont_b", email: "test@test.com" },
+      { id: "cont_a", email: "Test@Test.com" },
+      { id: "cont_c", email: "unique@tei.com" },
+    ]);
+    const byId = new Map(result.map((c) => [c.id, c.email]));
+    expect(byId.get("cont_a")).toBe("Test@Test.com"); // first by id keeps it
+    expect(byId.get("cont_b")).toBeNull();
+    expect(byId.get("cont_c")).toBe("unique@tei.com");
+  });
+
+  it("is deterministic regardless of input order", () => {
+    const rows = [
+      { id: "cont_a", email: "x@y.com" },
+      { id: "cont_b", email: "x@y.com" },
+    ];
+    const forward = dedupeContactEmails(rows);
+    const reversed = dedupeContactEmails([...rows].reverse());
+    expect(forward.map((c) => [c.id, c.email])).toEqual(
+      reversed.map((c) => [c.id, c.email]),
+    );
+  });
+
+  it("leaves invalid and missing emails alone", () => {
+    const result = dedupeContactEmails([
+      { id: "a", email: null },
+      { id: "b", email: "garbage" },
+      { id: "c", email: "garbage" },
+    ]);
+    expect(result.map((c) => c.email)).toEqual([null, "garbage", "garbage"]);
   });
 });

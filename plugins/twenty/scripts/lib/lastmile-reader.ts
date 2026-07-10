@@ -138,7 +138,10 @@ export interface LastmileCrmComment {
   entityId: string;
   content: string | null;
   isDeleted: boolean;
+  /** Authored-at time. Carried onto the Twenty note so the activity feed
+   * reflects when the rep actually wrote it, not when the import ran. */
   createdAt: Date | null;
+  authorName: string | null;
 }
 
 export interface LastmileCrmAttachment {
@@ -337,9 +340,11 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
                t.entity_id   as "entityId",
                nullif(trim(tc.content), '') as "content",
                coalesce(tc.is_deleted, false) as "isDeleted",
-               tc.created_at as "createdAt"
+               tc.created_at as "createdAt",
+               nullif(trim(concat_ws(' ', u.first_name, u.last_name)), '') as "authorName"
         from task_comment tc
         join task t on t.id = tc.task_id
+        left join users u on u.id = tc.user_id
         where t.entity_type in ('lead', 'opportunity')
           and t.entity_id is not null
         order by tc.id

@@ -310,6 +310,28 @@ export function mapAccount(
   return { sourceId: input.sourceId as string, input, warnings };
 }
 
+/**
+ * Twenty enforces a unique primary email on Person, but LastMile does not:
+ * among the scoped contacts, 17 addresses are shared by 2-8 people
+ * ("test@test.com" x8, a rep's own address x8). The first contact by id keeps
+ * the address; the rest migrate without one, so no person is lost to a
+ * duplicate-key error. The caller reports each dropped address.
+ */
+export function dedupeContactEmails<
+  T extends { id: string; email: string | null },
+>(contacts: readonly T[]): T[] {
+  const claimed = new Set<string>();
+  return [...contacts]
+    .sort((left, right) => (left.id < right.id ? -1 : 1))
+    .map((contact) => {
+      const email = normalizeEmail(contact.email);
+      if (!email) return contact;
+      if (claimed.has(email)) return { ...contact, email: null };
+      claimed.add(email);
+      return contact;
+    });
+}
+
 export function mapContact(
   contact: LastmileContact,
   companyIdBySourceId: ReadonlyMap<string, string>,
@@ -539,6 +561,11 @@ export interface MappedNote {
   targetSourceId: string;
   targetKind: "opportunity" | "company";
   isDeleted: boolean;
+  /** When the note was written in LastMile — replayed onto Twenty's createdAt
+   * so the activity timeline is chronologically correct. */
+  createdAt: string | null;
+  /** LastMile author; Twenty's actor is not settable via the API. */
+  authorName: string | null;
 }
 
 export function mapCrmComment(comment: LastmileCrmComment): MappedNote {
@@ -551,7 +578,16 @@ export function mapCrmComment(comment: LastmileCrmComment): MappedNote {
     targetSourceId: sourceId(comment.entityType, comment.entityId),
     targetKind: "opportunity",
     isDeleted: comment.isDeleted,
+    createdAt: toIsoTimestamp(comment.createdAt),
+    authorName: comment.authorName,
   };
+}
+
+/** Twenty wants an ISO-8601 DateTime; LastMile hands us a Date or null. */
+export function toIsoTimestamp(value: Date | string | null): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 /** Customer notes reach Twenty only when their dispatch customer name matches
@@ -568,5 +604,7 @@ export function mapCustomerNote(note: LastmileCustomerNote): MappedNote | null {
     targetSourceId: sourceId("account", note.matchedAccountId),
     targetKind: "company",
     isDeleted: false,
+    createdAt: toIsoTimestamp(note.dateCreated),
+    authorName: null,
   };
 }

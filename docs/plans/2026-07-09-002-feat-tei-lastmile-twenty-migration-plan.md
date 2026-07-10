@@ -356,6 +356,49 @@ conflict.
 
 No behavioral-skill evaluation applies — no agent/skill surface changes.
 
+### Parity sign-off (2026-07-10, reconciled)
+
+| Entity              | LastMile (scoped source)                           | Twenty | Reconciles                  |
+| ------------------- | -------------------------------------------------- | ------ | --------------------------- |
+| organizations       | 38                                                 | 38     | ✅                          |
+| companies           | 807                                                | 807    | ✅                          |
+| people              | 443                                                | 443    | ✅                          |
+| opportunities       | 2,032                                              | 2,032  | ✅                          |
+| opportunityProducts | 938                                                | 938    | ✅                          |
+| notes               | 616 CRM comments + 28 matched customer notes = 644 | 644    | ✅                          |
+| attachments         | 4                                                  | 0      | ⚠ capability gap, see below |
+
+Consistency invariants: **zero** duplicate `sourceId`s (soft-deleted included),
+every migrated note paired to exactly one target, no orphan owners.
+
+**Spot checks (R16), field-for-field against LastMile:**
+
+- Opportunity `opportunity:opp_xdh6577weuhsc2ttlct1acyl` — name _Reign Rentals GW
+  Lubes_, stage `10-Prospect` (from `task.status_id`, not the stale
+  `30-Formulate Offer` column), $12,000.00, close date 2026-07-23, company
+  _Reign Rentals_, owner _Chad Raemsch_, organization _GWO 300_, one product
+  line _Golden West_ qty 40 @ $12,000. ✅
+- Company `account:acct_elve2qd4snmfulu48ugdb389` — no owner and no contacts in
+  LastMile; Twenty matches exactly, with its one opportunity attached. ✅
+- Person `contact:con_exmpakc56hf1de9xjqkixkgo` — _Albert Mendoza_,
+  albert.mendoza@jecs.cc, +1 3612071515, _Equipment Manage_, company _JE
+  Construction/STX Materials_. ✅
+
+**Reconciled exceptions:**
+
+- **29 people failed the first seed, all recovered.** Twenty enforces a unique
+  person email; LastMile does not (17 addresses shared by 2-8 contacts,
+  "test@test.com" ×8). `dedupeContactEmails` now gives the address to the first
+  contact by id and migrates the rest without one, each reported. The delta run
+  created all 29. Final count 443/443 — nobody dropped.
+- **3 attachments cannot migrate.** Twenty exposes no file-upload mutation to a
+  workspace API key (`uploadFile` and the `Upload` scalar are absent; REST
+  `/rest/files` is object CRUD) — the same root cause as S5's missing auth
+  schema. A fourth attachment's binary is already gone from S3. These are
+  classified as a **capability gap, not a failure**, so delta runs do not exit
+  non-zero forever on the same three files; they are listed by name in every
+  report for manual upload. Accepted loss: 3 files out of 4,861 records.
+
 ### Gate status (2026-07-10)
 
 | Gate               | Status                                                                                                                                                                                           |
@@ -373,7 +416,7 @@ No behavioral-skill evaluation applies — no agent/skill surface changes.
 
 - All seven units land; the seed run has completed against TEI's Twenty with a reconciled parity report and passed spot checks.
 - Idempotency is demonstrated (second run is a no-op) — the cutover re-sync (F2) is thereby proven runnable, even though its execution waits for TEI's switch date.
-- The rep password-rotation step (R5 — cutover, abort, and over-long-window cases alike), the record-rollback procedure, and the delta re-run invocation are written up as a short operator note in the script's header comment (env vars, flags, order), so cutover day needs no code archaeology.
+- The rep password-rotation step (R5 — cutover, abort, and over-long-window cases alike), the record-rollback procedure, and the delta re-run invocation are written up as a short operator note in the script's header comment (env vars, flags, order), so cutover day needs no code archaeology. **Rotation is now a command, not a prose instruction**: `provision-twenty-members.ts --rotate --apply` mints an independent random password per rep (unique salts), prints them once, and persists nothing.
 - Spike artifacts (test member, test stage option, throwaway `zzSpikeLine` object, throwaway scripts) are removed; no abandoned experimental code remains in the diff.
 - ~~No writes to Twenty's Postgres~~ — **superseded by S5**: member provisioning writes to Twenty's Postgres, INSERT-only, with Eric's explicit authorization after the stop condition was surfaced. No LastMile mutations, no committed secrets. The shared rep password lives only in the operator's environment.
 

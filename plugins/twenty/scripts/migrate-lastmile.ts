@@ -74,6 +74,7 @@ import {
 } from "./lib/load-records";
 import {
   buildOwnerIndex,
+  dedupeContactEmails,
   deriveRepEmail,
   mapAccount,
   mapContact,
@@ -329,8 +330,21 @@ async function runMigration(options: {
   report.companies = "pending";
 
   log("records: loading people...");
-  const contacts = await reader.readContacts();
+  const rawContacts = await reader.readContacts();
+  // Twenty requires a unique person email; LastMile does not. Give the address
+  // to the first contact by id and migrate the rest without one, rather than
+  // losing them to a duplicate-key error (29 people failed this way on the
+  // first seed).
+  const contacts = dedupeContactEmails(rawContacts);
   const personCounters = emptyCounters();
+  const keptById = new Map(contacts.map((contact) => [contact.id, contact]));
+  for (const contact of rawContacts) {
+    if (contact.email && !keptById.get(contact.id)?.email) {
+      personCounters.warnings.push(
+        `duplicate email ${contact.email} dropped from contact ${contact.id}`,
+      );
+    }
+  }
   await upsertRecords({
     client,
     entity: PERSON,

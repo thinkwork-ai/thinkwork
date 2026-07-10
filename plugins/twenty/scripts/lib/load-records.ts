@@ -486,11 +486,19 @@ export async function upsertNotes(options: {
     return false;
   });
 
+  // createdAt is replayed from LastMile so the activity feed reads in the order
+  // reps actually wrote the notes. Twenty accepts it on create AND update, so
+  // notes seeded before this behaviour existed heal on the next run (their
+  // content hash changes when createdAt joins it).
   const mapped: MappedRecord[] = resolvable.map((note) => ({
     sourceId: note.sourceId,
     input: {
       title: note.title,
       bodyV2: { markdown: note.bodyMarkdown },
+      ...(note.createdAt
+        ? { createdAt: note.createdAt, updatedAt: note.createdAt }
+        : {}),
+      ...(note.authorName ? { author: note.authorName } : {}),
       sourceId: note.sourceId,
     },
     warnings: [],

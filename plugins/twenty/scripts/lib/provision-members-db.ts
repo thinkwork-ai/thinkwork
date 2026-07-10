@@ -181,6 +181,63 @@ export async function provisionMembers(
   };
 }
 
+export interface RotateResult {
+  rotated: number;
+  notFound: string[];
+}
+
+/**
+ * Rotate the shared validation-window password (plan R5). Every rep account
+ * this migration created gets a fresh bcrypt hash; nothing else is touched.
+ *
+ * Required on cutover, on abort, and on an over-long validation window alike —
+ * the shared credential must never outlive the phase that needed it. Pass a
+ * per-rep password map to give each rep a distinct one, or a single password to
+ * re-share (still shared: prefer the map, or follow with a forced reset).
+ */
+export async function rotateMemberPasswords(options: {
+  databaseUrl: string;
+  /** Emails of the accounts to rotate — the migration's provisioned reps. */
+  emails: readonly string[];
+  passwordFor: (email: string) => string;
+  dryRun: boolean;
+  log?: (message: string) => void;
+}): Promise<RotateResult> {
+  const log = options.log ?? (() => {});
+  const pool = new pg.Pool({ connectionString: options.databaseUrl, max: 2 });
+  const notFound: string[] = [];
+  let rotated = 0;
+  try {
+    for (const rawEmail of options.emails) {
+      const email = rawEmail.toLowerCase();
+      const existing = await pool.query<{ id: string }>(
+        `select id from core."user" where lower(email) = $1 and "deletedAt" is null`,
+        [email],
+      );
+      if (existing.rows.length === 0) {
+        notFound.push(email);
+        continue;
+      }
+      if (options.dryRun) {
+        rotated += 1;
+        continue;
+      }
+      // Hash per user: rotation is the moment the shared secret dies, so the
+      // salts must not be shared either.
+      const hash = hashPassword(options.passwordFor(email));
+      await pool.query(
+        `update core."user" set "passwordHash" = $2, "updatedAt" = now() where id = $1`,
+        [existing.rows[0].id, hash],
+      );
+      rotated += 1;
+      log(`rotated ${email}`);
+    }
+  } finally {
+    await pool.end();
+  }
+  return { rotated, notFound };
+}
+
 /** Workspace schema names are `workspace_<id>`; reject anything else rather
  * than interpolate an arbitrary identifier into SQL. */
 export function quoteIdent(schema: string): string {
