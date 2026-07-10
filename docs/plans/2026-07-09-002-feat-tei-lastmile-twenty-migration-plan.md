@@ -308,6 +308,20 @@ conflict.
   from `organization_id`, and name/description/account/products from
   `entity_data`. Task rows begin 2025-07; the 2,021 opportunities and 1,642
   leads older than that **do not migrate** (Eric's call, "task-backed only").
+- **S2b supersedes S2 (2026-07-10, Eric).** Products are a **catalog object plus
+  line items**, not a free-text field on the line. LastMile's `items[].brand`
+  holds **19 spellings of seven products** (`MOBIL`, `Mobil`, `MOBIL - CVL`,
+  `MOBIL - PVL`, `MOBIL - INDUSTRIAL`, `GWO - CVL`, `GOLDEN WEST`, ...); the
+  channel suffixes (CVL/PVL/INDUSTRIAL) denote the sales channel, not a distinct
+  product. A `Product` object now holds exactly the seven lines LastMile's picker
+  offers — Ancillary, DEF, Fuel, Golden West, Hotsy, Mighty, Mobil — and each
+  opportunity product line points at one, carrying its own Quantity and Amount.
+  Live: Mobil 273, Fuel 164, Golden West 160, DEF 64, Mighty 51, Ancillary 36,
+  Hotsy 17, and **173 lines unlinked** (75 `UNKNOWN`, 98 blank) which migrate
+  with quantity and amount but no product, each reported — the mapper refuses to
+  guess. The legacy `opportunity.product`, `opportunity.quantity`, and free-text
+  `opportunityProduct.product` fields are dropped; the opportunity keeps only its
+  native `amount` (summed from its lines).
 - **S2 supersedes R1.** An opportunity carries _multiple_ products (816 have
   lines; 82 have 2–5). `product`/`quantity` moved off the opportunity onto a new
   **Opportunity Product** object (many-to-one), with `amount` per line, the deal
@@ -430,6 +444,13 @@ all 2,032 stages: Twenty now matches LastMile 14/14 by stage
 99 Prospect, 88 Lost, 82 Contacted, 76 Formulate Offer, 70 Negotiation,
 43 Nurturing, 36 Implementation, 20 Unqualified). **This is precisely the class
 of failure the idempotent, source-derived design exists to absorb.**
+
+**The guards earned their keep immediately.** The product restructure hit the
+same lag twice: the catalog object was not live when its seven records were
+inserted, and `product.sourceHash` was missing entirely. Both **failed loudly**
+rather than silently corrupting data, and both were fixed before any record was
+written. `restructure-products.ts` now waits for the object, its fields, and the
+relation to answer a live query before touching a record.
 
 Two guards were added so it cannot recur:
 

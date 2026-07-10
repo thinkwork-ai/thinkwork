@@ -86,6 +86,12 @@ export const ORGANIZATION: EntityShape = {
   capSingular: "Organization",
   capPlural: "Organizations",
 };
+export const PRODUCT: EntityShape = {
+  singular: "product",
+  plural: "products",
+  capSingular: "Product",
+  capPlural: "Products",
+};
 export const NOTE: EntityShape = {
   singular: "note",
   plural: "notes",
@@ -615,11 +621,19 @@ export async function upsertOpportunityProducts(options: {
   products: MappedOpportunityProduct[];
   /** opportunity sourceId -> Twenty opportunity id. */
   opportunityIdBySourceId: ReadonlyMap<string, string>;
+  /** catalog product sourceId -> Twenty product id. */
+  productIdBySourceId: ReadonlyMap<string, string>;
   dryRun: boolean;
   counters: EntityCounters;
 }): Promise<void> {
-  const { client, products, opportunityIdBySourceId, dryRun, counters } =
-    options;
+  const {
+    client,
+    products,
+    opportunityIdBySourceId,
+    productIdBySourceId,
+    dryRun,
+    counters,
+  } = options;
 
   const resolvable: MappedRecord[] = [];
   for (const product of products) {
@@ -634,9 +648,24 @@ export async function upsertOpportunityProducts(options: {
       );
       continue;
     }
+    // A line whose brand did not map to a catalog product still migrates with
+    // its quantity and amount; it simply has no product. The warning already
+    // rode along from the mapper.
+    const productId = product.productSourceId
+      ? (productIdBySourceId.get(product.productSourceId) ?? null)
+      : null;
+    if (product.productSourceId && !productId) {
+      counters.gaps.push(
+        `line ${product.sourceId}: catalog product ${product.productSourceId} missing`,
+      );
+    }
     resolvable.push({
       sourceId: product.sourceId,
-      input: { ...product.input, opportunityId },
+      input: {
+        ...product.input,
+        opportunityId,
+        ...(productId ? { productId } : {}),
+      },
       warnings: product.warnings,
     });
   }

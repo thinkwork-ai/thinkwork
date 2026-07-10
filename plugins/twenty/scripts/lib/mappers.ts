@@ -393,15 +393,80 @@ export function mapContact(
   return { sourceId: input.sourceId as string, input, warnings };
 }
 
-/** Mobil-branded products, per line. Brands seen live: MOBIL, MOBIL - CVL,
- * GOLDEN WEST, FUEL, DEF, Hotsy. */
+/**
+ * TEI's seven product lines, exactly as LastMile's "Product Line" picker shows
+ * them. The `items[].brand` free-text field holds 19 variants of these seven
+ * (MOBIL, Mobil, "MOBIL - CVL", "GWO - PVL", ...), which is why products became
+ * a catalog object rather than a text field.
+ */
+export const PRODUCT_CATALOG: readonly string[] = [
+  "Ancillary",
+  "DEF",
+  "Fuel",
+  "Golden West",
+  "Hotsy",
+  "Mighty",
+  "Mobil",
+];
+
+/**
+ * Collapse a LastMile brand string onto a catalog product. Sub-line suffixes
+ * (CVL, PVL, INDUSTRIAL) denote the channel, not the product, so they fold into
+ * the parent. Returns null for "UNKNOWN" and blanks (173 lines): the line still
+ * migrates with its quantity and amount, but carries no product, and every one
+ * is listed in the report rather than silently bucketed.
+ */
+export function normalizeProductName(brand: string | null): string | null {
+  const raw = (brand ?? "").trim();
+  if (!raw) return null;
+  const base = raw.split("-")[0].trim().toLowerCase();
+  switch (base) {
+    case "mobil":
+      return "Mobil";
+    case "golden west":
+    case "gwo":
+      return "Golden West";
+    case "fuel":
+      return "Fuel";
+    case "def":
+      return "DEF";
+    case "mighty":
+      return "Mighty";
+    case "ancillary":
+      return "Ancillary";
+    case "hotsy":
+      return "Hotsy";
+    default:
+      return null;
+  }
+}
+
+/** Mobil-branded products, per line — driven by the catalog name, not the raw
+ * brand string, so "MOBIL - CVL" and "Mobil" agree. */
 export function isMobilBrand(brand: string | null): boolean {
-  return /mobil/i.test(brand ?? "");
+  return normalizeProductName(brand) === "Mobil";
+}
+
+/** A catalog product record. Name is the identity; the sourceId keeps re-runs
+ * idempotent. */
+export function mapProduct(name: string): MappedRecord {
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  return {
+    sourceId: sourceId("product", key),
+    input: { name, sourceId: sourceId("product", key) },
+    warnings: [],
+  };
+}
+
+export function productSourceId(name: string): string {
+  return sourceId("product", name.toLowerCase().replace(/[^a-z0-9]+/g, "_"));
 }
 
 export interface MappedOpportunityProduct extends MappedRecord {
   /** sourceId of the owning opportunity, resolved to a Twenty id by the loader. */
   opportunitySourceId: string;
+  /** sourceId of the catalog product, or null when the brand did not map. */
+  productSourceId: string | null;
 }
 
 /**
@@ -425,15 +490,23 @@ export function mapOpportunityProduct(item: {
   if (item.quantity && quantity === null) {
     warnings.push(`unparseable line quantity ${item.quantity} dropped`);
   }
+  const productName = normalizeProductName(item.brand);
+  if (!productName) {
+    warnings.push(
+      `line ${item.index + 1}: brand ${JSON.stringify(item.brand ?? "")} does not map to a product`,
+    );
+  }
+
   const lineSourceId = `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`;
   const input: Record<string, unknown> = {
-    name: item.brand ?? `Line ${item.index + 1}`,
-    ...(item.brand ? { product: item.brand } : {}),
+    // The chip in Twenty's UI reads the name, so an unmapped line says "Line 2",
+    // never "Untitled".
+    name: productName ?? `Line ${item.index + 1}`,
     ...(quantity !== null ? { quantity } : {}),
     ...(amountMicros !== null
       ? { amount: { amountMicros, currencyCode: "USD" } }
       : {}),
-    isMobil: isMobilBrand(item.brand),
+    isMobil: productName === "Mobil",
     lineNumber: item.index + 1,
     sourceId: lineSourceId,
   };
@@ -442,6 +515,7 @@ export function mapOpportunityProduct(item: {
     input,
     warnings,
     opportunitySourceId: sourceId("opportunity", item.opportunityId),
+    productSourceId: productName ? productSourceId(productName) : null,
   };
 }
 

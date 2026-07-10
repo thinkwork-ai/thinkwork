@@ -66,6 +66,7 @@ import {
   OPPORTUNITY_PRODUCT,
   ORGANIZATION,
   PERSON,
+  PRODUCT,
   rollbackEntity,
   upsertNotes,
   upsertOpportunityProducts,
@@ -82,7 +83,10 @@ import {
   mapCustomerNote,
   mapCrmTask,
   mapOrganization,
+  mapProduct,
   mapTaskProducts,
+  PRODUCT_CATALOG,
+  productSourceId,
   sourceId,
 } from "./lib/mappers";
 import { ensureMembers, type RepToProvision } from "./lib/members-ensure";
@@ -407,6 +411,26 @@ async function runMigration(options: {
   }
   report.opportunities = "pending";
 
+  // The product catalog (7 rows) must exist before the lines that point at it.
+  log("records: ensuring the product catalog...");
+  const catalogCounters = emptyCounters();
+  const productIdBySourceId = await upsertRecords({
+    client,
+    entity: PRODUCT,
+    mapped: PRODUCT_CATALOG.map(mapProduct),
+    dryRun,
+    counters: catalogCounters,
+  });
+  if (dryRun) {
+    for (const name of PRODUCT_CATALOG) {
+      const id = productSourceId(name);
+      if (!productIdBySourceId.has(id)) {
+        productIdBySourceId.set(id, `planned:${id}`);
+      }
+    }
+  }
+  report.productCatalog = summarizeCounters(catalogCounters);
+
   log("records: loading opportunity product lines...");
   const productCounters = emptyCounters();
   const mappedProducts = crmTasks.flatMap(mapTaskProducts);
@@ -414,6 +438,7 @@ async function runMigration(options: {
     client,
     products: mappedProducts,
     opportunityIdBySourceId,
+    productIdBySourceId,
     dryRun,
     counters: productCounters,
   });

@@ -44,6 +44,27 @@ export const ORGANIZATION_OBJECT = {
   targetFieldLabel: "Opportunities",
 } as const;
 
+/**
+ * TEI's product catalog: exactly the seven lines LastMile's "Product Line"
+ * picker offers. Opportunity product lines point at these, so a product is one
+ * record you can filter and report on rather than 19 free-text spellings.
+ */
+export const PRODUCT_OBJECT = {
+  nameSingular: "product",
+  namePlural: "products",
+  labelSingular: "Product",
+  labelPlural: "Products",
+  icon: "IconBox",
+  targetFieldLabel: "Lines",
+} as const;
+
+/** Legacy fields from the first import, superseded by the product lines.
+ * `amount` on the opportunity is Twenty's native deal total and stays. */
+export const LEGACY_OPPORTUNITY_FIELDS: readonly string[] = [
+  "product",
+  "quantity",
+];
+
 export const FIELD_SPECS: Array<{
   object: string;
   name: string;
@@ -119,12 +140,6 @@ export const FIELD_SPECS: Array<{
     object: "opportunityProduct",
     name: "sourceHash",
     label: "Source Hash",
-    type: "TEXT",
-  },
-  {
-    object: "opportunityProduct",
-    name: "product",
-    label: "Product",
     type: "TEXT",
   },
   {
@@ -400,7 +415,8 @@ export function planSchemaEnsure(
       // planned rather than an error.
       if (
         spec.object === OPPORTUNITY_PRODUCT_OBJECT.nameSingular ||
-        spec.object === ORGANIZATION_OBJECT.nameSingular
+        spec.object === ORGANIZATION_OBJECT.nameSingular ||
+        spec.object === PRODUCT_OBJECT.nameSingular
       ) {
         createFields.push({
           object: spec.object,

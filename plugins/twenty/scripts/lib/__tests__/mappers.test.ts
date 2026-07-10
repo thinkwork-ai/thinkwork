@@ -16,6 +16,10 @@ import {
   mapCrmComment,
   mapCrmTask,
   mapOrganization,
+  mapProduct,
+  normalizeProductName,
+  PRODUCT_CATALOG,
+  productSourceId,
   mapTaskProducts,
   mapTaskStatusToStage,
   mapCustomerNote,
@@ -328,13 +332,13 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
     expect(mapped.sourceId).toBe("opportunity_item:opp_1#0");
     expect(mapped.opportunitySourceId).toBe("opportunity:opp_1");
     expect(mapped.input).toMatchObject({
-      name: "MOBIL",
-      product: "MOBIL",
+      name: "Mobil",
       quantity: 6500,
       amount: { amountMicros: 50_000_000_000, currencyCode: "USD" },
       isMobil: true,
       lineNumber: 1,
     });
+    expect(mapped.productSourceId).toBe("product:mobil");
   });
 
   it("gives each line on one opportunity a distinct, stable sourceId", () => {
@@ -350,6 +354,11 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
     ]);
     expect(new Set(lines.map((l) => l.opportunitySourceId)).size).toBe(1);
     expect(lines.map((l) => l.input.isMobil)).toEqual([false, false, true]);
+    expect(lines.map((l) => l.productSourceId)).toEqual([
+      "product:def",
+      "product:golden_west",
+      "product:mobil",
+    ]);
     expect(lines.map((l) => l.input.lineNumber)).toEqual([1, 2, 3]);
   });
 
@@ -358,7 +367,7 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
       item({ brand: null, quantity: "n/a", amount: "" }),
     );
     expect(mapped.input.name).toBe("Line 1");
-    expect(mapped.input).not.toHaveProperty("product");
+    expect(mapped.productSourceId).toBeNull();
     expect(mapped.input).not.toHaveProperty("quantity");
     expect(mapped.input).not.toHaveProperty("amount");
     expect(mapped.input.isMobil).toBe(false);
@@ -507,10 +516,11 @@ describe("mapCrmTask (task table is the CRM authority)", () => {
       opportunitySourceId: "opportunity:opp_xdh6577weuhsc2ttlct1acyl",
     });
     expect(lines[0].input).toMatchObject({
-      product: "Golden West",
+      name: "Golden West",
       quantity: 40,
       amount: { amountMicros: 12_000_000_000, currencyCode: "USD" },
     });
+    expect(lines[0].productSourceId).toBe("product:golden_west");
   });
 });
 
@@ -572,5 +582,63 @@ describe("dedupeContactEmails", () => {
       { id: "c", email: "garbage" },
     ]);
     expect(result.map((c) => c.email)).toEqual([null, "garbage", "garbage"]);
+  });
+});
+
+describe("normalizeProductName (19 LastMile spellings -> 7 catalog products)", () => {
+  it("folds channel suffixes into the parent product", () => {
+    // CVL / PVL / INDUSTRIAL denote the sales channel, not a different product.
+    expect(normalizeProductName("MOBIL - CVL")).toBe("Mobil");
+    expect(normalizeProductName("MOBIL - PVL")).toBe("Mobil");
+    expect(normalizeProductName("MOBIL - INDUSTRIAL")).toBe("Mobil");
+    expect(normalizeProductName("GWO - CVL")).toBe("Golden West");
+    expect(normalizeProductName("GWO - PVL")).toBe("Golden West");
+    expect(normalizeProductName("GWO - INDUSTRIAL")).toBe("Golden West");
+  });
+
+  it("is case-insensitive across every observed spelling", () => {
+    expect(normalizeProductName("MOBIL")).toBe("Mobil");
+    expect(normalizeProductName("Mobil")).toBe("Mobil");
+    expect(normalizeProductName("GOLDEN WEST")).toBe("Golden West");
+    expect(normalizeProductName("Golden West")).toBe("Golden West");
+    expect(normalizeProductName("FUEL")).toBe("Fuel");
+    expect(normalizeProductName("DEF")).toBe("DEF");
+    expect(normalizeProductName("MIGHTY")).toBe("Mighty");
+    expect(normalizeProductName("Mighty")).toBe("Mighty");
+    expect(normalizeProductName("ANCILLARY")).toBe("Ancillary");
+    expect(normalizeProductName("HOTSY")).toBe("Hotsy");
+    expect(normalizeProductName("Hotsy")).toBe("Hotsy");
+  });
+
+  it("every catalog name maps to itself", () => {
+    for (const name of PRODUCT_CATALOG) {
+      expect(normalizeProductName(name)).toBe(name);
+    }
+  });
+
+  it("refuses to guess: UNKNOWN and blanks map to nothing", () => {
+    expect(normalizeProductName("UNKNOWN")).toBeNull();
+    expect(normalizeProductName("")).toBeNull();
+    expect(normalizeProductName("   ")).toBeNull();
+    expect(normalizeProductName(null)).toBeNull();
+    expect(normalizeProductName("Kerosene")).toBeNull();
+  });
+
+  it("isMobil follows the catalog, not the raw string", () => {
+    expect(isMobilBrand("MOBIL - CVL")).toBe(true);
+    expect(isMobilBrand("Mobil")).toBe(true);
+    expect(isMobilBrand("GOLDEN WEST")).toBe(false);
+    expect(isMobilBrand("UNKNOWN")).toBe(false);
+  });
+});
+
+describe("mapProduct", () => {
+  it("gives each catalog product a stable sourceId", () => {
+    expect(mapProduct("Golden West")).toMatchObject({
+      sourceId: "product:golden_west",
+      input: { name: "Golden West", sourceId: "product:golden_west" },
+    });
+    expect(mapProduct("DEF").sourceId).toBe("product:def");
+    expect(productSourceId("Mobil")).toBe("product:mobil");
   });
 });
