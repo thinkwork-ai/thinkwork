@@ -91,8 +91,6 @@ describe("AgentLoopDetailContent", () => {
     expect(
       screen.getByRole("heading", { name: "Linear dispatcher" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Definition" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Activity" })).toBeTruthy();
     expect(
       screen.getByText(
         "Act as the Linear agent dispatcher for the Web Apps project.",
@@ -105,7 +103,20 @@ describe("AgentLoopDetailContent", () => {
     expect(screen.getByText("Ada")).toBeTruthy();
     expect(screen.getByText("Space")).toBeTruthy();
     expect(screen.getByText("Customer")).toBeTruthy();
-    // Runs table.
+
+    // The tab strip lives in the AppTopBar now (THINK-247); the Activity tab
+    // renders the runs table.
+    cleanup();
+    render(
+      <AgentLoopDetailContent
+        loop={loopFixture()}
+        pendingAction={null}
+        activeTab="activity"
+        onRun={vi.fn()}
+        onToggle={vi.fn()}
+        onOpenRun={vi.fn()}
+      />,
+    );
     expect(screen.getByText("Recent Runs")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Started" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Cost" })).toBeTruthy();

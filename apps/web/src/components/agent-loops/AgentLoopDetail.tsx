@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Archive, Loader2, Pause, Play, RotateCw, Zap } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
@@ -15,10 +15,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
   Button,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   Tooltip,
   TooltipContent,
   TooltipIconButton,
@@ -183,12 +179,31 @@ export function AgentLoopDetail({
 
   const automationsHref =
     routeScope === "main" ? "/automations" : "/settings/automations";
+  const detailHref = `${automationsHref}/${agentLoopId}`;
+  // THINK-247: Definition | Activity render as an AppTopBar tab strip (like
+  // Memory), driven by the `tab` search param.
+  const search = useSearch({ strict: false }) as { tab?: string };
+  const activeTab: "definition" | "activity" =
+    search.tab === "activity" ? "activity" : "definition";
 
   usePageHeaderActions({
     title: loop?.name ?? "Automation",
     breadcrumbs: [
       { label: "Automations", href: automationsHref },
       { label: loop?.name ?? "Automation" },
+    ],
+    tabs: [
+      {
+        to: detailHref,
+        label: "Definition",
+        active: activeTab === "definition",
+      },
+      {
+        to: detailHref,
+        label: "Activity",
+        search: { tab: "activity" },
+        active: activeTab === "activity",
+      },
     ],
     action: loop ? (
       <HeaderActions
@@ -341,6 +356,7 @@ export function AgentLoopDetail({
         tenantId={tenantId}
         defaultSpaceId={defaultSpaceId}
         currentUserId={userId}
+        activeTab={activeTab}
         onSave={saveLoop}
         onRun={() => void runNow(loop)}
         onToggle={() => void toggleActive(loop, workerOptions)}
@@ -371,6 +387,7 @@ export function AgentLoopDetailContent({
   tenantId,
   defaultSpaceId,
   currentUserId,
+  activeTab = "definition",
   onSave,
   onRun,
   onToggle,
@@ -389,6 +406,8 @@ export function AgentLoopDetailContent({
   tenantId?: string | null;
   defaultSpaceId?: string | null;
   currentUserId?: string | null;
+  /** Which AppTopBar tab is active; the strip itself renders in the header. */
+  activeTab?: "definition" | "activity";
   onSave?: (payload: SaveAgentLoopPayload) => Promise<void>;
   onRun: () => void;
   onToggle: () => void;
@@ -402,7 +421,7 @@ export function AgentLoopDetailContent({
   const webhookDeliveries = loop.webhookDeliveries ?? [];
 
   return (
-    <div className="@container flex h-full min-h-0 w-full flex-col overflow-y-auto p-6">
+    <div className="@container flex h-full min-h-0 w-full flex-col overflow-y-auto px-6 pb-4 pt-6">
       <SettingsPageTitle
         title={loop.name}
         description={loop.description ?? undefined}
@@ -414,17 +433,8 @@ export function AgentLoopDetailContent({
         </div>
       ) : null}
 
-      <Tabs defaultValue="definition" className="min-h-0 flex-1 gap-6">
-        <TabsList variant="line" className="w-full justify-start border-b">
-          <TabsTrigger value="definition" className="flex-none px-3">
-            Definition
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="flex-none px-3">
-            Activity
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="definition" className="mt-0">
+      {activeTab === "definition" ? (
+        <div className="flex min-h-0 flex-1 flex-col">
           {builderThreadId ? (
             <div className="mb-3 flex justify-end">
               <a
@@ -450,7 +460,10 @@ export function AgentLoopDetailContent({
               boundDocumentPanel={
                 target.documentBinding ? (
                   <div className="pt-3">
-                    <BoundDocumentCard binding={target.documentBinding} />
+                    <BoundDocumentCard
+                      binding={target.documentBinding}
+                      hideHeading
+                    />
                   </div>
                 ) : null
               }
@@ -497,9 +510,9 @@ export function AgentLoopDetailContent({
               <AutomationWebhookEndpointPanel endpoint={webhookEndpoint} />
             </div>
           ) : null}
-        </TabsContent>
-
-        <TabsContent value="activity" className="mt-0 space-y-8">
+        </div>
+      ) : (
+        <div className="space-y-8">
           <section>
             <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
               Recent Runs
@@ -510,8 +523,8 @@ export function AgentLoopDetailContent({
           {webhookEndpoint ? (
             <AutomationWebhookDeliveriesPanel deliveries={webhookDeliveries} />
           ) : null}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   );
 }
@@ -524,8 +537,11 @@ export function AgentLoopDetailContent({
  */
 function BoundDocumentCard({
   binding,
+  hideHeading,
 }: {
   binding: NonNullable<ReturnType<typeof readTargetSpec>["documentBinding"]>;
+  /** The canvas inspector already titles the panel — skip the section h2. */
+  hideHeading?: boolean;
 }) {
   const artifactId = binding.capturedArtifactId ?? binding.artifactId ?? null;
   const [shareOpen, setShareOpen] = useState(false);
@@ -553,9 +569,11 @@ function BoundDocumentCard({
 
   return (
     <section data-testid="bound-document-card">
-      <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
-        Maintained document
-      </h2>
+      {hideHeading ? null : (
+        <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+          Maintained document
+        </h2>
+      )}
       <div className="rounded-md border border-border/70 bg-muted/20 p-4">
         {!artifactId ? (
           <p className="text-sm text-muted-foreground">

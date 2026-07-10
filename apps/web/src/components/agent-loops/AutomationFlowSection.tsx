@@ -185,7 +185,10 @@ export function AutomationFlowSection({
   }
 
   return (
-    <section data-testid="automation-flow-section" className="space-y-4">
+    <section
+      data-testid="automation-flow-section"
+      className="flex min-h-0 flex-1 flex-col gap-4"
+    >
       {dirty || error ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-2.5">
           <p className="text-sm">
@@ -223,7 +226,7 @@ export function AutomationFlowSection({
         </div>
       ) : null}
 
-      <div className="grid gap-6 @min-[650px]:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid min-h-0 flex-1 gap-6 @min-[650px]:grid-cols-[minmax(0,1fr)_340px]">
         <RoutineFlowCanvas
           mode="execution"
           aslJson={null}
@@ -232,11 +235,11 @@ export function AutomationFlowSection({
           onSelectNode={(nodeId) =>
             setSelectedNode((nodeId as AutomationNodeId | null) ?? null)
           }
-          className="h-[min(62vh,560px)] min-h-[380px]"
+          className="h-full min-h-[380px]"
           emptyLabel="This automation has no steps to draw."
         />
 
-        <div className="min-w-0">
+        <div className="min-h-0 min-w-0 overflow-y-auto">
           {selectedNode ? (
             <NodeInspector
               nodeId={selectedNode}

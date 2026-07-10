@@ -84,6 +84,9 @@ export function GhostSelect({
           "h-auto min-h-0 w-auto justify-end gap-1.5 rounded-md border-0 bg-transparent px-3 py-2",
           "text-sm font-medium text-foreground shadow-none hover:bg-muted/50",
           "focus:ring-0 focus-visible:ring-0 [&>svg]:opacity-60",
+          // Long values (e.g. document titles) truncate inside the row
+          // instead of overflowing the inspector/dialog (THINK-247).
+          "max-w-full min-w-0 [&>span]:min-w-0 [&>span]:truncate",
         )}
       >
         <SelectValue placeholder={placeholder} />
