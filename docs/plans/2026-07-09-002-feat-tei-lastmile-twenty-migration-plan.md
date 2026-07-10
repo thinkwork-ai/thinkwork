@@ -412,10 +412,45 @@ every migrated note paired to exactly one target, no orphan owners.
 | Parity sign-off    | **BLOCKED** — follows the seed                                                                                                                                                                   |
 | Login proof        | **BLOCKED** — 89 logins exist and one (`scoulson@`) is verified at the row/hash level and visible via Twenty's API; the in-UI login and "sees their opportunities" half awaits the seed and Eric |
 
+## Incident: stage retag coerced 1,510 records (2026-07-10, resolved)
+
+Eric asked for the `LM_` prefix to be dropped from opportunity stage **values**
+(labels were always clean). `retag-stage-values.ts` added the clean options and
+moved records onto them in one pass. Twenty accepted the metadata write, but the
+underlying Postgres enum lagged: **records written to a not-yet-live value are
+silently coerced to the field's default rather than rejected.** 1,510 of 2,032
+opportunities collapsed into `NEW` — every stage whose option was created in
+that same run. The five _reused_ option values (NEW, PROSPECT, FORMULATE_OFFER,
+WON, LOST) were unaffected, which is what made the failure mode legible.
+
+Recovery cost one command. LastMile is the source of truth and the importer
+derives stage from `task.status_id`, so `migrate-lastmile.ts --apply` rebuilt
+all 2,032 stages: Twenty now matches LastMile 14/14 by stage
+(539 New, 259 Won, 198 Converted, 192 Account Needs, 168 Qualified, 162 Working,
+99 Prospect, 88 Lost, 82 Contacted, 76 Formulate Offer, 70 Negotiation,
+43 Nurturing, 36 Implementation, 20 Unqualified). **This is precisely the class
+of failure the idempotent, source-derived design exists to absorb.**
+
+Two guards were added so it cannot recur:
+
+1. **Liveness wait** — after adding options, each new value is probed with a
+   filtered query until it answers; the retag refuses to move records onto a
+   value that is not yet queryable.
+2. **Pre-prune verification** — after the move, per-stage counts must equal the
+   plan exactly. Any drift aborts _before_ the destructive prune, with the
+   recovery command in the error message.
+
 ## Open Blockers and Out-of-Scope Findings
 
-- **B1 (blocker, needs Eric): the browser sign-in path is unverifiable from
-  outside.** This deployment serves no auth GraphQL schema to any credential we
+- **B1 — RESOLVED 2026-07-10.** Eric signed in as `jmoyers@alliedsalesco.com`
+  with the shared password; a `REFRESH_TOKEN` row appeared for that user at
+  14:20 (Twenty writes one only on a successful sign-in), and he owns 134
+  opportunities. The provisioned accounts work. The auth GraphQL schema is
+  absent because this deployment logs in through an **OAuth flow**
+  (`AUTHORIZATION_CODE` tokens in `core.appToken`), not the password mutations
+  we probed for — the door existed, we were looking at the wrong one. S5 stands.
+  Original finding, for the record: **the browser sign-in path was unverifiable
+  from outside.** This deployment serves no auth GraphQL schema to any credential we
   hold — `getLoginTokenFromCredentials`, `signIn`, and `signUpInWorkspace` are
   absent from the schema (GraphQL returns no "did you mean" suggestion for
   near-miss names, so they truly do not exist there), and `/auth/*` and REST

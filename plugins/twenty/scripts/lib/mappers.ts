@@ -234,29 +234,55 @@ export const MIGRATION_STAGE_OPTIONS: Array<{
   color: string;
 }> = [
   // Lead band
-  { label: "00-New", value: "LM_00_NEW", color: "gray" },
-  { label: "10-Working", value: "LM_10_WORKING", color: "gray" },
-  { label: "20-Contacted", value: "LM_20_CONTACTED", color: "gray" },
-  { label: "30-Nurturing", value: "LM_30_NURTURING", color: "blue" },
-  { label: "50-Qualified", value: "LM_50_QUALIFIED", color: "blue" },
-  { label: "90-Unqualified", value: "LM_90_UNQUALIFIED", color: "gray" },
-  { label: "Converted", value: "LM_CONVERTED", color: "turquoise" },
+  { label: "00-New", value: "NEW", color: "gray" },
+  { label: "10-Working", value: "WORKING", color: "gray" },
+  { label: "20-Contacted", value: "CONTACTED", color: "gray" },
+  { label: "30-Nurturing", value: "NURTURING", color: "blue" },
+  { label: "50-Qualified", value: "QUALIFIED", color: "blue" },
+  { label: "90-Unqualified", value: "UNQUALIFIED", color: "gray" },
+  { label: "Converted", value: "CONVERTED", color: "turquoise" },
   // Opportunity band
-  { label: "10-Prospect", value: "LM_10_PROSPECT", color: "sky" },
-  { label: "20-Account Needs", value: "LM_20_ACCOUNT_NEEDS", color: "sky" },
-  {
-    label: "30-Formulate Offer",
-    value: "LM_30_FORMULATE_OFFER",
-    color: "turquoise",
-  },
-  { label: "40-Negotiation", value: "LM_40_NEGOTIATION", color: "yellow" },
-  {
-    label: "50-Implementation",
-    value: "LM_50_IMPLEMENTATION",
-    color: "orange",
-  },
-  { label: "60-Won", value: "LM_60_WON", color: "green" },
-  { label: "90-Lost", value: "LM_90_LOST", color: "red" },
+  { label: "10-Prospect", value: "PROSPECT", color: "sky" },
+  { label: "20-Account Needs", value: "ACCOUNT_NEEDS", color: "sky" },
+  { label: "30-Formulate Offer", value: "FORMULATE_OFFER", color: "turquoise" },
+  { label: "40-Negotiation", value: "NEGOTIATION", color: "yellow" },
+  { label: "50-Implementation", value: "IMPLEMENTATION", color: "orange" },
+  { label: "60-Won", value: "WON", color: "green" },
+  { label: "90-Lost", value: "LOST", color: "red" },
+];
+
+/** Retag map for the one-off `retag-stage-values.ts` migration: the original
+ * import wrote LM_-prefixed values, which surface raw in the API, filters, and
+ * reports. Labels never changed. */
+export const LEGACY_STAGE_VALUE_MAP: Readonly<Record<string, string>> = {
+  LM_00_NEW: "NEW",
+  LM_10_WORKING: "WORKING",
+  LM_20_CONTACTED: "CONTACTED",
+  LM_30_NURTURING: "NURTURING",
+  LM_50_QUALIFIED: "QUALIFIED",
+  LM_90_UNQUALIFIED: "UNQUALIFIED",
+  LM_CONVERTED: "CONVERTED",
+  LM_10_PROSPECT: "PROSPECT",
+  LM_20_ACCOUNT_NEEDS: "ACCOUNT_NEEDS",
+  LM_30_FORMULATE_OFFER: "FORMULATE_OFFER",
+  LM_40_NEGOTIATION: "NEGOTIATION",
+  LM_50_IMPLEMENTATION: "IMPLEMENTATION",
+  LM_60_WON: "WON",
+  LM_90_LOST: "LOST",
+};
+
+/** Options from the abandoned first model, plus TEI's unused defaults, that no
+ * record references. Removed by the retag so the picker is not a graveyard.
+ * CUSTOMER is deliberately kept — the ThinkWork workflow triggers on it. */
+export const OBSOLETE_STAGE_VALUES: readonly string[] = [
+  "LEAD",
+  "LEAD_WORKING",
+  "LEAD_QUALIFIED",
+  "LEAD_UNQUALIFIED",
+  "QUALIFYING",
+  "IDENTIFY_NEEDS",
+  "NEGOTIATE",
+  "MANAGE_IMPLEMENTATION",
 ];
 
 const STAGE_VALUE_BY_STATUS_NAME = new Map(
@@ -279,7 +305,7 @@ export function mapTaskStatusToStage(statusName: string | null): {
     (statusName ?? "").toLowerCase().trim(),
   );
   if (value) return { stage: value, unknown: false };
-  return { stage: "LM_00_NEW", unknown: true };
+  return { stage: "NEW", unknown: true };
 }
 
 // --- Record mappers ------------------------------------------------------

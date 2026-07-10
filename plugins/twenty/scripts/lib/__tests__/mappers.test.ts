@@ -375,20 +375,18 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
 
 describe("mapTaskStatusToStage", () => {
   it("maps LastMile status names verbatim to pipeline stages", () => {
-    expect(mapTaskStatusToStage("10-Prospect").stage).toBe("LM_10_PROSPECT");
-    expect(mapTaskStatusToStage("60-Won").stage).toBe("LM_60_WON");
+    expect(mapTaskStatusToStage("10-Prospect").stage).toBe("PROSPECT");
+    expect(mapTaskStatusToStage("60-Won").stage).toBe("WON");
     expect(mapTaskStatusToStage("20-Account Needs").stage).toBe(
-      "LM_20_ACCOUNT_NEEDS",
+      "ACCOUNT_NEEDS",
     );
-    expect(mapTaskStatusToStage("Converted").stage).toBe("LM_CONVERTED");
-    expect(mapTaskStatusToStage("90-Unqualified").stage).toBe(
-      "LM_90_UNQUALIFIED",
-    );
+    expect(mapTaskStatusToStage("Converted").stage).toBe("CONVERTED");
+    expect(mapTaskStatusToStage("90-Unqualified").stage).toBe("UNQUALIFIED");
   });
 
   it("flags an unmapped status instead of silently bucketing it", () => {
     expect(mapTaskStatusToStage("Zz-Unknown")).toEqual({
-      stage: "LM_00_NEW",
+      stage: "NEW",
       unknown: true,
     });
     expect(mapTaskStatusToStage(null).unknown).toBe(true);
@@ -424,7 +422,7 @@ describe("mapCrmTask (task table is the CRM authority)", () => {
     expect(mapped.sourceId).toBe("opportunity:opp_xdh6577weuhsc2ttlct1acyl");
     expect(mapped.input).toMatchObject({
       name: "Reign Rentals GW Lubes",
-      stage: "LM_10_PROSPECT",
+      stage: "PROSPECT",
       amount: { amountMicros: 12_000_000_000, currencyCode: "USD" },
       ownerId: "member-chad",
       companyId: "company-reign",
@@ -438,7 +436,7 @@ describe("mapCrmTask (task table is the CRM authority)", () => {
     // The opportunity row for this task says "30-Formulate Offer"; the task
     // says 10-Prospect, and the task wins.
     expect(mapCrmTask(task(), ownerIndex, companyMap, orgMap).input.stage).toBe(
-      "LM_10_PROSPECT",
+      "PROSPECT",
     );
   });
 
@@ -480,7 +478,7 @@ describe("mapCrmTask (task table is the CRM authority)", () => {
     expect(mapped.sourceId).toBe("lead:lead_1");
     expect(mapped.input).toMatchObject({
       name: "Alpine Silica",
-      stage: "LM_50_QUALIFIED",
+      stage: "QUALIFIED",
     });
     expect(mapped.input).not.toHaveProperty("companyId");
     expect(mapped.input).not.toHaveProperty("amount");
