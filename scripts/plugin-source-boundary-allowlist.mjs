@@ -1,4 +1,15 @@
-export const pluginSourceBoundaryAllowlist = [];
+export const pluginSourceBoundaryAllowlist = [
+  {
+    path: "plugins/twenty/scripts/migrate-lastmile.ts",
+    reason:
+      "one-off TEI migration script owned by the Twenty plugin; LastMile is the data SOURCE it reads, not the owning plugin.",
+  },
+  {
+    path: "plugins/twenty/scripts/lib/lastmile-reader.ts",
+    reason:
+      "read-only LastMile Postgres reader used by the Twenty plugin's TEI migration script.",
+  },
+];
 
 export const sharedPluginTermAllowlist = [
   {

@@ -120,6 +120,39 @@ export function normalizeEmail(raw: string | null | undefined): string | null {
   return EMAIL_RE.test(email) ? email : null;
 }
 
+export interface NormalizedPhone {
+  primaryPhoneNumber: string;
+  primaryPhoneCallingCode: string;
+  primaryPhoneCountryCode: string;
+}
+
+/**
+ * Twenty validates phones with libphonenumber; bare national formats like
+ * "512-825-8875" are rejected without a country code (observed live — 17k
+ * person creates failed on it). LastMile numbers are US: normalize 10-digit
+ * (or 1-prefixed 11-digit) numbers to number + "+1"/US parts; anything else
+ * is dropped with a warning rather than failing the whole record.
+ */
+export function normalizePhone(
+  raw: string | null | undefined,
+): NormalizedPhone | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  const national =
+    digits.length === 10
+      ? digits
+      : digits.length === 11 && digits.startsWith("1")
+        ? digits.slice(1)
+        : null;
+  // libphonenumber rejects US numbers whose area code starts with 0/1.
+  if (!national || national[0] === "0" || national[0] === "1") return null;
+  return {
+    primaryPhoneNumber: national,
+    primaryPhoneCallingCode: "+1",
+    primaryPhoneCountryCode: "US",
+  };
+}
+
 /** Dollars (numeric string or number) → integer micros. Returns null for
  * missing/unparsable amounts. */
 export function toAmountMicros(
@@ -284,14 +317,17 @@ export function mapContact(
         `account ${contact.accountId} not found; person has no company`,
       );
   }
-  const phone = contact.phone ?? contact.phoneCellular;
+  const rawPhone = contact.phone ?? contact.phoneCellular;
+  const phone = normalizePhone(rawPhone);
+  if (rawPhone && !phone)
+    warnings.push(`unparseable phone ${rawPhone} dropped`);
   const input: Record<string, unknown> = {
     name: {
       firstName: contact.firstName ?? "",
       lastName: contact.lastName ?? "",
     },
     ...(email ? { emails: { primaryEmail: email } } : {}),
-    ...(phone ? { phones: { primaryPhoneNumber: phone } } : {}),
+    ...(phone ? { phones: phone } : {}),
     ...(contact.title ? { jobTitle: contact.title } : {}),
     ...(companyId ? { companyId } : {}),
     sourceId: sourceId("contact", contact.id),

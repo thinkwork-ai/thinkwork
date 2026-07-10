@@ -18,6 +18,7 @@ import {
   mapOpportunity,
   mapOpportunityStage,
   normalizeEmail,
+  normalizePhone,
   resolveOwner,
   sourceId,
   stableStringify,
@@ -85,6 +86,29 @@ describe("toQuantity", () => {
     expect(toQuantity("1,500")).toBe(1500);
     expect(toQuantity("about 12")).toBeNull();
     expect(toQuantity(null)).toBeNull();
+  });
+});
+
+describe("normalizePhone", () => {
+  it("normalizes US national formats to number + calling/country code", () => {
+    expect(normalizePhone("512-825-8875")).toEqual({
+      primaryPhoneNumber: "5128258875",
+      primaryPhoneCallingCode: "+1",
+      primaryPhoneCountryCode: "US",
+    });
+    expect(normalizePhone("(361) 664-9106")?.primaryPhoneNumber).toBe(
+      "3616649106",
+    );
+    expect(normalizePhone("1-512-825-8875")?.primaryPhoneNumber).toBe(
+      "5128258875",
+    );
+  });
+
+  it("drops unparseable or non-US-shaped numbers", () => {
+    expect(normalizePhone("call the office")).toBeNull();
+    expect(normalizePhone("12345")).toBeNull();
+    expect(normalizePhone("011-44-20-7946-0958")).toBeNull();
+    expect(normalizePhone(null)).toBeNull();
   });
 });
 
@@ -196,7 +220,11 @@ describe("mapContact", () => {
     expect(mapped.input).toMatchObject({
       name: { firstName: "Ann", lastName: "Lee" },
       emails: { primaryEmail: "ann@acme.com" },
-      phones: { primaryPhoneNumber: "210-555-0101" },
+      phones: {
+        primaryPhoneNumber: "2105550101",
+        primaryPhoneCallingCode: "+1",
+        primaryPhoneCountryCode: "US",
+      },
       jobTitle: "Buyer",
       companyId: "company-uuid-1",
       sourceId: "contact:ct_1",
