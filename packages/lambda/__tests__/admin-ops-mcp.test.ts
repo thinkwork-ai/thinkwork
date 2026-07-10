@@ -1178,36 +1178,22 @@ describe("admin-ops-mcp Lambda", () => {
   it("automation_save sends the header-threaded principal + agent id downstream, never args", async () => {
     dbLookupResult = [{ id: "key-uuid", tenant_id: "pinned-tenant-uuid" }];
     process.env.AUTOMATIONS_AGENT_WRITE_TOOLS_ENABLED = "true";
-    // saveAutomation resolves the Space first (THINK-246): first GraphQL
-    // response is the spaces catalog, second is the mutation.
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: {
-              spaces: [{ id: "space-1", name: "General", slug: "general" }],
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            saveAgentLoop: {
+              id: "loop-1",
+              name: "Daily GWO Report",
+              slug: "daily-gwo-report",
+              lifecycleStatus: "active",
+              enabled: true,
             },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            data: {
-              saveAgentLoop: {
-                id: "loop-1",
-                name: "Daily GWO Report",
-                slug: "daily-gwo-report",
-                lifecycleStatus: "active",
-                enabled: true,
-              },
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
     global.fetch = fetchMock as unknown as typeof fetch;
 
     const res = await handler(
@@ -1235,8 +1221,8 @@ describe("admin-ops-mcp Lambda", () => {
     const payload = JSON.parse(body.result.content[0].text);
     expect(payload).toMatchObject({ id: "loop-1" });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2); // spaces catalog + mutation
-    const [url, init] = fetchMock.mock.calls[1];
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toContain("/graphql");
     const headers = (init as { headers: Record<string, string> }).headers;
     expect(headers["x-principal-id"]).toBe("member-user-1");

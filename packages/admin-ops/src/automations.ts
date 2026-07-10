@@ -51,16 +51,6 @@ export interface SavedAutomation {
   enabled: boolean;
 }
 
-const SPACES_QUERY = `
-  query AdminOpsAutomationSpaces($tenantId: ID!) {
-    spaces(tenantId: $tenantId, status: ACTIVE) {
-      id
-      name
-      slug
-    }
-  }
-`;
-
 const SAVE_AGENT_LOOP_MUTATION = `
   mutation AdminOpsSaveAutomation($input: SaveAgentLoopInput!) {
     saveAgentLoop(input: $input) {
@@ -103,47 +93,6 @@ export function validateAutomationSchedule(input: {
   return null;
 }
 
-interface SpaceRow {
-  id: string;
-  name: string;
-  slug?: string | null;
-}
-
-/**
- * Match a Space reference by UUID, slug, or name (case-insensitive).
- * Agents routinely pass the slug ("general") where the resolver needs the
- * UUID — observed live on TEI (THINK-246 acceptance): the save failed with a
- * masked "Unexpected error" and the agent had nothing to self-correct with.
- * A miss now lists the tenant's actual Spaces so the retry can succeed.
- */
-function matchSpaceId(
-  spaces: SpaceRow[],
-  value: string,
-  field: string,
-): string {
-  const wanted = value.trim();
-  const lowered = wanted.toLowerCase();
-  const match =
-    spaces.find((space) => space.id === wanted) ??
-    spaces.find((space) => space.slug?.toLowerCase() === lowered) ??
-    spaces.find((space) => space.name.toLowerCase() === lowered);
-  if (!match) {
-    const catalog = spaces
-      .map(
-        (space) =>
-          `${space.name} (slug: ${space.slug ?? "-"}, id: ${space.id})`,
-      )
-      .join("; ");
-    throw new Error(
-      `${field} '${wanted}' does not match any active Space in this tenant. ` +
-        (catalog
-          ? `Available Spaces: ${catalog}. Pass one of these ids or slugs.`
-          : "This tenant has no active Spaces — an operator must create one first."),
-    );
-  }
-  return match.id;
-}
-
 export async function saveAutomation(
   client: AdminOpsClient,
   input: SaveAutomationInput,
@@ -171,35 +120,19 @@ export async function saveAutomation(
     );
   }
 
-  // One catalog fetch resolves both space fields; pure validations above
-  // stay network-free.
-  const { spaces } = await client.graphql<{ spaces: SpaceRow[] }>(
-    SPACES_QUERY,
-    { tenantId: input.tenantId },
-  );
-  const spaceId = matchSpaceId(spaces ?? [], input.spaceId, "spaceId");
-  const documentBinding = input.documentBinding
-    ? {
-        ...input.documentBinding,
-        ...(input.documentBinding.spaceId?.trim()
-          ? {
-              spaceId: matchSpaceId(
-                spaces ?? [],
-                input.documentBinding.spaceId,
-                "documentBinding.spaceId",
-              ),
-            }
-          : {}),
-      }
-    : undefined;
-
   const targetSpec: Record<string, unknown> = {
     kind: "agent_thread",
     agentThread: {
       instructions,
       threadMode: "new_per_run",
     },
-    ...(documentBinding ? { documentBinding } : {}),
+    // Space references (spaceId, documentBinding.spaceId) pass through
+    // verbatim — the saveAgentLoop resolver resolves UUID/slug/name; the
+    // spaces GraphQL query is member-visibility-gated and returns [] for
+    // apikey callers, so resolution cannot live in this layer.
+    ...(input.documentBinding
+      ? { documentBinding: input.documentBinding }
+      : {}),
     ...(input.deliveryRecipients && input.deliveryRecipients.length > 0
       ? {
           delivery: {
@@ -222,7 +155,7 @@ export async function saveAutomation(
         description: input.description ?? null,
         lifecycleStatus: "active",
         enabled: input.enabled ?? true,
-        spaceId,
+        spaceId: input.spaceId,
         triggerSpec: {
           family: "schedule",
           enabled: input.enabled ?? true,

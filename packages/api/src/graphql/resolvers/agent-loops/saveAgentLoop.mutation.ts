@@ -91,6 +91,16 @@ export async function saveAgentLoop(
       ? undefined
       : await resolveAgentLoopSpaceId(input.tenantId, input.spaceId);
 
+  // Create-mode document bindings carry the Space the document will live
+  // in — resolve slug/name references the same way the automation's own
+  // Space is resolved.
+  const binding = normalized.targetSpec?.documentBinding;
+  if (binding?.spaceId) {
+    binding.spaceId =
+      (await resolveAgentLoopSpaceId(input.tenantId, binding.spaceId)) ??
+      binding.spaceId;
+  }
+
   if (input.id) {
     return updateAgentLoop(input.id, input, normalized, actorId, spaceId);
   }
@@ -394,32 +404,48 @@ function assertAgentThreadTargetHasSpace(
   }
 }
 
-async function resolveAgentLoopSpaceId(
+/**
+ * Resolve a Space reference by UUID, slug, or name (case-insensitive).
+ * Conversational callers routinely pass the slug ("general") where the
+ * column wants the UUID — observed live on TEI (THINK-246 acceptance),
+ * where the miss surfaced as a masked "Unexpected error" the agent could
+ * not self-correct from. Resolution lives HERE (not the tool layer) so
+ * every save path gets it, and a miss names the tenant's actual Spaces.
+ * Matching happens in JS over the tenant's active catalog, so a non-UUID
+ * reference never reaches the uuid column in SQL.
+ */
+export async function resolveAgentLoopSpaceId(
   tenantId: string,
   spaceId: string | null,
 ): Promise<string | null> {
   if (!spaceId) return null;
-  const [space] = await db
-    .select({ id: spaces.id })
+  const wanted = spaceId.trim();
+  const active = await db
+    .select({ id: spaces.id, name: spaces.name, slug: spaces.slug })
     .from(spaces)
-    .where(
-      and(
-        eq(spaces.id, spaceId),
-        eq(spaces.tenant_id, tenantId),
-        eq(spaces.status, "active"),
-      ),
-    )
-    .limit(1);
-  if (!space) {
-    // GraphQLError (not bare Error) so Yoga doesn't mask it — a masked
-    // "Unexpected error" gave conversational callers nothing to
-    // self-correct with (THINK-246 TEI acceptance).
+    .where(and(eq(spaces.tenant_id, tenantId), eq(spaces.status, "active")));
+  const lowered = wanted.toLowerCase();
+  const match =
+    active.find((space) => space.id === wanted) ??
+    active.find((space) => space.slug?.toLowerCase() === lowered) ??
+    active.find((space) => space.name?.toLowerCase() === lowered);
+  if (!match) {
+    const catalog = active
+      .map(
+        (space) =>
+          `${space.name} (slug: ${space.slug ?? "-"}, id: ${space.id})`,
+      )
+      .join("; ");
+    // GraphQLError (not bare Error) so Yoga doesn't mask it.
     throw new GraphQLError(
-      `Automation Space '${spaceId}' is not active or does not belong to this tenant — pass an active Space's UUID.`,
+      `Automation Space '${wanted}' does not match any active Space in this tenant. ` +
+        (catalog
+          ? `Available Spaces: ${catalog}. Pass one of these ids or slugs.`
+          : "This tenant has no active Spaces — create one first."),
       { extensions: { code: "BAD_USER_INPUT" } },
     );
   }
-  return space.id;
+  return match.id;
 }
 
 async function loadVersion(id: string) {
