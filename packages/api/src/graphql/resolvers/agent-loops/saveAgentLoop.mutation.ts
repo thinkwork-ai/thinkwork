@@ -67,7 +67,19 @@ export async function saveAgentLoop(
   ctx: GraphQLContext,
 ): Promise<unknown> {
   const input = args.input;
-  const normalized = await normalizeSpecs(input);
+  let normalized: NormalizedAgentLoopSpecs;
+  try {
+    normalized = await normalizeSpecs(input);
+  } catch (err) {
+    if (err instanceof GraphQLError) throw err;
+    // Contract validation throws bare Errors, which Yoga masks to
+    // "Unexpected error." — useless to the web editor and fatal to
+    // conversational callers that need the message to self-correct
+    // (THINK-246). Spec-shape problems are user input by definition.
+    throw new GraphQLError(err instanceof Error ? err.message : String(err), {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
   const actorId = await resolveCallerUserId(ctx);
 
   // THINK-227 U11 (KTD10): role-split write access — admins keep general

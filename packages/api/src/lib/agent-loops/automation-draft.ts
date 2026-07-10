@@ -67,12 +67,34 @@ export function promptFirstDraftNeedsDefaultWorker(input: {
   );
 }
 
+/**
+ * goalSpec is a legacy contract input (target_spec is authoritative for
+ * dispatch since THINK-159), but normalizeGoalSpec still requires a
+ * non-empty completionCriteria. The web editor sends `[]` (it has no
+ * criteria surface), so an un-backfilled draft dies at save time —
+ * observed live on TEI (THINK-246): editing a delivery recipient failed
+ * with a masked "Unexpected error". Backfill the runtime-inferred
+ * criterion whenever criteria are absent, prompt-first or not.
+ */
+function withInferredCompletionCriteria(
+  goalSpec: Partial<GoalSpec> & JsonRecord,
+): Partial<GoalSpec> & JsonRecord {
+  const criteria = stringArray(
+    goalSpec.completionCriteria ?? goalSpec.completion_criteria,
+  );
+  if (criteria.length > 0) return goalSpec;
+  return {
+    ...goalSpec,
+    completionCriteria: [RUNTIME_INFERRED_COMPLETION_CRITERION],
+  };
+}
+
 export function normalizeAutomationDraft(
   input: AutomationDraftInput,
 ): NormalizedAutomationDraft {
   if (!isPromptFirstAutomationDraft(input.sourceMetadata)) {
     return {
-      goalSpec: input.goalSpec,
+      goalSpec: withInferredCompletionCriteria(input.goalSpec),
       workerSpec: input.workerSpec,
       judgeSpec: input.judgeSpec,
       sourceMetadata: input.sourceMetadata,
