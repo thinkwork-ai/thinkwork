@@ -75,7 +75,7 @@ describe("normalizeAutomationDraft", () => {
     expect(normalized.sourceMetadata.workerInference).toBeUndefined();
   });
 
-  it("does not normalize advanced drafts implicitly", () => {
+  it("does not run goal/worker inference for advanced drafts — but still backfills empty completion criteria", () => {
     const input = {
       goalSpec: { objective: "Advanced loop", completionCriteria: [] },
       workerSpec: { type: "agent", id: "", toolHints: [], config: {} },
@@ -83,7 +83,40 @@ describe("normalizeAutomationDraft", () => {
       sourceMetadata: { createdFrom: "settings.automations.advanced" },
     };
 
-    expect(normalizeAutomationDraft(input)).toEqual(input);
+    expect(normalizeAutomationDraft(input)).toEqual({
+      ...input,
+      goalSpec: {
+        objective: "Advanced loop",
+        completionCriteria: [RUNTIME_INFERRED_COMPLETION_CRITERION],
+      },
+    });
     expect(promptFirstDraftNeedsDefaultWorker(input)).toBe(false);
+  });
+
+  // THINK-246: the web editor sends completionCriteria: [] (it has no
+  // criteria surface) with createdFrom "settings.automations" — without the
+  // backfill, normalizeGoalSpec kills every web save with a masked error.
+  it("backfills empty completion criteria for web-editor drafts", () => {
+    const input = {
+      goalSpec: { objective: "Refresh the report", completionCriteria: [] },
+      workerSpec: { type: "agent", id: "agent-1", toolHints: [], config: {} },
+      judgeSpec: {},
+      sourceMetadata: { createdFrom: "settings.automations" },
+    };
+    const normalized = normalizeAutomationDraft(input);
+    expect(normalized.goalSpec.completionCriteria).toEqual([
+      RUNTIME_INFERRED_COMPLETION_CRITERION,
+    ]);
+    // Explicit criteria pass through untouched.
+    const explicit = normalizeAutomationDraft({
+      ...input,
+      goalSpec: {
+        objective: "Refresh the report",
+        completionCriteria: ["The edition shipped."],
+      },
+    });
+    expect(explicit.goalSpec.completionCriteria).toEqual([
+      "The edition shipped.",
+    ]);
   });
 });
