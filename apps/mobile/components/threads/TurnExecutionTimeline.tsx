@@ -15,6 +15,7 @@ type TimelineEvent = {
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   costUsd?: number;
   requestId?: string;
   inputPreview?: string;
@@ -105,6 +106,8 @@ function buildTimelineFromUsage(
   inputTokens?: number,
   outputTokens?: number,
   totalCost?: number | null,
+  cacheReadTokens?: number,
+  cacheWriteTokens?: number,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -120,6 +123,8 @@ function buildTimelineFromUsage(
         : "LLM",
       inputTokens: inputTokens || 0,
       outputTokens: outputTokens || 0,
+      cacheReadTokens: cacheReadTokens || 0,
+      cacheWriteTokens: cacheWriteTokens || 0,
       costUsd: totalCost || 0,
       toolUses: toolInvocations.map((ti: any) => ti.tool_name).filter(Boolean),
     });
@@ -355,6 +360,8 @@ export function TurnExecutionTimeline({
           Number(usage?.input_tokens || usage?.inputTokens || 0),
           Number(usage?.output_tokens || usage?.outputTokens || 0),
           turn.totalCost || 0,
+          Number(usage?.cached_read_tokens || usage?.cachedReadTokens || 0),
+          Number(usage?.cached_write_tokens || usage?.cachedWriteTokens || 0),
         );
 
   if (events.length === 0) {
@@ -384,6 +391,17 @@ export function TurnExecutionTimeline({
           0,
         )
       : Number(usage?.output_tokens || usage?.outputTokens || 0);
+  const totalCacheReadTokens =
+    invocations.length > 0
+      ? invocations.reduce(
+          (sum: number, inv: any) => sum + (inv.cacheReadTokenCount || 0),
+          0,
+        )
+      : Number(usage?.cached_read_tokens || usage?.cachedReadTokens || 0);
+  const totalCacheWriteTokens =
+    invocations.length > 0
+      ? 0
+      : Number(usage?.cached_write_tokens || usage?.cachedWriteTokens || 0);
 
   const branches = buildBranches(events);
   const hasBranches = branches.length > 0;
@@ -415,6 +433,14 @@ export function TurnExecutionTimeline({
         Execution ({events.length} steps) · {formatTokens(totalInputTokens)} in
         + {formatTokens(totalOutputTokens)} out · {formatCost(totalCost)}
       </Muted>
+      {totalCacheReadTokens > 0 || totalCacheWriteTokens > 0 ? (
+        <Muted className="text-[10px] uppercase tracking-wider">
+          Cache · {formatTokens(totalCacheReadTokens)} read
+          {totalCacheWriteTokens > 0
+            ? ` + ${formatTokens(totalCacheWriteTokens)} write`
+            : ""}
+        </Muted>
+      ) : null}
 
       <View style={{ position: "relative", paddingLeft: contentPadding }}>
         <Svg
@@ -545,6 +571,16 @@ export function TurnExecutionTimeline({
           const detailParts: string[] = [];
           if (event.type === "llm") {
             detailParts.push(`Request: ${event.requestId || "unknown"}`);
+            if (event.cacheReadTokens || event.cacheWriteTokens) {
+              const cacheParts: string[] = [];
+              if (event.cacheReadTokens)
+                cacheParts.push(`${formatTokens(event.cacheReadTokens)} read`);
+              if (event.cacheWriteTokens)
+                cacheParts.push(
+                  `${formatTokens(event.cacheWriteTokens)} write`,
+                );
+              detailParts.push(`Cache: ${cacheParts.join(" · ")}`);
+            }
             if (event.inputPreview)
               detailParts.push(`INPUT\n\n${event.inputPreview}`);
             if (event.outputPreview)

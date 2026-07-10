@@ -67,6 +67,13 @@ variable "billing_export_bucket_name" {
   default     = ""
 }
 
+variable "cost_alert_emails" {
+  description = "Email endpoints subscribed to the cost-alerts SNS topic (drift + reconciler-health alarms, THINK-245). Empty list creates the topic with no subscriptions."
+  type        = list(string)
+  default     = []
+  sensitive   = true
+}
+
 variable "billing_export_manifest_key" {
   description = "Optional S3 key for the latest AWS billing export manifest to import on the scheduled bill reconciler run."
   type        = string

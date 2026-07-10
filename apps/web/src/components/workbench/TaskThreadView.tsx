@@ -5287,6 +5287,9 @@ function agentProfileActionRow(
   const cached = numberValue(
     agentProfileField(run, "cachedReadTokens", "cached_read_tokens"),
   );
+  const cachedWrite = numberValue(
+    agentProfileField(run, "cachedWriteTokens", "cached_write_tokens"),
+  );
   const cost = numberValue(agentProfileField(run, "costUsd", "cost_usd"));
   const duration = numberValue(
     agentProfileField(run, "durationMs", "duration_ms"),
@@ -5311,9 +5314,7 @@ function agentProfileActionRow(
     model ? `Model: ${shortenModelName(model)}` : null,
     input == null && output == null
       ? null
-      : `Tokens: ${formatCount(input ?? 0)} in / ${formatCount(output ?? 0)} out${
-          cached && cached > 0 ? ` (${formatCount(cached)} cached)` : ""
-        }`,
+      : `Tokens: ${formatCount(input ?? 0)} in / ${formatCount(output ?? 0)} out${cachedSuffix(cached, cachedWrite)}`,
     cost == null ? null : `Cost: ${formatUsd(cost)}`,
     duration == null ? null : `Duration: ${formatDuration(duration)}`,
     status ? `Status: ${status.replace(/_/g, " ")}` : null,
@@ -5867,6 +5868,12 @@ function toolModelRoutingLines(record: Record<string, unknown>) {
       routing.cached_read_tokens ??
       routing.cacheReadTokens,
   );
+  const cachedWrite = numberValue(
+    record.cached_write_tokens ??
+      record.cacheWriteTokens ??
+      routing.cached_write_tokens ??
+      routing.cacheWriteTokens,
+  );
   const status =
     stringValue(record.model_routing_status) ||
     stringValue(record.modelRoutingStatus) ||
@@ -5883,9 +5890,7 @@ function toolModelRoutingLines(record: Record<string, unknown>) {
   const tokenLine =
     input == null && output == null
       ? "Tokens: unavailable"
-      : `Tokens: ${formatCount(input ?? 0)} in / ${formatCount(output ?? 0)} out${
-          cached && cached > 0 ? ` (${formatCount(cached)} cached)` : ""
-        }`;
+      : `Tokens: ${formatCount(input ?? 0)} in / ${formatCount(output ?? 0)} out${cachedSuffix(cached, cachedWrite)}`;
   const lines = [
     `Model: ${model ? shortenModelName(model) : "not routed"}`,
     tokenLine,
@@ -5903,6 +5908,23 @@ function toolModelRoutingLines(record: Record<string, unknown>) {
 function numberValue(value: unknown): number | null {
   const num = Number(value);
   return Number.isFinite(num) && num >= 0 ? num : null;
+}
+
+/**
+ * Parenthetical prompt-cache suffix for a token line. Cache activity is
+ * platform behavior; legacy events with no cache counts render nothing.
+ */
+function cachedSuffix(
+  cachedRead: number | null,
+  cachedWrite: number | null,
+): string {
+  const read = cachedRead ?? 0;
+  const write = cachedWrite ?? 0;
+  if (read <= 0 && write <= 0) return "";
+  const parts: string[] = [];
+  if (read > 0) parts.push(`${formatCount(read)} cache read`);
+  if (write > 0) parts.push(`${formatCount(write)} cache write`);
+  return ` (${parts.join(", ")})`;
 }
 
 function shortenModelName(model: string) {

@@ -20,7 +20,7 @@
  * application steps for the aggregation-specific fields.
  */
 
-import { invokeClaudeJson } from "./bedrock.js";
+import { invokeClaudeJson, type BedrockCostContext } from "./bedrock.js";
 import { describeAllPageTypes } from "./templates.js";
 import { validatePlannerResult, type PlannerResult } from "./planner.js";
 import type {
@@ -255,12 +255,17 @@ export function buildAggregationUserPrompt(batch: AggregationBatch): string {
  */
 export async function runAggregationPlanner(
   batch: AggregationBatch,
-  opts: { signal?: AbortSignal; modelId?: string } = {},
+  opts: {
+    signal?: AbortSignal;
+    modelId?: string;
+    costContext?: BedrockCostContext;
+  } = {},
 ): Promise<PlannerResult> {
   const user = buildAggregationUserPrompt(batch);
   const resp = await invokeClaudeJson<Record<string, unknown>>({
     system: AGGREGATION_SYSTEM,
     user,
+    costContext: opts.costContext,
     // Aggregation output tends to be smaller than the leaf planner's, but
     // section promotions carry a full newPage seed — leave comfortable
     // headroom.

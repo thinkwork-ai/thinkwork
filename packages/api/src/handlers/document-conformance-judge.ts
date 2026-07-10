@@ -63,6 +63,7 @@ export interface ConformanceJudgeSweepDeps {
     modelId: string;
     digestMarkdown: string;
     manifestSnapshot: ConformanceManifestSnapshot;
+    costContext?: { tenantId: string; requestId: string };
   }) => Promise<ConformanceJudgeVerdict>;
   markComplete: (
     id: string,
@@ -187,6 +188,14 @@ export async function sweepConformanceReports(
         modelId,
         digestMarkdown,
         manifestSnapshot: report.manifestSnapshot,
+        // THINK-245 U6: per-tenant cost attribution. The attempt count is
+        // part of the idempotency key so a retried report (each attempt is
+        // real Bedrock spend) isn't conflict-dropped by (request_id,
+        // event_type) uniqueness.
+        costContext: {
+          tenantId: report.tenantId,
+          requestId: `judge:${report.artifactId}:${report.digestRevision}:a${report.judgeAttempts}`,
+        },
       });
       await deps.markComplete(report.id, { model: modelId, findings });
       result.completed += 1;

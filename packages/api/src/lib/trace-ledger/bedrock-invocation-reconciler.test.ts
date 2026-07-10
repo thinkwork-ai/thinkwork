@@ -167,6 +167,101 @@ describe("reconcileInvocationRecords", () => {
     });
   });
 
+  // THINK-245 U5 — the U4 identity shapes must produce exact matches so
+  // agent-loop windows never degrade to ambiguous model+time (AE2).
+  it("matches all calls of a multi-invocation agent loop by request id (AE2)", () => {
+    const requestIds = Array.from({ length: 8 }, (_, i) => `req-${i}`);
+    const runtime: RuntimeModelUsageObservation = {
+      ...runtimeBase,
+      bedrockRequestIds: requestIds,
+      runtimeInputTokens: 96,
+      runtimeOutputTokens: 64,
+      runtimeAmountUsd: 0.001248,
+    };
+    const providers = requestIds.map((id, i) =>
+      provider({
+        requestId: id,
+        timestamp: `2026-06-25T15:00:0${i}.000Z`,
+      }),
+    );
+
+    const [decision] = reconcileInvocationRecords([runtime], providers);
+
+    expect(decision.state).toBe("invocation-reconciled");
+    expect(decision.confidence).toBe("request-id");
+    expect(decision.reason).not.toBe("ambiguous-provider-logs");
+  });
+
+  it("matches by requestMetadata (score-90 path) when request ids are absent", () => {
+    const [decision] = reconcileInvocationRecords(
+      [{ ...runtimeBase, bedrockRequestIds: [], requestId: "other" }],
+      [
+        provider({
+          requestId: "provider-a",
+          requestMetadata: { thread_turn_id: "turn-1", trace_id: "trace-1" },
+        }),
+        provider({ requestId: "provider-b" }),
+      ],
+    );
+
+    expect(decision.state).toBe("invocation-reconciled");
+    expect(decision.confidence).toBe("request-metadata");
+  });
+
+  it("legacy evidence without identity still degrades to model+time (no regression)", () => {
+    const [decision] = reconcileInvocationRecords(
+      [{ ...runtimeBase, bedrockRequestIds: [], requestId: "other" }],
+      [provider({ requestId: "provider-solo" })],
+    );
+
+    expect(decision.state).toBe("invocation-reconciled");
+    expect(decision.confidence).toBe("model-time");
+  });
+
+  it("prices cache tokens into the provider amount (R6)", () => {
+    const parsed = parseBedrockInvocationLogEvent({
+      eventId: "e",
+      logStreamName: "s",
+      timestamp: 1_782_405_600_000,
+      message: JSON.stringify({
+        requestId: "req-cache",
+        operation: "Converse",
+        modelId: "us.anthropic.claude-sonnet-4-6-v1:0",
+        input: {
+          inputTokenCount: 10_000,
+          cacheReadInputTokenCount: 200_000,
+          cacheWriteInputTokenCount: 50_000,
+          inputBodyJson: { messages: [] },
+        },
+        output: { outputTokenCount: 2_000, outputBodyJson: {} },
+      }),
+    });
+
+    // 10k*3 + 2k*15 + 200k*0.30 + 50k*3.75 per million = 0.3075 (AE1 rates)
+    expect(parsed?.costUsd).toBeCloseTo(0.3075, 6);
+  });
+
+  it("prices kimi cache tokens at zero (no caching on Bedrock)", () => {
+    const parsed = parseBedrockInvocationLogEvent({
+      eventId: "e",
+      logStreamName: "s",
+      timestamp: 1_782_405_600_000,
+      message: JSON.stringify({
+        requestId: "req-kimi",
+        operation: "Converse",
+        modelId: "moonshotai.kimi-k2.5",
+        input: {
+          inputTokenCount: 1_000_000,
+          cacheReadInputTokenCount: 500_000,
+          inputBodyJson: { messages: [] },
+        },
+        output: { outputTokenCount: 0, outputBodyJson: {} },
+      }),
+    });
+
+    expect(parsed?.costUsd).toBeCloseTo(0.6, 6);
+  });
+
   it("annotates resolver-facing provider records with reconciliation status", () => {
     const record = provider();
     const decisions = reconcileInvocationRecords([runtimeBase], [record]);

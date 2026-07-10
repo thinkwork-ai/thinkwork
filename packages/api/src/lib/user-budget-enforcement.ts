@@ -196,11 +196,14 @@ export async function getUserBudgetStatus(args: {
   const [spend] = await database
     .select({
       totalUsd: sql<number>`COALESCE(SUM(${costEvents.amount_usd}), 0)::float`,
-      estimatedUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'runtime-reported' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
-      invocationReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'invocation-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
-      billReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'bill-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
-      mismatchUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'mismatch' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
-      unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      // THINK-245 R11 — budget grace: enforcement_exempt rows (retroactively
+      // repriced/backfilled) are excluded from the enforced state buckets but
+      // stay inside totalUsd so display totals show true spend.
+      estimatedUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'runtime-reported' AND NOT ${costEvents.enforcement_exempt} THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      invocationReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'invocation-reconciled' AND NOT ${costEvents.enforcement_exempt} THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      billReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'bill-reconciled' AND NOT ${costEvents.enforcement_exempt} THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      mismatchUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'mismatch' AND NOT ${costEvents.enforcement_exempt} THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' AND NOT ${costEvents.enforcement_exempt} THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
     })
     .from(costEvents)
     .where(

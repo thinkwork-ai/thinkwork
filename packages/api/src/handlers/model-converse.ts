@@ -39,6 +39,7 @@ import {
 } from "../lib/response.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
+import { recordCostEvents } from "../lib/cost-recording.js";
 import {
   ModelResolutionError,
   parseConverseOutput,
@@ -127,6 +128,7 @@ export async function handler(
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), callTimeoutMs());
+  const startedAt = Date.now();
   try {
     const output = await getClient().send(
       new ConverseCommand({
@@ -144,6 +146,29 @@ export async function handler(
 
     const parsed = parseConverseOutput(output);
     const response: ProxyResponse = { ...parsed, modelId };
+
+    // THINK-245 U6: per-tenant cost event for this proxy call. The API
+    // Gateway requestId is unique per HTTP call — each call is exactly one
+    // billable Converse invocation, so it's a sound idempotency key.
+    // Best-effort: a recording failure must never fail the user's request.
+    try {
+      await recordCostEvents({
+        tenantId,
+        userId: userRow.id,
+        requestId: `model-converse:${event.requestContext.requestId}`,
+        model: modelId,
+        inputTokens: response.usage.inputTokens,
+        outputTokens: response.usage.outputTokens,
+        // Converse usage.inputTokens EXCLUDES cache tokens; pass them through.
+        cachedReadTokens: output.usage?.cacheReadInputTokens ?? 0,
+        cachedWriteTokens: output.usage?.cacheWriteInputTokens ?? 0,
+        durationMs: Date.now() - startedAt,
+        recordCompute: false,
+        source: "model_converse",
+      });
+    } catch (err) {
+      console.error("[model-converse] cost recording failed:", err);
+    }
 
     console.info(
       "[model-converse]",

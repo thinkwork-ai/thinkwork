@@ -4097,7 +4097,9 @@ describe("TaskThreadView", () => {
     expect(rows[1]?.title).toBe("Agent Profile: Research");
     expect(rows[1]?.detail).toContain("Profile: #research");
     expect(rows[1]?.detail).toContain("Model: claude-3-5-haiku-20241022");
-    expect(rows[1]?.detail).toContain("Tokens: 1.2K in / 321 out (400 cached)");
+    expect(rows[1]?.detail).toContain(
+      "Tokens: 1.2K in / 321 out (400 cache read)",
+    );
     expect(rows[1]?.detail).toContain("Cost: $0.0023");
     expect(rows[1]?.detail).toContain("Duration: 12s");
     expect(rows[1]?.detail).toContain("Status: completed");

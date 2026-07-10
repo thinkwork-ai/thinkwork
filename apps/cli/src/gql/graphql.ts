@@ -31,7 +31,11 @@ export type AccountUsage = {
 export type AccountUsageDay = {
   __typename?: 'AccountUsageDay';
   billReconciledUsd: Scalars['Float']['output'];
+  cacheUsd: Scalars['Float']['output'];
+  cachedReadTokens: Scalars['Int']['output'];
+  cachedWriteTokens: Scalars['Int']['output'];
   computeUsd: Scalars['Float']['output'];
+  conversationUsd: Scalars['Float']['output'];
   day: Scalars['String']['output'];
   enforcedUsd: Scalars['Float']['output'];
   estimatedUsd: Scalars['Float']['output'];
@@ -42,6 +46,7 @@ export type AccountUsageDay = {
   minimumReconciliationState: Scalars['String']['output'];
   mismatchUsd: Scalars['Float']['output'];
   outputTokens: Scalars['Int']['output'];
+  systemUsd: Scalars['Float']['output'];
   toolsUsd: Scalars['Float']['output'];
   totalUsd: Scalars['Float']['output'];
   unreconciledUsd: Scalars['Float']['output'];
@@ -50,6 +55,9 @@ export type AccountUsageDay = {
 export type AccountUsageModel = {
   __typename?: 'AccountUsageModel';
   billReconciledUsd: Scalars['Float']['output'];
+  cacheUsd: Scalars['Float']['output'];
+  cachedReadTokens: Scalars['Int']['output'];
+  cachedWriteTokens: Scalars['Int']['output'];
   displayName: Scalars['String']['output'];
   enforcedUsd: Scalars['Float']['output'];
   estimatedUsd: Scalars['Float']['output'];
@@ -67,7 +75,11 @@ export type AccountUsageModel = {
 export type AccountUsageSummary = {
   __typename?: 'AccountUsageSummary';
   billReconciledUsd: Scalars['Float']['output'];
+  cacheUsd: Scalars['Float']['output'];
+  cachedReadTokens: Scalars['Int']['output'];
+  cachedWriteTokens: Scalars['Int']['output'];
   computeUsd: Scalars['Float']['output'];
+  conversationUsd: Scalars['Float']['output'];
   enforcedUsd: Scalars['Float']['output'];
   estimatedUsd: Scalars['Float']['output'];
   eventCount: Scalars['Int']['output'];
@@ -77,6 +89,7 @@ export type AccountUsageSummary = {
   minimumReconciliationState: Scalars['String']['output'];
   mismatchUsd: Scalars['Float']['output'];
   outputTokens: Scalars['Int']['output'];
+  systemUsd: Scalars['Float']['output'];
   toolsUsd: Scalars['Float']['output'];
   totalUsd: Scalars['Float']['output'];
   unreconciledUsd: Scalars['Float']['output'];
@@ -1466,8 +1479,10 @@ export type CostEvent = {
   billingPeriodStart?: Maybe<Scalars['AWSDateTime']['output']>;
   billingServiceCode?: Maybe<Scalars['String']['output']>;
   cachedReadTokens?: Maybe<Scalars['Int']['output']>;
+  cachedWriteTokens?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   durationMs?: Maybe<Scalars['Int']['output']>;
+  enforcementExempt?: Maybe<Scalars['Boolean']['output']>;
   eventType: Scalars['String']['output'];
   id: Scalars['ID']['output'];
   inputTokens?: Maybe<Scalars['Int']['output']>;
@@ -1501,7 +1516,9 @@ export type CostRecordedEvent = {
 export type CostSummary = {
   __typename?: 'CostSummary';
   billReconciledUsd: Scalars['Float']['output'];
+  cacheUsd: Scalars['Float']['output'];
   computeUsd: Scalars['Float']['output'];
+  conversationUsd: Scalars['Float']['output'];
   enforcedUsd: Scalars['Float']['output'];
   estimatedUsd: Scalars['Float']['output'];
   evalUsd?: Maybe<Scalars['Float']['output']>;
@@ -1512,7 +1529,10 @@ export type CostSummary = {
   mismatchUsd: Scalars['Float']['output'];
   periodEnd: Scalars['AWSDateTime']['output'];
   periodStart: Scalars['AWSDateTime']['output'];
+  systemUsd: Scalars['Float']['output'];
   toolsUsd: Scalars['Float']['output'];
+  totalCachedReadTokens: Scalars['Int']['output'];
+  totalCachedWriteTokens: Scalars['Int']['output'];
   totalInputTokens: Scalars['Int']['output'];
   totalOutputTokens: Scalars['Int']['output'];
   totalUsd: Scalars['Float']['output'];

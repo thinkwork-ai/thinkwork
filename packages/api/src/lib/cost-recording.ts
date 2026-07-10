@@ -360,6 +360,9 @@ export async function checkBudgetAndPause(
         and(
           eq(costEvents.agent_id, agentId),
           gte(costEvents.created_at, startOfMonth),
+          // THINK-245 R11 — graced (retroactively repriced) rows never
+          // count toward enforcement.
+          eq(costEvents.enforcement_exempt, false),
         ),
       );
 
@@ -403,6 +406,9 @@ export async function checkBudgetAndPause(
         and(
           eq(costEvents.tenant_id, tenantId),
           gte(costEvents.created_at, startOfMonth),
+          // THINK-245 R11 — graced (retroactively repriced) rows never
+          // count toward enforcement.
+          eq(costEvents.enforcement_exempt, false),
         ),
       );
 

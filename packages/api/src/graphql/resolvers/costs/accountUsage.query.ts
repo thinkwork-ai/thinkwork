@@ -12,6 +12,10 @@ import {
   tenantModelCatalog,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { computeCacheUsdByModel } from "./cache-usd.js";
+// System-source IN list is baked into the SQL templates below (tests mock
+// the drizzle `sql` helper, so sql.raw is unavailable). Keep in sync with
+// SYSTEM_COST_SOURCES in lib/cost-sources.ts.
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import {
   budgetMinimumReconciliationStateFromEnv,
@@ -38,6 +42,10 @@ type UsageSummaryRow = {
   unreconciledUsd: number | string | null;
   inputTokens: number | string | null;
   outputTokens: number | string | null;
+  cachedReadTokens: number | string | null;
+  cachedWriteTokens: number | string | null;
+  cacheUsd?: number;
+  systemUsd: number | string | null;
   eventCount: number | string | null;
 };
 
@@ -54,6 +62,8 @@ type UsageModelRow = {
   unreconciledUsd: number | string | null;
   inputTokens: number | string | null;
   outputTokens: number | string | null;
+  cachedReadTokens: number | string | null;
+  cachedWriteTokens: number | string | null;
 };
 
 const DEFAULT_DAYS = 90;
@@ -97,6 +107,11 @@ function emptySummary(
     minimumReconciliationState,
     inputTokens: 0,
     outputTokens: 0,
+    cachedReadTokens: 0,
+    cachedWriteTokens: 0,
+    cacheUsd: 0,
+    conversationUsd: 0,
+    systemUsd: 0,
     eventCount: 0,
   };
 }
@@ -131,6 +146,20 @@ function mapSummary(
     minimumReconciliationState,
     inputTokens: toInt(row.inputTokens),
     outputTokens: toInt(row.outputTokens),
+    cachedReadTokens: toInt(row.cachedReadTokens),
+    cachedWriteTokens: toInt(row.cachedWriteTokens),
+    cacheUsd: computeCacheUsdByModel([
+      {
+        model: null,
+        cachedReadTokens: row.cachedReadTokens,
+        cachedWriteTokens: row.cachedWriteTokens,
+      },
+    ]),
+    conversationUsd:
+      Math.round(
+        (toNumber(row.totalUsd) - toNumber(row.systemUsd)) * 1_000_000,
+      ) / 1_000_000,
+    systemUsd: toNumber(row.systemUsd),
     eventCount: toInt(row.eventCount),
   };
 }
@@ -180,6 +209,9 @@ export const accountUsage = async (
       unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       inputTokens: sql<number>`COALESCE(SUM(${costEvents.input_tokens}), 0)::int`,
       outputTokens: sql<number>`COALESCE(SUM(${costEvents.output_tokens}), 0)::int`,
+      cachedReadTokens: sql<number>`COALESCE(SUM(${costEvents.cached_read_tokens}), 0)::int`,
+      cachedWriteTokens: sql<number>`COALESCE(SUM(${costEvents.cached_write_tokens}), 0)::int`,
+      systemUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.metadata} ->> 'source' IN ('wiki_compile', 'conformance_judge', 'kg_extraction', 'model_converse', 'idle_learning', 'dreaming', 'backfill_daily_adjustment') THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       eventCount: sql<number>`COUNT(*)::int`,
     })
     .from(costEvents)
@@ -200,6 +232,9 @@ export const accountUsage = async (
       unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       inputTokens: sql<number>`COALESCE(SUM(${costEvents.input_tokens}), 0)::int`,
       outputTokens: sql<number>`COALESCE(SUM(${costEvents.output_tokens}), 0)::int`,
+      cachedReadTokens: sql<number>`COALESCE(SUM(${costEvents.cached_read_tokens}), 0)::int`,
+      cachedWriteTokens: sql<number>`COALESCE(SUM(${costEvents.cached_write_tokens}), 0)::int`,
+      systemUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.metadata} ->> 'source' IN ('wiki_compile', 'conformance_judge', 'kg_extraction', 'model_converse', 'idle_learning', 'dreaming', 'backfill_daily_adjustment') THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       eventCount: sql<number>`COUNT(*)::int`,
     })
     .from(costEvents)
@@ -220,6 +255,8 @@ export const accountUsage = async (
       unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       inputTokens: sql<number>`COALESCE(SUM(${costEvents.input_tokens}), 0)::int`,
       outputTokens: sql<number>`COALESCE(SUM(${costEvents.output_tokens}), 0)::int`,
+      cachedReadTokens: sql<number>`COALESCE(SUM(${costEvents.cached_read_tokens}), 0)::int`,
+      cachedWriteTokens: sql<number>`COALESCE(SUM(${costEvents.cached_write_tokens}), 0)::int`,
     })
     .from(costEvents)
     .leftJoin(
@@ -241,6 +278,9 @@ export const accountUsage = async (
     summaryRow as UsageSummaryRow | undefined,
     minimumReconciliationState,
   );
+  // Summary-level cache dollars use per-model rates from the model rows
+  // (mapSummary's single-row estimate can't see the model mix).
+  summary.cacheUsd = computeCacheUsdByModel(modelRows as UsageModelRow[]);
   const llmUsd = summary.llmUsd;
 
   return {
@@ -281,6 +321,9 @@ export const accountUsage = async (
           minimumReconciliationState,
           inputTokens: toInt(row.inputTokens),
           outputTokens: toInt(row.outputTokens),
+          cachedReadTokens: toInt(row.cachedReadTokens),
+          cachedWriteTokens: toInt(row.cachedWriteTokens),
+          cacheUsd: computeCacheUsdByModel([row]),
           usageShare: llmUsd > 0 ? totalUsd / llmUsd : 0,
         };
       })

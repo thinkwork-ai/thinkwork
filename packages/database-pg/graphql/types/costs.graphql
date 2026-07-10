@@ -13,6 +13,8 @@ type CostEvent {
   inputTokens: Int
   outputTokens: Int
   cachedReadTokens: Int
+  cachedWriteTokens: Int
+  enforcementExempt: Boolean
   durationMs: Int
   traceEventId: ID
   reconciliationState: String
@@ -43,6 +45,11 @@ type CostSummary {
   evalUsd: Float
   totalInputTokens: Int!
   totalOutputTokens: Int!
+  totalCachedReadTokens: Int!
+  totalCachedWriteTokens: Int!
+  cacheUsd: Float!
+  conversationUsd: Float!
+  systemUsd: Float!
   eventCount: Int!
   periodStart: AWSDateTime!
   periodEnd: AWSDateTime!
@@ -94,6 +101,11 @@ type AccountUsageSummary {
   toolsUsd: Float!
   inputTokens: Int!
   outputTokens: Int!
+  cachedReadTokens: Int!
+  cachedWriteTokens: Int!
+  cacheUsd: Float!
+  conversationUsd: Float!
+  systemUsd: Float!
   eventCount: Int!
 }
 
@@ -112,6 +124,11 @@ type AccountUsageDay {
   toolsUsd: Float!
   inputTokens: Int!
   outputTokens: Int!
+  cachedReadTokens: Int!
+  cachedWriteTokens: Int!
+  cacheUsd: Float!
+  conversationUsd: Float!
+  systemUsd: Float!
   eventCount: Int!
 }
 
@@ -128,6 +145,9 @@ type AccountUsageModel {
   minimumReconciliationState: String!
   inputTokens: Int!
   outputTokens: Int!
+  cachedReadTokens: Int!
+  cachedWriteTokens: Int!
+  cacheUsd: Float!
   usageShare: Float!
 }
 

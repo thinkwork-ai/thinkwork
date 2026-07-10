@@ -281,6 +281,14 @@ locals {
         ]
         Resource = "*"
       },
+      # THINK-245 U10 — cost-drift-check compares recorded per-model spend
+      # against Cost Explorer. ce:GetCostAndUsage supports no resource-level
+      # scoping (must be "*").
+      {
+        Effect   = "Allow"
+        Action   = ["ce:GetCostAndUsage"]
+        Resource = "*"
+      },
     ],
     var.plugin_catalog_github_token_secret_arn != "" ? [
       {

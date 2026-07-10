@@ -157,10 +157,13 @@ export async function invokeConformanceJudge(input: {
   modelId: string;
   digestMarkdown: string;
   manifestSnapshot: ConformanceManifestSnapshot;
+  /** THINK-245 U6: when set, the call records a per-tenant cost event. */
+  costContext?: { tenantId: string; requestId: string };
 }): Promise<ConformanceJudgeVerdict> {
   const { BedrockRuntimeClient, ConverseCommand } =
     await import("@aws-sdk/client-bedrock-runtime");
   const client = new BedrockRuntimeClient({ region: REGION });
+  const startedAt = Date.now();
   const resp = await client.send(
     new ConverseCommand({
       modelId: input.modelId,
@@ -174,6 +177,32 @@ export async function invokeConformanceJudge(input: {
       inferenceConfig: { maxTokens: 1024, temperature: 0 },
     }),
   );
+
+  // Cost recording is best-effort — a failure here must never fail the
+  // judge sweep. Converse usage.inputTokens EXCLUDES cache tokens.
+  if (input.costContext) {
+    try {
+      const { recordCostEvents } = await import("../cost-recording.js");
+      await recordCostEvents({
+        tenantId: input.costContext.tenantId,
+        requestId: input.costContext.requestId,
+        model: input.modelId,
+        inputTokens: resp.usage?.inputTokens ?? 0,
+        outputTokens: resp.usage?.outputTokens ?? 0,
+        cachedReadTokens: resp.usage?.cacheReadInputTokens ?? 0,
+        cachedWriteTokens: resp.usage?.cacheWriteInputTokens ?? 0,
+        durationMs: Date.now() - startedAt,
+        recordCompute: false,
+        source: "conformance_judge",
+      });
+    } catch (err) {
+      console.error(
+        `[conformance-judge] cost recording failed (request=${input.costContext.requestId}):`,
+        err,
+      );
+    }
+  }
+
   const text = resp.output?.message?.content?.[0]?.text || "";
   return parseConformanceJudgeVerdict(text);
 }

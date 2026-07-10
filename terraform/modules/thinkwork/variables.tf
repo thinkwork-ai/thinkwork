@@ -869,6 +869,13 @@ variable "billing_export_manifest_key" {
   default     = ""
 }
 
+variable "cost_alert_emails" {
+  description = "Email endpoints subscribed to the cost-alerts SNS topic (drift + reconciler-health alarms, THINK-245)."
+  type        = list(string)
+  default     = []
+  sensitive   = true
+}
+
 variable "billing_reconciliation_tolerance_usd" {
   description = "Absolute USD tolerance used when comparing ThinkWork projected aggregate spend to AWS billing export spend."
   type        = number

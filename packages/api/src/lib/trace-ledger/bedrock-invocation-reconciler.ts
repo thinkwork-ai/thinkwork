@@ -272,6 +272,28 @@ export function reconcileInvocationRecords(
     const topScore = candidates[0].score;
     const top = candidates.filter((candidate) => candidate.score === topScore);
     if (top.length !== 1) {
+      // THINK-245 U5 — identity-matched candidates (request-id/request-
+      // metadata) that tie are not ambiguous: an agent loop makes many
+      // Bedrock calls in one turn and the turn-level cost event is their
+      // SUM. Aggregate identity matches; only model+time ties stay ambiguous.
+      if (topScore >= 90) {
+        const identityMatches = candidates.filter(
+          (candidate) => candidate.score >= 90,
+        );
+        const merged = aggregateProviderRecords(
+          identityMatches.map((candidate) => candidate.record),
+        );
+        const state = hasTokenMismatch(runtime, merged)
+          ? "mismatch"
+          : "invocation-reconciled";
+        return decision(runtime, merged, state, identityMatches[0].confidence, {
+          reason:
+            state === "mismatch"
+              ? "provider-token-mismatch"
+              : identityMatches[0].reason,
+          candidates: identityMatches.map((candidate) => candidate.record),
+        });
+      }
       return decision(runtime, undefined, "unreconciled/error", "none", {
         reason: "ambiguous-provider-logs",
         candidates: top.map((candidate) => candidate.record),
@@ -842,8 +864,8 @@ function metadataMatchesRuntime(
   const metadataValues = new Set(Object.values(record.requestMetadata));
   return Boolean(
     (runtime.traceId && metadataValues.has(runtime.traceId)) ||
-      (runtime.threadTurnId && metadataValues.has(runtime.threadTurnId)) ||
-      (runtime.requestId && metadataValues.has(runtime.requestId)),
+    (runtime.threadTurnId && metadataValues.has(runtime.threadTurnId)) ||
+    (runtime.requestId && metadataValues.has(runtime.requestId)),
   );
 }
 
@@ -893,6 +915,33 @@ function decisionDiagnostic(
   }
   if (decision.reason === "no-provider-log") return "no provider log matched";
   return undefined;
+}
+
+/**
+ * Merge several identity-matched invocation records for one turn into a
+ * single provider view: token counts, cost, and duration sum; identity
+ * fields come from the first (earliest-listed) record. THINK-245 U5 — the
+ * turn-level cost event represents ALL of a turn's Bedrock calls.
+ */
+function aggregateProviderRecords(
+  records: BedrockInvocationLogRecord[],
+): BedrockInvocationLogRecord {
+  if (records.length === 1) return records[0];
+  const [first, ...rest] = records;
+  const merged = { ...first };
+  for (const record of rest) {
+    merged.inputTokenCount += record.inputTokenCount;
+    merged.outputTokenCount += record.outputTokenCount;
+    merged.cacheReadTokenCount += record.cacheReadTokenCount;
+    merged.cacheWriteTokenCount += record.cacheWriteTokenCount;
+    merged.costUsd = roundUsd(merged.costUsd + record.costUsd);
+    if (merged.durationMs != null && record.durationMs != null) {
+      merged.durationMs += record.durationMs;
+    }
+    merged.toolUses = [...merged.toolUses, ...record.toolUses];
+    merged.hasToolResult = merged.hasToolResult || record.hasToolResult;
+  }
+  return merged;
 }
 
 export function shortenModelId(modelId: string): string {

@@ -133,6 +133,8 @@ export async function extractGraphFromPackets(args: {
   signal?: AbortSignal;
   /** Test seam; defaults to the house invokeClaudeJson. */
   invoke?: typeof invokeClaudeJson;
+  /** THINK-245 U6: per-tenant cost attribution, keyed by the ingest run. */
+  costContext?: { tenantId: string; runId: string };
 }): Promise<GraphExtractionRunResult> {
   const invoke = args.invoke ?? invokeClaudeJson;
   const batchSize = kgExtractionBatchSize();
@@ -160,6 +162,13 @@ export async function extractGraphFromPackets(args: {
         ),
         maxTokens: KG_EXTRACTION_MAX_TOKENS,
         signal: args.signal,
+        costContext: args.costContext
+          ? {
+              tenantId: args.costContext.tenantId,
+              requestId: `kg:${args.costContext.runId}:extract:${batchIndex}`,
+              source: "kg_extraction",
+            }
+          : undefined,
       });
       inputTokens += result.inputTokens;
       outputTokens += result.outputTokens;

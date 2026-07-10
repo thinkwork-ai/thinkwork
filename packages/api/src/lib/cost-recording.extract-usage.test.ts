@@ -30,6 +30,7 @@ describe("extractUsage", () => {
       inputTokens: 8968,
       outputTokens: 427,
       cachedReadTokens: 12,
+      cachedWriteTokens: 0,
       model: "moonshotai.kimi-k2.5",
     });
   });
