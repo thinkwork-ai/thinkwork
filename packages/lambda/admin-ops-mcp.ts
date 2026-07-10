@@ -1036,7 +1036,11 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
           instructions: {
             type: "string",
             description:
-              "What the agent should do each run (e.g. 'Refresh the GWO pipeline report from the CRM').",
+              "What the agent should do each run (e.g. 'Refresh the GWO pipeline report from the CRM'). " +
+              "When the automation maintains a document, the instructions MUST tell the agent to emit the " +
+              "report as the FINAL edition of the bound document and then end the turn WITHOUT asking for " +
+              "confirmation — a run that leaves a draft or asks permission never captures the document and " +
+              "never emails. Include what sections/stats to produce so every edition is complete.",
           },
           scheduleExpression: {
             type: "string",
@@ -1051,7 +1055,8 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
           spaceId: {
             type: "string",
             description:
-              "Space UUID the automation (and a created document) lives in — use the current space.",
+              "Space the automation (and a created document) lives in — UUID, slug, or exact name " +
+              "(resolved server-side). Use the current space.",
           },
           enabled: { type: "boolean" },
           documentBinding: {
@@ -1242,8 +1247,7 @@ async function dispatch(
 
       case "tools/call": {
         const params = req.params as
-          | { name?: string; arguments?: Record<string, unknown> }
-          | undefined;
+          { name?: string; arguments?: Record<string, unknown> } | undefined;
         const toolName = params?.name;
         const toolArgs = params?.arguments ?? {};
         if (!toolName) {

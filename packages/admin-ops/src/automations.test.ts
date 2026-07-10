@@ -6,13 +6,24 @@ import {
   validateAutomationSchedule,
 } from "./automations.js";
 
+function jsonResponse(payload: unknown): Response {
+  return new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+const SPACES = {
+  spaces: [{ id: "space-1", name: "General", slug: "general" }],
+};
+
+/** saveAutomation now resolves the Space first — queue the spaces response
+ * ahead of the mutation response(s). */
 function mockGraphql(data: unknown): ReturnType<typeof vi.fn> {
-  return vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ data }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }),
-  );
+  return vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ data: SPACES }))
+    .mockResolvedValue(jsonResponse({ data }));
 }
 
 const SAVED = {
@@ -82,7 +93,7 @@ describe("saveAutomation", () => {
     const saved = await saveAutomation(client, baseInput());
     expect(saved.id).toBe("loop-1");
 
-    const [url, init] = fetchImpl.mock.calls[0];
+    const [url, init] = fetchImpl.mock.calls[1];
     expect(String(url)).toBe("https://api.example.com/graphql");
     const headers = (init as { headers: Record<string, string> }).headers;
     expect(headers["x-principal-id"]).toBe("member-1");
@@ -141,7 +152,7 @@ describe("saveAutomation", () => {
       automationId: "loop-1",
     });
     const body = JSON.parse(
-      (fetchImpl.mock.calls[0][1] as { body: string }).body,
+      (fetchImpl.mock.calls[1][1] as { body: string }).body,
     ) as { variables: { input: { id?: string } } };
     expect(body.variables.input.id).toBe("loop-1");
   });
@@ -179,9 +190,11 @@ describe("saveAutomation", () => {
   });
 
   it("surfaces GraphQL errors (e.g. the U11 refusal) verbatim", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: SPACES }))
+      .mockResolvedValue(
+        jsonResponse({
           errors: [
             {
               message:
@@ -189,9 +202,7 @@ describe("saveAutomation", () => {
             },
           ],
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+      );
     const client = createClient({
       apiUrl: "https://api.example.com",
       authSecret: "s3cret",
@@ -203,11 +214,85 @@ describe("saveAutomation", () => {
   });
 });
 
+describe("saveAutomation space resolution (THINK-246)", () => {
+  function clientWith(fetchImpl: ReturnType<typeof vi.fn>) {
+    return createClient({
+      apiUrl: "https://api.example.com",
+      authSecret: "s3cret",
+      principalId: "member-1",
+      tenantId: "tenant-1",
+      fetchImpl,
+    });
+  }
+
+  it("resolves a Space slug to its UUID before the mutation", async () => {
+    const fetchImpl = mockGraphql(SAVED);
+    await saveAutomation(clientWith(fetchImpl), {
+      ...baseInput(),
+      spaceId: "general",
+    });
+    const body = JSON.parse(
+      (fetchImpl.mock.calls[1][1] as { body: string }).body,
+    ) as { variables: { input: { spaceId: string } } };
+    expect(body.variables.input.spaceId).toBe("space-1");
+  });
+
+  it("resolves a Space name case-insensitively", async () => {
+    const fetchImpl = mockGraphql(SAVED);
+    await saveAutomation(clientWith(fetchImpl), {
+      ...baseInput(),
+      spaceId: "GENERAL",
+    });
+    const body = JSON.parse(
+      (fetchImpl.mock.calls[1][1] as { body: string }).body,
+    ) as { variables: { input: { spaceId: string } } };
+    expect(body.variables.input.spaceId).toBe("space-1");
+  });
+
+  it("resolves documentBinding.spaceId too", async () => {
+    const fetchImpl = mockGraphql(SAVED);
+    await saveAutomation(clientWith(fetchImpl), {
+      ...baseInput(),
+      documentBinding: {
+        mode: "create" as const,
+        genre: "report",
+        title: "Weekly",
+        spaceId: "general",
+      },
+    });
+    const body = JSON.parse(
+      (fetchImpl.mock.calls[1][1] as { body: string }).body,
+    ) as {
+      variables: {
+        input: { targetSpec: { documentBinding: { spaceId: string } } };
+      };
+    };
+    expect(body.variables.input.targetSpec.documentBinding.spaceId).toBe(
+      "space-1",
+    );
+  });
+
+  it("an unknown Space fails BEFORE the mutation and lists the tenant's Spaces", async () => {
+    const fetchImpl = mockGraphql(SAVED);
+    await expect(
+      saveAutomation(clientWith(fetchImpl), {
+        ...baseInput(),
+        spaceId: "marketing",
+      }),
+    ).rejects.toThrow(/does not match any active Space.*General.*space-1/s);
+    // Only the spaces lookup fired — the save never went out.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("deleteAutomation", () => {
   it("POSTs deleteAgentLoop with the automation id", async () => {
-    const fetchImpl = mockGraphql({
-      deleteAgentLoop: { id: "loop-1", ok: true },
-    });
+    // deleteAutomation makes no spaces lookup — plain single-response mock.
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ data: { deleteAgentLoop: { id: "loop-1", ok: true } } }),
+      );
     const client = createClient({
       apiUrl: "https://api.example.com",
       authSecret: "s3cret",

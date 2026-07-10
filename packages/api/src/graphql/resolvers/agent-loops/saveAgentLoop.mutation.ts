@@ -11,6 +11,7 @@ import {
   type TargetSpec,
 } from "@thinkwork/agent-loops-core";
 import { and, desc, eq } from "drizzle-orm";
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { inArray } from "drizzle-orm";
 import {
@@ -386,8 +387,9 @@ function assertAgentThreadTargetHasSpace(
   spaceId: string | null | undefined,
 ): void {
   if (targetSpec.kind === "agent_thread" && !spaceId) {
-    throw new Error(
+    throw new GraphQLError(
       "Agent-thread automations need a Space — pick one or switch to a routine/workflow target.",
+      { extensions: { code: "BAD_USER_INPUT" } },
     );
   }
 }
@@ -409,8 +411,12 @@ async function resolveAgentLoopSpaceId(
     )
     .limit(1);
   if (!space) {
-    throw new Error(
-      "Automation Space is not active or does not belong to this tenant",
+    // GraphQLError (not bare Error) so Yoga doesn't mask it — a masked
+    // "Unexpected error" gave conversational callers nothing to
+    // self-correct with (THINK-246 TEI acceptance).
+    throw new GraphQLError(
+      `Automation Space '${spaceId}' is not active or does not belong to this tenant — pass an active Space's UUID.`,
+      { extensions: { code: "BAD_USER_INPUT" } },
     );
   }
   return space.id;
