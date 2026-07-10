@@ -144,6 +144,35 @@ export interface CompositorPlate {
 /** Fence info-string prefix that routes a fenced block to the engine. */
 export const DIRECTIVE_FENCE_PREFIX = "tw:";
 
+interface ParsedDirectiveFence {
+  kind: string;
+  body: string;
+}
+
+/**
+ * Resolve both the canonical fenced form (` ```tw:analysis `) and the common
+ * model-authored variant where `tw:analysis` is the first line inside an
+ * otherwise untyped fence. The latter used to render as raw YAML even though
+ * its intent is unambiguous. Typed non-directive fences remain literal code.
+ */
+function parseDirectiveFence(token: Tokens.Code): ParsedDirectiveFence | null {
+  const info = (token.lang ?? "").trim();
+  if (info.toLowerCase().startsWith(DIRECTIVE_FENCE_PREFIX)) {
+    return {
+      kind: info.slice(DIRECTIVE_FENCE_PREFIX.length).trim(),
+      body: token.text,
+    };
+  }
+  if (info !== "") return null;
+
+  const marker = /^tw:([a-z][a-z0-9-]*)[ \t]*(?:\r?\n|$)/i.exec(token.text);
+  if (!marker) return null;
+  return {
+    kind: marker[1],
+    body: token.text.slice(marker[0].length),
+  };
+}
+
 /** Frontmatter keys the compiler defines (KTD7). Everything else is dropped. */
 const FRONTMATTER_KEYS = ["eyebrow", "date", "context"] as const;
 type FrontmatterKey = (typeof FRONTMATTER_KEYS)[number];
@@ -304,11 +333,14 @@ function buildMarked(state: CompileState): Marked {
         state.headingIdByToken.set(token, id);
         return `<h${level} id="${id}">${inner}</h${level}>\n`;
       },
-      code({ text, lang }: Tokens.Code) {
-        const info = (lang ?? "").trim();
-        if (info.toLowerCase().startsWith(DIRECTIVE_FENCE_PREFIX)) {
-          const kind = info.slice(DIRECTIVE_FENCE_PREFIX.length).trim();
-          const result = state.engine({ kind, body: text, genre: state.genre });
+      code(token: Tokens.Code) {
+        const directive = parseDirectiveFence(token);
+        if (directive) {
+          const result = state.engine({
+            kind: directive.kind,
+            body: directive.body,
+            genre: state.genre,
+          });
           if (!result.ok) {
             state.errors.push(...result.diagnostics);
             return "";
@@ -320,7 +352,7 @@ function buildMarked(state: CompileState): Marked {
           state.placeholders.set(token, result.html);
           return `<div class="tw-directive-slot">${token}</div>\n`;
         }
-        return `<pre><code>${escapeHtml(text)}</code></pre>\n`;
+        return `<pre><code>${escapeHtml(token.text)}</code></pre>\n`;
       },
       html({ text }: Tokens.HTML | Tokens.Tag) {
         // Model-authored HTML never reaches the render (R1). Dropped, with a
@@ -498,16 +530,16 @@ function collectSectionFacts(input: {
     }
     if (token.type === "space") continue;
     if (token.type === "code") {
-      const info = ((token as Tokens.Code).lang ?? "").trim();
-      if (info.toLowerCase().startsWith(DIRECTIVE_FENCE_PREFIX)) {
-        const kind = info.slice(DIRECTIVE_FENCE_PREFIX.length).trim();
+      const directive = parseDirectiveFence(token as Tokens.Code);
+      if (directive) {
+        const { kind } = directive;
         if (current !== null) {
           const kinds = directivesBySection.get(current.id) ?? new Set();
           kinds.add(kind);
           directivesBySection.set(current.id, kinds);
         }
         if (kind === "analysis") {
-          const key = extractAnalysisKey((token as Tokens.Code).text);
+          const key = extractAnalysisKey(directive.body);
           if (key !== null) {
             analysisRenders.push({ key, sectionId: current?.id ?? null });
           }

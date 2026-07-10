@@ -52,6 +52,7 @@ import {
   ADMIN_OPS_ACTING_USER_HEADER,
   ADMIN_OPS_AGENT_ID_HEADER,
 } from "@thinkwork/agent-loops-core";
+import type { McpResultTransform } from "@thinkwork/plugin-catalog";
 
 /** The tenant's admin-ops MCP surface (provisioned at `/mcp/admin`). */
 function isAdminOpsUrl(url: string): boolean {
@@ -100,6 +101,7 @@ export interface McpServerConfig {
   tools?: string[];
   availableTools?: string[];
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  resultTransforms?: McpResultTransform[];
   /**
    * Probe-mode only (capability-mapping plan U3, KTD-1): the stored token's
    * status for this server, read from user_mcp_tokens / auth_config metadata
@@ -1366,6 +1368,10 @@ function toMcpServerConfig(
     mcp.management_source === "plugin" && mcp.plugin_install_id
       ? extractMcpRuntimeRecordLinkHints(mcp.runtime_metadata)
       : undefined;
+  const resultTransforms =
+    mcp.management_source === "plugin" && mcp.plugin_install_id
+      ? extractMcpRuntimeResultTransforms(mcp.runtime_metadata)
+      : undefined;
   const config: McpServerConfig = {
     name: mcp.slug ?? mcp.name,
     url: mcp.url,
@@ -1385,7 +1391,52 @@ function toMcpServerConfig(
     config.trustedInternal = true;
   }
   if (recordLinkHints) config.recordLinkHints = recordLinkHints;
+  if (resultTransforms) config.resultTransforms = resultTransforms;
   return config;
+}
+
+function extractMcpRuntimeResultTransforms(
+  runtimeMetadata: unknown,
+): McpResultTransform[] | undefined {
+  const metadata = recordOrNull(runtimeMetadata);
+  const transforms = metadata?.resultTransforms;
+  if (
+    !Array.isArray(transforms) ||
+    transforms.length === 0 ||
+    transforms.length > 8
+  ) {
+    return undefined;
+  }
+  const normalized: McpResultTransform[] = [];
+  for (const value of transforms) {
+    const transform = recordOrNull(value);
+    if (
+      !transform ||
+      transform.type !== "scaled-integer-to-decimal" ||
+      typeof transform.sourceField !== "string" ||
+      !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(transform.sourceField) ||
+      typeof transform.targetField !== "string" ||
+      !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(transform.targetField) ||
+      transform.sourceField === transform.targetField ||
+      !Number.isInteger(transform.scale) ||
+      (transform.scale as number) < 0 ||
+      (transform.scale as number) > 12 ||
+      (transform.removeSource !== undefined &&
+        typeof transform.removeSource !== "boolean")
+    ) {
+      return undefined;
+    }
+    normalized.push({
+      type: "scaled-integer-to-decimal",
+      sourceField: transform.sourceField,
+      targetField: transform.targetField,
+      scale: transform.scale as number,
+      ...(transform.removeSource !== undefined
+        ? { removeSource: transform.removeSource }
+        : {}),
+    });
+  }
+  return normalized;
 }
 
 function isTrustedInternalNoAuthPluginMcp(mcp: {

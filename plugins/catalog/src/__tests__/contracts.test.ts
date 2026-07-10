@@ -284,6 +284,62 @@ describe("validatePluginManifest", () => {
     expect(validatedServer.recordLinkHints).toEqual(server.recordLinkHints);
   });
 
+  it("accepts provider-neutral MCP result transforms", () => {
+    const ok = manifest();
+    const server = version(ok).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    (server as unknown as Record<string, unknown>).resultTransforms = [
+      {
+        type: "scaled-integer-to-decimal",
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 6,
+        removeSource: true,
+      },
+    ];
+
+    const validated = validatePluginManifest(ok);
+    const validatedServer = validated.versions[0].components[0];
+    if (validatedServer.type !== "mcp-server") {
+      throw new Error("expected mcp-server");
+    }
+    expect(
+      (validatedServer as unknown as Record<string, unknown>).resultTransforms,
+    ).toEqual((server as unknown as Record<string, unknown>).resultTransforms);
+  });
+
+  it("rejects unsafe or unbounded MCP result transforms", () => {
+    for (const transform of [
+      {
+        type: "unknown-transform",
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 6,
+      },
+      {
+        type: "scaled-integer-to-decimal",
+        sourceField: "auth.token",
+        targetField: "value",
+        scale: 6,
+      },
+      {
+        type: "scaled-integer-to-decimal",
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 100,
+      },
+    ]) {
+      const bad = manifest();
+      const server = version(bad).components[0];
+      if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+      (server as unknown as Record<string, unknown>).resultTransforms = [
+        transform,
+      ];
+
+      expect(() => validatePluginManifest(bad)).toThrow(/resultTransforms/);
+    }
+  });
+
   it("rejects unsafe MCP record-link route templates", () => {
     for (const routeTemplate of [
       "https://crm.example.com/object/opportunity/{id}",

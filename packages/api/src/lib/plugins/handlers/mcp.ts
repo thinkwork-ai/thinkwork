@@ -60,6 +60,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type {
   McpRecordLinkHints,
+  McpResultTransform,
   McpServerComponent,
 } from "@thinkwork/plugin-catalog";
 import { db as defaultDb } from "../../../graphql/utils.js";
@@ -87,6 +88,7 @@ interface RuntimeRecordLinkHints extends McpRecordLinkHints {
 
 interface McpRuntimeMetadata {
   recordLinkHints?: RuntimeRecordLinkHints;
+  resultTransforms?: McpResultTransform[];
 }
 
 export function pluginMcpServerSlug(
@@ -227,15 +229,19 @@ function pluginMcpRuntimeMetadata(
   component: McpServerComponent,
   resolvedEndpoint: ResolvedPluginMcpEndpoint,
 ): McpRuntimeMetadata | null {
-  if (!component.recordLinkHints || !resolvedEndpoint.browserBaseUrl) {
-    return null;
-  }
-  return {
-    recordLinkHints: {
+  const metadata: McpRuntimeMetadata = {};
+  if (component.recordLinkHints && resolvedEndpoint.browserBaseUrl) {
+    metadata.recordLinkHints = {
       ...component.recordLinkHints,
       browserBaseUrl: resolvedEndpoint.browserBaseUrl,
-    },
-  };
+    };
+  }
+  if (component.resultTransforms?.length) {
+    metadata.resultTransforms = component.resultTransforms.map((transform) => ({
+      ...transform,
+    }));
+  }
+  return Object.keys(metadata).length > 0 ? metadata : null;
 }
 
 /**

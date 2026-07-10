@@ -156,6 +156,15 @@ function twentyRecordLinkMetadata(over: Record<string, unknown> = {}) {
       ],
       ...over,
     },
+    resultTransforms: [
+      {
+        type: "scaled-integer-to-decimal",
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 6,
+        removeSource: true,
+      },
+    ],
   };
 }
 
@@ -404,6 +413,15 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
           },
         ],
       },
+      resultTransforms: [
+        {
+          type: "scaled-integer-to-decimal",
+          sourceField: "amountMicros",
+          targetField: "value",
+          scale: 6,
+          removeSource: true,
+        },
+      ],
     });
     expect(JSON.stringify(configs[0]!.recordLinkHints)).not.toContain(
       "twenty-server-level-token",

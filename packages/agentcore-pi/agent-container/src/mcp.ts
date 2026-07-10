@@ -5,6 +5,7 @@ import {
   findModelRoutingDecision,
   ModelRoutingPolicyError,
   type ChildModelCaller,
+  type McpResultTransform,
   type ModelRoutingDecision,
   type ModelRoutingPolicy,
 } from "@thinkwork/pi-runtime-core";
@@ -144,6 +145,8 @@ export interface ConnectMcpServerArgs {
   transport?: "streamable-http" | "sse";
   /** Optional non-secret record-link hints for enriching MCP tool results. */
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  /** Provider-neutral, manifest-declared result normalization rules. */
+  resultTransforms?: McpResultTransform[];
   /**
    * Plan §006 U2/U4 — per-invocation registry the connect path populates
    * with each whitelist-filtered tool's metadata. The MCP proxy AgentTool
@@ -247,6 +250,8 @@ export interface McpServerConfig {
   transport?: "streamable-http" | "sse";
   /** Optional non-secret record-link hints for enriching MCP tool results. */
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  /** Provider-neutral, manifest-declared result normalization rules. */
+  resultTransforms?: McpResultTransform[];
   /**
    * Server-built trust marker for plugin-owned tenant-internal MCP endpoints.
    * Allows no-auth connects; URL validation remains owned by the trusted
@@ -601,6 +606,7 @@ export async function buildMcpTools(
         toolWhitelist: config.toolWhitelist,
         transport: config.transport,
         recordLinkHints: config.recordLinkHints,
+        resultTransforms: config.resultTransforms,
         registry,
       });
       tools.push(

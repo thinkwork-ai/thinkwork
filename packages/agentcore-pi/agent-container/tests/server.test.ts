@@ -1624,7 +1624,8 @@ describe("handleInvocation — happy path", () => {
     let seenSystemPrompt: string | undefined = "unset";
     let seenTools: AgentTool<any>[] = [];
     let capturedBundle:
-      import("../src/server.js").InvocationResourceBundle | undefined;
+      | import("../src/server.js").InvocationResourceBundle
+      | undefined;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
         message: "Summarize the file attached in Slack.",
@@ -1876,6 +1877,47 @@ describe("handleInvocation — handle store lifecycle", () => {
 // ---------------------------------------------------------------------------
 
 describe("handleInvocation — MCP URL validator", () => {
+  it("preserves valid provider-neutral result transforms when parsing mcp_configs", async () => {
+    let capturedResultTransforms: unknown;
+    await handleInvocation({
+      payload: VALID_PAYLOAD({
+        mcp_configs: [
+          {
+            name: "provider--crm",
+            url: "https://crm.example.com/mcp",
+            auth: { token: "test-bearer" },
+            resultTransforms: [
+              {
+                type: "scaled-integer-to-decimal",
+                sourceField: "amountMicros",
+                targetField: "value",
+                scale: 6,
+                removeSource: true,
+                ignoredExtra: "not forwarded",
+              },
+            ],
+          },
+        ],
+      }),
+      deps: makeDeps({
+        connectMcpServerFactory: async (args) => {
+          capturedResultTransforms = args.resultTransforms;
+          return [];
+        },
+      }),
+    });
+
+    expect(capturedResultTransforms).toEqual([
+      {
+        type: "scaled-integer-to-decimal",
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 6,
+        removeSource: true,
+      },
+    ]);
+  });
+
   it("preserves valid MCP record-link hints when parsing mcp_configs", async () => {
     let capturedRecordLinkHints: unknown;
     await handleInvocation({

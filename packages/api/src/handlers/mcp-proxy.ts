@@ -354,11 +354,13 @@ async function handleCall(
 
   try {
     const target = targetFor(config);
-    const result = config.recordLinkHints
-      ? await mcpCallTool(target, toolName, args, {
-          recordLinkHints: config.recordLinkHints,
-        })
-      : await mcpCallTool(target, toolName, args);
+    const result =
+      config.recordLinkHints || config.resultTransforms
+        ? await mcpCallTool(target, toolName, args, {
+            recordLinkHints: config.recordLinkHints,
+            resultTransforms: config.resultTransforms,
+          })
+        : await mcpCallTool(target, toolName, args);
     const recordLinkCount = !result.isError
       ? (result.recordLinks?.length ?? 0)
       : 0;

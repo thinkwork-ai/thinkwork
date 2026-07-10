@@ -30,6 +30,10 @@
 
 import type { McpRuntimeRecordLinkHints } from "./mcp-configs.js";
 import {
+  transformMcpResultContent,
+  type McpResultTransform,
+} from "@thinkwork/pi-runtime-core";
+import {
   enrichMcpRecordLinks,
   type McpRecordLink,
 } from "./mcp-record-links.js";
@@ -90,6 +94,7 @@ export interface McpCallToolOptions {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  resultTransforms?: McpResultTransform[];
 }
 
 interface JsonRpcResponse {
@@ -341,11 +346,14 @@ export async function mcpCallTool(
   const content =
     "content" in result ? result.content : (result.toolResult ?? null);
   const isError = result.isError === true;
+  const modelContent = !isError
+    ? transformMcpResultContent(content, opts.resultTransforms)
+    : content;
   if (!isError && opts.recordLinkHints) {
     const enriched = enrichMcpRecordLinks({
       hints: opts.recordLinkHints,
       response: result,
-      text: textFromMcpContent(content),
+      text: textFromMcpContent(modelContent),
       toolName: name,
     });
     if (enriched.recordLinks.length > 0) {
@@ -358,7 +366,7 @@ export async function mcpCallTool(
     }
   }
   return {
-    content,
+    content: modelContent,
     isError,
     raw: result,
   };

@@ -120,6 +120,7 @@ import {
   type CapabilityDiagnostic,
   type CapabilityDiagnosticsCollector,
 } from "./capability-diagnostics.js";
+import type { McpResultTransform } from "@thinkwork/plugin-catalog";
 
 export interface SkillConfig {
   skillId: string;
@@ -144,6 +145,7 @@ export interface McpConfig {
   tools?: string[];
   availableTools?: string[];
   recordLinkHints?: McpRuntimeRecordLinkHints;
+  resultTransforms?: McpResultTransform[];
   /** Probe-mode only (U3): stored token status; never set on runtime resolutions. */
   tokenStatus?: "active" | "expired" | "configured";
   /** THINK-229 U4 (KTD6): signed sidecar budgets — analyst broker, post-flip only. */

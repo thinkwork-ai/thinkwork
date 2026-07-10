@@ -73,12 +73,14 @@ function captureFakeConnect(capture: {
   headers?: Record<string, string>;
   transport?: string;
   recordLinkHints?: unknown;
+  resultTransforms?: unknown;
 }): ConnectMcpServerFn {
   return async (args) => {
     capture.url = args.url;
     capture.headers = { ...args.headers };
     capture.transport = args.transport;
     capture.recordLinkHints = args.recordLinkHints;
+    capture.resultTransforms = args.resultTransforms;
     return [makeFakeTool("captured", args.headers)];
   };
 }
@@ -380,6 +382,35 @@ describe("buildMcpTools — Authorization shape", () => {
     expect(captured.recordLinkHints).toEqual(recordLinkHints);
     expect(captured.headers?.Authorization).toMatch(/^Handle /);
     expect(captured.headers?.Authorization).not.toContain(BEARER_FIXTURES.jwt);
+  });
+
+  it("forwards provider-neutral result transforms", async () => {
+    const store = new HandleStore();
+    const captured: any = {};
+    const resultTransforms = [
+      {
+        type: "scaled-integer-to-decimal" as const,
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 6,
+        removeSource: true,
+      },
+    ];
+
+    await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "provider--crm",
+          url: "https://crm.example.com/mcp",
+          bearer: BEARER_FIXTURES.jwt,
+          resultTransforms,
+        },
+      ],
+      handleStore: store,
+      connectMcpServer: captureFakeConnect(captured),
+    });
+
+    expect(captured.resultTransforms).toEqual(resultTransforms);
   });
 });
 
