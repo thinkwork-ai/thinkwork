@@ -5,10 +5,12 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  FileText,
   GitBranch,
   Globe,
   Layers,
   Loader2,
+  Mail,
   Map,
   Play,
   Radio,
@@ -17,6 +19,7 @@ import {
   Workflow,
   Wrench,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { Badge } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
@@ -211,6 +214,29 @@ function nodePresentation(node: RoutineGraphNode) {
         label: "Emit event",
         iconClass:
           "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      };
+    // Automation canvas node kinds (THINK-247) — the automation surface draws
+    // trigger/document/delivery in the same visual language as workflow steps.
+    case "trigger":
+      return {
+        Icon: Zap,
+        label: "Trigger",
+        iconClass:
+          "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      };
+    case "document":
+      return {
+        Icon: FileText,
+        label: "Document",
+        iconClass:
+          "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+      };
+    case "deliver":
+      return {
+        Icon: Mail,
+        label: "Email",
+        iconClass:
+          "border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-300",
       };
     default:
       return {

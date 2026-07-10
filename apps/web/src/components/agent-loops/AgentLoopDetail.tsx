@@ -1,15 +1,7 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  Archive,
-  Loader2,
-  Pause,
-  Pencil,
-  Play,
-  RotateCw,
-  Zap,
-} from "lucide-react";
+import { Archive, Loader2, Pause, Play, RotateCw, Zap } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -56,7 +48,7 @@ import {
   SettingsTenantAgentQuery,
   SettingsTenantMembersQuery,
 } from "@/lib/settings-queries";
-import { AgentLoopForm } from "./AgentLoopForm";
+import { AutomationFlowSection } from "./AutomationFlowSection";
 import {
   AutomationWebhookDeliveriesPanel,
   AutomationWebhookEndpointPanel,
@@ -73,6 +65,7 @@ import { AutomationRunsList } from "./AutomationRunsList";
 import { AutomationStatusRail } from "./AutomationStatusRail";
 import type {
   AgentLoopMemberOption,
+  AgentLoopRoutineOption,
   AgentLoopRow,
   AgentLoopRunSummary,
   AgentLoopSpaceOption,
@@ -112,7 +105,6 @@ export function AgentLoopDetail({
 }) {
   const { tenantId, userId } = useTenant();
   const navigate = useNavigate();
-  const [editing, setEditing] = useState(false);
   const [pendingAction, setPendingAction] = useState<
     "run" | "pause" | "archive" | "refresh" | null
   >(null);
@@ -202,7 +194,6 @@ export function AgentLoopDetail({
       <HeaderActions
         loop={loop}
         pendingAction={pendingAction}
-        onEdit={() => setEditing(true)}
         onRun={() => void runNow(loop)}
         onToggle={() => void toggleActive(loop, workerOptions)}
         onRefresh={() => {
@@ -219,7 +210,6 @@ export function AgentLoopDetail({
   async function saveLoop(payload: SaveAgentLoopPayload) {
     const result = await saveAgentLoop({ input: payload });
     if (result.error) throw result.error;
-    setEditing(false);
     refetchLoop({ requestPolicy: "network-only" });
     toast.success("Automation saved");
   }
@@ -339,28 +329,19 @@ export function AgentLoopDetail({
 
   return (
     <>
-      {editing && tenantId ? (
-        <AgentLoopForm
-          mode="edit"
-          tenantId={tenantId}
-          initialLoop={loop}
-          workerOptions={workerOptions}
-          spaceOptions={spaceOptions}
-          routineOptions={routineOptions}
-          workflowOptions={workflowOptions}
-          memberOptions={memberOptions}
-          defaultSpaceId={defaultSpaceId}
-          currentUserId={userId}
-          onSubmit={saveLoop}
-          onCancel={() => setEditing(false)}
-        />
-      ) : null}
       <AgentLoopDetailContent
         loop={loop}
         pendingAction={pendingAction}
         actionError={actionError}
         spaceOptions={spaceOptions}
         memberOptions={memberOptions}
+        workerOptions={workerOptions}
+        routineOptions={routineOptions}
+        workflowOptions={workflowOptions}
+        tenantId={tenantId}
+        defaultSpaceId={defaultSpaceId}
+        currentUserId={userId}
+        onSave={saveLoop}
         onRun={() => void runNow(loop)}
         onToggle={() => void toggleActive(loop, workerOptions)}
         onOpenRun={(run) =>
@@ -384,6 +365,13 @@ export function AgentLoopDetailContent({
   actionError,
   spaceOptions = [],
   memberOptions = [],
+  workerOptions = [],
+  routineOptions = [],
+  workflowOptions = [],
+  tenantId,
+  defaultSpaceId,
+  currentUserId,
+  onSave,
   onRun,
   onToggle,
   onOpenRun,
@@ -393,6 +381,15 @@ export function AgentLoopDetailContent({
   actionError?: string | null;
   spaceOptions?: AgentLoopSpaceOption[];
   memberOptions?: AgentLoopMemberOption[];
+  workerOptions?: AgentLoopWorkerOption[];
+  routineOptions?: AgentLoopRoutineOption[];
+  workflowOptions?: AgentLoopRoutineOption[];
+  /** THINK-247: with tenantId + onSave present, Definition renders the
+   * editable workflow canvas; without them it falls back to read-only. */
+  tenantId?: string | null;
+  defaultSpaceId?: string | null;
+  currentUserId?: string | null;
+  onSave?: (payload: SaveAgentLoopPayload) => Promise<void>;
   onRun: () => void;
   onToggle: () => void;
   onOpenRun: (run: AgentLoopRunSummary) => void;
@@ -428,45 +425,78 @@ export function AgentLoopDetailContent({
         </TabsList>
 
         <TabsContent value="definition" className="mt-0">
-          <div className="grid gap-8 @min-[650px]:grid-cols-[minmax(0,1fr)_320px]">
-            <main className="min-w-0 space-y-8">
-              <section>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-muted-foreground">
+          {builderThreadId ? (
+            <div className="mb-3 flex justify-end">
+              <a
+                className="text-sm text-primary hover:underline"
+                href={`/threads/${builderThreadId}`}
+              >
+                Setup thread
+              </a>
+            </div>
+          ) : null}
+          {tenantId && onSave ? (
+            <AutomationFlowSection
+              tenantId={tenantId}
+              loop={loop}
+              workerOptions={workerOptions}
+              spaceOptions={spaceOptions}
+              routineOptions={routineOptions}
+              workflowOptions={workflowOptions}
+              memberOptions={memberOptions}
+              defaultSpaceId={defaultSpaceId}
+              currentUserId={currentUserId}
+              onSave={onSave}
+              boundDocumentPanel={
+                target.documentBinding ? (
+                  <div className="pt-3">
+                    <BoundDocumentCard binding={target.documentBinding} />
+                  </div>
+                ) : null
+              }
+              statusRail={
+                <AutomationStatusRail
+                  loop={loop}
+                  pendingAction={pendingAction}
+                  spaceOptions={spaceOptions}
+                  memberOptions={memberOptions}
+                  onRun={onRun}
+                  onToggle={onToggle}
+                />
+              }
+            />
+          ) : (
+            <div className="grid gap-8 @min-[650px]:grid-cols-[minmax(0,1fr)_320px]">
+              <main className="min-w-0 space-y-8">
+                <section>
+                  <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
                     {target.kind === "agent_thread" ? "Instructions" : "Target"}
                   </h2>
-                  {builderThreadId ? (
-                    <a
-                      className="text-sm text-primary hover:underline"
-                      href={`/threads/${builderThreadId}`}
-                    >
-                      Setup thread
-                    </a>
-                  ) : null}
-                </div>
-                <div className="whitespace-pre-wrap rounded-md border border-border/70 bg-muted/20 p-5 text-base leading-7">
-                  {targetSummary(target)}
-                </div>
-              </section>
+                  <div className="whitespace-pre-wrap rounded-md border border-border/70 bg-muted/20 p-5 text-base leading-7">
+                    {targetSummary(target)}
+                  </div>
+                </section>
 
-              {target.documentBinding ? (
-                <BoundDocumentCard binding={target.documentBinding} />
-              ) : null}
+                {target.documentBinding ? (
+                  <BoundDocumentCard binding={target.documentBinding} />
+                ) : null}
+              </main>
 
-              {webhookEndpoint ? (
-                <AutomationWebhookEndpointPanel endpoint={webhookEndpoint} />
-              ) : null}
-            </main>
-
-            <AutomationStatusRail
-              loop={loop}
-              pendingAction={pendingAction}
-              spaceOptions={spaceOptions}
-              memberOptions={memberOptions}
-              onRun={onRun}
-              onToggle={onToggle}
-            />
-          </div>
+              <AutomationStatusRail
+                loop={loop}
+                pendingAction={pendingAction}
+                spaceOptions={spaceOptions}
+                memberOptions={memberOptions}
+                onRun={onRun}
+                onToggle={onToggle}
+              />
+            </div>
+          )}
+          {webhookEndpoint ? (
+            <div className="mt-6">
+              <AutomationWebhookEndpointPanel endpoint={webhookEndpoint} />
+            </div>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="activity" className="mt-0 space-y-8">
@@ -517,8 +547,8 @@ function BoundDocumentCard({
 
   const stale = Boolean(
     artifact?.refreshFailedAt &&
-      (!artifact.lastRefreshAt ||
-        new Date(artifact.refreshFailedAt) > new Date(artifact.lastRefreshAt)),
+    (!artifact.lastRefreshAt ||
+      new Date(artifact.refreshFailedAt) > new Date(artifact.lastRefreshAt)),
   );
 
   return (
@@ -613,7 +643,6 @@ function jsonRecordSafe(value: unknown): Record<string, unknown> {
 function HeaderActions({
   loop,
   pendingAction,
-  onEdit,
   onRun,
   onToggle,
   onRefresh,
@@ -621,7 +650,6 @@ function HeaderActions({
 }: {
   loop: AgentLoopRow;
   pendingAction: string | null;
-  onEdit: () => void;
   onRun: () => void;
   onToggle: () => void;
   onRefresh: () => void;
@@ -631,9 +659,6 @@ function HeaderActions({
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex items-center gap-1">
-        <IconAction label="Edit" disabled={!!pendingAction} onClick={onEdit}>
-          <Pencil className="size-4" />
-        </IconAction>
         <IconAction
           label="Run now"
           disabled={!!pendingAction || !active}

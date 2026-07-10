@@ -62,6 +62,17 @@ function stepSubtitle(step: Record<string, unknown>): string | undefined {
     }
     case "emit_event":
       return stringField(step, "eventType") ?? undefined;
+    case "deliver": {
+      const recipients = Array.isArray(step.recipients)
+        ? step.recipients.filter(
+            (entry): entry is string => typeof entry === "string",
+          )
+        : [];
+      if (recipients.length === 0) return undefined;
+      return recipients.length === 1
+        ? recipients[0]
+        : `${recipients[0]} +${recipients.length - 1} more`;
+    }
     default:
       return undefined;
   }
