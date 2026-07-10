@@ -1864,12 +1864,21 @@ importers:
         specifier: ^16.10.0
         version: 16.13.2
     devDependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.700.0
+        version: 3.1028.0
       '@thinkwork/deployment-runner':
         specifier: workspace:*
         version: link:../../packages/deployment-runner
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../catalog
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
+      pg:
+        specifier: ^8.13.0
+        version: 8.20.0
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
