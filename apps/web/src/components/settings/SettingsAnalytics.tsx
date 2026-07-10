@@ -153,6 +153,22 @@ export function SettingsAnalytics({ embedded }: { embedded?: boolean } = {}) {
     (summary?.eventCount ?? 0) > 0
       ? (summary?.totalUsd ?? 0) / (summary?.eventCount ?? 1)
       : 0;
+  const systemUsd = summary?.systemUsd ?? 0;
+  const spendSplit =
+    systemUsd > 0
+      ? `Conversation ${formatUsd(summary?.conversationUsd ?? 0)} · Background ${formatUsd(systemUsd)}`
+      : null;
+  const cachedReadTokens = summary?.totalCachedReadTokens ?? 0;
+  const cachedWriteTokens = summary?.totalCachedWriteTokens ?? 0;
+  const cacheUsd = summary?.cacheUsd ?? 0;
+  const cacheDetail =
+    cachedReadTokens > 0 || cachedWriteTokens > 0 || cacheUsd > 0
+      ? [
+          `${formatTokens(cachedReadTokens)} cache read`,
+          `${formatTokens(cachedWriteTokens)} cache write`,
+          ...(cacheUsd > 0 ? [formatUsd(cacheUsd)] : []),
+        ].join(" · ")
+      : null;
 
   return (
     <SettingsPane className="max-w-none">
@@ -163,8 +179,16 @@ export function SettingsAnalytics({ embedded }: { embedded?: boolean } = {}) {
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Metric label="Total Spend" value={formatUsd(summary?.totalUsd ?? 0)} />
-        <Metric label="LLM" value={formatUsd(summary?.llmUsd ?? 0)} />
+        <Metric
+          label="Total Spend"
+          value={formatUsd(summary?.totalUsd ?? 0)}
+          sub={spendSplit}
+        />
+        <Metric
+          label="LLM"
+          value={formatUsd(summary?.llmUsd ?? 0)}
+          sub={cacheDetail}
+        />
         <Metric label="Infra" value={formatUsd(summary?.computeUsd ?? 0)} />
         <Metric label="Tools" value={formatUsd(summary?.toolsUsd ?? 0)} />
         <Metric label="Invocations" value={String(summary?.eventCount ?? 0)} />
@@ -190,11 +214,22 @@ export function SettingsAnalytics({ embedded }: { embedded?: boolean } = {}) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string | null;
+}) {
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
+      {sub ? (
+        <p className="mt-1 text-xs tabular-nums text-muted-foreground">{sub}</p>
+      ) : null}
     </div>
   );
 }

@@ -738,10 +738,12 @@ describe("SettingsActivityThreadDetail", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getAllByText("Kimi K2.5").length).toBeGreaterThan(0);
-    expect(screen.getByTitle("Input / Output tokens").textContent).toContain(
+    const aggregateTokensTitle =
+      "Input / Output tokens · Prompt cache: 15.0K read";
+    expect(screen.getByTitle(aggregateTokensTitle).textContent).toContain(
       "100 → 207",
     );
-    expect(screen.getByTitle("Input / Output tokens").textContent).toContain(
+    expect(screen.getByTitle(aggregateTokensTitle).textContent).toContain(
       "15.0K cached",
     );
     expect(screen.queryByText("Mixed")).toBeNull();

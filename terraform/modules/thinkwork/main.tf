@@ -972,6 +972,7 @@ module "api" {
   billing_export_bucket_name           = var.billing_export_bucket_name
   billing_export_manifest_key          = var.billing_export_manifest_key
   billing_reconciliation_tolerance_usd = var.billing_reconciliation_tolerance_usd
+  cost_alert_emails                    = var.cost_alert_emails
 
   # Phase 3 U4 — compliance-outbox-drainer connects as `compliance_drainer`
   # via this dedicated secret (provisioned in U2 / PR #887, populated by

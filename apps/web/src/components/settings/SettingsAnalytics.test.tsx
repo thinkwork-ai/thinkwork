@@ -62,6 +62,24 @@ describe("SettingsAnalytics user cost reporting", () => {
     );
   });
 
+  it("surfaces cached-token spend and the conversation/system split", () => {
+    expect(querySource).toContain("cacheUsd");
+    expect(querySource).toContain("conversationUsd");
+    expect(querySource).toContain("systemUsd");
+    expect(querySource).toContain("totalCachedReadTokens");
+    expect(querySource).toContain("totalCachedWriteTokens");
+    expect(querySource).toContain("cachedReadTokens");
+    expect(querySource).toContain("cachedWriteTokens");
+
+    // Split renders under the total and hides when systemUsd is 0.
+    expect(componentSource).toContain("systemUsd > 0");
+    expect(componentSource).toContain("Conversation ${formatUsd(");
+    expect(componentSource).toContain("Background ${formatUsd(systemUsd)}");
+    // Cache is framed as platform behavior alongside the LLM total.
+    expect(componentSource).toContain("cache read");
+    expect(componentSource).toContain("cache write");
+  });
+
   it("keeps profile account usage separate from tenant analytics", () => {
     expect(querySource).toContain("query SettingsAccountUsage");
     expect(querySource).toContain(

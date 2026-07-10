@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
-const { mockAuthenticate, mockSend, mockUserRows } = vi.hoisted(() => ({
-  mockAuthenticate: vi.fn(),
-  mockSend: vi.fn(),
-  mockUserRows: vi.fn(),
-}));
+const { mockAuthenticate, mockSend, mockUserRows, mockRecordCostEvents } =
+  vi.hoisted(() => ({
+    mockAuthenticate: vi.fn(),
+    mockSend: vi.fn(),
+    mockUserRows: vi.fn(),
+    mockRecordCostEvents: vi.fn(),
+  }));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
+
+vi.mock("../lib/cost-recording.js", () => ({
+  recordCostEvents: mockRecordCostEvents,
+}));
 
 vi.mock("../lib/db.js", () => ({
   db: {
@@ -45,7 +51,7 @@ function event(
   overrides: Partial<APIGatewayProxyEventV2> = {},
 ): APIGatewayProxyEventV2 {
   return {
-    requestContext: { http: { method: "POST" } },
+    requestContext: { http: { method: "POST" }, requestId: "req-abc" },
     headers: { authorization: "Bearer tok" },
     body: JSON.stringify({
       model: MODEL,
@@ -68,6 +74,12 @@ beforeEach(() => {
   mockAuthenticate.mockReset();
   mockSend.mockReset();
   mockUserRows.mockReset();
+  mockRecordCostEvents.mockReset();
+  mockRecordCostEvents.mockResolvedValue({
+    totalUsd: 0,
+    llmUsd: 0,
+    computeUsd: 0,
+  });
   mockAuthenticate.mockResolvedValue({
     principalId: "p1",
     tenantId: null, // federated user — null JWT claim
@@ -198,6 +210,43 @@ describe("model-converse handler", () => {
       } as Partial<APIGatewayProxyEventV2>),
     );
     expect(res.statusCode).toBe(405);
+  });
+
+  it("records a per-tenant cost event tagged model_converse (THINK-245 U6)", async () => {
+    mockSend.mockResolvedValue(converseOutput([{ text: "hello" }]));
+    const res = await handler(event());
+    expect(res.statusCode).toBe(200);
+    expect(mockRecordCostEvents).toHaveBeenCalledTimes(1);
+    expect(mockRecordCostEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "t1",
+        userId: "u1",
+        requestId: "model-converse:req-abc",
+        model: MODEL,
+        inputTokens: 10,
+        outputTokens: 4,
+        recordCompute: false,
+        source: "model_converse",
+      }),
+    );
+  });
+
+  it("still returns 200 when cost recording fails", async () => {
+    mockSend.mockResolvedValue(converseOutput([{ text: "hello" }]));
+    mockRecordCostEvents.mockRejectedValue(new Error("db down"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await handler(event());
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body as string).text).toBe("hello");
+    errorSpy.mockRestore();
+  });
+
+  it("records no cost event when Bedrock rejects the request", async () => {
+    const err = new Error("bad request");
+    err.name = "ValidationException";
+    mockSend.mockRejectedValue(err);
+    await handler(event());
+    expect(mockRecordCostEvents).not.toHaveBeenCalled();
   });
 
   it("rejects an empty messages array", async () => {

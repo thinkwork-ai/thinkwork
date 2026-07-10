@@ -44,6 +44,10 @@ export const costEvents = pgTable(
     input_tokens: integer("input_tokens"),
     output_tokens: integer("output_tokens"),
     cached_read_tokens: integer("cached_read_tokens"),
+    cached_write_tokens: integer("cached_write_tokens"),
+    // Budget grace (THINK-245): rows repriced/backfilled retroactively are
+    // exempt from budget-window enforcement; display totals still include them.
+    enforcement_exempt: boolean("enforcement_exempt").notNull().default(false),
     duration_ms: integer("duration_ms"),
     trace_id: text("trace_id"),
     trace_event_id: uuid("trace_event_id"),

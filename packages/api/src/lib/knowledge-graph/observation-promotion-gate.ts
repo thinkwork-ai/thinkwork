@@ -70,6 +70,9 @@ export interface PromotionGateDeps {
   classify?: (
     items: Array<{ id: string; text: string; context?: string }>,
   ) => Promise<Map<string, "institutional" | "personal">>;
+  /** THINK-245 U6: per-tenant cost attribution for the default classifier,
+   * keyed by the ingest run. Ignored when a custom `classify` is injected. */
+  costContext?: { tenantId: string; runId: string };
 }
 
 /**
@@ -295,6 +298,7 @@ Respond with ONLY a JSON array, one element per input, in input order:
 
 async function classifyWithBedrock(
   items: Array<{ id: string; text: string; context?: string }>,
+  costContext?: { tenantId: string; runId: string },
 ): Promise<Map<string, "institutional" | "personal">> {
   const verdicts = new Map<string, "institutional" | "personal">();
   for (let start = 0; start < items.length; start += CLASSIFIER_BATCH_SIZE) {
@@ -313,6 +317,13 @@ async function classifyWithBedrock(
           })),
         ),
         maxTokens: 4096,
+        costContext: costContext
+          ? {
+              tenantId: costContext.tenantId,
+              requestId: `kg:${costContext.runId}:classify:${start}`,
+              source: "kg_extraction",
+            }
+          : undefined,
       });
       const parsed = Array.isArray(result.parsed) ? result.parsed : [];
       // Strict per-item validation: only exact verdicts for known ids count;
@@ -373,7 +384,10 @@ export async function applyPromotionGate(
     return true;
   });
 
-  const classify = deps.classify ?? classifyWithBedrock;
+  const classify =
+    deps.classify ??
+    ((items: Array<{ id: string; text: string; context?: string }>) =>
+      classifyWithBedrock(items, deps.costContext));
   const candidateContexts =
     afterScan.length > 0
       ? await resolveCandidateContexts(deps.db, afterScan)

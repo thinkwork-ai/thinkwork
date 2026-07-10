@@ -13,6 +13,10 @@ import {
   traceRuns,
   traceSourceEvidence,
 } from "@thinkwork/database-pg/schema";
+import {
+  computeLlmCostUsd,
+  lookupFallbackModelPricing,
+} from "../model-catalog/pricing.js";
 
 export interface CloudWatchLogsClientLike {
   send(command: FilterLogEventsCommand): Promise<FilterLogEventsCommandOutput>;
@@ -143,14 +147,8 @@ export const DEFAULT_BEDROCK_INVOCATION_LOG_GROUP =
 
 const defaultCloudWatch = new CloudWatchLogsClient({ region: REGION });
 
-// Fallback pricing for near-real-time log-derived estimates (per million tokens).
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-5": { input: 3.0, output: 15.0 },
-  "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
-  "claude-haiku-4-5": { input: 0.8, output: 4.0 },
-  "claude-3-haiku": { input: 0.25, output: 1.25 },
-  "kimi-k2": { input: 1.0, output: 3.0 },
-};
+// Pricing (incl. cache rates) comes from the shared module — THINK-245
+// consolidated the previously duplicated fallback maps.
 
 export function normalizeInvocationTimestamp(
   value: unknown,
@@ -183,14 +181,20 @@ export function parseBedrockInvocationLogEvent(
     const input = readRecord(log.input);
     const output = readRecord(log.output);
     const modelId = stringValue(log.modelId) ?? "";
-    const pricing = lookupPricing(modelId);
+    const pricing = lookupFallbackModelPricing(modelId);
 
     const inputTokens = nonNegativeInt(input.inputTokenCount);
     const outputTokens = nonNegativeInt(output.outputTokenCount);
     const cacheReadTokens = nonNegativeInt(input.cacheReadInputTokenCount);
     const cacheWriteTokens = nonNegativeInt(input.cacheWriteInputTokenCount);
-    const costUsd =
-      (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+    // Provider-billed amount prices all four token types (THINK-245 —
+    // cache-write was TEI's largest Sonnet billing line, recorded as $0).
+    const costUsd = computeLlmCostUsd(pricing, {
+      inputTokens,
+      outputTokens,
+      cachedReadTokens: cacheReadTokens,
+      cachedWriteTokens: cacheWriteTokens,
+    });
 
     const inputBodyJson = input.inputBodyJson;
     const outputBodyJson = output.outputBodyJson;
@@ -268,6 +272,28 @@ export function reconcileInvocationRecords(
     const topScore = candidates[0].score;
     const top = candidates.filter((candidate) => candidate.score === topScore);
     if (top.length !== 1) {
+      // THINK-245 U5 — identity-matched candidates (request-id/request-
+      // metadata) that tie are not ambiguous: an agent loop makes many
+      // Bedrock calls in one turn and the turn-level cost event is their
+      // SUM. Aggregate identity matches; only model+time ties stay ambiguous.
+      if (topScore >= 90) {
+        const identityMatches = candidates.filter(
+          (candidate) => candidate.score >= 90,
+        );
+        const merged = aggregateProviderRecords(
+          identityMatches.map((candidate) => candidate.record),
+        );
+        const state = hasTokenMismatch(runtime, merged)
+          ? "mismatch"
+          : "invocation-reconciled";
+        return decision(runtime, merged, state, identityMatches[0].confidence, {
+          reason:
+            state === "mismatch"
+              ? "provider-token-mismatch"
+              : identityMatches[0].reason,
+          candidates: identityMatches.map((candidate) => candidate.record),
+        });
+      }
       return decision(runtime, undefined, "unreconciled/error", "none", {
         reason: "ambiguous-provider-logs",
         candidates: top.map((candidate) => candidate.record),
@@ -686,6 +712,7 @@ async function updateCostEventCurrentState(
       input_tokens: decision.provider.inputTokenCount,
       output_tokens: decision.provider.outputTokenCount,
       cached_read_tokens: decision.provider.cacheReadTokenCount,
+      cached_write_tokens: decision.provider.cacheWriteTokenCount,
       amount_usd: String(decision.provider.costUsd),
       provider: decision.runtime.provider ?? "bedrock",
       model: decision.provider.displayModelId,
@@ -837,8 +864,8 @@ function metadataMatchesRuntime(
   const metadataValues = new Set(Object.values(record.requestMetadata));
   return Boolean(
     (runtime.traceId && metadataValues.has(runtime.traceId)) ||
-      (runtime.threadTurnId && metadataValues.has(runtime.threadTurnId)) ||
-      (runtime.requestId && metadataValues.has(runtime.requestId)),
+    (runtime.threadTurnId && metadataValues.has(runtime.threadTurnId)) ||
+    (runtime.requestId && metadataValues.has(runtime.requestId)),
   );
 }
 
@@ -890,12 +917,31 @@ function decisionDiagnostic(
   return undefined;
 }
 
-function lookupPricing(modelId: string): { input: number; output: number } {
-  const lower = modelId.toLowerCase();
-  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
-    if (lower.includes(key)) return pricing;
+/**
+ * Merge several identity-matched invocation records for one turn into a
+ * single provider view: token counts, cost, and duration sum; identity
+ * fields come from the first (earliest-listed) record. THINK-245 U5 — the
+ * turn-level cost event represents ALL of a turn's Bedrock calls.
+ */
+function aggregateProviderRecords(
+  records: BedrockInvocationLogRecord[],
+): BedrockInvocationLogRecord {
+  if (records.length === 1) return records[0];
+  const [first, ...rest] = records;
+  const merged = { ...first };
+  for (const record of rest) {
+    merged.inputTokenCount += record.inputTokenCount;
+    merged.outputTokenCount += record.outputTokenCount;
+    merged.cacheReadTokenCount += record.cacheReadTokenCount;
+    merged.cacheWriteTokenCount += record.cacheWriteTokenCount;
+    merged.costUsd = roundUsd(merged.costUsd + record.costUsd);
+    if (merged.durationMs != null && record.durationMs != null) {
+      merged.durationMs += record.durationMs;
+    }
+    merged.toolUses = [...merged.toolUses, ...record.toolUses];
+    merged.hasToolResult = merged.hasToolResult || record.hasToolResult;
   }
-  return { input: 3.0, output: 15.0 };
+  return merged;
 }
 
 export function shortenModelId(modelId: string): string {

@@ -442,7 +442,13 @@ export async function runCompileJob(
               suggestedType: m.suggested_type,
             })),
           },
-          { modelId: opts.modelId },
+          {
+            modelId: opts.modelId,
+            costContext: {
+              tenantId: job.tenant_id,
+              requestId: `wiki:${job.id}:planner:${metrics.planner_calls}`,
+            },
+          },
         );
         metrics.planner_calls += 1;
         metrics.input_tokens += plan.usage.inputTokens;
@@ -811,6 +817,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
         sourceRecords: sectionSources,
         knownPageTitles: args.knownPageTitles,
         modelId: args.modelId,
+        costContext: {
+          tenantId: job.tenant_id,
+          requestId: `wiki:${job.id}:section:${metrics.section_writer_calls}`,
+        },
       });
       metrics.section_writer_calls += 1;
       metrics.sections_rewritten += 1;
@@ -1346,7 +1356,13 @@ export async function runAggregationPass(args: AggregationArgs): Promise<void> {
       parentCandidates,
       linkNeighborhoods,
     },
-    { modelId },
+    {
+      modelId,
+      costContext: {
+        tenantId: job.tenant_id,
+        requestId: `wiki:${job.id}:aggregation:${metrics.aggregation_planner_calls ?? 0}`,
+      },
+    },
   );
 
   metrics.aggregation_planner_calls =
@@ -1631,6 +1647,10 @@ async function applyAggregationPlan(args: ApplyAggregationArgs): Promise<void> {
         sourceRecords: citedRecords,
         knownPageTitles,
         modelId,
+        costContext: {
+          tenantId: job.tenant_id,
+          requestId: `wiki:${job.id}:section:${metrics.section_writer_calls}`,
+        },
       });
       metrics.section_writer_calls += 1;
       metrics.input_tokens += writeRes.inputTokens;

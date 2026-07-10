@@ -383,6 +383,7 @@ export async function processFinalize(
         inputTokens: payload.usage.input_tokens ?? 0,
         outputTokens: payload.usage.output_tokens ?? 0,
         cachedReadTokens: payload.usage.cached_read_tokens ?? 0,
+        cachedWriteTokens: payload.usage.cached_write_tokens ?? 0,
       }
     : extractUsage({ usage: undefined });
   const bedrockRequestIds = invokeResult.bedrock_request_ids;
@@ -398,6 +399,7 @@ export async function processFinalize(
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cachedReadTokens: usage.cachedReadTokens,
+      cachedWriteTokens: usage.cachedWriteTokens,
       durationMs,
       inputText: userMessage,
       outputText: responseText,
@@ -542,6 +544,7 @@ export async function processFinalize(
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cachedReadTokens: usage.cachedReadTokens,
+      cachedWriteTokens: usage.cachedWriteTokens,
       costUsd: parentCostUsd,
     },
     modelRoutedToolCalls,
@@ -552,6 +555,7 @@ export async function processFinalize(
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     cached_read_tokens: usage.cachedReadTokens,
+    cached_write_tokens: usage.cachedWriteTokens,
     cost_usd: parentCostUsd,
   };
   const goalRun = goalRunProjectionFromFinalizePayload(payload);
@@ -562,6 +566,7 @@ export async function processFinalize(
     input_tokens: aggregateUsage.inputTokens,
     output_tokens: aggregateUsage.outputTokens,
     cached_read_tokens: aggregateUsage.cachedReadTokens,
+    cached_write_tokens: aggregateUsage.cachedWriteTokens,
     cost_usd: aggregateUsage.costUsd,
     parent_usage: parentUsage,
     diagnostics,
@@ -622,6 +627,7 @@ export async function processFinalize(
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cachedReadTokens: usage.cachedReadTokens,
+      cachedWriteTokens: usage.cachedWriteTokens,
       costUsd: parentCostUsd,
     },
     diagnostics,
@@ -2169,6 +2175,7 @@ function aggregateTurnUsage(input: {
     inputTokens: number;
     outputTokens: number;
     cachedReadTokens: number;
+    cachedWriteTokens?: number;
     costUsd?: number | null;
   };
   modelRoutedToolCalls: ModelRoutedToolCallEvidence[];
@@ -2177,6 +2184,7 @@ function aggregateTurnUsage(input: {
   inputTokens: number;
   outputTokens: number;
   cachedReadTokens: number;
+  cachedWriteTokens: number;
   costUsd: number | null;
 } {
   const inputTokens =
@@ -2200,6 +2208,16 @@ function aggregateTurnUsage(input: {
       0,
     ) +
     input.agentProfileRuns.reduce((sum, run) => sum + run.cachedReadTokens, 0);
+  const cachedWriteTokens =
+    (input.parent.cachedWriteTokens ?? 0) +
+    input.modelRoutedToolCalls.reduce(
+      (sum, call) => sum + (call.cachedWriteTokens ?? 0),
+      0,
+    ) +
+    input.agentProfileRuns.reduce(
+      (sum, run) => sum + (run.cachedWriteTokens ?? 0),
+      0,
+    );
   const costValues = [
     input.parent.costUsd,
     ...input.modelRoutedToolCalls.map((call) => call.costUsd),
@@ -2212,6 +2230,7 @@ function aggregateTurnUsage(input: {
     inputTokens,
     outputTokens,
     cachedReadTokens,
+    cachedWriteTokens,
     costUsd:
       costValues.length > 0
         ? Math.round(

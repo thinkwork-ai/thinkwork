@@ -1772,6 +1772,7 @@ export const TurnInvocationLogsQuery = gql`
       inputTokenCount
       outputTokenCount
       cacheReadTokenCount
+      cacheWriteTokenCount
       inputPreview
       outputPreview
       toolCount

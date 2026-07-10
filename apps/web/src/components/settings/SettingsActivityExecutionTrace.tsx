@@ -210,6 +210,7 @@ type TimelineEvent = {
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   costUsd?: number;
   durationMs?: number;
   requestId?: string;
@@ -248,6 +249,7 @@ type TimelineEvent = {
   profileInputTokens?: number;
   profileOutputTokens?: number;
   profileCacheReadTokens?: number;
+  profileCacheWriteTokens?: number;
   profileCostUsd?: number;
   profileDurationMs?: number;
   profileHandoffSummary?: string;
@@ -281,6 +283,7 @@ type TokenTotals = {
   inputTokens: number;
   outputTokens: number;
   cachedReadTokens: number;
+  cachedWriteTokens: number;
 };
 
 export interface ExecutionTraceModelRouteTrace {
@@ -518,7 +521,11 @@ function profileRunModel(run: Record<string, unknown>): string {
 
 function profileRunTokens(
   run: Record<string, unknown>,
-  key: "inputTokens" | "outputTokens" | "cachedReadTokens",
+  key:
+    | "inputTokens"
+    | "outputTokens"
+    | "cachedReadTokens"
+    | "cachedWriteTokens",
 ): number {
   return numberValue(profileRunField(run, key)) ?? 0;
 }
@@ -673,20 +680,26 @@ function aggregateProfileRunTokens(
       outputTokens: sum.outputTokens + profileRunTokens(run, "outputTokens"),
       cachedReadTokens:
         sum.cachedReadTokens + profileRunTokens(run, "cachedReadTokens"),
+      cachedWriteTokens:
+        sum.cachedWriteTokens + profileRunTokens(run, "cachedWriteTokens"),
     }),
-    { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0 },
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedReadTokens: 0,
+      cachedWriteTokens: 0,
+    },
   );
 }
 
-function aggregateTurnTokens(usage: Record<string, unknown> | null): {
-  inputTokens: number;
-  outputTokens: number;
-  cachedReadTokens: number;
-} {
+function aggregateTurnTokens(
+  usage: Record<string, unknown> | null,
+): TokenTotals {
   const directTotals = {
     inputTokens: numberValue(usage?.input_tokens) ?? 0,
     outputTokens: numberValue(usage?.output_tokens) ?? 0,
     cachedReadTokens: numberValue(usage?.cached_read_tokens) ?? 0,
+    cachedWriteTokens: numberValue(usage?.cached_write_tokens) ?? 0,
   };
   if (usage?.parent_usage || usage?.parentUsage) {
     return directTotals;
@@ -701,7 +714,23 @@ function aggregateTurnTokens(usage: Record<string, unknown> | null): {
     outputTokens: directTotals.outputTokens + profileTotals.outputTokens,
     cachedReadTokens:
       directTotals.cachedReadTokens + profileTotals.cachedReadTokens,
+    cachedWriteTokens:
+      directTotals.cachedWriteTokens + profileTotals.cachedWriteTokens,
   };
+}
+
+/**
+ * Tooltip text for a "(N cached)" affordance: prompt-cache read/write token
+ * counts. Cache activity is platform behavior, not a user control. Returns
+ * a read-only label when no write count is known.
+ */
+function cacheTooltip(readTokens?: number | null, writeTokens?: number | null) {
+  const read = readTokens ?? 0;
+  const write = writeTokens ?? 0;
+  if (write > 0) {
+    return `Prompt cache: ${formatTokens(read)} read · ${formatTokens(write)} write`;
+  }
+  return `Prompt cache: ${formatTokens(read)} read`;
 }
 
 function loopEvidenceRecords(
@@ -1166,10 +1195,10 @@ function mergeRouteEvidence(
 function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
   return Boolean(
     event.routeModelId ||
-      event.routeStatus ||
-      event.routeInputTokens != null ||
-      event.routeOutputTokens != null ||
-      event.routeCostUsd != null,
+    event.routeStatus ||
+    event.routeInputTokens != null ||
+    event.routeOutputTokens != null ||
+    event.routeCostUsd != null,
   );
 }
 
@@ -1333,6 +1362,7 @@ function buildTimelineFromUsage(
     const profileInputTokens = profileRunTokens(run, "inputTokens");
     const profileOutputTokens = profileRunTokens(run, "outputTokens");
     const profileCacheReadTokens = profileRunTokens(run, "cachedReadTokens");
+    const profileCacheWriteTokens = profileRunTokens(run, "cachedWriteTokens");
     const profileCostUsd = profileRunCost(run);
     const profileDurationMs = profileRunDuration(run);
 
@@ -1352,6 +1382,7 @@ function buildTimelineFromUsage(
       profileInputTokens,
       profileOutputTokens,
       profileCacheReadTokens,
+      profileCacheWriteTokens,
       profileCostUsd,
       profileDurationMs,
       profileHandoffSummary: profileRunHandoff(run),
@@ -1466,6 +1497,7 @@ function buildTimeline(
       inputTokens: inv.inputTokenCount,
       outputTokens: inv.outputTokenCount,
       cacheReadTokens: inv.cacheReadTokenCount,
+      cacheWriteTokens: inv.cacheWriteTokenCount,
       costUsd: inv.costUsd,
       requestId: inv.requestId,
       inputPreview: inv.inputPreview,
@@ -1929,9 +1961,15 @@ function ExecutionTimeline({
                 <span className="tabular-nums">
                   {formatTokens(eventInputTokens)}→
                   {formatTokens(eventOutputTokens)}
-                  {ev.cacheReadTokens ? (
-                    <span className="text-green-500 ml-1">
-                      ({formatTokens(ev.cacheReadTokens)} cached)
+                  {ev.cacheReadTokens || ev.cacheWriteTokens ? (
+                    <span
+                      className="text-green-500 ml-1"
+                      title={cacheTooltip(
+                        ev.cacheReadTokens,
+                        ev.cacheWriteTokens,
+                      )}
+                    >
+                      ({formatTokens(ev.cacheReadTokens ?? 0)} cached)
                     </span>
                   ) : null}
                 </span>
@@ -2005,7 +2043,19 @@ function ExecutionTimeline({
             }`;
             rightDetail = (
               <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
-                <span className="tabular-nums">{tokenLabel}</span>
+                <span
+                  className="tabular-nums"
+                  title={
+                    ev.profileCacheReadTokens || ev.profileCacheWriteTokens
+                      ? cacheTooltip(
+                          ev.profileCacheReadTokens,
+                          ev.profileCacheWriteTokens,
+                        )
+                      : undefined
+                  }
+                >
+                  {tokenLabel}
+                </span>
                 <span className="tabular-nums">
                   {formatDuration(ev.profileDurationMs)}
                 </span>
@@ -2257,6 +2307,7 @@ function TurnRow({
     aggregateTokens.inputTokens > 0 ||
     aggregateTokens.outputTokens > 0 ||
     aggregateTokens.cachedReadTokens > 0 ||
+    aggregateTokens.cachedWriteTokens > 0 ||
     inputTokens != null;
   const title = "Thinking";
   const sourceLabel = formatInvocationSource(
@@ -2316,7 +2367,15 @@ function TurnRow({
             {hasAggregateTokens && (
               <span
                 className="flex min-w-0 items-center gap-0.5 truncate"
-                title="Input / Output tokens"
+                title={
+                  aggregateTokens.cachedReadTokens ||
+                  aggregateTokens.cachedWriteTokens
+                    ? `Input / Output tokens · ${cacheTooltip(
+                        aggregateTokens.cachedReadTokens,
+                        aggregateTokens.cachedWriteTokens,
+                      )}`
+                    : "Input / Output tokens"
+                }
               >
                 <Zap className="h-3 w-3" />
                 {formatTokens(aggregateTokens.inputTokens)} →{" "}

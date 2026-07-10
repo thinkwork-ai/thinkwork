@@ -11,6 +11,7 @@ import {
   reconcileBedrockInvocationsForTurn,
   reconcileRecentBedrockInvocations,
 } from "../lib/trace-ledger/bedrock-invocation-reconciler.js";
+import { emitCostMetrics } from "../lib/cost-metrics.js";
 
 type TargetedEvent = {
   tenantId?: unknown;
@@ -64,6 +65,15 @@ export async function handler(
       ...result,
     }),
   );
+  // THINK-245 U5 — reconciler health metrics. The matched:0 steady state ran
+  // silently from Jun 25 to Jul 9; the alarm on these metrics (terraform,
+  // treat_missing_data=breaching) is the AE4 "never silent again" contract.
+  emitCostMetrics([
+    { name: "ReconcilerTurnsScanned", value: result.turnsScanned },
+    { name: "ReconcilerMatched", value: result.matched },
+    { name: "ReconcilerMismatched", value: result.mismatched },
+    { name: "ReconcilerUnreconciled", value: result.unreconciled },
+  ]);
   return result;
 }
 

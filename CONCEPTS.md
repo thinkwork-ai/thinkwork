@@ -338,4 +338,4 @@ The correction layer that overwrites runtime-reported cost amounts with provider
 The policy for retroactively correcting historical cost events: backfilled/repriced amounts are flagged and excluded from budget-window and cost-cap enforcement, so dashboards show true spend while no user or tenant crosses a limit as a side effect of the correction. Only spend recorded after the fix counts toward enforcement.
 
 ### System Spend
-Per-tenant cost events written by background Bedrock consumers (wiki compile, conformance judge, KG extraction, idle learning, dreaming, model proxy), tagged with a source category naming the consumer rather than attributed to a thread or turn. Lets dashboards split conversation spend from background/system spend while keeping tenant totals reconcilable with AWS billing.
+Per-tenant cost events written by background Bedrock consumers (wiki compile, conformance judge, KG extraction, model converse, dreaming), tagged with a source category naming the consumer rather than attributed to a thread or turn. Lets dashboards split conversation spend from background/system spend while keeping tenant totals reconcilable with AWS billing.

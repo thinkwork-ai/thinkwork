@@ -24,7 +24,7 @@
  * can exercise the full structural pipeline without a network call.
  */
 
-import { invokeClaudeWithRetry } from "./bedrock.js";
+import { invokeClaudeWithRetry, type BedrockCostContext } from "./bedrock.js";
 import { slugifyTitle } from "./aliases.js";
 import {
   claimCompileJobById,
@@ -120,6 +120,7 @@ export interface DraftCompileSeam {
     user: string;
     modelId?: string;
     signal?: AbortSignal;
+    costContext?: BedrockCostContext;
   }) => Promise<{
     text: string;
     inputTokens: number;
@@ -179,6 +180,7 @@ If the page already covers all candidate facts, return the existing sections ver
 export async function runDraftCompile(
   input: DraftCompileInput,
   seam?: DraftCompileSeam,
+  costContext?: BedrockCostContext,
 ): Promise<DraftCompileResult> {
   const snapshotMd = input.currentBodyMd;
   const existingSections = parseSections(snapshotMd);
@@ -193,6 +195,7 @@ export async function runDraftCompile(
   const resp = await invoke({
     system: DRAFT_COMPILE_SYSTEM,
     user: userPrompt,
+    costContext,
   });
 
   const parsed = parseModelResponse(resp.text);
@@ -583,6 +586,7 @@ async function defaultInvokeModel(args: {
   user: string;
   modelId?: string;
   signal?: AbortSignal;
+  costContext?: BedrockCostContext;
 }): Promise<{
   text: string;
   inputTokens: number;
@@ -596,6 +600,7 @@ async function defaultInvokeModel(args: {
     temperature: 0,
     modelId: args.modelId,
     signal: args.signal,
+    costContext: args.costContext,
   });
   return {
     text: resp.text,
@@ -715,7 +720,10 @@ export async function runDraftCompileJob(
       candidates: parsedInput.candidates,
       requestingAgentId: parsedInput.requestingAgentId ?? null,
     };
-    const result = await runDraftCompile(parsedInput, opts.seam);
+    const result = await runDraftCompile(parsedInput, opts.seam, {
+      tenantId: job.tenant_id,
+      requestId: `wiki:${job.id}:draft`,
+    });
 
     const writeback =
       result.regions.length === 0

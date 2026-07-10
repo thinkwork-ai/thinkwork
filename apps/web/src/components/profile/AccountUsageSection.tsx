@@ -26,6 +26,11 @@ type UsageDay = {
   unreconciledUsd: number;
   inputTokens: number;
   outputTokens: number;
+  cachedReadTokens?: number | null;
+  cachedWriteTokens?: number | null;
+  cacheUsd?: number | null;
+  conversationUsd?: number | null;
+  systemUsd?: number | null;
   eventCount: number;
 };
 
@@ -36,6 +41,9 @@ type UsageModel = {
   enforcedUsd: number;
   inputTokens: number;
   outputTokens: number;
+  cachedReadTokens?: number | null;
+  cachedWriteTokens?: number | null;
+  cacheUsd?: number | null;
   usageShare: number;
 };
 
@@ -100,6 +108,16 @@ export function AccountUsageSection({
   ).length;
   const reviewUsd =
     (summary?.mismatchUsd ?? 0) + (summary?.unreconciledUsd ?? 0);
+  const systemUsd = summary?.systemUsd ?? 0;
+  const spendSplit =
+    systemUsd > 0
+      ? `Conversation ${formatUsd(summary?.conversationUsd ?? 0)} · Background ${formatUsd(systemUsd)}`
+      : null;
+  const cacheDetail = cacheDetailLabel(
+    summary?.cachedReadTokens ?? 0,
+    summary?.cachedWriteTokens ?? 0,
+    summary?.cacheUsd ?? 0,
+  );
 
   return (
     <section aria-labelledby="account-usage-heading" className="mb-8">
@@ -130,6 +148,7 @@ export function AccountUsageSection({
             icon={<Coins className="size-4" />}
             label="Total"
             value={formatUsd(summary?.totalUsd ?? 0)}
+            sub={spendSplit}
           />
           <UsageMetric
             icon={<ShieldCheck className="size-4" />}
@@ -145,6 +164,7 @@ export function AccountUsageSection({
             icon={<Hash className="size-4" />}
             label="Tokens"
             value={formatTokens(totalTokens)}
+            sub={cacheDetail}
           />
           <UsageMetric
             icon={<Activity className="size-4" />}
@@ -174,10 +194,12 @@ function UsageMetric({
   icon,
   label,
   value,
+  sub,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
+  sub?: string | null;
 }) {
   return (
     <div className="rounded-lg border border-border bg-background px-3 py-3">
@@ -188,6 +210,9 @@ function UsageMetric({
       <p className="mt-2 text-lg font-semibold tabular-nums text-foreground">
         {value}
       </p>
+      {sub ? (
+        <p className="mt-1 text-xs tabular-nums text-muted-foreground">{sub}</p>
+      ) : null}
     </div>
   );
 }
@@ -266,7 +291,26 @@ function UsageCalendar({
                     label="Spend"
                     value={formatUsd(cell.row?.totalUsd ?? 0)}
                   />
+                  {(cell.row?.systemUsd ?? 0) > 0 ? (
+                    <>
+                      <TooltipMetric
+                        label="Conversation"
+                        value={formatUsd(cell.row?.conversationUsd ?? 0)}
+                      />
+                      <TooltipMetric
+                        label="Background"
+                        value={formatUsd(cell.row?.systemUsd ?? 0)}
+                      />
+                    </>
+                  ) : null}
                   <TooltipMetric label="Tokens" value={formatTokens(tokens)} />
+                  {(cell.row?.cachedReadTokens ?? 0) > 0 ||
+                  (cell.row?.cachedWriteTokens ?? 0) > 0 ? (
+                    <TooltipMetric
+                      label="Cache"
+                      value={`${formatTokens(cell.row?.cachedReadTokens ?? 0)} read · ${formatTokens(cell.row?.cachedWriteTokens ?? 0)} write`}
+                    />
+                  ) : null}
                   <TooltipMetric
                     label="Events"
                     value={formatInteger(cell.row?.eventCount ?? 0)}
@@ -320,6 +364,17 @@ function ModelBreakdown({ models }: { models: UsageModel[] }) {
           {sorted.map((model) => {
             const name = model.displayName || shortenModelId(model.model);
             const totalTokens = model.inputTokens + model.outputTokens;
+            const cacheDetail = cacheDetailLabel(
+              model.cachedReadTokens ?? 0,
+              model.cachedWriteTokens ?? 0,
+              model.cacheUsd ?? 0,
+            );
+            const tokensTitle = [
+              `${formatTokens(model.inputTokens)} in / ${formatTokens(model.outputTokens)} out`,
+              cacheDetail,
+            ]
+              .filter(Boolean)
+              .join(" · ");
             return (
               <div
                 className="grid min-w-full grid-cols-[minmax(0,1fr)_8rem_7rem_7rem_5rem] items-center gap-4 border-b border-border bg-background px-3 py-3 last:border-b-0"
@@ -332,7 +387,10 @@ function ModelBreakdown({ models }: { models: UsageModel[] }) {
                 >
                   {name}
                 </p>
-                <p className="text-right text-sm tabular-nums text-muted-foreground">
+                <p
+                  className="text-right text-sm tabular-nums text-muted-foreground"
+                  title={tokensTitle}
+                >
                   {formatTokens(totalTokens)} tokens
                 </p>
                 <p className="text-right text-sm font-semibold tabular-nums text-foreground">
@@ -430,6 +488,25 @@ function parseDateOnly(value: string | null | undefined): Date | null {
 
 function formatUsd(value: number): string {
   return `$${value.toFixed(2)}`;
+}
+
+/**
+ * Platform prompt-cache activity (read/write token counts and their dollar
+ * contribution). Returns null when there was no cache activity so legacy
+ * rows render without "0 cache" noise.
+ */
+function cacheDetailLabel(
+  readTokens: number,
+  writeTokens: number,
+  cacheUsd: number,
+): string | null {
+  if (readTokens <= 0 && writeTokens <= 0 && cacheUsd <= 0) return null;
+  const parts = [
+    `${formatTokens(readTokens)} cache read`,
+    `${formatTokens(writeTokens)} cache write`,
+  ];
+  if (cacheUsd > 0) parts.push(formatUsd(cacheUsd));
+  return parts.join(" · ");
 }
 
 function formatTokens(value: number): string {

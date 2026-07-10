@@ -231,6 +231,65 @@ describe("AccountUsageSection", () => {
       query: queryDocs.SettingsAccountUsageQuery,
       variables: { tenantId: "tenant-1", userId: "user-1", days: 180 },
     });
+
+    // Legacy rows without cache/system fields render without cache noise or
+    // a $0 background split.
+    expect(screen.queryByText(/cache read/)).toBeNull();
+    expect(screen.queryByText(/Conversation \$/)).toBeNull();
+  });
+
+  it("renders cache token detail and the conversation/background split when present", () => {
+    urqlMocks.result = {
+      data: {
+        accountUsage: {
+          ...activeUsage.accountUsage,
+          summary: {
+            ...activeUsage.accountUsage.summary,
+            cachedReadTokens: 1200,
+            cachedWriteTokens: 300,
+            cacheUsd: 0.4,
+            conversationUsd: 6,
+            systemUsd: 2,
+          },
+        },
+      },
+      error: undefined,
+      fetching: false,
+    };
+
+    render(<AccountUsageSection tenantId="tenant-1" userId="user-1" />);
+
+    expect(
+      screen.getByText("Conversation $6.00 · Background $2.00"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("1.2k cache read · 300 cache write · $0.40"),
+    ).toBeTruthy();
+  });
+
+  it("hides the spend split when system spend is zero", () => {
+    urqlMocks.result = {
+      data: {
+        accountUsage: {
+          ...activeUsage.accountUsage,
+          summary: {
+            ...activeUsage.accountUsage.summary,
+            cachedReadTokens: 0,
+            cachedWriteTokens: 0,
+            cacheUsd: 0,
+            conversationUsd: 8,
+            systemUsd: 0,
+          },
+        },
+      },
+      error: undefined,
+      fetching: false,
+    };
+
+    render(<AccountUsageSection tenantId="tenant-1" userId="user-1" />);
+
+    expect(screen.queryByText(/Conversation \$/)).toBeNull();
+    expect(screen.queryByText(/cache read/)).toBeNull();
   });
 
   it("renders a stable empty state when the user has no account usage", () => {

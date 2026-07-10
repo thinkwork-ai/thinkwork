@@ -665,6 +665,8 @@ resource "aws_lambda_function" "handler" {
     # THNK-74 U3 — reconciles runtime-reported model usage against Bedrock
     # model invocation logs and appends invocation-scope trace ledger facts.
     "trace-invocation-reconciler",
+    # THINK-245 U10 — daily per-model drift check against Cost Explorer.
+    "cost-drift-check",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
     # Both are service-endpoint shape: the runtime POSTs with
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
@@ -2049,6 +2051,121 @@ resource "aws_scheduler_schedule" "cost_bill_reconciler" {
   target {
     arn      = aws_lambda_function.handler["cost-bill-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# cost_drift_check — THINK-245 U10/R9. Daily comparison of recorded per-model
+# LLM spend against Cost Explorer (day D-2; CE lags ~24h and refreshes by
+# early UTC afternoon). Emits CostDriftPercent / CostDriftCheckFailed EMF
+# metrics; the alarms below page the cost-alerts SNS topic. Drift discovered
+# by a customer instead of an alarm is the incident this exists to prevent.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "cost_drift_check" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-cost-drift-check"
+  group_name          = "default"
+  schedule_expression = "cron(0 14 * * ? *)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["cost-drift-check"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# THINK-245 U10 — cost alerting channel. First notification-wired alarms in
+# the stack; endpoints come from var.cost_alert_emails (sensitive).
+resource "aws_sns_topic" "cost_alerts" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+  name  = "thinkwork-${var.stage}-cost-alerts"
+}
+
+resource "aws_sns_topic_subscription" "cost_alert_emails" {
+  for_each = local.deploy_lambda_handlers ? toset(nonsensitive(var.cost_alert_emails)) : toset([])
+
+  topic_arn = aws_sns_topic.cost_alerts[0].arn
+  protocol  = "email"
+  endpoint  = each.value
+}
+
+# Drift > 1% for the daily datapoint, or the drift check stopped emitting
+# entirely (treat_missing_data = breaching — a silent checker is itself the
+# failure mode; see the Jun 25–Jul 9 reconciler incident).
+resource "aws_cloudwatch_metric_alarm" "cost_drift" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  alarm_name          = "thinkwork-${var.stage}-cost-drift"
+  alarm_description   = "Recorded per-model LLM spend diverges >1% from Cost Explorer (THINK-245 R9/AE5), or the drift check stopped emitting."
+  namespace           = "Thinkwork/Costs"
+  metric_name         = "CostDriftPercent"
+  statistic           = "Maximum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.cost_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.cost_alerts[0].arn]
+
+  dimensions = {
+    Stage = var.stage
+  }
+}
+
+# Reconciler health (THINK-245 R8/AE4): sustained matched==0 while
+# unreconciled work exists, or the reconciler stopped emitting metrics at
+# all. Metric math because the condition spans two metrics.
+resource "aws_cloudwatch_metric_alarm" "cost_reconciler_stalled" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  alarm_name          = "thinkwork-${var.stage}-cost-reconciler-stalled"
+  alarm_description   = "trace-invocation-reconciler matched 0 turns across an hour while unreconciled turns exist, or stopped emitting (THINK-245 R8/AE4 — this exact condition ran silently Jun 25–Jul 9)."
+  evaluation_periods  = 12
+  datapoints_to_alarm = 12
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.cost_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.cost_alerts[0].arn]
+
+  metric_query {
+    id          = "stalled"
+    expression  = "IF(matched == 0 AND unreconciled > 0, 1, 0)"
+    label       = "reconciler stalled"
+    return_data = true
+  }
+
+  metric_query {
+    id = "matched"
+    metric {
+      namespace   = "Thinkwork/Costs"
+      metric_name = "ReconcilerMatched"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        Stage = var.stage
+      }
+    }
+  }
+
+  metric_query {
+    id = "unreconciled"
+    metric {
+      namespace   = "Thinkwork/Costs"
+      metric_name = "ReconcilerUnreconciled"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        Stage = var.stage
+      }
+    }
   }
 }
 

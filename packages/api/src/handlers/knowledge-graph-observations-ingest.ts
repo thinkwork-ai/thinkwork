@@ -297,6 +297,10 @@ async function processTenantObservationsIngest(
       sourceRef: run.source_ref,
       sourceLabel: run.source_label ?? "Hindsight observations",
       maxCandidates: maxCandidatesPerRun(),
+      // THINK-245 U6: attribute classifier spend to the tenant/run.
+      gateDeps: {
+        costContext: { tenantId: run.tenant_id, runId: run.id },
+      },
     });
 
     const auditMetrics = {
@@ -339,6 +343,8 @@ async function processTenantObservationsIngest(
     const extraction = await extractor({
       packets: source.bundle.packets,
       ontology,
+      // THINK-245 U6: attribute extraction spend to the tenant/run.
+      costContext: { tenantId: run.tenant_id, runId: run.id },
     });
 
     // A batch that failed after the retry envelope means observations went

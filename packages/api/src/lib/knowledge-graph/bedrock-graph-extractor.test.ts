@@ -292,6 +292,32 @@ describe("extractGraphFromPackets", () => {
     });
   });
 
+  it("threads a per-batch kg_extraction costContext into the invoke seam (THINK-245 U6)", async () => {
+    const invoke = invokeReturning([
+      { entities: [], relationships: [] },
+      { entities: [], relationships: [] },
+    ]);
+    vi.stubEnv("KG_EXTRACTION_BATCH_SIZE", "1");
+    await extractGraphFromPackets({
+      packets: [packet("p1", "x"), packet("p2", "y")],
+      ontology: ONTOLOGY,
+      invoke: invoke as never,
+      costContext: { tenantId: "t1", runId: "run-1" },
+    });
+    expect(invoke.mock.calls[0]![0]).toMatchObject({
+      costContext: {
+        tenantId: "t1",
+        requestId: "kg:run-1:extract:0",
+        source: "kg_extraction",
+      },
+    });
+    expect(invoke.mock.calls[1]![0]).toMatchObject({
+      costContext: expect.objectContaining({
+        requestId: "kg:run-1:extract:1",
+      }),
+    });
+  });
+
   it("golden set fixture is well-formed and labels are verbatim substrings of packet text", () => {
     const golden = JSON.parse(
       readFileSync(

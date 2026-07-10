@@ -513,6 +513,15 @@ async function runRemPhase(
       maxTokens: 1200,
       temperature: 0.2,
       modelId: process.env.REQUESTER_MEMORY_DREAMING_MODEL_ID,
+      // THINK-245 U6: one REM reflection per (run, user) — the composite
+      // key is stable per billable call. Recording is best-effort inside
+      // invokeClaude and never fails the dream run.
+      costContext: {
+        tenantId: input.target.tenantId,
+        userId: input.target.userId,
+        requestId: `dream:${input.runId}:${input.target.userId}:rem`,
+        source: "dreaming",
+      },
     });
     return response.text.trim() || deterministicReflection(input.candidates);
   } catch (err) {

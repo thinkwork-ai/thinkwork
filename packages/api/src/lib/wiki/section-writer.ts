@@ -13,7 +13,7 @@
  */
 
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
-import { invokeClaudeWithRetry } from "./bedrock.js";
+import { invokeClaudeWithRetry, type BedrockCostContext } from "./bedrock.js";
 import { getTemplate } from "./templates.js";
 import type { WikiPageType } from "./repository.js";
 
@@ -39,6 +39,8 @@ export interface SectionWriteArgs {
   knownPageTitles?: string[];
   modelId?: string;
   signal?: AbortSignal;
+  /** Per-tenant cost attribution — see BedrockCostContext (THINK-245 U6). */
+  costContext?: BedrockCostContext;
 }
 
 export interface SectionWriteResult {
@@ -132,6 +134,7 @@ export async function writeSection(
     temperature: 0,
     modelId: args.modelId,
     signal: args.signal,
+    costContext: args.costContext,
   });
   return {
     body_md: resp.text.trim(),

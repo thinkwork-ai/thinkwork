@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   rows: [] as Array<Array<Record<string, unknown>>>,
+  requireAdminOrServiceCaller: vi.fn(async () => {}),
 }));
 
 function queryChain() {
@@ -9,6 +10,7 @@ function queryChain() {
   const chain = {
     from: () => chain,
     where: () => chain,
+    groupBy: () => chain,
     then: (
       resolve: (value: Array<Record<string, unknown>>) => unknown,
       reject?: (reason: unknown) => unknown,
@@ -29,6 +31,10 @@ vi.mock("../../utils.js", () => ({
     reconciliation_state: "cost_events.reconciliation_state",
     input_tokens: "cost_events.input_tokens",
     output_tokens: "cost_events.output_tokens",
+    cached_read_tokens: "cost_events.cached_read_tokens",
+    cached_write_tokens: "cost_events.cached_write_tokens",
+    metadata: "cost_events.metadata",
+    model: "cost_events.model",
   },
   and: (...args: unknown[]) => ({ _and: args }),
   eq: (...args: unknown[]) => ({ _eq: args }),
@@ -36,6 +42,10 @@ vi.mock("../../utils.js", () => ({
   lte: (...args: unknown[]) => ({ _lte: args }),
   sql: (...args: unknown[]) => ({ _sql: args }),
   startOfMonth: () => new Date("2026-06-01T00:00:00.000Z"),
+}));
+
+vi.mock("../core/authz.js", () => ({
+  requireAdminOrServiceCaller: mocks.requireAdminOrServiceCaller,
 }));
 
 // eslint-disable-next-line import/first
@@ -62,7 +72,17 @@ describe("costSummary", () => {
           unreconciledUsd: 0,
           totalInputTokens: 1200,
           totalOutputTokens: 600,
+          totalCachedReadTokens: 400,
+          totalCachedWriteTokens: 100,
+          systemUsd: 2,
           eventCount: 4,
+        },
+      ],
+      [
+        {
+          model: "claude-sonnet-4-6",
+          cachedReadTokens: 400,
+          cachedWriteTokens: 100,
         },
       ],
     ];
@@ -86,7 +106,18 @@ describe("costSummary", () => {
       minimumReconciliationState: "runtime-reported",
       totalInputTokens: 1200,
       totalOutputTokens: 600,
+      totalCachedReadTokens: 400,
+      totalCachedWriteTokens: 100,
+      // 400*0.30 + 100*3.75 per million
+      cacheUsd: 0.000495,
+      systemUsd: 2,
+      conversationUsd: 15,
       eventCount: 4,
     });
+    expect(mocks.requireAdminOrServiceCaller).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-1",
+      "cost_summary:read",
+    );
   });
 });

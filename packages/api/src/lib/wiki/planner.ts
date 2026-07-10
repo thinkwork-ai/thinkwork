@@ -21,7 +21,7 @@
 
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import type { OntologyCompileSnapshot } from "../ontology/compile-snapshot.js";
-import { invokeClaudeJson } from "./bedrock.js";
+import { invokeClaudeJson, type BedrockCostContext } from "./bedrock.js";
 import {
   describeAllPageTypes,
   describeOntologyAwareWikiGuardrails,
@@ -470,12 +470,17 @@ export function describeOntologySnapshotForPrompt(
  */
 export async function runPlanner(
   batch: PlannerBatch,
-  opts: { signal?: AbortSignal; modelId?: string } = {},
+  opts: {
+    signal?: AbortSignal;
+    modelId?: string;
+    costContext?: BedrockCostContext;
+  } = {},
 ): Promise<PlannerResult> {
   const user = buildPlannerUserPrompt(batch);
   const resp = await invokeClaudeJson<PlannerResult>({
     system: PLANNER_SYSTEM,
     user,
+    costContext: opts.costContext,
     // Planner output grows with batch complexity + link proposals + per-
     // section source_refs. 8k was tight enough to truncate on 50-record
     // batches with 20+ new pages; 24k gives comfortable headroom without

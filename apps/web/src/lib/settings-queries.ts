@@ -1477,8 +1477,13 @@ export const SettingsAccountUsageQuery = graphql(`
         llmUsd
         computeUsd
         toolsUsd
+        cacheUsd
+        conversationUsd
+        systemUsd
         inputTokens
         outputTokens
+        cachedReadTokens
+        cachedWriteTokens
         eventCount
       }
       daily {
@@ -1494,8 +1499,13 @@ export const SettingsAccountUsageQuery = graphql(`
         llmUsd
         computeUsd
         toolsUsd
+        cacheUsd
+        conversationUsd
+        systemUsd
         inputTokens
         outputTokens
+        cachedReadTokens
+        cachedWriteTokens
         eventCount
       }
       models {
@@ -1511,6 +1521,9 @@ export const SettingsAccountUsageQuery = graphql(`
         minimumReconciliationState
         inputTokens
         outputTokens
+        cachedReadTokens
+        cachedWriteTokens
+        cacheUsd
         usageShare
       }
     }
@@ -1635,8 +1648,13 @@ export const SettingsCostSummaryQuery = graphql(`
       llmUsd
       computeUsd
       toolsUsd
+      cacheUsd
+      conversationUsd
+      systemUsd
       totalInputTokens
       totalOutputTokens
+      totalCachedReadTokens
+      totalCachedWriteTokens
       eventCount
     }
   }

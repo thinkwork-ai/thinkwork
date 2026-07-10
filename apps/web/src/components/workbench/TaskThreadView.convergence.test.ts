@@ -223,7 +223,7 @@ describe("actionRowsForTurn — live/finalized convergence", () => {
     expect(rows[0].detail).toContain("Model routing");
     expect(rows[0].detail).toContain("Model: claude-haiku-4-5-20251001");
     expect(rows[0].detail).toContain("Tokens: 1.2K in / 56 out");
-    expect(rows[0].detail).toContain("(20 cached)");
+    expect(rows[0].detail).toContain("(20 cache read)");
     expect(rows[0].detail).toContain("Routing status: succeeded");
     expect(rows[0].detail).toContain('"scope": "user"');
     expect(rows[0].detail).toContain('"skill": "research"');

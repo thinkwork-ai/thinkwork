@@ -658,6 +658,11 @@ build_handler "cost-bill-reconciler" \
 build_handler "trace-invocation-reconciler" \
   "$REPO_ROOT/packages/api/src/handlers/trace-invocation-reconciler.ts"
 
+# THINK-245 U10 — daily Cost Explorer drift check (recorded vs billed per
+# model). @aws-sdk/client-cost-explorer stays external (Lambda runtime SDK).
+build_handler "cost-drift-check" \
+  "$REPO_ROOT/packages/api/src/handlers/cost-drift-check.ts"
+
 # ---------------------------------------------------------------------------
 # P2: Cron handlers
 # ---------------------------------------------------------------------------

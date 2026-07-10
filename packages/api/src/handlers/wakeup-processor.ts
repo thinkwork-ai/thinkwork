@@ -2749,6 +2749,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cachedReadTokens: usage.cachedReadTokens,
+        cachedWriteTokens: usage.cachedWriteTokens,
         durationMs,
         inputText: agentMessage,
         outputText: responseText,

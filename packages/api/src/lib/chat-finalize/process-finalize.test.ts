@@ -870,6 +870,7 @@ describe("processFinalize reconcile seam", () => {
           inputTokens: 1000,
           outputTokens: 200,
           cachedReadTokens: 15,
+          cachedWriteTokens: 0,
           costUsd: 1.23,
         },
         diagnostics: expect.objectContaining({

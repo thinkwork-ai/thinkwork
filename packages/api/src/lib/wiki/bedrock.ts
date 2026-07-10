@@ -20,6 +20,7 @@ import {
   type ContentBlock,
   type Message,
   type SystemContentBlock,
+  type TokenUsage,
 } from "@aws-sdk/client-bedrock-runtime";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
@@ -50,6 +51,23 @@ function getClient(): BedrockRuntimeClient {
   return _client;
 }
 
+/**
+ * Per-tenant cost attribution for a Converse call (THINK-245 U6). When
+ * present, every successful invocation writes a cost_events row via
+ * `recordCostEvents`. `requestId` is the idempotency key — cost_events is
+ * unique on (request_id, event_type) — so callers must pass a value that is
+ * stable per billable call (e.g. `wiki:<jobId>:planner:<batch>`); retry
+ * attempts get an automatic `:r<n>` suffix so retried spend still records.
+ */
+export interface BedrockCostContext {
+  tenantId: string;
+  requestId: string;
+  /** cost_events metadata.source tag. Defaults to "wiki_compile". */
+  source?: string;
+  agentId?: string | null;
+  userId?: string | null;
+}
+
 export interface InvokeClaudeArgs {
   /** System prompt. Kept separate from user content for clarity + caching. */
   system: string;
@@ -63,6 +81,8 @@ export interface InvokeClaudeArgs {
   modelId?: string;
   /** Abort signal for the SDK — compiler uses this to enforce a per-call budget. */
   signal?: AbortSignal;
+  /** When set, the call records a per-tenant cost event (never throws). */
+  costContext?: BedrockCostContext;
 }
 
 export interface InvokeClaudeResult {
@@ -105,6 +125,7 @@ export async function invokeClaude(
   const timeoutId = timeout
     ? setTimeout(() => timeout.abort(), DEFAULT_CALL_TIMEOUT_MS)
     : null;
+  const startedAt = Date.now();
   try {
     const resp = await client.send(
       new ConverseCommand({
@@ -126,6 +147,15 @@ export async function invokeClaude(
       .map((b) => (typeof b.text === "string" ? b.text : ""))
       .join("");
 
+    if (args.costContext) {
+      await recordConverseCost({
+        context: args.costContext,
+        modelId,
+        usage: resp.usage,
+        durationMs: Date.now() - startedAt,
+      });
+    }
+
     return {
       text,
       inputTokens: resp.usage?.inputTokens ?? 0,
@@ -144,6 +174,43 @@ export async function invokeClaude(
     throw err;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Best-effort per-tenant cost recording for one Converse call (THINK-245 U6).
+ * A cost-recording failure must NEVER fail the underlying job — errors are
+ * logged and swallowed. Converse `usage.inputTokens` EXCLUDES cache tokens,
+ * so cacheRead/cacheWrite are passed through separately when present.
+ * `recordCompute: false` — these are Lambda-side callers, not AgentCore turns.
+ */
+async function recordConverseCost(input: {
+  context: BedrockCostContext;
+  modelId: string;
+  usage: TokenUsage | undefined;
+  durationMs: number;
+}): Promise<void> {
+  try {
+    const { recordCostEvents } = await import("../cost-recording.js");
+    await recordCostEvents({
+      tenantId: input.context.tenantId,
+      agentId: input.context.agentId ?? null,
+      userId: input.context.userId ?? null,
+      requestId: input.context.requestId,
+      model: input.modelId,
+      inputTokens: input.usage?.inputTokens ?? 0,
+      outputTokens: input.usage?.outputTokens ?? 0,
+      cachedReadTokens: input.usage?.cacheReadInputTokens ?? 0,
+      cachedWriteTokens: input.usage?.cacheWriteInputTokens ?? 0,
+      durationMs: input.durationMs,
+      recordCompute: false,
+      source: input.context.source ?? "wiki_compile",
+    });
+  } catch (err) {
+    console.error(
+      `[bedrock] cost recording failed (source=${input.context.source ?? "wiki_compile"} request=${input.context.requestId}):`,
+      err,
+    );
   }
 }
 
@@ -295,9 +362,29 @@ export interface InvokeClaudeWithRetryResult extends InvokeClaudeResult {
 export async function invokeClaudeWithRetry(
   args: InvokeClaudeArgs,
 ): Promise<InvokeClaudeWithRetryResult> {
-  return withBedrockRetry(async () => invokeClaude(args), {
-    signal: args.signal,
-  });
+  return withBedrockRetry(
+    async (attempt) => invokeClaude(argsForAttempt(args, attempt)),
+    { signal: args.signal },
+  );
+}
+
+/**
+ * Retry attempts each incur real Bedrock spend, so give attempts > 1 a
+ * derived idempotency key (`<requestId>:r<n>`) — otherwise the
+ * (request_id, event_type) unique constraint would silently drop them.
+ */
+function argsForAttempt(
+  args: InvokeClaudeArgs,
+  attempt: number,
+): InvokeClaudeArgs {
+  if (!args.costContext || attempt <= 1) return args;
+  return {
+    ...args,
+    costContext: {
+      ...args.costContext,
+      requestId: `${args.costContext.requestId}:r${attempt}`,
+    },
+  };
 }
 
 export interface InvokeClaudeJsonResult<T> extends InvokeClaudeWithRetryResult {
@@ -318,8 +405,8 @@ export async function invokeClaudeJson<T>(
 ): Promise<InvokeClaudeJsonResult<T>> {
   const parse = args.parse ?? ((text: string) => parseJsonResponse<T>(text));
   return withBedrockRetry(
-    async () => {
-      const res = await invokeClaude(args);
+    async (attempt) => {
+      const res = await invokeClaude(argsForAttempt(args, attempt));
       const parsed = parse(res.text);
       return { ...res, parsed };
     },
@@ -328,7 +415,7 @@ export async function invokeClaudeJson<T>(
 }
 
 async function withBedrockRetry<R>(
-  fn: () => Promise<R>,
+  fn: (attempt: number) => Promise<R>,
   opts: { signal?: AbortSignal; maxAttempts?: number } = {},
 ): Promise<R & { retries: number }> {
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
@@ -340,7 +427,7 @@ async function withBedrockRetry<R>(
       throw abortErr;
     }
     try {
-      const res = await fn();
+      const res = await fn(attempt);
       return { ...res, retries: attempt - 1 };
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));

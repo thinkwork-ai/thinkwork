@@ -57,6 +57,7 @@ import {
   createSkillsExtension,
   createMemoryExtension,
   createOkfWikiNavigatorExtension,
+  createRequestIdentityExtension,
   createSendEmailExtension,
   createSystemPromptExtension,
   createTaskStatusExtension,
@@ -715,6 +716,12 @@ function extractConverseText(response: unknown): string {
 
 export function createBedrockChildModelCaller(
   client: BedrockRuntimeClient,
+  // THINK-245 U4 — request identity: stamp child-model Converse calls with
+  // requestMetadata and surface response requestIds for exact reconciliation.
+  requestIdentity?: {
+    requestMetadata?: Record<string, string>;
+    onRequestId?: (requestId: string) => void;
+  },
 ): ChildModelCaller {
   return async (input) => {
     const response = await client.send(
@@ -731,8 +738,16 @@ export function createBedrockChildModelCaller(
           maxTokens: 2048,
           temperature: 0,
         },
+        ...(requestIdentity?.requestMetadata &&
+        Object.keys(requestIdentity.requestMetadata).length > 0
+          ? { requestMetadata: requestIdentity.requestMetadata }
+          : {}),
       }),
     );
+    const responseRequestId = response.$metadata?.requestId;
+    if (responseRequestId) {
+      requestIdentity?.onRequestId?.(responseRequestId);
+    }
     const usage = asRecord(response.usage);
     const cachedReadTokens =
       numberFromRecord(usage, "cacheReadInputTokens") ??
@@ -1219,6 +1234,14 @@ export interface InvocationResourceBundle {
     status: "registered" | "skipped";
     reason?: string;
   }>;
+  /**
+   * THINK-245 U4 — Bedrock response requestIds observed during this
+   * invocation (parent agent loop via the request-identity extension, plus
+   * child-model callers). Mutated as calls complete; the finalize payload
+   * sends the accumulated list as `bedrock_request_ids` so the trace-ledger
+   * reconciler can match invocation-log records exactly.
+   */
+  bedrockRequestIds: string[];
 }
 
 export interface BuildInvocationResourcesArgs {
@@ -1237,6 +1260,13 @@ export interface BuildInvocationResourcesArgs {
    * array owned by the factory.
    */
   cleanup: Array<() => Promise<void>>;
+  /**
+   * THINK-245 U4 — optional caller-allocated collector for Bedrock response
+   * requestIds (same idiom as `cleanup`): the caller shares one array between
+   * its child-model caller and the request-identity extension built here, so
+   * every model call in the invocation lands in one list for finalize.
+   */
+  bedrockRequestIds?: string[];
   /**
    * U16 — Per-invocation `HandleStore` allocated by the caller. The
    * scrubbing fetch passed into `createConnectMcpServer` resolves
@@ -1348,6 +1378,26 @@ export async function buildInvocationResources(
   const handleStore = args.handleStore;
   const extensionFactories: ExtensionFactory[] = [];
   const extensionToolNames: string[] = [];
+  // THINK-245 U4 — request identity for cost reconciliation: stamp Bedrock
+  // Converse payloads with requestMetadata and collect response requestIds.
+  // Hook-only extension (no tools), so it bypasses the addExtension helper.
+  // Caller may allocate the collector (same idiom as `cleanup`) so its own
+  // child-model callers feed the same list.
+  const bedrockRequestIds: string[] = args.bedrockRequestIds ?? [];
+  extensionFactories.push(
+    toExtensionFactory(
+      createRequestIdentityExtension({
+        threadTurnId: asString(args.payload.thread_turn_id) || null,
+        traceId: asString(args.payload.trace_id) || null,
+        onRequestId: (requestId) => {
+          if (!bedrockRequestIds.includes(requestId)) {
+            bedrockRequestIds.push(requestId);
+          }
+        },
+      }),
+      {},
+    ),
+  );
   const addExtension = (
     extension: ThinkworkExtension,
     providers: ProviderBundle = {},
@@ -2020,6 +2070,7 @@ export async function buildInvocationResources(
     mcpProxyRegistered,
     mcpLoadRecord,
     capabilityLoadRecord,
+    bedrockRequestIds,
   };
 }
 
@@ -3168,6 +3219,19 @@ export async function handleInvocation(
   // we touch the HandleStore.
   let bundle: InvocationResourceBundle;
   const toolAssemblyStart = Date.now();
+  // THINK-245 U4 — one collector shared by the request-identity extension
+  // (parent agent loop) and the Bedrock child-model caller, so every model
+  // call's response requestId reaches the finalize payload.
+  const bedrockRequestIds: string[] = [];
+  const collectBedrockRequestId = (requestId: string) => {
+    if (!bedrockRequestIds.includes(requestId)) {
+      bedrockRequestIds.push(requestId);
+    }
+  };
+  const childRequestMetadata: Record<string, string> = {
+    ...(threadTurnId ? { thread_turn_id: threadTurnId } : {}),
+    ...(identity.traceId ? { trace_id: identity.traceId } : {}),
+  };
   try {
     bundle = await buildInvocationResources({
       payload: args.payload,
@@ -3178,6 +3242,7 @@ export async function handleInvocation(
       connectMcpServer,
       sessionStoreFactory,
       cleanup,
+      bedrockRequestIds,
       handleStore,
       mcpJsonConfig,
       capabilitiesManifest,
@@ -3187,6 +3252,10 @@ export async function handleInvocation(
         deps.childModelCaller ??
         createBedrockChildModelCaller(
           deps.bedrockRuntimeClientFactory(env.awsRegion),
+          {
+            requestMetadata: childRequestMetadata,
+            onRequestId: collectBedrockRequestId,
+          },
         ),
     });
     logAgentCorePhase({
@@ -3991,6 +4060,7 @@ export async function handleInvocation(
         systemPrompt: composedSystemPrompt,
         changedFiles,
         result: { status: "error", error: runError, latencyMs },
+        bedrockRequestIds,
         fetchImpl: callbackFetchImpl,
         logger: logStructured,
       });
@@ -4127,6 +4197,7 @@ export async function handleInvocation(
       systemPrompt: composedSystemPrompt,
       changedFiles,
       result: { status: "ok", runResult, latencyMs },
+      bedrockRequestIds,
       fetchImpl: callbackFetchImpl,
       logger: logStructured,
     });
