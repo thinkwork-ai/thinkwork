@@ -462,7 +462,7 @@ export function AgentLoopDetailContent({
                   <div className="pt-3">
                     <BoundDocumentCard
                       binding={target.documentBinding}
-                      hideHeading
+                      embedded
                     />
                   </div>
                 ) : null
@@ -473,6 +473,7 @@ export function AgentLoopDetailContent({
                   pendingAction={pendingAction}
                   spaceOptions={spaceOptions}
                   memberOptions={memberOptions}
+                  variant="card"
                   onRun={onRun}
                   onToggle={onToggle}
                 />
@@ -537,11 +538,12 @@ export function AgentLoopDetailContent({
  */
 function BoundDocumentCard({
   binding,
-  hideHeading,
+  embedded,
 }: {
   binding: NonNullable<ReturnType<typeof readTargetSpec>["documentBinding"]>;
-  /** The canvas inspector already titles the panel — skip the section h2. */
-  hideHeading?: boolean;
+  /** Inside the canvas inspector: the panel already carries the heading and
+   * the card chrome, so render bare wrapping text — no nested card. */
+  embedded?: boolean;
 }) {
   const artifactId = binding.capturedArtifactId ?? binding.artifactId ?? null;
   const [shareOpen, setShareOpen] = useState(false);
@@ -569,12 +571,16 @@ function BoundDocumentCard({
 
   return (
     <section data-testid="bound-document-card">
-      {hideHeading ? null : (
+      {embedded ? null : (
         <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
           Maintained document
         </h2>
       )}
-      <div className="rounded-md border border-border/70 bg-muted/20 p-4">
+      <div
+        className={
+          embedded ? "" : "rounded-md border border-border/70 bg-muted/20 p-4"
+        }
+      >
         {!artifactId ? (
           <p className="text-sm text-muted-foreground">
             Created on the first run
@@ -588,10 +594,16 @@ function BoundDocumentCard({
             onto it automatically.
           </p>
         ) : artifact ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div
+            className={
+              embedded
+                ? "flex flex-col items-start gap-2"
+                : "flex flex-wrap items-center justify-between gap-3"
+            }
+          >
             <div className="min-w-0">
               <a
-                className="truncate text-sm font-medium text-primary hover:underline"
+                className={`${embedded ? "break-words" : "truncate"} text-sm font-medium text-primary hover:underline`}
                 href={`/artifacts/${artifact.id}`}
               >
                 {artifact.title}

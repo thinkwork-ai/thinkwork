@@ -38,7 +38,7 @@ export function AppTopBar() {
 
   return (
     <header
-      className={`flex h-12 shrink-0 items-center gap-2 border-b border-border pr-4 ${isMobile ? "pl-14" : "pl-4"}`}
+      className={`relative flex h-12 shrink-0 items-center gap-2 border-b border-border pr-4 ${isMobile ? "pl-14" : "pl-4"}`}
     >
       {actions ? (
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -157,7 +157,10 @@ export function AppTopBar() {
       ) : null}
 
       {tabs.length > 0 ? (
-        <div className="flex flex-1 justify-center">
+        // Absolutely centered on the bar itself — flex centering would only
+        // center within the space left over after the breadcrumbs, drifting
+        // the strip toward the actions on pages with long titles.
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <Tabs value={activeTab}>
             <TabsList>
               {tabs.map((tab) => (

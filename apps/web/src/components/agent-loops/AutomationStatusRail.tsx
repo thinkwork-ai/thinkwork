@@ -26,6 +26,7 @@ export function AutomationStatusRail({
   pendingAction,
   spaceOptions = [],
   memberOptions = [],
+  variant = "rail",
   onRun,
   onToggle,
 }: {
@@ -33,6 +34,9 @@ export function AutomationStatusRail({
   pendingAction: string | null;
   spaceOptions?: AgentLoopSpaceOption[];
   memberOptions?: AgentLoopMemberOption[];
+  /** "rail" = classic bordered sidebar; "card" = the canvas right-rail card
+   * matching the node inspectors (THINK-247). */
+  variant?: "rail" | "card";
   onRun: () => void;
   onToggle: () => void;
 }) {
@@ -52,8 +56,16 @@ export function AutomationStatusRail({
     (loop.runAsUserId ? loop.runAsUserId : "You");
 
   return (
-    <aside className="border-l border-border/70 pl-6">
-      <div className="sticky top-4 space-y-6">
+    <aside
+      className={
+        variant === "card"
+          ? "rounded-md border border-border/70 bg-muted/10 p-4"
+          : "border-l border-border/70 pl-6"
+      }
+    >
+      <div
+        className={variant === "card" ? "space-y-6" : "sticky top-4 space-y-6"}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={loop.lifecycleStatus} size="sm" />
           <Badge variant="outline" className="text-xs">
