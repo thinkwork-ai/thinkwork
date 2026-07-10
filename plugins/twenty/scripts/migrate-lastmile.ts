@@ -22,6 +22,8 @@
  *   npx tsx scripts/migrate-lastmile.ts --apply         # seed (or delta re-sync — same command)
  *   npx tsx scripts/migrate-lastmile.ts --rollback      # list the sourceId-owned record set
  *   npx tsx scripts/migrate-lastmile.ts --rollback --apply  # soft-delete that set (restorable)
+ *   --skip-invites        with --apply: load schema+records but provision no new
+ *                         members (owners heal on a later re-run once members exist)
  *
  * Cutover day, in order:
  *   1. Freeze LastMile CRM edits.
@@ -79,14 +81,19 @@ import { TwentyClient, normalizeBaseUrl } from "./lib/twenty-client";
 interface CliArgs {
   apply: boolean;
   rollback: boolean;
+  /** Provision no new members this run: match existing members only. Owner
+   * refs for unprovisioned reps stay null and heal on a later re-run once the
+   * members exist (content hash changes when ownerId resolves). */
+  skipInvites: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { apply: false, rollback: false };
+  const args: CliArgs = { apply: false, rollback: false, skipInvites: false };
   for (const arg of argv) {
     if (arg === "--apply") args.apply = true;
     else if (arg === "--dry-run") args.apply = false;
     else if (arg === "--rollback") args.rollback = true;
+    else if (arg === "--skip-invites") args.skipInvites = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
   return args;
@@ -139,6 +146,7 @@ async function main(): Promise<void> {
       repPassword,
       report,
       dryRun,
+      skipInvites: args.skipInvites,
     });
   } finally {
     await reader.close();
@@ -183,8 +191,10 @@ async function runMigration(options: {
   repPassword: string;
   report: Record<string, unknown>;
   dryRun: boolean;
+  skipInvites: boolean;
 }): Promise<void> {
-  const { client, reader, baseUrl, repPassword, report, dryRun } = options;
+  const { client, reader, baseUrl, repPassword, report, dryRun, skipInvites } =
+    options;
 
   // Phase A: preflight ------------------------------------------------------
   log("preflight: connecting to LastMile and Twenty...");
@@ -250,8 +260,13 @@ async function runMigration(options: {
     reps: repsToProvision,
     repPassword,
     workspaceId,
-    dryRun,
+    // --skip-invites: match existing members only, invite nobody this run.
+    dryRun: dryRun || skipInvites,
   });
+  if (skipInvites) {
+    report.membersMode =
+      "skip-invites (existing members matched; no invitations sent)";
+  }
   report.members = {
     report: members.report,
     provisionable: members.ownerMap.size,
