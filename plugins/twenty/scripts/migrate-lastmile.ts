@@ -15,6 +15,8 @@
  *                          outside the repo). ROTATE OR DEACTIVATE every rep account at
  *                          cutover, on abort, or if the validation window drags on.
  *   TWENTY_WORKSPACE_ID    Optional override; otherwise resolved from the admin session
+ *   TWENTY_REP_EMAIL_DOMAIN  Domain for reps with no LastMile email
+ *                          (default texasenterprises.com; <first-initial><lastname>@)
  *   AWS_PROFILE / AWS_REGION  Needed for attachment binaries (LastMile S3 bucket)
  *
  * Invocations (dry-run is the default; nothing is written without --apply):
@@ -50,20 +52,24 @@ import {
   mirrorDeletions,
   NOTE,
   OPPORTUNITY,
+  OPPORTUNITY_PRODUCT,
   PERSON,
   rollbackEntity,
   upsertNotes,
+  upsertOpportunityProducts,
   upsertRecords,
   type EntityCounters,
 } from "./lib/load-records";
 import {
   buildOwnerIndex,
+  deriveRepEmail,
   mapAccount,
   mapContact,
   mapCrmComment,
   mapCustomerNote,
   mapLead,
   mapOpportunity,
+  mapOpportunityProduct,
   sourceId,
 } from "./lib/mappers";
 import {
@@ -73,6 +79,7 @@ import {
 } from "./lib/members-ensure";
 import {
   applySchemaEnsure,
+  ensureOpportunityProductObject,
   fetchObjectMetadata,
   planSchemaEnsure,
 } from "./lib/schema-ensure";
@@ -161,6 +168,7 @@ async function runRollback(
 ): Promise<void> {
   const entities = [
     { entity: NOTE, prefixes: ["task_comment:", "note:"] },
+    { entity: OPPORTUNITY_PRODUCT, prefixes: ["opportunity_item:"] },
     { entity: OPPORTUNITY, prefixes: ["lead:", "opportunity:"] },
     { entity: PERSON, prefixes: ["contact:"] },
     { entity: COMPANY, prefixes: ["account:"] },
@@ -207,7 +215,17 @@ async function runMigration(options: {
 
   // Phase B: schema ensure --------------------------------------------------
   log("schema: ensuring custom fields and stage options...");
-  const objects = await fetchObjectMetadata(client);
+  let objects = await fetchObjectMetadata(client);
+  const objectEnsure = await ensureOpportunityProductObject(
+    client,
+    objects,
+    dryRun,
+  );
+  if (!dryRun && (objectEnsure.created || objectEnsure.relationCreated)) {
+    // Re-read metadata so the field plan addresses the real object id.
+    objects = await fetchObjectMetadata(client);
+  }
+  report.opportunityProductObject = objectEnsure;
   const schemaPlan = planSchemaEnsure(objects);
   if (dryRun) {
     report.schema = {
@@ -222,15 +240,33 @@ async function runMigration(options: {
 
   // Phase C: members --------------------------------------------------------
   log("members: ensuring workspace members...");
+  const repEmailDomain =
+    process.env.TWENTY_REP_EMAIL_DOMAIN ?? "texasenterprises.com";
+  const derivedEmails: string[] = [];
   const repsToProvision: RepToProvision[] = reps
     .filter((rep) => !rep.archived)
-    .map((rep) => ({
-      repId: rep.id,
-      email: rep.email,
-      firstName: rep.firstName,
-      lastName: rep.lastName,
-      archived: rep.archived,
-    }));
+    .map((rep) => {
+      let email = rep.email;
+      if (!email) {
+        // Reps with no LastMile email get <first-initial><lastname>@<domain>;
+        // house/intercompany/placeholder rows derive to null and stay
+        // unprovisionable.
+        email = deriveRepEmail(rep.firstName, rep.lastName, repEmailDomain);
+        if (email) derivedEmails.push(`${rep.id} -> ${email}`);
+      }
+      return {
+        repId: rep.id,
+        email,
+        firstName: rep.firstName,
+        lastName: rep.lastName,
+        archived: rep.archived,
+      };
+    });
+  report.derivedRepEmails = {
+    domain: repEmailDomain,
+    count: derivedEmails.length,
+    sample: derivedEmails.slice(0, 20),
+  };
 
   let adminClient: TwentyClient | null = null;
   let workspaceId = process.env.TWENTY_WORKSPACE_ID ?? null;
@@ -370,6 +406,18 @@ async function runMigration(options: {
   }
   report.opportunities = "pending";
 
+  log("records: loading opportunity product lines...");
+  const items = await reader.readOpportunityItems();
+  const productCounters = emptyCounters();
+  await upsertOpportunityProducts({
+    client,
+    products: items.map(mapOpportunityProduct),
+    opportunityIdBySourceId,
+    dryRun,
+    counters: productCounters,
+  });
+  report.opportunityProducts = summarizeCounters(productCounters);
+
   // Phase E: notes + attachments -------------------------------------------
   log("annexes: loading notes...");
   const [comments, customerNotes] = await Promise.all([
@@ -459,6 +507,21 @@ async function runMigration(options: {
   report.people = summarizeCounters(personCounters);
   report.opportunities = summarizeCounters(opportunityCounters);
 
+  await mirrorDeletions({
+    client,
+    entity: OPPORTUNITY_PRODUCT,
+    liveSourceIds: new Set(
+      items.map(
+        (item) =>
+          `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`,
+      ),
+    ),
+    ownedPrefixes: ["opportunity_item:"],
+    dryRun,
+    counters: productCounters,
+  });
+  report.opportunityProducts = summarizeCounters(productCounters);
+
   // Phase G: parity + invariants ---------------------------------------------
   log("parity: checking invariants...");
   const invariants = dryRun ? [] : await checkNoteTargetPairing(client);
@@ -480,6 +543,7 @@ async function runMigration(options: {
       companyCounters,
       personCounters,
       opportunityCounters,
+      productCounters,
       noteCounters,
       attachmentCounters,
     ].some((counters) => counters.failed > 0);

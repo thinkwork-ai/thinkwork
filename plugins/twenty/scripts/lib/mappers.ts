@@ -120,6 +120,52 @@ export function normalizeEmail(raw: string | null | undefined): string | null {
   return EMAIL_RE.test(email) ? email : null;
 }
 
+/** Non-person sales_rep rows: house/dealer buckets, intercompany ledgers, and
+ * placeholders. They must never receive a login. */
+const NON_PERSON_REP_TOKENS = new Set([
+  "house",
+  "intercompany",
+  "tbd",
+  "undefined",
+  "unknown",
+  "unassigned",
+  "buyback",
+  "asc",
+  "salesrep",
+  "company",
+  "fuel",
+  "oil",
+  "transport",
+  "transportation",
+  "hauling",
+]);
+
+/** A person's name part: letters, optionally hyphenated/apostrophed. Rejects
+ * multi-word buckets ("Golden West Laredo"), digits, and underscores
+ * ("Ervi_2"). */
+const NAME_PART_RE = /^[a-z]+(?:['-][a-z]+)*$/;
+
+/**
+ * Reps missing an email in LastMile get `<first-initial><lastname>@<domain>`
+ * (Eric's rule, 2026-07-10) — but only when both name parts look like a real
+ * person's. 60 of 131 active reps have no email; most are house/intercompany
+ * rows that must stay unprovisionable. Returns null for those.
+ */
+export function deriveRepEmail(
+  firstName: string | null,
+  lastName: string | null,
+  domain: string,
+): string | null {
+  const first = (firstName ?? "").trim().toLowerCase();
+  const last = (lastName ?? "").trim().toLowerCase();
+  if (!NAME_PART_RE.test(first) || !NAME_PART_RE.test(last)) return null;
+  if (NON_PERSON_REP_TOKENS.has(first) || NON_PERSON_REP_TOKENS.has(last)) {
+    return null;
+  }
+  const localPart = `${first[0]}${last.replace(/['-]/g, "")}`;
+  return normalizeEmail(`${localPart}@${domain}`);
+}
+
 export interface NormalizedPhone {
   primaryPhoneNumber: string;
   primaryPhoneCallingCode: string;
@@ -333,6 +379,58 @@ export function mapContact(
     sourceId: sourceId("contact", contact.id),
   };
   return { sourceId: input.sourceId as string, input, warnings };
+}
+
+/** Mobil-branded products, per line. Brands seen live: MOBIL, MOBIL - CVL,
+ * GOLDEN WEST, FUEL, DEF, Hotsy. */
+export function isMobilBrand(brand: string | null): boolean {
+  return /mobil/i.test(brand ?? "");
+}
+
+export interface MappedOpportunityProduct extends MappedRecord {
+  /** sourceId of the owning opportunity, resolved to a Twenty id by the loader. */
+  opportunitySourceId: string;
+}
+
+/**
+ * One product line on an opportunity (R1: multiple products per opportunity).
+ * Identity is opportunity + position, so re-runs update lines in place rather
+ * than duplicating them.
+ */
+export function mapOpportunityProduct(item: {
+  opportunityId: string;
+  index: number;
+  brand: string | null;
+  quantity: string | null;
+  amount: string | null;
+}): MappedOpportunityProduct {
+  const warnings: string[] = [];
+  const amountMicros = toAmountMicros(item.amount);
+  if (item.amount && amountMicros === null) {
+    warnings.push(`unparseable line amount ${item.amount} dropped`);
+  }
+  const quantity = toQuantity(item.quantity);
+  if (item.quantity && quantity === null) {
+    warnings.push(`unparseable line quantity ${item.quantity} dropped`);
+  }
+  const lineSourceId = `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`;
+  const input: Record<string, unknown> = {
+    name: item.brand ?? `Line ${item.index + 1}`,
+    ...(item.brand ? { product: item.brand } : {}),
+    ...(quantity !== null ? { quantity } : {}),
+    ...(amountMicros !== null
+      ? { amount: { amountMicros, currencyCode: "USD" } }
+      : {}),
+    isMobil: isMobilBrand(item.brand),
+    lineNumber: item.index + 1,
+    sourceId: lineSourceId,
+  };
+  return {
+    sourceId: lineSourceId,
+    input,
+    warnings,
+    opportunitySourceId: sourceId("opportunity", item.opportunityId),
+  };
 }
 
 function isMobilProduct(opportunity: {

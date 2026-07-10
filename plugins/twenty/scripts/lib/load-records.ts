@@ -10,7 +10,11 @@
  */
 
 import { contentHash } from "./mappers";
-import type { MappedNote, MappedRecord } from "./mappers";
+import type {
+  MappedNote,
+  MappedOpportunityProduct,
+  MappedRecord,
+} from "./mappers";
 import {
   BATCH_LIMIT,
   chunk,
@@ -60,6 +64,12 @@ export const OPPORTUNITY: EntityShape = {
   plural: "opportunities",
   capSingular: "Opportunity",
   capPlural: "Opportunities",
+};
+export const OPPORTUNITY_PRODUCT: EntityShape = {
+  singular: "opportunityProduct",
+  plural: "opportunityProducts",
+  capSingular: "OpportunityProduct",
+  capPlural: "OpportunityProducts",
 };
 export const NOTE: EntityShape = {
   singular: "note",
@@ -569,6 +579,52 @@ export async function upsertNotes(options: {
       }
     }
   }
+}
+
+/**
+ * Product lines on opportunities (multiple products per opportunity). Lines
+ * whose opportunity did not migrate are skipped and reported; the rest upsert
+ * by their `opportunity_item:<oppId>#<index>` sourceId, so re-runs update a
+ * line in place rather than duplicating it.
+ */
+export async function upsertOpportunityProducts(options: {
+  client: TwentyClient;
+  products: MappedOpportunityProduct[];
+  /** opportunity sourceId -> Twenty opportunity id. */
+  opportunityIdBySourceId: ReadonlyMap<string, string>;
+  dryRun: boolean;
+  counters: EntityCounters;
+}): Promise<void> {
+  const { client, products, opportunityIdBySourceId, dryRun, counters } =
+    options;
+
+  const resolvable: MappedRecord[] = [];
+  for (const product of products) {
+    const opportunityId = opportunityIdBySourceId.get(
+      product.opportunitySourceId,
+    );
+    if (!opportunityId) {
+      counters.sourceTotal += 1;
+      counters.skipped += 1;
+      counters.gaps.push(
+        `product line ${product.sourceId}: opportunity ${product.opportunitySourceId} not migrated`,
+      );
+      continue;
+    }
+    resolvable.push({
+      sourceId: product.sourceId,
+      input: { ...product.input, opportunityId },
+      warnings: product.warnings,
+    });
+  }
+
+  await upsertRecords({
+    client,
+    entity: OPPORTUNITY_PRODUCT,
+    mapped: resolvable,
+    dryRun,
+    counters,
+  });
 }
 
 // --- Consistency invariants (U7) ------------------------------------------

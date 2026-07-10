@@ -12,11 +12,29 @@ import { MIGRATION_STAGE_OPTIONS } from "./mappers";
 import type { TwentyClient } from "./twenty-client";
 
 /** The whole schema delta in one reviewable place (plan U3 approach note). */
+/**
+ * Opportunities carry MULTIPLE product lines (LastMile keeps them in
+ * `task.entity_data->'items'`: 816 opportunities, 82 with 2-5 lines each), so
+ * product/quantity/amount belong on a child object, not on the opportunity
+ * row. This custom object holds one row per line, related many-to-one back to
+ * the opportunity. The opportunity's own `product` (category) and native
+ * `amount` (deal total) stay where they are.
+ */
+export const OPPORTUNITY_PRODUCT_OBJECT = {
+  nameSingular: "opportunityProduct",
+  namePlural: "opportunityProducts",
+  labelSingular: "Opportunity Product",
+  labelPlural: "Opportunity Products",
+  icon: "IconPackage",
+  /** Field created on `opportunity` pointing back at the lines. */
+  targetFieldLabel: "Products",
+} as const;
+
 export const FIELD_SPECS: Array<{
   object: string;
   name: string;
   label: string;
-  type: "TEXT" | "NUMBER" | "BOOLEAN";
+  type: "TEXT" | "NUMBER" | "BOOLEAN" | "CURRENCY";
   isUnique?: boolean;
 }> = [
   {
@@ -76,7 +94,54 @@ export const FIELD_SPECS: Array<{
     type: "TEXT",
     isUnique: true,
   },
+  // Product-line object (created first when missing; see ensureOpportunityProductObject).
+  {
+    object: "opportunityProduct",
+    name: "sourceId",
+    label: "Source ID",
+    type: "TEXT",
+    isUnique: true,
+  },
+  {
+    object: "opportunityProduct",
+    name: "sourceHash",
+    label: "Source Hash",
+    type: "TEXT",
+  },
+  {
+    object: "opportunityProduct",
+    name: "product",
+    label: "Product",
+    type: "TEXT",
+  },
+  {
+    object: "opportunityProduct",
+    name: "quantity",
+    label: "Quantity",
+    type: "NUMBER",
+  },
+  {
+    object: "opportunityProduct",
+    name: "amount",
+    label: "Amount",
+    type: "CURRENCY",
+  },
+  {
+    object: "opportunityProduct",
+    name: "isMobil",
+    label: "Mobil Product",
+    type: "BOOLEAN",
+  },
+  {
+    object: "opportunityProduct",
+    name: "lineNumber",
+    label: "Line",
+    type: "NUMBER",
+  },
 ];
+
+/** Placeholder id used only in dry-run plans, never sent to Twenty. */
+export const PENDING_OBJECT_ID = "<pending-object-creation>";
 
 interface ObjectMetadata {
   id: string;
@@ -122,6 +187,74 @@ const UPDATE_FIELD_MUTATION = `
     updateOneField(input: $input) { id name options }
   }
 `;
+
+const CREATE_OBJECT_MUTATION = `
+  mutation MigrationCreateObject($input: CreateOneObjectInput!) {
+    createOneObject(input: $input) { id nameSingular }
+  }
+`;
+
+/**
+ * Create the opportunityProduct object and its many-to-one relation to
+ * opportunity, if absent. Idempotent: returns the existing object's id when it
+ * is already there. Must run before the field pass, which addresses the object
+ * by name. Verified live: the workspace API key may create objects and
+ * RELATION fields via `relationCreationPayload`, and Twenty exposes the FK to
+ * the data API as `opportunityId` on the line's create input.
+ */
+export async function ensureOpportunityProductObject(
+  client: TwentyClient,
+  objects: Map<string, ObjectMetadata>,
+  dryRun: boolean,
+): Promise<{ created: boolean; relationCreated: boolean }> {
+  const existing = objects.get(OPPORTUNITY_PRODUCT_OBJECT.nameSingular);
+  const opportunity = objects.get("opportunity");
+  if (!opportunity) throw new Error('Twenty object "opportunity" not found.');
+
+  if (existing?.fields.has("opportunity")) {
+    return { created: false, relationCreated: false };
+  }
+  if (dryRun) {
+    return { created: !existing, relationCreated: true };
+  }
+
+  let objectId = existing?.id;
+  if (!objectId) {
+    const created = await client.requestOnce<{
+      createOneObject: { id: string };
+    }>("/metadata", CREATE_OBJECT_MUTATION, {
+      input: {
+        object: {
+          nameSingular: OPPORTUNITY_PRODUCT_OBJECT.nameSingular,
+          namePlural: OPPORTUNITY_PRODUCT_OBJECT.namePlural,
+          labelSingular: OPPORTUNITY_PRODUCT_OBJECT.labelSingular,
+          labelPlural: OPPORTUNITY_PRODUCT_OBJECT.labelPlural,
+          icon: OPPORTUNITY_PRODUCT_OBJECT.icon,
+        },
+      },
+    });
+    objectId = created.createOneObject.id;
+  }
+
+  await client.requestOnce("/metadata", CREATE_FIELD_MUTATION, {
+    input: {
+      field: {
+        objectMetadataId: objectId,
+        name: "opportunity",
+        label: "Opportunity",
+        type: "RELATION",
+        relationCreationPayload: {
+          targetObjectMetadataId: opportunity.id,
+          targetFieldLabel: OPPORTUNITY_PRODUCT_OBJECT.targetFieldLabel,
+          targetFieldIcon: OPPORTUNITY_PRODUCT_OBJECT.icon,
+          type: "MANY_TO_ONE",
+        },
+      },
+    },
+  });
+
+  return { created: !existing, relationCreated: true };
+}
 
 export async function fetchObjectMetadata(
   client: TwentyClient,
@@ -179,6 +312,17 @@ export function planSchemaEnsure(
   for (const spec of FIELD_SPECS) {
     const object = objects.get(spec.object);
     if (!object) {
+      // ensureOpportunityProductObject creates this object earlier in the same
+      // run; in a dry-run against a workspace that lacks it, its fields are
+      // planned rather than an error.
+      if (spec.object === OPPORTUNITY_PRODUCT_OBJECT.nameSingular) {
+        createFields.push({
+          object: spec.object,
+          objectMetadataId: PENDING_OBJECT_ID,
+          name: spec.name,
+        });
+        continue;
+      }
       throw new Error(
         `Twenty object "${spec.object}" not found in metadata; aborting.`,
       );
@@ -247,6 +391,12 @@ export async function applySchemaEnsure(
     );
     if (!spec)
       throw new Error(`No field spec for ${create.object}.${create.name}`);
+    if (create.objectMetadataId === PENDING_OBJECT_ID) {
+      throw new Error(
+        `Field ${create.object}.${create.name} was planned against an uncreated object — ` +
+          `re-plan after ensureOpportunityProductObject so the real object id is known.`,
+      );
+    }
     // Metadata mutation errors abort the run before any record loading (U3).
     await client.requestOnce("/metadata", CREATE_FIELD_MUTATION, {
       input: {

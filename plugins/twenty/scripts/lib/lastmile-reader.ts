@@ -74,6 +74,23 @@ export interface LastmileOpportunity {
   dateCreated: Date | null;
 }
 
+/**
+ * A product line on an opportunity. LastMile keeps them as a JSON array at
+ * `task.entity_data->'items'` on the opportunity's task row — 816 of 2,971
+ * opportunities have one, and 82 carry 2-5 lines. `brand` is the product
+ * ("MOBIL", "GOLDEN WEST", "DEF"); the opportunity row's own `product_type`
+ * is the coarser category ("Fuel", "Equipment").
+ */
+export interface LastmileOpportunityItem {
+  /** Owning opportunity id (lead/opportunity entity_id on the task row). */
+  opportunityId: string;
+  /** Position within the items array — part of the line's stable identity. */
+  index: number;
+  brand: string | null;
+  quantity: string | null;
+  amount: string | null;
+}
+
 export interface LastmileCrmComment {
   id: string;
   entityType: "lead" | "opportunity";
@@ -109,6 +126,7 @@ export interface LastmileReader {
   readContacts(): Promise<LastmileContact[]>;
   readLeads(): Promise<LastmileLead[]>;
   readOpportunities(): Promise<LastmileOpportunity[]>;
+  readOpportunityItems(): Promise<LastmileOpportunityItem[]>;
   readCrmComments(): Promise<LastmileCrmComment[]>;
   readCrmAttachments(): Promise<LastmileCrmAttachment[]>;
   readCustomerNotes(): Promise<LastmileCustomerNote[]>;
@@ -194,6 +212,22 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
                date_created                  as "dateCreated"
         from opportunity
         order by id
+      `),
+    readOpportunityItems: () =>
+      rows<LastmileOpportunityItem>(`
+        select t.entity_id                       as "opportunityId",
+               (it.ordinality - 1)::int          as "index",
+               nullif(trim(it.value ->> 'brand'), '')    as "brand",
+               nullif(trim(it.value ->> 'quantity'), '') as "quantity",
+               nullif(trim(it.value ->> 'amount'), '')   as "amount"
+        from task t
+        cross join lateral jsonb_array_elements(t.entity_data -> 'items')
+          with ordinality as it(value, ordinality)
+        where t.entity_type = 'opportunity'
+          and t.entity_id is not null
+          and t.entity_data ? 'items'
+          and jsonb_typeof(t.entity_data -> 'items') = 'array'
+        order by t.entity_id, it.ordinality
       `),
     readCrmComments: () =>
       rows<LastmileCrmComment>(`
