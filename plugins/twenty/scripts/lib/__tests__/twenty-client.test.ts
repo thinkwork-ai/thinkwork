@@ -59,6 +59,8 @@ describe("TwentyClient.requestOnce", () => {
       baseUrl: "https://crm.example.com",
       authToken: "key",
       fetchImpl,
+      minRequestIntervalMs: 0,
+      rateLimitWaitMs: 1,
     });
     await expect(client.requestOnce("/graphql", "query { x }")).rejects.toThrow(
       /Field boom is required/,
@@ -71,6 +73,7 @@ describe("TwentyClient.requestOnce", () => {
       baseUrl: "https://crm.example.com",
       authToken: "secret-key",
       fetchImpl,
+      minRequestIntervalMs: 0,
     });
     await client.requestOnce("/graphql", "query { x }");
     const [, init] = fetchImpl.mock.calls[0] as unknown as [
@@ -94,6 +97,8 @@ describe("TwentyClient.requestOnce", () => {
       baseUrl: "https://crm.example.com",
       authToken: "key",
       fetchImpl,
+      minRequestIntervalMs: 0,
+      rateLimitWaitMs: 1,
     });
     const error = await client
       .requestOnce("/graphql", "mutation { y }")
@@ -114,6 +119,8 @@ describe("TwentyClient.requestWithRetry", () => {
       authToken: "key",
       fetchImpl,
       backoffMs: 1,
+      minRequestIntervalMs: 0,
+      rateLimitWaitMs: 1,
     });
     const data = await client.requestWithRetry<{ ok: boolean }>(
       "/graphql",
@@ -132,6 +139,8 @@ describe("TwentyClient.requestWithRetry", () => {
       authToken: "key",
       fetchImpl,
       backoffMs: 1,
+      minRequestIntervalMs: 0,
+      rateLimitWaitMs: 1,
     });
     await expect(
       client.requestWithRetry("/graphql", "query { x }"),
@@ -147,6 +156,8 @@ describe("TwentyClient.requestWithRetry", () => {
       fetchImpl,
       backoffMs: 1,
       maxRetries: 2,
+      minRequestIntervalMs: 0,
+      rateLimitWaitMs: 1,
     });
     await expect(
       client.requestWithRetry("/graphql", "query { x }"),
@@ -166,6 +177,8 @@ describe("network errors", () => {
       authToken: "key",
       fetchImpl,
       backoffMs: 1,
+      minRequestIntervalMs: 0,
+      rateLimitWaitMs: 1,
     });
     const data = await client.requestWithRetry<{ ok: boolean }>(
       "/graphql",
@@ -181,6 +194,8 @@ describe("network errors", () => {
       baseUrl: "https://crm.example.com",
       authToken: "key",
       fetchImpl,
+      minRequestIntervalMs: 0,
+      rateLimitWaitMs: 1,
     });
     const error = await client
       .requestOnce("/graphql", "mutation { y }")

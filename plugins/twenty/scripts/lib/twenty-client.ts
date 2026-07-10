@@ -38,10 +38,24 @@ export class TwentyGraphqlError extends Error {
     );
   }
 
+  /** Twenty's throttle rejects with a GraphQL error (subCode LIMIT_REACHED),
+   * not HTTP 429. The guard fires before the resolver, so a rate-limited
+   * request had NO side effect — safe to retry even for mutations. */
+  get isRateLimited(): boolean {
+    return (
+      this.httpStatus === 429 ||
+      this.errors.some(
+        (error) =>
+          (error.extensions as { subCode?: string } | undefined)?.subCode ===
+            "LIMIT_REACHED" || /limit reached/i.test(error.message),
+      )
+    );
+  }
+
   get isRetryable(): boolean {
     return (
       this.isNetworkError ||
-      this.httpStatus === 429 ||
+      this.isRateLimited ||
       (this.httpStatus !== undefined && this.httpStatus >= 500)
     );
   }
@@ -58,6 +72,11 @@ export interface TwentyClientOptions {
   /** Base backoff in ms; test seam. */
   backoffMs?: number;
   maxRetries?: number;
+  /** Minimum ms between requests — Twenty allows 100 req/min, so the default
+   * paces to ~92/min. 0 disables (tests). */
+  minRequestIntervalMs?: number;
+  /** Wait before retrying a rate-limited request; test seam. */
+  rateLimitWaitMs?: number;
 }
 
 export function normalizeBaseUrl(url: string): string {
@@ -85,6 +104,9 @@ export class TwentyClient {
   private readonly fetchImpl: typeof fetch;
   private readonly backoffMs: number;
   private readonly maxRetries: number;
+  private readonly minRequestIntervalMs: number;
+  private readonly rateLimitWaitMs: number;
+  private nextSlotAt = 0;
 
   constructor(options: TwentyClientOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
@@ -92,21 +114,58 @@ export class TwentyClient {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.backoffMs = options.backoffMs ?? 1_000;
     this.maxRetries = options.maxRetries ?? 4;
+    this.minRequestIntervalMs = options.minRequestIntervalMs ?? 650;
+    this.rateLimitWaitMs = options.rateLimitWaitMs ?? 15_000;
   }
 
   endpoint(path: TwentyEndpointPath): string {
     return `${this.baseUrl}${path}`;
   }
 
+  /** Pace requests under Twenty's 100 req/min throttle. */
+  private async takeSlot(): Promise<void> {
+    if (this.minRequestIntervalMs <= 0) return;
+    const now = Date.now();
+    const slot = Math.max(this.nextSlotAt, now);
+    this.nextSlotAt = slot + this.minRequestIntervalMs;
+    if (slot > now) await sleep(slot - now);
+  }
+
   /**
-   * Single-shot request. No retries — safe for mutations, whose callers must
-   * re-query by sourceId before re-attempting (plan KTD3).
+   * Single request with NO blind mutation retries (plan KTD3) — with one
+   * carve-out: Twenty's rate-limit guard rejects before the resolver runs, so
+   * a LIMIT_REACHED rejection had no side effect and is retried here after a
+   * wait, for mutations and reads alike.
    */
   async requestOnce<T = Record<string, unknown>>(
     path: TwentyEndpointPath,
     query: string,
     variables: Record<string, unknown> = {},
   ): Promise<T> {
+    let attempt = 0;
+    for (;;) {
+      try {
+        return await this.performRequest<T>(path, query, variables);
+      } catch (error) {
+        const rateLimited =
+          error instanceof TwentyGraphqlError && error.isRateLimited;
+        if (!rateLimited || attempt >= this.maxRetries) throw error;
+        // The 100-token window refills per minute; wait a meaningful slice.
+        await sleep(
+          this.rateLimitWaitMs +
+            Math.floor(Math.random() * (this.rateLimitWaitMs / 3 + 1)),
+        );
+        attempt += 1;
+      }
+    }
+  }
+
+  private async performRequest<T>(
+    path: TwentyEndpointPath,
+    query: string,
+    variables: Record<string, unknown>,
+  ): Promise<T> {
+    await this.takeSlot();
     let response: Response;
     try {
       response = await this.fetchImpl(this.endpoint(path), {
