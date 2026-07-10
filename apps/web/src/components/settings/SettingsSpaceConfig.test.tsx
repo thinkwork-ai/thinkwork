@@ -1,10 +1,12 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   queryDocs,
   updateSpaceMock,
+  upsertPolicyMock,
+  emailPolicyState,
   refetchMock,
   pageHeaderMock,
   spaceRecord,
@@ -14,8 +16,14 @@ const {
     SettingsSpaceQuery: Symbol("space"),
     SettingsUpdateSpaceMutation: Symbol("updateSpace"),
     SettingsDeleteSpaceMutation: Symbol("deleteSpace"),
+    SettingsSpaceEmailPolicyQuery: Symbol("spaceEmailPolicy"),
+    SettingsUpsertEmailSpacePolicyMutation: Symbol("upsertEmailSpacePolicy"),
   },
   updateSpaceMock: vi.fn(),
+  upsertPolicyMock: vi.fn(),
+  emailPolicyState: {
+    record: null as Record<string, unknown> | null,
+  },
   refetchMock: vi.fn(),
   pageHeaderMock: vi.fn(),
   searchState: {
@@ -98,11 +106,20 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("urql", () => ({
-  useQuery: () => [
-    { data: { space: spaceRecord }, fetching: false },
-    refetchMock,
-  ],
-  useMutation: () => [{ fetching: false }, updateSpaceMock],
+  useQuery: ({ query }: { query: unknown }) =>
+    query === queryDocs.SettingsSpaceEmailPolicyQuery
+      ? [
+          {
+            data: { emailSpaceEmailPolicy: emailPolicyState.record },
+            fetching: false,
+          },
+          refetchMock,
+        ]
+      : [{ data: { space: spaceRecord }, fetching: false }, refetchMock],
+  useMutation: (doc: unknown) =>
+    doc === queryDocs.SettingsUpsertEmailSpacePolicyMutation
+      ? [{ fetching: false }, upsertPolicyMock]
+      : [{ fetching: false }, updateSpaceMock],
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
@@ -132,6 +149,9 @@ import { SettingsSpaceConfig } from "./SettingsSpaceConfig";
 
 beforeEach(() => {
   updateSpaceMock.mockReset();
+  upsertPolicyMock.mockReset();
+  upsertPolicyMock.mockResolvedValue({ error: undefined });
+  emailPolicyState.record = null;
   refetchMock.mockReset();
   pageHeaderMock.mockReset();
   searchState.view = undefined;
@@ -181,6 +201,55 @@ describe("SettingsSpaceConfig", () => {
     expect(editor.getAttribute("data-targetkey")).toBe("space:space-1");
     expect(editor.getAttribute("data-default-open")).toBeNull();
     expect(editor.getAttribute("data-bordered")).toBe("false");
+  });
+
+  it("renders the Email section with built-in defaults when no policy row exists", () => {
+    render(<SettingsSpaceConfig />);
+
+    expect(screen.getByText("Email")).toBeTruthy();
+    const outbound = screen.getByRole("switch", { name: "Outbound email" });
+    const review = screen.getByRole("switch", { name: "First-send review" });
+    expect(outbound.getAttribute("aria-checked")).toBe("true");
+    expect(review.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("saves a waived first-send review through upsertEmailSpacePolicy", async () => {
+    render(<SettingsSpaceConfig />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "First-send review" }));
+    const saveButtons = screen.getAllByRole("button", { name: "Save" });
+    fireEvent.click(saveButtons[saveButtons.length - 1]);
+
+    await vi.waitFor(() => {
+      expect(upsertPolicyMock).toHaveBeenCalledWith({
+        input: expect.objectContaining({
+          spaceId: "space-1",
+          enabled: true,
+          firstSendReviewRequired: false,
+        }),
+      });
+    });
+  });
+
+  it("reflects an existing policy row's flags in the Email section", () => {
+    emailPolicyState.record = {
+      id: "policy-1",
+      spaceId: "space-1",
+      providerInstallId: null,
+      enabled: false,
+      registeredUsersAllowed: true,
+      privateSpaceMembershipRequired: true,
+      outsideSenderDefault: "deny",
+      firstSendReviewRequired: false,
+      updatedAt: "2026-07-10T00:00:00Z",
+    };
+
+    render(<SettingsSpaceConfig />);
+
+    const outbound = screen.getByRole("switch", { name: "Outbound email" });
+    const review = screen.getByRole("switch", { name: "First-send review" });
+    expect(outbound.getAttribute("aria-checked")).toBe("false");
+    expect(review.getAttribute("aria-checked")).toBe("false");
   });
 
   it("opens a requested file inside the full Space file editor", () => {

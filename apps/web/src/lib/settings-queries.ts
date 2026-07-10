@@ -232,6 +232,22 @@ export const SettingsRunEmailReadinessProbeMutation = graphql(`
   }
 `);
 
+export const SettingsSpaceEmailPolicyQuery = graphql(`
+  query SettingsSpaceEmailPolicy($spaceId: ID!) {
+    emailSpaceEmailPolicy(spaceId: $spaceId) {
+      id
+      spaceId
+      providerInstallId
+      enabled
+      registeredUsersAllowed
+      privateSpaceMembershipRequired
+      outsideSenderDefault
+      firstSendReviewRequired
+      updatedAt
+    }
+  }
+`);
+
 export const SettingsUpsertEmailSpacePolicyMutation = graphql(`
   mutation SettingsUpsertEmailSpacePolicy(
     $input: UpsertEmailSpacePolicyInput!
