@@ -91,6 +91,47 @@ export interface LastmileOpportunityItem {
   amount: string | null;
 }
 
+/**
+ * The `task` table is LastMile's live CRM. Everything a rep sees hangs off it:
+ * `status_id` (the real pipeline status — the `opportunity.stage` column is
+ * stale and disagrees for 889 of 950 rows), `assignee_id` (the owning rep),
+ * `organization_id` (the branch, e.g. "GWO 300"), and `entity_data` (name,
+ * description, account, and the product `items` array). Task rows only exist
+ * from 2025-07 onward; older opportunity/lead rows are legacy and out of scope.
+ */
+export interface LastmileCrmTask {
+  taskId: string;
+  entityType: "lead" | "opportunity";
+  /** opportunity/lead row id — the stable identity for the Twenty record. */
+  entityId: string;
+  title: string | null;
+  description: string | null;
+  /** Present on opportunity tasks only; leads pre-date an account. */
+  accountId: string | null;
+  /** Company name typed on a lead before an account exists. */
+  leadCompanyName: string | null;
+  statusName: string | null;
+  organizationId: string | null;
+  /** Owning rep, resolved from the task's assignee user. */
+  assigneeRepId: string | null;
+  dueDate: Date | null;
+  createdAt: Date | null;
+  /** Product lines: [{ brand, quantity, amount }, ...] */
+  items: Array<{
+    brand?: string | null;
+    quantity?: string | number | null;
+    amount?: string | number | null;
+  }> | null;
+}
+
+export interface LastmileOrganization {
+  id: string;
+  name: string | null;
+  /** Short code shown in the LastMile UI, e.g. "GWO 300". */
+  abbv: string | null;
+  archived: boolean;
+}
+
 export interface LastmileCrmComment {
   id: string;
   entityType: "lead" | "opportunity";
@@ -126,6 +167,8 @@ export interface LastmileReader {
   readContacts(): Promise<LastmileContact[]>;
   readLeads(): Promise<LastmileLead[]>;
   readOpportunities(): Promise<LastmileOpportunity[]>;
+  readCrmTasks(): Promise<LastmileCrmTask[]>;
+  readOrganizations(): Promise<LastmileOrganization[]>;
   readOpportunityItems(): Promise<LastmileOpportunityItem[]>;
   readCrmComments(): Promise<LastmileCrmComment[]>;
   readCrmAttachments(): Promise<LastmileCrmAttachment[]>;
@@ -211,6 +254,44 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
                nullif(trim(description), '') as "description",
                date_created                  as "dateCreated"
         from opportunity
+        order by id
+      `),
+    readCrmTasks: () =>
+      rows<LastmileCrmTask>(`
+        select t.id                              as "taskId",
+               t.entity_type                     as "entityType",
+               t.entity_id                       as "entityId",
+               coalesce(
+                 nullif(trim(t.entity_data ->> 'opp_name'), ''),
+                 nullif(trim(t.title), '')
+               )                                 as "title",
+               nullif(trim(t.entity_data ->> 'description'), '') as "description",
+               nullif(trim(t.entity_data ->> 'account_id'), '')  as "accountId",
+               nullif(trim(t.entity_data ->> 'company'), '')     as "leadCompanyName",
+               nullif(trim(s.name), '')          as "statusName",
+               nullif(t.organization_id, '')     as "organizationId",
+               nullif(u.sales_rep_id, '')        as "assigneeRepId",
+               t.due_date                        as "dueDate",
+               t.created_at                      as "createdAt",
+               case
+                 when jsonb_typeof(t.entity_data -> 'items') = 'array'
+                 then t.entity_data -> 'items'
+                 else null
+               end                               as "items"
+        from task t
+        left join status s on s.id = t.status_id
+        left join users u  on u.id = t.assignee_id
+        where t.entity_type in ('lead', 'opportunity')
+          and t.entity_id is not null
+        order by t.entity_type, t.entity_id
+      `),
+    readOrganizations: () =>
+      rows<LastmileOrganization>(`
+        select id,
+               nullif(trim(name), '') as "name",
+               nullif(trim(abbv), '') as "abbv",
+               coalesce(archived, false) as "archived"
+        from organization
         order by id
       `),
     readOpportunityItems: () =>

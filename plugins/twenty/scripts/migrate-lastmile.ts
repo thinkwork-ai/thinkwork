@@ -53,6 +53,7 @@ import {
   NOTE,
   OPPORTUNITY,
   OPPORTUNITY_PRODUCT,
+  ORGANIZATION,
   PERSON,
   rollbackEntity,
   upsertNotes,
@@ -67,9 +68,9 @@ import {
   mapContact,
   mapCrmComment,
   mapCustomerNote,
-  mapLead,
-  mapOpportunity,
-  mapOpportunityProduct,
+  mapCrmTask,
+  mapOrganization,
+  mapTaskProducts,
   sourceId,
 } from "./lib/mappers";
 import {
@@ -80,6 +81,7 @@ import {
 import {
   applySchemaEnsure,
   ensureOpportunityProductObject,
+  ensureOrganizationObject,
   fetchObjectMetadata,
   planSchemaEnsure,
 } from "./lib/schema-ensure";
@@ -172,6 +174,7 @@ async function runRollback(
     { entity: OPPORTUNITY, prefixes: ["lead:", "opportunity:"] },
     { entity: PERSON, prefixes: ["contact:"] },
     { entity: COMPANY, prefixes: ["account:"] },
+    { entity: ORGANIZATION, prefixes: ["organization:"] },
   ];
   for (const { entity, prefixes } of entities) {
     const counters = emptyCounters();
@@ -216,16 +219,34 @@ async function runMigration(options: {
   // Phase B: schema ensure --------------------------------------------------
   log("schema: ensuring custom fields and stage options...");
   let objects = await fetchObjectMetadata(client);
-  const objectEnsure = await ensureOpportunityProductObject(
+  const productObjectEnsure = await ensureOpportunityProductObject(
     client,
     objects,
     dryRun,
   );
-  if (!dryRun && (objectEnsure.created || objectEnsure.relationCreated)) {
-    // Re-read metadata so the field plan addresses the real object id.
+  if (
+    !dryRun &&
+    (productObjectEnsure.created || productObjectEnsure.relationCreated)
+  ) {
     objects = await fetchObjectMetadata(client);
   }
-  report.opportunityProductObject = objectEnsure;
+  const organizationObjectEnsure = await ensureOrganizationObject(
+    client,
+    objects,
+    dryRun,
+  );
+  if (
+    !dryRun &&
+    (organizationObjectEnsure.created ||
+      organizationObjectEnsure.relationCreated)
+  ) {
+    // Re-read metadata so the field plan addresses the real object ids.
+    objects = await fetchObjectMetadata(client);
+  }
+  report.customObjects = {
+    opportunityProduct: productObjectEnsure,
+    organization: organizationObjectEnsure,
+  };
   const schemaPlan = planSchemaEnsure(objects);
   if (dryRun) {
     report.schema = {
@@ -375,18 +396,40 @@ async function runMigration(options: {
   });
   report.people = "pending";
 
-  log("records: loading opportunities (leads + opportunities)...");
-  const [leads, opportunities] = await Promise.all([
-    reader.readLeads(),
-    reader.readOpportunities(),
-  ]);
+  // Organizations (LastMile branches, e.g. "GWO 300") — opportunities link to
+  // them, so they load before the CRM tasks.
+  log("records: loading organizations...");
+  const organizations = await reader.readOrganizations();
+  const organizationCounters = emptyCounters();
+  const mappedOrganizations = organizations.map(mapOrganization);
+  const organizationIdBySourceId = await upsertRecords({
+    client,
+    entity: ORGANIZATION,
+    mapped: mappedOrganizations,
+    dryRun,
+    counters: organizationCounters,
+  });
+  if (dryRun) {
+    for (const record of mappedOrganizations) {
+      if (!organizationIdBySourceId.has(record.sourceId)) {
+        organizationIdBySourceId.set(
+          record.sourceId,
+          `planned:${record.sourceId}`,
+        );
+      }
+    }
+  }
+  report.organizations = summarizeCounters(organizationCounters);
+
+  // The `task` table is the CRM: status, owner, organization, and products all
+  // come from it. The `opportunity`/`lead` tables' own stage columns are stale
+  // (they disagree with the task status on 889 of 950 opportunities).
+  log("records: loading CRM tasks (leads + opportunities)...");
+  const crmTasks = await reader.readCrmTasks();
   const opportunityCounters = emptyCounters();
-  const mappedOpportunities = [
-    ...leads.map((lead) => mapLead(lead, ownerIndex)),
-    ...opportunities.map((opportunity) =>
-      mapOpportunity(opportunity, ownerIndex, companyIdBySourceId),
-    ),
-  ];
+  const mappedOpportunities = crmTasks.map((task) =>
+    mapCrmTask(task, ownerIndex, companyIdBySourceId, organizationIdBySourceId),
+  );
   const opportunityIdBySourceId = await upsertRecords({
     client,
     entity: OPPORTUNITY,
@@ -407,11 +450,11 @@ async function runMigration(options: {
   report.opportunities = "pending";
 
   log("records: loading opportunity product lines...");
-  const items = await reader.readOpportunityItems();
   const productCounters = emptyCounters();
+  const mappedProducts = crmTasks.flatMap(mapTaskProducts);
   await upsertOpportunityProducts({
     client,
-    products: items.map(mapOpportunityProduct),
+    products: mappedProducts,
     opportunityIdBySourceId,
     dryRun,
     counters: productCounters,
@@ -492,12 +535,9 @@ async function runMigration(options: {
   await mirrorDeletions({
     client,
     entity: OPPORTUNITY,
-    liveSourceIds: new Set([
-      ...leads.map((lead) => sourceId("lead", lead.id)),
-      ...opportunities.map((opportunity) =>
-        sourceId("opportunity", opportunity.id),
-      ),
-    ]),
+    liveSourceIds: new Set(
+      crmTasks.map((task) => sourceId(task.entityType, task.entityId)),
+    ),
     ownedPrefixes: ["lead:", "opportunity:"],
     dryRun,
     counters: opportunityCounters,
@@ -510,12 +550,7 @@ async function runMigration(options: {
   await mirrorDeletions({
     client,
     entity: OPPORTUNITY_PRODUCT,
-    liveSourceIds: new Set(
-      items.map(
-        (item) =>
-          `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`,
-      ),
-    ),
+    liveSourceIds: new Set(mappedProducts.map((product) => product.sourceId)),
     ownedPrefixes: ["opportunity_item:"],
     dryRun,
     counters: productCounters,
@@ -540,6 +575,7 @@ async function runMigration(options: {
   const anyFailures =
     members.hadFailures ||
     [
+      organizationCounters,
       companyCounters,
       personCounters,
       opportunityCounters,

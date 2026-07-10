@@ -61,9 +61,9 @@ function bareObjects() {
     opportunity: [stageField],
     note: [],
     attachment: [],
-    // The product-line object exists (ensureOpportunityProductObject ran) but
-    // has none of its fields yet.
+    // Custom objects exist (their ensure* ran) but have none of their fields.
     opportunityProduct: [],
+    organization: [],
   });
 }
 
@@ -115,6 +115,7 @@ function provisionedObjects() {
         options: null,
       },
     ],
+    organization: withAll("organization"),
   });
 }
 
@@ -143,7 +144,7 @@ describe("planSchemaEnsure", () => {
 
   it("creates only the gap on partial presence", () => {
     const objects = bareObjects();
-    objects.get("opportunity")!.fields.set("product", {
+    objects.get("opportunityProduct")!.fields.set("product", {
       id: "f-product",
       name: "product",
       type: "TEXT",
@@ -153,8 +154,8 @@ describe("planSchemaEnsure", () => {
     const names = plan.createFields.map(
       (field) => `${field.object}.${field.name}`,
     );
-    expect(names).not.toContain("opportunity.product");
-    expect(names).toContain("opportunity.quantity");
+    expect(names).not.toContain("opportunityProduct.product");
+    expect(names).toContain("opportunityProduct.quantity");
   });
 
   it("aborts when the stage field is missing", () => {
@@ -165,6 +166,7 @@ describe("planSchemaEnsure", () => {
       note: [],
       attachment: [],
       opportunityProduct: [],
+      organization: [],
     });
     expect(() => planSchemaEnsure(objects)).toThrow(/stage field/);
   });
@@ -202,7 +204,7 @@ describe("applySchemaEnsure", () => {
     ).toContain("CUSTOMER");
     expect(
       lastCall[2].input.update.options.map((option) => option.value),
-    ).toContain("LEAD");
+    ).toContain("LM_10_PROSPECT");
   });
 
   it("refuses to create a field against a pending object id", async () => {

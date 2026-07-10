@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type {
   LastmileContact,
+  LastmileCrmTask,
   LastmileCustomerNote,
-  LastmileLead,
-  LastmileOpportunity,
 } from "../lastmile-reader";
 import {
   buildOwnerIndex,
@@ -14,12 +13,12 @@ import {
   mapAccount,
   mapContact,
   mapCrmComment,
+  mapCrmTask,
+  mapOrganization,
+  mapTaskProducts,
+  mapTaskStatusToStage,
   mapCustomerNote,
-  mapLead,
-  mapLeadStatusToStage,
-  mapOpportunity,
   mapOpportunityProduct,
-  mapOpportunityStage,
   normalizeEmail,
   normalizePhone,
   resolveOwner,
@@ -31,45 +30,6 @@ import {
 
 const ownerMap = new Map([["rep_jane", "member-jane-uuid"]]);
 const companyMap = new Map([[sourceId("account", "acct_1"), "company-uuid-1"]]);
-
-function lead(overrides: Partial<LastmileLead> = {}): LastmileLead {
-  return {
-    id: "lead_1",
-    status: "00-New",
-    companyName: "Acme Fuel",
-    firstName: "Ann",
-    lastName: "Lee",
-    email: null,
-    phone: null,
-    source: null,
-    description: null,
-    ownerRepId: null,
-    dateCreated: null,
-    ...overrides,
-  };
-}
-
-function opportunity(
-  overrides: Partial<LastmileOpportunity> = {},
-): LastmileOpportunity {
-  return {
-    id: "opp_1",
-    name: "Bulk diesel contract",
-    stage: "10-Prospect",
-    amount: "1234.56",
-    quantity: "100",
-    productType: "Diesel",
-    brand: "Mobil",
-    closed: null,
-    won: null,
-    accountId: "acct_1",
-    ownerRepId: "rep_jane",
-    expectedCloseDate: "2026-08-01",
-    description: null,
-    dateCreated: null,
-    ...overrides,
-  };
-}
 
 describe("toAmountMicros", () => {
   it("converts $1,234.56 to 1234560000 micros", () => {
@@ -119,63 +79,6 @@ describe("normalizeEmail", () => {
   it("lowercases and validates", () => {
     expect(normalizeEmail(" Jane@TEI.com ")).toBe("jane@tei.com");
     expect(normalizeEmail("not-an-email")).toBeNull();
-  });
-});
-
-describe("stage mapping", () => {
-  it("maps messy lead statuses into the lead band", () => {
-    expect(mapLeadStatusToStage("00-New").stage).toBe("LEAD");
-    expect(mapLeadStatusToStage("new").stage).toBe("LEAD");
-    expect(mapLeadStatusToStage(null).stage).toBe("LEAD");
-    expect(mapLeadStatusToStage("20-Working").stage).toBe("LEAD_WORKING");
-    expect(mapLeadStatusToStage("30-Nurturing").stage).toBe("LEAD_WORKING");
-    expect(mapLeadStatusToStage("50-Qualified").stage).toBe("LEAD_QUALIFIED");
-    expect(mapLeadStatusToStage("90-Unqualified").stage).toBe(
-      "LEAD_UNQUALIFIED",
-    );
-    expect(mapLeadStatusToStage("Converted").stage).toBe("LEAD_QUALIFIED");
-  });
-
-  it("flags unknown lead statuses", () => {
-    expect(mapLeadStatusToStage("13-Mystery")).toEqual({
-      stage: "LEAD",
-      unknown: true,
-    });
-  });
-
-  it("maps opportunity stages including both Negotiate spellings", () => {
-    expect(
-      mapOpportunityStage({ stage: "60-Won", closed: null, won: null }).stage,
-    ).toBe("WON");
-    expect(
-      mapOpportunityStage({ stage: "90-Lost", closed: null, won: null }).stage,
-    ).toBe("LOST");
-    expect(
-      mapOpportunityStage({
-        stage: "40-Negotiate to Close",
-        closed: null,
-        won: null,
-      }).stage,
-    ).toBe("NEGOTIATE");
-    expect(
-      mapOpportunityStage({
-        stage: "40-Negotiation to Close",
-        closed: null,
-        won: null,
-      }).stage,
-    ).toBe("NEGOTIATE");
-  });
-
-  it("falls back to closed/won flags for blank stages", () => {
-    expect(
-      mapOpportunityStage({ stage: null, closed: "true", won: "true" }).stage,
-    ).toBe("WON");
-    expect(
-      mapOpportunityStage({ stage: null, closed: "true", won: "false" }).stage,
-    ).toBe("LOST");
-    expect(
-      mapOpportunityStage({ stage: null, closed: null, won: null }).stage,
-    ).toBe("NEW");
   });
 });
 
@@ -244,59 +147,6 @@ describe("mapContact", () => {
     const mapped = mapContact(contact({ email: "garbage" }), companyMap);
     expect(mapped.input).not.toHaveProperty("emails");
     expect(mapped.warnings[0]).toMatch(/invalid email/);
-  });
-});
-
-describe("mapOpportunity", () => {
-  it("maps stage, micros, custom fields, links, and owner (AE1 shape)", () => {
-    const mapped = mapOpportunity(opportunity(), ownerMap, companyMap);
-    expect(mapped.input).toMatchObject({
-      name: "Bulk diesel contract",
-      stage: "PROSPECT",
-      amount: { amountMicros: 1_234_560_000, currencyCode: "USD" },
-      ownerId: "member-jane-uuid",
-      companyId: "company-uuid-1",
-      product: "Diesel",
-      quantity: 100,
-      isMobil: true,
-      sourceId: "opportunity:opp_1",
-    });
-  });
-
-  it("is not Mobil when neither product nor brand mentions Mobil", () => {
-    const mapped = mapOpportunity(
-      opportunity({ brand: "Shell", productType: "Unleaded" }),
-      ownerMap,
-      companyMap,
-    );
-    expect(mapped.input.isMobil).toBe(false);
-  });
-
-  it("flags an unresolvable company and unprovisioned owner", () => {
-    const mapped = mapOpportunity(
-      opportunity({ accountId: "acct_missing", ownerRepId: "rep_gone" }),
-      ownerMap,
-      companyMap,
-    );
-    expect(mapped.input).not.toHaveProperty("companyId");
-    expect(mapped.input).not.toHaveProperty("ownerId");
-    expect(mapped.warnings).toHaveLength(2);
-  });
-});
-
-describe("mapLead", () => {
-  it("maps a lead row to the early Lead stage in the opportunity pipeline (AE3)", () => {
-    const mapped = mapLead(lead(), ownerMap);
-    expect(mapped.input).toMatchObject({
-      name: "Acme Fuel",
-      stage: "LEAD",
-      sourceId: "lead:lead_1",
-    });
-  });
-
-  it("names person-only leads by their person name", () => {
-    const mapped = mapLead(lead({ companyName: null }), ownerMap);
-    expect(mapped.input.name).toBe("Ann Lee");
   });
 });
 
@@ -485,5 +335,174 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
     expect(isMobilBrand("Mobil")).toBe(true);
     expect(isMobilBrand("GOLDEN WEST")).toBe(false);
     expect(isMobilBrand(null)).toBe(false);
+  });
+});
+
+describe("mapTaskStatusToStage", () => {
+  it("maps LastMile status names verbatim to pipeline stages", () => {
+    expect(mapTaskStatusToStage("10-Prospect").stage).toBe("LM_10_PROSPECT");
+    expect(mapTaskStatusToStage("60-Won").stage).toBe("LM_60_WON");
+    expect(mapTaskStatusToStage("20-Account Needs").stage).toBe(
+      "LM_20_ACCOUNT_NEEDS",
+    );
+    expect(mapTaskStatusToStage("Converted").stage).toBe("LM_CONVERTED");
+    expect(mapTaskStatusToStage("90-Unqualified").stage).toBe(
+      "LM_90_UNQUALIFIED",
+    );
+  });
+
+  it("flags an unmapped status instead of silently bucketing it", () => {
+    expect(mapTaskStatusToStage("Zz-Unknown")).toEqual({
+      stage: "LM_00_NEW",
+      unknown: true,
+    });
+    expect(mapTaskStatusToStage(null).unknown).toBe(true);
+  });
+});
+
+describe("mapCrmTask (task table is the CRM authority)", () => {
+  const ownerIndex = new Map([["rep_chad", "member-chad"]]);
+  const companyMap = new Map([["account:acct_reign", "company-reign"]]);
+  const orgMap = new Map([["organization:org_gwo", "org-gwo-300"]]);
+
+  function task(overrides: Partial<LastmileCrmTask> = {}): LastmileCrmTask {
+    return {
+      taskId: "task_xdh6577weuhsc2ttlct1acyl",
+      entityType: "opportunity",
+      entityId: "opp_xdh6577weuhsc2ttlct1acyl",
+      title: "Reign Rentals GW Lubes",
+      description: "start up oilfield rental company with brand new equipment",
+      accountId: "acct_reign",
+      leadCompanyName: null,
+      statusName: "10-Prospect",
+      organizationId: "org_gwo",
+      assigneeRepId: "rep_chad",
+      dueDate: new Date("2026-07-23T00:00:00Z"),
+      createdAt: null,
+      items: [{ brand: "Golden West", amount: 12000, quantity: 40 }],
+      ...overrides,
+    };
+  }
+
+  it("reproduces the reference opportunity exactly", () => {
+    const mapped = mapCrmTask(task(), ownerIndex, companyMap, orgMap);
+    expect(mapped.sourceId).toBe("opportunity:opp_xdh6577weuhsc2ttlct1acyl");
+    expect(mapped.input).toMatchObject({
+      name: "Reign Rentals GW Lubes",
+      stage: "LM_10_PROSPECT",
+      amount: { amountMicros: 12_000_000_000, currencyCode: "USD" },
+      ownerId: "member-chad",
+      companyId: "company-reign",
+      organizationId: "org-gwo-300",
+      isMobil: false,
+    });
+    expect(mapped.warnings).toEqual([]);
+  });
+
+  it("takes status from the task, not the stale opportunity.stage column", () => {
+    // The opportunity row for this task says "30-Formulate Offer"; the task
+    // says 10-Prospect, and the task wins.
+    expect(mapCrmTask(task(), ownerIndex, companyMap, orgMap).input.stage).toBe(
+      "LM_10_PROSPECT",
+    );
+  });
+
+  it("sums product lines into the deal amount and rolls up isMobil", () => {
+    const mapped = mapCrmTask(
+      task({
+        items: [
+          { brand: "DEF", amount: 1000, quantity: 1000 },
+          { brand: "GOLDEN WEST", amount: 1000, quantity: 1000 },
+          { brand: "MOBIL", amount: 1000, quantity: 500 },
+        ],
+      }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.input.amount).toEqual({
+      amountMicros: 3_000_000_000,
+      currencyCode: "USD",
+    });
+    expect(mapped.input.isMobil).toBe(true);
+  });
+
+  it("maps a lead with no account to a named opportunity with no company", () => {
+    const mapped = mapCrmTask(
+      task({
+        entityType: "lead",
+        entityId: "lead_1",
+        title: null,
+        accountId: null,
+        leadCompanyName: "Alpine Silica",
+        statusName: "50-Qualified",
+        items: null,
+      }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.sourceId).toBe("lead:lead_1");
+    expect(mapped.input).toMatchObject({
+      name: "Alpine Silica",
+      stage: "LM_50_QUALIFIED",
+    });
+    expect(mapped.input).not.toHaveProperty("companyId");
+    expect(mapped.input).not.toHaveProperty("amount");
+  });
+
+  it("flags an unassigned task and an unmigrated organization", () => {
+    const mapped = mapCrmTask(
+      task({ assigneeRepId: null, organizationId: "org_missing" }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.input).not.toHaveProperty("ownerId");
+    expect(mapped.input).not.toHaveProperty("organizationId");
+    expect(mapped.warnings).toEqual([
+      "task has no assignee; no owner",
+      "organization org_missing not migrated",
+    ]);
+  });
+
+  it("derives product lines from the task's items array", () => {
+    const lines = mapTaskProducts(task());
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      sourceId: "opportunity_item:opp_xdh6577weuhsc2ttlct1acyl#0",
+      opportunitySourceId: "opportunity:opp_xdh6577weuhsc2ttlct1acyl",
+    });
+    expect(lines[0].input).toMatchObject({
+      product: "Golden West",
+      quantity: 40,
+      amount: { amountMicros: 12_000_000_000, currencyCode: "USD" },
+    });
+  });
+});
+
+describe("mapOrganization", () => {
+  it("names the record by its abbreviation and keeps the full name", () => {
+    const mapped = mapOrganization({
+      id: "org_x3wdgjtw4x4jqx2a937amutm",
+      name: "Golden West Oil Co..San Antonio (300)",
+      abbv: "GWO 300",
+      archived: false,
+    });
+    expect(mapped.sourceId).toBe("organization:org_x3wdgjtw4x4jqx2a937amutm");
+    expect(mapped.input).toMatchObject({
+      name: "GWO 300",
+      fullName: "Golden West Oil Co..San Antonio (300)",
+    });
+  });
+
+  it("falls back to the full name when there is no abbreviation", () => {
+    const mapped = mapOrganization({
+      id: "org_1",
+      name: "UNKNOWN",
+      abbv: null,
+      archived: false,
+    });
+    expect(mapped.input.name).toBe("UNKNOWN");
   });
 });
