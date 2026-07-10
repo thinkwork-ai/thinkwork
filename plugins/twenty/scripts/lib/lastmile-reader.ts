@@ -208,8 +208,21 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
         from account
         order by id
       `),
+    /**
+     * Contacts are scoped to accounts that actually have an opportunity or
+     * lead (Eric, 2026-07-10: "we ONLY need contacts assigned to accounts that
+     * are attached to opportunities"). LastMile holds 29,966 contacts, most of
+     * them old data on accounts nobody is selling to; the CRM-relevant set is
+     * 443 across 805 accounts.
+     */
     readContacts: () =>
       rows<LastmileContact>(`
+        with opportunity_accounts as (
+          select distinct nullif(trim(t.entity_data ->> 'account_id'), '') as account_id
+          from task t
+          where t.entity_type in ('lead', 'opportunity')
+            and nullif(trim(t.entity_data ->> 'account_id'), '') is not null
+        )
         select id,
                nullif(account_id, '')      as "accountId",
                nullif(trim(first_name), '') as "firstName",
@@ -219,6 +232,7 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
                nullif(trim(phone_cellular), '') as "phoneCellular",
                nullif(trim(title), '')     as "title"
         from contact
+        where account_id in (select account_id from opportunity_accounts)
         order by id
       `),
     readLeads: () =>
