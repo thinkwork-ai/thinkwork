@@ -591,47 +591,9 @@ export function mapCrmTask(
     isMobil: (task.items ?? []).some((item) =>
       isMobilBrand(item.brand ?? null),
     ),
-    productsSummary: buildProductsSummary(task.items),
     sourceId: sourceId(task.entityType, task.entityId),
   };
   return { sourceId: input.sourceId as string, input, warnings };
-}
-
-/**
- * A one-line-per-product text summary for the opportunity's inline Products
- * field: "Golden West — 6,000 — $1,800". Unmapped brands read by their line
- * label ("Line 2"). Empty when the opportunity has no product lines.
- */
-export function buildProductsSummary(items: LastmileCrmTask["items"]): string {
-  if (!items || items.length === 0) return "";
-  return items
-    .map((item, index) => {
-      const name =
-        normalizeProductName(item.brand ?? null) ?? `Line ${index + 1}`;
-      const quantity = toQuantity(
-        item.quantity === null || item.quantity === undefined
-          ? null
-          : String(item.quantity),
-      );
-      const micros = toAmountMicros(
-        item.amount === null || item.amount === undefined
-          ? null
-          : String(item.amount),
-      );
-      const parts = [name];
-      if (quantity !== null) parts.push(quantity.toLocaleString("en-US"));
-      if (micros !== null) {
-        parts.push(
-          (micros / 1_000_000).toLocaleString("en-US", {
-            style: "currency",
-            currency: "USD",
-            maximumFractionDigits: 0,
-          }),
-        );
-      }
-      return parts.join(" — ");
-    })
-    .join("\n");
 }
 
 export function sumLineAmountsMicros(
