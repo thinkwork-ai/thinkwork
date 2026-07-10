@@ -10,6 +10,7 @@ import {
   buildOwnerIndex,
   contentHash,
   deriveRepEmail,
+  isMobilBrand,
   mapAccount,
   mapContact,
   mapCrmComment,
@@ -17,6 +18,7 @@ import {
   mapLead,
   mapLeadStatusToStage,
   mapOpportunity,
+  mapOpportunityProduct,
   mapOpportunityStage,
   normalizeEmail,
   normalizePhone,
@@ -423,5 +425,65 @@ describe("deriveRepEmail", () => {
     expect(deriveRepEmail("Chelsea", "Ervi_2", domain)).toBeNull();
     expect(deriveRepEmail("Bob", "Loa2", domain)).toBeNull();
     expect(deriveRepEmail(null, "Smith", domain)).toBeNull();
+  });
+});
+
+describe("mapOpportunityProduct (multiple products per opportunity)", () => {
+  const item = (overrides = {}) => ({
+    opportunityId: "opp_1",
+    index: 0,
+    brand: "MOBIL",
+    quantity: "6500",
+    amount: "50000",
+    ...overrides,
+  });
+
+  it("maps a line to product, quantity, currency micros, and its opportunity", () => {
+    const mapped = mapOpportunityProduct(item());
+    expect(mapped.sourceId).toBe("opportunity_item:opp_1#0");
+    expect(mapped.opportunitySourceId).toBe("opportunity:opp_1");
+    expect(mapped.input).toMatchObject({
+      name: "MOBIL",
+      product: "MOBIL",
+      quantity: 6500,
+      amount: { amountMicros: 50_000_000_000, currencyCode: "USD" },
+      isMobil: true,
+      lineNumber: 1,
+    });
+  });
+
+  it("gives each line on one opportunity a distinct, stable sourceId", () => {
+    const lines = [
+      mapOpportunityProduct(item({ index: 0, brand: "DEF" })),
+      mapOpportunityProduct(item({ index: 1, brand: "GOLDEN WEST" })),
+      mapOpportunityProduct(item({ index: 2, brand: "MOBIL" })),
+    ];
+    expect(lines.map((l) => l.sourceId)).toEqual([
+      "opportunity_item:opp_1#0",
+      "opportunity_item:opp_1#1",
+      "opportunity_item:opp_1#2",
+    ]);
+    expect(new Set(lines.map((l) => l.opportunitySourceId)).size).toBe(1);
+    expect(lines.map((l) => l.input.isMobil)).toEqual([false, false, true]);
+    expect(lines.map((l) => l.input.lineNumber)).toEqual([1, 2, 3]);
+  });
+
+  it("names an unbranded line by its position and flags unparseable numbers", () => {
+    const mapped = mapOpportunityProduct(
+      item({ brand: null, quantity: "n/a", amount: "" }),
+    );
+    expect(mapped.input.name).toBe("Line 1");
+    expect(mapped.input).not.toHaveProperty("product");
+    expect(mapped.input).not.toHaveProperty("quantity");
+    expect(mapped.input).not.toHaveProperty("amount");
+    expect(mapped.input.isMobil).toBe(false);
+    expect(mapped.warnings).toContain("unparseable line quantity n/a dropped");
+  });
+
+  it("treats MOBIL - CVL as Mobil, GOLDEN WEST as not", () => {
+    expect(isMobilBrand("MOBIL - CVL")).toBe(true);
+    expect(isMobilBrand("Mobil")).toBe(true);
+    expect(isMobilBrand("GOLDEN WEST")).toBe(false);
+    expect(isMobilBrand(null)).toBe(false);
   });
 });

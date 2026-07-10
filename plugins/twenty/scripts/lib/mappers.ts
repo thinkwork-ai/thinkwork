@@ -381,6 +381,58 @@ export function mapContact(
   return { sourceId: input.sourceId as string, input, warnings };
 }
 
+/** Mobil-branded products, per line. Brands seen live: MOBIL, MOBIL - CVL,
+ * GOLDEN WEST, FUEL, DEF, Hotsy. */
+export function isMobilBrand(brand: string | null): boolean {
+  return /mobil/i.test(brand ?? "");
+}
+
+export interface MappedOpportunityProduct extends MappedRecord {
+  /** sourceId of the owning opportunity, resolved to a Twenty id by the loader. */
+  opportunitySourceId: string;
+}
+
+/**
+ * One product line on an opportunity (R1: multiple products per opportunity).
+ * Identity is opportunity + position, so re-runs update lines in place rather
+ * than duplicating them.
+ */
+export function mapOpportunityProduct(item: {
+  opportunityId: string;
+  index: number;
+  brand: string | null;
+  quantity: string | null;
+  amount: string | null;
+}): MappedOpportunityProduct {
+  const warnings: string[] = [];
+  const amountMicros = toAmountMicros(item.amount);
+  if (item.amount && amountMicros === null) {
+    warnings.push(`unparseable line amount ${item.amount} dropped`);
+  }
+  const quantity = toQuantity(item.quantity);
+  if (item.quantity && quantity === null) {
+    warnings.push(`unparseable line quantity ${item.quantity} dropped`);
+  }
+  const lineSourceId = `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`;
+  const input: Record<string, unknown> = {
+    name: item.brand ?? `Line ${item.index + 1}`,
+    ...(item.brand ? { product: item.brand } : {}),
+    ...(quantity !== null ? { quantity } : {}),
+    ...(amountMicros !== null
+      ? { amount: { amountMicros, currencyCode: "USD" } }
+      : {}),
+    isMobil: isMobilBrand(item.brand),
+    lineNumber: item.index + 1,
+    sourceId: lineSourceId,
+  };
+  return {
+    sourceId: lineSourceId,
+    input,
+    warnings,
+    opportunitySourceId: sourceId("opportunity", item.opportunityId),
+  };
+}
+
 function isMobilProduct(opportunity: {
   productType: string | null;
   brand: string | null;

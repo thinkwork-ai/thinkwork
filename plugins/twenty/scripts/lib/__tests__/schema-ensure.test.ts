@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applySchemaEnsure,
   FIELD_SPECS,
+  PENDING_OBJECT_ID,
   planSchemaEnsure,
 } from "../schema-ensure";
 import { MIGRATION_STAGE_OPTIONS } from "../mappers";
@@ -60,6 +61,20 @@ function bareObjects() {
     opportunity: [stageField],
     note: [],
     attachment: [],
+    // The product-line object exists (ensureOpportunityProductObject ran) but
+    // has none of its fields yet.
+    opportunityProduct: [],
+  });
+}
+
+/** A workspace that has never seen the product-line object at all. */
+function objectsWithoutProductObject() {
+  return objectsFixture({
+    company: [],
+    person: [],
+    opportunity: [stageField],
+    note: [],
+    attachment: [],
   });
 }
 
@@ -91,6 +106,15 @@ function provisionedObjects() {
     opportunity: opportunityFields,
     note: withAll("note"),
     attachment: withAll("attachment"),
+    opportunityProduct: [
+      ...withAll("opportunityProduct"),
+      {
+        id: "f-op-rel",
+        name: "opportunity",
+        type: "RELATION",
+        options: null,
+      },
+    ],
   });
 }
 
@@ -140,8 +164,20 @@ describe("planSchemaEnsure", () => {
       opportunity: [],
       note: [],
       attachment: [],
+      opportunityProduct: [],
     });
     expect(() => planSchemaEnsure(objects)).toThrow(/stage field/);
+  });
+
+  it("plans product-line fields against a pending object id when it does not exist yet", () => {
+    const plan = planSchemaEnsure(objectsWithoutProductObject());
+    const productFields = plan.createFields.filter(
+      (field) => field.object === "opportunityProduct",
+    );
+    expect(productFields.length).toBeGreaterThan(0);
+    expect(
+      productFields.every((field) => field.objectMetadataId === PENDING_OBJECT_ID),
+    ).toBe(true);
   });
 });
 
@@ -165,6 +201,17 @@ describe("applySchemaEnsure", () => {
     expect(
       lastCall[2].input.update.options.map((option) => option.value),
     ).toContain("LEAD");
+  });
+
+  it("refuses to create a field against a pending object id", async () => {
+    // Guards the ordering bug: fields must be planned only after
+    // ensureOpportunityProductObject has created the object.
+    const requestOnce = vi.fn(async () => ({}));
+    const client = { requestOnce } as unknown as TwentyClient;
+    const plan = planSchemaEnsure(objectsWithoutProductObject());
+    await expect(applySchemaEnsure(client, plan)).rejects.toThrow(
+      /planned against an uncreated object/,
+    );
   });
 
   it("aborts on the first metadata mutation error", async () => {
