@@ -173,12 +173,13 @@ async function main(): Promise<void> {
     }
   }
 
-  // --- Opportunity side: render products as a TAB, not inline chips ---------
-  // Every other one-to-many relation (tasks, notes, files, timeline) is HIDDEN
-  // in the opportunity's record-page field widget, which is what makes Twenty
-  // show it as a tab with a full table. `products` was left visible, so it
-  // rendered as chips you had to click one at a time. Hiding it surfaces the
-  // Products tab, whose columns we set above to Name / Quantity / Amount.
+  // Hide the products RELATION chips from the opportunity record page. Twenty
+  // renders a one-to-many relation as chips you must click one at a time; the
+  // readable line list now lives in the `productsSummary` text field, so the
+  // chips are redundant. (Hiding does NOT create a tab — Twenty's tabs are
+  // built-ins, not relation-driven — but that's fine: the summary field is the
+  // at-a-glance list.) The relation itself stays for structured editing and
+  // reporting via the Opportunity Products object.
   const opportunity = objects.get("opportunity");
   if (opportunity) {
     const productsFieldId = [...opportunity.fields.values()].find(
@@ -208,7 +209,7 @@ async function main(): Promise<void> {
         (field) => field.fieldMetadataId === productsFieldId,
       );
       if (existing?.isVisible) {
-        changes.push("opportunity widget: hide products chip (render as tab)");
+        changes.push("opportunity: hide redundant products chips");
         if (apply) {
           await client.requestOnce(
             "/metadata",

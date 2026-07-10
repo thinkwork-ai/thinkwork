@@ -110,6 +110,16 @@ export const FIELD_SPECS: Array<{
     label: "Mobil Product",
     type: "BOOLEAN",
   },
+  // Zero-click, at-a-glance product list shown inline on the opportunity. A
+  // denormalized mirror of the product lines (Eric wants the line data visible
+  // without opening the tab or clicking each chip); the structured catalog +
+  // lines stay underneath for editing and reporting.
+  {
+    object: "opportunity",
+    name: "productsSummary",
+    label: "Products",
+    type: "TEXT",
+  },
   {
     object: "note",
     name: "sourceId",

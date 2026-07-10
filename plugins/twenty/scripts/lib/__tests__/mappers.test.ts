@@ -7,6 +7,7 @@ import type {
 } from "../lastmile-reader";
 import {
   buildOwnerIndex,
+  buildProductsSummary,
   contentHash,
   dedupeContactEmails,
   deriveRepEmail,
@@ -640,5 +641,30 @@ describe("mapProduct", () => {
     });
     expect(mapProduct("DEF").sourceId).toBe("product:def");
     expect(productSourceId("Mobil")).toBe("product:mobil");
+  });
+});
+
+describe("buildProductsSummary (inline zero-click product list)", () => {
+  it("renders one product-quantity-amount line per item", () => {
+    const summary = buildProductsSummary([
+      { brand: "GOLDEN WEST", quantity: 6000, amount: 1800 },
+      { brand: "MOBIL - CVL", quantity: 3000, amount: 1800 },
+    ]);
+    expect(summary).toBe(
+      "Golden West — 6,000 — $1,800\nMobil — 3,000 — $1,800",
+    );
+  });
+
+  it("names an unmapped line by position and omits missing numbers", () => {
+    expect(
+      buildProductsSummary([
+        { brand: "UNKNOWN", quantity: null, amount: null },
+      ]),
+    ).toBe("Line 1");
+  });
+
+  it("is empty when there are no product lines", () => {
+    expect(buildProductsSummary(null)).toBe("");
+    expect(buildProductsSummary([])).toBe("");
   });
 });
