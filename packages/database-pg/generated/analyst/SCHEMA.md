@@ -963,6 +963,8 @@ Join hints:
 | input_tokens | integer |  |
 | output_tokens | integer |  |
 | cached_read_tokens | integer |  |
+| cached_write_tokens | integer |  |
+| enforcement_exempt | boolean | not null |
 | duration_ms | integer |  |
 | trace_id | text |  |
 | trace_event_id | uuid |  |
