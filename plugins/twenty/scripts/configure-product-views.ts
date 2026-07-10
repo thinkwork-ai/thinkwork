@@ -173,6 +173,55 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- Opportunity side: render products as a TAB, not inline chips ---------
+  // Every other one-to-many relation (tasks, notes, files, timeline) is HIDDEN
+  // in the opportunity's record-page field widget, which is what makes Twenty
+  // show it as a tab with a full table. `products` was left visible, so it
+  // rendered as chips you had to click one at a time. Hiding it surfaces the
+  // Products tab, whose columns we set above to Name / Quantity / Amount.
+  const opportunity = objects.get("opportunity");
+  if (opportunity) {
+    const productsFieldId = [...opportunity.fields.values()].find(
+      (field) => field.name === "products",
+    )?.id;
+    const oppViews = await client.requestWithRetry<{
+      getViews: Array<{ id: string; type: string }>;
+    }>(
+      "/metadata",
+      `query ConfigOppViews($objectMetadataId: String!) {
+        getViews(objectMetadataId: $objectMetadataId) { id type }
+      }`,
+      { objectMetadataId: opportunity.id },
+    );
+    const widget = oppViews.getViews.find(
+      (view) => view.type === "FIELDS_WIDGET",
+    );
+    if (widget && productsFieldId) {
+      const wf = await client.requestWithRetry<{ getViewFields: ViewField[] }>(
+        "/metadata",
+        `query ConfigOppWidget($viewId: String!) {
+          getViewFields(viewId: $viewId) { id fieldMetadataId isVisible }
+        }`,
+        { viewId: widget.id },
+      );
+      const existing = wf.getViewFields.find(
+        (field) => field.fieldMetadataId === productsFieldId,
+      );
+      if (existing?.isVisible) {
+        changes.push("opportunity widget: hide products chip (render as tab)");
+        if (apply) {
+          await client.requestOnce(
+            "/metadata",
+            `mutation ConfigHideOppProducts($input: UpdateViewFieldInput!) {
+              updateViewField(input: $input) { id }
+            }`,
+            { input: { id: existing.id, update: { isVisible: false } } },
+          );
+        }
+      }
+    }
+  }
+
   report.changes =
     changes.length > 0 ? changes : "none — views already correct";
   if (apply && changes.length > 0)
