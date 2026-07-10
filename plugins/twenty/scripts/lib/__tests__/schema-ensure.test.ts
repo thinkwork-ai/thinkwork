@@ -176,7 +176,9 @@ describe("planSchemaEnsure", () => {
     );
     expect(productFields.length).toBeGreaterThan(0);
     expect(
-      productFields.every((field) => field.objectMetadataId === PENDING_OBJECT_ID),
+      productFields.every(
+        (field) => field.objectMetadataId === PENDING_OBJECT_ID,
+      ),
     ).toBe(true);
   });
 });

@@ -512,7 +512,8 @@ async function runMigration(options: {
     entity: OPPORTUNITY_PRODUCT,
     liveSourceIds: new Set(
       items.map(
-        (item) => `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`,
+        (item) =>
+          `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`,
       ),
     ),
     ownedPrefixes: ["opportunity_item:"],
