@@ -25,7 +25,21 @@ vi.mock("../../utils.js", () => ({
   db: {
     select: () => ({
       from: () => ({
+        // Awaitable directly (the Space-catalog read has no .limit) and via
+        // .limit()/.orderBy().limit() — each consumption takes one
+        // selectRows slot, preserving the call-index choreography.
         where: () => ({
+          then: (
+            resolve: (rows: unknown) => void,
+            reject: (err: unknown) => void,
+          ) => {
+            selectCall += 1;
+            try {
+              resolve(mocks.selectRows(selectCall));
+            } catch (err) {
+              reject(err);
+            }
+          },
           limit: async () => {
             selectCall += 1;
             return mocks.selectRows(selectCall);
@@ -136,7 +150,10 @@ vi.mock("./write-access.js", () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { saveAgentLoop } from "./saveAgentLoop.mutation.js";
+import {
+  saveAgentLoop,
+  resolveAgentLoopSpaceId,
+} from "./saveAgentLoop.mutation.js";
 
 const ctx = () =>
   ({
@@ -413,7 +430,9 @@ describe("saveAgentLoop", () => {
   // schedule rides the workflow — the legacy binding goes quiet.
   it("converges a document-bound automation and disables the legacy schedule binding", async () => {
     mocks.selectRows.mockImplementation(async (call: number) => {
-      if (call === 1) return [{ id: "space-1" }]; // resolveAgentLoopSpaceId
+      // Calls 1–2: resolveAgentLoopSpaceId for the automation's Space and
+      // the binding's Space (both 'space-1').
+      if (call <= 2) return [{ id: "space-1" }];
       return [
         {
           id: "loop-1",
@@ -557,5 +576,60 @@ describe("saveAgentLoop", () => {
         target_spec: expect.objectContaining({ kind: "routine" }),
       }),
     );
+  });
+});
+
+// THINK-246: conversational callers pass Space slugs/names where the column
+// wants the UUID; the resolver resolves all three and a miss names the
+// tenant's actual Spaces (unmasked BAD_USER_INPUT).
+describe("resolveAgentLoopSpaceId (THINK-246)", () => {
+  const CATALOG = [
+    {
+      id: "ff3b6c66-6ef1-42fb-97bf-62f7be49d8e2",
+      name: "General",
+      slug: "general",
+    },
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Customer Ops",
+      slug: "customer-ops",
+    },
+  ];
+
+  beforeEach(() => {
+    mocks.selectRows.mockImplementation(async () => CATALOG);
+  });
+
+  it("resolves a UUID verbatim", async () => {
+    await expect(
+      resolveAgentLoopSpaceId("tenant-1", CATALOG[0].id),
+    ).resolves.toBe(CATALOG[0].id);
+  });
+
+  it("resolves a slug to its UUID", async () => {
+    await expect(resolveAgentLoopSpaceId("tenant-1", "general")).resolves.toBe(
+      CATALOG[0].id,
+    );
+  });
+
+  it("resolves a name case-insensitively", async () => {
+    await expect(
+      resolveAgentLoopSpaceId("tenant-1", "customer OPS"),
+    ).resolves.toBe(CATALOG[1].id);
+  });
+
+  it("a miss lists the tenant's Spaces in an unmasked BAD_USER_INPUT error", async () => {
+    await expect(
+      resolveAgentLoopSpaceId("tenant-1", "marketing"),
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(
+        /does not match any active Space.*General \(slug: general/s,
+      ),
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  });
+
+  it("null passes through (headless targets save without a Space)", async () => {
+    await expect(resolveAgentLoopSpaceId("tenant-1", null)).resolves.toBeNull();
   });
 });
