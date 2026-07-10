@@ -13,14 +13,18 @@ type Db = Pick<Database, "select">;
 export type OutboundEmailPolicyResult =
   | {
       allowed: true;
-      providerInstallId: string;
+      /**
+       * Null when sending through built-in SES without a provider install
+       * row (no provider has ever been configured for the tenant).
+       */
+      providerInstallId: string | null;
       provider: EmailChannelProvider;
       firstSendReviewRequired: boolean;
     }
   | {
       allowed: false;
       reasonCode:
-        | "email_provider_missing"
+        | "email_provider_disabled"
         | "email_readiness_incomplete"
         | "email_space_policy_disabled";
       message: string;
@@ -42,13 +46,32 @@ export async function evaluateOutboundEmailPolicy(input: {
     )
     .limit(1);
 
-  if (!provider) {
-    return {
-      allowed: false,
-      reasonCode: "email_provider_missing",
-      message:
-        "Email provider readiness is incomplete. Configure and verify the Email Channel plugin before sending production email.",
-    };
+  // Built-in SES path: an explicitly selected SES install, or no provider
+  // install at all. SES readiness is owned by the platform deployment (IAM
+  // role + Terraform-managed agents domain), not tenant plugin checks — the
+  // resend-style readiness gate below only applies to third-party providers.
+  // This keeps email always available: plugins are opt-in upgrades, SES is
+  // the baseline.
+  if (!provider || provider.provider === "ses") {
+    // Still honor an operator's explicit disable (or a probe-recorded
+    // failure) on the SES install itself — always-available covers the
+    // default states (no install, pending, ready), not an install someone
+    // turned off.
+    if (
+      provider &&
+      (provider.status === "disabled" || provider.status === "failed")
+    ) {
+      return {
+        allowed: false,
+        reasonCode: "email_provider_disabled",
+        message:
+          "The selected SES email provider is disabled. Re-enable it in Settings before sending.",
+      };
+    }
+    return finalizeWithSpacePolicy(input, {
+      providerInstallId: provider?.id ?? null,
+      provider: "ses",
+    });
   }
 
   const readiness = await input.db
@@ -72,11 +95,23 @@ export async function evaluateOutboundEmailPolicy(input: {
     return {
       allowed: false,
       reasonCode: "email_readiness_incomplete",
-      message:
-        "Email provider readiness is incomplete. Production email fails closed until the Resend key, ThinkWork domain, receiving, and webhook checks pass.",
+      message: `Email provider readiness is incomplete for ${provider.provider}. Production email through a third-party provider fails closed until its credential, domain, receiving, and webhook checks pass.`,
     };
   }
 
+  return finalizeWithSpacePolicy(input, {
+    providerInstallId: provider.id,
+    provider: provider.provider as EmailChannelProvider,
+  });
+}
+
+async function finalizeWithSpacePolicy(
+  input: { db: Db; tenantId: string; spaceId?: string | null },
+  selected: {
+    providerInstallId: string | null;
+    provider: EmailChannelProvider;
+  },
+): Promise<OutboundEmailPolicyResult> {
   let firstSendReviewRequired = true;
   if (input.spaceId) {
     const [policy] = await input.db
@@ -101,8 +136,8 @@ export async function evaluateOutboundEmailPolicy(input: {
 
   return {
     allowed: true,
-    providerInstallId: provider.id,
-    provider: provider.provider as EmailChannelProvider,
+    providerInstallId: selected.providerInstallId,
+    provider: selected.provider,
     firstSendReviewRequired,
   };
 }

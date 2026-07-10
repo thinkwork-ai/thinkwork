@@ -26,7 +26,8 @@ type EmailSendFunction = (
 export interface EmailDraftApprovalInput {
   db: Db;
   tenantId: string;
-  providerInstallId: string;
+  /** Null when sending through built-in SES with no provider install row. */
+  providerInstallId: string | null;
   provider: EmailChannelProvider;
   agentId: string;
   spaceId?: string | null;
@@ -65,23 +66,68 @@ export async function requestFirstSendApproval(
     };
   }
 
-  const [conversation] = await input.db
-    .insert(emailConversations)
-    .values({
-      tenant_id: input.tenantId,
-      space_id: input.spaceId ?? null,
-      thread_id: input.threadId ?? null,
-      provider_install_id: input.providerInstallId,
-      subject: input.subject,
-      status: "pending_approval",
-      participant_hash: participantHash,
-      metadata: {
-        from: input.from,
-        to: input.to,
-        firstSendReviewRequired: true,
-      },
-    })
-    .returning();
+  // A pending conversation may already exist for this
+  // (tenant, thread, participants) — the unique index
+  // uq_email_conversations_thread_participants forbids a second row, so
+  // reuse it (refreshing every mutable field to the latest request) and
+  // raise a fresh review instead of crashing on the duplicate insert.
+  const refresh = {
+    space_id: input.spaceId ?? null,
+    provider_install_id: input.providerInstallId,
+    subject: input.subject,
+    status: "pending_approval" as const,
+    metadata: {
+      from: input.from,
+      to: input.to,
+      firstSendReviewRequired: true,
+    },
+    updated_at: sql`now()`,
+  };
+  let conversation = existingConversation;
+  if (conversation) {
+    [conversation] = await input.db
+      .update(emailConversations)
+      .set(refresh)
+      .where(eq(emailConversations.id, conversation.id))
+      .returning();
+    // Supersede the prior undecided review — a stale pending item would
+    // otherwise stay approvable and send an outdated draft alongside the
+    // new one.
+    await input.db
+      .update(inboxItems)
+      .set({ status: "cancelled", updated_at: sql`now()` })
+      .where(
+        and(
+          eq(inboxItems.tenant_id, input.tenantId),
+          eq(inboxItems.entity_type, "email_conversation"),
+          eq(inboxItems.entity_id, conversation.id),
+          eq(inboxItems.status, "pending"),
+        ),
+      );
+  } else {
+    // onConflictDoUpdate closes the select-then-insert race: two concurrent
+    // first sends for the same non-null thread land on one row instead of
+    // the loser crashing with 23505. (Null-thread conversations are outside
+    // the partial index and insert as before.)
+    [conversation] = await input.db
+      .insert(emailConversations)
+      .values({
+        tenant_id: input.tenantId,
+        thread_id: input.threadId ?? null,
+        participant_hash: participantHash,
+        ...refresh,
+      })
+      .onConflictDoUpdate({
+        target: [
+          emailConversations.tenant_id,
+          emailConversations.thread_id,
+          emailConversations.participant_hash,
+        ],
+        targetWhere: sql`${emailConversations.thread_id} IS NOT NULL`,
+        set: refresh,
+      })
+      .returning();
+  }
 
   const bodyHash = contentHash(input.body);
   const [bodyObject] = await input.db

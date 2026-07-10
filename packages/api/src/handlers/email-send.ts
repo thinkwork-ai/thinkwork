@@ -235,6 +235,21 @@ export async function handler(
     };
   }
   const emailAddress = spaceAddress;
+
+  // Resolve the Space row so the outbound policy can consult the Space
+  // email policy — passing null here would skip a Space-level disable.
+  const spaceSlugFromReq = req.spaceSlug || req.activeSpaceSlug || "";
+  const [spaceRow] = await db
+    .select({ id: spaces.id })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.tenant_id, agent.tenant_id),
+        eq(spaces.slug, spaceSlugFromReq),
+      ),
+    );
+  const spaceId = spaceRow?.id ?? null;
+
   const maxReplyTokenAgeDays = (config.maxReplyTokenAgeDays as number) || 7;
   const maxReplyTokenUses = (config.maxReplyTokenUses as number) || 3;
 
@@ -310,7 +325,7 @@ export async function handler(
   const policy = await evaluateOutboundEmailPolicy({
     db,
     tenantId: agent.tenant_id,
-    spaceId: null,
+    spaceId,
   });
   if (!policy.allowed) {
     return {
@@ -329,7 +344,7 @@ export async function handler(
       providerInstallId: policy.providerInstallId,
       provider: policy.provider,
       agentId: agent.id,
-      spaceId: null,
+      spaceId,
       threadId: req.threadId ?? null,
       from: emailAddress,
       to: recipients,
@@ -575,7 +590,7 @@ async function sendRoutineChannelEmail(input: {
     input.req.bodyFormat === "markdown" ? renderForEmail(input.body) : null;
   const result = await emailChannel.send(policy.provider, {
     tenantId,
-    providerInstallId: policy.providerInstallId,
+    providerInstallId: policy.providerInstallId ?? undefined,
     from: fromAddress,
     to: input.recipients,
     cc: input.cc,
