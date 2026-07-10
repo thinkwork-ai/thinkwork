@@ -1,17 +1,16 @@
-export const pluginSourceBoundaryAllowlist = [
+export const pluginSourceBoundaryAllowlist = [];
+
+export const sharedPluginTermAllowlist = [
   {
     path: "plugins/twenty/scripts/migrate-lastmile.ts",
     reason:
-      "one-off TEI migration script owned by the Twenty plugin; LastMile is the data SOURCE it reads, not the owning plugin.",
+      "one-off TEI data migration owned by the Twenty plugin; LastMile is the data SOURCE it reads, not the owning plugin.",
   },
   {
     path: "plugins/twenty/scripts/lib/lastmile-reader.ts",
     reason:
       "read-only LastMile Postgres reader used by the Twenty plugin's TEI migration script.",
   },
-];
-
-export const sharedPluginTermAllowlist = [
   {
     path: "apps/cli/__tests__/terraform-n8n-fixture.test.ts",
     reason:
