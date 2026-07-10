@@ -30,6 +30,20 @@ export const OPPORTUNITY_PRODUCT_OBJECT = {
   targetFieldLabel: "Products",
 } as const;
 
+/**
+ * LastMile branches ("Golden West Oil Co..San Antonio (300)", displayed as
+ * "GWO 300"). Opportunities belong to exactly one, so it is a related object
+ * rather than a free-text field: 38 of them, filterable and roll-up-able.
+ */
+export const ORGANIZATION_OBJECT = {
+  nameSingular: "organization",
+  namePlural: "organizations",
+  labelSingular: "Organization",
+  labelPlural: "Organizations",
+  icon: "IconBuildingCommunity",
+  targetFieldLabel: "Opportunities",
+} as const;
+
 export const FIELD_SPECS: Array<{
   object: string;
   name: string;
@@ -66,13 +80,9 @@ export const FIELD_SPECS: Array<{
     label: "Source Hash",
     type: "TEXT",
   },
-  { object: "opportunity", name: "product", label: "Product", type: "TEXT" },
-  {
-    object: "opportunity",
-    name: "quantity",
-    label: "Quantity",
-    type: "NUMBER",
-  },
+  // product + quantity live on the opportunityProduct lines, not here — an
+  // opportunity can carry several. isMobil stays as a roll-up: true when any
+  // line is a Mobil product, so the pipeline can be filtered on it.
   {
     object: "opportunity",
     name: "isMobil",
@@ -138,6 +148,25 @@ export const FIELD_SPECS: Array<{
     label: "Line",
     type: "NUMBER",
   },
+  {
+    object: "organization",
+    name: "sourceId",
+    label: "Source ID",
+    type: "TEXT",
+    isUnique: true,
+  },
+  {
+    object: "organization",
+    name: "sourceHash",
+    label: "Source Hash",
+    type: "TEXT",
+  },
+  {
+    object: "organization",
+    name: "fullName",
+    label: "Full Name",
+    type: "TEXT",
+  },
 ];
 
 /** Placeholder id used only in dry-run plans, never sent to Twenty. */
@@ -202,21 +231,34 @@ const CREATE_OBJECT_MUTATION = `
  * RELATION fields via `relationCreationPayload`, and Twenty exposes the FK to
  * the data API as `opportunityId` on the line's create input.
  */
-export async function ensureOpportunityProductObject(
+async function ensureCustomObjectWithOpportunityRelation(
   client: TwentyClient,
   objects: Map<string, ObjectMetadata>,
   dryRun: boolean,
+  spec: {
+    nameSingular: string;
+    namePlural: string;
+    labelSingular: string;
+    labelPlural: string;
+    icon: string;
+    targetFieldLabel: string;
+  },
+  /** Which side owns the FK. "child" = many spec-rows -> one opportunity;
+   * "parent" = many opportunities -> one spec-row. */
+  direction: "child" | "parent",
 ): Promise<{ created: boolean; relationCreated: boolean }> {
-  const existing = objects.get(OPPORTUNITY_PRODUCT_OBJECT.nameSingular);
+  const existing = objects.get(spec.nameSingular);
   const opportunity = objects.get("opportunity");
   if (!opportunity) throw new Error('Twenty object "opportunity" not found.');
 
-  if (existing?.fields.has("opportunity")) {
+  const relationLives =
+    direction === "child"
+      ? existing?.fields.has("opportunity")
+      : opportunity.fields.has(spec.nameSingular);
+  if (existing && relationLives) {
     return { created: false, relationCreated: false };
   }
-  if (dryRun) {
-    return { created: !existing, relationCreated: true };
-  }
+  if (dryRun) return { created: !existing, relationCreated: true };
 
   let objectId = existing?.id;
   if (!objectId) {
@@ -225,28 +267,36 @@ export async function ensureOpportunityProductObject(
     }>("/metadata", CREATE_OBJECT_MUTATION, {
       input: {
         object: {
-          nameSingular: OPPORTUNITY_PRODUCT_OBJECT.nameSingular,
-          namePlural: OPPORTUNITY_PRODUCT_OBJECT.namePlural,
-          labelSingular: OPPORTUNITY_PRODUCT_OBJECT.labelSingular,
-          labelPlural: OPPORTUNITY_PRODUCT_OBJECT.labelPlural,
-          icon: OPPORTUNITY_PRODUCT_OBJECT.icon,
+          nameSingular: spec.nameSingular,
+          namePlural: spec.namePlural,
+          labelSingular: spec.labelSingular,
+          labelPlural: spec.labelPlural,
+          icon: spec.icon,
         },
       },
     });
     objectId = created.createOneObject.id;
   }
 
+  // MANY_TO_ONE always reads "many <owner> -> one <target>". For the child
+  // direction the line owns the FK; for the parent direction the opportunity
+  // does, so the field is created on opportunity pointing at spec's object.
+  const [ownerObjectId, targetObjectId, fieldName, fieldLabel] =
+    direction === "child"
+      ? [objectId, opportunity.id, "opportunity", "Opportunity"]
+      : [opportunity.id, objectId, spec.nameSingular, spec.labelSingular];
+
   await client.requestOnce("/metadata", CREATE_FIELD_MUTATION, {
     input: {
       field: {
-        objectMetadataId: objectId,
-        name: "opportunity",
-        label: "Opportunity",
+        objectMetadataId: ownerObjectId,
+        name: fieldName,
+        label: fieldLabel,
         type: "RELATION",
         relationCreationPayload: {
-          targetObjectMetadataId: opportunity.id,
-          targetFieldLabel: OPPORTUNITY_PRODUCT_OBJECT.targetFieldLabel,
-          targetFieldIcon: OPPORTUNITY_PRODUCT_OBJECT.icon,
+          targetObjectMetadataId: targetObjectId,
+          targetFieldLabel: spec.targetFieldLabel,
+          targetFieldIcon: spec.icon,
           type: "MANY_TO_ONE",
         },
       },
@@ -254,6 +304,36 @@ export async function ensureOpportunityProductObject(
   });
 
   return { created: !existing, relationCreated: true };
+}
+
+export async function ensureOpportunityProductObject(
+  client: TwentyClient,
+  objects: Map<string, ObjectMetadata>,
+  dryRun: boolean,
+): Promise<{ created: boolean; relationCreated: boolean }> {
+  return ensureCustomObjectWithOpportunityRelation(
+    client,
+    objects,
+    dryRun,
+    OPPORTUNITY_PRODUCT_OBJECT,
+    "child",
+  );
+}
+
+/** Many opportunities belong to one organization, so the FK lives on
+ * opportunity as `organizationId`. */
+export async function ensureOrganizationObject(
+  client: TwentyClient,
+  objects: Map<string, ObjectMetadata>,
+  dryRun: boolean,
+): Promise<{ created: boolean; relationCreated: boolean }> {
+  return ensureCustomObjectWithOpportunityRelation(
+    client,
+    objects,
+    dryRun,
+    ORGANIZATION_OBJECT,
+    "parent",
+  );
 }
 
 export async function fetchObjectMetadata(
@@ -315,7 +395,10 @@ export function planSchemaEnsure(
       // ensureOpportunityProductObject creates this object earlier in the same
       // run; in a dry-run against a workspace that lacks it, its fields are
       // planned rather than an error.
-      if (spec.object === OPPORTUNITY_PRODUCT_OBJECT.nameSingular) {
+      if (
+        spec.object === OPPORTUNITY_PRODUCT_OBJECT.nameSingular ||
+        spec.object === ORGANIZATION_OBJECT.nameSingular
+      ) {
         createFields.push({
           object: spec.object,
           objectMetadataId: PENDING_OBJECT_ID,

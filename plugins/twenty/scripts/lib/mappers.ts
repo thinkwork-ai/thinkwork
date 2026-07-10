@@ -11,9 +11,9 @@ import type {
   LastmileAccount,
   LastmileContact,
   LastmileCrmComment,
+  LastmileCrmTask,
   LastmileCustomerNote,
-  LastmileLead,
-  LastmileOpportunity,
+  LastmileOrganization,
 } from "./lastmile-reader";
 
 /**
@@ -219,103 +219,67 @@ export function toQuantity(raw: string | null | undefined): number | null {
 
 // --- Stage mapping -------------------------------------------------------
 
-/** Existing TEI options (NEW/SCREENING/MEETING/PROPOSAL/CUSTOMER) are
- * preserved verbatim — the ThinkWork workflow triggers on CUSTOMER. These are
- * the options the migration adds, merged into the live array (full-replace
- * write semantics confirmed by U1). */
+/**
+ * Pipeline stages are LastMile's own status names, verbatim (from the `status`
+ * table, via `task.status_id`). Opportunity statuses and lead statuses share
+ * one Twenty pipeline because leads become early-stage opportunities.
+ *
+ * Existing TEI options (NEW/SCREENING/MEETING/PROPOSAL/CUSTOMER) are preserved
+ * by the merge — the ThinkWork workflow triggers on CUSTOMER — but nothing new
+ * maps onto them.
+ */
 export const MIGRATION_STAGE_OPTIONS: Array<{
   label: string;
   value: string;
   color: string;
 }> = [
-  { label: "Lead", value: "LEAD", color: "gray" },
-  { label: "Lead - Working", value: "LEAD_WORKING", color: "gray" },
-  { label: "Lead - Qualified", value: "LEAD_QUALIFIED", color: "blue" },
-  { label: "Lead - Unqualified", value: "LEAD_UNQUALIFIED", color: "gray" },
-  { label: "Prospect", value: "PROSPECT", color: "sky" },
-  { label: "Qualifying", value: "QUALIFYING", color: "sky" },
-  { label: "Identify Needs", value: "IDENTIFY_NEEDS", color: "turquoise" },
-  { label: "Formulate Offer", value: "FORMULATE_OFFER", color: "turquoise" },
-  { label: "Negotiate to Close", value: "NEGOTIATE", color: "yellow" },
+  // Lead band
+  { label: "00-New", value: "LM_00_NEW", color: "gray" },
+  { label: "10-Working", value: "LM_10_WORKING", color: "gray" },
+  { label: "20-Contacted", value: "LM_20_CONTACTED", color: "gray" },
+  { label: "30-Nurturing", value: "LM_30_NURTURING", color: "blue" },
+  { label: "50-Qualified", value: "LM_50_QUALIFIED", color: "blue" },
+  { label: "90-Unqualified", value: "LM_90_UNQUALIFIED", color: "gray" },
+  { label: "Converted", value: "LM_CONVERTED", color: "turquoise" },
+  // Opportunity band
+  { label: "10-Prospect", value: "LM_10_PROSPECT", color: "sky" },
+  { label: "20-Account Needs", value: "LM_20_ACCOUNT_NEEDS", color: "sky" },
   {
-    label: "Manage Implementation",
-    value: "MANAGE_IMPLEMENTATION",
+    label: "30-Formulate Offer",
+    value: "LM_30_FORMULATE_OFFER",
+    color: "turquoise",
+  },
+  { label: "40-Negotiation", value: "LM_40_NEGOTIATION", color: "yellow" },
+  {
+    label: "50-Implementation",
+    value: "LM_50_IMPLEMENTATION",
     color: "orange",
   },
-  { label: "Won", value: "WON", color: "green" },
-  { label: "Lost", value: "LOST", color: "red" },
+  { label: "60-Won", value: "LM_60_WON", color: "green" },
+  { label: "90-Lost", value: "LM_90_LOST", color: "red" },
 ];
 
-/** Live lead.status values observed 2026-07-09 (case-insensitive, prefix
- * digits vary). Unknown statuses fall back to LEAD and are reported. */
-export function mapLeadStatusToStage(status: string | null): {
+const STAGE_VALUE_BY_STATUS_NAME = new Map(
+  MIGRATION_STAGE_OPTIONS.map((option) => [
+    option.label.toLowerCase(),
+    option.value,
+  ]),
+);
+
+/**
+ * `task.status_id` -> status name -> stage value. Lead and opportunity status
+ * names collide only on "00-New", which both bands share intentionally.
+ * An unmapped status is reported rather than silently bucketed.
+ */
+export function mapTaskStatusToStage(statusName: string | null): {
   stage: string;
   unknown: boolean;
 } {
-  const normalized = (status ?? "").toLowerCase().replace(/^\d+-/, "").trim();
-  switch (normalized) {
-    case "":
-    case "new":
-      return { stage: "LEAD", unknown: false };
-    case "working":
-    case "contacted":
-    case "nurturing":
-      return { stage: "LEAD_WORKING", unknown: false };
-    case "qualified":
-      return { stage: "LEAD_QUALIFIED", unknown: false };
-    case "unqualified":
-      return { stage: "LEAD_UNQUALIFIED", unknown: false };
-    case "converted":
-      // Converted leads became opportunities in LastMile; the lead row keeps
-      // its history at the qualified end of the lead band.
-      return { stage: "LEAD_QUALIFIED", unknown: false };
-    default:
-      return { stage: "LEAD", unknown: true };
-  }
-}
-
-export function mapOpportunityStage(opportunity: {
-  stage: string | null;
-  closed: string | null;
-  won: string | null;
-}): { stage: string; unknown: boolean } {
-  const normalized = (opportunity.stage ?? "")
-    .toLowerCase()
-    .replace(/^\d+-/, "")
-    .trim();
-  switch (normalized) {
-    case "new":
-      return { stage: "NEW", unknown: false };
-    case "prospect":
-      return { stage: "PROSPECT", unknown: false };
-    case "qualifying":
-      return { stage: "QUALIFYING", unknown: false };
-    case "identify account needs":
-      return { stage: "IDENTIFY_NEEDS", unknown: false };
-    case "formulate offer":
-      return { stage: "FORMULATE_OFFER", unknown: false };
-    case "negotiate to close":
-    case "negotiation to close":
-      return { stage: "NEGOTIATE", unknown: false };
-    case "manage implementation":
-      return { stage: "MANAGE_IMPLEMENTATION", unknown: false };
-    case "won":
-      return { stage: "WON", unknown: false };
-    case "lost":
-      return { stage: "LOST", unknown: false };
-    case "": {
-      // Blank stage: fall back to the closed/won flags.
-      if (opportunity.closed === "true" && opportunity.won === "true") {
-        return { stage: "WON", unknown: false };
-      }
-      if (opportunity.closed === "true") {
-        return { stage: "LOST", unknown: false };
-      }
-      return { stage: "NEW", unknown: false };
-    }
-    default:
-      return { stage: "NEW", unknown: true };
-  }
+  const value = STAGE_VALUE_BY_STATUS_NAME.get(
+    (statusName ?? "").toLowerCase().trim(),
+  );
+  if (value) return { stage: value, unknown: false };
+  return { stage: "LM_00_NEW", unknown: true };
 }
 
 // --- Record mappers ------------------------------------------------------
@@ -433,89 +397,138 @@ export function mapOpportunityProduct(item: {
   };
 }
 
-function isMobilProduct(opportunity: {
-  productType: string | null;
-  brand: string | null;
-}): boolean {
-  return /mobil/i.test(
-    `${opportunity.productType ?? ""} ${opportunity.brand ?? ""}`,
-  );
-}
-
-export function mapOpportunity(
-  opportunity: LastmileOpportunity,
-  ownerMap: ReadonlyMap<string, string>,
+/**
+ * A CRM record as LastMile's `task` table sees it — the authority for status,
+ * owner, organization, and products. Leads and opportunities both land in
+ * Twenty's opportunity pipeline (AE3).
+ */
+export function mapCrmTask(
+  task: LastmileCrmTask,
+  ownerIndex: ReadonlyMap<string, string>,
   companyIdBySourceId: ReadonlyMap<string, string>,
+  organizationIdBySourceId: ReadonlyMap<string, string>,
 ): MappedRecord {
   const warnings: string[] = [];
-  const { stage, unknown } = mapOpportunityStage(opportunity);
-  if (unknown)
-    warnings.push(`unknown stage "${opportunity.stage}" mapped to NEW`);
-  const ownerId = resolveOwner(opportunity.ownerRepId, ownerMap);
-  if (opportunity.ownerRepId && !ownerId) {
-    warnings.push(
-      `owner ${opportunity.ownerRepId} not provisioned; opportunity has no owner`,
-    );
+
+  const { stage, unknown } = mapTaskStatusToStage(task.statusName);
+  if (unknown) {
+    warnings.push(`unknown task status "${task.statusName}" mapped to 00-New`);
   }
+
+  const ownerId = resolveOwner(task.assigneeRepId, ownerIndex);
+  if (task.assigneeRepId && !ownerId) {
+    warnings.push(
+      `assignee rep ${task.assigneeRepId} not provisioned; no owner`,
+    );
+  } else if (!task.assigneeRepId) {
+    warnings.push("task has no assignee; no owner");
+  }
+
+  // Leads pre-date an account: they carry only a typed company name.
   let companyId: string | null = null;
-  if (opportunity.accountId) {
+  if (task.accountId) {
     companyId =
-      companyIdBySourceId.get(sourceId("account", opportunity.accountId)) ??
-      null;
+      companyIdBySourceId.get(sourceId("account", task.accountId)) ?? null;
     if (!companyId) {
-      warnings.push(
-        `account ${opportunity.accountId} not found; opportunity has no company`,
-      );
+      warnings.push(`account ${task.accountId} not migrated; no company link`);
     }
   }
-  const amountMicros = toAmountMicros(opportunity.amount);
+
+  let organizationId: string | null = null;
+  if (task.organizationId) {
+    organizationId =
+      organizationIdBySourceId.get(
+        sourceId("organization", task.organizationId),
+      ) ?? null;
+    if (!organizationId) {
+      warnings.push(`organization ${task.organizationId} not migrated`);
+    }
+  }
+
+  // The deal total is the sum of its product lines when they exist; otherwise
+  // there is no reliable amount on the task.
+  const amountMicros = sumLineAmountsMicros(task.items);
+
+  const name =
+    task.title ??
+    task.leadCompanyName ??
+    `${task.entityType === "lead" ? "Lead" : "Opportunity"} ${task.entityId}`;
+
   const input: Record<string, unknown> = {
-    name: opportunity.name ?? `Opportunity ${opportunity.id}`,
+    name,
     stage,
     ...(amountMicros !== null
       ? { amount: { amountMicros, currencyCode: "USD" } }
       : {}),
-    ...(opportunity.expectedCloseDate
-      ? { closeDate: `${opportunity.expectedCloseDate}T00:00:00.000Z` }
+    ...(task.dueDate
+      ? { closeDate: new Date(task.dueDate).toISOString() }
       : {}),
     ...(ownerId ? { ownerId } : {}),
     ...(companyId ? { companyId } : {}),
-    ...(opportunity.productType ? { product: opportunity.productType } : {}),
-    ...(toQuantity(opportunity.quantity) !== null
-      ? { quantity: toQuantity(opportunity.quantity) }
-      : {}),
-    isMobil: isMobilProduct(opportunity),
-    sourceId: sourceId("opportunity", opportunity.id),
+    ...(organizationId ? { organizationId } : {}),
+    isMobil: (task.items ?? []).some((item) =>
+      isMobilBrand(item.brand ?? null),
+    ),
+    sourceId: sourceId(task.entityType, task.entityId),
   };
   return { sourceId: input.sourceId as string, input, warnings };
 }
 
-/** Leads land in the same Twenty opportunity pipeline at the lead-band stages
- * (AE3): never as bare person/company records. */
-export function mapLead(
-  lead: LastmileLead,
-  ownerMap: ReadonlyMap<string, string>,
-): MappedRecord {
-  const warnings: string[] = [];
-  const { stage, unknown } = mapLeadStatusToStage(lead.status);
-  if (unknown)
-    warnings.push(`unknown lead status "${lead.status}" mapped to LEAD`);
-  const ownerId = resolveOwner(lead.ownerRepId, ownerMap);
-  if (lead.ownerRepId && !ownerId) {
-    warnings.push(
-      `owner ${lead.ownerRepId} not provisioned; lead has no owner`,
+export function sumLineAmountsMicros(
+  items: LastmileCrmTask["items"],
+): number | null {
+  if (!items || items.length === 0) return null;
+  let total = 0;
+  let sawAny = false;
+  for (const item of items) {
+    const micros = toAmountMicros(
+      item.amount === null || item.amount === undefined
+        ? null
+        : String(item.amount),
     );
+    if (micros !== null) {
+      total += micros;
+      sawAny = true;
+    }
   }
-  const personName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
-  const name = lead.companyName ?? (personName || `Lead ${lead.id}`);
-  const input: Record<string, unknown> = {
-    name,
-    stage,
-    ...(ownerId ? { ownerId } : {}),
-    isMobil: false,
-    sourceId: sourceId("lead", lead.id),
+  return sawAny ? total : null;
+}
+
+/** LastMile branch/business unit ("Golden West Oil Co..San Antonio (300)",
+ * shown in the UI as its `abbv`, "GWO 300"). */
+export function mapOrganization(
+  organization: LastmileOrganization,
+): MappedRecord {
+  return {
+    sourceId: sourceId("organization", organization.id),
+    input: {
+      name: organization.abbv ?? organization.name ?? organization.id,
+      fullName: organization.name ?? "",
+      sourceId: sourceId("organization", organization.id),
+    },
+    warnings: [],
   };
-  return { sourceId: input.sourceId as string, input, warnings };
+}
+
+/** Product lines belonging to a CRM task, keyed by the task's entity id. */
+export function mapTaskProducts(
+  task: LastmileCrmTask,
+): MappedOpportunityProduct[] {
+  return (task.items ?? []).map((item, index) =>
+    mapOpportunityProduct({
+      opportunityId: task.entityId,
+      index,
+      brand: item.brand ?? null,
+      quantity:
+        item.quantity === null || item.quantity === undefined
+          ? null
+          : String(item.quantity),
+      amount:
+        item.amount === null || item.amount === undefined
+          ? null
+          : String(item.amount),
+    }),
+  );
 }
 
 export interface MappedNote {

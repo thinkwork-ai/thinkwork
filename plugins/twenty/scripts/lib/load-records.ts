@@ -24,15 +24,24 @@ import {
 
 const QUERY_PAGE = 200;
 
-/** True when Twenty rejects a filter because the sourceId custom field does
- * not exist yet (virgin workspace before schema-ensure applies — the dry-run
- * plans the field but cannot create it). No field ⇒ no record carries it. */
+/**
+ * True when Twenty rejects a query because schema this run would create does
+ * not exist yet: a missing `sourceId` custom field, or a whole missing custom
+ * object (`opportunityProduct`, `organization`). A dry-run plans that schema
+ * but cannot create it, so nothing can carry a sourceId and the honest answer
+ * to "what already exists?" is "nothing".
+ *
+ * Apply runs create objects and fields before any record pass, so this can
+ * only fire in dry-run; a genuine apply-time schema gap aborts in the metadata
+ * phase, before record loading.
+ */
 export function isMissingSourceIdFieldError(error: unknown): boolean {
-  return (
-    error instanceof TwentyGraphqlError &&
-    error.errors.some((entry) =>
-      /doesn't have any .?sourceId.? field/i.test(entry.message),
-    )
+  if (!(error instanceof TwentyGraphqlError)) return false;
+  return error.errors.some(
+    (entry) =>
+      /doesn't have any .?sourceId.? field/i.test(entry.message) ||
+      /Unknown type "\w+FilterInput"/i.test(entry.message) ||
+      /Cannot query field "\w+" on type "Query"/i.test(entry.message),
   );
 }
 
@@ -70,6 +79,12 @@ export const OPPORTUNITY_PRODUCT: EntityShape = {
   plural: "opportunityProducts",
   capSingular: "OpportunityProduct",
   capPlural: "OpportunityProducts",
+};
+export const ORGANIZATION: EntityShape = {
+  singular: "organization",
+  plural: "organizations",
+  capSingular: "Organization",
+  capPlural: "Organizations",
 };
 export const NOTE: EntityShape = {
   singular: "note",

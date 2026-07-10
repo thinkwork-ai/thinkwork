@@ -12,6 +12,11 @@ export const sharedPluginTermAllowlist = [
       "read-only LastMile Postgres reader used by the Twenty plugin's TEI migration script.",
   },
   {
+    path: "plugins/twenty/scripts/purge-lastmile-import.ts",
+    reason:
+      "clears the Twenty plugin's TEI import; LastMile is the data source it names, not the owning plugin.",
+  },
+  {
     path: "apps/cli/__tests__/terraform-n8n-fixture.test.ts",
     reason:
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
