@@ -176,6 +176,22 @@ export interface LastmileReader {
   close(): Promise<void>;
 }
 
+/**
+ * The accounts TEI actually sells to: those referenced by a CRM task (lead or
+ * opportunity). Companies and contacts are both scoped to this set — LastMile
+ * carries 3,403 accounts and 29,966 contacts, but only 805 accounts have an
+ * opportunity, and 443 contacts sit on them. Everything else is old data that
+ * stays in LastMile (Eric, 2026-07-10).
+ */
+const OPPORTUNITY_ACCOUNTS_CTE = `
+  opportunity_accounts as (
+    select distinct nullif(trim(t.entity_data ->> 'account_id'), '') as account_id
+    from task t
+    where t.entity_type in ('lead', 'opportunity')
+      and nullif(trim(t.entity_data ->> 'account_id'), '') is not null
+  )
+`;
+
 export function createLastmileReader(databaseUrl: string): LastmileReader {
   const pool = new pg.Pool({
     connectionString: databaseUrl,
@@ -204,25 +220,15 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
       `),
     readAccounts: () =>
       rows<LastmileAccount>(`
+        with ${OPPORTUNITY_ACCOUNTS_CTE}
         select id, nullif(trim(name), '') as "name", nullif(owner, '') as "ownerRepId"
         from account
+        where id in (select account_id from opportunity_accounts)
         order by id
       `),
-    /**
-     * Contacts are scoped to accounts that actually have an opportunity or
-     * lead (Eric, 2026-07-10: "we ONLY need contacts assigned to accounts that
-     * are attached to opportunities"). LastMile holds 29,966 contacts, most of
-     * them old data on accounts nobody is selling to; the CRM-relevant set is
-     * 443 across 805 accounts.
-     */
     readContacts: () =>
       rows<LastmileContact>(`
-        with opportunity_accounts as (
-          select distinct nullif(trim(t.entity_data ->> 'account_id'), '') as account_id
-          from task t
-          where t.entity_type in ('lead', 'opportunity')
-            and nullif(trim(t.entity_data ->> 'account_id'), '') is not null
-        )
+        with ${OPPORTUNITY_ACCOUNTS_CTE}
         select id,
                nullif(account_id, '')      as "accountId",
                nullif(trim(first_name), '') as "firstName",
@@ -355,10 +361,13 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
       `),
     readCustomerNotes: () =>
       rows<LastmileCustomerNote>(`
-        with account_names as (
+        with ${OPPORTUNITY_ACCOUNTS_CTE},
+        account_names as (
+          -- Only migrated accounts can host a note.
           select lower(trim(name)) as norm_name, min(id) as account_id, count(*) as n
           from account
           where nullif(trim(name), '') is not null
+            and id in (select account_id from opportunity_accounts)
           group by lower(trim(name))
         )
         select n.id,
