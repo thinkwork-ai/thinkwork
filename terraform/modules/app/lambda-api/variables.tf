@@ -795,3 +795,9 @@ variable "analyst_db_cluster_resource_id" {
   type        = string
   default     = ""
 }
+
+variable "artifact_delivery_from_email" {
+  description = "Default SES from-address for artifact email delivery. Empty keeps the code fallback (noreply@agents.thinkwork.ai — only verified in the ThinkWork dev account, so customer stages MUST set this)."
+  type        = string
+  default     = ""
+}
