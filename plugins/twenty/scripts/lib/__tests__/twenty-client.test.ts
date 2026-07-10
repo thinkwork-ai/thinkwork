@@ -154,3 +154,39 @@ describe("TwentyClient.requestWithRetry", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("network errors", () => {
+  it("retries socket-level failures on reads", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(jsonResponse({ data: { ok: true } }));
+    const client = new TwentyClient({
+      baseUrl: "https://crm.example.com",
+      authToken: "key",
+      fetchImpl,
+      backoffMs: 1,
+    });
+    const data = await client.requestWithRetry<{ ok: boolean }>(
+      "/graphql",
+      "query { x }",
+    );
+    expect(data.ok).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("wraps network failures with context on requestOnce", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    const client = new TwentyClient({
+      baseUrl: "https://crm.example.com",
+      authToken: "key",
+      fetchImpl,
+    });
+    const error = await client
+      .requestOnce("/graphql", "mutation { y }")
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(TwentyGraphqlError);
+    expect((error as TwentyGraphqlError).isNetworkError).toBe(true);
+    expect((error as TwentyGraphqlError).message).toMatch(/network error/);
+  });
+});

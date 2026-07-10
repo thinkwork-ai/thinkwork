@@ -40,10 +40,13 @@ export class TwentyGraphqlError extends Error {
 
   get isRetryable(): boolean {
     return (
+      this.isNetworkError ||
       this.httpStatus === 429 ||
       (this.httpStatus !== undefined && this.httpStatus >= 500)
     );
   }
+
+  isNetworkError = false;
 }
 
 export interface TwentyClientOptions {
@@ -104,14 +107,25 @@ export class TwentyClient {
     query: string,
     variables: Record<string, unknown> = {},
   ): Promise<T> {
-    const response = await this.fetchImpl(this.endpoint(path), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${this.authToken}`,
-      },
-      body: JSON.stringify({ query, variables }),
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.endpoint(path), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({ query, variables }),
+      });
+    } catch (cause) {
+      // Socket-level failure (DNS, reset, timeout): no response was received.
+      // Reads retry these; mutation callers re-query by sourceId first (KTD3).
+      const error = new TwentyGraphqlError(
+        `Twenty GraphQL network error: ${cause instanceof Error ? (cause.cause instanceof Error ? cause.cause.message : cause.message) : String(cause)}`,
+      );
+      error.isNetworkError = true;
+      throw error;
+    }
     const bodyText = await response.text();
     if (!response.ok) {
       throw new TwentyGraphqlError(
