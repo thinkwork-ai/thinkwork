@@ -432,6 +432,95 @@ describe("createConnectMcpServer", () => {
     });
   });
 
+  it("applies manifest-declared scaled integer transforms without provider knowledge", async () => {
+    const upstream = {
+      result: {
+        records: [
+          {
+            name: "Choke Canyon travel centers",
+            amount: {
+              amountMicros: 1_500_000_000,
+              currencyCode: "USD",
+            },
+            lineItems: [
+              {
+                amount: {
+                  amountMicros: "1234567",
+                  currencyCode: "USD",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const fake = makeFakeClient([{ name: "execute_tool" }], {
+      content: [{ type: "text", text: JSON.stringify(upstream) }],
+    });
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    const [tool] = await factory({
+      url: "https://provider.example.com/mcp",
+      headers: {},
+      serverName: "provider--crm",
+      resultTransforms: [
+        {
+          type: "scaled-integer-to-decimal",
+          sourceField: "amountMicros",
+          targetField: "value",
+          scale: 6,
+          removeSource: true,
+        },
+      ],
+    });
+
+    const result = await tool!.execute("call-1", {});
+    const text =
+      result.content?.[0]?.type === "text" ? result.content[0].text : "";
+    const modelPayload = JSON.parse(text);
+
+    expect(modelPayload.result.records[0].amount).toEqual({
+      currencyCode: "USD",
+      value: "1500",
+    });
+    expect(modelPayload.result.records[0].lineItems[0].amount).toEqual({
+      currencyCode: "USD",
+      value: "1.234567",
+    });
+    expect(text).not.toContain("amountMicros");
+    expect(result.details.raw).toEqual({
+      content: [{ type: "text", text: JSON.stringify(upstream) }],
+    });
+  });
+
+  it("leaves MCP result content unchanged when no transform is declared", async () => {
+    const payload = {
+      amount: { amountMicros: 1_500_000_000, currencyCode: "USD" },
+    };
+    const fake = makeFakeClient([{ name: "search" }], {
+      content: [{ type: "text", text: JSON.stringify(payload) }],
+    });
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    const [tool] = await factory({
+      url: "https://mcp.example.com",
+      headers: {},
+      serverName: "provider--crm",
+    });
+
+    const result = await tool!.execute("call-1", {});
+    const text =
+      result.content?.[0]?.type === "text" ? result.content[0].text : "";
+
+    expect(JSON.parse(text)).toEqual(payload);
+  });
+
   it("does not synthesize record links for MCP isError responses", async () => {
     const fake = makeFakeClient([{ name: "find_many_opportunities" }], {
       content: [

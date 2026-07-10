@@ -312,6 +312,15 @@ const endpointFromComponent: McpServerComponent = {
       },
     ],
   },
+  resultTransforms: [
+    {
+      type: "scaled-integer-to-decimal",
+      sourceField: "amountMicros",
+      targetField: "value",
+      scale: 6,
+      removeSource: true,
+    },
+  ],
 };
 
 describe("endpointFrom resolution (U10)", () => {
@@ -361,6 +370,15 @@ describe("endpointFrom resolution (U10)", () => {
             },
           ],
         },
+        resultTransforms: [
+          {
+            type: "scaled-integer-to-decimal",
+            sourceField: "amountMicros",
+            targetField: "value",
+            scale: 6,
+            removeSource: true,
+          },
+        ],
       },
     });
     expect(JSON.stringify(insertCalls[0]!.runtime_metadata)).not.toContain(
@@ -405,6 +423,15 @@ describe("endpointFrom resolution (U10)", () => {
             },
           ],
         },
+        resultTransforms: [
+          {
+            type: "scaled-integer-to-decimal",
+            sourceField: "amountMicros",
+            targetField: "value",
+            scale: 6,
+            removeSource: true,
+          },
+        ],
       },
     });
   });
@@ -583,8 +610,21 @@ describe("endpointFrom resolution (U10)", () => {
 
     expect(insertCalls[0]).toMatchObject({
       url: "http://crm.tenant.example.com/mcp",
-      runtime_metadata: null,
+      runtime_metadata: {
+        resultTransforms: [
+          {
+            type: "scaled-integer-to-decimal",
+            sourceField: "amountMicros",
+            targetField: "value",
+            scale: 6,
+            removeSource: true,
+          },
+        ],
+      },
     });
+    expect(insertCalls[0]?.runtime_metadata).not.toHaveProperty(
+      "recordLinkHints",
+    );
   });
 
   it("keeps runtime record-link metadata for localhost http origins", async () => {

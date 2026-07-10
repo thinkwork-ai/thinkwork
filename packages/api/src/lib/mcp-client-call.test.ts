@@ -210,6 +210,45 @@ describe("mcp-client-call session lifecycle", () => {
     expect(textFromMcpContent(result.content)).toBe("nope");
   });
 
+  it("applies manifest-declared result transforms while preserving raw MCP data", async () => {
+    const upstream = {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            amount: { amountMicros: 1_500_000_000, currencyCode: "USD" },
+          }),
+        },
+      ],
+    };
+    const fetchImpl = lifecycleFetch([
+      jsonResponse({ jsonrpc: "2.0", id: 1, result: upstream }),
+    ]);
+
+    const result = await mcpCallTool(
+      TARGET,
+      "find_deals",
+      {},
+      {
+        fetchImpl,
+        resultTransforms: [
+          {
+            type: "scaled-integer-to-decimal",
+            sourceField: "amountMicros",
+            targetField: "value",
+            scale: 6,
+            removeSource: true,
+          },
+        ],
+      },
+    );
+
+    expect(JSON.parse(textFromMcpContent(result.content))).toEqual({
+      amount: { value: "1500", currencyCode: "USD" },
+    });
+    expect(result.raw).toEqual(upstream);
+  });
+
   it("enriches successful tool results with record links when hints are present", async () => {
     const fetchImpl = lifecycleFetch([
       jsonResponse({

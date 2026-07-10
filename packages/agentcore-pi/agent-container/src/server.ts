@@ -878,9 +878,50 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
             ) as string[])
           : undefined,
         recordLinkHints: parseMcpRecordLinkHints(record.recordLinkHints),
+        resultTransforms: parseMcpResultTransforms(record.resultTransforms),
       } as McpServerConfig,
     ];
   });
+}
+
+function parseMcpResultTransforms(
+  value: unknown,
+): McpServerConfig["resultTransforms"] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 8) {
+    return undefined;
+  }
+  const transforms: NonNullable<McpServerConfig["resultTransforms"]> = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return undefined;
+    }
+    const record = item as Record<string, unknown>;
+    const sourceField = asString(record.sourceField);
+    const targetField = asString(record.targetField);
+    if (
+      record.type !== "scaled-integer-to-decimal" ||
+      !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(sourceField) ||
+      !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(targetField) ||
+      sourceField === targetField ||
+      !Number.isInteger(record.scale) ||
+      (record.scale as number) < 0 ||
+      (record.scale as number) > 12 ||
+      (record.removeSource !== undefined &&
+        typeof record.removeSource !== "boolean")
+    ) {
+      return undefined;
+    }
+    transforms.push({
+      type: "scaled-integer-to-decimal",
+      sourceField,
+      targetField,
+      scale: record.scale as number,
+      ...(record.removeSource !== undefined
+        ? { removeSource: record.removeSource }
+        : {}),
+    });
+  }
+  return transforms;
 }
 
 const RECORD_LINK_FIELD_RE =

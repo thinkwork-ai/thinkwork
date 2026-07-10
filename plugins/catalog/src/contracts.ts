@@ -181,6 +181,21 @@ export interface McpRecordLinkHints {
   workspace?: McpRecordLinkWorkspaceHint;
 }
 
+/** Provider-neutral, declarative transformation applied to successful MCP results. */
+export interface McpScaledIntegerToDecimalTransform {
+  type: "scaled-integer-to-decimal";
+  /** Object field containing an integer encoded in the provider's base unit. */
+  sourceField: string;
+  /** Sibling field receiving the exact decimal string. */
+  targetField: string;
+  /** Number of base-10 fractional digits in the source integer. */
+  scale: number;
+  /** Drop the provider-specific source field after a successful conversion. */
+  removeSource?: boolean;
+}
+
+export type McpResultTransform = McpScaledIntegerToDecimalTransform;
+
 export interface McpServerComponent {
   type: "mcp-server";
   key: string;
@@ -193,6 +208,8 @@ export interface McpServerComponent {
   auth: McpServerAuth;
   /** Optional non-secret hints for generating links from trusted MCP results. */
   recordLinkHints?: McpRecordLinkHints;
+  /** Optional provider-owned, data-only normalization rules for tool results. */
+  resultTransforms?: McpResultTransform[];
   /** Optional human notes about the tools the server exposes. */
   toolNotes?: string[];
 }
@@ -697,6 +714,9 @@ function validateMcpServerComponent(
   if (component.recordLinkHints !== undefined) {
     validateRecordLinkHints(component.recordLinkHints, prefix);
   }
+  if (component.resultTransforms !== undefined) {
+    validateMcpResultTransforms(component.resultTransforms, prefix);
+  }
   if (component.toolNotes !== undefined) {
     if (
       !Array.isArray(component.toolNotes) ||
@@ -746,6 +766,14 @@ function validateMcpServerComponent(
 }
 
 const RECORD_LINK_FIELD_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/;
+const RESULT_TRANSFORM_FIELD_RE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+const RESULT_TRANSFORM_ALLOWED_KEYS = [
+  "type",
+  "sourceField",
+  "targetField",
+  "scale",
+  "removeSource",
+] as const;
 const RECORD_LINK_ALLOWED_HINT_KEYS = [
   "schemaVersion",
   "source",
@@ -770,6 +798,90 @@ const RECORD_LINK_FORBIDDEN_FIELD_PARTS = [
   "credential",
   "header",
 ] as const;
+
+function validateMcpResultTransforms(
+  transforms: McpResultTransform[],
+  prefix: string,
+): void {
+  const label = `${prefix}.resultTransforms`;
+  if (
+    !Array.isArray(transforms) ||
+    transforms.length === 0 ||
+    transforms.length > 8
+  ) {
+    throw new PluginManifestError(`${label} must contain 1–8 transforms`);
+  }
+  const seenTargets = new Set<string>();
+  for (const [index, transform] of transforms.entries()) {
+    const transformLabel = `${label}[${index}]`;
+    if (
+      !transform ||
+      typeof transform !== "object" ||
+      Array.isArray(transform)
+    ) {
+      throw new PluginManifestError(`${transformLabel} must be an object`);
+    }
+    rejectUnknownKeys(
+      transform as unknown as Record<string, unknown>,
+      RESULT_TRANSFORM_ALLOWED_KEYS,
+      transformLabel,
+    );
+    if (transform.type !== "scaled-integer-to-decimal") {
+      throw new PluginManifestError(
+        `${transformLabel}.type must be "scaled-integer-to-decimal"`,
+      );
+    }
+    for (const [fieldName, fieldValue] of [
+      ["sourceField", transform.sourceField],
+      ["targetField", transform.targetField],
+    ] as const) {
+      requireString(fieldValue, `${transformLabel}.${fieldName}`);
+      if (!RESULT_TRANSFORM_FIELD_RE.test(fieldValue)) {
+        throw new PluginManifestError(
+          `${transformLabel}.${fieldName} must be a simple non-sensitive object field`,
+        );
+      }
+      const normalized = fieldValue.toLowerCase();
+      if (
+        RECORD_LINK_FORBIDDEN_FIELD_PARTS.some((part) =>
+          normalized.includes(part),
+        )
+      ) {
+        throw new PluginManifestError(
+          `${transformLabel}.${fieldName} must not be credential-shaped`,
+        );
+      }
+    }
+    if (transform.sourceField === transform.targetField) {
+      throw new PluginManifestError(
+        `${transformLabel}.targetField must differ from sourceField`,
+      );
+    }
+    if (
+      !Number.isInteger(transform.scale) ||
+      transform.scale < 0 ||
+      transform.scale > 12
+    ) {
+      throw new PluginManifestError(
+        `${transformLabel}.scale must be an integer from 0 through 12`,
+      );
+    }
+    if (
+      transform.removeSource !== undefined &&
+      typeof transform.removeSource !== "boolean"
+    ) {
+      throw new PluginManifestError(
+        `${transformLabel}.removeSource must be a boolean`,
+      );
+    }
+    if (seenTargets.has(transform.targetField)) {
+      throw new PluginManifestError(
+        `${label} declares duplicate targetField "${transform.targetField}"`,
+      );
+    }
+    seenTargets.add(transform.targetField);
+  }
+}
 
 function validateRecordLinkHints(
   hints: Partial<McpRecordLinkHints>,

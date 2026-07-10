@@ -33,6 +33,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createHash } from "node:crypto";
 import { Type, type TSchema } from "typebox";
+import { transformMcpResultContent } from "@thinkwork/pi-runtime-core";
 import type { ConnectMcpServerArgs, ConnectMcpServerFn } from "./mcp.js";
 import { enrichMcpRecordLinks } from "./mcp-record-links.js";
 
@@ -304,10 +305,7 @@ async function mcpAppsFromTemplateResources(input: {
 function isHtmlMimeType(value: unknown): boolean {
   return (
     typeof value === "string" &&
-    value
-      .split(";", 1)[0]
-      .trim()
-      .toLowerCase() === "text/html"
+    value.split(";", 1)[0].trim().toLowerCase() === "text/html"
   );
 }
 
@@ -404,7 +402,7 @@ export function createConnectMcpServer(
             );
             const content =
               "content" in response ? response.content : response.toolResult;
-            const text = textFromMcpContent(content);
+            const rawText = textFromMcpContent(content);
             const mcpApps = mcpAppsFromContent({
               content,
               serverName: args.serverName,
@@ -420,8 +418,13 @@ export function createConnectMcpServer(
               })),
             );
             if ("isError" in response && response.isError) {
-              throw new Error(text || `MCP tool ${tool.name} returned isError`);
+              throw new Error(
+                rawText || `MCP tool ${tool.name} returned isError`,
+              );
             }
+            const text = textFromMcpContent(
+              transformMcpResultContent(content, args.resultTransforms),
+            );
             const enriched = enrichMcpRecordLinks({
               hints: args.recordLinkHints,
               response,

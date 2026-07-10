@@ -147,6 +147,56 @@ items:
     expect(preflight.ok).toBe(true);
   });
 
+  it("recovers a tw directive marker placed on the first line of an untyped fence", () => {
+    const plate: CompositorPlate = {
+      ...REPORT_PLATE,
+      sections: [
+        {
+          id: "pipeline-health",
+          title: "Pipeline Health",
+          tier: "required",
+          guidance: "Render the ordered pipeline funnel.",
+        },
+      ],
+      analyses: [
+        {
+          key: "pipeline-conversion",
+          op: "funnel_conversion",
+          presentation: { directive: "chart", chartType: "funnel" },
+        },
+      ],
+    };
+    const result = compileDocument({
+      plate,
+      title: "Sales Rep Review",
+      abstract: "Pipeline health.",
+      markdownBody: `## Pipeline Health
+
+\`\`\`
+tw:analysis
+analysis: pipeline-conversion
+stages:
+  - { label: NEW, count: 9 }
+  - { label: PROSPECT, count: 1 }
+  - { label: WON, count: 34 }
+\`\`\`
+`,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.renderHtml).toContain("Pipeline conversion");
+    expect(result.renderHtml).toContain("<svg");
+    expect(result.renderHtml).not.toContain("tw:analysis");
+    expect(result.sectionFacts?.analyses).toEqual([
+      {
+        key: "pipeline-conversion",
+        computed: true,
+        sectionId: "pipeline-health",
+      },
+    ]);
+  });
+
   it("timeline track segments span the item's horizontal padding so adjacent segments meet (THINK-205 repair)", () => {
     // R5/AE1: the row must read as ONE continuous line through all dots. Each
     // item draws its own segment inside .t-track, but .t-item carries

@@ -394,6 +394,40 @@ describe("mcp-proxy handler", () => {
     );
   });
 
+  it("tools/call forwards provider-neutral result transforms", async () => {
+    const resultTransforms = [
+      {
+        type: "scaled-integer-to-decimal" as const,
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 6,
+        removeSource: true,
+      },
+    ];
+    mockBuildMcpConfigs.mockResolvedValue([{ ...SERVER_A, resultTransforms }]);
+    mockCallTool.mockResolvedValue({
+      content: OK_CONTENT,
+      isError: false,
+      raw: {},
+    });
+
+    const res = await handler(
+      event(CALL_PATH, {
+        agentId: "ag1",
+        name: "crm__find_many_opportunities",
+        arguments: {},
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockCallTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "crm" }),
+      "find_many_opportunities",
+      {},
+      { recordLinkHints: undefined, resultTransforms },
+    );
+  });
+
   it("tools/call forwards auxiliary headers for bearer-auth servers", async () => {
     mockBuildMcpConfigs.mockResolvedValue([
       {

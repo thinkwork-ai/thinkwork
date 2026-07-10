@@ -108,6 +108,7 @@ describe("twenty plugin manifest", () => {
       "0.1.0",
       "0.2.0",
       "0.3.0",
+      "0.3.1",
     ]);
 
     const components = latestVersion(validated).components;
@@ -162,7 +163,7 @@ describe("twenty plugin manifest", () => {
         },
       ],
     });
-    expect(latestVersion(validated).version).toBe("0.3.0");
+    expect(latestVersion(validated).version).toBe("0.3.1");
     expect(latestMcp.recordLinkHints).toEqual({
       schemaVersion: 1,
       source: "plugin-manifest",
@@ -180,6 +181,15 @@ describe("twenty plugin manifest", () => {
         },
       ],
     });
+    expect(latestMcp.resultTransforms).toEqual([
+      {
+        type: "scaled-integer-to-decimal",
+        sourceField: "amountMicros",
+        targetField: "value",
+        scale: 6,
+        removeSource: true,
+      },
+    ]);
   });
 
   it("publishes a launchable Client Engagement app surface in the latest version", () => {
@@ -457,7 +467,7 @@ describe("twenty plugin manifest", () => {
       validatedTwentyManifest.versions.map(
         (version) => version.requiredOauthScopes,
       ),
-    ).toEqual([[], [], []]);
+    ).toEqual([[], [], [], []]);
     expect(() => validatePluginManifest(twentyManifest)).not.toThrow();
   });
 });

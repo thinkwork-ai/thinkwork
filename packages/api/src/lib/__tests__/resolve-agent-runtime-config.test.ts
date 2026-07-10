@@ -1379,6 +1379,15 @@ describe("resolveAgentRuntimeConfig", () => {
             },
           ],
         },
+        resultTransforms: [
+          {
+            type: "scaled-integer-to-decimal",
+            sourceField: "amountMicros",
+            targetField: "value",
+            scale: 6,
+            removeSource: true,
+          },
+        ],
       },
     ]);
     const cfg = await resolveAgentRuntimeConfig({
@@ -1401,6 +1410,15 @@ describe("resolveAgentRuntimeConfig", () => {
             },
           ],
         },
+        resultTransforms: [
+          {
+            type: "scaled-integer-to-decimal",
+            sourceField: "amountMicros",
+            targetField: "value",
+            scale: 6,
+            removeSource: true,
+          },
+        ],
       },
     ]);
     expect(mockBuildMcpConfigs).toHaveBeenCalledWith(
