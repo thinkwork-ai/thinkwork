@@ -13,6 +13,10 @@ import {
   traceRuns,
   traceSourceEvidence,
 } from "@thinkwork/database-pg/schema";
+import {
+  computeLlmCostUsd,
+  lookupFallbackModelPricing,
+} from "../model-catalog/pricing.js";
 
 export interface CloudWatchLogsClientLike {
   send(command: FilterLogEventsCommand): Promise<FilterLogEventsCommandOutput>;
@@ -143,14 +147,8 @@ export const DEFAULT_BEDROCK_INVOCATION_LOG_GROUP =
 
 const defaultCloudWatch = new CloudWatchLogsClient({ region: REGION });
 
-// Fallback pricing for near-real-time log-derived estimates (per million tokens).
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-5": { input: 3.0, output: 15.0 },
-  "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
-  "claude-haiku-4-5": { input: 0.8, output: 4.0 },
-  "claude-3-haiku": { input: 0.25, output: 1.25 },
-  "kimi-k2": { input: 1.0, output: 3.0 },
-};
+// Pricing (incl. cache rates) comes from the shared module — THINK-245
+// consolidated the previously duplicated fallback maps.
 
 export function normalizeInvocationTimestamp(
   value: unknown,
@@ -183,14 +181,20 @@ export function parseBedrockInvocationLogEvent(
     const input = readRecord(log.input);
     const output = readRecord(log.output);
     const modelId = stringValue(log.modelId) ?? "";
-    const pricing = lookupPricing(modelId);
+    const pricing = lookupFallbackModelPricing(modelId);
 
     const inputTokens = nonNegativeInt(input.inputTokenCount);
     const outputTokens = nonNegativeInt(output.outputTokenCount);
     const cacheReadTokens = nonNegativeInt(input.cacheReadInputTokenCount);
     const cacheWriteTokens = nonNegativeInt(input.cacheWriteInputTokenCount);
-    const costUsd =
-      (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+    // Provider-billed amount prices all four token types (THINK-245 —
+    // cache-write was TEI's largest Sonnet billing line, recorded as $0).
+    const costUsd = computeLlmCostUsd(pricing, {
+      inputTokens,
+      outputTokens,
+      cachedReadTokens: cacheReadTokens,
+      cachedWriteTokens: cacheWriteTokens,
+    });
 
     const inputBodyJson = input.inputBodyJson;
     const outputBodyJson = output.outputBodyJson;
@@ -686,6 +690,7 @@ async function updateCostEventCurrentState(
       input_tokens: decision.provider.inputTokenCount,
       output_tokens: decision.provider.outputTokenCount,
       cached_read_tokens: decision.provider.cacheReadTokenCount,
+      cached_write_tokens: decision.provider.cacheWriteTokenCount,
       amount_usd: String(decision.provider.costUsd),
       provider: decision.runtime.provider ?? "bedrock",
       model: decision.provider.displayModelId,
@@ -888,14 +893,6 @@ function decisionDiagnostic(
   }
   if (decision.reason === "no-provider-log") return "no provider log matched";
   return undefined;
-}
-
-function lookupPricing(modelId: string): { input: number; output: number } {
-  const lower = modelId.toLowerCase();
-  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
-    if (lower.includes(key)) return pricing;
-  }
-  return { input: 3.0, output: 15.0 };
 }
 
 export function shortenModelId(modelId: string): string {

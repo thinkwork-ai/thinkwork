@@ -18,6 +18,7 @@ export interface RuntimeUsageEvidence {
   inputTokens: number;
   outputTokens: number;
   cachedReadTokens: number;
+  cachedWriteTokens?: number;
   costUsd?: number | null;
 }
 
@@ -167,6 +168,7 @@ export function buildTraceEvidencePlan(
         input_tokens: input.usage.inputTokens,
         output_tokens: input.usage.outputTokens,
         cached_read_tokens: input.usage.cachedReadTokens,
+        cached_write_tokens: input.usage.cachedWriteTokens,
         cost_usd: input.usage.costUsd,
         bedrock_request_ids: arrayValue(input.bedrockRequestIds),
         runtime_reported_zero_tokens:

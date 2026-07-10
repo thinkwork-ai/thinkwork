@@ -17,6 +17,10 @@ export interface FinalizeCallbackArgs {
   result:
     | { status: "ok"; runResult: RunAgentLoopResult; latencyMs: number }
     | { status: "error"; error: unknown; latencyMs: number };
+  /** THINK-245 U4 — Bedrock response requestIds observed during the run;
+   * lands in the finalize body as `bedrock_request_ids` for exact
+   * invocation-log reconciliation. */
+  bedrockRequestIds?: string[];
   fetchImpl: typeof fetch;
   attemptTimeoutMs?: number;
   logger?: (entry: PiRuntimeLogEntry) => void;
@@ -62,6 +66,9 @@ export function buildFinalizeBody(
 
   return {
     thread_turn_id: asString(payload.thread_turn_id),
+    ...(args.bedrockRequestIds && args.bedrockRequestIds.length > 0
+      ? { bedrock_request_ids: args.bedrockRequestIds }
+      : {}),
     tenant_id: identity.tenantId,
     agent_id: identity.agentId,
     thread_id: identity.threadId,
@@ -98,6 +105,12 @@ export function buildFinalizeBody(
         "cachedReadTokens",
         "cacheRead",
         "cached_read_tokens",
+      ),
+      cached_write_tokens: usageNumber(
+        usage,
+        "cachedWriteTokens",
+        "cacheWrite",
+        "cached_write_tokens",
       ),
       ...(runResult?.goalRun ? { goal_run: runResult.goalRun } : {}),
       ...(runResult?.diagnostics ? { diagnostics: runResult.diagnostics } : {}),

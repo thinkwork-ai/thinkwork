@@ -179,6 +179,7 @@ export interface FinalizePayload {
     input_tokens?: number;
     output_tokens?: number;
     cached_read_tokens?: number;
+    cached_write_tokens?: number;
     diagnostics?: Record<string, unknown>;
     goal_run?: unknown;
   };

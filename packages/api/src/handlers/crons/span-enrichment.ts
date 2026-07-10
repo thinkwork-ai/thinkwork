@@ -16,6 +16,10 @@ import {
   CloudWatchLogsClient,
   FilterLogEventsCommand,
 } from "@aws-sdk/client-cloudwatch-logs";
+import {
+  computeLlmCostUsd,
+  lookupFallbackModelPricing,
+} from "../../lib/model-catalog/pricing.js";
 
 const db = getDb();
 const logsClient = new CloudWatchLogsClient({ region: "us-east-1" });
@@ -23,23 +27,8 @@ const logsClient = new CloudWatchLogsClient({ region: "us-east-1" });
 const INVOCATIONS_LOG_GROUP = "/thinkwork/bedrock/model-invocations";
 const LOOKBACK_MS = 15 * 60 * 1000; // 15 minutes
 
-// Fallback pricing (per million tokens)
-const FALLBACK_PRICING: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4": { input: 3.0, output: 15.0 },
-  "claude-sonnet-4-5": { input: 3.0, output: 15.0 },
-  "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
-  "claude-3-5-haiku": { input: 0.8, output: 4.0 },
-  "claude-haiku-4-5": { input: 0.8, output: 4.0 },
-  "kimi-k2": { input: 1.0, output: 3.0 },
-};
-
-function lookupPricing(modelId: string): { input: number; output: number } {
-  const lower = modelId.toLowerCase();
-  for (const [key, pricing] of Object.entries(FALLBACK_PRICING)) {
-    if (lower.includes(key)) return pricing;
-  }
-  return { input: 3.0, output: 15.0 };
-}
+// Pricing (incl. cache rates) comes from the shared module — THINK-245
+// consolidated the previously duplicated fallback maps.
 
 /**
  * Query invocation logs for a time window and extract token counts.
@@ -55,6 +44,7 @@ async function queryInvocationLogs(
     inputTokens: number;
     outputTokens: number;
     cacheReadTokens: number;
+    cacheWriteTokens: number;
   }>
 > {
   try {
@@ -83,6 +73,7 @@ async function queryInvocationLogs(
             inputTokens: input.inputTokenCount || 0,
             outputTokens: output.outputTokenCount || 0,
             cacheReadTokens: input.cacheReadInputTokenCount || 0,
+            cacheWriteTokens: input.cacheWriteInputTokenCount || 0,
           };
         } catch {
           return null;
@@ -214,18 +205,26 @@ export async function handler(): Promise<void> {
     // Sum tokens across all matched invocations (a turn may have multiple model calls)
     const totalIn = matchedInvocations.reduce((s, i) => s + i.inputTokens, 0);
     const totalOut = matchedInvocations.reduce((s, i) => s + i.outputTokens, 0);
-    const totalCache = matchedInvocations.reduce(
+    const totalCacheRead = matchedInvocations.reduce(
       (s, i) => s + i.cacheReadTokens,
+      0,
+    );
+    const totalCacheWrite = matchedInvocations.reduce(
+      (s, i) => s + i.cacheWriteTokens,
       0,
     );
     const bestModel = matchedInvocations[0].modelId;
 
     if (totalIn === 0 && totalOut === 0) continue;
 
-    // 4. Calculate real cost
-    const pricing = lookupPricing(bestModel);
-    const realCost =
-      (totalIn * pricing.input + totalOut * pricing.output) / 1_000_000;
+    // 4. Calculate real cost (all four token types)
+    const pricing = lookupFallbackModelPricing(bestModel);
+    const realCost = computeLlmCostUsd(pricing, {
+      inputTokens: totalIn,
+      outputTokens: totalOut,
+      cachedReadTokens: totalCacheRead,
+      cachedWriteTokens: totalCacheWrite,
+    });
 
     // 5. Update the cost event with real data
     await db
@@ -233,7 +232,8 @@ export async function handler(): Promise<void> {
       .set({
         input_tokens: totalIn,
         output_tokens: totalOut,
-        cached_read_tokens: totalCache,
+        cached_read_tokens: totalCacheRead,
+        cached_write_tokens: totalCacheWrite,
         amount_usd: realCost.toFixed(6),
         metadata: sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{estimated}', 'false')`,
       })

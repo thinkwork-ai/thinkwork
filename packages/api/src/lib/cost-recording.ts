@@ -20,6 +20,12 @@ import {
   resolveTenantUserCostOwner,
 } from "./user-budget-enforcement.js";
 import { getTenantModelPricing } from "./model-catalog/tenant-catalog.js";
+import {
+  computeLlmCostUsd,
+  lookupFallbackModelPricing,
+  withCacheRates,
+  type ModelPricing,
+} from "./model-catalog/pricing.js";
 
 const db = getDb();
 
@@ -29,25 +35,8 @@ const db = getDb();
 
 const AGENTCORE_RATE_PER_SECOND = 0.00012; // ~$0.43/hour estimate
 
-const FALLBACK_PRICING = { inputPerMillion: 3.0, outputPerMillion: 15.0 };
-
-const MODEL_PRICING_FALLBACKS: Record<
-  string,
-  { input: number; output: number }
-> = {
-  "claude-sonnet-4": { input: 3.0, output: 15.0 },
-  "claude-sonnet-4-5": { input: 3.0, output: 15.0 },
-  "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
-  "claude-3-5-haiku": { input: 0.8, output: 4.0 },
-  "claude-3-haiku": { input: 0.25, output: 1.25 },
-  "kimi-k2": { input: 1.0, output: 3.0 },
-  "kimi-k2-instruct": { input: 1.0, output: 3.0 },
-  // PRD-41B Phase 7 item 2: Hindsight uses these for retain (extract) and
-  // reflect (synthesize). Bedrock pricing for the openai-hosted GPT-OSS
-  // models — verify against current AWS pricing page periodically.
-  "gpt-oss-20b": { input: 0.05, output: 0.2 },
-  "gpt-oss-120b": { input: 0.15, output: 0.6 },
-};
+// Model pricing (incl. cache rates) lives in ./model-catalog/pricing.js —
+// THINK-245 consolidated the previously duplicated fallback maps.
 
 // ---------------------------------------------------------------------------
 // Token extraction from AgentCore response
@@ -57,6 +46,7 @@ export interface AgentCoreUsage {
   inputTokens: number;
   outputTokens: number;
   cachedReadTokens: number;
+  cachedWriteTokens: number;
   model: string | null;
 }
 
@@ -91,6 +81,13 @@ export function extractUsage(
       usage.cached_read_tokens ||
       usage.cache_read_input_tokens ||
       0,
+    cachedWriteTokens:
+      usage.cacheWriteInputTokens ||
+      usage.cachedWriteTokens ||
+      usage.cacheWrite ||
+      usage.cached_write_tokens ||
+      usage.cache_write_input_tokens ||
+      0,
     model: (invokeResult.model as string) || (response.model as string) || null,
   };
 }
@@ -102,11 +99,14 @@ export function extractUsage(
 async function lookupModelPricing(
   tenantId: string,
   modelId: string | null,
-): Promise<{ inputPerMillion: number; outputPerMillion: number }> {
-  if (!modelId) return FALLBACK_PRICING;
+): Promise<ModelPricing> {
+  if (!modelId) return lookupFallbackModelPricing(null);
 
+  // DB tiers carry only input/output — cache rates are always overlaid as
+  // the model's multipliers applied to the RESOLVED input rate, so tenant-
+  // specific input pricing propagates to cache pricing (THINK-245).
   const tenantPricing = await getTenantModelPricing({ tenantId, modelId });
-  if (tenantPricing) return tenantPricing;
+  if (tenantPricing) return withCacheRates(modelId, tenantPricing);
 
   // Try model_catalog first
   try {
@@ -120,32 +120,16 @@ async function lookupModelPricing(
       .limit(1);
 
     if (entry?.input && entry?.output) {
-      return {
+      return withCacheRates(modelId, {
         inputPerMillion: Number(entry.input),
         outputPerMillion: Number(entry.output),
-      };
+      });
     }
   } catch {
     // model_catalog query failed — fall through to fallback
   }
 
-  return matchFallbackPricing(modelId);
-}
-
-function matchFallbackPricing(modelId: string): {
-  inputPerMillion: number;
-  outputPerMillion: number;
-} {
-  const lower = modelId.toLowerCase();
-  for (const [key, pricing] of Object.entries(MODEL_PRICING_FALLBACKS)) {
-    if (lower.includes(key)) {
-      return {
-        inputPerMillion: pricing.input,
-        outputPerMillion: pricing.output,
-      };
-    }
-  }
-  return FALLBACK_PRICING;
+  return lookupFallbackModelPricing(modelId);
 }
 
 function deriveProvider(modelId: string | null): string | null {
@@ -188,6 +172,7 @@ export interface RecordCostParams {
   inputTokens: number;
   outputTokens: number;
   cachedReadTokens: number;
+  cachedWriteTokens?: number;
   durationMs: number;
   inputText?: string;
   outputText?: string;
@@ -242,10 +227,12 @@ export async function recordCostEvents(
     );
   }
 
-  const llmCost =
-    (inputTokens * pricing.inputPerMillion +
-      outputTokens * pricing.outputPerMillion) /
-    1_000_000;
+  const llmCost = computeLlmCostUsd(pricing, {
+    inputTokens,
+    outputTokens,
+    cachedReadTokens: params.cachedReadTokens,
+    cachedWriteTokens: params.cachedWriteTokens,
+  });
 
   const computeCost =
     (params.durationMs / 1000) *
@@ -282,6 +269,7 @@ export async function recordCostEvents(
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       cached_read_tokens: params.cachedReadTokens,
+      cached_write_tokens: params.cachedWriteTokens ?? null,
       thread_id: params.threadId || undefined,
       trace_id: params.traceId || undefined,
       reconciliation_source: "runtime",
