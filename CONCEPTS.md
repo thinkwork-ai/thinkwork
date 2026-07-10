@@ -328,3 +328,14 @@ The verification pass that judges a shipped change by exercising the deployed pr
 
 ### Paper Cut
 A defect or friction observed during Dogfood Verification that does not violate the verification contract, so it is recorded rather than failing the verdict. Paper cuts are listed in the dogfood report and carried into the next planning pass, where they are re-ranked on their own merits — a paper cut that misleads users (such as a fabricated write confirmation) can outrank cosmetic or capability gaps.
+
+## Costs and Reconciliation
+
+### Cost Reconciliation
+The correction layer that overwrites runtime-reported cost amounts with provider-billed truth: the trace-ledger reconciler matches Bedrock invocation-log records to recorded turns (by request identity, degrading to model+time) and rewrites `cost_events.amount_usd`. Each cost event carries a reconciliation state (runtime-reported, reconciled, backfilled); dashboards and drift checks compare corrected totals against AWS Cost Explorer, not raw runtime figures.
+
+### Graced Backfill
+The policy for retroactively correcting historical cost events: backfilled/repriced amounts are flagged and excluded from budget-window and cost-cap enforcement, so dashboards show true spend while no user or tenant crosses a limit as a side effect of the correction. Only spend recorded after the fix counts toward enforcement.
+
+### System Spend
+Per-tenant cost events written by background Bedrock consumers (wiki compile, conformance judge, KG extraction, idle learning, dreaming, model proxy), tagged with a source category naming the consumer rather than attributed to a thread or turn. Lets dashboards split conversation spend from background/system spend while keeping tenant totals reconcilable with AWS billing.
