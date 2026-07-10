@@ -329,6 +329,11 @@ resource "aws_iam_role_policy" "codebuild" {
           "scheduler:*",
           "secretsmanager:*",
           "ses:*",
+          # THINK-245 shipped SNS-backed cost alerting (aws_sns_topic
+          # cost_alerts) — without this, customer runner applies fail on
+          # SNS:CreateTopic. Live TEI/McPherson roles were hand-patched
+          # 2026-07-09; this keeps future installs correct.
+          "sns:*",
           "sqs:*",
           "ssm:*",
           "states:*",
