@@ -5,34 +5,45 @@
  *
  * OPERATOR RUNBOOK
  * ================
+ * PREREQUISITE — Twenty's stock workflow "Create company when adding a new person"
+ * MUST be deactivated (Settings -> Workflows) before any --apply run. It fires on
+ * every person insert, invents a company from the email domain, and repoints the
+ * person at it; it once mislinked 21,989 of 24,028 migrated people. The workspace
+ * API key is forbidden from toggling workflows, so this is a human step.
+ *
  * Environment (all required unless noted):
  *   TWENTY_PUBLIC_URL      TEI's Twenty base URL, e.g. https://crm.tei.thinkwork.ai
- *   TWENTY_API_KEY         Workspace API key (Settings → API & Webhooks)
+ *   TWENTY_API_KEY         Workspace API key (Settings -> API & Webhooks)
  *   LASTMILE_DATABASE_URL  LastMile dispatch Postgres connection string (read access)
- *   TWENTY_ADMIN_EMAIL     Admin user email — required only when --apply provisions members
- *   TWENTY_ADMIN_PASSWORD  Admin user password — same
- *   TWENTY_REP_PASSWORD    Shared test password for provisioned reps (R5; value lives
- *                          outside the repo). ROTATE OR DEACTIVATE every rep account at
- *                          cutover, on abort, or if the validation window drags on.
- *   TWENTY_WORKSPACE_ID    Optional override; otherwise resolved from the admin session
- *   TWENTY_REP_EMAIL_DOMAIN  Domain for reps with no LastMile email
+ *   TWENTY_REP_EMAIL_DOMAIN  Optional; domain for reps with no LastMile email
  *                          (default texasenterprises.com; <first-initial><lastname>@)
  *   AWS_PROFILE / AWS_REGION  Needed for attachment binaries (LastMile S3 bucket)
+ *   NODE_EXTRA_CA_CERTS    RDS CA bundle, when the DB rejects the system trust store
+ *
+ * Members are NOT provisioned by this script: TEI's Twenty does not serve the auth
+ * GraphQL schema, so `scripts/provision-twenty-members.ts` writes them directly to
+ * Twenty's Postgres (see that file's header). Run it FIRST, then this script, so
+ * every record resolves its owner. Reps without a member load ownerless and heal
+ * on the next run once their member exists.
  *
  * Invocations (dry-run is the default; nothing is written without --apply):
- *   npx tsx scripts/migrate-lastmile.ts                 # full dry-run + planned mutations
- *   npx tsx scripts/migrate-lastmile.ts --apply         # seed (or delta re-sync — same command)
- *   npx tsx scripts/migrate-lastmile.ts --rollback      # list the sourceId-owned record set
- *   npx tsx scripts/migrate-lastmile.ts --rollback --apply  # soft-delete that set (restorable)
- *   --skip-invites        with --apply: load schema+records but provision no new
- *                         members (owners heal on a later re-run once members exist)
+ *   npx tsx scripts/migrate-lastmile.ts                        # dry-run + planned mutations
+ *   npx tsx scripts/migrate-lastmile.ts --apply                # seed / delta re-sync
+ *   npx tsx scripts/migrate-lastmile.ts --rollback             # list the sourceId-owned set
+ *   npx tsx scripts/migrate-lastmile.ts --rollback --apply     # soft-delete it (restorable)
+ *
+ * To start over from an empty workspace: `scripts/purge-lastmile-import.ts --apply`
+ * hard-deletes every sourceId-owned record plus workflow-created domain companies.
  *
  * Cutover day, in order:
- *   1. Freeze LastMile CRM edits.
- *   2. Re-run with --apply (delta re-sync; upserts by sourceId, mirrors deletions).
- *   3. Check the parity report + spot checks (this script's stdout JSON).
- *   4. Rotate every rep password / enforce resets — the shared test password must not
- *      outlive the validation phase.
+ *   1. Confirm the person-to-company workflow is still deactivated.
+ *   2. Freeze LastMile CRM edits.
+ *   3. Re-run with --apply (delta re-sync; upserts by sourceId,
+ *      mirrors deletions via an id-set diff -- LastMile has no dead-mark columns).
+ *   4. Check the parity report + spot checks (this script's stdout JSON).
+ *   5. ROTATE every rep password. The shared TWENTY_REP_PASSWORD is set on 89
+ *      accounts and must not outlive the validation phase -- rotate on cutover, on
+ *      abort, and on an over-long validation window alike (R5).
  *
  * The parity report prints to stdout as JSON; all other logging goes to stderr.
  * Secrets are never logged. One invocation at a time (KTD3).
@@ -73,11 +84,7 @@ import {
   mapTaskProducts,
   sourceId,
 } from "./lib/mappers";
-import {
-  adminSignIn,
-  ensureMembers,
-  type RepToProvision,
-} from "./lib/members-ensure";
+import { ensureMembers, type RepToProvision } from "./lib/members-ensure";
 import {
   applySchemaEnsure,
   ensureOpportunityProductObject,
@@ -90,19 +97,17 @@ import { TwentyClient, normalizeBaseUrl } from "./lib/twenty-client";
 interface CliArgs {
   apply: boolean;
   rollback: boolean;
-  /** Provision no new members this run: match existing members only. Owner
-   * refs for unprovisioned reps stay null and heal on a later re-run once the
-   * members exist (content hash changes when ownerId resolves). */
-  skipInvites: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { apply: false, rollback: false, skipInvites: false };
+  const args: CliArgs = { apply: false, rollback: false };
   for (const arg of argv) {
     if (arg === "--apply") args.apply = true;
     else if (arg === "--dry-run") args.apply = false;
     else if (arg === "--rollback") args.rollback = true;
-    else if (arg === "--skip-invites") args.skipInvites = true;
+    // Accepted and ignored: this script never provisions members, so the flag
+    // that once suppressed it is a no-op. Kept so an old invocation still runs.
+    else if (arg === "--skip-invites") continue;
     else throw new Error(`Unknown argument: ${arg}`);
   }
   return args;
@@ -127,7 +132,6 @@ async function main(): Promise<void> {
   const baseUrl = normalizeBaseUrl(requireEnv("TWENTY_PUBLIC_URL"));
   const apiKey = requireEnv("TWENTY_API_KEY");
   const lastmileUrl = requireEnv("LASTMILE_DATABASE_URL");
-  const repPassword = process.env.TWENTY_REP_PASSWORD ?? "";
 
   const client = new TwentyClient({ baseUrl, authToken: apiKey });
   const reader = createLastmileReader(lastmileUrl);
@@ -148,15 +152,7 @@ async function main(): Promise<void> {
       await runRollback(client, report, dryRun);
       return;
     }
-    await runMigration({
-      client,
-      reader,
-      baseUrl,
-      repPassword,
-      report,
-      dryRun,
-      skipInvites: args.skipInvites,
-    });
+    await runMigration({ client, reader, baseUrl, report, dryRun });
   } finally {
     await reader.close();
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -199,13 +195,10 @@ async function runMigration(options: {
   client: TwentyClient;
   reader: LastmileReader;
   baseUrl: string;
-  repPassword: string;
   report: Record<string, unknown>;
   dryRun: boolean;
-  skipInvites: boolean;
 }): Promise<void> {
-  const { client, reader, baseUrl, repPassword, report, dryRun, skipInvites } =
-    options;
+  const { client, reader, baseUrl, report, dryRun } = options;
 
   // Phase A: preflight ------------------------------------------------------
   log("preflight: connecting to LastMile and Twenty...");
@@ -289,74 +282,25 @@ async function runMigration(options: {
     sample: derivedEmails.slice(0, 20),
   };
 
-  let adminClient: TwentyClient | null = null;
-  let workspaceId = process.env.TWENTY_WORKSPACE_ID ?? null;
-  if (!dryRun) {
-    const adminEmail = process.env.TWENTY_ADMIN_EMAIL;
-    const adminPassword = process.env.TWENTY_ADMIN_PASSWORD;
-    if (adminEmail && adminPassword) {
-      if (!repPassword)
-        throw new Error(
-          "Missing required environment variable: TWENTY_REP_PASSWORD",
-        );
-      const session = await adminSignIn({
-        baseUrl,
-        email: adminEmail,
-        password: adminPassword,
-      });
-      adminClient = new TwentyClient({
-        baseUrl,
-        authToken: session.accessToken,
-      });
-      workspaceId = workspaceId ?? session.workspaceId;
-    }
-  }
   const members = await ensureMembers({
     dataClient: client,
-    adminClient,
     reps: repsToProvision,
-    repPassword,
-    workspaceId,
-    // --skip-invites: match existing members only, invite nobody this run.
-    dryRun: dryRun || skipInvites,
   });
-  if (skipInvites) {
-    report.membersMode =
-      "skip-invites (existing members matched; no invitations sent)";
+  if (members.missingMembers > 0) {
+    log(
+      `members: ${members.missingMembers} rep(s) have no Twenty member — run ` +
+        `scripts/provision-twenty-members.ts, then re-run to attach their owners`,
+    );
   }
   report.members = {
     report: members.report,
-    provisionable: members.ownerMap.size,
-    hadFailures: members.hadFailures,
+    resolved: members.ownerMap.size,
+    missingMembers: members.missingMembers,
   };
   // Archived reps still resolve for historical ownership when a member with a
   // matching email already exists; unprovisioned owners map to null and are
   // flagged per record (U5 edge case).
-  const ownerMap = new Map(members.ownerMap);
-  if (dryRun) {
-    // Planned members don't have ids yet; placeholders keep the dry-run's
-    // owner resolution (and its planned-mutation list) representative. Apply
-    // runs always resolve real member ids.
-    for (const row of members.report) {
-      if (row.action === "planned" && row.email && !ownerMap.has(row.repId)) {
-        ownerMap.set(row.repId, `planned-member:${row.email}`);
-      }
-    }
-    for (const row of members.report) {
-      if (
-        row.action === "merged-duplicate-email" &&
-        row.email &&
-        !ownerMap.has(row.repId)
-      ) {
-        const primary = ownerMap.get(
-          members.report.find(
-            (r) => r.email === row.email && r.repId !== row.repId,
-          )?.repId ?? "",
-        );
-        if (primary) ownerMap.set(row.repId, primary);
-      }
-    }
-  }
+  const ownerMap = members.ownerMap;
 
   // Owner refs in LastMile mix rep ids, aliases, and display names; the index
   // adds unique alias/name keys on top of the provisioned rep→member map.
@@ -572,17 +516,15 @@ async function runMigration(options: {
     opportunities: opportunityCounters,
   });
 
-  const anyFailures =
-    members.hadFailures ||
-    [
-      organizationCounters,
-      companyCounters,
-      personCounters,
-      opportunityCounters,
-      productCounters,
-      noteCounters,
-      attachmentCounters,
-    ].some((counters) => counters.failed > 0);
+  const anyFailures = [
+    organizationCounters,
+    companyCounters,
+    personCounters,
+    opportunityCounters,
+    productCounters,
+    noteCounters,
+    attachmentCounters,
+  ].some((counters) => counters.failed > 0);
   report.ok = !anyFailures;
   if (anyFailures) process.exitCode = 2;
 }

@@ -293,6 +293,54 @@ Load order is dependency-driven: members before opportunities (owner resolution)
 
 ---
 
+## Superseding Decisions (2026-07-10, during implementation)
+
+Live data and the live instance contradicted five parts of the Product/Planning
+Contract above. Each was surfaced to Eric and decided by him; the original text
+is preserved for provenance, and this section is the authority where they
+conflict.
+
+- **S1 supersedes R8, KTD-lead/opportunity mapping.** LastMile's `task` table —
+  not `opportunity`/`lead` — is the CRM. For the 950 opportunities carrying a
+  task, `opportunity.stage` matches the real status only **61 times**. The
+  import now drives off task rows (950 opportunity + 1,072 lead), taking status
+  from `status_id`, owner from `assignee_id → users.sales_rep_id`, organization
+  from `organization_id`, and name/description/account/products from
+  `entity_data`. Task rows begin 2025-07; the 2,021 opportunities and 1,642
+  leads older than that **do not migrate** (Eric's call, "task-backed only").
+- **S2 supersedes R1.** An opportunity carries _multiple_ products (816 have
+  lines; 82 have 2–5). `product`/`quantity` moved off the opportunity onto a new
+  **Opportunity Product** object (many-to-one), with `amount` per line, the deal
+  amount summed from lines, and `isMobil` rolled up. A single flat trio silently
+  dropped every line after the first.
+- **S3 supersedes R3.** Pipeline stages are LastMile's own status names verbatim
+  (`00-New`, `10-Prospect`, `20-Account Needs`, `30-Formulate Offer`,
+  `40-Negotiation`, `50-Implementation`, `60-Won`, `90-Lost`, plus the lead
+  band), not invented ones. TEI's pre-existing options are preserved.
+- **S4 supersedes R13/KTD7.** LastMile's CRM tables have **no dead-mark
+  columns**. Deletion mirroring is an id-set diff (Twenty `sourceId`s vs live
+  source ids), plus `task_comment.is_deleted` for notes.
+- **S5 supersedes KTD4 and the "no writes to Twenty's Postgres" stop
+  condition.** TEI's Twenty does not serve the auth GraphQL schema over its ALB:
+  `sendInvitations`, `signUpInWorkspace`, and `getLoginTokenFromCredentials` all
+  return "Cannot query field" on `/graphql` and `/metadata` under every header
+  and origin combination, and `/rest` exposes object CRUD only. There is no API
+  path to create a user. Eric authorized direct Postgres provisioning after the
+  stop condition was surfaced; `scripts/provision-twenty-members.ts` does it
+  INSERT-only, idempotent by email, one transaction per rep, mirroring the row
+  shapes Twenty writes itself. **89 reps provisioned, 0 failures.**
+- **S6 (new).** Two additions with no counterpart in the original contract: a
+  migrated **Organization** object (38 LastMile branches, named by `abbv` e.g.
+  "GWO 300"), and `scripts/purge-lastmile-import.ts`, which hard-deletes the
+  import plus the 3,796 domain-named companies that Twenty's stock _"Create
+  company when adding a new person"_ workflow invented on each person insert —
+  it repointed people at them, mislinking 21,989 of 24,028. **That workflow must
+  be deactivated for the duration of the import**; the workspace API key is
+  forbidden from doing so, so it is an operator step.
+- **S7 (new dependency).** Reps missing an email in LastMile receive
+  `<first-initial><lastname>@texasenterprises.com`; house/intercompany/
+  placeholder rows receive no login.
+
 ## Verification Contract
 
 | Gate               | Command / Check                                                                                                                                                                                                                                  | Applies to |
@@ -308,13 +356,26 @@ Load order is dependency-driven: members before opportunities (owner resolution)
 
 No behavioral-skill evaluation applies — no agent/skill surface changes.
 
+### Gate status (2026-07-10)
+
+| Gate               | Status                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit tests         | **PASS** — 100 vitest, incl. a test reconstructing `task_xdh6577weuhsc2ttlct1acyl` (_Reign Rentals GW Lubes_) field-for-field                                                                    |
+| Repo gates         | **PASS** — `tsc --noEmit`, prettier, plugin-source boundary                                                                                                                                      |
+| Spike facts        | **PASS with amendment** — stage-option full-replace and composite casing recorded above; the invite-token question resolved differently (no auth schema; see S5)                                 |
+| Live dry-run       | **PASS** — 38 orgs, 3,403 companies, 29,966 people, 2,022 opportunities, 928 product lines, 749 notes, 0 failures, 0 writes                                                                      |
+| Rollback rehearsal | **PASS** — dry-run listing exercised; hard-delete purge also executed live (33,865 records + 3,796 workflow companies, 0 failures)                                                               |
+| Idempotency proof  | **BLOCKED** — needs a seed `--apply`, which needs the workflow deactivated (S6)                                                                                                                  |
+| Parity sign-off    | **BLOCKED** — follows the seed                                                                                                                                                                   |
+| Login proof        | **BLOCKED** — 89 logins exist and one (`scoulson@`) is verified at the row/hash level and visible via Twenty's API; the in-UI login and "sees their opportunities" half awaits the seed and Eric |
+
 ## Definition of Done
 
 - All seven units land; the seed run has completed against TEI's Twenty with a reconciled parity report and passed spot checks.
 - Idempotency is demonstrated (second run is a no-op) — the cutover re-sync (F2) is thereby proven runnable, even though its execution waits for TEI's switch date.
 - The rep password-rotation step (R5 — cutover, abort, and over-long-window cases alike), the record-rollback procedure, and the delta re-run invocation are written up as a short operator note in the script's header comment (env vars, flags, order), so cutover day needs no code archaeology.
-- Spike artifacts (test member, test stage option, throwaway script if not folded in) are removed; no abandoned experimental code remains in the diff.
-- No writes to Twenty's Postgres, no LastMile mutations, no committed secrets.
+- Spike artifacts (test member, test stage option, throwaway `zzSpikeLine` object, throwaway scripts) are removed; no abandoned experimental code remains in the diff.
+- ~~No writes to Twenty's Postgres~~ — **superseded by S5**: member provisioning writes to Twenty's Postgres, INSERT-only, with Eric's explicit authorization after the stop condition was surfaced. No LastMile mutations, no committed secrets. The shared rep password lives only in the operator's environment.
 
 ---
 
