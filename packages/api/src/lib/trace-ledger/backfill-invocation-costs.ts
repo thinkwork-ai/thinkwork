@@ -44,6 +44,15 @@ import {
   shortenModelId,
   type CloudWatchLogsClientLike,
 } from "./bedrock-invocation-reconciler.js";
+import { modelKeyFor } from "../../handlers/cost-drift-check.js";
+
+/** Canonical per-model bucket key for pass 2. Provider records carry ARNs /
+ * inference-profile ids while cost_events.model mixes raw ids with
+ * reconciler-shortened names — bucketing both sides through modelKeyFor
+ * keeps same-model spend aligned (raw-key mismatch would double-count). */
+function bucketKey(model: string | null): string {
+  return modelKeyFor(model) ?? shortenModelId(model ?? "unknown");
+}
 
 const ADJUSTMENT_EPSILON_USD = 0.0005; // below CE rounding; skip noise
 
@@ -202,7 +211,7 @@ export async function backfillInvocationCosts(input: {
     });
     const providerByModel = new Map<string, number>();
     for (const record of providerRecords) {
-      const model = shortenModelId(record.modelId);
+      const model = bucketKey(record.modelId);
       providerByModel.set(
         model,
         (providerByModel.get(model) ?? 0) + record.costUsd,
@@ -223,9 +232,11 @@ export async function backfillInvocationCosts(input: {
         ),
       )
       .groupBy(costEvents.model);
-    const recordedByModel = new Map<string, number>(
-      recordedRows.map((row) => [row.model ?? "unknown", row.totalUsd]),
-    );
+    const recordedByModel = new Map<string, number>();
+    for (const row of recordedRows) {
+      const key = bucketKey(row.model);
+      recordedByModel.set(key, (recordedByModel.get(key) ?? 0) + row.totalUsd);
+    }
 
     for (const [model, providerUsd] of providerByModel) {
       const recordedUsd = recordedByModel.get(model) ?? 0;
