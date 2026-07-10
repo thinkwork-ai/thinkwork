@@ -23,6 +23,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Switch,
   Textarea,
 } from "@thinkwork/ui";
 import { SpaceAccessMode } from "@/gql/graphql";
@@ -30,8 +31,10 @@ import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   SettingsDeleteSpaceMutation,
+  SettingsSpaceEmailPolicyQuery,
   SettingsSpaceQuery,
   SettingsUpdateSpaceMutation,
+  SettingsUpsertEmailSpacePolicyMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsPageTitle,
@@ -168,8 +171,101 @@ export function SettingsSpaceConfig() {
           status={space.status}
           onSaved={() => refetch({ requestPolicy: "network-only" })}
         />
+        <EmailSection spaceId={spaceId} />
       </div>
     </div>
+  );
+}
+
+function EmailSection({ spaceId }: { spaceId: string }) {
+  const [result, refetch] = useQuery({
+    query: SettingsSpaceEmailPolicyQuery,
+    variables: { spaceId },
+    requestPolicy: "cache-and-network",
+  });
+  // No policy row means the built-in defaults apply: email enabled,
+  // first send held for review.
+  const policy = result.data?.emailSpaceEmailPolicy ?? null;
+  const [form, setForm] = useState({
+    enabled: true,
+    firstSendReviewRequired: true,
+  });
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [{ fetching: saving }, upsertPolicy] = useMutation(
+    SettingsUpsertEmailSpacePolicyMutation,
+  );
+
+  useEffect(() => {
+    setForm({
+      enabled: policy ? policy.enabled : true,
+      firstSendReviewRequired: policy ? policy.firstSendReviewRequired : true,
+    });
+  }, [policy]);
+
+  async function onSave() {
+    setErrorMsg(null);
+    setSaved(false);
+    const res = await upsertPolicy({
+      input: {
+        spaceId,
+        enabled: form.enabled,
+        firstSendReviewRequired: form.firstSendReviewRequired,
+        // Preserve the rest of an existing policy row; server defaults
+        // apply when no row exists yet.
+        providerInstallId: policy?.providerInstallId ?? undefined,
+        registeredUsersAllowed: policy?.registeredUsersAllowed ?? undefined,
+        privateSpaceMembershipRequired:
+          policy?.privateSpaceMembershipRequired ?? undefined,
+        outsideSenderDefault: policy?.outsideSenderDefault ?? undefined,
+      },
+    });
+    if (res.error) {
+      setErrorMsg(res.error.message);
+      return;
+    }
+    setSaved(true);
+    refetch({ requestPolicy: "network-only" });
+  }
+
+  return (
+    <SettingsSection label="Email">
+      <SettingsRow
+        label="Outbound email"
+        description="Allow agents in this Space to send email."
+      >
+        <Switch
+          checked={form.enabled}
+          onCheckedChange={(checked) =>
+            setForm((f) => ({ ...f, enabled: checked }))
+          }
+          aria-label="Outbound email"
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="First-send review"
+        description="Hold the first email to new recipients as an approval in the Inbox before it sends."
+      >
+        <Switch
+          checked={form.firstSendReviewRequired}
+          onCheckedChange={(checked) =>
+            setForm((f) => ({ ...f, firstSendReviewRequired: checked }))
+          }
+          aria-label="First-send review"
+        />
+      </SettingsRow>
+      <div className="flex items-center justify-end gap-3 px-4 py-3.5">
+        {saved ? (
+          <span className="text-sm text-muted-foreground">Saved</span>
+        ) : null}
+        {errorMsg ? (
+          <span className="text-sm text-destructive">{errorMsg}</span>
+        ) : null}
+        <Button onClick={onSave} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </SettingsSection>
   );
 }
 
