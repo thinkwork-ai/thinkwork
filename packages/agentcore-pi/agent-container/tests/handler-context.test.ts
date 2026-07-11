@@ -37,6 +37,32 @@ describe("snapshotIdentity", () => {
     });
   });
 
+  it("parses member_spaces defensively, dropping malformed entries (THINK-261 #6)", () => {
+    const out = snapshotIdentity({
+      ...baseValid,
+      member_spaces: [
+        { id: "space-1", name: "Research" },
+        { id: "  ", name: "blank id drops" },
+        { name: "missing id drops" },
+        "not-an-object",
+        { id: "space-2", name: "" },
+      ],
+    });
+    expect(out.memberSpaces).toEqual([
+      { id: "space-1", name: "Research" },
+      { id: "space-2", name: "" },
+    ]);
+
+    // Absent, empty, or non-array member_spaces → no field at all.
+    expect(snapshotIdentity({ ...baseValid }).memberSpaces).toBeUndefined();
+    expect(
+      snapshotIdentity({ ...baseValid, member_spaces: [] }).memberSpaces,
+    ).toBeUndefined();
+    expect(
+      snapshotIdentity({ ...baseValid, member_spaces: "nope" }).memberSpaces,
+    ).toBeUndefined();
+  });
+
   it("trims whitespace on identity fields", () => {
     const out = snapshotIdentity({
       tenant_id: "  tenant-1 ",

@@ -45,6 +45,180 @@ describe("createHindsightMemoryProvider", () => {
     );
   });
 
+  it("fans recall out to every member space, deduped against the current space, with labels (THINK-261 #6)", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/memories/list")) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url.includes("space_space-2")) {
+        return new Response(
+          JSON.stringify({
+            memory_units: [
+              {
+                id: "aaaaaaaa-0000-0000-0000-00000000000a",
+                text: "Acme raised pricing concerns",
+                score: 1,
+                type: "world",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ memory_units: [] }), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+
+    const provider = createHindsightMemoryProvider({
+      endpoint: "https://hindsight.example.test",
+      tenantId: "tenant-1",
+      userId: "user-1",
+      spaceId: "space-1",
+      memberSpaces: [
+        { id: "space-1", name: "Research" },
+        { id: "space-2", name: "Sales" },
+      ],
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "acme", limit: 10 } as any);
+
+    // 3 distinct banks (user, space-1 deduped, space-2) × list-then-recall.
+    const urls: string[] = (fetchImpl as any).mock.calls.map(
+      (call: unknown[]) => String(call[0]),
+    );
+    expect(
+      urls.filter((u: string) => u.includes("/memories/list")),
+    ).toHaveLength(3);
+    expect(
+      urls.filter((u: string) => u.endsWith("/memories/recall")),
+    ).toHaveLength(3);
+    expect(urls.some((u: string) => u.includes("banks/space_space-2/"))).toBe(
+      true,
+    );
+    expect(
+      urls.filter((u: string) => u.includes("banks/space_space-1/")),
+    ).toHaveLength(2);
+
+    // The member-space name rides the item as its scope label.
+    expect(result.memories).toHaveLength(1);
+    expect(result.memories[0]).toMatchObject({
+      sourceScope: "space",
+      scopeLabel: "Sales",
+    });
+  });
+
+  it("drops the personal duplicate when the same content exists in a space bank (cross-bank dedupe)", async () => {
+    const content = "Release codename is Bluejay.";
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/memories/list")) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      if (url.includes("user_user-1")) {
+        return new Response(
+          JSON.stringify({
+            memory_units: [
+              {
+                id: "aaaaaaaa-0000-0000-0000-0000000000b1",
+                text: content,
+                score: 1,
+                type: "world",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          memory_units: [
+            {
+              id: "aaaaaaaa-0000-0000-0000-0000000000b2",
+              text: `${content}  `,
+              score: 1,
+              type: "world",
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const provider = createHindsightMemoryProvider({
+      endpoint: "https://hindsight.example.test",
+      tenantId: "tenant-1",
+      userId: "user-1",
+      memberSpaces: [{ id: "space-9", name: "Launch" }],
+      fetchImpl,
+    });
+
+    const result = await provider.recall({ query: "codename" } as any);
+
+    expect(result.memories).toHaveLength(1);
+    expect(result.memories[0]).toMatchObject({
+      sourceScope: "space",
+      scopeLabel: "Launch",
+    });
+  });
+
+  it("degrades a failing space bank instead of failing the turn; reflect names surviving scopes", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("space_space-bad")) {
+        return new Response("boom", { status: 400 });
+      }
+      if (url.endsWith("/reflect")) {
+        return new Response(
+          JSON.stringify({
+            text: url.includes("user_")
+              ? "Personal synthesis."
+              : "Team synthesis.",
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/memories/list")) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({
+          memory_units: url.includes("space_space-ok")
+            ? [
+                {
+                  id: "aaaaaaaa-0000-0000-0000-0000000000c1",
+                  text: "surviving space fact",
+                  score: 1,
+                  type: "world",
+                },
+              ]
+            : [],
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const provider = createHindsightMemoryProvider({
+      endpoint: "https://hindsight.example.test",
+      tenantId: "tenant-1",
+      userId: "user-1",
+      memberSpaces: [
+        { id: "space-bad", name: "Broken" },
+        { id: "space-ok", name: "Sales" },
+      ],
+      fetchImpl,
+    });
+
+    const recall = await provider.recall({ query: "anything" } as any);
+    expect(recall.memories).toHaveLength(1);
+    expect(recall.memories[0]?.scopeLabel).toBe("Sales");
+
+    const reflect = await provider.reflect({ query: "anything" } as any);
+    expect(reflect.ok).toBe(true);
+    expect(reflect.text).toContain("User memory:\nPersonal synthesis.");
+    expect(reflect.text).toContain("Team memory (Sales):\nTeam synthesis.");
+    expect(reflect.text).not.toContain("Broken");
+  });
+
   it("ranks observations ahead of raw units at equal score and records access counts (THINK-199)", async () => {
     const rawUnit = {
       id: "aaaaaaaa-0000-0000-0000-000000000001",
