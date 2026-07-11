@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PanelRightOpen } from "lucide-react";
 import {
   Button,
@@ -12,26 +12,68 @@ import {
 } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
 
-const FIXED_INSPECTOR_QUERY = "(min-width: 1536px)";
+const MIN_FIXED_CANVAS_WIDTH = 700;
+const GRID_GAP = 16;
+const LEADING_WIDTH = 200;
+const WIDE_LEADING_WIDTH = 220;
+const WIDE_LEADING_QUERY = "(min-width: 1280px)";
 
-function useFixedInspector() {
-  const [fixed, setFixed] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia(FIXED_INSPECTOR_QUERY).matches,
-  );
+function hasFixedInspectorSpace({
+  workspaceWidth,
+  hasLeading,
+  wideLeading,
+}: {
+  workspaceWidth: number;
+  hasLeading: boolean;
+  wideLeading: boolean;
+}) {
+  const leadingWidth = hasLeading
+    ? wideLeading
+      ? WIDE_LEADING_WIDTH
+      : LEADING_WIDTH
+    : 0;
+  const gapWidth = hasLeading ? GRID_GAP : 0;
+  const canvasWidth = workspaceWidth - leadingWidth - gapWidth;
+
+  return canvasWidth > MIN_FIXED_CANVAS_WIDTH;
+}
+
+function useFixedInspector(hasLeading: boolean) {
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const [fixed, setFixed] = useState(false);
 
   useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia(FIXED_INSPECTOR_QUERY);
-    const update = () => setFixed(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
 
-  return fixed;
+    const update = (workspaceWidth: number) => {
+      const wideLeading =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia(WIDE_LEADING_QUERY).matches;
+      setFixed(
+        hasFixedInspectorSpace({
+          workspaceWidth,
+          hasLeading,
+          wideLeading,
+        }),
+      );
+    };
+
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(([entry]) => {
+        if (entry) update(entry.contentRect.width);
+      });
+      observer.observe(workspace);
+      return () => observer.disconnect();
+    }
+
+    const measure = () => update(workspace.getBoundingClientRect().width);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [hasLeading]);
+
+  return { fixed, workspaceRef };
 }
 
 export function WorkflowCanvasWorkspace({
@@ -50,7 +92,9 @@ export function WorkflowCanvasWorkspace({
   className?: string;
 }) {
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const fixedInspector = useFixedInspector();
+  const { fixed: fixedInspector, workspaceRef } = useFixedInspector(
+    Boolean(leading),
+  );
 
   useEffect(() => {
     setInspectorOpen(!fixedInspector && Boolean(inspectorKey));
@@ -63,14 +107,19 @@ export function WorkflowCanvasWorkspace({
 
   return (
     <div
+      ref={workspaceRef}
       className={cn("relative flex min-h-0 flex-1 overflow-hidden", className)}
     >
       <div
         className={cn(
           "grid min-h-0 flex-1 gap-4",
           leading
-            ? "grid-cols-[200px_minmax(360px,1fr)] xl:grid-cols-[220px_minmax(420px,1fr)] 2xl:grid-cols-[220px_minmax(420px,1fr)_400px]"
-            : "grid-cols-[minmax(0,1fr)] 2xl:grid-cols-[minmax(420px,1fr)_400px]",
+            ? fixedInspector
+              ? "grid-cols-[200px_minmax(0,1fr)_400px] xl:grid-cols-[220px_minmax(0,1fr)_400px]"
+              : "grid-cols-[200px_minmax(360px,1fr)] xl:grid-cols-[220px_minmax(420px,1fr)]"
+            : fixedInspector
+              ? "grid-cols-[minmax(0,1fr)_400px]"
+              : "grid-cols-[minmax(0,1fr)]",
         )}
       >
         {leading}
@@ -78,7 +127,7 @@ export function WorkflowCanvasWorkspace({
         {fixedInspector ? (
           <aside
             data-testid="workflow-fixed-inspector"
-            className="min-h-0 overflow-y-auto rounded-md border border-border bg-card"
+            className="min-h-0 overflow-y-auto"
           >
             {inspector}
           </aside>
@@ -89,9 +138,9 @@ export function WorkflowCanvasWorkspace({
           <SheetTrigger asChild>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon-sm"
-              className="absolute right-3 top-3 z-10 bg-background/90 shadow-sm"
+              className="absolute right-3 top-3 z-10 items-center bg-background/90"
               aria-label="Open inspector panel"
             >
               <PanelRightOpen className="size-4" />

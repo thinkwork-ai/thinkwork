@@ -265,11 +265,10 @@ describe("AutomationFlowSection (THINK-247)", () => {
     expect(screen.getByTestId("canvas-node-work")).toBeTruthy();
     expect(screen.getByTestId("canvas-node-document")).toBeTruthy();
     expect(screen.getByTestId("canvas-node-deliver")).toBeTruthy();
-    expect(screen.queryByTestId("status-rail")).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open inspector panel" }),
-    );
     expect(screen.getByTestId("status-rail")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Open inspector panel" }),
+    ).toBeNull();
   });
 
   it("opens the typed deliver inspector with editable recipients and subject", () => {

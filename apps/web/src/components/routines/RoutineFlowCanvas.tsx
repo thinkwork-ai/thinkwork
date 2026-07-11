@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Background,
   Controls,
   ReactFlow,
   type Edge,
   type Node,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import { AlertCircle, Workflow } from "lucide-react";
 import { Badge } from "@thinkwork/ui";
@@ -39,6 +40,8 @@ const nodeTypes = {
   routine: RoutineFlowNode,
 };
 
+const FIT_VIEW_OPTIONS = { padding: 0.18, maxZoom: 1 } as const;
+
 export function RoutineFlowCanvas({
   mode,
   graph: graphOverride,
@@ -50,6 +53,8 @@ export function RoutineFlowCanvas({
   ...graphInput
 }: RoutineFlowCanvasProps) {
   const { theme } = useTheme();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const flowRef = useRef<ReactFlowInstance | null>(null);
   const graph = useMemo(
     () => graphOverride ?? buildRoutineAslGraph(graphInput),
     [graphOverride, graphInput],
@@ -59,6 +64,33 @@ export function RoutineFlowCanvas({
     [graph, selectedNodeId],
   );
   const edges = useMemo(() => toFlowEdges(graph), [graph]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver !== "function") return;
+
+    let frame: number | null = null;
+    const observer = new ResizeObserver(([entry]) => {
+      if (
+        !entry ||
+        entry.contentRect.width === 0 ||
+        entry.contentRect.height === 0
+      ) {
+        return;
+      }
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        void flowRef.current?.fitView(FIT_VIEW_OPTIONS);
+      });
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, []);
 
   if (graph.error || nodes.length === 0) {
     return (
@@ -97,6 +129,7 @@ export function RoutineFlowCanvas({
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "routine-flow-canvas relative h-[min(70vh,680px)] min-h-[420px] w-full overflow-hidden rounded-md border border-border/80 bg-background",
         className,
@@ -129,13 +162,16 @@ export function RoutineFlowCanvas({
         colorMode={theme === "dark-blue" ? "dark" : theme}
         proOptions={{ hideAttribution: true }}
         fitView
-        fitViewOptions={{ padding: 0.18, maxZoom: 1 }}
+        fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.35}
         maxZoom={1.4}
         nodesDraggable={false}
         nodesConnectable={false}
         zoomOnScroll
         elementsSelectable
+        onInit={(instance) => {
+          flowRef.current = instance;
+        }}
         onNodeClick={(_, node) => {
           const data = node.data as unknown as RoutineGraphNode;
           if (node.id.startsWith("__") || data.kind === "group") return;

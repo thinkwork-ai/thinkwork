@@ -13,32 +13,46 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function mockViewport(wide: boolean) {
-  const listeners = new Set<() => void>();
-  const query = {
-    matches: wide,
-    media: "(min-width: 1536px)",
-    addEventListener: vi.fn((_event: string, listener: () => void) => {
-      listeners.add(listener);
-    }),
-    removeEventListener: vi.fn((_event: string, listener: () => void) => {
-      listeners.delete(listener);
-    }),
-    dispatch(next: boolean) {
-      query.matches = next;
-      listeners.forEach((listener) => listener());
+function mockWorkspaceWidth(initialWidth: number, wideLeading = false) {
+  let callback: ResizeObserverCallback | null = null;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(next: ResizeObserverCallback) {
+        callback = next;
+      }
+
+      observe(target: Element) {
+        dispatch(initialWidth, target);
+      }
+
+      disconnect() {}
+      unobserve() {}
     },
-  };
+  );
   vi.stubGlobal(
     "matchMedia",
-    vi.fn(() => query),
+    vi.fn(() => ({ matches: wideLeading })),
   );
-  return query;
+
+  function dispatch(width: number, target: Element = document.body) {
+    callback?.(
+      [
+        {
+          target,
+          contentRect: { width },
+        } as ResizeObserverEntry,
+      ],
+      {} as ResizeObserver,
+    );
+  }
+
+  return { dispatch };
 }
 
 describe("WorkflowCanvasWorkspace", () => {
   it("renders source-owned canvas and inspector content in one shared shell", () => {
-    mockViewport(false);
+    mockWorkspaceWidth(700);
     const { container } = render(
       <WorkflowCanvasWorkspace
         canvas={<div>Automation graph</div>}
@@ -58,7 +72,7 @@ describe("WorkflowCanvasWorkspace", () => {
   });
 
   it("opens the side sheet when a canvas node becomes selected", () => {
-    mockViewport(false);
+    mockWorkspaceWidth(700);
     const { rerender } = render(
       <WorkflowCanvasWorkspace
         canvas={<div>Automation graph</div>}
@@ -80,7 +94,7 @@ describe("WorkflowCanvasWorkspace", () => {
   });
 
   it("switches between a side sheet and fixed inspector as the viewport changes", () => {
-    const viewport = mockViewport(false);
+    const workspace = mockWorkspaceWidth(700);
     render(
       <WorkflowCanvasWorkspace
         canvas={<div>Automation graph</div>}
@@ -94,12 +108,48 @@ describe("WorkflowCanvasWorkspace", () => {
     );
     expect(screen.getByTestId("workflow-inspector-panel")).toBeTruthy();
 
-    act(() => viewport.dispatch(true));
+    act(() => workspace.dispatch(701));
 
     expect(screen.queryByTestId("workflow-inspector-panel")).toBeNull();
     expect(screen.getByTestId("workflow-fixed-inspector")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Open inspector panel" }),
     ).toBeNull();
+  });
+
+  it("keeps 700 pixels for the canvas before fixing the inspector", () => {
+    const workspace = mockWorkspaceWidth(700);
+    render(
+      <WorkflowCanvasWorkspace
+        canvas={<div>Automation graph</div>}
+        inspector={<aside>General information</aside>}
+      />,
+    );
+
+    expect(screen.queryByTestId("workflow-fixed-inspector")).toBeNull();
+
+    act(() => workspace.dispatch(701));
+
+    const fixedInspector = screen.getByTestId("workflow-fixed-inspector");
+    expect(fixedInspector.className).not.toContain("p-4");
+    expect(fixedInspector.className).not.toContain("border");
+    expect(fixedInspector.className).not.toContain("bg-card");
+  });
+
+  it("accounts for the executions list before fixing the inspector", () => {
+    const workspace = mockWorkspaceWidth(936, true);
+    render(
+      <WorkflowCanvasWorkspace
+        leading={<aside>Executions</aside>}
+        canvas={<div>Automation graph</div>}
+        inspector={<aside>Execution information</aside>}
+      />,
+    );
+
+    expect(screen.queryByTestId("workflow-fixed-inspector")).toBeNull();
+
+    act(() => workspace.dispatch(937));
+
+    expect(screen.getByTestId("workflow-fixed-inspector")).toBeTruthy();
   });
 });
