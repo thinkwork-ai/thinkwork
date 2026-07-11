@@ -72,6 +72,11 @@ export interface OkfMaterializationSource {
   tenantId: string;
   tenantSlug: string;
   pages: OkfMaterializationPage[];
+  /**
+   * THINK-261 #3 — entity pages the loader excluded as fallback stubs
+   * (empty/blank summary). Surfaced into the manifest's sourceCounts.
+   */
+  excludedStubPageCount?: number;
 }
 
 export interface OkfBundleFile {
@@ -96,6 +101,23 @@ export interface BuildOkfBundleArgs {
   generatedAt?: Date;
   ontologyVersion?: string | null;
   staleAfter?: Date | string | null;
+}
+
+/**
+ * THINK-261 #3 — fallback-stub predicate. graph-materializer.ts writes the
+ * literal "<label> is tracked in the tenant knowledge graph." body exactly
+ * when `entity.summary?.trim()` is falsy (summary stored as NULL or a blank
+ * string), so an entity page with an empty summary carries no knowledge.
+ * Scoped to entity pages only — non-entity types can be legitimately
+ * summary-less.
+ */
+export function isFallbackStubPage(page: {
+  type: string;
+  summary: string | null | undefined;
+}): boolean {
+  return (
+    page.type === "entity" && (!page.summary || page.summary.trim() === "")
+  );
 }
 
 export async function loadTenantOkfMaterializationSource(args: {
@@ -136,8 +158,16 @@ export async function loadTenantOkfMaterializationSource(args: {
     .orderBy(asc(wikiPages.type), asc(wikiPages.slug));
 
   const pages: OkfMaterializationPage[] = [];
+  let excludedStubPageCount = 0;
   for (const page of pageRows) {
     if (!isOkfWikiPageType(page.type)) continue;
+    // THINK-261 #3 — exclude fallback stubs so agents stop reading placeholder
+    // text; the wiki page itself stays intact for other surfaces, and the
+    // manifest records the count so the drop is auditable.
+    if (isFallbackStubPage(page)) {
+      excludedStubPageCount += 1;
+      continue;
+    }
     pages.push({
       id: page.id,
       type: page.type,
@@ -156,7 +186,12 @@ export async function loadTenantOkfMaterializationSource(args: {
   }
 
   if (pages.length === 0) {
-    return { tenantId: tenant.id, tenantSlug: tenant.slug ?? tenant.id, pages };
+    return {
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug ?? tenant.id,
+      pages,
+      excludedStubPageCount,
+    };
   }
 
   const pageIds = pages.map((page) => page.id);
@@ -231,6 +266,7 @@ export async function loadTenantOkfMaterializationSource(args: {
     tenantId: tenant.id,
     tenantSlug: tenant.slug ?? tenant.id,
     pages,
+    excludedStubPageCount,
   };
 }
 
@@ -295,6 +331,7 @@ export function buildOkfBundle(args: BuildOkfBundleArgs): OkfBundleBuild {
       (count, page) => count + (page.links?.length ?? 0),
       0,
     ),
+    excludedStubPages: source.excludedStubPageCount ?? 0,
   };
   const freshness = freshnessFor({
     pages,

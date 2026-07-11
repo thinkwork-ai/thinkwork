@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOkfBundle,
+  isFallbackStubPage,
   type OkfMaterializationSource,
 } from "./materializer.js";
 
@@ -143,6 +144,35 @@ describe("OKF materializer", () => {
     expect(entity).toContain('target: "../../decisions/expansion-decision.md"');
     expect(decision).toContain("## Backlinks");
     expect(decision).toContain("- Acme Corp");
+  });
+
+  it("classifies fallback stubs: empty-summary entity pages only", () => {
+    // Null and blank summaries on entity pages match graph-materializer's
+    // fallback condition (`entity.summary?.trim() ||`).
+    expect(isFallbackStubPage({ type: "entity", summary: null })).toBe(true);
+    expect(isFallbackStubPage({ type: "entity", summary: "" })).toBe(true);
+    expect(isFallbackStubPage({ type: "entity", summary: "   " })).toBe(true);
+    // Real summaries are not stubs.
+    expect(
+      isFallbackStubPage({ type: "entity", summary: "Strategic customer." }),
+    ).toBe(false);
+    // Non-entity types never hit the fallback path — legitimately summary-less.
+    expect(isFallbackStubPage({ type: "topic", summary: null })).toBe(false);
+    expect(isFallbackStubPage({ type: "decision", summary: "" })).toBe(false);
+  });
+
+  it("records the excluded-stub count in the manifest sourceCounts", () => {
+    const withCount = buildOkfBundle({
+      source: { ...source(), excludedStubPageCount: 7 },
+      generatedAt: GENERATED_AT,
+    });
+    expect(withCount.manifest.sourceCounts.excludedStubPages).toBe(7);
+
+    const withoutCount = buildOkfBundle({
+      source: source(),
+      generatedAt: GENERATED_AT,
+    });
+    expect(withoutCount.manifest.sourceCounts.excludedStubPages).toBe(0);
   });
 
   it("is deterministic for a fixed generated-at timestamp", () => {
