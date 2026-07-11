@@ -29,6 +29,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1028.0
         version: 3.1028.0
+      '@electric-sql/pglite':
+        specifier: ^0.5.4
+        version: 0.5.4
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
@@ -894,7 +897,7 @@ importers:
         version: 3.0.1(ajv@8.18.0)
       drizzle-orm:
         specifier: ^0.39.0
-        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
+        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@electric-sql/pglite@0.5.4)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
       expo-server-sdk:
         specifier: ^6.1.0
         version: 6.1.0
@@ -1093,7 +1096,7 @@ importers:
         version: link:../runtime-config
       drizzle-orm:
         specifier: ^0.39.3
-        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
+        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@electric-sql/pglite@0.5.4)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
       pg:
         specifier: ^8.16.3
         version: 8.20.0
@@ -1284,7 +1287,7 @@ importers:
         version: link:../runtime-config
       drizzle-orm:
         specifier: ^0.39.0
-        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
+        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@electric-sql/pglite@0.5.4)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
       p-limit:
         specifier: ^6.2.0
         version: 6.2.0
@@ -3679,6 +3682,9 @@ packages:
   '@egjs/hammerjs@2.0.17':
     resolution: {integrity: sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A==}
     engines: {node: '>=0.8.0'}
+
+  '@electric-sql/pglite@0.5.4':
+    resolution: {integrity: sha512-yYZUyyXrHU7tPlCjwZQJ6hIG9DscdCCn7Uk0mYKwC1FeHX286AbcmFveMiRBEak8e9iPupjsoVImN3yJZVed2g==}
 
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
@@ -19569,6 +19575,8 @@ snapshots:
     dependencies:
       '@types/hammerjs': 2.0.46
 
+  '@electric-sql/pglite@0.5.4': {}
+
   '@electron/asar@3.4.1':
     dependencies:
       commander: 5.1.0
@@ -26752,9 +26760,10 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.21.0
 
-  drizzle-orm@0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1):
+  drizzle-orm@0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@electric-sql/pglite@0.5.4)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1):
     optionalDependencies:
       '@aws-sdk/client-rds-data': 3.1028.0
+      '@electric-sql/pglite': 0.5.4
       '@opentelemetry/api': 1.9.1
       '@types/pg': 8.20.0
       better-sqlite3: 11.10.0

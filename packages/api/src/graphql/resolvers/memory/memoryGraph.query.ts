@@ -43,6 +43,11 @@ async function tenantBankLabels(
       COALESCE(a.name, a.slug, a.id::text) AS name
     FROM agents a
     WHERE a.tenant_id = ${tenantId}
+    UNION
+    SELECT ('tenant_' || t.id::text) AS bank_id,
+      (t.name || ' (Company Brain)') AS name
+    FROM tenants t
+    WHERE t.id = ${tenantId}
   `);
   const map = new Map<string, string>();
   for (const r of (rows.rows ?? []) as Array<{
@@ -92,43 +97,68 @@ export const memoryGraph = async (
 
   const bankIds = [...bankLabels.keys()];
   if (bankIds.length === 0) return { nodes: [], edges: [] };
+  // Drizzle renders a bare JS-array param as a `($1, $2)` record, which
+  // Postgres can't cast to an array — build ARRAY[...] explicitly.
   const bankIdArray = sql`ARRAY[${sql.join(
     bankIds.map((b) => sql`${b}`),
     sql`, `,
   )}]::text[]`;
+  const uuidArray = (ids: string[]) =>
+    sql`ARRAY[${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )}]::uuid[]`;
   // Hindsight entity/cooccurrence tables — route to the Hindsight handle
   // (identical to `db` until the cutover env var is set).
   const hdb = resolveHindsightDb(db);
 
+  // Per-bank top-K, not a global top-N: mature user banks have entities with
+  // thousands of mentions while young space/tenant banks top out in the
+  // single digits, so a global `ORDER BY mention_count LIMIT 200` never
+  // surfaces them (and they then vanish from the UI's Bank facet, which is
+  // built from returned nodes). Ranking within each bank first and filling
+  // the 200-node budget round-robin by rank guarantees every non-empty bank
+  // contributes its top entities. Single-bank mode degenerates to the old
+  // global top-200.
   let entityRows: any;
   try {
     entityRows = await hdb.execute(sql`
 			SELECT id, canonical_name, mention_count, metadata, bank_id
-			FROM ${hindsightSql()}entities
-			WHERE bank_id = ANY(${bankIdArray})
-			ORDER BY mention_count DESC
+			FROM (
+				SELECT id, canonical_name, mention_count, metadata, bank_id,
+					ROW_NUMBER() OVER (
+						PARTITION BY bank_id ORDER BY mention_count DESC, id
+					) AS bank_rank
+				FROM ${hindsightSql()}entities
+				WHERE bank_id = ANY(${bankIdArray})
+			) ranked
+			ORDER BY bank_rank ASC, mention_count DESC
 			LIMIT 200
 		`);
   } catch {
     return { nodes: [], edges: [] };
   }
 
-  const edgeRows = await hdb.execute(sql`
-		SELECT
-			e1.id AS source_id,
-			e2.id AS target_id,
-			ec.cooccurrence_count
-		FROM ${hindsightSql()}entity_cooccurrences ec
-		JOIN ${hindsightSql()}entities e1 ON e1.id = ec.entity_id_1
-		JOIN ${hindsightSql()}entities e2 ON e2.id = ec.entity_id_2
-		WHERE e1.bank_id = ANY(${bankIdArray})
-		ORDER BY ec.cooccurrence_count DESC
-		LIMIT 500
-	`);
-
   const entityIds: string[] = (entityRows.rows || []).map((r: any) =>
     String(r.id),
   );
+
+  // Edges are restricted to the selected node set (both endpoints) so the
+  // graph never references entities the per-bank selection dropped.
+  let edgeRows: any = { rows: [] };
+  if (entityIds.length > 0) {
+    edgeRows = await hdb.execute(sql`
+			SELECT
+				ec.entity_id_1 AS source_id,
+				ec.entity_id_2 AS target_id,
+				ec.cooccurrence_count
+			FROM ${hindsightSql()}entity_cooccurrences ec
+			WHERE ec.entity_id_1 = ANY(${uuidArray(entityIds)})
+				AND ec.entity_id_2 = ANY(${uuidArray(entityIds)})
+			ORDER BY ec.cooccurrence_count DESC
+			LIMIT 500
+		`);
+  }
 
   // For each entity, look up the most recent source memory_unit that carries
   // a thread_id in its metadata. Surfaces the originating thread in the
@@ -142,7 +172,7 @@ export const memoryGraph = async (
 					m.metadata->>'thread_id' AS thread_id
 				FROM ${hindsightSql()}unit_entities ue
 				JOIN ${hindsightSql()}memory_units m ON m.id = ue.unit_id
-				WHERE ue.entity_id = ANY(${entityIds}::uuid[])
+				WHERE ue.entity_id = ANY(${uuidArray(entityIds)})
 					AND m.metadata->>'thread_id' IS NOT NULL
 				ORDER BY ue.entity_id, m.created_at DESC
 			`);
