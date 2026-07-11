@@ -85,6 +85,7 @@ import {
   mapOrganization,
   mapProduct,
   mapTaskProducts,
+  mapTaskStatusActivity,
   PRODUCT_CATALOG,
   productSourceId,
   sourceId,
@@ -446,9 +447,10 @@ async function runMigration(options: {
 
   // Phase E: notes + attachments -------------------------------------------
   log("annexes: loading notes...");
-  const [comments, customerNotes] = await Promise.all([
+  const [comments, customerNotes, statusChanges] = await Promise.all([
     reader.readCrmComments(),
     reader.readCustomerNotes(),
+    reader.readTaskStatusChanges(),
   ]);
   const noteCounters = emptyCounters();
   const noteTargets = new Map<string, string>([
@@ -457,6 +459,10 @@ async function runMigration(options: {
   ]);
   const mappedNotes = [
     ...comments.map(mapCrmComment),
+    ...statusChanges.flatMap((change) => {
+      const mapped = mapTaskStatusActivity(change);
+      return mapped ? [mapped] : [];
+    }),
     ...customerNotes.flatMap((note) => {
       const mapped = mapCustomerNote(note);
       if (!mapped) {

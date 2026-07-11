@@ -14,6 +14,7 @@ import type {
   LastmileCrmTask,
   LastmileCustomerNote,
   LastmileOrganization,
+  LastmileTaskStatusChange,
 } from "./lastmile-reader";
 
 /**
@@ -591,6 +592,11 @@ export function mapCrmTask(
     isMobil: (task.items ?? []).some((item) =>
       isMobilBrand(item.brand ?? null),
     ),
+    // Replay LastMile's true creation time onto Twenty so "created" reads
+    // correctly and the record sorts by real age, not import time. Twenty
+    // accepts createdAt on create and update (proven by the notes path), so
+    // records seeded before this behaviour existed heal on the next sweep.
+    ...(task.createdAt ? { createdAt: toIsoTimestamp(task.createdAt) } : {}),
     sourceId: sourceId(task.entityType, task.entityId),
   };
   return { sourceId: input.sourceId as string, input, warnings };
@@ -680,6 +686,34 @@ export function mapCrmComment(comment: LastmileCrmComment): MappedNote {
     isDeleted: comment.isDeleted,
     createdAt: toIsoTimestamp(comment.createdAt),
     authorName: comment.authorName,
+  };
+}
+
+/**
+ * A LastMile pipeline transition ("00-New" -> "10-Prospect") reconstructed as a
+ * dated Note on the Twenty opportunity, so the activity feed shows when each
+ * status change actually happened. Returns null when the event carries no
+ * destination stage name (nothing meaningful to record). Stage names arrive
+ * already clean ("10-Prospect", "60-Won") — the same labels Twenty uses — so no
+ * LM_ stripping is needed. The `task_activity.id` gives a stable sourceId, so
+ * re-runs upsert the same note rather than duplicating it.
+ */
+export function mapTaskStatusActivity(
+  activity: LastmileTaskStatusChange,
+): MappedNote | null {
+  if (!activity.newStatusName) return null;
+  const body = activity.oldStatusName
+    ? `${activity.oldStatusName} → ${activity.newStatusName}`
+    : `Set to ${activity.newStatusName}`;
+  return {
+    sourceId: sourceId("task_activity", activity.id),
+    title: `Stage → ${activity.newStatusName}`,
+    bodyMarkdown: body,
+    targetSourceId: sourceId(activity.entityType, activity.entityId),
+    targetKind: "opportunity",
+    isDeleted: false,
+    createdAt: toIsoTimestamp(activity.createdAt),
+    authorName: activity.authorName,
   };
 }
 

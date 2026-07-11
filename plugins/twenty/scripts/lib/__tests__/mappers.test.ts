@@ -21,6 +21,7 @@ import {
   PRODUCT_CATALOG,
   productSourceId,
   mapTaskProducts,
+  mapTaskStatusActivity,
   mapTaskStatusToStage,
   mapCustomerNote,
   mapOpportunityProduct,
@@ -202,6 +203,56 @@ describe("notes mapping", () => {
     };
     expect(mapCustomerNote(base)?.targetSourceId).toBe("account:acct_1");
     expect(mapCustomerNote({ ...base, matchedAccountId: null })).toBeNull();
+  });
+
+  it("reconstructs a status change as a dated note on its opportunity", () => {
+    const mapped = mapTaskStatusActivity({
+      id: "act_1",
+      entityType: "opportunity",
+      entityId: "opp_1",
+      oldStatusName: "00-New",
+      newStatusName: "10-Prospect",
+      createdAt: new Date("2026-05-14T20:19:03.740Z"),
+      authorName: "Dean Kittel",
+    });
+    expect(mapped).toMatchObject({
+      sourceId: "task_activity:act_1",
+      title: "Stage → 10-Prospect",
+      bodyMarkdown: "00-New → 10-Prospect",
+      targetSourceId: "opportunity:opp_1",
+      targetKind: "opportunity",
+      // True transition time, so the feed sorts correctly against the comments.
+      createdAt: "2026-05-14T20:19:03.740Z",
+      authorName: "Dean Kittel",
+    });
+  });
+
+  it("labels a status change with no prior stage as a plain set", () => {
+    const mapped = mapTaskStatusActivity({
+      id: "act_2",
+      entityType: "lead",
+      entityId: "lead_1",
+      oldStatusName: null,
+      newStatusName: "60-Won",
+      createdAt: null,
+      authorName: null,
+    });
+    expect(mapped?.bodyMarkdown).toBe("Set to 60-Won");
+    expect(mapped?.targetSourceId).toBe("lead:lead_1");
+  });
+
+  it("drops a status event that names no destination stage", () => {
+    expect(
+      mapTaskStatusActivity({
+        id: "act_3",
+        entityType: "opportunity",
+        entityId: "opp_1",
+        oldStatusName: "10-Prospect",
+        newStatusName: null,
+        createdAt: null,
+        authorName: null,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -439,6 +490,21 @@ describe("mapCrmTask (task table is the CRM authority)", () => {
       isMobil: false,
     });
     expect(mapped.warnings).toEqual([]);
+  });
+
+  it("replays the LastMile creation time onto Twenty's createdAt", () => {
+    const mapped = mapCrmTask(
+      task({ createdAt: new Date("2026-05-13T15:37:15.268Z") }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.input.createdAt).toBe("2026-05-13T15:37:15.268Z");
+  });
+
+  it("omits createdAt when the task has no creation time", () => {
+    const mapped = mapCrmTask(task(), ownerIndex, companyMap, orgMap);
+    expect(mapped.input).not.toHaveProperty("createdAt");
   });
 
   it("takes status from the task, not the stale opportunity.stage column", () => {

@@ -144,6 +144,25 @@ export interface LastmileCrmComment {
   authorName: string | null;
 }
 
+/**
+ * A single status-change event from LastMile's `task_activity` log — the row
+ * behind "Dean Kittel changed status to 10-Prospect" in the task activity feed.
+ * The pipeline transition is reconstructed onto the Twenty opportunity as a
+ * dated Note so the activity timeline reads in true order. `activity_data`
+ * carries human-readable stage names (`new_status_name` in every prod row; the
+ * camelCase `newStatusName` variant is coalesced defensively). `created_at` is
+ * the real transition time; `user_id` resolves to the rep who moved it.
+ */
+export interface LastmileTaskStatusChange {
+  id: string;
+  entityType: "lead" | "opportunity";
+  entityId: string;
+  oldStatusName: string | null;
+  newStatusName: string | null;
+  createdAt: Date | null;
+  authorName: string | null;
+}
+
 export interface LastmileCrmAttachment {
   id: string;
   entityType: "lead" | "opportunity";
@@ -174,6 +193,7 @@ export interface LastmileReader {
   readOrganizations(): Promise<LastmileOrganization[]>;
   readOpportunityItems(): Promise<LastmileOpportunityItem[]>;
   readCrmComments(): Promise<LastmileCrmComment[]>;
+  readTaskStatusChanges(): Promise<LastmileTaskStatusChange[]>;
   readCrmAttachments(): Promise<LastmileCrmAttachment[]>;
   readCustomerNotes(): Promise<LastmileCustomerNote[]>;
   close(): Promise<void>;
@@ -348,6 +368,29 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
         where t.entity_type in ('lead', 'opportunity')
           and t.entity_id is not null
         order by tc.id
+      `),
+    readTaskStatusChanges: () =>
+      rows<LastmileTaskStatusChange>(`
+        select ta.id,
+               t.entity_type as "entityType",
+               t.entity_id   as "entityId",
+               coalesce(
+                 nullif(trim(ta.activity_data ->> 'old_status_name'), ''),
+                 nullif(trim(ta.activity_data ->> 'oldStatusName'), '')
+               ) as "oldStatusName",
+               coalesce(
+                 nullif(trim(ta.activity_data ->> 'new_status_name'), ''),
+                 nullif(trim(ta.activity_data ->> 'newStatusName'), '')
+               ) as "newStatusName",
+               ta.created_at as "createdAt",
+               nullif(trim(concat_ws(' ', u.first_name, u.last_name)), '') as "authorName"
+        from task_activity ta
+        join task t on t.id = ta.task_id
+        left join users u on u.id = ta.user_id
+        where t.entity_type in ('lead', 'opportunity')
+          and t.entity_id is not null
+          and ta.activity_type in ('status_changed', 'status_change')
+        order by ta.id
       `),
     readCrmAttachments: () =>
       rows<LastmileCrmAttachment>(`
