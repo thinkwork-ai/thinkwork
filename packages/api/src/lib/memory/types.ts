@@ -16,7 +16,7 @@ export type MemoryEngineType = "hindsight" | "agentcore";
 
 export type MemoryOwnerRef = {
   tenantId: string;
-  ownerType: "user" | "agent" | "space";
+  ownerType: "user" | "agent" | "space" | "tenant";
   ownerId: string;
   threadId?: string;
 };
@@ -134,7 +134,7 @@ export type MemoryRequestContext = {
 export type ThinkWorkMemoryRecord = {
   id: string;
   tenantId: string;
-  ownerType: "user" | "agent" | "space";
+  ownerType: "user" | "agent" | "space" | "tenant";
   ownerId: string;
   threadId?: string;
   kind: MemoryRecordKind;

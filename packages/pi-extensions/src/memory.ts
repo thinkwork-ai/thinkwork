@@ -94,6 +94,8 @@ function formatMemories(memories: MemoryItem[]): string {
       // tell whose knowledge it is citing.
       if (memory.sourceScope === "space") {
         tags.push(memory.scopeLabel ? `team: ${memory.scopeLabel}` : "team");
+      } else if (memory.sourceScope === "tenant") {
+        tags.push("company");
       } else if (memory.sourceScope === "user") {
         tags.push("personal");
       }

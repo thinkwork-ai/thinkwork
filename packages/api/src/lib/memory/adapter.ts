@@ -105,7 +105,7 @@ export interface MemoryAdapter {
 
 export interface ListRecordsUpdatedSinceRequest {
   tenantId: string;
-  ownerType?: "user" | "agent" | "space";
+  ownerType?: "user" | "agent" | "space" | "tenant";
   ownerId: string;
   sinceUpdatedAt?: Date;
   sinceRecordId?: string;

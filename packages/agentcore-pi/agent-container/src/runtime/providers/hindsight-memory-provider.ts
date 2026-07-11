@@ -116,6 +116,10 @@ function spaceBankFor(spaceId: string): string {
   return `space_${spaceId}`;
 }
 
+function tenantBankFor(tenantId: string): string {
+  return `tenant_${tenantId}`;
+}
+
 function jitter(): number {
   return (Math.random() * 2 - 1) * RETRY_JITTER_MS;
 }
@@ -138,7 +142,7 @@ function unitText(unit: unknown): string {
 
 type HindsightBankTarget = {
   bankId: string;
-  sourceScope: "user" | "space";
+  sourceScope: "user" | "space" | "tenant";
   /** Human-readable label (the space name) stamped onto recalled items. */
   label?: string;
 };
@@ -224,7 +228,9 @@ function toListedMemoryItems(
  * the space, and the personal duplicate is dropped.
  */
 function scopeRank(scope: MemoryItem["sourceScope"]): number {
-  return scope === "space" ? 0 : 1;
+  if (scope === "space") return 0;
+  if (scope === "tenant") return 1;
+  return 2;
 }
 
 function contentKey(item: MemoryItem): string {
@@ -922,6 +928,10 @@ export function createHindsightMemoryProvider(
   const targets: HindsightBankTarget[] = [
     { bankId: userBankFor(options.userId), sourceScope: "user" },
     ...spaceTargets.values(),
+    // Company-brain plan U9 — the Tenant Bank rides every recall/reflect.
+    // Empty (or never-written) banks return zero hits through the existing
+    // merge, so no flag machinery guards this.
+    { bankId: tenantBankFor(options.tenantId), sourceScope: "tenant" },
   ];
   // Identity (endpoint/tenantId/userId) is captured in this closure at
   // construction time — cred-snapshot-at-entry; never re-read from env mid-turn.
@@ -1111,7 +1121,7 @@ export function createHindsightMemoryProvider(
           (
             item,
           ): item is {
-            sourceScope: "user" | "space";
+            sourceScope: "user" | "space" | "tenant";
             label: string | undefined;
             text: string;
           } => item !== null,
@@ -1133,7 +1143,9 @@ export function createHindsightMemoryProvider(
                       ? item.label
                         ? `Team memory (${item.label})`
                         : "Space memory"
-                      : "User memory";
+                      : item.sourceScope === "tenant"
+                        ? "Company memory"
+                        : "User memory";
                   return `${prefix}:\n${item.text}`;
                 })
                 .join("\n\n"),

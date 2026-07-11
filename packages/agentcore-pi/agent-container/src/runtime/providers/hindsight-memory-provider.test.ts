@@ -22,27 +22,21 @@ describe("createHindsightMemoryProvider", () => {
 
     await provider.recall({ query: "launch code", limit: 10 } as any);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      1,
+    // user + space + tenant banks (U9) x list-then-recall.
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    const calledUrls = (fetchImpl as any).mock.calls.map((call: unknown[]) =>
+      String(call[0]),
+    );
+    for (const expected of [
       "https://hindsight.example.test/v1/default/banks/user_user-1/memories/list?q=launch+code&limit=25&offset=0",
-      expect.any(Object),
-    );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
       "https://hindsight.example.test/v1/default/banks/space_space-1/memories/list?q=launch+code&limit=25&offset=0",
-      expect.any(Object),
-    );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      3,
+      "https://hindsight.example.test/v1/default/banks/tenant_tenant-1/memories/list?q=launch+code&limit=25&offset=0",
       "https://hindsight.example.test/v1/default/banks/user_user-1/memories/recall",
-      expect.any(Object),
-    );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      4,
       "https://hindsight.example.test/v1/default/banks/space_space-1/memories/recall",
-      expect.any(Object),
-    );
+      "https://hindsight.example.test/v1/default/banks/tenant_tenant-1/memories/recall",
+    ]) {
+      expect(calledUrls).toContain(expected);
+    }
   });
 
   it("fans recall out to every member space, deduped against the current space, with labels (THINK-261 #6)", async () => {
@@ -84,16 +78,17 @@ describe("createHindsightMemoryProvider", () => {
 
     const result = await provider.recall({ query: "acme", limit: 10 } as any);
 
-    // 3 distinct banks (user, space-1 deduped, space-2) × list-then-recall.
+    // 4 distinct banks (user, space-1 deduped, space-2, tenant) x
+    // list-then-recall.
     const urls: string[] = (fetchImpl as any).mock.calls.map(
       (call: unknown[]) => String(call[0]),
     );
     expect(
       urls.filter((u: string) => u.includes("/memories/list")),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       urls.filter((u: string) => u.endsWith("/memories/recall")),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(urls.some((u: string) => u.includes("banks/space_space-2/"))).toBe(
       true,
     );

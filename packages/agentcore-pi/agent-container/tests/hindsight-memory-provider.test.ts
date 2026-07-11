@@ -72,11 +72,16 @@ describe("createHindsightMemoryProvider", () => {
 
     const result = await provider.recall({ query: "pi" });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    // user bank + tenant bank (U9: the Tenant Bank rides every recall) ×
+    // list-then-recall tiers.
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     expect(fetchImpl.mock.calls[0]![0]).toBe(
       "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/list?q=pi&limit=25&offset=0",
     );
-    const [url, init] = fetchImpl.mock.calls[1]!;
+    const recallCallArgs = fetchImpl.mock.calls.find((call) =>
+      String(call[0]).endsWith("banks/user_user-1/memories/recall"),
+    )!;
+    const [url, init] = recallCallArgs;
     expect(url).toBe(
       "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
     );
@@ -349,14 +354,16 @@ describe("createHindsightMemoryProvider", () => {
     });
     await provider.recall({ query: "team priorities" });
 
-    expect(
-      JSON.parse((fetchImpl.mock.calls[1]![1] as RequestInit).body as string),
-    ).toMatchObject({
+    const recallBodies = fetchImpl.mock.calls
+      .filter((call) => String(call[0]).endsWith("/memories/recall"))
+      .map((call) => JSON.parse((call[1] as RequestInit).body as string));
+    // First invocation's recalls carry the anchor; second invocation's do not.
+    expect(recallBodies[0]).toMatchObject({
       query_timestamp: "2026-06-27T17:00:00.000Z",
     });
-    expect(
-      JSON.parse((fetchImpl.mock.calls[3]![1] as RequestInit).body as string),
-    ).not.toHaveProperty("query_timestamp");
+    expect(recallBodies[recallBodies.length - 1]).not.toHaveProperty(
+      "query_timestamp",
+    );
   });
 
   it("recall rejects an empty query without calling fetch", async () => {
@@ -440,20 +447,27 @@ describe("createHindsightMemoryProvider", () => {
     await expect(provider.recall({ query: "x" })).rejects.toThrow(
       HindsightMemoryProviderError,
     );
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // Single-token query skips the list tier; recall tier hits user + tenant
+    // banks once each — no retries on 4xx.
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("retries a 5xx and succeeds on a later attempt", async () => {
     vi.useFakeTimers();
     try {
-      let recallCalls = 0;
+      let userRecallCalls = 0;
       const fetchImpl = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         const url = String(input);
         if (url.endsWith("/memories/list?q=x&limit=25&offset=0")) {
           return jsonResponse({ items: [], total: 0, limit: 25, offset: 0 });
         }
-        recallCalls += 1;
-        if (recallCalls === 1) {
+        // Tenant bank stays empty so the retry path under test (user bank
+        // 503 -> retry -> ok) is deterministic.
+        if (url.includes("/banks/tenant_")) {
+          return jsonResponse({ memory_units: [] });
+        }
+        userRecallCalls += 1;
+        if (userRecallCalls === 1) {
           return new Response("boom", { status: 503 });
         }
         return jsonResponse({ memory_units: [{ text: "ok" }] });
@@ -466,8 +480,10 @@ describe("createHindsightMemoryProvider", () => {
       // Advance through the first backoff (1s + jitter) so the retry fires.
       await vi.advanceTimersByTimeAsync(5_000);
       const result = await promise;
-      expect(fetchImpl).toHaveBeenCalledTimes(2);
-      expect(recallCalls).toBe(2);
+      // Single-token query skips the list tier: tenant recall (1) + user
+      // recall (503 then retry = 2) = 3.
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      expect(userRecallCalls).toBe(2);
       expect(result.memories).toEqual([
         { id: "unit-0", content: "ok", sourceScope: "user" },
       ]);
@@ -488,10 +504,12 @@ describe("createHindsightMemoryProvider", () => {
       const assertion = expect(promise).rejects.toThrow(
         HindsightMemoryProviderError,
       );
-      // Advance past all backoffs (1s + 3s + 9s).
+      // Advance past all backoffs (1s + 3s + 9s); both banks retry in
+      // parallel so one pass covers them.
       await vi.advanceTimersByTimeAsync(15_000);
       await assertion;
-      expect(fetchImpl).toHaveBeenCalledTimes(4); // initial + 3 retries
+      // Recall tier x 2 banks (user + tenant) x (initial + 3 retries) = 8.
+      expect(fetchImpl).toHaveBeenCalledTimes(8);
     } finally {
       vi.useRealTimers();
     }
@@ -688,7 +706,10 @@ describe("deployed recall wire format (Hindsight 0.5.0)", () => {
     });
 
     const result = await provider.recall({ query: "alice" });
-    const [, init] = fetchImpl.mock.calls[1]!;
+    const userRecallCall = fetchImpl.mock.calls.find((call) =>
+      String(call[0]).endsWith("banks/user_user-1/memories/recall"),
+    )!;
+    const [, init] = userRecallCall;
     expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({
       include: { entities: null, source_facts: {} },
     });
@@ -741,7 +762,8 @@ describe("deployed recall wire format (Hindsight 0.5.0)", () => {
 
     const result = await provider.recall({ query: "rollout", limit: 5 });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    // user + current space + tenant banks (U9) x list-then-recall.
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     expect(fetchImpl.mock.calls.map((call) => String(call[0]))).toEqual(
       expect.arrayContaining([
         "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
