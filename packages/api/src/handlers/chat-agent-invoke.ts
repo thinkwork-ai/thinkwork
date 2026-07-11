@@ -96,6 +96,7 @@ import {
 } from "../lib/goal-mode.js";
 import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import {
   fingerprintInputsFromCapabilitiesManifest,
@@ -1627,6 +1628,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // wakeup paths get it too (the parity test enforces this).
       ...buildAgentDispatchControlFields({
         documentPlates: await documentPlatesForDispatch(tenantId),
+        // THINK-261 #6: member spaces for recall fan-out + scope labels.
+        memberSpaces: await memberSpacesForDispatch(tenantId, currentUserId),
         thinkworkApiUrl: thinkworkApiUrl(),
         apiAuthSecret,
         threadId,

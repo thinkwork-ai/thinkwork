@@ -49,6 +49,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "okf_wiki_navigator_enabled",
   "document_plates",
   "withheld_connections",
+  "member_spaces",
 ] as const;
 
 export type RequiredDispatchField = (typeof REQUIRED_DISPATCH_FIELDS)[number];
@@ -57,6 +58,18 @@ export interface DispatchTurnContext {
   spaceId: string;
   tenantSlug: string | undefined;
   spaceSlug: string | null | undefined;
+}
+
+/**
+ * THINK-261 #6 / company-brain plan U6 — a space the invoking user belongs
+ * to, with the name the runtime's scope labels render. Rides the payload as
+ * `member_spaces`, a top-level dispatch field rather than a `turn_context`
+ * member: `turn_context` is null on personal threads, which is exactly where
+ * member-space recall fan-out matters most.
+ */
+export interface DispatchMemberSpace {
+  id: string;
+  name: string;
 }
 
 export interface AgentDispatchControlFieldArgs {
@@ -135,6 +148,14 @@ export interface AgentDispatchControlFieldArgs {
    * outage instead of estimating.
    */
   withheldConnections?: Array<{ slug: string; detail: string }>;
+  /**
+   * THINK-261 #6 — the invoking user's member spaces (id + name), resolved
+   * fresh per dispatch by `memberSpacesForDispatch`. The runtime fans memory
+   * recall out to these space banks and labels recalled memories with the
+   * space name. Undefined for user-less dispatches (memory is skipped there
+   * anyway) or when the best-effort lookup failed.
+   */
+  memberSpaces?: DispatchMemberSpace[];
 }
 
 export function buildAgentDispatchControlFields(
@@ -182,10 +203,10 @@ export function buildAgentDispatchControlFields(
     // workspace for the routing tree the tool navigates.
     fetch_workspace_source_enabled: Boolean(
       args.thinkworkApiUrl &&
-      args.apiAuthSecret &&
-      args.threadId &&
-      args.threadTurnId &&
-      args.renderedWorkspacePrefix,
+        args.apiAuthSecret &&
+        args.threadId &&
+        args.threadTurnId &&
+        args.renderedWorkspacePrefix,
     ),
     // Finalize-callback opt-in (plan 2026-05-22-006 U3) — chat-path only,
     // see `includeFinalizeCallback`.
@@ -208,5 +229,9 @@ export function buildAgentDispatchControlFields(
       args.apiAuthSecret && args.threadTurnId ? args.apiAuthSecret : undefined,
     okf_wiki_navigator_enabled: args.okfWikiNavigatorEnabled || undefined,
     document_plates: args.documentPlates,
+    member_spaces:
+      args.memberSpaces && args.memberSpaces.length > 0
+        ? args.memberSpaces
+        : undefined,
   };
 }

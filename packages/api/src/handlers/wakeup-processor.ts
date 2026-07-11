@@ -113,6 +113,7 @@ import {
   type AgentRuntimePiExtension,
 } from "../lib/resolve-agent-runtime-config.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { computeConfigFingerprint } from "../lib/capability-fingerprint.js";
 import {
   filterBlockedSkills,
@@ -240,8 +241,9 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -358,8 +360,9 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -848,7 +851,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Resolve Bedrock guardrail: class-level → tenant default → none
   let guardrailPayload:
-    { guardrailIdentifier: string; guardrailVersion: string } | undefined;
+    | { guardrailIdentifier: string; guardrailVersion: string }
+    | undefined;
   if (agent.guardrail_id) {
     const [gr] = await db
       .select({
@@ -1317,12 +1321,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } =
-          await import("../lib/orchestration/process-parser.js");
-        const { materializeProcess } =
-          await import("../lib/orchestration/process-materializer.js");
-        const { S3Client, GetObjectCommand } =
-          await import("@aws-sdk/client-s3");
+        const { parseProcessTemplate } = await import(
+          "../lib/orchestration/process-parser.js"
+        );
+        const { materializeProcess } = await import(
+          "../lib/orchestration/process-materializer.js"
+        );
+        const { S3Client, GetObjectCommand } = await import(
+          "@aws-sdk/client-s3"
+        );
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -1863,6 +1870,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveDocumentPlates = await documentPlatesForDispatch(
     wakeup.tenant_id,
   );
+  // THINK-261 #6: the invoker's member spaces ride the dispatch payload
+  // (BOTH builders — payload-parity rule with chat-agent-invoke) so the
+  // runtime can fan memory recall out to space banks with named labels.
+  // Best-effort; undefined degrades recall to the user bank.
+  const effectiveMemberSpaces = await memberSpacesForDispatch(
+    wakeup.tenant_id,
+    invokerUserId ?? null,
+  );
   const effectiveContextEngineEnabled =
     contextEngineEnabled &&
     isAnyToolAllowed(...toolPolicyAliases("context_engine"));
@@ -2231,6 +2246,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ...buildAgentDispatchControlFields({
         withheldConnections,
         documentPlates: effectiveDocumentPlates,
+        memberSpaces: effectiveMemberSpaces,
         thinkworkApiUrl: thinkworkApiUrl(),
         apiAuthSecret: getApiAuthSecret(),
         threadId: resolvedThreadId || undefined,
@@ -2555,7 +2571,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     ) {
       // Route response to email thread (create or reuse based on reply token context)
       const replyTokenContextId = payload?.replyTokenContextId as
-        string | undefined;
+        | string
+        | undefined;
       const emailSubject = (payload?.subject as string) || "(no subject)";
       let emailThreadId = replyTokenContextId || "";
 
@@ -2914,6 +2931,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             ...buildAgentDispatchControlFields({
               withheldConnections,
               documentPlates: effectiveDocumentPlates,
+              memberSpaces: effectiveMemberSpaces,
               thinkworkApiUrl: thinkworkApiUrl(),
               apiAuthSecret: getApiAuthSecret(),
               threadId: resolvedThreadId || undefined,
@@ -3141,8 +3159,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
