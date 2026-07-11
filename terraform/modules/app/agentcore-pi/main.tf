@@ -26,12 +26,16 @@ locals {
   chat_agent_activity_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_activity_fn_name}"
   manifest_log_fn_name        = "thinkwork-${var.stage}-api-manifest-log"
   manifest_log_fn_arn         = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.manifest_log_fn_name}"
-  pi_image_uri                = "${var.ecr_repository_url}:pi-latest"
-  okf_efs_vpc_enabled         = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
-  private_vpc_enabled         = local.okf_efs_vpc_enabled
-  private_subnet_ids          = var.okf_efs_subnet_ids
-  private_security_group_ids  = var.okf_efs_security_group_ids
-  okf_efs_mount_enabled       = local.okf_efs_vpc_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != ""
+  # Release-backed deployments use an immutable, source-derived target tag so
+  # changing the release image also changes aws_lambda_function.image_uri.
+  # Reusing pi-latest lets Terraform miss the update even after ECR is retagged.
+  pi_image_tag               = var.source_image_uri != "" ? "pi-${substr(sha256(var.source_image_uri), 0, 16)}" : "pi-latest"
+  pi_image_uri               = "${var.ecr_repository_url}:${local.pi_image_tag}"
+  okf_efs_vpc_enabled        = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+  private_vpc_enabled        = local.okf_efs_vpc_enabled
+  private_subnet_ids         = var.okf_efs_subnet_ids
+  private_security_group_ids = var.okf_efs_security_group_ids
+  okf_efs_mount_enabled      = local.okf_efs_vpc_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != ""
   okf_efs_iam_statements = local.okf_efs_mount_enabled ? [
     {
       Sid      = "OkfWikiEfsReadOnlyMount"
@@ -345,32 +349,14 @@ resource "terraform_data" "seed_pi_image" {
       set -euo pipefail
       repo_root="${abspath("${path.module}/../../../..")}"
       aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${var.account_id}.dkr.ecr.${var.region}.amazonaws.com
-      if docker pull "${var.source_image_uri}"; then
-        source_id="$(docker image inspect --format '{{.Id}}' "${var.source_image_uri}")"
-        docker tag "$source_id" "${local.pi_image_uri}"
-      else
-        # Unreachable source must not fail a stack whose target tag is already
-        # seeded (rerun after a partial deploy, or a registry that went
-        # private) — the Lambda only consumes the target ECR tag.
-        repo_name="$(basename "${var.ecr_repository_url}")"
-        if aws ecr describe-images --repository-name "$repo_name" --image-ids imageTag=pi-latest --region ${var.region} >/dev/null 2>&1; then
-          echo "WARN: could not pull ${var.source_image_uri}; ${local.pi_image_uri} is already seeded — keeping the existing image."
-          exit 0
-        fi
-        dockerfile="$repo_root/packages/agentcore-pi/agent-container/Dockerfile"
-        if [[ ! -f "$dockerfile" ]]; then
-          echo "ERROR: could not pull ${var.source_image_uri} and there is no repo checkout at $repo_root to build from." >&2
-          echo "The pinned release image must be pullable by this machine (public registry, or docker login to its registry)." >&2
-          echo "Alternatively set agentcore_pi_source_image_uri in terraform.tfvars to an image this AWS account can pull." >&2
-          exit 1
-        fi
-        echo "Unable to pull release image ${var.source_image_uri}; building Pi image from $repo_root"
-        docker build \
-          --platform linux/amd64 \
-          -f "$dockerfile" \
-          -t "${local.pi_image_uri}" \
-          "$repo_root"
+      if ! docker pull "${var.source_image_uri}"; then
+        echo "ERROR: could not pull pinned Pi release image ${var.source_image_uri}." >&2
+        echo "Refusing to retain an older runtime while reporting this release as deployed." >&2
+        echo "Authenticate the deploy runner to the source registry or provide a pullable agentcore_pi_source_image_uri." >&2
+        exit 1
       fi
+      source_id="$(docker image inspect --format '{{.Id}}' "${var.source_image_uri}")"
+      docker tag "$source_id" "${local.pi_image_uri}"
       docker push "${local.pi_image_uri}"
     EOT
   }
@@ -400,9 +386,9 @@ resource "aws_lambda_function" "agentcore_pi" {
       MANIFEST_LOG_FUNCTION_NAME             = local.manifest_log_fn_name
       HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
       # THINK-220 cutover flag — see the variable description.
-      HINDSIGHT_DATABASE_NAME                = var.hindsight_database_name
-      THINKWORK_API_URL                      = var.api_endpoint
-      API_AUTH_SECRET                        = var.api_auth_secret
+      HINDSIGHT_DATABASE_NAME = var.hindsight_database_name
+      THINKWORK_API_URL       = var.api_endpoint
+      API_AUTH_SECRET         = var.api_auth_secret
       # Plan §005 U4 — AuroraSessionStore uses the RDS Data API to persist
       # Pi's SessionData blobs against threads.session_data. Empty during
       # the first greenfield apply (DB cluster doesn't exist yet); the
