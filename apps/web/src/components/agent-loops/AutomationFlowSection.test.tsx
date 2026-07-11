@@ -1,4 +1,10 @@
-import { Children, isValidElement } from "react";
+import {
+  Children,
+  cloneElement,
+  createContext,
+  isValidElement,
+  useContext,
+} from "react";
 import type { ReactElement } from "react";
 import {
   cleanup,
@@ -48,6 +54,13 @@ vi.mock("@/components/routines/RoutineFlowCanvas", () => ({
 }));
 
 vi.mock("@thinkwork/ui", () => {
+  const SheetContext = createContext<{
+    open: boolean;
+    setOpen: (open: boolean) => void;
+  }>({
+    open: false,
+    setOpen: () => undefined,
+  });
   const findTriggerProps = (children: React.ReactNode) => {
     let props: { id?: string; "aria-label"?: string } = {};
     Children.forEach(children, (child) => {
@@ -62,6 +75,53 @@ vi.mock("@thinkwork/ui", () => {
     return props;
   };
   return {
+    Sheet: ({
+      open = false,
+      onOpenChange,
+      children,
+    }: {
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+      children: React.ReactNode;
+    }) => (
+      <SheetContext.Provider
+        value={{ open, setOpen: (next) => onOpenChange?.(next) }}
+      >
+        {children}
+      </SheetContext.Provider>
+    ),
+    SheetTrigger: ({
+      children,
+    }: {
+      children: React.ReactElement<{
+        onClick?: React.MouseEventHandler<HTMLElement>;
+      }>;
+    }) => {
+      const sheet = useContext(SheetContext);
+      return cloneElement(children, { onClick: () => sheet.setOpen(true) });
+    },
+    SheetContent: ({ children }: { children: React.ReactNode }) => {
+      const sheet = useContext(SheetContext);
+      return sheet.open ? (
+        <div role="dialog">
+          {children}
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => sheet.setOpen(false)}
+          />
+        </div>
+      ) : null;
+    },
+    SheetHeader: ({ children }: { children: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+    SheetTitle: ({ children }: { children: React.ReactNode }) => (
+      <h2>{children}</h2>
+    ),
+    SheetDescription: ({ children }: { children: React.ReactNode }) => (
+      <p>{children}</p>
+    ),
     Button: ({
       children,
       variant: _variant,
@@ -205,6 +265,10 @@ describe("AutomationFlowSection (THINK-247)", () => {
     expect(screen.getByTestId("canvas-node-work")).toBeTruthy();
     expect(screen.getByTestId("canvas-node-document")).toBeTruthy();
     expect(screen.getByTestId("canvas-node-deliver")).toBeTruthy();
+    expect(screen.queryByTestId("status-rail")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open inspector panel" }),
+    );
     expect(screen.getByTestId("status-rail")).toBeTruthy();
   });
 

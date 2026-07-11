@@ -308,6 +308,7 @@ export type AgentLoop = {
   lastRunStatus?: Maybe<AgentLoopRunStatus>;
   lastRunSummary: Scalars['AWSJSON']['output'];
   lifecycleStatus: AgentLoopLifecycleStatus;
+  linkedWorkflow?: Maybe<Workflow>;
   name: Scalars['String']['output'];
   ownerAgentId?: Maybe<Scalars['ID']['output']>;
   ownerUserId?: Maybe<Scalars['ID']['output']>;
@@ -11460,6 +11461,8 @@ export type Workflow = {
   readinessState: WorkflowReadinessState;
   runs: Array<WorkflowRun>;
   slug: Scalars['String']['output'];
+  sourceAgentLoopId?: Maybe<Scalars['ID']['output']>;
+  sourceAutomation?: Maybe<AgentLoop>;
   tenantId: Scalars['ID']['output'];
   triggers: Array<WorkflowTrigger>;
   updatedAt: Scalars['AWSDateTime']['output'];

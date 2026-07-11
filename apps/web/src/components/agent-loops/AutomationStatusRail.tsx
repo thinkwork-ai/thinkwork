@@ -11,9 +11,9 @@ import {
   formatDateTime,
   jsonRecord,
   readTargetSpec,
-  stringValue,
   titleize,
 } from "./agent-loop-utils";
+import { formatWorkflowSchedule } from "@/components/workflows/workflow-schedule-display";
 
 const TARGET_LABELS: Record<string, string> = {
   agent_thread: "Agent thread",
@@ -27,6 +27,7 @@ export function AutomationStatusRail({
   spaceOptions = [],
   memberOptions = [],
   variant = "rail",
+  showActions = true,
   onRun,
   onToggle,
 }: {
@@ -37,6 +38,7 @@ export function AutomationStatusRail({
   /** "rail" = classic bordered sidebar; "card" = the canvas right-rail card
    * matching the node inspectors (THINK-247). */
   variant?: "rail" | "card";
+  showActions?: boolean;
   onRun: () => void;
   onToggle: () => void;
 }) {
@@ -66,6 +68,7 @@ export function AutomationStatusRail({
       <div
         className={variant === "card" ? "space-y-6" : "sticky top-4 space-y-6"}
       >
+        <h3 className="text-sm font-semibold">General information</h3>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={loop.lifecycleStatus} size="sm" />
           <Badge variant="outline" className="text-xs">
@@ -85,7 +88,14 @@ export function AutomationStatusRail({
           {loop.primaryTriggerFamily === "schedule" ? (
             <RailRow
               label="Schedule"
-              value={stringValue(triggerConfig.scheduleExpression, "-")}
+              value={formatWorkflowSchedule(
+                typeof triggerConfig.scheduleExpression === "string"
+                  ? triggerConfig.scheduleExpression
+                  : null,
+                typeof triggerConfig.timezone === "string"
+                  ? triggerConfig.timezone
+                  : null,
+              )}
             />
           ) : null}
           <RailRow label="Target" value={TARGET_LABELS[target.kind]} />
@@ -113,35 +123,37 @@ export function AutomationStatusRail({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 @max-[650px]:grid-cols-1">
-          <Button
-            type="button"
-            onClick={onRun}
-            disabled={pendingAction !== null || !active}
-          >
-            {pendingAction === "run" ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <Zap className="mr-2 size-4" />
-            )}
-            Run now
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onToggle}
-            disabled={pendingAction !== null}
-          >
-            {pendingAction === "pause" ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : active ? (
-              <Pause className="mr-2 size-4" />
-            ) : (
-              <Play className="mr-2 size-4" />
-            )}
-            {active ? "Pause" : "Resume"}
-          </Button>
-        </div>
+        {showActions ? (
+          <div className="grid grid-cols-2 gap-2 @max-[650px]:grid-cols-1">
+            <Button
+              type="button"
+              onClick={onRun}
+              disabled={pendingAction !== null || !active}
+            >
+              {pendingAction === "run" ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Zap className="mr-2 size-4" />
+              )}
+              Run now
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onToggle}
+              disabled={pendingAction !== null}
+            >
+              {pendingAction === "pause" ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : active ? (
+                <Pause className="mr-2 size-4" />
+              ) : (
+                <Play className="mr-2 size-4" />
+              )}
+              {active ? "Pause" : "Resume"}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

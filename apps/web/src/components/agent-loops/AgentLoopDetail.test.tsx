@@ -72,6 +72,12 @@ vi.mock("@/components/settings/SettingsContent", () => ({
   ),
 }));
 
+vi.mock("@/components/workflows/WorkflowExecutionsTab", () => ({
+  WorkflowExecutionsTab: ({ executions }: { executions: unknown[] }) => (
+    <div data-testid="shared-executions">{executions.length} executions</div>
+  ),
+}));
+
 afterEach(() => cleanup());
 
 describe("AgentLoopDetailContent", () => {
@@ -84,13 +90,9 @@ describe("AgentLoopDetailContent", () => {
         memberOptions={[{ id: "user-9", label: "Ada" }]}
         onRun={vi.fn()}
         onToggle={vi.fn()}
-        onOpenRun={vi.fn()}
       />,
     );
 
-    expect(
-      screen.getByRole("heading", { name: "Linear dispatcher" }),
-    ).toBeTruthy();
     expect(
       screen.getByText(
         "Act as the Linear agent dispatcher for the Web Apps project.",
@@ -103,23 +105,23 @@ describe("AgentLoopDetailContent", () => {
     expect(screen.getByText("Ada")).toBeTruthy();
     expect(screen.getByText("Space")).toBeTruthy();
     expect(screen.getByText("Customer")).toBeTruthy();
+    expect(screen.getByText("General information")).toBeTruthy();
+    expect(screen.getByText("Daily at 6:00 AM · America/Chicago")).toBeTruthy();
 
-    // The tab strip lives in the AppTopBar now (THINK-247); the Activity tab
-    // renders the runs table.
+    // The tab strip lives in the AppTopBar now; Executions reuses the shared
+    // Workflow execution workspace.
     cleanup();
     render(
       <AgentLoopDetailContent
         loop={loopFixture()}
         pendingAction={null}
-        activeTab="activity"
+        activeTab="executions"
         onRun={vi.fn()}
         onToggle={vi.fn()}
-        onOpenRun={vi.fn()}
       />,
     );
-    expect(screen.getByText("Recent Runs")).toBeTruthy();
-    expect(screen.getByRole("columnheader", { name: "Started" })).toBeTruthy();
-    expect(screen.getByRole("columnheader", { name: "Cost" })).toBeTruthy();
+    expect(screen.getByTestId("shared-executions")).toBeTruthy();
+    expect(screen.getByText("1 executions")).toBeTruthy();
   });
 
   it("does not render legacy judge/evidence runtime detail", () => {
@@ -129,7 +131,6 @@ describe("AgentLoopDetailContent", () => {
         pendingAction={null}
         onRun={vi.fn()}
         onToggle={vi.fn()}
-        onOpenRun={vi.fn()}
       />,
     );
 
@@ -162,7 +163,10 @@ function loopFixture(): AgentLoopRow {
       triggerSpec: {
         family: "schedule",
         enabled: true,
-        config: { scheduleExpression: "rate(5 minutes)", timezone: "UTC" },
+        config: {
+          scheduleExpression: "cron(0 6 * * ? *)",
+          timezone: "America/Chicago",
+        },
       },
       targetSpec: {
         kind: "agent_thread",

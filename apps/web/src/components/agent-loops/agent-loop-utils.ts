@@ -14,6 +14,7 @@ import type {
   AgentLoopWorkerSpec,
   SaveAgentLoopPayload,
 } from "./agent-loop-types";
+import { formatWorkflowSchedule } from "@/components/workflows/workflow-schedule-display";
 
 export function titleize(value: string | null | undefined): string {
   if (!value) return "-";
@@ -709,24 +710,9 @@ export function customSchedulePatch(
 
 /** The closed Schedule row's value text, e.g. "Weekdays at 9:00 AM". */
 export function scheduleValueLabel(draft: AgentLoopDraft): string {
-  const parsed = parseScheduleFromDraft(draft);
-  switch (parsed.preset) {
-    case "manual":
-      return "Manual";
-    case "hourly":
-      return "Hourly";
-    case "daily":
-      return `Daily at ${formatTimeOfDay(parsed.minutesOfDay)}`;
-    case "weekdays":
-      return `Weekdays at ${formatTimeOfDay(parsed.minutesOfDay)}`;
-    case "weekly": {
-      if (parsed.expression === "rate(7 days)") return "Weekly";
-      const day =
-        WEEKDAY_OPTIONS.find((option) => option.id === parsed.weekday)?.label ??
-        "Monday";
-      return `Weekly on ${day} at ${formatTimeOfDay(parsed.minutesOfDay)}`;
-    }
-    default:
-      return "Custom";
-  }
+  if (draft.triggerFamily === "manual") return "Manual";
+  return formatWorkflowSchedule(draft.scheduleExpression, draft.timezone, {
+    includeTimezone: false,
+    customLabel: "Custom",
+  });
 }

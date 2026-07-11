@@ -129,7 +129,7 @@ export function RoutineFlowCanvas({
         colorMode={theme === "dark-blue" ? "dark" : theme}
         proOptions={{ hideAttribution: true }}
         fitView
-        fitViewOptions={{ padding: 0.18 }}
+        fitViewOptions={{ padding: 0.18, maxZoom: 1 }}
         minZoom={0.35}
         maxZoom={1.4}
         nodesDraggable={false}

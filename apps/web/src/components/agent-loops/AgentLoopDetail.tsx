@@ -22,76 +22,51 @@ import {
   TooltipTrigger,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
-import {
-  SettingsPageTitle,
-  SettingsPane,
-} from "@/components/settings/SettingsContent";
+import { SettingsPane } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { useTenant } from "@/context/TenantContext";
 import { InfoCard } from "@/components/workflows/workflow-ui";
 import {
   BoundDocumentCardQuery,
-  SpacesQuery,
+  SettingsAgentLoopLinkedWorkflowQuery,
   SettingsAgentLoopQuery,
   SettingsDeleteAgentLoopMutation,
-  SettingsGitRoutinesQuery,
   SettingsSaveAgentLoopMutation,
   SettingsTriggerAgentLoopRunMutation,
+  TriggerWorkflowRunMutation,
 } from "@/lib/graphql-queries";
 import { ArtifactShareDialog } from "@/components/artifacts/ArtifactShareDialog";
-import {
-  SettingsAgentProfilesQuery,
-  SettingsTenantAgentQuery,
-  SettingsTenantMembersQuery,
-} from "@/lib/settings-queries";
 import { AutomationFlowSection } from "./AutomationFlowSection";
 import {
   AutomationWebhookDeliveriesPanel,
   AutomationWebhookEndpointPanel,
 } from "./AutomationWebhookPanel";
-import {
-  buildMemberOptions,
-  buildRoutineOptions,
-  buildWorkerOptions,
-  buildWorkflowOptions,
-  type RoutineRow,
-  type TenantMemberRow,
-} from "./agent-loop-options";
-import { AutomationRunsList } from "./AutomationRunsList";
 import { AutomationStatusRail } from "./AutomationStatusRail";
 import type {
   AgentLoopMemberOption,
   AgentLoopRoutineOption,
   AgentLoopRow,
-  AgentLoopRunSummary,
   AgentLoopSpaceOption,
   AgentLoopWorkerOption,
   SaveAgentLoopPayload,
 } from "./agent-loop-types";
 import {
-  defaultSpaceIdFromAgentRuntimeConfig,
   draftFromVersion,
   draftToPayload,
   readTargetSpec,
   stringValue,
 } from "./agent-loop-utils";
+import { useAutomationEditorData } from "./useAutomationEditorData";
+import {
+  automationRunTarget,
+  mergeAutomationExecutions,
+} from "@/components/workflows/workflow-execution-model";
+import { WorkflowExecutionsTab } from "@/components/workflows/WorkflowExecutionsTab";
+import { buildAutomationFlowGraphFromLoop } from "./automationFlowGraph";
 
 type AgentLoopDetailData = { agentLoop?: AgentLoopRow | null };
-type AgentProfilesData = {
-  agentProfiles?: Array<{
-    id: string;
-    name: string;
-    description?: string | null;
-    enabled: boolean;
-  }>;
+type AgentLoopLinkData = {
+  agentLoop?: Pick<AgentLoopRow, "id" | "linkedWorkflow"> | null;
 };
-type SpacesData = { spaces?: AgentLoopSpaceOption[] };
-type TenantAgentData = {
-  agent?: { id: string; name?: string | null; runtimeConfig?: unknown } | null;
-};
-type RoutinesData = { routines?: RoutineRow[] };
-type MembersData = { tenantMembers?: TenantMemberRow[] };
-
 export function AgentLoopDetail({
   agentLoopId,
   routeScope = "settings",
@@ -99,7 +74,16 @@ export function AgentLoopDetail({
   agentLoopId: string;
   routeScope?: "main" | "settings";
 }) {
-  const { tenantId, userId } = useTenant();
+  const {
+    tenantId,
+    userId,
+    workerOptions,
+    spaceOptions,
+    routineOptions,
+    workflowOptions,
+    memberOptions,
+    defaultSpaceId,
+  } = useAutomationEditorData();
   const navigate = useNavigate();
   const [pendingAction, setPendingAction] = useState<
     "run" | "pause" | "archive" | "refresh" | null
@@ -111,80 +95,37 @@ export function AgentLoopDetail({
     variables: { id: agentLoopId, runLimit: 25 },
     requestPolicy: "cache-and-network",
   });
-  const [agentResult] = useQuery<TenantAgentData>({
-    query: SettingsTenantAgentQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
-  });
-  const [profilesResult] = useQuery<AgentProfilesData>({
-    query: SettingsAgentProfilesQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
-  });
-  const [spacesResult] = useQuery<SpacesData>({
-    query: SpacesQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
-  });
-  const [routinesResult] = useQuery<RoutinesData>({
-    query: SettingsGitRoutinesQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
-  });
-  const [membersResult] = useQuery<MembersData>({
-    query: SettingsTenantMembersQuery,
-    variables: { tenantId: tenantId ?? "" },
-    pause: !tenantId,
+  const [linkResult] = useQuery<AgentLoopLinkData>({
+    query: SettingsAgentLoopLinkedWorkflowQuery,
+    variables: { id: agentLoopId, runLimit: 25 },
+    requestPolicy: "cache-and-network",
   });
   const [, saveAgentLoop] = useMutation(SettingsSaveAgentLoopMutation);
   const [, deleteAgentLoop] = useMutation(SettingsDeleteAgentLoopMutation);
   const [, triggerRun] = useMutation(SettingsTriggerAgentLoopRunMutation);
+  const [, triggerWorkflowRun] = useMutation(TriggerWorkflowRunMutation);
 
-  const loop = loopResult.data?.agentLoop ?? null;
-  const workerOptions = useMemo(
+  const baseLoop = loopResult.data?.agentLoop ?? null;
+  const loop = useMemo(
     () =>
-      buildWorkerOptions({
-        agent: agentResult.data?.agent ?? null,
-        profiles: profilesResult.data?.agentProfiles ?? [],
-      }),
-    [agentResult.data?.agent, profilesResult.data?.agentProfiles],
+      baseLoop
+        ? {
+            ...baseLoop,
+            linkedWorkflow: linkResult.data?.agentLoop?.linkedWorkflow ?? null,
+          }
+        : null,
+    [baseLoop, linkResult.data?.agentLoop?.linkedWorkflow],
   );
-  const spaceOptions = useMemo(
-    () => spacesResult.data?.spaces ?? [],
-    [spacesResult.data?.spaces],
-  );
-  const routineOptions = useMemo(
-    () => buildRoutineOptions(routinesResult.data?.routines ?? []),
-    [routinesResult.data?.routines],
-  );
-  const workflowOptions = useMemo(
-    () => buildWorkflowOptions(routinesResult.data?.routines ?? []),
-    [routinesResult.data?.routines],
-  );
-  const memberOptions = useMemo(
-    () =>
-      buildMemberOptions(
-        membersResult.data?.tenantMembers ?? [],
-        userId ? { id: userId, label: "You" } : null,
-      ),
-    [membersResult.data?.tenantMembers, userId],
-  );
-  const defaultSpaceId = useMemo(
-    () =>
-      defaultSpaceIdFromAgentRuntimeConfig(
-        agentResult.data?.agent?.runtimeConfig,
-      ),
-    [agentResult.data?.agent?.runtimeConfig],
-  );
-
   const automationsHref =
     routeScope === "main" ? "/automations" : "/settings/automations";
   const detailHref = `${automationsHref}/${agentLoopId}`;
-  // THINK-247: Definition | Activity render as an AppTopBar tab strip (like
+  // THINK-247: Definition | Executions render as an AppTopBar tab strip (like
   // Memory), driven by the `tab` search param.
   const search = useSearch({ strict: false }) as { tab?: string };
-  const activeTab: "definition" | "activity" =
-    search.tab === "activity" ? "activity" : "definition";
+  const activeTab: "definition" | "executions" =
+    search.tab === "activity" || search.tab === "executions"
+      ? "executions"
+      : "definition";
 
   usePageHeaderActions({
     title: loop?.name ?? "Automation",
@@ -200,9 +141,9 @@ export function AgentLoopDetail({
       },
       {
         to: detailHref,
-        label: "Activity",
-        search: { tab: "activity" },
-        active: activeTab === "activity",
+        label: "Executions",
+        search: { tab: "executions" },
+        active: activeTab === "executions",
       },
     ],
     action: loop ? (
@@ -234,6 +175,21 @@ export function AgentLoopDetail({
     setPendingAction("run");
     setActionError(null);
     try {
+      const target = automationRunTarget(row);
+      if (target.kind === "workflow") {
+        const workflowResult = await triggerWorkflowRun({
+          input: {
+            workflowId: target.id,
+            triggerSource: "automation_run_now",
+            input: { source: "automation_run_now" },
+          },
+        });
+        if (workflowResult.error) throw workflowResult.error;
+        toast.success("Automation run queued");
+        refetchLoop({ requestPolicy: "network-only" });
+        navigate({ to: detailHref, search: { tab: "executions" } });
+        return;
+      }
       const result = await triggerRun({
         input: {
           agentLoopId: row.id,
@@ -360,16 +316,6 @@ export function AgentLoopDetail({
         onSave={saveLoop}
         onRun={() => void runNow(loop)}
         onToggle={() => void toggleActive(loop, workerOptions)}
-        onOpenRun={(run) =>
-          routeScope === "settings"
-            ? navigate({
-                to: "/settings/agent-loops/$agentLoopId/runs/$runId",
-                params: { agentLoopId: loop.id, runId: run.id },
-              })
-            : run.threadId
-              ? navigate({ to: "/threads/$id", params: { id: run.threadId } })
-              : undefined
-        }
       />
     </>
   );
@@ -391,7 +337,6 @@ export function AgentLoopDetailContent({
   onSave,
   onRun,
   onToggle,
-  onOpenRun,
 }: {
   loop: AgentLoopRow;
   pendingAction: string | null;
@@ -407,11 +352,10 @@ export function AgentLoopDetailContent({
   defaultSpaceId?: string | null;
   currentUserId?: string | null;
   /** Which AppTopBar tab is active; the strip itself renders in the header. */
-  activeTab?: "definition" | "activity";
+  activeTab?: "definition" | "executions";
   onSave?: (payload: SaveAgentLoopPayload) => Promise<void>;
   onRun: () => void;
   onToggle: () => void;
-  onOpenRun: (run: AgentLoopRunSummary) => void;
 }) {
   const version = loop.currentVersion;
   const target = readTargetSpec(version);
@@ -419,14 +363,24 @@ export function AgentLoopDetailContent({
   const builderThreadId = stringValue(sourceMetadata.builderThreadId);
   const webhookEndpoint = loop.webhookEndpoint ?? null;
   const webhookDeliveries = loop.webhookDeliveries ?? [];
+  const executionGraph = useMemo(
+    () =>
+      buildAutomationFlowGraphFromLoop({
+        loop,
+        workerOptions,
+        spaceOptions,
+        defaultSpaceId,
+        currentUserId,
+      }),
+    [currentUserId, defaultSpaceId, loop, spaceOptions, workerOptions],
+  );
+  const executions = useMemo(
+    () => mergeAutomationExecutions(loop.linkedWorkflow?.runs, loop.runs),
+    [loop.linkedWorkflow?.runs, loop.runs],
+  );
 
   return (
-    <div className="@container flex h-full min-h-0 w-full flex-col overflow-y-auto px-6 pb-4 pt-6">
-      <SettingsPageTitle
-        title={loop.name}
-        description={loop.description ?? undefined}
-      />
-
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-4">
       {actionError ? (
         <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           {actionError}
@@ -513,13 +467,11 @@ export function AgentLoopDetailContent({
           ) : null}
         </div>
       ) : (
-        <div className="space-y-8">
-          <section>
-            <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
-              Recent Runs
-            </h2>
-            <AutomationRunsList runs={loop.runs ?? []} onOpenRun={onOpenRun} />
-          </section>
+        <div className="flex min-h-[620px] flex-1 flex-col gap-6">
+          <WorkflowExecutionsTab
+            executions={executions}
+            graph={executionGraph}
+          />
 
           {webhookEndpoint ? (
             <AutomationWebhookDeliveriesPanel deliveries={webhookDeliveries} />
@@ -565,8 +517,8 @@ function BoundDocumentCard({
 
   const stale = Boolean(
     artifact?.refreshFailedAt &&
-    (!artifact.lastRefreshAt ||
-      new Date(artifact.refreshFailedAt) > new Date(artifact.lastRefreshAt)),
+      (!artifact.lastRefreshAt ||
+        new Date(artifact.refreshFailedAt) > new Date(artifact.lastRefreshAt)),
   );
 
   return (

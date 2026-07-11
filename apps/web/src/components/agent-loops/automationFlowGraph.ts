@@ -4,9 +4,15 @@ import type {
   RoutineGraphNode,
 } from "@/components/routines/routineAslGraph";
 import type { AgentLoopDraft } from "./agent-loop-types";
+import type {
+  AgentLoopRow,
+  AgentLoopSpaceOption,
+  AgentLoopWorkerOption,
+} from "./agent-loop-types";
 import {
   parseDeliveryRecipients,
   scheduleValueLabel,
+  draftFromVersion,
 } from "./agent-loop-utils";
 
 /**
@@ -46,6 +52,23 @@ export interface BuildAutomationFlowGraphInput {
   targetLabel?: string | null;
   /** Title of the bound document once known (existing pick or captured). */
   boundDocumentTitle?: string | null;
+}
+
+export function buildAutomationFlowGraphFromLoop(input: {
+  loop: AgentLoopRow;
+  workerOptions?: AgentLoopWorkerOption[];
+  spaceOptions?: AgentLoopSpaceOption[];
+  defaultSpaceId?: string | null;
+  currentUserId?: string | null;
+}): RoutineAslGraph {
+  const draft = draftFromVersion(
+    input.loop,
+    input.workerOptions ?? [],
+    input.spaceOptions ?? [],
+    input.defaultSpaceId,
+    input.currentUserId ?? "",
+  );
+  return buildAutomationFlowGraph({ draft });
 }
 
 export function buildAutomationFlowGraph(

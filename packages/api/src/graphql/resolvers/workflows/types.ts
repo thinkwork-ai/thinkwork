@@ -1,5 +1,6 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import {
+  agentLoops,
   routineAslVersions,
   routines,
   workflowEngineBindings,
@@ -12,7 +13,10 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
-import { requireTenantMember } from "../core/authz.js";
+import {
+  requireAdminOrServiceCaller,
+  requireTenantMember,
+} from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 type TenantScoped = {
@@ -22,6 +26,7 @@ type TenantScoped = {
 
 type WorkflowParent = TenantScoped & {
   id?: string;
+  sourceAgentLoopId?: string | null;
   currentVersionId?: string | null;
   lastRunId?: string | null;
 };
@@ -99,6 +104,28 @@ export function normalizeWorkflowEnum(value?: string | null): string | null {
 }
 
 export const workflowTypeResolvers = {
+  sourceAutomation: async (
+    workflow: WorkflowParent,
+    _args: unknown,
+    ctx: GraphQLContext,
+  ) => {
+    if (!workflow.sourceAgentLoopId) return null;
+    const tenantId = workflow.tenantId ?? workflow.tenant_id ?? null;
+    if (!tenantId) return null;
+    await requireAdminOrServiceCaller(ctx, tenantId, "read_agent_loop");
+    const [row] = await db
+      .select()
+      .from(agentLoops)
+      .where(
+        and(
+          eq(agentLoops.id, workflow.sourceAgentLoopId),
+          eq(agentLoops.tenant_id, tenantId),
+        ),
+      )
+      .limit(1);
+    return row ? snakeToCamel(row) : null;
+  },
+
   currentVersion: async (workflow: WorkflowParent) => {
     if (!workflow.currentVersionId) return null;
     const [row] = await db

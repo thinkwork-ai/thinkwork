@@ -262,7 +262,7 @@ describe("AgentLoopInventory", () => {
   });
 
   it("derives Trigger and Target column labels from the version spec", () => {
-    expect(triggerLabel(loop())).toBe("rate(7 days)");
+    expect(triggerLabel(loop())).toBe("Weekly");
     expect(targetLabel(loop())).toBe("Agent thread");
     expect(triggerLabel(loop({ primaryTriggerFamily: "webhook" }))).toBe(
       "Webhook",

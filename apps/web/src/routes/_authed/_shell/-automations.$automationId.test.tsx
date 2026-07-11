@@ -25,6 +25,8 @@ describe("main Automations shell routes", () => {
     expect(route).toContain("AgentLoopDetail");
     expect(route).toContain('routeScope="main"');
     expect(route).toContain("automationId");
+    expect(route).toContain('tab?: "executions"');
+    expect(route).toContain('search.tab === "activity"');
     expect(route).not.toContain("$scheduledJobId");
   });
 });

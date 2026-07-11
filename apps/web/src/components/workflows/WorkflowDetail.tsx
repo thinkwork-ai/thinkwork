@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Info, Pencil, RefreshCw, Trash2 } from "lucide-react";
@@ -28,8 +28,20 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   DeleteWorkflowMutation,
+  SettingsAgentLoopQuery,
+  SettingsAgentLoopsQuery,
+  SettingsSaveAgentLoopMutation,
   SettingsWorkflowQuery,
+  SettingsWorkflowSourceAutomationQuery,
 } from "@/lib/graphql-queries";
+import { AutomationFlowSection } from "@/components/agent-loops/AutomationFlowSection";
+import { AutomationStatusRail } from "@/components/agent-loops/AutomationStatusRail";
+import type {
+  AgentLoopRow,
+  SaveAgentLoopPayload,
+} from "@/components/agent-loops/agent-loop-types";
+import { useAutomationEditorData } from "@/components/agent-loops/useAutomationEditorData";
+import { buildAutomationFlowGraphFromLoop } from "@/components/agent-loops/automationFlowGraph";
 import { WorkflowDefinitionTab } from "./WorkflowDefinitionTab";
 import { WorkflowExecutionsTab } from "./WorkflowExecutionsTab";
 import { WorkflowFormDialog } from "./WorkflowFormDialog";
@@ -49,6 +61,8 @@ import {
   type WorkflowRunSummary,
   WorkflowReadinessBadge,
 } from "./workflow-ui";
+import { buildWorkflowDefinitionGraph } from "./workflowDefinitionGraph";
+import { mergeAutomationExecutions } from "./workflow-execution-model";
 
 type WorkflowTrigger = {
   id: string;
@@ -92,8 +106,15 @@ type WorkflowDetailData = {
     triggers: WorkflowTrigger[];
     bindings: WorkflowBinding[];
     runs: WorkflowRunSummary[];
+    sourceAutomation?: AgentLoopRow | null;
     createdAt: string;
     updatedAt: string;
+  } | null;
+};
+type WorkflowSourceAutomationData = {
+  workflow?: {
+    id: string;
+    sourceAutomation?: AgentLoopRow | null;
   } | null;
 };
 
@@ -107,19 +128,73 @@ export function WorkflowDetail({
   tab?: WorkflowDetailTab;
 }) {
   const navigate = useNavigate();
+  const editor = useAutomationEditorData();
   const [result, refetch] = useQuery<WorkflowDetailData>({
     query: SettingsWorkflowQuery,
     variables: { id: workflowId, runLimit: 25 },
     requestPolicy: "cache-and-network",
   });
+  const [sourceAutomationResult, refetchSourceAutomation] =
+    useQuery<WorkflowSourceAutomationData>({
+      query: SettingsWorkflowSourceAutomationQuery,
+      variables: { id: workflowId, runLimit: 25 },
+      requestPolicy: "cache-and-network",
+    });
+  const baseWorkflow = result.data?.workflow ?? null;
+  const legacyAutomationPrefix = useMemo(() => {
+    if (!sourceAutomationResult.error) return null;
+    const match = /^automation-([0-9a-f]{8})$/i.exec(baseWorkflow?.slug ?? "");
+    return match?.[1]?.toLowerCase() ?? null;
+  }, [baseWorkflow?.slug, sourceAutomationResult.error]);
+  const [legacyInventoryResult] = useQuery<{ agentLoops?: AgentLoopRow[] }>({
+    query: SettingsAgentLoopsQuery,
+    variables: {
+      tenantId: editor.tenantId ?? "",
+      limit: 100,
+    },
+    pause: !editor.tenantId || !legacyAutomationPrefix,
+    requestPolicy: "cache-and-network",
+  });
+  const legacySourceId = useMemo(() => {
+    if (!legacyAutomationPrefix) return null;
+    const matches = (legacyInventoryResult.data?.agentLoops ?? []).filter(
+      (loop) => loop.id.toLowerCase().startsWith(legacyAutomationPrefix),
+    );
+    return matches.length === 1 ? matches[0].id : null;
+  }, [legacyAutomationPrefix, legacyInventoryResult.data?.agentLoops]);
+  const [legacySourceResult] = useQuery<{ agentLoop?: AgentLoopRow | null }>({
+    query: SettingsAgentLoopQuery,
+    variables: { id: legacySourceId ?? "", runLimit: 25 },
+    pause: !legacySourceId,
+    requestPolicy: "cache-and-network",
+  });
   const [deleteState, deleteWorkflowMutation] = useMutation(
     DeleteWorkflowMutation,
+  );
+  const [, saveSourceAutomationMutation] = useMutation(
+    SettingsSaveAgentLoopMutation,
   );
   const [editOpen, setEditOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const workflow = result.data?.workflow ?? null;
+  const workflow = useMemo(
+    () =>
+      baseWorkflow
+        ? {
+            ...baseWorkflow,
+            sourceAutomation:
+              sourceAutomationResult.data?.workflow?.sourceAutomation ??
+              legacySourceResult.data?.agentLoop ??
+              null,
+          }
+        : null,
+    [
+      baseWorkflow,
+      legacySourceResult.data?.agentLoop,
+      sourceAutomationResult.data?.workflow?.sourceAutomation,
+    ],
+  );
   const binding = primaryBinding(workflow?.bindings);
   const readinessReason = readinessReasonText(workflow?.readinessReasons);
   const routineId =
@@ -130,6 +205,36 @@ export function WorkflowDetail({
     (trigger) => trigger.triggerFamily === workflow.primaryTriggerFamily,
   );
   const triggerConfig = jsonRecord(primaryTrigger?.triggerConfig);
+  const executionGraph = useMemo(
+    () =>
+      workflow?.sourceAutomation
+        ? buildAutomationFlowGraphFromLoop({
+            loop: workflow.sourceAutomation,
+            workerOptions: editor.workerOptions,
+            spaceOptions: editor.spaceOptions,
+            defaultSpaceId: editor.defaultSpaceId,
+            currentUserId: editor.userId,
+          })
+        : buildWorkflowDefinitionGraph(
+            workflow?.currentVersion?.definitionSnapshot,
+          ),
+    [
+      editor.defaultSpaceId,
+      editor.spaceOptions,
+      editor.userId,
+      editor.workerOptions,
+      workflow?.currentVersion?.definitionSnapshot,
+      workflow?.sourceAutomation,
+    ],
+  );
+  const executions = useMemo(
+    () =>
+      mergeAutomationExecutions(
+        workflow?.runs ?? [],
+        workflow?.sourceAutomation?.runs ?? [],
+      ),
+    [workflow?.runs, workflow?.sourceAutomation?.runs],
+  );
 
   async function deleteWorkflow() {
     if (!workflow) return;
@@ -140,6 +245,14 @@ export function WorkflowDetail({
     }
     toast.success("Workflow deleted.");
     void navigate({ to: "/settings/workflows" });
+  }
+
+  async function saveSourceAutomation(payload: SaveAgentLoopPayload) {
+    const response = await saveSourceAutomationMutation({ input: payload });
+    if (response.error) throw response.error;
+    refetch({ requestPolicy: "network-only" });
+    refetchSourceAutomation({ requestPolicy: "network-only" });
+    toast.success("Automation saved");
   }
 
   const headerIcon =
@@ -265,10 +378,31 @@ export function WorkflowDetail({
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-4">
       {tab === "executions" ? (
-        <WorkflowExecutionsTab
-          workflowId={workflow.id}
-          runs={workflow.runs}
-          definition={workflow.currentVersion?.definitionSnapshot}
+        <WorkflowExecutionsTab executions={executions} graph={executionGraph} />
+      ) : workflow.sourceAutomation && editor.tenantId ? (
+        <AutomationFlowSection
+          tenantId={editor.tenantId}
+          loop={workflow.sourceAutomation}
+          workerOptions={editor.workerOptions}
+          spaceOptions={editor.spaceOptions}
+          routineOptions={editor.routineOptions}
+          workflowOptions={editor.workflowOptions}
+          memberOptions={editor.memberOptions}
+          defaultSpaceId={editor.defaultSpaceId}
+          currentUserId={editor.userId}
+          statusRail={
+            <AutomationStatusRail
+              loop={workflow.sourceAutomation}
+              pendingAction={null}
+              spaceOptions={editor.spaceOptions}
+              memberOptions={editor.memberOptions}
+              variant="card"
+              showActions={false}
+              onRun={() => undefined}
+              onToggle={() => undefined}
+            />
+          }
+          onSave={saveSourceAutomation}
         />
       ) : (
         <WorkflowDefinitionTab

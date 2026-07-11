@@ -66,6 +66,9 @@ type AgentLoop {
   currentVersionId: ID
   currentVersionNumber: Int
   currentVersion: AgentLoopVersion
+  # Canonical Workflow projection for converged Automations. Null for legacy
+  # or non-report Automations that have not been projected.
+  linkedWorkflow: Workflow
   lastRunId: ID
   lastRunStatus: AgentLoopRunStatus
   lastRunAt: AWSDateTime

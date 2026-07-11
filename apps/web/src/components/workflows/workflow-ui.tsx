@@ -20,11 +20,18 @@ export type WorkflowRunSummary = {
   status: string;
   triggerFamily: string;
   triggerSource?: string | null;
+  actorType?: string | null;
+  actorId?: string | null;
+  idempotencyKey?: string | null;
+  correlationId?: string | null;
+  backendExecutionId?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   lastEventAt?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  totalCostUsdCents?: number | null;
+  createdAt: string;
 };
 
 export function titleize(value: string | null | undefined): string {

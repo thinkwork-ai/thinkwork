@@ -353,6 +353,7 @@ export const SettingsWorkflowQuery = gql`
         triggerSource
         actorType
         actorId
+        idempotencyKey
         correlationId
         backendExecutionId
         startedAt
@@ -361,9 +362,74 @@ export const SettingsWorkflowQuery = gql`
         errorCode
         errorMessage
         totalCostUsdCents
+        createdAt
       }
       createdAt
       updatedAt
+    }
+  }
+`;
+
+export const SettingsWorkflowSourceAutomationQuery = gql`
+  query SettingsWorkflowSourceAutomation($id: ID!, $runLimit: Int) {
+    workflow(id: $id) {
+      id
+      sourceAutomation {
+        id
+        tenantId
+        name
+        slug
+        description
+        lifecycleStatus
+        enabled
+        ownerUserId
+        ownerAgentId
+        runAsUserId
+        spaceId
+        primaryTriggerFamily
+        currentVersionId
+        currentVersionNumber
+        lastRunId
+        lastRunStatus
+        lastRunAt
+        lastRunSummary
+        currentVersion {
+          id
+          versionNumber
+          versionStatus
+          triggerSpec
+          routineActionsSpec
+          targetSpec
+          sourceMetadata
+          publishedAt
+          createdAt
+        }
+        runs(limit: $runLimit) {
+          id
+          threadId
+          status
+          triggerFamily
+          triggerSource
+          scheduledJobId
+          actorType
+          actorId
+          idempotencyKey
+          correlationId
+          currentIteration
+          terminalReason
+          inputSummary
+          outputSummary
+          startedAt
+          finishedAt
+          lastEventAt
+          errorCode
+          errorMessage
+          totalCostUsdCents
+          createdAt
+        }
+        createdAt
+        updatedAt
+      }
     }
   }
 `;
@@ -660,6 +726,7 @@ export const SettingsAgentLoopQuery = gql`
         scheduledJobId
         actorType
         actorId
+        idempotencyKey
         correlationId
         currentIteration
         terminalReason
@@ -675,6 +742,43 @@ export const SettingsAgentLoopQuery = gql`
       }
       createdAt
       updatedAt
+    }
+  }
+`;
+
+export const SettingsAgentLoopLinkedWorkflowQuery = gql`
+  query SettingsAgentLoopLinkedWorkflow($id: ID!, $runLimit: Int) {
+    agentLoop(id: $id) {
+      id
+      linkedWorkflow {
+        id
+        name
+        readinessState
+        currentVersionNumber
+        currentVersion {
+          id
+          versionNumber
+          definitionSnapshot
+        }
+        runs(limit: $runLimit) {
+          id
+          status
+          triggerFamily
+          triggerSource
+          actorType
+          actorId
+          idempotencyKey
+          correlationId
+          backendExecutionId
+          startedAt
+          finishedAt
+          lastEventAt
+          errorCode
+          errorMessage
+          totalCostUsdCents
+          createdAt
+        }
+      }
     }
   }
 `;
@@ -740,6 +844,20 @@ export const SettingsAgentLoopRunQuery = gql`
       }
       createdAt
       updatedAt
+    }
+  }
+`;
+
+export const TriggerWorkflowRunMutation = gql`
+  mutation TriggerWorkflowRun($input: TriggerWorkflowRunInput!) {
+    triggerWorkflowRun(input: $input) {
+      id
+      workflowId
+      status
+      triggerFamily
+      triggerSource
+      startedAt
+      createdAt
     }
   }
 `;
