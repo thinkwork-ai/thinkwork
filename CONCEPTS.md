@@ -339,3 +339,17 @@ The policy for retroactively correcting historical cost events: backfilled/repri
 
 ### System Spend
 Per-tenant cost events written by background Bedrock consumers (wiki compile, conformance judge, KG extraction, model converse, dreaming), tagged with a source category naming the consumer rather than attributed to a thread or turn. Lets dashboards split conversation spend from background/system spend while keeping tenant totals reconcilable with AWS billing.
+
+## Channels
+
+### ChannelPort
+The thin ThinkWork-owned seam behind which the external channel adapter (Vercel Chat SDK) is confined — normalize events, resolve conversation keys, render parts, post and edit messages. It is an ownership boundary, not reversal insurance: adapter types and imports stay inside the channel handler layer (lint-enforced), and core thread, identity, and HITL code carries no adapter dependency. ThinkWork remains the system of record on the other side of the seam (THINK-84).
+
+### Ingress Ledger
+The durable per-delivery record for external channel webhooks: one row per delivery carrying a resolution status (ok, dedupe, unverified, unknown team, unlinked user, dropped, error). One artifact serves two roles — the idempotency store that absorbs platform redeliveries, and the operator observability surface answering "did my message arrive and what happened to it."
+
+### Portal / Plumbed Binding
+The two channel→Space routing modes (named after Matrix bridge conventions). Portal is the zero-config default: channel-originated threads land in the tenant's auto-provisioned general Space. Plumbed is an explicit operator-created binding routing a specific external channel to a specific Space. The binding registry is also the designed seam for someday relaxing the workspace-once-per-tenant constraint by making the channel, not the workspace, the unit of tenant resolution.
+
+### Step-Up Approval
+A channel-delivered HITL approval whose risk tier (spend, publishing, external communication) exceeds what a channel card tap may authorize — a tap authenticates only a platform user id, not a ThinkWork principal. The card instead deep-links into an authenticated ThinkWork session where the approval settles; low-tier answers settle in-channel via single-use idempotent tokens.
