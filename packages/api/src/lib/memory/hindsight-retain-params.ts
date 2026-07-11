@@ -22,6 +22,38 @@ export function buildThreadRetainOptions(
   });
 }
 
+/**
+ * THINK-261 / company-brain plan U8 — the space-bank copy of an ordinary
+ * thread conversation. Written only when the thread's space opted into
+ * conversation sharing (`spaces.config.memorySharing === "conversations"`);
+ * the personal copy in the user bank keeps `buildThreadRetainOptions`.
+ */
+export function buildSpaceThreadRetainOptions(input: {
+  spaceId: string;
+  messages: RetainConversationRequest["messages"];
+}): HindsightRetainOptions {
+  const spaceTag = `space:${input.spaceId}`;
+  return retainOptions({
+    timestamp: latestIsoTimestamp(
+      input.messages.map((message) => message.timestamp),
+    ),
+    tags: [
+      spaceTag,
+      "source:thread",
+      "surface:pi",
+      "scope:space",
+      "scope:thread",
+    ],
+    documentTags: [spaceTag, "source:thread", "scope:space", "scope:thread"],
+    observationScopes: [
+      [spaceTag],
+      ["source:thread"],
+      ["scope:space"],
+      ["scope:thread"],
+    ],
+  });
+}
+
 export function buildDailyMemoryRetainOptions(
   date: string,
 ): HindsightRetainOptions {

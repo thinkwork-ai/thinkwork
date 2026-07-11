@@ -74,7 +74,7 @@ R-IDs are stable and continuous across capability groups (grouping is by concern
 **Team memory**
 
 - R6. Pi runtime recall fans out from the user's bank to the space banks of **all spaces the user is a member of**, with each returned memory carrying an agent-visible scope label (personal / team: space / company) that reflect output preserves.
-- R12. Conversation retain dual-writes to the thread's space bank when the thread belongs to a space **and the thread's visibility is space-wide** — restricted-visibility threads (mention-invite, work-item-owned) stay user-bank-only, so team banks are populated by ordinary work without bypassing the per-thread access gate.
+- R12. Conversation retain dual-writes to the thread's space bank only when the space has **opted into conversation sharing** (`spaces.config.memorySharing = "conversations"`; default is explicit-only). Implementation surfaced that ALL thread visibility is participant-based — space membership grants no thread access — so a per-thread visibility gate would match nothing; the per-space admin opt-in makes the information flow a deliberate team choice instead.
 
 **Tenant Bank pilot (gated on R4 pass and R5 verified)**
 
@@ -144,6 +144,7 @@ R-IDs are stable and continuous across capability groups (grouping is by concern
 - KTD-10. **Retain-volume changes are gated on the memory-eval harness.** U8 (dual-write) runs the frozen 18-thread fixture at `packages/api/scripts/memory-eval/` before/after; material degradation is a stop condition.
 - KTD-11. **The spike uses vendor APIs directly and tears down via the wipe runbook.** The adapter exposes no mental-model CRUD (read-only evidence parsing), so the spike calls Hindsight's HTTP API for mental models; banks materialize implicitly on first write; teardown follows `packages/api/scripts/wipe-external-memory-stores.ts` / `docs/runbooks/hindsight-wipe-and-reload.md` (dry-run first, delete by `bank_id`).
 - KTD-12. **Dual-write beats single-write routing for space threads because personal recall must survive leaving the space.** Routing space-thread retain only to the space bank would halve retain volume and avoid duplicate surfacing, but a user's recall of their own conversations would then depend on continued space membership. Dual-write keeps the personal copy durable; the doubled retain volume is watched per System-Wide Impact, and the duplicate surfacing it creates is resolved at U7's merge dedupe.
+- KTD-13. **The dual-write gate is per-space opt-in, not per-thread visibility.** `callerVisibleThreadPredicate` makes every thread's visibility participant-based and deliberately excludes space membership as a grant, so the originally decided "space-wide-visible threads only" rule matched zero threads, and an unconditional dual-write would have leaked every thread past its participant gate. Instead, a space admin opts the team in via `spaces.config.memorySharing = "conversations"` (existing jsonb — no schema change); the retain door reads it fail-closed. Confirmed with the plan author 2026-07-11 as the replacement for the review-gate visibility rule.
 
 ### High-Level Technical Design
 
@@ -314,11 +315,11 @@ flowchart LR
 - **Requirements:** R12.
 - **Dependencies:** U2 (suppression first, so dual-write doesn't double the junk).
 - **Files:** `packages/api/src/handlers/memory-retain.ts` (+ `packages/api/src/lib/memory/hindsight-retain-params.ts` if tags need a space variant), `memory-retain.test.ts`.
-- **Approach:** When the retained thread has a `spaceId` **and its visibility equals full space membership** (per the `callerVisibleThreadPredicate` model — threads gated via `thread_participants` or work-item ownership are excluded), retain the conversation to `space_<spaceId>` in addition to `user_<userId>`, mirroring the existing high-confidence-fact scope split. Handle per-bank retain failures independently and loudly (0.8.4 returns 500s). Do not touch `retain_custom_instructions` (known failed lever).
+- **Approach:** Per KTD-13: when the retained thread has a `spaceId` and the space's `config.memorySharing` is `"conversations"` (fail-closed lookup), retain the conversation to `space_<spaceId>` in addition to `user_<userId>` with space-scoped tags. The space write runs after the personal write succeeds; its failure is loud and recorded on the attempt (`spaceDualWrite: failed`) but never fails the personal retain. Eval traffic never dual-writes. Do not touch `retain_custom_instructions` (known failed lever).
 - **Execution note:** Before/after run of the memory-eval fixture (`packages/api/scripts/memory-eval/`) is part of this unit's proof; material degradation is a stop condition.
 - **Test scenarios:**
-  - Space-wide-visibility space thread → adapter called for both banks with the same transcript, space-scoped tags on the space write.
-  - Restricted-visibility space thread (participants-gated or work-item-owned) → single user-bank retain; a non-participant space member's recall never surfaces its content.
+  - Opted-in space (`config.memorySharing = "conversations"`) → adapter called for both banks with the same transcript, space-scoped tags on the space write.
+  - Non-opted-in space (default) → single user-bank retain; a space member's recall never surfaces another member's conversations.
   - Personal thread → single user-bank retain (regression).
   - Space-bank retain 500s → error surfaced/classified; user-bank retain still completes (and vice versa).
   - Suppressed traffic (smoke, reflect-exhaust, eval) dual-writes nothing.

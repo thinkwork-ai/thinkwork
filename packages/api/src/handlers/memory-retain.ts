@@ -18,15 +18,53 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb, getHindsightDb, hindsightSql } from "@thinkwork/database-pg";
-import { agents, messages } from "@thinkwork/database-pg/schema";
+import { agents, messages, spaces } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
 import {
   isEvalTrafficMetadata,
   isReflectExhaustMetadata,
 } from "../lib/memory/eval-traffic.js";
+
+/**
+ * THINK-261 / company-brain plan U8 — per-space conversation-sharing opt-in.
+ * Thread visibility in this codebase is participant-based (space membership
+ * grants no thread access — see callerVisibleThreadPredicate), so conversation
+ * content flows into the team-readable space bank only when a space admin
+ * deliberately opted the space in via `spaces.config.memorySharing =
+ * "conversations"`. Default (absent key) is explicit-only: space banks fill
+ * through deliberate capture paths, never ordinary conversation. Fail-closed
+ * on lookup errors.
+ */
+async function spaceConversationSharingEnabled(
+  tenantId: string,
+  spaceId: string,
+): Promise<boolean> {
+  try {
+    const rows = await getDb()
+      .select({ config: spaces.config })
+      .from(spaces)
+      .where(and(eq(spaces.tenant_id, tenantId), eq(spaces.id, spaceId)))
+      .limit(1);
+    const config = rows[0]?.config;
+    if (!config || typeof config !== "object" || Array.isArray(config)) {
+      return false;
+    }
+    return (
+      (config as Record<string, unknown>).memorySharing === "conversations"
+    );
+  } catch (err) {
+    console.warn(
+      `[memory-retain] space-sharing lookup failed (fail-closed) space=${spaceId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return false;
+  }
+}
 import {
   buildDailyMemoryRetainOptions,
   buildHighConfidenceFactRetainOptions,
+  buildSpaceThreadRetainOptions,
   buildThreadRetainOptions,
 } from "../lib/memory/hindsight-retain-params.js";
 import {
@@ -361,6 +399,42 @@ async function processClaimedRetainAttempt(
           `event=${eventMessages.length} merged=${merged.length}`,
       );
 
+      // THINK-261 / company-brain plan U8 — space dual-write, opt-in per
+      // space. Runs after the user-bank retain succeeded; its failure is
+      // loud but independent (the personal copy stands, the attempt records
+      // the space outcome). Eval traffic never dual-writes. Idempotent on
+      // retry: retainConversation upserts per thread document.
+      let spaceDualWrite: "retained" | "failed" | undefined;
+      const dualWriteSpaceId = attempt.space_id;
+      if (dualWriteSpaceId && !evalTraffic) {
+        if (
+          await spaceConversationSharingEnabled(tenantId, dualWriteSpaceId)
+        ) {
+          try {
+            await adapter.retainConversation({
+              tenantId,
+              ownerType: "space",
+              ownerId: dualWriteSpaceId,
+              threadId: eventThreadId,
+              messages: merged,
+              hindsight: buildSpaceThreadRetainOptions({
+                spaceId: dualWriteSpaceId,
+                messages: merged,
+              }),
+              metadata: eventMetadata,
+            });
+            spaceDualWrite = "retained";
+          } catch (err) {
+            spaceDualWrite = "failed";
+            console.error(
+              `[memory-retain] space_dual_write_failed space=${dualWriteSpaceId} thread=${eventThreadId} tenant=${tenantId}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
+        }
+      }
+
       if (highConfidenceFactError) {
         throw highConfidenceFactError;
       }
@@ -389,6 +463,7 @@ async function processClaimedRetainAttempt(
           messageCount: merged.length,
           highConfidenceFactCount: highConfidenceFacts.documents.length,
           ...(extractedUnitCount !== null ? { extractedUnitCount } : {}),
+          ...(spaceDualWrite ? { spaceDualWrite } : {}),
         },
         metadata: mergeAttemptMetadata(attempt.metadata, {
           dbMessageCount: dbMessages.length,

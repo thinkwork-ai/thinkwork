@@ -109,13 +109,19 @@ function dbRow(role: string, content: string, ts: string, tenantId = TENANT_A) {
   };
 }
 
-function buildSelectChain(rows: ReturnType<typeof dbRow>[]) {
-  // Drizzle chain: db.select({...}).from(...).where(...).orderBy(...)
+function buildSelectChain(
+  rows: ReturnType<typeof dbRow>[],
+  spaceConfigRows: Array<{ config: unknown }> = [],
+) {
+  // Drizzle chains: transcript reads end `.where(...).orderBy(...)`; the
+  // space-sharing lookup (THINK-261 U8) ends `.where(...).limit(1)`. One
+  // chain serves both — each terminal resolves its own row set.
   const orderBy = vi.fn().mockResolvedValue(rows);
-  const where = vi.fn().mockReturnValue({ orderBy });
+  const limit = vi.fn().mockResolvedValue(spaceConfigRows);
+  const where = vi.fn().mockReturnValue({ orderBy, limit });
   const from = vi.fn().mockReturnValue({ where });
   selectMock.mockReturnValue({ from });
-  return { from, where, orderBy };
+  return { from, where, orderBy, limit };
 }
 
 function buildRetainConversationServices() {
@@ -438,6 +444,144 @@ describe("memory-retain handler", () => {
 
     expect(result).toEqual({ ok: true, engine: "suppressed_reflect_exhaust" });
     expect(retainConversationMock).not.toHaveBeenCalled();
+  });
+
+  it("dual-writes to the space bank when the space opted into conversation sharing (THINK-261 U8)", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([], [{ config: { memorySharing: "conversations" } }]);
+    upsertRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+    claimRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      spaceId: SPACE_ID,
+      transcript: [
+        { role: "user", content: "Acme raised pricing concerns" },
+        { role: "assistant", content: "Logged." },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(retainConversationMock).toHaveBeenCalledTimes(2);
+    const [personalCall, spaceCall] = retainConversationMock.mock.calls.map(
+      (call) => call[0],
+    );
+    expect(personalCall).toMatchObject({ ownerType: "user", ownerId: USER_ID });
+    expect(spaceCall).toMatchObject({
+      ownerType: "space",
+      ownerId: SPACE_ID,
+      threadId: THREAD_ID,
+    });
+    expect(spaceCall.hindsight.tags).toEqual(
+      expect.arrayContaining([`space:${SPACE_ID}`, "scope:space", "source:thread"]),
+    );
+    // Same merged transcript both writes.
+    expect(spaceCall.messages).toEqual(personalCall.messages);
+    // The attempt records the space outcome.
+    expect(
+      markRetainAttemptRetainedMock.mock.calls[0][1].providerResult
+        .spaceDualWrite,
+    ).toBe("retained");
+  });
+
+  it("does not dual-write when the space has not opted in (default explicit-only)", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([], [{ config: {} }]);
+    upsertRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+    claimRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      spaceId: SPACE_ID,
+      transcript: [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi" },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(retainConversationMock).toHaveBeenCalledTimes(1);
+    expect(retainConversationMock.mock.calls[0][0].ownerType).toBe("user");
+  });
+
+  it("space dual-write failure is loud but never fails the personal retain", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([], [{ config: { memorySharing: "conversations" } }]);
+    upsertRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+    claimRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+    retainConversationMock
+      .mockResolvedValueOnce({ ok: true })
+      .mockRejectedValueOnce(new Error("hindsight 500"));
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      spaceId: SPACE_ID,
+      transcript: [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi" },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(markRetainAttemptRetainedMock).toHaveBeenCalledTimes(1);
+    expect(
+      markRetainAttemptRetainedMock.mock.calls[0][1].providerResult
+        .spaceDualWrite,
+    ).toBe("failed");
+  });
+
+  it("eval traffic never dual-writes even when the space opted in", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([], [{ config: { memorySharing: "conversations" } }]);
+    upsertRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+    claimRetainAttemptMock.mockResolvedValue({
+      ...BASE_ATTEMPT,
+      space_id: SPACE_ID,
+    });
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      spaceId: SPACE_ID,
+      transcript: [
+        { role: "user", content: "synthetic" },
+        { role: "assistant", content: "ok" },
+      ],
+      metadata: { evalTraffic: true },
+    });
+
+    expect(result.ok).toBe(true);
+    // Eval keeps its existing single marked personal retain; no space write.
+    expect(retainConversationMock).toHaveBeenCalledTimes(1);
+    expect(retainConversationMock.mock.calls[0][0].ownerType).toBe("user");
   });
 
   it("unmarked traffic still extracts facts and enqueues wiki compile", async () => {
