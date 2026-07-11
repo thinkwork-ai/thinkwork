@@ -149,7 +149,7 @@ describe("createMemoryExtension", () => {
     ]);
   });
 
-  it("recall tool labels Space memories and carries redacted evidence in details", async () => {
+  it("recall tool labels scopes (team by name, personal) and carries redacted evidence in details", async () => {
     const provider: MemoryProvider = {
       recall: async () => ({
         memories: [
@@ -167,6 +167,17 @@ describe("createMemoryExtension", () => {
                 },
               ],
             },
+          },
+          {
+            id: "space-memory-2",
+            content: "Acme raised pricing concerns",
+            sourceScope: "space",
+            scopeLabel: "Sales",
+          },
+          {
+            id: "user-memory-1",
+            content: "Prefers async standups",
+            sourceScope: "user",
           },
         ],
       }),
@@ -186,10 +197,12 @@ describe("createMemoryExtension", () => {
     );
 
     const text = (result.content?.[0] as { text: string }).text;
-    expect(text).toContain("[space] Shared onboarding plan");
+    expect(text).toContain("[team] Shared onboarding plan");
+    expect(text).toContain("[team: Sales] Acme raised pricing concerns");
+    expect(text).toContain("[personal] Prefers async standups");
     expect(result.details).toEqual({
       query: "onboarding",
-      count: 1,
+      count: 3,
       memories: [
         {
           id: "space-memory-1",
@@ -204,6 +217,16 @@ describe("createMemoryExtension", () => {
               },
             ],
           },
+        },
+        {
+          id: "space-memory-2",
+          sourceScope: "space",
+          evidence: undefined,
+        },
+        {
+          id: "user-memory-1",
+          sourceScope: "user",
+          evidence: undefined,
         },
       ],
     });

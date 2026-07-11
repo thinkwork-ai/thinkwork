@@ -96,6 +96,10 @@ export interface MemoryRetainRequest {
      * retained document still carries the marker so downstream consumers
      * (KG ingest, dream-state quarantine, backfill wipes) can filter it. */
     evalTraffic?: boolean;
+    /** THINK-261 #2 — the turn invoked the `reflect` memory tool, so its
+     * assistant content is synthesized from existing memories. The retain
+     * door suppresses conversation retention for flagged turns. */
+    reflectExhaust?: boolean;
   };
 }
 
@@ -150,6 +154,7 @@ export function buildMemoryRetainRequest(
   payload: RetainPayloadInput,
   identity: IdentitySnapshot,
   assistantContent: string,
+  options: { reflectExhaust?: boolean } = {},
 ): MemoryRetainRequest {
   const threadTurnId =
     typeof payload.thread_turn_id === "string"
@@ -163,6 +168,7 @@ export function buildMemoryRetainRequest(
   }
   if (spaceId) metadata.spaceId = spaceId;
   if (isEvalTrafficPayload(payload)) metadata.evalTraffic = true;
+  if (options.reflectExhaust) metadata.reflectExhaust = true;
 
   return {
     tenantId: identity.tenantId,
@@ -186,6 +192,9 @@ export interface RetainConversationArgs {
   assistantContent: string;
   /** Lambda client. Injected by the caller; tests pass a mock. */
   lambdaClient: LambdaClient;
+  /** THINK-261 #2 — true when the turn invoked the `reflect` memory tool;
+   * stamped into metadata so the retain door suppresses the turn. */
+  reflectExhaust?: boolean;
 }
 
 /**
@@ -202,6 +211,7 @@ export async function retainConversation(
   args: RetainConversationArgs,
 ): Promise<RetainConversationResult> {
   const { payload, identity, env, assistantContent, lambdaClient } = args;
+  const reflectExhaust = args.reflectExhaust === true;
 
   // Opt-in only: missing or false → skip. Conservative default mirrors Pi
   // (which uses `optionalBoolean(payload.use_memory)` returning false unless
@@ -221,7 +231,14 @@ export async function retainConversation(
     return { retained: false };
   }
 
-  const request = buildMemoryRetainRequest(payload, identity, assistantContent);
+  const request = buildMemoryRetainRequest(
+    payload,
+    identity,
+    assistantContent,
+    {
+      reflectExhaust,
+    },
+  );
   if (request.transcript.length === 0) return { retained: false };
 
   try {

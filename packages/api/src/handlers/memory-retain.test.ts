@@ -12,7 +12,7 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
     // status quo), so hindsight-routed statements still land on executeMock.
     getDb: handle,
     getHindsightDb: handle,
-    resolveHindsightDb: <T,>(primary: T) => primary,
+    resolveHindsightDb: <T>(primary: T) => primary,
     // Real seam chunk so `${hindsightSql()}` renders `hindsight.` in query text.
     hindsightSql: actual.hindsightSql,
   };
@@ -360,6 +360,84 @@ describe("memory-retain handler", () => {
     expect(executeMock).not.toHaveBeenCalled();
     expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
     expect(maybeEnqueueMock).not.toHaveBeenCalled();
+  });
+
+  it("smoke-prefixed thread ids are suppressed at the door: no retain, no ledger row", async () => {
+    buildRetainConversationServices();
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: "smoke-1720700000-abc123",
+      transcript: [
+        {
+          role: "user",
+          content:
+            "This is a smoke-test fact: my favorite hot beverage is lapsang souchong tea",
+        },
+        { role: "assistant", content: "Noted." },
+      ],
+    });
+
+    expect(result).toEqual({ ok: true, engine: "suppressed_smoke" });
+    expect(retainConversationMock).not.toHaveBeenCalled();
+    expect(upsertRetainAttemptMock).not.toHaveBeenCalled();
+    expect(maybeEnqueueMock).not.toHaveBeenCalled();
+  });
+
+  it("normal UUID-style thread ids are not caught by the smoke suppression (regression)", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi" },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(retainConversationMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reflectExhaust-marked turns are suppressed at the door: no retain, no ledger row", async () => {
+    buildRetainConversationServices();
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        { role: "user", content: "what do I know about Acme?" },
+        { role: "assistant", content: "Synthesized from memory: ..." },
+      ],
+      metadata: { reflectExhaust: true },
+    });
+
+    expect(result).toEqual({ ok: true, engine: "suppressed_reflect_exhaust" });
+    expect(retainConversationMock).not.toHaveBeenCalled();
+    expect(upsertRetainAttemptMock).not.toHaveBeenCalled();
+  });
+
+  it("reflectExhaust accepts the string form 'true' from JSON payload plumbing", async () => {
+    buildRetainConversationServices();
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [
+        { role: "user", content: "what do I know about Acme?" },
+        { role: "assistant", content: "Synthesized from memory: ..." },
+      ],
+      metadata: { reflectExhaust: "true" },
+    });
+
+    expect(result).toEqual({ ok: true, engine: "suppressed_reflect_exhaust" });
+    expect(retainConversationMock).not.toHaveBeenCalled();
   });
 
   it("unmarked traffic still extracts facts and enqueues wiki compile", async () => {

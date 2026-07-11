@@ -1266,6 +1266,13 @@ export interface InvocationResourceBundle {
     reason?: string;
   }>;
   /**
+   * THINK-261 #2 — per-turn memory signals, mutated by the memory extension
+   * as tools execute (same lifecycle pattern as `bedrockRequestIds`). The
+   * end-of-turn retain reads `reflectInvoked` to stamp the payload as
+   * reflect-exhaust so the retain door suppresses memory-question turns.
+   */
+  memorySignals: { reflectInvoked: boolean };
+  /**
    * THINK-173 U6 — per-entry outcomes for manifest-mode capability
    * registration. Empty when the invocation is not in manifest mode.
    */
@@ -1419,6 +1426,9 @@ export async function buildInvocationResources(
   const handleStore = args.handleStore;
   const extensionFactories: ExtensionFactory[] = [];
   const extensionToolNames: string[] = [];
+  // THINK-261 #2 — mutated by the memory extension's reflect tool; read at
+  // the end-of-turn retain to mark memory-question turns as reflect-exhaust.
+  const memorySignals = { reflectInvoked: false };
   // THINK-245 U4 — request identity for cost reconciliation: stamp Bedrock
   // Converse payloads with requestMetadata and collect response requestIds.
   // Hook-only extension (no tools), so it bypasses the addExtension helper.
@@ -1883,6 +1893,8 @@ export async function buildInvocationResources(
         tenantId: args.identity.tenantId,
         userId: args.identity.userId,
         spaceId: args.identity.spaceId,
+        // THINK-261 #6 — recall/reflect fan out to every member space's bank.
+        memberSpaces: args.identity.memberSpaces,
         dbClusterArn: args.env.dbClusterArn,
         dbSecretArn: args.env.dbSecretArn,
         dbName: args.env.dbName,
@@ -1895,6 +1907,9 @@ export async function buildInvocationResources(
       // ordinary turns pay the recall cost.
       const memoryExtension = createMemoryExtension({
         ...(groundingQuery ? { groundingQuery } : {}),
+        onReflectInvoked: () => {
+          memorySignals.reflectInvoked = true;
+        },
         onGrounding: ({ phase, count }) =>
           logStructured({
             level: "info",
@@ -2112,6 +2127,7 @@ export async function buildInvocationResources(
     mcpLoadRecord,
     capabilityLoadRecord,
     bedrockRequestIds,
+    memorySignals,
   };
 }
 
@@ -4212,6 +4228,9 @@ export async function handleInvocation(
     env,
     assistantContent: runResult.content,
     lambdaClient: deps.lambdaClientFactory(env.awsRegion),
+    // THINK-261 #2 — turns that invoked `reflect` are memory questions; the
+    // retain door suppresses them so synthesized answers don't loop back in.
+    reflectExhaust: bundle.memorySignals.reflectInvoked,
   });
   if (retainOutcome.retained) {
     logStructured({

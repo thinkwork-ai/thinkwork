@@ -20,7 +20,10 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb, getHindsightDb, hindsightSql } from "@thinkwork/database-pg";
 import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
-import { isEvalTrafficMetadata } from "../lib/memory/eval-traffic.js";
+import {
+  isEvalTrafficMetadata,
+  isReflectExhaustMetadata,
+} from "../lib/memory/eval-traffic.js";
 import {
   buildDailyMemoryRetainOptions,
   buildHighConfidenceFactRetainOptions,
@@ -162,6 +165,29 @@ export async function handler(
     if (!eventThreadId) {
       console.warn("[memory-retain] MISSING_DOCUMENT_ID missing threadId");
       return { ok: false, error: "MISSING_DOCUMENT_ID" };
+    }
+
+    // THINK-261 #2 — non-knowledge traffic is suppressed at the door, before
+    // the retain-attempt ledger, so nothing is stored and nothing retries.
+    //
+    // Smoke threads are synthetic (`smoke-<timestamp>-<random>`, never a DB
+    // row) and previously planted fixture facts in real user banks on every
+    // post-deploy run. Suppressing here rather than eval-tagging the smoke
+    // payload keeps pi-marco-smoke's `expectRetain` assertion intact — the
+    // client-side invoke still happens; the handler declines the content.
+    if (eventThreadId.startsWith("smoke-")) {
+      console.log(
+        `[memory-retain] suppressed_smoke_thread thread=${eventThreadId} tenant=${tenantId}`,
+      );
+      return { ok: true, engine: "suppressed_smoke" };
+    }
+    // Reflect-exhaust turns are memory questions — their assistant content is
+    // synthesized from existing memories and must not re-enter the banks.
+    if (isReflectExhaustMetadata(eventMetadata)) {
+      console.log(
+        `[memory-retain] suppressed_reflect_exhaust thread=${eventThreadId} tenant=${tenantId}`,
+      );
+      return { ok: true, engine: "suppressed_reflect_exhaust" };
     }
 
     const sourceEventKey = buildRetainSourceEventKey({
