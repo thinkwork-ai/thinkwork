@@ -56,6 +56,15 @@ export interface MemoryExtensionOptions {
     query: string;
     count: number;
   }) => void;
+  /**
+   * Fired when the agent invokes the `reflect` tool this turn. The host uses
+   * this to mark the turn's end-of-turn retain as reflect-exhaust (THINK-261
+   * #2 / company-brain plan KTD-2): a turn that asked memory a question gets
+   * its synthesized answer suppressed at the retain door instead of looping
+   * back into the banks as new knowledge. Fired on invocation, not success —
+   * a failed reflect still marks the turn as a memory question.
+   */
+  onReflectInvoked?: () => void;
 }
 
 const DEFAULT_GROUNDING_LIMIT = 5;
@@ -80,7 +89,16 @@ function formatMemories(memories: MemoryItem[]): string {
           tags.push(`${memory.proofCount} supporting facts`);
         }
       }
-      if (memory.sourceScope === "space") tags.push("space");
+      // THINK-261 #6 — scope attribution. Multi-bank recall merges personal
+      // and team memories into one list; without labels the model cannot
+      // tell whose knowledge it is citing.
+      if (memory.sourceScope === "space") {
+        tags.push(memory.scopeLabel ? `team: ${memory.scopeLabel}` : "team");
+      } else if (memory.sourceScope === "tenant") {
+        tags.push("company");
+      } else if (memory.sourceScope === "user") {
+        tags.push("personal");
+      }
       const prefix = tags.length > 0 ? `[${tags.join(", ")}] ` : "";
       return `${index + 1}. ${prefix}${memory.content}`;
     })
@@ -207,6 +225,7 @@ export function createMemoryExtension(
         }),
         executionMode: "sequential",
         async execute(_toolCallId, params, signal) {
+          options.onReflectInvoked?.();
           const { query, context } = params as {
             query: string;
             context?: string;

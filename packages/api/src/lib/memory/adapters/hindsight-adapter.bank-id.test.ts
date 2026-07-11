@@ -154,4 +154,43 @@ describe("HindsightAdapter user-only bank ids", () => {
     ]);
     expect(executeMock).not.toHaveBeenCalled();
   });
+
+  it("resolves tenant-scoped owners to the tenant bank (company-brain U9)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ memory_units: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "tenant",
+      ownerId: TENANT_ID,
+      query: "company knowledge",
+    });
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      `https://hindsight.example/v1/default/banks/tenant_${TENANT_ID}/memories/recall`,
+    ]);
+  });
+
+  it("rejects a non-UUID tenant owner id (existing guard covers the new type)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    await expect(
+      adapter.recall({
+        tenantId: TENANT_ID,
+        ownerType: "tenant",
+        ownerId: "not-a-uuid",
+        query: "x",
+      }),
+    ).rejects.toThrow(/UUID/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

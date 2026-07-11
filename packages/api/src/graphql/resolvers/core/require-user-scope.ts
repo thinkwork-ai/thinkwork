@@ -148,7 +148,7 @@ export async function requireMemoryTenantScope(
   return { tenantId, userId: caller.userId };
 }
 
-async function isTenantAdmin(
+export async function isTenantAdmin(
   userId: string,
   tenantId: string,
 ): Promise<boolean> {

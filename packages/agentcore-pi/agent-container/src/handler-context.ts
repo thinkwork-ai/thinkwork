@@ -29,6 +29,13 @@ export interface InvocationIdentity {
   agentId: string;
   threadId: string;
   spaceId?: string;
+  /**
+   * THINK-261 #6 — the invoking user's member spaces (id + name) from the
+   * dispatch payload's `member_spaces` field. Memory recall fans out to these
+   * space banks with named scope labels. Absent for user-less dispatches or
+   * when the API-side lookup degraded.
+   */
+  memberSpaces?: Array<{ id: string; name: string }>;
 }
 
 export interface IdentitySnapshot extends InvocationIdentity {
@@ -58,6 +65,27 @@ function asString(value: unknown): string {
 function spaceIdFromTurnContext(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   return asString((value as Record<string, unknown>).spaceId);
+}
+
+/**
+ * THINK-261 #6 — the invoking user's member spaces from the dispatch payload
+ * (`member_spaces`, a top-level field: `turn_context` is null on personal
+ * threads, exactly where member-space recall matters most). Defensive parse:
+ * malformed entries drop rather than fail the invocation.
+ */
+function memberSpacesFromPayload(
+  value: unknown,
+): Array<{ id: string; name: string }> {
+  if (!Array.isArray(value)) return [];
+  const spaces: Array<{ id: string; name: string }> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const id = asString((entry as Record<string, unknown>).id);
+    const name = asString((entry as Record<string, unknown>).name);
+    if (!id) continue;
+    spaces.push({ id, name });
+  }
+  return spaces;
 }
 
 /**
@@ -96,12 +124,15 @@ export function snapshotIdentity(
     );
   }
 
+  const memberSpaces = memberSpacesFromPayload(payload.member_spaces);
+
   return {
     tenantId,
     userId,
     agentId,
     threadId,
     spaceId: spaceId || undefined,
+    ...(memberSpaces.length > 0 ? { memberSpaces } : {}),
     tenantSlug: asString(payload.tenant_slug),
     agentSlug: asString(payload.instance_id),
     traceId: asString(payload.trace_id),

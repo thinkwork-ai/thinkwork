@@ -62,7 +62,8 @@ function resolveHindsightTarget(dbName: string | undefined): {
   database: string;
   prefix: "hindsight." | "public.";
 } {
-  const hindsightDatabaseName = process.env.HINDSIGHT_DATABASE_NAME || undefined;
+  const hindsightDatabaseName =
+    process.env.HINDSIGHT_DATABASE_NAME || undefined;
   return hindsightDatabaseName
     ? { database: hindsightDatabaseName, prefix: "public." }
     : { database: dbName || "thinkwork", prefix: "hindsight." };
@@ -77,6 +78,12 @@ export interface HindsightMemoryProviderOptions {
   userId: string;
   /** Current Space id, when the invocation is scoped to a Space. */
   spaceId?: string | null;
+  /**
+   * THINK-261 #6 — all spaces the invoking user belongs to (id + name), from
+   * the dispatch payload. Recall/reflect fan out to each space's bank; the
+   * name becomes the item's scope label. Deduped against `spaceId`.
+   */
+  memberSpaces?: Array<{ id: string; name: string }> | null;
   /** Per-attempt request timeout in ms (default 30_000). */
   timeoutMs?: number;
   /** Aurora DB cluster ARN for direct Hindsight high-confidence fact lookup. */
@@ -109,6 +116,10 @@ function spaceBankFor(spaceId: string): string {
   return `space_${spaceId}`;
 }
 
+function tenantBankFor(tenantId: string): string {
+  return `tenant_${tenantId}`;
+}
+
 function jitter(): number {
   return (Math.random() * 2 - 1) * RETRY_JITTER_MS;
 }
@@ -131,7 +142,9 @@ function unitText(unit: unknown): string {
 
 type HindsightBankTarget = {
   bankId: string;
-  sourceScope: "user" | "space";
+  sourceScope: "user" | "space" | "tenant";
+  /** Human-readable label (the space name) stamped onto recalled items. */
+  label?: string;
 };
 
 /** Normalize a raw Hindsight recall response into structured memory items. */
@@ -185,6 +198,7 @@ function toMemoryItems(
         id,
         content: text,
         sourceScope: target.sourceScope,
+        ...(target.label ? { scopeLabel: target.label } : {}),
         ...(score !== undefined ? { score } : {}),
         ...(factType !== undefined ? { factType } : {}),
         ...(freshness !== undefined ? { freshness } : {}),
@@ -205,13 +219,45 @@ function toListedMemoryItems(
   return toMemoryItems({ memory_units: raw }, target);
 }
 
+/**
+ * Cross-bank content rank (company-brain plan U7): dual-write retain (U8)
+ * lands the same conversation in the user bank AND the space bank under
+ * different unit ids, so id-level dedupe alone would surface the same fact
+ * twice with contradictory scope labels. When normalized content collides
+ * across scopes, the team copy wins — space-origin content is attributed to
+ * the space, and the personal duplicate is dropped.
+ */
+function scopeRank(scope: MemoryItem["sourceScope"]): number {
+  if (scope === "space") return 0;
+  if (scope === "tenant") return 1;
+  return 2;
+}
+
+function contentKey(item: MemoryItem): string {
+  return item.content.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 function mergeMemoryItems(...groups: MemoryItem[][]): MemoryItem[] {
   const seen = new Set<string>();
+  const indexByContent = new Map<string, number>();
   const out: MemoryItem[] = [];
   for (const item of groups.flat()) {
     const key = item.id || `${item.sourceScope ?? "unknown"}:${item.content}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    const ckey = contentKey(item);
+    const existingIndex = indexByContent.get(ckey);
+    if (existingIndex !== undefined) {
+      const existing = out[existingIndex];
+      if (
+        existing &&
+        scopeRank(item.sourceScope) < scopeRank(existing.sourceScope)
+      ) {
+        out[existingIndex] = item;
+      }
+      continue;
+    }
+    indexByContent.set(ckey, out.length);
     out.push(item);
   }
   return out;
@@ -309,6 +355,7 @@ function highConfidenceRowsToMemoryItems(
         id,
         content: text.trim(),
         sourceScope: target.sourceScope,
+        ...(target.label ? { scopeLabel: target.label } : {}),
         score: 20_000 - index,
         ...(factType ? { factType } : {}),
         evidence: {
@@ -850,16 +897,41 @@ export function createHindsightMemoryProvider(
   options: HindsightMemoryProviderOptions,
 ): MemoryProvider {
   requireScope(options);
+  // THINK-261 #6 — fan out to the current thread's space plus every member
+  // space, deduped by space id. The member-space entry's name becomes the
+  // scope label; the current space keeps a label too when membership supplies
+  // one. Wall-clock cost stays the slowest single call (parallel per-bank
+  // requests), and per-bank failures degrade rather than fail the turn.
+  const spaceTargets = new Map<string, HindsightBankTarget>();
+  const currentSpaceId = options.spaceId?.trim();
+  if (currentSpaceId) {
+    spaceTargets.set(currentSpaceId, {
+      bankId: spaceBankFor(currentSpaceId),
+      sourceScope: "space",
+    });
+  }
+  for (const space of options.memberSpaces ?? []) {
+    const spaceId = space.id?.trim();
+    if (!spaceId) continue;
+    const name = space.name?.trim();
+    const existing = spaceTargets.get(spaceId);
+    if (existing) {
+      if (name && !existing.label) existing.label = name;
+      continue;
+    }
+    spaceTargets.set(spaceId, {
+      bankId: spaceBankFor(spaceId),
+      sourceScope: "space",
+      ...(name ? { label: name } : {}),
+    });
+  }
   const targets: HindsightBankTarget[] = [
     { bankId: userBankFor(options.userId), sourceScope: "user" },
-    ...(options.spaceId?.trim()
-      ? [
-          {
-            bankId: spaceBankFor(options.spaceId.trim()),
-            sourceScope: "space" as const,
-          },
-        ]
-      : []),
+    ...spaceTargets.values(),
+    // Company-brain plan U9 — the Tenant Bank rides every recall/reflect.
+    // Empty (or never-written) banks return zero hits through the existing
+    // merge, so no flag machinery guards this.
+    { bankId: tenantBankFor(options.tenantId), sourceScope: "tenant" },
   ];
   // Identity (endpoint/tenantId/userId) is captured in this closure at
   // construction time — cred-snapshot-at-entry; never re-read from env mid-turn.
@@ -901,14 +973,26 @@ export function createHindsightMemoryProvider(
         }
         return { memories, usage };
       };
+      // Per-bank failures in the high-confidence and list tiers degrade to
+      // an empty batch (fan-out multiplies bank count — one degraded bank
+      // must not fail the turn); the final recall tier keeps its existing
+      // all-banks-failed error propagation.
       const highConfidenceBatches = await Promise.all(
         targets.map(async (target) => {
-          const highConfidenceGroups = await Promise.all(
-            searchQueries.map((listQuery) =>
-              listHighConfidenceMemoryItems(options, target, listQuery),
-            ),
-          );
-          return mergeMemoryItems(...highConfidenceGroups);
+          try {
+            const highConfidenceGroups = await Promise.all(
+              searchQueries.map((listQuery) =>
+                listHighConfidenceMemoryItems(options, target, listQuery),
+              ),
+            );
+            return mergeMemoryItems(...highConfidenceGroups);
+          } catch (err) {
+            console.warn(
+              `[hindsight-memory] high-confidence tier failed for ${target.bankId} (degraded):`,
+              err instanceof Error ? err.message : err,
+            );
+            return [];
+          }
         }),
       );
       const highConfidenceMemories = mergeMemoryItems(
@@ -920,12 +1004,20 @@ export function createHindsightMemoryProvider(
 
       const listedBatches = await Promise.all(
         targets.map(async (target) => {
-          const listedGroups = await Promise.all(
-            searchQueries.map((listQuery) =>
-              listMemoryItems(options, target, listQuery, signal),
-            ),
-          );
-          return mergeMemoryItems(...listedGroups);
+          try {
+            const listedGroups = await Promise.all(
+              searchQueries.map((listQuery) =>
+                listMemoryItems(options, target, listQuery, signal),
+              ),
+            );
+            return mergeMemoryItems(...listedGroups);
+          } catch (err) {
+            console.warn(
+              `[hindsight-memory] list tier failed for ${target.bankId} (degraded):`,
+              err instanceof Error ? err.message : err,
+            );
+            return [];
+          }
         }),
       );
       const listedMemories = mergeMemoryItems(...listedBatches).sort(
@@ -984,25 +1076,55 @@ export function createHindsightMemoryProvider(
         );
       }
       const reflectQuery = reflectQueryWithContext(request);
-      const batches = await Promise.all(
+      // Per-bank error isolation mirrors recall: with N member-space banks,
+      // one degraded bank drops its synthesis instead of failing reflect.
+      // Only when EVERY bank fails does the first error propagate.
+      const settled = await Promise.all(
         targets.map(async (target) => {
-          const data = await postJson(
-            options,
-            `/v1/default/banks/${encodeURIComponent(target.bankId)}/reflect`,
-            { query: reflectQuery, budget: "mid", include: { facts: {} } },
-            signal,
-          );
-          return { target, data };
+          try {
+            const data = await postJson(
+              options,
+              `/v1/default/banks/${encodeURIComponent(target.bankId)}/reflect`,
+              { query: reflectQuery, budget: "mid", include: { facts: {} } },
+              signal,
+            );
+            return { target, data, error: undefined };
+          } catch (error) {
+            console.warn(
+              `[hindsight-memory] reflect failed for ${target.bankId} (degraded):`,
+              error instanceof Error ? error.message : error,
+            );
+            return { target, data: undefined, error };
+          }
         }),
       );
+      const batches = settled.filter(
+        (
+          batch,
+        ): batch is {
+          target: HindsightBankTarget;
+          data: unknown;
+          error: undefined;
+        } => batch.error === undefined,
+      );
+      if (batches.length === 0 && settled.length > 0) {
+        throw settled[0]?.error;
+      }
       const texts = batches
         .map(({ target, data }) => {
           const text = toReflectText(data);
-          return text ? { sourceScope: target.sourceScope, text } : null;
+          return text
+            ? { sourceScope: target.sourceScope, label: target.label, text }
+            : null;
         })
         .filter(
-          (item): item is { sourceScope: "user" | "space"; text: string } =>
-            item !== null,
+          (
+            item,
+          ): item is {
+            sourceScope: "user" | "space" | "tenant";
+            label: string | undefined;
+            text: string;
+          } => item !== null,
         );
       const evidence = mergeEvidence(
         batches
@@ -1015,10 +1137,17 @@ export function createHindsightMemoryProvider(
           texts.length === 1
             ? texts[0]?.text
             : texts
-                .map(
-                  (item) =>
-                    `${item.sourceScope === "space" ? "Space" : "User"} memory:\n${item.text}`,
-                )
+                .map((item) => {
+                  const prefix =
+                    item.sourceScope === "space"
+                      ? item.label
+                        ? `Team memory (${item.label})`
+                        : "Space memory"
+                      : item.sourceScope === "tenant"
+                        ? "Company memory"
+                        : "User memory";
+                  return `${prefix}:\n${item.text}`;
+                })
                 .join("\n\n"),
         usage: mergeUnknownValues(
           batches.map(({ data }) =>

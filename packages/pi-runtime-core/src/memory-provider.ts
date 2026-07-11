@@ -60,7 +60,13 @@ export interface MemoryItem {
   id: string;
   content: string;
   /** Logical source scope for multi-bank recall; never exposes raw bank ids. */
-  sourceScope?: "user" | "space";
+  sourceScope?: "user" | "space" | "tenant";
+  /**
+   * Human-readable scope label for multi-bank recall (THINK-261 #6) — the
+   * space name for space-scope items. Rendered by the memory extension as
+   * `[team: <name>]` so the agent can attribute recalled knowledge.
+   */
+  scopeLabel?: string;
   /** Relevance score when the backing store provides one. */
   score?: number;
   /** Backing-store fact type (e.g. "world", "experience", "observation"). */

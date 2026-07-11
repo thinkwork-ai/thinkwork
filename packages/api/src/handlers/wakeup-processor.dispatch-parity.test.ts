@@ -134,6 +134,29 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     }
   });
 
+  it("carries member spaces for recall fan-out, dropping the key when empty (THINK-261 #6)", () => {
+    const withSpaces = buildAgentDispatchControlFields(
+      baseArgs({
+        memberSpaces: [
+          { id: "space-1", name: "Research" },
+          { id: "space-2", name: "Sales" },
+        ],
+      }),
+    );
+    expect(withSpaces.member_spaces).toEqual([
+      { id: "space-1", name: "Research" },
+      { id: "space-2", name: "Sales" },
+    ]);
+    // Zero memberships and user-less dispatches serialize without the key.
+    expect(
+      buildAgentDispatchControlFields(baseArgs({ memberSpaces: [] }))
+        .member_spaces,
+    ).toBeUndefined();
+    expect(
+      buildAgentDispatchControlFields(baseArgs()).member_spaces,
+    ).toBeUndefined();
+  });
+
   it("carries the pinned capabilities manifest fingerprint on every dispatch path (THINK-173 U5)", () => {
     const fields = buildAgentDispatchControlFields(
       baseArgs({ capabilitiesManifestFingerprint: "a".repeat(64) }),

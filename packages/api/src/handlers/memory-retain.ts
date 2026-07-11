@@ -18,12 +18,53 @@
 import { createHash } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { getDb, getHindsightDb, hindsightSql } from "@thinkwork/database-pg";
-import { agents, messages } from "@thinkwork/database-pg/schema";
+import { agents, messages, spaces } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
-import { isEvalTrafficMetadata } from "../lib/memory/eval-traffic.js";
+import {
+  isEvalTrafficMetadata,
+  isReflectExhaustMetadata,
+} from "../lib/memory/eval-traffic.js";
+
+/**
+ * THINK-261 / company-brain plan U8 — per-space conversation-sharing opt-in.
+ * Thread visibility in this codebase is participant-based (space membership
+ * grants no thread access — see callerVisibleThreadPredicate), so conversation
+ * content flows into the team-readable space bank only when a space admin
+ * deliberately opted the space in via `spaces.config.memorySharing =
+ * "conversations"`. Default (absent key) is explicit-only: space banks fill
+ * through deliberate capture paths, never ordinary conversation. Fail-closed
+ * on lookup errors.
+ */
+async function spaceConversationSharingEnabled(
+  tenantId: string,
+  spaceId: string,
+): Promise<boolean> {
+  try {
+    const rows = await getDb()
+      .select({ config: spaces.config })
+      .from(spaces)
+      .where(and(eq(spaces.tenant_id, tenantId), eq(spaces.id, spaceId)))
+      .limit(1);
+    const config = rows[0]?.config;
+    if (!config || typeof config !== "object" || Array.isArray(config)) {
+      return false;
+    }
+    return (
+      (config as Record<string, unknown>).memorySharing === "conversations"
+    );
+  } catch (err) {
+    console.warn(
+      `[memory-retain] space-sharing lookup failed (fail-closed) space=${spaceId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return false;
+  }
+}
 import {
   buildDailyMemoryRetainOptions,
   buildHighConfidenceFactRetainOptions,
+  buildSpaceThreadRetainOptions,
   buildThreadRetainOptions,
 } from "../lib/memory/hindsight-retain-params.js";
 import {
@@ -162,6 +203,29 @@ export async function handler(
     if (!eventThreadId) {
       console.warn("[memory-retain] MISSING_DOCUMENT_ID missing threadId");
       return { ok: false, error: "MISSING_DOCUMENT_ID" };
+    }
+
+    // THINK-261 #2 — non-knowledge traffic is suppressed at the door, before
+    // the retain-attempt ledger, so nothing is stored and nothing retries.
+    //
+    // Smoke threads are synthetic (`smoke-<timestamp>-<random>`, never a DB
+    // row) and previously planted fixture facts in real user banks on every
+    // post-deploy run. Suppressing here rather than eval-tagging the smoke
+    // payload keeps pi-marco-smoke's `expectRetain` assertion intact — the
+    // client-side invoke still happens; the handler declines the content.
+    if (eventThreadId.startsWith("smoke-")) {
+      console.log(
+        `[memory-retain] suppressed_smoke_thread thread=${eventThreadId} tenant=${tenantId}`,
+      );
+      return { ok: true, engine: "suppressed_smoke" };
+    }
+    // Reflect-exhaust turns are memory questions — their assistant content is
+    // synthesized from existing memories and must not re-enter the banks.
+    if (isReflectExhaustMetadata(eventMetadata)) {
+      console.log(
+        `[memory-retain] suppressed_reflect_exhaust thread=${eventThreadId} tenant=${tenantId}`,
+      );
+      return { ok: true, engine: "suppressed_reflect_exhaust" };
     }
 
     const sourceEventKey = buildRetainSourceEventKey({
@@ -335,6 +399,42 @@ async function processClaimedRetainAttempt(
           `event=${eventMessages.length} merged=${merged.length}`,
       );
 
+      // THINK-261 / company-brain plan U8 — space dual-write, opt-in per
+      // space. Runs after the user-bank retain succeeded; its failure is
+      // loud but independent (the personal copy stands, the attempt records
+      // the space outcome). Eval traffic never dual-writes. Idempotent on
+      // retry: retainConversation upserts per thread document.
+      let spaceDualWrite: "retained" | "failed" | undefined;
+      const dualWriteSpaceId = attempt.space_id;
+      if (dualWriteSpaceId && !evalTraffic) {
+        if (
+          await spaceConversationSharingEnabled(tenantId, dualWriteSpaceId)
+        ) {
+          try {
+            await adapter.retainConversation({
+              tenantId,
+              ownerType: "space",
+              ownerId: dualWriteSpaceId,
+              threadId: eventThreadId,
+              messages: merged,
+              hindsight: buildSpaceThreadRetainOptions({
+                spaceId: dualWriteSpaceId,
+                messages: merged,
+              }),
+              metadata: eventMetadata,
+            });
+            spaceDualWrite = "retained";
+          } catch (err) {
+            spaceDualWrite = "failed";
+            console.error(
+              `[memory-retain] space_dual_write_failed space=${dualWriteSpaceId} thread=${eventThreadId} tenant=${tenantId}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
+        }
+      }
+
       if (highConfidenceFactError) {
         throw highConfidenceFactError;
       }
@@ -363,6 +463,7 @@ async function processClaimedRetainAttempt(
           messageCount: merged.length,
           highConfidenceFactCount: highConfidenceFacts.documents.length,
           ...(extractedUnitCount !== null ? { extractedUnitCount } : {}),
+          ...(spaceDualWrite ? { spaceDualWrite } : {}),
         },
         metadata: mergeAttemptMetadata(attempt.metadata, {
           dbMessageCount: dbMessages.length,

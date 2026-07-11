@@ -934,6 +934,10 @@ export class HindsightAdapter implements MemoryAdapter {
     if (owner.ownerType === "space") {
       return `space_${ownerId}`;
     }
+    // THINK-261 / company-brain plan U9 — the company-scope Tenant Bank.
+    if (owner.ownerType === "tenant") {
+      return `tenant_${ownerId}`;
+    }
     return `user_${ownerId}`;
   }
 
@@ -1609,10 +1613,16 @@ function inferOwnerType(
   value: unknown,
   bankId: string,
 ): ThinkWorkMemoryRecord["ownerType"] {
-  if (value === "user" || value === "agent" || value === "space") {
+  if (
+    value === "user" ||
+    value === "agent" ||
+    value === "space" ||
+    value === "tenant"
+  ) {
     return value;
   }
   if (bankId.startsWith("space_")) return "space";
+  if (bankId.startsWith("tenant_")) return "tenant";
   return "user";
 }
 
@@ -1625,6 +1635,9 @@ function inferOwnerIdFromBank(
   }
   if (ownerType === "user" && bankId.startsWith("user_")) {
     return bankId.slice("user_".length);
+  }
+  if (ownerType === "tenant" && bankId.startsWith("tenant_")) {
+    return bankId.slice("tenant_".length);
   }
   return undefined;
 }

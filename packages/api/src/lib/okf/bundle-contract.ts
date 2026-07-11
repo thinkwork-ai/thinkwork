@@ -21,6 +21,12 @@ export interface OkfSourceCounts {
   brainPages: number;
   sources: number;
   relationships: number;
+  /**
+   * THINK-261 #3 — entity pages excluded from the bundle because their
+   * summary was empty (the graph-materializer fallback-stub marker). Recorded
+   * so the stub filter is auditable in the manifest rather than a silent drop.
+   */
+  excludedStubPages?: number;
 }
 
 export interface OkfSourceWatermark {
@@ -471,6 +477,13 @@ function validateSourceCounts(
   }
   for (const key of ["wikiPages", "brainPages", "sources", "relationships"]) {
     requireNonNegativeInteger(counts[key], `${label}.${key}`, errors);
+  }
+  if (counts.excludedStubPages !== undefined) {
+    requireNonNegativeInteger(
+      counts.excludedStubPages,
+      `${label}.excludedStubPages`,
+      errors,
+    );
   }
 }
 

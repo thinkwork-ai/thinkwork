@@ -92,6 +92,53 @@ describe("memory-retain-client", () => {
     ).toBeUndefined();
   });
 
+  it("stamps reflectExhaust into retain metadata when the turn invoked reflect", () => {
+    expect(
+      buildMemoryRetainRequest(
+        { use_memory: true, message: "what do I know about Acme?" },
+        identity,
+        "Synthesized answer.",
+        { reflectExhaust: true },
+      ).metadata,
+    ).toMatchObject({ reflectExhaust: true });
+    expect(
+      buildMemoryRetainRequest(
+        { use_memory: true, message: "ordinary turn" },
+        identity,
+        "ok",
+      ).metadata?.reflectExhaust,
+    ).toBeUndefined();
+  });
+
+  it("threads reflectExhaust from retainConversation args into the Lambda payload", async () => {
+    const env = {
+      memoryRetainFnName: "memory-retain-fn",
+      awsRegion: "us-east-1",
+    } as unknown as RuntimeEnvSnapshot;
+    const payloads: string[] = [];
+    const lambdaClient = {
+      send: async (command: { input?: { Payload?: Uint8Array } }) => {
+        const raw = command.input?.Payload;
+        payloads.push(raw ? new TextDecoder().decode(raw) : "");
+        return {};
+      },
+    } as never;
+
+    const result = await retainConversation({
+      payload: { use_memory: true, message: "what do I know about Acme?" },
+      identity,
+      env,
+      assistantContent: "Synthesized answer.",
+      lambdaClient,
+      reflectExhaust: true,
+    });
+    expect(result).toEqual({ retained: true });
+    expect(payloads).toHaveLength(1);
+    expect(JSON.parse(payloads[0]).metadata).toMatchObject({
+      reflectExhaust: true,
+    });
+  });
+
   it("explicitly suppresses retain for eval traffic even when use_memory is true", async () => {
     const env = {
       memoryRetainFnName: "memory-retain-fn",

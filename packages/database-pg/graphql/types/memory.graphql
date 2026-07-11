@@ -363,6 +363,45 @@ extend type Mutation {
   ingestSpaceMemoryDocument(
     input: IngestSpaceMemoryDocumentInput!
   ): SpaceMemoryDocumentIngest!
+  promoteSpaceMemoriesToTenant(
+    tenantId: ID
+    spaceId: ID!
+    memoryIds: [ID!]!
+    justification: String!
+  ): TenantMemoryPromotionResult!
+}
+
+"""
+Governed Promotion (company-brain plan U10): explicitly selected space-bank
+memories copied into the Tenant Bank with provenance intact. Idempotent per
+source memory; the source rows are untouched.
+"""
+type TenantMemoryPromotionResult {
+  promoted: [ID!]!
+  alreadyPromoted: [ID!]!
+  missing: [ID!]!
+}
+
+"""
+One Tenant Bank memory with its Governed Promotion provenance and consumption
+signal (company-brain plan U11 — provenance queryable in one step).
+"""
+type TenantBankMemory {
+  id: ID!
+  content: String!
+  factType: String
+  sourceBankId: String
+  sourceMemoryId: ID
+  sourceTimestamp: String
+  promotedBy: String
+  promotedAt: String
+  justification: String
+  accessCount: Int
+  createdAt: String
+}
+
+extend type Query {
+  tenantBankMemories(tenantId: ID, limit: Int): [TenantBankMemory!]!
 }
 
 """

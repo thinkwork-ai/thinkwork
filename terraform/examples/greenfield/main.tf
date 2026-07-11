@@ -410,6 +410,12 @@ variable "requester_memory_dreaming_schedule_expression" {
   default     = "cron(30 4 * * ? *)"
 }
 
+variable "brain_dream_state_enabled" {
+  description = "Enable the recurring Brain dream-state consolidation schedule (THINK-261 #5). Manual invokes work regardless via event.manual."
+  type        = bool
+  default     = false
+}
+
 variable "requester_memory_dreaming_model_id" {
   description = "Bedrock Converse model id for requester memory REM reflection."
   type        = string
@@ -831,6 +837,7 @@ module "thinkwork" {
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
+  brain_dream_state_enabled                     = var.brain_dream_state_enabled
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   agentcore_memory_id                           = var.agentcore_memory_id
