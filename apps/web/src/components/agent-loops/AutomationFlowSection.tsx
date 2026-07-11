@@ -4,6 +4,7 @@ import { useQuery } from "urql";
 import { X } from "lucide-react";
 import { Button, Input, SelectItem, Textarea } from "@thinkwork/ui";
 import { RoutineFlowCanvas } from "@/components/routines/RoutineFlowCanvas";
+import { WorkflowCanvasWorkspace } from "@/components/workflows/WorkflowCanvasWorkspace";
 import { BoundDocumentCardQuery } from "@/lib/graphql-queries";
 import type {
   AgentLoopDraft,
@@ -226,21 +227,24 @@ export function AutomationFlowSection({
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-6 @min-[650px]:grid-cols-[minmax(0,1fr)_340px]">
-        <RoutineFlowCanvas
-          mode="execution"
-          aslJson={null}
-          graph={graph}
-          selectedNodeId={selectedNode}
-          onSelectNode={(nodeId) =>
-            setSelectedNode((nodeId as AutomationNodeId | null) ?? null)
-          }
-          className="h-full min-h-[380px]"
-          emptyLabel="This automation has no steps to draw."
-        />
-
-        <div className="min-h-0 min-w-0 overflow-y-auto">
-          {selectedNode ? (
+      <WorkflowCanvasWorkspace
+        inspectorKey={selectedNode}
+        onInspectorClose={() => setSelectedNode(null)}
+        canvas={
+          <RoutineFlowCanvas
+            mode="execution"
+            aslJson={null}
+            graph={graph}
+            selectedNodeId={selectedNode}
+            onSelectNode={(nodeId) =>
+              setSelectedNode((nodeId as AutomationNodeId | null) ?? null)
+            }
+            className="h-full min-h-[380px]"
+            emptyLabel="This automation has no steps to draw."
+          />
+        }
+        inspector={
+          selectedNode ? (
             <NodeInspector
               nodeId={selectedNode}
               tenantId={tenantId}
@@ -259,9 +263,9 @@ export function AutomationFlowSection({
             />
           ) : (
             statusRail
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
     </section>
   );
 }

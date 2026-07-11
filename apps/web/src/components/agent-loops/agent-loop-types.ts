@@ -114,6 +114,7 @@ export interface AgentLoopRunSummary {
   scheduledJobId?: string | null;
   actorType?: string | null;
   actorId?: string | null;
+  idempotencyKey?: string | null;
   correlationId?: string | null;
   currentIteration: number;
   terminalReason?: string | null;
@@ -126,6 +127,37 @@ export interface AgentLoopRunSummary {
   errorMessage?: string | null;
   totalCostUsdCents?: number | null;
   createdAt: string;
+}
+
+export interface LinkedWorkflowRunSummary {
+  id: string;
+  status: string;
+  triggerFamily: string;
+  triggerSource?: string | null;
+  actorType?: string | null;
+  actorId?: string | null;
+  correlationId?: string | null;
+  backendExecutionId?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  lastEventAt?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  totalCostUsdCents?: number | null;
+  createdAt: string;
+}
+
+export interface AgentLoopLinkedWorkflow {
+  id: string;
+  name: string;
+  readinessState: string;
+  currentVersionNumber?: number | null;
+  currentVersion?: {
+    id: string;
+    versionNumber: number;
+    definitionSnapshot?: unknown;
+  } | null;
+  runs: LinkedWorkflowRunSummary[];
 }
 
 export interface AgentLoopRow {
@@ -145,6 +177,7 @@ export interface AgentLoopRow {
   currentVersionId?: string | null;
   currentVersionNumber?: number | null;
   currentVersion?: AgentLoopVersionSummary | null;
+  linkedWorkflow?: AgentLoopLinkedWorkflow | null;
   lastRunId?: string | null;
   lastRunStatus?: string | null;
   lastRunAt?: string | null;

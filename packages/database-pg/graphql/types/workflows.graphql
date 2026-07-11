@@ -95,6 +95,10 @@ type Workflow {
   visibility: WorkflowVisibility!
   ownerUserId: ID
   ownerAgentId: ID
+  # Source Automation for save-time-converged report workflows. Generic,
+  # imported, CRM, and routine-backed workflows leave this null.
+  sourceAgentLoopId: ID
+  sourceAutomation: AgentLoop
   primaryTriggerFamily: WorkflowTriggerFamily!
   currentVersionId: ID
   currentVersionNumber: Int

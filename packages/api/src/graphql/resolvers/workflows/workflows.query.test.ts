@@ -5,6 +5,7 @@ const mockWhere = vi.fn();
 const mockOrderBy = vi.fn();
 const mockLimit = vi.fn();
 const mockRequireTenantMember = vi.fn();
+const mockRequireAdminOrServiceCaller = vi.fn();
 const mockResolveCallerTenantId = vi.fn();
 
 vi.mock("../../utils.js", () => ({
@@ -25,6 +26,10 @@ vi.mock("../../utils.js", () => ({
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
+  agentLoops: {
+    id: "agent_loops.id",
+    tenant_id: "agent_loops.tenant_id",
+  },
   routineAslVersions: {
     id: "routine_asl_versions.id",
   },
@@ -68,6 +73,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 }));
 
 vi.mock("../core/authz.js", () => ({
+  requireAdminOrServiceCaller: mockRequireAdminOrServiceCaller,
   requireTenantMember: mockRequireTenantMember,
 }));
 
@@ -91,6 +97,7 @@ beforeEach(async () => {
   mockOrderBy.mockReset();
   mockLimit.mockReset();
   mockRequireTenantMember.mockReset();
+  mockRequireAdminOrServiceCaller.mockReset();
   mockResolveCallerTenantId.mockReset();
   vi.resetModules();
 
@@ -208,5 +215,53 @@ describe("workflow queries", () => {
       eq: ["workflow_engine_bindings.workflow_id", "workflow-1"],
     });
     expect(mockLimit).toHaveBeenCalledWith(1_000);
+  });
+
+  it("resolves a source Automation by immutable id and tenant", async () => {
+    mockRows.mockReturnValueOnce([
+      {
+        id: "loop-1",
+        tenant_id: "tenant-a",
+        name: "Daily sales review",
+      },
+    ]);
+
+    const result = await workflowTypes.workflowTypeResolvers.sourceAutomation(
+      {
+        id: "workflow-1",
+        tenantId: "tenant-a",
+        sourceAgentLoopId: "loop-1",
+      },
+      {},
+      { auth: { tenantId: "tenant-a" } } as any,
+    );
+
+    expect(result).toEqual({
+      id: "loop-1",
+      tenantId: "tenant-a",
+      name: "Daily sales review",
+    });
+    expect(mockRequireAdminOrServiceCaller).toHaveBeenCalledWith(
+      { auth: { tenantId: "tenant-a" } },
+      "tenant-a",
+      "read_agent_loop",
+    );
+    expect(mockWhere).toHaveBeenCalledWith({
+      and: [
+        { eq: ["agent_loops.id", "loop-1"] },
+        { eq: ["agent_loops.tenant_id", "tenant-a"] },
+      ],
+    });
+  });
+
+  it("returns null when a Workflow has no source Automation", async () => {
+    const result = await workflowTypes.workflowTypeResolvers.sourceAutomation(
+      { id: "workflow-1", tenantId: "tenant-a" },
+      {},
+      { auth: { tenantId: "tenant-a" } } as any,
+    );
+
+    expect(result).toBeNull();
+    expect(mockRequireAdminOrServiceCaller).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,5 @@
 import { and, desc, eq, lt } from "drizzle-orm";
+import { workflows } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import {
   agentWakeupRequests,
@@ -100,6 +101,19 @@ export function agentLoopRowToGraphql(row: Record<string, unknown>): unknown {
 }
 
 export const agentLoopTypeResolvers = {
+  linkedWorkflow: async (loop: AgentLoopParent) => {
+    if (!loop.id) return null;
+    const tenantId = loop.tenantId ?? loop.tenant_id ?? null;
+    const conditions = [eq(workflows.source_agent_loop_id, loop.id)];
+    if (tenantId) conditions.push(eq(workflows.tenant_id, tenantId));
+    const [row] = await db
+      .select()
+      .from(workflows)
+      .where(and(...conditions))
+      .limit(1);
+    return row ? snakeToCamel(row) : null;
+  },
+
   currentVersion: async (loop: AgentLoopParent) => {
     if (!loop.currentVersionId) return null;
     const [row] = await db

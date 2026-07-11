@@ -21,6 +21,7 @@ import {
 import { CollapsedFilterSearch } from "@/components/artifacts/CollapsedFilterSearch";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { StatusBadge } from "@/components/StatusBadge";
+import { formatWorkflowSchedule } from "@/components/workflows/workflow-schedule-display";
 import { useTenant } from "@/context/TenantContext";
 import {
   SpacesQuery,
@@ -474,7 +475,11 @@ export function triggerLabel(row: AgentLoopRow): string {
   if (family !== "schedule") return titleize(family);
   const trigger = jsonRecord(row.currentVersion?.triggerSpec);
   const config = jsonRecord(trigger.config);
-  return stringValue(config.scheduleExpression, "Schedule");
+  return formatWorkflowSchedule(
+    stringValue(config.scheduleExpression),
+    stringValue(config.timezone),
+    { includeTimezone: false, customLabel: "Custom schedule" },
+  );
 }
 
 export function targetLabel(row: AgentLoopRow): string {

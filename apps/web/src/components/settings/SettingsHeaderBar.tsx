@@ -42,7 +42,7 @@ export function SettingsHeaderBar() {
   return (
     <header
       className={cn(
-        "flex shrink-0 items-center gap-2 border-b border-border text-foreground",
+        "grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-border text-foreground",
         isDesktop
           ? "desktop-app-header h-[var(--desktop-app-header-height)] bg-background pr-3"
           : "h-12 bg-background pr-4",
@@ -53,14 +53,17 @@ export function SettingsHeaderBar() {
     >
       <nav
         aria-label="Breadcrumb"
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm font-medium"
+        className="col-start-1 flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium"
       >
         {crumbs.map((crumb, index) => {
           const isLast = index === crumbs.length - 1;
           return (
             <span
               key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
-              className="flex min-w-0 items-center gap-1"
+              className={cn(
+                "flex items-center gap-1",
+                isLast ? "min-w-0 flex-1" : "shrink-0",
+              )}
             >
               {index > 0 ? (
                 <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
@@ -94,7 +97,7 @@ export function SettingsHeaderBar() {
         ) : null}
       </nav>
       {tabs.length > 0 ? (
-        <div className="flex flex-1 justify-center">
+        <div className="col-start-2 flex justify-center">
           <Tabs value={activeTab}>
             <TabsList>
               {tabs.map((tab) => (
@@ -116,15 +119,13 @@ export function SettingsHeaderBar() {
       {actions?.action ? (
         <div
           className={cn(
-            "flex shrink-0 items-center gap-1",
-            // Balance the left breadcrumb so centered tabs stay centered.
-            tabs.length > 0 ? "flex-1 justify-end" : "ml-auto",
+            "col-start-3 ml-auto flex min-w-0 shrink-0 items-center gap-1",
           )}
         >
           {actions.action}
         </div>
       ) : tabs.length > 0 ? (
-        <div className="flex-1" aria-hidden />
+        <div className="col-start-3" aria-hidden />
       ) : null}
     </header>
   );
