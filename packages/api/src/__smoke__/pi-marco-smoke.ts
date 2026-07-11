@@ -22,6 +22,14 @@
  * Defaults are dev-tenant + Marco's IDs. Override via env vars to run
  * against another stage/agent. Sandbox interpreter ID is per-tenant
  * and rotates rarely — hardcoded for dev with env override available.
+ *
+ * The payload intentionally omits `model`: chat-agent-invoke sends null
+ * when the agent row has no configured model, so the runtime's fallback
+ * (server.ts currentModelId) is a production path this smoke pins. A
+ * runtime that requires payload.model fails here with
+ * `Unsupported model "missing model id"` — that regression shipped
+ * silently once (THINK-261 dogfooding, 2026-07-11) while this smoke sat
+ * behind the run_smokes workflow_dispatch flag.
  */
 
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";

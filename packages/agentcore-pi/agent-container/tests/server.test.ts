@@ -338,6 +338,52 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
+  // THINK-261 — payload.model is optional. chat-agent-invoke sends null when
+  // the agent row has no configured model, and direct invokers (pi-marco
+  // smoke) omit it entirely; both must fall back to the runtime default
+  // instead of dying in runLoop with UnsupportedModelError("missing model id").
+  it("falls back to the default model id when payload.model is absent", async () => {
+    let seenModelId: unknown = "unset";
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD(),
+      deps: makeDeps({
+        runAgentLoop: async ({ modelId }) => {
+          seenModelId = modelId;
+          return {
+            content: "stub response",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(seenModelId).toBe("us.anthropic.claude-sonnet-4-5-20250929-v1:0");
+  });
+
+  it("passes an explicit payload.model through to runAgentLoop", async () => {
+    let seenModelId: unknown = "unset";
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({ model: "anthropic/claude-sonnet-4-5" }),
+      deps: makeDeps({
+        runAgentLoop: async ({ modelId }) => {
+          seenModelId = modelId;
+          return {
+            content: "stub response",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(seenModelId).toBe("anthropic/claude-sonnet-4-5");
+  });
+
   // THINK-116 U7 — deterministic markdown→GenUI safety-net backstop.
   // DEFAULT-ON since THINK-145: absent flag = enabled; explicit false is the
   // per-dispatch kill-switch.

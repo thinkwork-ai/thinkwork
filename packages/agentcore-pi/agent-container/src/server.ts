@@ -3525,11 +3525,12 @@ export async function handleInvocation(
       profileExtensionToolNamesById.set(profile.id, loaded.extensionToolNames);
     }
   }
-  // The current invocation's model id is what pi-ai's Agent will use
-  // to serialize history -> Bedrock for THIS turn. We use the same id on
-  // synthesized AssistantMessage history entries so the metadata is
-  // self-consistent even though pi-ai doesn't actually read those
-  // fields during serialization.
+  // The single model id for THIS turn: every runLoop call site and the
+  // synthesized AssistantMessage history entries must use it so the loop
+  // model and history metadata stay self-consistent. `payload.model` is
+  // optional — chat-agent-invoke sends null when the agent row has no
+  // configured model, and runLoop throws UnsupportedModelError on a
+  // missing id — so the fallback here is load-bearing, not cosmetic.
   const currentModelId =
     typeof args.payload.model === "string" && args.payload.model.trim()
       ? args.payload.model.trim()
@@ -3745,7 +3746,7 @@ export async function handleInvocation(
           tools: bundle.tools,
           extensionFactories: bundle.extensionFactories,
           extensionToolNames: bundle.extensionToolNames,
-          modelId: args.payload.model,
+          modelId: currentModelId,
           threadId: identity.threadId,
           gitSha: env.gitSha,
           identity,
@@ -3774,7 +3775,7 @@ export async function handleInvocation(
           // U6 — fold extension tool names into the allowlist so they're actually
           // enabled (the SDK gates to the allowlist).
           extensionToolNames: bundle.extensionToolNames,
-          modelId: args.payload.model,
+          modelId: currentModelId,
           threadId: identity.threadId,
           gitSha: env.gitSha,
           identity,
@@ -3818,7 +3819,7 @@ export async function handleInvocation(
             tools: bundle.tools,
             extensionFactories: bundle.extensionFactories,
             extensionToolNames: bundle.extensionToolNames,
-            modelId: args.payload.model,
+            modelId: currentModelId,
             threadId: identity.threadId,
             gitSha: env.gitSha,
             identity,
