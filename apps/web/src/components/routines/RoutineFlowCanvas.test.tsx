@@ -3,10 +3,18 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 let flowProps: Record<string, unknown> | null = null;
+const fitViewMock = vi.fn();
 
 vi.mock("@xyflow/react", () => ({
   ReactFlow: (props: Record<string, unknown>) => {
     flowProps = props;
+    (
+      props.onInit as
+        | ((instance: { fitView: typeof fitViewMock }) => void)
+        | undefined
+    )?.({
+      fitView: fitViewMock,
+    });
     return <div data-testid="react-flow">{props.children as ReactNode}</div>;
   },
   Background: () => null,
@@ -24,10 +32,18 @@ import { RoutineFlowCanvas } from "./RoutineFlowCanvas";
 afterEach(() => {
   cleanup();
   flowProps = null;
+  fitViewMock.mockReset();
+  vi.unstubAllGlobals();
 });
 
 describe("RoutineFlowCanvas", () => {
   it("caps automatic fit at authored node size while retaining manual zoom", () => {
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
     render(
       <RoutineFlowCanvas
         mode="execution"
@@ -52,5 +68,6 @@ describe("RoutineFlowCanvas", () => {
     expect(flowProps?.fitView).toBe(true);
     expect(flowProps?.fitViewOptions).toEqual({ padding: 0.18, maxZoom: 1 });
     expect(flowProps?.maxZoom).toBe(1.4);
+    expect(fitViewMock).toHaveBeenCalledWith({ padding: 0.18, maxZoom: 1 });
   });
 });
