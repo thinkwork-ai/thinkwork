@@ -21,6 +21,8 @@ import { rollbackThreadIdleLearningRun } from "./rollbackThreadIdleLearningRun.m
 import { spaceMemorySearch } from "./spaceMemorySearch.query.js";
 import { memoryRetainAttempts } from "./memoryRetainAttempts.query.js";
 import { brainDreamRuns } from "./brainDreamRuns.query.js";
+import { promoteSpaceMemoriesToTenant } from "./promoteSpaceMemoriesToTenant.mutation.js";
+import { tenantBankMemories } from "./tenantBankMemories.query.js";
 
 export const memoryQueries = {
   memoryRecords,
@@ -31,6 +33,7 @@ export const memoryQueries = {
   memorySystemConfig,
   memoryRetainAttempts,
   brainDreamRuns,
+  tenantBankMemories,
   mobileMemoryCaptures,
   mobileMemorySearch,
   mobileWikiSearch,
@@ -45,6 +48,7 @@ export const memoryMutations = {
   captureMobileMemory,
   captureSpaceMemory,
   ingestSpaceMemoryDocument,
+  promoteSpaceMemoriesToTenant,
   deleteMobileMemoryCapture,
   rollbackThreadIdleLearningRun,
 };

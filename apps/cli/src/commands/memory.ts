@@ -23,6 +23,44 @@ import {
   printSuccess,
 } from "../ui.js";
 
+const PromoteSpaceMemoriesDoc = graphql(`
+  mutation CliPromoteSpaceMemories(
+    $tenantId: ID
+    $spaceId: ID!
+    $memoryIds: [ID!]!
+    $justification: String!
+  ) {
+    promoteSpaceMemoriesToTenant(
+      tenantId: $tenantId
+      spaceId: $spaceId
+      memoryIds: $memoryIds
+      justification: $justification
+    ) {
+      promoted
+      alreadyPromoted
+      missing
+    }
+  }
+`);
+
+const TenantBankMemoriesDoc = graphql(`
+  query CliTenantBankMemories($tenantId: ID, $limit: Int) {
+    tenantBankMemories(tenantId: $tenantId, limit: $limit) {
+      id
+      content
+      factType
+      sourceBankId
+      sourceMemoryId
+      sourceTimestamp
+      promotedBy
+      promotedAt
+      justification
+      accessCount
+      createdAt
+    }
+  }
+`);
+
 const MemoryRecordsDoc = graphql(`
   query CliMemoryRecords($tenantId: ID, $assistantId: ID, $namespace: String!) {
     memoryRecords(
@@ -387,6 +425,92 @@ async function runMemoryGraph(opts: GraphOptions): Promise<void> {
   }
 }
 
+interface PromoteOptions extends MemoryCliOptions {
+  space?: string;
+  ids?: string;
+  justification?: string;
+}
+
+/**
+ * Governed Promotion (company-brain plan U10): copy selected space-bank
+ * memories into the Tenant Bank. Tenant owner/admin + source-space access
+ * enforced server-side; this surface is the pilot's operator entry point.
+ */
+async function runMemoryPromote(opts: PromoteOptions): Promise<void> {
+  const ctx = await resolveMemoryContext(opts);
+  if (!opts.space) {
+    printError("--space <id> is required.");
+    process.exit(1);
+  }
+  const memoryIds = (opts.ids ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (memoryIds.length === 0) {
+    printError("--ids <id,id,...> is required (source memory unit ids).");
+    process.exit(1);
+  }
+  if (!opts.justification?.trim()) {
+    printError("--justification <text> is required (audited).");
+    process.exit(1);
+  }
+  const data = await gqlMutate(ctx.client, PromoteSpaceMemoriesDoc, {
+    tenantId: ctx.tenantId,
+    spaceId: opts.space,
+    memoryIds,
+    justification: opts.justification,
+  });
+  const result = data.promoteSpaceMemoriesToTenant;
+  if (isJsonMode()) {
+    printJson(result);
+    return;
+  }
+  printSuccess(
+    `Promoted ${result.promoted.length}; already promoted ${result.alreadyPromoted.length}; missing ${result.missing.length}.`,
+  );
+  if (result.missing.length > 0) {
+    printError(`Missing from space bank: ${result.missing.join(", ")}`);
+  }
+}
+
+interface BankOptions extends MemoryCliOptions {
+  limit?: string;
+}
+
+/** Company-brain plan U11: Tenant Bank contents + provenance in one query. */
+async function runMemoryBank(opts: BankOptions): Promise<void> {
+  const ctx = await resolveMemoryContext(opts);
+  const data = await gqlQuery(ctx.client, TenantBankMemoriesDoc, {
+    tenantId: ctx.tenantId,
+    limit: opts.limit ? Number(opts.limit) : null,
+  });
+  const rows = data.tenantBankMemories;
+  if (isJsonMode()) {
+    printJson(rows);
+    return;
+  }
+  if (rows.length === 0) {
+    logStderr("Tenant Bank is empty.");
+    return;
+  }
+  printTable(
+    rows.map((row) => ({
+      id: row.id,
+      promotedAt: row.promotedAt ?? "",
+      sourceBankId: row.sourceBankId ?? "",
+      access: String(row.accessCount ?? 0),
+      content: (row.content ?? "").slice(0, 80),
+    })),
+    [
+      { key: "id", header: "ID" },
+      { key: "promotedAt", header: "Promoted At" },
+      { key: "sourceBankId", header: "Source Bank" },
+      { key: "access", header: "Access" },
+      { key: "content", header: "Content" },
+    ],
+  );
+}
+
 export function registerMemoryCommand(program: Command): void {
   const memory = program
     .command("memory")
@@ -436,6 +560,28 @@ export function registerMemoryCommand(program: Command): void {
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(runMemoryUpdate);
+
+  memory
+    .command("promote")
+    .description(
+      "Governed Promotion: copy selected space-bank memories into the Tenant Bank (tenant owner/admin only).",
+    )
+    .option("--space <id>", "Source space ID")
+    .option("--ids <ids>", "Comma-separated source memory unit ids")
+    .option("--justification <text>", "Audited justification for the promotion")
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
+    .action(runMemoryPromote);
+
+  memory
+    .command("bank")
+    .description(
+      "List the Tenant Bank's memories with Governed Promotion provenance and access counts.",
+    )
+    .option("--limit <n>", "Max rows", "200")
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
+    .action(runMemoryBank);
 
   memory
     .command("delete <recordId>")

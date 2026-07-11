@@ -3876,6 +3876,7 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
+  promoteSpaceMemoriesToTenant: TenantMemoryPromotionResult;
   /**
    * Run the analyst connector provisioning ceremony for the caller's tenant
    * (THINK-230) — the operator-facing action that replaces the
@@ -4866,6 +4867,14 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
+};
+
+
+export type MutationPromoteSpaceMemoriesToTenantArgs = {
+  justification: Scalars['String']['input'];
+  memoryIds: Array<Scalars['ID']['input']>;
+  spaceId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -6630,6 +6639,7 @@ export type Query = {
   tenantAgent: Agent;
   tenantAgentSummary: TenantAgentSummary;
   tenantArtifactShares: Array<ArtifactShare>;
+  tenantBankMemories: Array<TenantBankMemory>;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
   tenantDocumentPalette: TenantDocumentPalette;
@@ -7592,6 +7602,12 @@ export type QueryTenantAgentSummaryArgs = {
 
 export type QueryTenantArtifactSharesArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryTenantBankMemoriesArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -9534,6 +9550,25 @@ export type TenantAuthProviderReference = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+/**
+ * One Tenant Bank memory with its Governed Promotion provenance and consumption
+ * signal (company-brain plan U11 — provenance queryable in one step).
+ */
+export type TenantBankMemory = {
+  __typename?: 'TenantBankMemory';
+  accessCount?: Maybe<Scalars['Int']['output']>;
+  content: Scalars['String']['output'];
+  createdAt?: Maybe<Scalars['String']['output']>;
+  factType?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  justification?: Maybe<Scalars['String']['output']>;
+  promotedAt?: Maybe<Scalars['String']['output']>;
+  promotedBy?: Maybe<Scalars['String']['output']>;
+  sourceBankId?: Maybe<Scalars['String']['output']>;
+  sourceMemoryId?: Maybe<Scalars['ID']['output']>;
+  sourceTimestamp?: Maybe<Scalars['String']['output']>;
+};
+
 export type TenantCredential = {
   __typename?: 'TenantCredential';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -9589,6 +9624,18 @@ export type TenantMember = {
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   user?: Maybe<User>;
+};
+
+/**
+ * Governed Promotion (company-brain plan U10): explicitly selected space-bank
+ * memories copied into the Tenant Bank with provenance intact. Idempotent per
+ * source memory; the source rows are untouched.
+ */
+export type TenantMemoryPromotionResult = {
+  __typename?: 'TenantMemoryPromotionResult';
+  alreadyPromoted: Array<Scalars['ID']['output']>;
+  missing: Array<Scalars['ID']['output']>;
+  promoted: Array<Scalars['ID']['output']>;
 };
 
 export type TenantModelCatalogEntry = {
