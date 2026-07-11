@@ -3766,8 +3766,24 @@ export type MemoryEvidenceItemSummary = {
 
 export type MemoryGraph = {
   __typename?: 'MemoryGraph';
+  /**
+   * All banks in scope for this graph (tenant-enumerated in allTenantBanks
+   * mode), including banks with no visible nodes.
+   */
+  banks: Array<MemoryGraphBank>;
   edges: Array<MemoryGraphEdge>;
   nodes: Array<MemoryGraphNode>;
+};
+
+/**
+ * A Hindsight bank enumerated from tenant tables (user / space / agent),
+ * independent of whether any of its entities appear in the returned graph.
+ * The Bank filter facet builds from this list, never from node data.
+ */
+export type MemoryGraphBank = {
+  __typename?: 'MemoryGraphBank';
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
 };
 
 export type MemoryGraphEdge = {

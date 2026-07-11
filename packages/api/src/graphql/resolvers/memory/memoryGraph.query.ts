@@ -89,14 +89,21 @@ export const memoryGraph = async (
     bankLabels = new Map([[`user_${userId}`, "You"]]);
   }
 
+  // The Bank facet builds from this authoritative, tenant-enumerated list —
+  // never from which banks happened to land nodes in the capped graph — so
+  // young space/tenant banks stay visible and selectable from day zero.
+  const banks = [...bankLabels.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   const { inspect: inspectService } = getMemoryServices();
   const capabilities = await inspectService.capabilities();
   if (!capabilities.inspectGraph) {
-    return { nodes: [], edges: [] };
+    return { nodes: [], edges: [], banks };
   }
 
   const bankIds = [...bankLabels.keys()];
-  if (bankIds.length === 0) return { nodes: [], edges: [] };
+  if (bankIds.length === 0) return { nodes: [], edges: [], banks };
   // Drizzle renders a bare JS-array param as a `($1, $2)` record, which
   // Postgres can't cast to an array — build ARRAY[...] explicitly.
   const bankIdArray = sql`ARRAY[${sql.join(
@@ -112,31 +119,30 @@ export const memoryGraph = async (
   // (identical to `db` until the cutover env var is set).
   const hdb = resolveHindsightDb(db);
 
-  // Per-bank top-K, not a global top-N: mature user banks have entities with
-  // thousands of mentions while young space/tenant banks top out in the
-  // single digits, so a global `ORDER BY mention_count LIMIT 200` never
-  // surfaces them (and they then vanish from the UI's Bank facet, which is
-  // built from returned nodes). Ranking within each bank first and filling
-  // the 200-node budget round-robin by rank guarantees every non-empty bank
-  // contributes its top entities. Single-bank mode degenerates to the old
-  // global top-200.
+  // Per-bank ranking, not a global top-N: a global ORDER BY mention_count
+  // starves young banks — 12k-unit user banks monopolize the cap while a
+  // space or tenant bank's entire entity set (mention counts in the single
+  // digits) never surfaces. Rank within each bank, take every bank's best
+  // rows first, then fill by mention count up to the overall bound.
   let entityRows: any;
   try {
     entityRows = await hdb.execute(sql`
 			SELECT id, canonical_name, mention_count, metadata, bank_id
 			FROM (
-				SELECT id, canonical_name, mention_count, metadata, bank_id,
+				SELECT e.id, e.canonical_name, e.mention_count, e.metadata, e.bank_id,
 					ROW_NUMBER() OVER (
-						PARTITION BY bank_id ORDER BY mention_count DESC, id
+						PARTITION BY e.bank_id
+						ORDER BY e.mention_count DESC, e.id
 					) AS bank_rank
-				FROM ${hindsightSql()}entities
-				WHERE bank_id = ANY(${bankIdArray})
+				FROM ${hindsightSql()}entities e
+				WHERE e.bank_id = ANY(${bankIdArray})
 			) ranked
+			WHERE bank_rank <= 25
 			ORDER BY bank_rank ASC, mention_count DESC
-			LIMIT 200
+			LIMIT 300
 		`);
   } catch {
-    return { nodes: [], edges: [] };
+    return { nodes: [], edges: [], banks };
   }
 
   const entityIds: string[] = (entityRows.rows || []).map((r: any) =>
@@ -224,5 +230,5 @@ export const memoryGraph = async (
     weight: (Number(r.cooccurrence_count) || 1) / maxCooccurrence,
   }));
 
-  return { nodes, edges };
+  return { nodes, edges, banks };
 };

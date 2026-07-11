@@ -134,9 +134,24 @@ type MemoryGraphEdge {
   weight: Float!
 }
 
+"""
+A Hindsight bank enumerated from tenant tables (user / space / agent),
+independent of whether any of its entities appear in the returned graph.
+The Bank filter facet builds from this list, never from node data.
+"""
+type MemoryGraphBank {
+  id: String!
+  name: String!
+}
+
 type MemoryGraph {
   nodes: [MemoryGraphNode!]!
   edges: [MemoryGraphEdge!]!
+  """
+  All banks in scope for this graph (tenant-enumerated in allTenantBanks
+  mode), including banks with no visible nodes.
+  """
+  banks: [MemoryGraphBank!]!
 }
 
 """

@@ -5,6 +5,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryGraph } from "./MemoryGraph.js";
@@ -173,6 +174,111 @@ describe("MemoryGraph (2D canvas)", () => {
     await screen.findByTestId("force-graph");
     return latestForceGraphProps();
   }
+
+  it("builds the Bank facet from the query's authoritative banks list, not from rendered nodes", async () => {
+    const onBanksLoaded = vi.fn();
+    urqlMocks.useQuery.mockReturnValue([
+      {
+        fetching: false,
+        data: {
+          memoryGraph: {
+            ...memoryGraphFixture,
+            nodes: [
+              {
+                ...memoryGraphFixture.nodes[0],
+                bankId: "user_u1",
+                bankName: "Eric Odom",
+              },
+            ],
+            // "General" has no nodes in the capped graph — it must still be
+            // filterable.
+            banks: [
+              { id: "user_u1", name: "Eric Odom" },
+              { id: "space_s1", name: "General" },
+            ],
+          },
+        },
+        error: null,
+      },
+      vi.fn(),
+    ] as any);
+    render(
+      <MemoryGraph
+        useRequesterScope
+        allTenantBanks
+        onBanksLoaded={onBanksLoaded}
+      />,
+    );
+    await screen.findByTestId("force-graph");
+    expect(onBanksLoaded).toHaveBeenCalledWith([
+      { id: "user_u1", name: "Eric Odom" },
+      { id: "space_s1", name: "General" },
+    ]);
+  });
+
+  it("reports authoritative banks even when the graph has zero nodes", async () => {
+    const onBanksLoaded = vi.fn();
+    urqlMocks.useQuery.mockReturnValue([
+      {
+        fetching: false,
+        data: {
+          memoryGraph: {
+            nodes: [],
+            edges: [],
+            banks: [{ id: "space_s1", name: "General" }],
+          },
+        },
+        error: null,
+      },
+      vi.fn(),
+    ] as any);
+    render(
+      <MemoryGraph
+        useRequesterScope
+        allTenantBanks
+        onBanksLoaded={onBanksLoaded}
+      />,
+    );
+    await waitFor(() =>
+      expect(onBanksLoaded).toHaveBeenCalledWith([
+        { id: "space_s1", name: "General" },
+      ]),
+    );
+  });
+
+  it("falls back to node-derived banks when the server returns no banks field", async () => {
+    const onBanksLoaded = vi.fn();
+    urqlMocks.useQuery.mockReturnValue([
+      {
+        fetching: false,
+        data: {
+          memoryGraph: {
+            ...memoryGraphFixture,
+            nodes: [
+              {
+                ...memoryGraphFixture.nodes[0],
+                bankId: "user_u1",
+                bankName: "Eric Odom",
+              },
+            ],
+          },
+        },
+        error: null,
+      },
+      vi.fn(),
+    ] as any);
+    render(
+      <MemoryGraph
+        useRequesterScope
+        allTenantBanks
+        onBanksLoaded={onBanksLoaded}
+      />,
+    );
+    await screen.findByTestId("force-graph");
+    expect(onBanksLoaded).toHaveBeenCalledWith([
+      { id: "user_u1", name: "Eric Odom" },
+    ]);
+  });
 
   it("wires the interactivity contract: geometric click, drag, background", async () => {
     const props = await renderWithData();
