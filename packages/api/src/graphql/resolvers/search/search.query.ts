@@ -14,6 +14,7 @@ import {
 } from "../core/resolve-auth-user.js";
 import { resolveWikiUnionReadScope } from "../wiki/auth.js";
 import { searchBroker, type SearchSource } from "../../../lib/search/broker.js";
+import { resolveServiceSearchScope } from "./search-auth.js";
 
 const DEFAULT_LIMIT = 10;
 
@@ -29,6 +30,25 @@ export const search = async (
   ctx: GraphQLContext,
 ) => {
   const authType = ctx.auth?.authType;
+
+  // Service callers are the Pi agent tool (THINK-263 U8): derive tenant AND
+  // the turn's user server-side from the turn-bound header so the broker runs
+  // with the same per-user thread/memory scope the user sees in the palette.
+  if (authType === "service") {
+    const { tenantId, userId } = await resolveServiceSearchScope(ctx, {
+      tenantId: args.tenantId,
+    });
+    return searchBroker({
+      tenantId,
+      callerUserId: userId,
+      query: args.query,
+      sources: args.sources ?? [],
+      limit: args.limit ?? DEFAULT_LIMIT,
+      wikiScope: { kind: "tenantUnion", userId },
+      queryId: args.queryId ?? null,
+    });
+  }
+
   let callerUserId: string | null = null;
   if (authType === "cognito") {
     const callerTenantId = await resolveCallerTenantId(ctx);

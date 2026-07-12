@@ -16,6 +16,7 @@ export * from "./mcp-result-transforms.js";
 export * from "./model-provider.js";
 export * from "./model-routing-policy.js";
 export * from "./okf-wiki-navigator.js";
+export * from "./search-provider.js";
 export * from "./tool-costs.js";
 export * from "./types.js";
 export * from "./workspace-provider.js";
