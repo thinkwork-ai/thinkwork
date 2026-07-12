@@ -47,6 +47,8 @@ export interface PhaseConfig {
   model: string;
   wallClockSlaMinutes: number;
   silenceBudgetMinutes: number;
+  /** `--max-budget-usd` runaway backstop for the phase's worker. */
+  budgetUsd: number;
 }
 
 export interface FactoryConfig {
@@ -63,23 +65,50 @@ export const DEFAULT_POLL_INTERVAL_SECONDS = 30;
 /**
  * Default phase table. Keys are the factory's pipeline phases; user config
  * may override any field per phase (shallow-merged) or add extra phases.
+ *
+ * Models/budgets mirror the Model Policy table in
+ * .claude/skills/linear-dispatch/SKILL.md verbatim:
+ *   Brainstorm, Plan        → fable  / $25
+ *   Implement (and repair)  → fable  / $100
+ *   Verify, Debug           → opus   / $50
+ *   Compound                → sonnet / $10
  */
 export const DEFAULT_PHASES: Record<string, PhaseConfig> = {
-  plan: { model: "opus", wallClockSlaMinutes: 45, silenceBudgetMinutes: 10 },
-  implement: {
-    model: "sonnet",
-    wallClockSlaMinutes: 120,
-    silenceBudgetMinutes: 15,
+  brainstorm: {
+    model: "fable",
+    wallClockSlaMinutes: 45,
+    silenceBudgetMinutes: 10,
+    budgetUsd: 25,
   },
-  verify: {
-    model: "sonnet",
+  plan: {
+    model: "fable",
+    wallClockSlaMinutes: 45,
+    silenceBudgetMinutes: 10,
+    budgetUsd: 25,
+  },
+  debug: {
+    model: "opus",
     wallClockSlaMinutes: 60,
     silenceBudgetMinutes: 10,
+    budgetUsd: 50,
+  },
+  implement: {
+    model: "fable",
+    wallClockSlaMinutes: 120,
+    silenceBudgetMinutes: 15,
+    budgetUsd: 100,
+  },
+  verify: {
+    model: "opus",
+    wallClockSlaMinutes: 60,
+    silenceBudgetMinutes: 10,
+    budgetUsd: 50,
   },
   compound: {
     model: "sonnet",
     wallClockSlaMinutes: 30,
     silenceBudgetMinutes: 10,
+    budgetUsd: 10,
   },
 };
 
@@ -158,6 +187,7 @@ function mergePhases(raw: unknown): Record<string, PhaseConfig> {
       model: "sonnet",
       wallClockSlaMinutes: 60,
       silenceBudgetMinutes: 10,
+      budgetUsd: 25,
     };
     merged[name] = {
       model: isNonEmptyString(v.model) ? v.model : base.model,
@@ -169,6 +199,10 @@ function mergePhases(raw: unknown): Record<string, PhaseConfig> {
         typeof v.silenceBudgetMinutes === "number" && v.silenceBudgetMinutes > 0
           ? v.silenceBudgetMinutes
           : base.silenceBudgetMinutes,
+      budgetUsd:
+        typeof v.budgetUsd === "number" && v.budgetUsd > 0
+          ? v.budgetUsd
+          : base.budgetUsd,
     };
   }
   return merged;

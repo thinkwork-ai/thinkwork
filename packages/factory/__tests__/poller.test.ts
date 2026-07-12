@@ -44,7 +44,8 @@ describe("candidate filter", () => {
 
     const result = await pollTick(gateway, TEAM);
     const ids = result.candidates.map((c) => c.issue.identifier).sort();
-    expect(ids).toEqual(["T-1", "T-2", "T-3", "T-4"]);
+    // T-7 (Done + lane) IS a candidate: the engine decides compound vs noop.
+    expect(ids).toEqual(["T-1", "T-2", "T-3", "T-4", "T-7"]);
 
     const byId = Object.fromEntries(
       result.candidates.map((c) => [c.issue.identifier, c]),

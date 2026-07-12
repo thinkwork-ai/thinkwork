@@ -54,6 +54,10 @@ export const ACTIVE_STATES = [
   "Ready to Work",
   "Ready To Work",
   "In Progress",
+  // Done is routed too: the engine decides compound (LFG + not yet
+  // compounded) or noop — excluding it here made the contract's compound
+  // row unreachable (fixed in the U5 wiring slice).
+  "Done",
 ] as const;
 
 /** Verification-family states — enrolled regardless of lane label. */

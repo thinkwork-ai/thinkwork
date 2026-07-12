@@ -11,6 +11,10 @@ import type {
 
 export interface FakeIssue extends LinearIssueSnapshot {
   comments: LinearCommentSnapshot[];
+  /** KTD-12 guard input: does this issue have child issues? */
+  hasChildren?: boolean;
+  /** Content of the `Progress: <title>` document; null/absent = none. */
+  progressDoc?: string | null;
 }
 
 export interface WriteLogEntry {
@@ -36,6 +40,8 @@ export function makeIssue(
     state: partial.state ?? "Todo",
     labels: partial.labels ?? [],
     comments: partial.comments ?? [],
+    hasChildren: partial.hasChildren ?? false,
+    progressDoc: partial.progressDoc ?? null,
   };
 }
 
@@ -102,6 +108,17 @@ export class FakeGateway implements LinearGateway {
     this.writes.push({ op: "removeLabel", args: [issueId, labelName] });
     const issue = this.byId(issueId);
     issue.labels = issue.labels.filter((l) => l !== labelName);
+  }
+
+  async hasChildIssues(issueId: string): Promise<boolean> {
+    return this.byId(issueId).hasChildren === true;
+  }
+
+  async getProgressDocument(
+    issueId: string,
+    _featureTitle: string,
+  ): Promise<string | null> {
+    return this.byId(issueId).progressDoc ?? null;
   }
 
   async setState(issueId: string, stateName: string): Promise<void> {

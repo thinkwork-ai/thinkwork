@@ -36,6 +36,22 @@ export interface LinearGateway {
   addLabel(issueId: string, labelName: string): Promise<void>;
   removeLabel(issueId: string, labelName: string): Promise<void>;
   setState(issueId: string, stateName: string): Promise<void>;
+  /** True when the issue has at least one child issue (KTD-12 guard). */
+  hasChildIssues(issueId: string): Promise<boolean>;
+  /**
+   * Markdown content of the Progress document for this issue, or null when
+   * none exists. Implementation choice (documented per U5): @linear/sdk
+   * exposes `issue.documents()` whose Document fragment includes `title` and
+   * `content`, so we read documents attached to the ISSUE directly — an exact
+   * `Progress: <featureTitle>` title match wins, else the newest
+   * `Progress:`-prefixed document. No project-level fallback is needed; when
+   * nothing matches we return null and baton synthesis falls back to issue
+   * description + comments.
+   */
+  getProgressDocument(
+    issueId: string,
+    featureTitle: string,
+  ): Promise<string | null>;
 }
 
 interface PageOf<T> {
@@ -161,6 +177,35 @@ export function createLinearGateway(apiKey: string): LinearGateway {
         .map((l) => l.id);
       if (remaining.length === current.length) return;
       await client.updateIssue(issueId, { labelIds: remaining });
+    },
+
+    async hasChildIssues(issueId) {
+      const issue = await client.issue(issueId);
+      const children = (await issue.children({ first: 1 })) as unknown as {
+        nodes: unknown[];
+      };
+      return children.nodes.length > 0;
+    },
+
+    async getProgressDocument(issueId, featureTitle) {
+      const issue = await client.issue(issueId);
+      const docs = await drain(
+        (await issue.documents()) as unknown as PageOf<{
+          title: string;
+          content?: string;
+          updatedAt: Date | string;
+        }>,
+      );
+      const exactTitle = `Progress: ${featureTitle}`;
+      const byNewest = (a: { updatedAt: Date | string }, b: { updatedAt: Date | string }) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      const exact = docs.filter((d) => d.title === exactTitle).sort(byNewest);
+      if (exact.length > 0) return exact[0].content ?? null;
+      const prefixed = docs
+        .filter((d) => d.title.startsWith("Progress:"))
+        .sort(byNewest);
+      if (prefixed.length > 0) return prefixed[0].content ?? null;
+      return null;
     },
 
     async setState(issueId, stateName) {

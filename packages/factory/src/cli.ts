@@ -2,15 +2,35 @@
 
 /**
  * factoryd — daemon that dispatches headless Claude/Codex workers against
- * Linear issues. U2 scaffold: `run` wires config + store + logger and exits;
- * the poll loop lands in a later unit. `status`/`pause`/`resume`/`halt` are
- * stubs until the control surface exists.
+ * Linear issues. U5 wiring: `run` executes the real poll loop (pollTick →
+ * preflight → StoreView → decideAction → executeAction) with clean
+ * SIGINT/SIGTERM shutdown and a `--once` tracer mode; `doctor` checks the
+ * daemon's own dependencies. `status`/`pause`/`resume`/`halt` are stubs
+ * until the control surface exists (U8).
  */
 
+import { join } from "node:path";
+
 import { Command } from "commander";
+
 import { ConfigError, getStateDir, loadConfig } from "./config.js";
+import {
+  createDaemonController,
+  runDaemon,
+  type DaemonDeps,
+} from "./daemon.js";
+import { formatDoctorReport, runDoctor } from "./doctor.js";
+import { createLinearGateway } from "./linear/client.js";
 import { createLogger } from "./logger.js";
+import {
+  defaultBootstrapScriptPath,
+  executeAction,
+  type ExecutorDeps,
+} from "./phases/executor.js";
 import { openStore } from "./store/db.js";
+import { createAttemptMachine } from "./workers/attempts.js";
+import { ClaudeRunner } from "./workers/claude-runner.js";
+import { LocalTransport } from "./workers/transport.js";
 
 const program = new Command();
 
@@ -21,10 +41,9 @@ program
 
 program
   .command("run")
-  .description(
-    "Start the daemon (config + store + logger wiring; poll loop lands later)",
-  )
-  .action(() => {
+  .description("Start the daemon poll loop (single dispatch authority)")
+  .option("--once", "run a single poll tick and exit (tracer mode)")
+  .action(async (opts: { once?: boolean }) => {
     const log = createLogger({ component: "factoryd" });
     let config;
     try {
@@ -42,17 +61,103 @@ program
       throw e;
     }
 
+    const host = config.hosts.find(
+      (h) => h.kind === "local" && h.capabilities.includes("claude"),
+    );
+    if (host === undefined) {
+      log.error(
+        "no local host with the claude capability in config.hosts — nothing can launch",
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     const stateDir = getStateDir();
     const store = openStore(stateDir);
+    const machine = createAttemptMachine(store);
+    const gateway = createLinearGateway(config.linear.apiKey);
+    const transport = new LocalTransport();
+
+    const claudeRunner =
+      host.claudeBin !== undefined
+        ? new ClaudeRunner({
+            claudeBin: host.claudeBin,
+            logsDir: join(stateDir, "logs"),
+            transport,
+          })
+        : null;
+    if (claudeRunner === null) {
+      log.warn(
+        "host has no claudeBin — launch decisions will be skipped until it is configured",
+        { host: host.name },
+      );
+    }
+
+    const executorDeps: ExecutorDeps = {
+      gateway,
+      store,
+      machine,
+      config,
+      host,
+      teamKey: config.linear.teamKey,
+      worktreesDir: join(stateDir, "worktrees"),
+      bootstrapScript: defaultBootstrapScriptPath(),
+      runnerFor: (kind) => (kind === "claude" ? claudeRunner : null),
+      log: log.child("executor"),
+    };
+
+    const daemonDeps: DaemonDeps = {
+      gateway,
+      store,
+      transport,
+      repoPath: host.repoPath,
+      teamKey: config.linear.teamKey,
+      log: log.child("loop"),
+      execute: (action, candidate) =>
+        executeAction(action, candidate, executorDeps),
+    };
+
+    const controller = createDaemonController();
+    const onSignal = (signal: string) => {
+      log.info(
+        "shutdown requested — finishing current issue; detached workers keep running",
+        { signal },
+      );
+      controller.stop();
+    };
+    process.once("SIGINT", () => onSignal("SIGINT"));
+    process.once("SIGTERM", () => onSignal("SIGTERM"));
+
     log.info("factoryd starting", {
       stateDir,
       teamKey: config.linear.teamKey,
-      hosts: config.hosts.map((h) => h.name),
+      host: host.name,
       pollIntervalSeconds: config.pollIntervalSeconds,
       phases: Object.keys(config.phases),
+      once: opts.once === true,
     });
-    log.info("poll loop not yet implemented — exiting cleanly (U2 scaffold)");
-    store.close();
+
+    try {
+      await runDaemon(daemonDeps, {
+        pollIntervalSeconds: config.pollIntervalSeconds,
+        once: opts.once === true,
+        controller,
+      });
+    } finally {
+      store.close();
+    }
+    log.info("factoryd stopped");
+  });
+
+program
+  .command("doctor")
+  .description(
+    "Check daemon prerequisites: config, store, Linear API, claude binary, gh auth, bootstrap script",
+  )
+  .action(async () => {
+    const { checks, ok } = await runDoctor();
+    console.log(formatDoctorReport(checks));
+    if (!ok) process.exitCode = 1;
   });
 
 program
