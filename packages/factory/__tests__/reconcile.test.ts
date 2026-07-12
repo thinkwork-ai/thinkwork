@@ -26,6 +26,7 @@ import {
 } from "../src/reconcile/reconciler.js";
 import type { GithubGateway, PrInfo } from "../src/phases/evidence.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
+import { DEV_DEPLOYMENT_LOCK } from "../src/sweep/locks.js";
 import type {
   ExecResult,
   HostTransport,
@@ -146,7 +147,9 @@ describe("orphaned attempt expiry (AE6)", () => {
     const res = await reconcile(deps(gateway, new ReconcileTransport()));
 
     const attempt = store.getAttempt(attemptId)!;
-    expect(attempt.state).toBe("Failed");
+    // Restart-orphans settle as CanceledByReconciliation (NOT Failed) so they
+    // are structurally excluded from the attempt-ceiling kill count.
+    expect(attempt.state).toBe("CanceledByReconciliation");
     expect(attempt.detail).toMatch(/orphaned by daemon restart/);
     expect(store.getLease(issue.id)).toBeUndefined();
     expect(res.relaunchQueued).toContain("THINK-1");
@@ -177,7 +180,7 @@ describe("orphaned attempt expiry (AE6)", () => {
     // No github + status not moved + no baton → no evidence → expire.
     const res = await reconcile(deps(gateway, transport));
 
-    expect(store.getAttempt(attemptId)!.state).toBe("Failed");
+    expect(store.getAttempt(attemptId)!.state).toBe("CanceledByReconciliation");
     expect(res.relaunchQueued).toContain("THINK-2");
   });
 });
@@ -275,6 +278,155 @@ describe("host-unreachable freeze", () => {
     expect(res.outcomes[0].kind).toBe("host-unreachable");
     expect(res.relaunchQueued).toHaveLength(0);
     expect(transport.killed).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix: stalled-but-ALIVE worker must be killed BEFORE it is settled/relaunched
+// ---------------------------------------------------------------------------
+
+describe("stalled-but-alive orphan is killed before settle", () => {
+  it("a reachable host + live pid + stale log (stalled) → killPidGroup, then settle + relaunch", async () => {
+    const issue = makeIssue({ identifier: "THINK-7", state: "In Progress" });
+    const gateway = new FakeGateway([issue]);
+    upsertIssueRow(issue.id, issue.identifier, issue.state);
+    const attemptId = store.insertAttempt({
+      issueId: issue.id,
+      phase: "implement",
+      attemptNumber: 1,
+      state: "Running",
+      pid: 8080,
+      branch: "auto/think-7-implement-a1",
+      logPath: "/log",
+    });
+    const transport = new ReconcileTransport();
+    transport.reachable = true;
+    transport.alivePids.add(8080); // pid is ALIVE …
+    // … but the log has been silent for 20m, past the 10m budget → "stalled".
+    transport.mtimeByPath.set("/log", clockNow.getTime() - 20 * 60_000);
+
+    const res = await reconcile(deps(gateway, transport));
+
+    // The wedged-but-live worker was killed before the row was settled — the
+    // duplicate-worker / adopt-while-alive race is closed.
+    expect(transport.killed).toEqual([8080]);
+    const attempt = store.getAttempt(attemptId)!;
+    expect(attempt.state).toBe("CanceledByReconciliation");
+    expect(store.getLease(issue.id)).toBeUndefined();
+    expect(res.relaunchQueued).toContain("THINK-7");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix: dev-deployment lock leaked by a hard crash → cleared on boot reconcile
+// ---------------------------------------------------------------------------
+
+describe("orphaned dev-deployment lock cleanup", () => {
+  it("a lock held by an issue with NO active attempt is released on boot reconcile", async () => {
+    const issue = makeIssue({ identifier: "THINK-8", state: "Verification" });
+    const gateway = new FakeGateway([issue]);
+    // Issue row present (store is not empty), but no active attempt — the
+    // verify worker that held the lock died in a SIGKILL, leaving the row set.
+    upsertIssueRow(issue.id, issue.identifier, issue.state);
+    store.acquireLock(DEV_DEPLOYMENT_LOCK, issue.id, clockNow.toISOString());
+    expect(store.getLock(DEV_DEPLOYMENT_LOCK)?.holder_issue_id).toBe(issue.id);
+
+    await reconcile(deps(gateway, new ReconcileTransport()));
+
+    expect(store.getLock(DEV_DEPLOYMENT_LOCK)).toBeUndefined();
+  });
+
+  it("a lock held by an issue whose worker was reattached (still active) is retained", async () => {
+    const issue = makeIssue({ identifier: "THINK-8b", state: "Verification" });
+    const gateway = new FakeGateway([issue]);
+    upsertIssueRow(issue.id, issue.identifier, issue.state);
+    store.insertAttempt({
+      issueId: issue.id,
+      phase: "verify",
+      attemptNumber: 1,
+      state: "Running",
+      pid: 909,
+      logPath: "/log",
+    });
+    store.acquireLock(DEV_DEPLOYMENT_LOCK, issue.id, clockNow.toISOString());
+    const transport = new ReconcileTransport();
+    transport.alivePids.add(909); // live → reattached, keeps its lock
+    transport.mtimeByPath.set("/log", clockNow.getTime() - 60_000);
+
+    await reconcile(deps(gateway, transport));
+
+    expect(store.getLock(DEV_DEPLOYMENT_LOCK)?.holder_issue_id).toBe(issue.id);
+  });
+
+  it("settling an orphaned VERIFY attempt also drops its held dev lock", async () => {
+    const issue = makeIssue({ identifier: "THINK-8c", state: "Verification" });
+    const gateway = new FakeGateway([issue]);
+    upsertIssueRow(issue.id, issue.identifier, issue.state);
+    store.insertAttempt({
+      issueId: issue.id,
+      phase: "verify",
+      attemptNumber: 1,
+      state: "Running", // no pid → crash-orphan
+    });
+    store.acquireLock(DEV_DEPLOYMENT_LOCK, issue.id, clockNow.toISOString());
+
+    await reconcile(deps(gateway, new ReconcileTransport()));
+
+    expect(store.getLock(DEV_DEPLOYMENT_LOCK)).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix: adoption write failure must not relaunch already-completed work
+// ---------------------------------------------------------------------------
+
+describe("adoption write failure is non-relaunching", () => {
+  class ThrowingSetStateGateway extends FakeGateway {
+    async setState(): Promise<void> {
+      throw new Error("fake: setState 500");
+    }
+  }
+
+  it("a throwing setState still settles the attempt Succeeded and never relaunches on the next reconcile", async () => {
+    const issue = makeIssue({ identifier: "THINK-9", state: "In Progress" });
+    const gateway = new ThrowingSetStateGateway([issue]);
+    upsertIssueRow(issue.id, issue.identifier, issue.state);
+    const branch = "auto/think-9-implement-a1";
+    const attemptId = store.insertAttempt({
+      issueId: issue.id,
+      phase: "implement",
+      attemptNumber: 1,
+      state: "Running",
+      pid: 6060, // dead → orphan → evidence checked
+      branch,
+      logPath: "/log",
+    });
+    const github = fakeGithub([
+      {
+        number: 7,
+        state: "MERGED",
+        url: "https://github.com/o/r/pull/7",
+        mergedAt: "2026-07-11T23:00:00.000Z",
+      },
+    ]);
+
+    const res = await reconcile(deps(gateway, new ReconcileTransport(), github));
+
+    // The store-first settle is the commit point: the attempt is Succeeded even
+    // though the Linear advance threw, so nothing relaunches.
+    expect(store.getAttempt(attemptId)!.state).toBe("Succeeded");
+    expect(res.relaunchQueued).toHaveLength(0);
+
+    // The next reconcile finds the attempt terminal (not active) → no orphan
+    // processing, no duplicate dispatch.
+    const res2 = await reconcile(
+      deps(gateway, new ReconcileTransport(), github),
+    );
+    expect(res2.relaunchQueued).toHaveLength(0);
+    expect(
+      res2.outcomes.filter((o) => o.kind === "adopted-evidence"),
+    ).toHaveLength(0);
+    expect(store.getAttempt(attemptId)!.state).toBe("Succeeded");
   });
 });
 

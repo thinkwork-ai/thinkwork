@@ -65,3 +65,25 @@ export function devLockHeldByOther(
   const holder = devLockHolder(store);
   return holder !== null && holder !== issueId;
 }
+
+/**
+ * Release the dev-deployment lock if its holder has NO active (non-terminal)
+ * attempt (Fix: dev-lock leak on hard crash). The executor releases the lock in
+ * an in-process `finally`, so a SIGKILL/panic mid-verify leaves the `locks` row
+ * set forever with no TTL — and every future verify phase then waits on a lock
+ * whose holder is gone (permanent Verification deadlock). The boot reconciler
+ * calls this after settling orphaned attempts: a holder with no live attempt is
+ * definitionally gone, so the lock is releasable. A holder whose verify worker
+ * survived the restart (reattached → still has an active attempt) keeps its
+ * lock. Returns the released holder id, or null when nothing was released.
+ */
+export function releaseOrphanedDevLock(store: FactoryStore): string | null {
+  const holder = devLockHolder(store);
+  if (holder === null) return null;
+  const holderHasActiveAttempt = store
+    .listActiveAttempts()
+    .some((a) => a.issue_id === holder);
+  if (holderHasActiveAttempt) return null;
+  releaseDevLock(store, holder);
+  return holder;
+}

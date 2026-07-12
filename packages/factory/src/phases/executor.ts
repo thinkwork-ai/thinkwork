@@ -42,7 +42,12 @@ import {
   phaseNeedsDevLock,
   releaseDevLock,
 } from "../sweep/locks.js";
-import type { EngineAction, RunnerKind } from "./engine.js";
+import {
+  BLOCK_MARKER_PREFIX,
+  blockMarker,
+  type EngineAction,
+  type RunnerKind,
+} from "./engine.js";
 import {
   detectPhaseEvidence,
   type GithubGateway,
@@ -64,12 +69,10 @@ export function launchMarker(
   return `dispatcher:${issueIdentifier}:${phase}:${lane}`;
 }
 
-/** Block-marker comment (mirrors preflight's `factory-preflight:` pattern). */
-export const BLOCK_MARKER_PREFIX = "factory-block:";
-
-export function blockMarker(issueIdentifier: string): string {
-  return `${BLOCK_MARKER_PREFIX}${issueIdentifier}`;
-}
+/** Block-marker comment (mirrors preflight's `factory-preflight:` pattern).
+ * Defined in engine.ts (shared with the escalation-override check) and
+ * re-exported here for the executor's block-marker writes and its tests. */
+export { BLOCK_MARKER_PREFIX, blockMarker };
 
 // ---------------------------------------------------------------------------
 // Bootstrap runner

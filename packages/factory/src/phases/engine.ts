@@ -15,8 +15,14 @@
 
 import type { LaneLabel } from "../domain/statuses.js";
 import { ROUTING_STATUSES } from "../domain/statuses.js";
-import type { LinearIssueSnapshot } from "../linear/client.js";
+import {
+  isTrustedComment,
+  type CommentTrust,
+  type LinearCommentSnapshot,
+  type LinearIssueSnapshot,
+} from "../linear/client.js";
 import type { Ledger } from "../linear/ledger.js";
+import { isMarkerComment } from "../linear/markers.js";
 import { TERMINAL_ATTEMPT_STATES } from "../store/db.js";
 
 /** Factory pipeline phases a launch action can name. */
@@ -105,6 +111,20 @@ export interface EngineCandidate {
    * it has never touched. Load-bearing for the compound cutoff below.
    */
   ledger: { ledger: Ledger; synthesized: boolean };
+  /**
+   * The issue's comments — used to detect an operator override of a
+   * ceiling/quota escalation (a `factory-block:` marker present while the
+   * `Needs User` label has been removed). PollCandidate satisfies this
+   * structurally, so the daemon's `decideAction(candidate, view)` supplies it
+   * for free. Optional so engine-only callers/tests need not populate it.
+   */
+  comments?: LinearCommentSnapshot[];
+  /**
+   * Baton/marker author allowlist. When present, the override marker must come
+   * from a trusted author (mirrors the preflight-override trust check); when
+   * absent the check is fail-open, exactly as `hasPreflightOverride` is.
+   */
+  trust?: CommentTrust;
 }
 
 /**
@@ -146,6 +166,18 @@ export interface StoreView {
 
 const VERIFICATION_FAILED_LABEL = "Verification Failed";
 
+const NEEDS_USER_LABEL = "Needs User";
+
+/** Block-marker comment prefix (`factory-block:<ISSUE_ID>`), posted by the
+ * executor whenever it applies a block — including a ceiling/quota escalation.
+ * Defined here (not in executor.ts) so both the escalation-override check below
+ * and the executor can share ONE source without a circular import. */
+export const BLOCK_MARKER_PREFIX = "factory-block:";
+
+export function blockMarker(issueIdentifier: string): string {
+  return `${BLOCK_MARKER_PREFIX}${issueIdentifier}`;
+}
+
 /**
  * Attempt ceiling (R15/AE5): the SECOND consecutive kill/stall on the same
  * phase escalates instead of launching a third attempt.
@@ -153,30 +185,65 @@ const VERIFICATION_FAILED_LABEL = "Verification Failed";
 export const ATTEMPT_CEILING = 2;
 
 /**
+ * The SINGLE status→launch-phase table. `phaseForStatus` and the routing
+ * switch's launch rows both read from it, so the two can never drift (a launch
+ * that names a different phase than `phaseForStatus` reports would mis-key the
+ * attempt-ceiling count). Statuses absent from the table never launch a worker
+ * (advance/wait/noop rows).
+ */
+const STATUS_LAUNCH_PHASE: Readonly<Record<string, Phase>> = {
+  Brainstorming: "brainstorm",
+  Planning: "plan",
+  Debug: "debug",
+  "Ready to Work": "implement",
+  "Ready To Work": "implement",
+  "In Progress": "implement",
+  Verification: "verify",
+  Review: "verify",
+  Done: "compound",
+};
+
+/**
  * The pipeline phase a launch would use for a given workflow status, or null
  * for statuses that never launch a worker (advance/wait/noop rows). Used by the
  * daemon to look up the relevant attempt-ceiling count for a candidate.
  */
 export function phaseForStatus(state: string): Phase | null {
-  switch (state) {
-    case "Brainstorming":
-      return "brainstorm";
-    case "Planning":
-      return "plan";
-    case "Debug":
-      return "debug";
-    case "Ready to Work":
-    case "Ready To Work":
-    case "In Progress":
-      return "implement";
-    case "Verification":
-    case "Review":
-      return "verify";
-    case "Done":
-      return "compound";
-    default:
-      return null;
+  return STATUS_LAUNCH_PHASE[state] ?? null;
+}
+
+/** The launch phase for a status the routing switch has already proven routes
+ * a worker. Throws on drift (a launch row for a status absent from the table). */
+function requireLaunchPhase(state: string): Phase {
+  const phase = phaseForStatus(state);
+  if (phase === null) {
+    throw new Error(
+      `routing-table drift: status "${state}" launches a worker but has no ` +
+        "STATUS_LAUNCH_PHASE entry",
+    );
   }
+  return phase;
+}
+
+/**
+ * Operator override of a ceiling/quota escalation (Fix: escalation wedge).
+ * Mirrors `hasPreflightOverride`: a ceiling/quota escalation applies the
+ * `Needs User` label + a `factory-block:` marker comment, but the derived
+ * escalation (immutable attempt rows / an expired quota) never clears on its
+ * own — so removing the label would re-block instantly on the next tick. When
+ * the marker is present AND the `Needs User` label has been removed, an
+ * operator deliberately cleared the block: route normally (a fresh attempt may
+ * launch). When trust info is present the marker must be trusted-authored.
+ */
+function hasEscalationOverride(candidate: EngineCandidate): boolean {
+  if (candidate.issue.labels.includes(NEEDS_USER_LABEL)) return false;
+  const comments = candidate.comments ?? [];
+  const marker = blockMarker(candidate.issue.identifier);
+  return comments.some(
+    (c) =>
+      isMarkerComment(c.body, marker) &&
+      (candidate.trust === undefined || isTrustedComment(c, candidate.trust)),
+  );
 }
 
 function isTerminalAttemptState(state: string): boolean {
@@ -281,7 +348,7 @@ export function decideAction(
       } — waiting out the rate-limit window before retry (R14/AE8)`,
     };
   }
-  if (view.quota?.kind === "expired") {
+  if (view.quota?.kind === "expired" && !hasEscalationOverride(candidate)) {
     return {
       kind: "block",
       label: "Needs User",
@@ -313,7 +380,7 @@ export function decideAction(
   // escalates instead of launching a third attempt.
   if (action.kind === "launch") {
     const kills = view.consecutiveKillsByPhase?.[action.phase] ?? 0;
-    if (kills >= ATTEMPT_CEILING) {
+    if (kills >= ATTEMPT_CEILING && !hasEscalationOverride(candidate)) {
       return {
         kind: "block",
         label: "Needs User",
@@ -342,7 +409,7 @@ function routeByStatus(candidate: EngineCandidate): EngineAction {
       };
 
     case "Brainstorming":
-      return launch(candidate, "brainstorm");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     case "Requirements Review":
       return hasLfg
@@ -357,10 +424,10 @@ function routeByStatus(candidate: EngineCandidate): EngineAction {
           };
 
     case "Planning":
-      return launch(candidate, "plan");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     case "Debug":
-      return launch(candidate, "debug");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     case "Plan Review":
       return hasLfg
@@ -376,20 +443,20 @@ function routeByStatus(candidate: EngineCandidate): EngineAction {
 
     case "Ready to Work":
     case "Ready To Work":
-      return launch(candidate, "implement", {
+      return launch(candidate, requireLaunchPhase(issue.state), {
         repair: issue.labels.includes(VERIFICATION_FAILED_LABEL),
       });
 
     case "In Progress":
       // No valid recorded worker (checked above) → create implementation/repair.
-      return launch(candidate, "implement", {
+      return launch(candidate, requireLaunchPhase(issue.state), {
         repair: issue.labels.includes(VERIFICATION_FAILED_LABEL),
       });
 
     case "Verification":
     case "Review":
       return hasLfg
-        ? launch(candidate, "verify")
+        ? launch(candidate, requireLaunchPhase(issue.state))
         : {
             kind: "wait",
             reason: "Verification without LFG — waiting for human review (zero SLA)",
@@ -420,7 +487,7 @@ function routeByStatus(candidate: EngineCandidate): EngineAction {
           reason: `${id} is Done and already compounded — never relaunch compound`,
         };
       }
-      return launch(candidate, "compound");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     default:
       return {

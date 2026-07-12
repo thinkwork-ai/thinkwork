@@ -10,7 +10,9 @@ import {
 import type { LinearCommentSnapshot } from "../src/linear/client.js";
 import { DEFAULT_LEDGER, type Ledger } from "../src/linear/ledger.js";
 import {
+  ATTEMPT_CEILING,
   ROUTING_STATUSES,
+  blockMarker,
   decideAction,
   type EngineAction,
   type EngineCandidate,
@@ -73,6 +75,7 @@ function makeCandidate(
       // block). The compound-cutoff tests set this true for a legacy issue.
       synthesized: partial.synthesized ?? false,
     },
+    comments: partial.comments,
   };
 }
 
@@ -390,6 +393,98 @@ describe("block decisions", () => {
     const first = decideAction(candidate, emptyView());
     const second = decideAction(candidate, emptyView());
     expect(second).toEqual(first);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// escalation wedge: ceiling / quota escalations must be resumable by the
+// operator (Fix: escalation wedge — a ceiling/quota escalation can never
+// resume because the derived signal is recomputed every tick).
+// ---------------------------------------------------------------------------
+
+describe("ceiling/quota escalation is resumable (operator override)", () => {
+  const blockComment = (id: string): LinearCommentSnapshot => ({
+    id: `c-block-${id}`,
+    body: `${blockMarker(id)}\n\nAutomation blocked this issue.`,
+    authorId: "viewer-daemon",
+  });
+
+  it("ceiling reached with Needs User still present → escalates (block), no launch", () => {
+    const action = decideAction(
+      makeCandidate({
+        identifier: "T-9",
+        state: "Ready to Work",
+        labels: ["Claude", "LFG", "Needs User"],
+      }),
+      emptyView({ consecutiveKillsByPhase: { implement: ATTEMPT_CEILING } }),
+    );
+    // Needs User is itself a blocker label → the block short-circuits first.
+    expect(action).toMatchObject({ kind: "block", label: "Needs User" });
+  });
+
+  it("ceiling reached, no override marker → escalates to Needs User", () => {
+    const action = decideAction(
+      makeCandidate({
+        identifier: "T-9",
+        state: "Ready to Work",
+        labels: ["Claude", "LFG"],
+      }),
+      emptyView({ consecutiveKillsByPhase: { implement: ATTEMPT_CEILING } }),
+    );
+    expect(action).toMatchObject({ kind: "block", label: "Needs User" });
+    expect((action as { reason: string }).reason).toMatch(/consecutive/i);
+  });
+
+  it("ceiling reached but operator removed Needs User with the block marker present → fresh launch (override)", () => {
+    const action = decideAction(
+      makeCandidate({
+        identifier: "T-9",
+        state: "Ready to Work",
+        labels: ["Claude", "LFG"], // Needs User deliberately removed
+        comments: [blockComment("T-9")],
+      }),
+      emptyView({ consecutiveKillsByPhase: { implement: ATTEMPT_CEILING } }),
+    );
+    expect(action).toMatchObject({ kind: "launch", phase: "implement" });
+  });
+
+  it("quota expired, no override → escalates to Needs User", () => {
+    const action = decideAction(
+      makeCandidate({
+        identifier: "T-9",
+        state: "Ready to Work",
+        labels: ["Claude", "LFG"],
+      }),
+      emptyView({ quota: { kind: "expired" } }),
+    );
+    expect(action).toMatchObject({ kind: "block", label: "Needs User" });
+    expect((action as { reason: string }).reason).toMatch(/QuotaCooldown/);
+  });
+
+  it("quota expired but operator override (marker present, Needs User absent) → routes normally", () => {
+    const action = decideAction(
+      makeCandidate({
+        identifier: "T-9",
+        state: "Ready to Work",
+        labels: ["Claude", "LFG"],
+        comments: [blockComment("T-9")],
+      }),
+      emptyView({ quota: { kind: "expired" } }),
+    );
+    expect(action).toMatchObject({ kind: "launch", phase: "implement" });
+  });
+
+  it("override marker for a DIFFERENT issue does not enable the override", () => {
+    const action = decideAction(
+      makeCandidate({
+        identifier: "T-9",
+        state: "Ready to Work",
+        labels: ["Claude", "LFG"],
+        comments: [blockComment("T-OTHER")],
+      }),
+      emptyView({ consecutiveKillsByPhase: { implement: ATTEMPT_CEILING } }),
+    );
+    expect(action).toMatchObject({ kind: "block", label: "Needs User" });
   });
 });
 

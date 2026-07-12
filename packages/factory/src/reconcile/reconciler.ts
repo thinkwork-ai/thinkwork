@@ -14,8 +14,11 @@
  *       pid (or never recorded one). Reuses U6 `evaluateLiveness`; before
  *       failing it, checks for phase evidence the dead worker may have left
  *       (baton / externally-merged PR) and ADOPTS it (advance, no relaunch);
- *       otherwise settles it Failed("orphaned by daemon restart") + drops the
- *       lease, so decide() relaunches a fresh attempt (AE6).
+ *       otherwise settles it CanceledByReconciliation("orphaned by daemon
+ *       restart") + drops the lease, so decide() relaunches a fresh attempt
+ *       (AE6). The CanceledByReconciliation terminal state (not Failed) keeps a
+ *       daemon-restart expiry OUT of the attempt-ceiling kill count — only the
+ *       live sweep counts a genuine worker failure.
  *   (b) EXTERNALLY-MERGED PR — the merged-PR fallback of `detectPhaseEvidence`:
  *       adopt as completion evidence and advance the issue instead of
  *       relaunching implement.
@@ -54,6 +57,11 @@ import {
 import { PHASE_HANDOFF, type Phase } from "../phases/engine.js";
 import type { AttemptRow, FactoryStore } from "../store/db.js";
 import { evaluateLiveness, renewLease } from "../sweep/leases.js";
+import {
+  phaseNeedsDevLock,
+  releaseDevLock,
+  releaseOrphanedDevLock,
+} from "../sweep/locks.js";
 import type { HostTransport } from "../workers/transport.js";
 
 /** Sentinel the executor writes into an attempt's detail when the worker ran
@@ -109,6 +117,21 @@ function asPhase(phase: string): Phase | null {
 function singleLane(labels: string[]): LaneLabel | null {
   const lanes = LANE_LABELS.filter((l) => labels.includes(l));
   return lanes.length === 1 ? lanes[0] : null;
+}
+
+/**
+ * Release the dev-deployment lock for an attempt the reconciler just settled
+ * out of a verify phase (Fix: dev-lock leak). A verify worker holds the single
+ * dev-deployment mutex for its run; if it was orphaned by the daemon's death,
+ * the executor's in-process `finally` never ran, so the lock leaked. Dropping
+ * it here (belt-and-suspenders alongside the boot-time `releaseOrphanedDevLock`
+ * sweep) unblocks the next verify phase immediately.
+ */
+function releaseVerifyDevLock(deps: ReconcileDeps, attempt: AttemptRow): void {
+  const phase = asPhase(attempt.phase);
+  if (phase !== null && phaseNeedsDevLock(phase)) {
+    releaseDevLock(deps.store, attempt.issue_id);
+  }
 }
 
 /**
@@ -190,9 +213,13 @@ async function reconcileOrphan(
       complete: false,
       reason: "evidence not checked",
     };
+    // Hoisted so the adopt path below can reuse it for the advance target —
+    // nothing moves the status between here and the settle, so a second Linear
+    // read would be redundant.
+    let currentStatus = issueRow.state;
     try {
       const [fresh] = await deps.gateway.getIssuesByIdentifier([identifier]);
-      const currentStatus = fresh?.state ?? issueRow.state;
+      currentStatus = fresh?.state ?? issueRow.state;
       const comments = await deps.gateway.listComments(attempt.issue_id);
       evidence = await detectPhaseEvidence({
         phase,
@@ -216,23 +243,40 @@ async function reconcileOrphan(
 
     if (evidence.complete) {
       // The phase actually finished while the daemon was down. Settle the
-      // attempt Succeeded and advance the issue if the worker died before
-      // moving the status itself (baton / merged-PR evidence). A status-moved
-      // evidence needs no write — the worker already advanced it.
+      // attempt Succeeded in the STORE FIRST — this is the idempotent commit
+      // point: once the attempt is terminal it is out of listActiveAttempts(),
+      // so even if the Linear advance below throws, the NEXT reconcile finds it
+      // already Succeeded and never relaunches the already-completed work
+      // (Fix: adoption write-failure must not relaunch completed work).
       deps.store.transitionAttempt(
         attempt.id,
         "Succeeded",
         `adopted ${evidence.kind}: ${evidence.detail}`.slice(0, 1000),
       );
       deps.store.deleteLease(attempt.issue_id);
+      releaseVerifyDevLock(deps, attempt);
       if (evidence.kind !== "status-moved") {
+        // Advance the issue if the worker died before moving the status itself
+        // (baton / merged-PR evidence). Reuse the status already read for
+        // evidence detection — nothing has moved it since. A failure here is
+        // best-effort: the attempt is already Succeeded (no relaunch), and the
+        // dead worker's worktree guards the daemon against a duplicate launch
+        // until the advance is re-driven.
         const target = advanceTargetFor(phase, evidence);
-        const [fresh] = await deps.gateway
-          .getIssuesByIdentifier([identifier])
-          .catch(() => [undefined]);
-        const current = fresh?.state ?? issueRow.state;
-        if (target !== null && current !== target) {
-          await deps.gateway.setState(attempt.issue_id, target);
+        if (target !== null && currentStatus !== target) {
+          try {
+            await deps.gateway.setState(attempt.issue_id, target);
+          } catch (e) {
+            deps.log.error(
+              "reconcile: adopted-evidence advance write failed — attempt already Succeeded, no relaunch",
+              {
+                issue: identifier,
+                attemptId: attempt.id,
+                target,
+                error: String(e),
+              },
+            );
+          }
         }
       }
       deps.log.info("reconcile: adopted externally-completed phase evidence", {
@@ -253,14 +297,21 @@ async function reconcileOrphan(
     }
   }
 
-  // No evidence — the attempt was orphaned by the daemon's death. Settle it and
-  // drop the lease; the next decide() relaunches a fresh attempt (AE6).
+  // No evidence — the attempt was orphaned by the daemon's death. Settle it as
+  // CanceledByReconciliation (NOT Failed) and drop the lease; the next decide()
+  // relaunches a fresh attempt (AE6). The distinct terminal state keeps a
+  // restart-expiry OUT of the attempt-ceiling kill count (the daemon counts
+  // only Stalled/TimedOut/Failed): otherwise two daemon restarts mid-implement
+  // would settle two attempts and falsely escalate a healthy phase to Needs
+  // User (Fix: restart must not count as a genuine worker kill). The live sweep
+  // — not the reconciler — is what counts a genuine worker failure.
   deps.store.transitionAttempt(
     attempt.id,
-    "Failed",
+    "CanceledByReconciliation",
     "orphaned by daemon restart",
   );
   deps.store.deleteLease(attempt.issue_id);
+  releaseVerifyDevLock(deps, attempt);
   deps.log.warn("reconcile: expired orphaned attempt — relaunch next decide", {
     issue: identifier,
     attemptId: attempt.id,
@@ -348,9 +399,31 @@ async function reconcileActiveAttempt(
         relaunch: false,
       };
     }
-    case "stalled":
+    case "stalled": {
+      // `evaluateLiveness` returns "stalled" ONLY when the host is reachable,
+      // the pid is confirmed ALIVE, and the log has been silent past the
+      // budget — i.e. a wedged-but-RUNNING worker. Settling + relaunching (or
+      // adopting a merged PR and advancing) WITHOUT first killing it would
+      // duplicate the worker / adopt-while-alive — the exact race this feature
+      // prevents, and the worktree guard misses it because the survivor's
+      // worktree_path is on the row we are about to settle. Mirror the sweep:
+      // kill the process group BEFORE reconcileOrphan. (Fix: stalled-but-alive.)
+      if (attempt.pid !== null) {
+        try {
+          await deps.transport.killPidGroup(attempt.pid);
+        } catch (e) {
+          deps.log.warn("reconcile stall kill failed — settling anyway", {
+            issue: identifier,
+            attemptId: attempt.id,
+            pid: attempt.pid,
+            error: String(e),
+          });
+        }
+      }
+      return reconcileOrphan(deps, attempt);
+    }
     case "dead":
-      // pid dead or wedged past the silence budget → orphan repair path.
+      // pid confirmed dead → orphan repair path (no live process to kill).
       return reconcileOrphan(deps, attempt);
   }
 }
@@ -484,6 +557,26 @@ export async function reconcile(deps: ReconcileDeps): Promise<ReconcileResult> {
         detail: String(e),
       });
     }
+  }
+
+  // Clear a leaked dev-deployment lock (Fix: dev-lock leak on hard crash). The
+  // executor releases the lock in an in-process `finally`, so a SIGKILL/panic
+  // mid-verify leaves the `locks` row set forever — and there is no TTL. Run
+  // this AFTER the attempt loop so any holder whose orphaned attempt was just
+  // settled now reads as having no active attempt and is released; a holder
+  // whose verify worker was reattached keeps its lock.
+  try {
+    const released = releaseOrphanedDevLock(deps.store);
+    if (released !== null) {
+      deps.log.warn(
+        "reconcile: released orphaned dev-deployment lock (holder had no active attempt)",
+        { holder: released },
+      );
+    }
+  } catch (e) {
+    deps.log.error("reconcile: orphaned dev-lock release failed — continuing", {
+      error: String(e),
+    });
   }
 
   deps.log.info("reconcile pass complete", {

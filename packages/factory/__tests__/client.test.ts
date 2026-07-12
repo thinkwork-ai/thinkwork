@@ -18,6 +18,17 @@ vi.mock("@linear/sdk", () => ({
 
 const { createLinearGateway } = await import("../src/linear/client.js");
 
+/**
+ * Minimal `client.client` stub so the construction-time rawRequest guard
+ * (SDK-shape guard) passes for tests that don't exercise listTeamIssues.
+ * Returns an empty single page if it ever were called.
+ */
+const noopRawClient = {
+  rawRequest: async () => ({
+    data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } },
+  }),
+};
+
 interface Page<T> {
   nodes: T[];
   pageInfo: { hasNextPage: boolean };
@@ -138,11 +149,89 @@ describe("createLinearGateway — listTeamIssues", () => {
   });
 
   it("throws a named error when the team key does not exist", async () => {
-    fakeClient = { teams: async () => ({ nodes: [] }) };
+    fakeClient = { teams: async () => ({ nodes: [] }), client: noopRawClient };
     const gateway = createLinearGateway("key");
     await expect(gateway.listTeamIssues("NOPE")).rejects.toThrow(
       /team with key "NOPE" not found/,
     );
+  });
+});
+
+describe("createLinearGateway — listTeamIssues pagination hardening", () => {
+  // A bad page (GraphQL error / throttle / partial failure) must ABORT, not
+  // silently return a truncated candidate list that looks like success —
+  // otherwise an enrolled issue is dropped with no error (under-dispatch).
+  it("throws when the FIRST page resolves without a data.issues payload", async () => {
+    fakeClient = {
+      teams: async () => ({ nodes: [{ key: "THINK", id: "team-1" }] }),
+      client: { rawRequest: async () => ({ data: null }) },
+    };
+    const gateway = createLinearGateway("key");
+    await expect(gateway.listTeamIssues("THINK")).rejects.toThrow(
+      /truncated candidate set/,
+    );
+  });
+
+  it("throws mid-pagination when a LATER page loses data.issues (no short list)", async () => {
+    let call = 0;
+    const rawRequest = async () => {
+      call += 1;
+      if (call === 1) {
+        return {
+          data: {
+            issues: {
+              nodes: [rawIssueNode("i1", "THINK-1", ["Claude"])],
+              pageInfo: { hasNextPage: true, endCursor: "cur-0" },
+            },
+          },
+        };
+      }
+      return { data: null }; // second page fails → must throw, not return [i1]
+    };
+    fakeClient = {
+      teams: async () => ({ nodes: [{ key: "THINK", id: "team-1" }] }),
+      client: { rawRequest },
+    };
+    const gateway = createLinearGateway("key");
+    await expect(gateway.listTeamIssues("THINK")).rejects.toThrow(
+      /truncated candidate set/,
+    );
+  });
+
+  it("throws when the response carries a non-empty GraphQL errors array", async () => {
+    fakeClient = {
+      teams: async () => ({ nodes: [{ key: "THINK", id: "team-1" }] }),
+      client: {
+        rawRequest: async () => ({
+          data: null,
+          errors: [{ message: "throttled" }],
+        }),
+      },
+    };
+    const gateway = createLinearGateway("key");
+    await expect(gateway.listTeamIssues("THINK")).rejects.toThrow(
+      /truncated candidate set/,
+    );
+  });
+});
+
+describe("createLinearGateway — SDK-shape startup guard", () => {
+  it("throws a clear, NAMED error at construction when client.rawRequest is absent", () => {
+    fakeClient = { teams: async () => ({ nodes: [] }) }; // no `client` at all
+    let caught: unknown;
+    try {
+      createLinearGateway("key");
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).name).toBe("LinearSdkShapeError");
+    expect((caught as Error).message).toMatch(/rawRequest/);
+  });
+
+  it("throws at construction when client.rawRequest is not a function", () => {
+    fakeClient = { client: { rawRequest: "nope" } };
+    expect(() => createLinearGateway("key")).toThrow(/rawRequest/);
   });
 });
 
@@ -155,6 +244,7 @@ describe("createLinearGateway — listComments author ids", () => {
       botActor?: { id: string } | null;
     };
     fakeClient = {
+      client: noopRawClient,
       issue: async () => ({
         comments: async () =>
           pages<CommentNode>(
@@ -188,7 +278,7 @@ describe("createLinearGateway — label mutations", () => {
       }),
       labels: async () => pages(currentLabels),
     };
-    fakeClient = { issue: async () => issueObj, updateIssue };
+    fakeClient = { client: noopRawClient, issue: async () => issueObj, updateIssue };
     return { updateIssue };
   }
 
@@ -250,6 +340,7 @@ describe("createLinearGateway — setState", () => {
   function stateHarness() {
     const updateIssue = vi.fn(async () => ({}));
     fakeClient = {
+      client: noopRawClient,
       issue: async () => ({
         team: Promise.resolve({
           key: "THINK",
@@ -288,6 +379,7 @@ describe("createLinearGateway — viewerId", () => {
   it("resolves the viewer id once and caches it", async () => {
     let viewerReads = 0;
     fakeClient = {
+      client: noopRawClient,
       get viewer() {
         viewerReads++;
         return Promise.resolve({ id: "viewer-1" });

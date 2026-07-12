@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { heartbeatPath, writeHeartbeat } from "./heartbeat.js";
 import type { Logger } from "./logger.js";
 
 const execFileAsync = promisify(execFile);
@@ -300,6 +301,12 @@ export interface InstallOptions {
   run?: CommandRunner;
   /** Injectable precondition runner (defaults to the real one). */
   preconditionRun?: CommandRunner;
+  /**
+   * Injectable LaunchAgents directory (defaults to ~/Library/LaunchAgents).
+   * Exists so tests can point plist writes/targets at a tmp dir — including a
+   * path with `&`/spaces — without touching the real user directory.
+   */
+  launchAgentsDir?: string;
 }
 
 /**
@@ -324,17 +331,27 @@ export async function installFactoryd(opts: InstallOptions): Promise<void> {
     );
   }
 
-  mkdirSync(launchAgentsDir(), { recursive: true });
+  const agentsDir = opts.launchAgentsDir ?? launchAgentsDir();
+  const targetPath = (label: string): string => join(agentsDir, `${label}.plist`);
+
+  mkdirSync(agentsDir, { recursive: true });
   mkdirSync(ctx.logDir, { recursive: true });
 
   const daemonPlist = renderDaemonPlist(ctx, opts.throttleIntervalSeconds);
   const watchdogPlist = renderWatchdogPlist(ctx, opts.watchdogIntervalSeconds);
-  writeFileSync(plistTargetPath(DAEMON_LABEL), daemonPlist);
-  writeFileSync(plistTargetPath(WATCHDOG_LABEL), watchdogPlist);
+  writeFileSync(targetPath(DAEMON_LABEL), daemonPlist);
+  writeFileSync(targetPath(WATCHDOG_LABEL), watchdogPlist);
   log.info("wrote LaunchAgent plists", {
-    daemon: plistTargetPath(DAEMON_LABEL),
-    watchdog: plistTargetPath(WATCHDOG_LABEL),
+    daemon: targetPath(DAEMON_LABEL),
+    watchdog: targetPath(WATCHDOG_LABEL),
   });
+
+  // Seed an initial heartbeat so the watchdog's first RunAtLoad tick (which
+  // fires immediately at install) sees a FRESH file instead of an absent one —
+  // otherwise a boot-time watchdog run reads "daemon has not started" and pages
+  // falsely while the daemon is still doing its pre-heartbeat boot reconcile.
+  writeHeartbeat(heartbeatPath(ctx.stateDir));
+  log.info("seeded daemon heartbeat", { path: heartbeatPath(ctx.stateDir) });
 
   // The reboot-survival amendment: inspect + warn LOUDLY, never block.
   const pre = await checkUnattendedRebootPreconditions(
@@ -361,22 +378,57 @@ export async function installFactoryd(opts: InstallOptions): Promise<void> {
   }
 
   const domain = `gui/${ctx.uid}`;
+  // Track launchctl failures so a failed bootstrap/kickstart makes `install`
+  // fail LOUDLY rather than logging an error under a success-looking exit.
+  const failures: string[] = [];
   for (const label of [DAEMON_LABEL, WATCHDOG_LABEL]) {
-    const target = plistTargetPath(label);
-    // bootout first so a re-install cleanly replaces an existing definition.
-    await run("launchctl", ["bootout", domain, target]);
-    const res = await run("launchctl", ["bootstrap", domain, target]);
+    // Every launchctl call passes its arguments as a fixed argv array via
+    // execFile (NO shell), so a `&`/space in a rendered path can never split an
+    // argument or corrupt the command. bootout targets the fixed service label
+    // literal (`gui/<uid>/<label>`), not a path.
+    //
+    // bootout first so a re-install cleanly replaces an existing definition; a
+    // non-zero here is expected when the job isn't loaded yet, so it is ignored.
+    await run("launchctl", ["bootout", `${domain}/${label}`]);
+    const res = await run("launchctl", [
+      "bootstrap",
+      domain,
+      targetPath(label),
+    ]);
     if (res.code !== 0) {
       log.error("launchctl bootstrap failed", {
         label,
+        code: res.code,
         stderr: res.stderr.trim(),
       });
+      failures.push(
+        `bootstrap ${label}: ${res.stderr.trim() || `exit ${res.code}`}`,
+      );
     } else {
       log.info("bootstrapped LaunchAgent", { label, domain });
     }
   }
   // Kick the daemon so it starts now without waiting for the next login.
-  await run("launchctl", ["kickstart", "-k", `${domain}/${DAEMON_LABEL}`]);
+  const kick = await run("launchctl", [
+    "kickstart",
+    "-k",
+    `${domain}/${DAEMON_LABEL}`,
+  ]);
+  if (kick.code !== 0) {
+    log.error("launchctl kickstart failed", {
+      code: kick.code,
+      stderr: kick.stderr.trim(),
+    });
+    failures.push(
+      `kickstart ${DAEMON_LABEL}: ${kick.stderr.trim() || `exit ${kick.code}`}`,
+    );
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `factoryd install failed — launchctl reported errors:\n  ${failures.join("\n  ")}`,
+    );
+  }
   log.info("factoryd installed", { domain });
 }
 
@@ -395,7 +447,9 @@ export async function uninstallFactoryd(opts: UninstallOptions): Promise<void> {
   const domain = `gui/${uid}`;
   for (const label of [DAEMON_LABEL, WATCHDOG_LABEL]) {
     const target = plistTargetPath(label);
-    const res = await run("launchctl", ["bootout", domain, target]);
+    // Target the fixed service label literal (`gui/<uid>/<label>`), never a
+    // path — a `&`/space in the plist path can then never corrupt the bootout.
+    const res = await run("launchctl", ["bootout", `${domain}/${label}`]);
     log.info("booted out LaunchAgent", { label, code: res.code });
     if (opts.removeFiles !== false && existsSync(target)) {
       try {

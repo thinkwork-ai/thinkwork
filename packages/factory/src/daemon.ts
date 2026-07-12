@@ -40,6 +40,17 @@ import { writeHeartbeat } from "./heartbeat.js";
 /** Trailing terminal states that count as a "kill" for the attempt ceiling. */
 const KILL_TERMINALS = new Set(["Stalled", "TimedOut", "Failed"]);
 
+/**
+ * Default cadence for the INDEPENDENT heartbeat interval (KTD-6). The daemon
+ * stamps the heartbeat file on this timer regardless of tick progress, so a
+ * long-running worker (implement can run for wallClockSlaMinutes) never lets
+ * the file age past the watchdog's overdue threshold. The interval callback
+ * fires on the event loop even while a tick is awaiting async worker I/O — so
+ * the file stays fresh during a long tick, but goes stale precisely when the
+ * event loop genuinely hangs (which is what the watchdog must catch).
+ */
+export const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
+
 export interface DaemonController {
   readonly stopping: boolean;
   stop(): void;
@@ -396,7 +407,11 @@ export async function runTick(
       }
 
       const view = await buildStoreView(deps, candidate);
-      const action = decideAction(candidate, view);
+      // Thread the daemon's trust allowlist so the escalation-override marker
+      // check is author-gated (an untrusted commenter must not be able to
+      // pre-post a `factory-block:` marker to pre-empt a ceiling/quota
+      // escalation). PollCandidate carries comments; trust is added here.
+      const action = decideAction({ ...candidate, trust: deps.trust }, view);
       deps.log.info("decision", {
         issue: id,
         state: candidate.issue.state,
@@ -439,6 +454,12 @@ export interface RunDaemonOptions {
    * `deps.reconcile` is present.
    */
   reconcileEveryTicks?: number;
+  /**
+   * Cadence of the independent heartbeat interval (ms). Defaults to
+   * `min(pollIntervalSeconds*1000, DEFAULT_HEARTBEAT_INTERVAL_MS)` so it never
+   * lags the poll interval. Injectable for deterministic tests.
+   */
+  heartbeatIntervalMs?: number;
 }
 
 /** Run a reconciliation pass, isolated so a failure never crashes the loop. */
@@ -469,59 +490,89 @@ export async function runDaemon(
   const controller = options.controller ?? createDaemonController();
   const granularity = options.sleepGranularityMs ?? 200;
 
-  // Boot reconciliation (U7, F4): repair partial state left by a crash/reboot
-  // BEFORE the first tick, so decide() sees a consistent world (an orphaned
-  // attempt is expired here → the first tick relaunches it; a merged PR is
-  // adopted here → the first tick advances instead of relaunching).
-  await runReconcileIsolated(deps, "boot");
-
-  let tickCount = 0;
-  for (;;) {
-    // Stamp the heartbeat at the START of each cycle so the independent
-    // watchdog sees the daemon is alive and iterating; a wedged tick then stops
-    // updating it and the watchdog fires.
-    if (deps.heartbeatPath !== undefined) {
-      try {
-        writeHeartbeat(deps.heartbeatPath, new Date());
-      } catch (e) {
-        deps.log.warn("heartbeat write failed", { error: String(e) });
-      }
-    }
-
+  // Independent heartbeat interval (KTD-6). DECOUPLED from the tick: the tick
+  // awaits driveAttempt for the worker's entire run (up to wallClockSlaMinutes),
+  // so a heartbeat stamped only per-cycle would go stale for the whole run and
+  // trip the watchdog's overdue threshold on EVERY worker >5min. Stamping on a
+  // self-scheduling interval keeps the file fresh while the loop is merely
+  // awaiting async worker I/O, yet lets it go stale if the event loop genuinely
+  // hangs — exactly the condition the watchdog should catch. Unref'd so the
+  // timer alone never keeps the process alive.
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  const stampHeartbeat = (): void => {
+    if (deps.heartbeatPath === undefined) return;
     try {
-      const tick = await runTick(deps, () => controller.stopping);
-      deps.log.info("tick complete", {
-        decided: tick.decisions.length,
-        stopped: tick.stopped,
-      });
+      writeHeartbeat(deps.heartbeatPath, new Date());
     } catch (e) {
-      if (e instanceof PollAbortedError) {
-        deps.log.warn("poll tick aborted — retrying next interval", {
-          error: e.message,
+      deps.log.warn("heartbeat write failed", { error: String(e) });
+    }
+  };
+  if (deps.heartbeatPath !== undefined) {
+    // Stamp once immediately so the watchdog sees liveness before the first
+    // (possibly long) tick, then let the interval carry it.
+    stampHeartbeat();
+    const intervalMs = Math.max(
+      1,
+      Math.min(
+        options.heartbeatIntervalMs ??
+          Math.min(
+            options.pollIntervalSeconds * 1000,
+            DEFAULT_HEARTBEAT_INTERVAL_MS,
+          ),
+        DEFAULT_HEARTBEAT_INTERVAL_MS,
+      ),
+    );
+    heartbeatTimer = setInterval(stampHeartbeat, intervalMs);
+    // Node's Timeout has unref(); guard for exotic timer shims in tests.
+    heartbeatTimer.unref?.();
+  }
+
+  try {
+    // Boot reconciliation (U7, F4): repair partial state left by a crash/reboot
+    // BEFORE the first tick, so decide() sees a consistent world (an orphaned
+    // attempt is expired here → the first tick relaunches it; a merged PR is
+    // adopted here → the first tick advances instead of relaunching).
+    await runReconcileIsolated(deps, "boot");
+
+    let tickCount = 0;
+    for (;;) {
+      try {
+        const tick = await runTick(deps, () => controller.stopping);
+        deps.log.info("tick complete", {
+          decided: tick.decisions.length,
+          stopped: tick.stopped,
         });
-      } else {
-        deps.log.error("tick failed", { error: String(e) });
+      } catch (e) {
+        if (e instanceof PollAbortedError) {
+          deps.log.warn("poll tick aborted — retrying next interval", {
+            error: e.message,
+          });
+        } else {
+          deps.log.error("tick failed", { error: String(e) });
+        }
+      }
+
+      tickCount += 1;
+      // Periodic reconciliation (U7): routinely re-repair drift while running.
+      if (
+        options.reconcileEveryTicks !== undefined &&
+        options.reconcileEveryTicks > 0 &&
+        tickCount % options.reconcileEveryTicks === 0
+      ) {
+        await runReconcileIsolated(deps, "periodic");
+      }
+
+      if (options.once === true || controller.stopping) return;
+
+      const deadline = Date.now() + options.pollIntervalSeconds * 1000;
+      while (Date.now() < deadline) {
+        if (controller.stopping) return;
+        await new Promise((r) =>
+          setTimeout(r, Math.min(granularity, deadline - Date.now())),
+        );
       }
     }
-
-    tickCount += 1;
-    // Periodic reconciliation (U7): routinely re-repair drift while running.
-    if (
-      options.reconcileEveryTicks !== undefined &&
-      options.reconcileEveryTicks > 0 &&
-      tickCount % options.reconcileEveryTicks === 0
-    ) {
-      await runReconcileIsolated(deps, "periodic");
-    }
-
-    if (options.once === true || controller.stopping) return;
-
-    const deadline = Date.now() + options.pollIntervalSeconds * 1000;
-    while (Date.now() < deadline) {
-      if (controller.stopping) return;
-      await new Promise((r) =>
-        setTimeout(r, Math.min(granularity, deadline - Date.now())),
-      );
-    }
+  } finally {
+    if (heartbeatTimer !== undefined) clearInterval(heartbeatTimer);
   }
 }

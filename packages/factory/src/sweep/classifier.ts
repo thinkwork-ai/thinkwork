@@ -33,9 +33,6 @@ import { evaluateLiveness, renewLease, type LivenessVerdict } from "./leases.js"
 import { classifyQuota, DEFAULT_QUOTA_COOLDOWN_MINUTES } from "./quota.js";
 import { armNag, disarmNag, sweepNags, type FiredNag } from "./nags.js";
 
-/** Terminal states that count as a "kill" for the attempt ceiling. */
-const KILL_TERMINALS = new Set(["Stalled", "TimedOut", "Failed"]);
-
 /** Lines of the worker log tail preserved to the ledger on a stall. */
 const STALL_TAIL_LINES = 40;
 
@@ -284,12 +281,19 @@ export async function runSweep(
 ): Promise<SweepResult> {
   const classifications: IssueClassification[] = [];
 
+  // Read every active attempt ONCE and index by issue (first/lowest-id wins, to
+  // match the previous `.find()` semantics), instead of re-querying inside the
+  // per-candidate loop — that was O(candidates × attempts) under Linear-scale
+  // boards. listActiveAttempts() is ORDER BY id ASC, so the first insert wins.
+  const activeByIssue = new Map<string, AttemptRow>();
+  for (const a of deps.store.listActiveAttempts()) {
+    if (!activeByIssue.has(a.issue_id)) activeByIssue.set(a.issue_id, a);
+  }
+
   for (const candidate of candidates) {
     const issueId = candidate.issue.id;
     try {
-      const active = deps.store
-        .listActiveAttempts()
-        .find((a) => a.issue_id === issueId);
+      const active = activeByIssue.get(issueId);
       const classification =
         active !== undefined
           ? await classifyActiveAttempt(candidate, active, deps)

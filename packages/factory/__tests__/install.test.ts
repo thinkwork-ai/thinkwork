@@ -8,12 +8,18 @@
  * paths with no placeholder left behind.
  */
 
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { heartbeatPath } from "../src/heartbeat.js";
+import { createLogger, type Logger } from "../src/logger.js";
 import {
   DAEMON_LABEL,
   WATCHDOG_LABEL,
   checkUnattendedRebootPreconditions,
+  installFactoryd,
   renderDaemonPlist,
   renderWatchdogPlist,
   resolveInstallContext,
@@ -164,5 +170,109 @@ describe("unattended-reboot preconditions", () => {
     expect(pre.fileVaultOn).toBeNull();
     expect(pre.guaranteed).toBe(false);
     expect(pre.warnings.join(" ")).toMatch(/Could not determine FileVault/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// installFactoryd: argv-not-shell safety, fail-loud on launchctl error, and the
+// seeded heartbeat (Fix 1 / Fix 2 / Fix 4).
+// ---------------------------------------------------------------------------
+
+interface RunCall {
+  cmd: string;
+  args: string[];
+}
+
+/** Fake launchctl that records every argv and returns a fixed exit code. */
+function recordingLaunchctl(
+  calls: RunCall[],
+  codeFor: (args: string[]) => number = () => 0,
+): CommandRunner {
+  return async (cmd, args) => {
+    calls.push({ cmd, args });
+    return { code: codeFor(args), stdout: "", stderr: "" };
+  };
+}
+
+/** Preconditions are irrelevant to these tests — keep them off the real host. */
+const benignPreconditionRun: CommandRunner = async (cmd) => {
+  if (cmd === "defaults") return { code: 0, stdout: "eric\n", stderr: "" };
+  return { code: 0, stdout: "FileVault is Off.\n", stderr: "" };
+};
+
+describe("installFactoryd (imperative)", () => {
+  let root: string;
+  let log: Logger;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "factory-install-test-"));
+    log = createLogger({ write: () => {}, level: "error" });
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("passes a LaunchAgents path containing `&` and a space to launchctl as ONE argv element", async () => {
+    // A home/state path with `&` and a space is the classic shell-injection trap:
+    // built into a shell string it would split or disable BOTH agents. execFile
+    // array args must deliver it intact.
+    const agentsDir = join(root, "Home & Co", "Library", "LaunchAgents");
+    const stateDir = join(root, "state & data", "factory");
+    const calls: RunCall[] = [];
+
+    await installFactoryd({
+      stateDir,
+      launchAgentsDir: agentsDir,
+      log,
+      run: recordingLaunchctl(calls),
+      preconditionRun: benignPreconditionRun,
+    });
+
+    const daemonPlistPath = join(agentsDir, `${DAEMON_LABEL}.plist`);
+    const bootstrap = calls.find(
+      (c) => c.args[0] === "bootstrap" && c.args[2] === daemonPlistPath,
+    );
+    expect(bootstrap).toBeDefined();
+    // The whole path — `&` and space included — is a SINGLE argv element.
+    expect(bootstrap!.args).toHaveLength(3);
+    expect(bootstrap!.args[2]).toBe(daemonPlistPath);
+    expect(bootstrap!.args[2]).toContain("Home & Co");
+    // bootout targets the fixed service label literal, never a path.
+    const bootout = calls.find((c) => c.args[0] === "bootout");
+    expect(bootout!.args[1]).toMatch(/^gui\/\d+\/com\.thinkwork\.factory$/);
+    expect(bootout!.args.some((a) => a.includes("/"))).toBe(true); // gui/uid/label only
+    expect(bootout!.args.some((a) => a.endsWith(".plist"))).toBe(false);
+  });
+
+  it("throws when launchctl bootstrap fails instead of exiting success", async () => {
+    const calls: RunCall[] = [];
+    await expect(
+      installFactoryd({
+        stateDir: join(root, "state"),
+        launchAgentsDir: join(root, "LaunchAgents"),
+        log,
+        // bootstrap returns non-zero; bootout is best-effort and ignored.
+        run: recordingLaunchctl(calls, (args) =>
+          args[0] === "bootstrap" ? 1 : 0,
+        ),
+        preconditionRun: benignPreconditionRun,
+      }),
+    ).rejects.toThrow(/install failed/i);
+  });
+
+  it("seeds a fresh daemon.heartbeat so the watchdog's first tick is not a false alarm", async () => {
+    const stateDir = join(root, "state");
+    await installFactoryd({
+      stateDir,
+      launchAgentsDir: join(root, "LaunchAgents"),
+      log,
+      run: recordingLaunchctl([]),
+      preconditionRun: benignPreconditionRun,
+    });
+    const hb = heartbeatPath(stateDir);
+    expect(existsSync(hb)).toBe(true);
+    // Self-describing ISO content (the watchdog reads mtime, humans read this).
+    expect(readFileSync(hb, "utf-8").trim()).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });
