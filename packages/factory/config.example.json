@@ -33,5 +33,6 @@
     }
   ],
   "phases": {},
-  "pollIntervalSeconds": 30
+  "pollIntervalSeconds": 30,
+  "enforceBudgetUsd": false
 }

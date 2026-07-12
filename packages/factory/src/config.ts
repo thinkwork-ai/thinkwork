@@ -53,7 +53,15 @@ export interface PhaseConfig {
   model: string;
   wallClockSlaMinutes: number;
   silenceBudgetMinutes: number;
-  /** `--max-budget-usd` runaway backstop for the phase's worker. */
+  /**
+   * `--max-budget-usd` runaway backstop, in notional API-equivalent dollars.
+   * Applied ONLY when `enforceBudgetUsd` is true (default false). On a
+   * subscription this figure is not real spend, so the dollar cap is an
+   * artificial limit that could prematurely kill legitimate long work — the
+   * real governors are the wall-clock SLA and the silence/stall budget. The
+   * value stays here as a documented ceiling for anyone who opts in (e.g. an
+   * API-billed host).
+   */
   budgetUsd: number;
 }
 
@@ -64,6 +72,13 @@ export interface FactoryConfig {
   /** Per-phase model + SLA table, defaults merged in. */
   phases: Record<string, PhaseConfig>;
   pollIntervalSeconds: number;
+  /**
+   * Pass each phase's `budgetUsd` to the worker as `--max-budget-usd`. Default
+   * false: subscription workers are governed by wall-clock SLA + stall
+   * detection, not a dollar cap. Set true only on API-billed hosts where the
+   * reported cost is real spend.
+   */
+  enforceBudgetUsd: boolean;
 }
 
 export const DEFAULT_POLL_INTERVAL_SECONDS = 30;
@@ -296,5 +311,6 @@ export function loadConfig(): FactoryConfig {
     hosts,
     phases: mergePhases(raw.phases),
     pollIntervalSeconds,
+    enforceBudgetUsd: raw.enforceBudgetUsd === true,
   };
 }

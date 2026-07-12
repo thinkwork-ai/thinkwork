@@ -70,6 +70,7 @@ const config: FactoryConfig = {
   hosts: [host],
   phases: DEFAULT_PHASES,
   pollIntervalSeconds: 1,
+  enforceBudgetUsd: false,
 };
 
 interface Harness {
@@ -239,7 +240,8 @@ describe("executeAction — launch", () => {
     // Launch used the phase's model + budget from config.
     expect(h.launches).toHaveLength(1);
     expect(h.launches[0].opts.model).toBe(DEFAULT_PHASES.plan.model);
-    expect(h.launches[0].opts.budgetUsd).toBe(DEFAULT_PHASES.plan.budgetUsd);
+    // Budget backstop is opt-in; default (subscription) omits the dollar cap.
+    expect(h.launches[0].opts.budgetUsd).toBeUndefined();
 
     // Ledger comment written with the observed completion.
     const ledgerComment = issue.comments.find((c) =>
@@ -477,6 +479,46 @@ describe("executeAction — wall-clock SLA wiring", () => {
     expect(seenOptions?.timeoutMs).toBe(
       DEFAULT_PHASES.plan.wallClockSlaMinutes * 60_000,
     );
+  });
+});
+
+describe("executeAction — budget backstop is opt-in (subscription default)", () => {
+  it("omits --max-budget-usd by default (enforceBudgetUsd false)", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-40",
+      state: "Planning",
+      labels: ["Claude"],
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Ready to Work" });
+    const candidate = await candidateFor(h.gateway, "THINK-40");
+    const action = decideAction(candidate, {
+      activeAttempt: null,
+      hasChildIssues: false,
+    });
+
+    await executeAction(action, candidate, h.deps);
+
+    // No dollar cap passed to the worker — SLA + stall detection govern it.
+    expect(h.launches[0].opts.budgetUsd).toBeUndefined();
+  });
+
+  it("passes the phase budgetUsd when enforceBudgetUsd is true (API-billed host)", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-41",
+      state: "Planning",
+      labels: ["Claude"],
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Ready to Work" });
+    h.deps.config = { ...h.deps.config, enforceBudgetUsd: true };
+    const candidate = await candidateFor(h.gateway, "THINK-41");
+    const action = decideAction(candidate, {
+      activeAttempt: null,
+      hasChildIssues: false,
+    });
+
+    await executeAction(action, candidate, h.deps);
+
+    expect(h.launches[0].opts.budgetUsd).toBe(DEFAULT_PHASES.plan.budgetUsd);
   });
 });
 

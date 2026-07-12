@@ -92,6 +92,7 @@ const config: FactoryConfig = {
   hosts: [host],
   phases: DEFAULT_PHASES,
   pollIntervalSeconds: 1,
+  enforceBudgetUsd: false,
 };
 
 function makeDeps(

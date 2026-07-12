@@ -395,7 +395,7 @@ async function executeLaunch(
       "",
       `- branch: \`${plan.branch}\``,
       `- worktree: \`${plan.worktreePath}\``,
-      `- model: \`${phaseConfig.model}\` (budget backstop $${phaseConfig.budgetUsd})`,
+      `- model: \`${phaseConfig.model}\`${deps.config.enforceBudgetUsd ? ` (budget backstop $${phaseConfig.budgetUsd})` : ` (SLA ${phaseConfig.wallClockSlaMinutes}m; no dollar cap)`}`,
       `- expected stop: durable evidence per the routing contract (baton/status/PR)`,
     ].join("\n");
     await deps.gateway.createComment(issue.id, markerBody);
@@ -441,7 +441,10 @@ async function executeLaunch(
     launchOptions: {
       model: phaseConfig.model,
       cwd: plan.worktreePath,
-      budgetUsd: phaseConfig.budgetUsd,
+      // Dollar backstop only when explicitly enforced (API-billed hosts). On a
+      // subscription the reported cost is notional, so omit the cap and let the
+      // wall-clock SLA + stall detection govern the worker.
+      budgetUsd: deps.config.enforceBudgetUsd ? phaseConfig.budgetUsd : undefined,
     },
     launchContext: {
       issueId: id,
