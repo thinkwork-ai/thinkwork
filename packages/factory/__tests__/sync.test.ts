@@ -129,6 +129,68 @@ describe("syncCandidate", () => {
     expect(slack.posts).toHaveLength(0);
   });
 
+  it("Done + stale Needs User → ZERO Slack activity (no thread, no escalation) — Done is terminal", async () => {
+    // Regression: an old Done issue carrying a stale `Needs User` (or lane)
+    // label from past work must NOT re-open a thread + @mention every tick. The
+    // engine correctly noops it; the Slack layer must be terminal too, or it
+    // churns a thread-open + escalation + un-enroll-close forever (the observed
+    // Done-issue chatter). Only a genuine compound `launch` warrants a thread.
+    const issue = makeIssue({
+      identifier: "THINK-6",
+      state: "Done",
+      labels: ["Codex", "Needs User"],
+      comments: [
+        { id: "q-old", body: "@eric1 stale question from when it was active", authorId: "worker" },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    const candidate = candidateFor(issue, ["Needs User"]);
+
+    // The engine noops a Done issue; even across repeated ticks, nothing posts.
+    await sync.syncCandidate(candidate, {
+      kind: "noop",
+      reason: "THINK-6 is Done without LFG — no automated compounding",
+    });
+    await sync.syncCandidate(candidate, {
+      kind: "noop",
+      reason: "THINK-6 is Done without LFG — no automated compounding",
+    });
+
+    expect(store.getSlackThreadByIssue(issue.id)).toBeUndefined();
+    expect(slack.posts).toHaveLength(0);
+    expect(slack.mentions()).toHaveLength(0);
+  });
+
+  it("Done + compound launch DOES open a thread but never escalates a stale Needs User", async () => {
+    // The one legitimate Done thread: a factory-driven, not-yet-compounded issue
+    // the engine launches compound on. It gets a launch milestone, but a stale
+    // `Needs User` must not turn into an @mention escalation.
+    const issue = makeIssue({
+      identifier: "THINK-202",
+      state: "Done",
+      labels: ["Claude", "LFG", "Needs User"],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    const compoundLaunch: EngineAction = {
+      ...launch,
+      phase: "compound",
+      promptInputs: {
+        issueIdentifier: "THINK-202",
+        title: "t",
+        handoffStatus: "Done",
+      },
+    };
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), compoundLaunch);
+
+    expect(store.getSlackThreadByIssue(issue.id)).toBeDefined();
+    expect(slack.mentions()).toHaveLength(0); // no stale-label escalation
+  });
+
   it("opens the thread for advance and block actions", async () => {
     const advanceIssue = makeIssue({
       identifier: "THINK-7",
