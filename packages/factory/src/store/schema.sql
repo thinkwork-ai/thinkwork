@@ -60,11 +60,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_attempts_one_active
 
 CREATE INDEX IF NOT EXISTS idx_attempts_issue ON attempts (issue_id);
 
+-- Worker heartbeat lease (U6, R10/R11/R15). One row per issue whose active
+-- attempt the daemon is monitoring. `sla_accumulated_ms` is the phase's
+-- observed-reachable wall-clock: the sweep advances it ONLY on ticks where the
+-- host probed reachable, so a host-unreachable window freezes the clock (R11)
+-- rather than counting against the SLA. A missed heartbeat expires the lease
+-- (→ R15 recovery) only after the host is reachable AND the old pid is
+-- confirmed dead (the duplicate-worker guard, AE4). db.ts adds
+-- `sla_accumulated_ms` to any pre-existing lease table on open (rebuildable
+-- cache — an older factory.db simply gains the column).
 CREATE TABLE IF NOT EXISTS leases (
-  issue_id     TEXT PRIMARY KEY,
-  attempt_id   INTEGER NOT NULL,
-  expires_at   TEXT NOT NULL,
-  heartbeat_at TEXT NOT NULL
+  issue_id           TEXT PRIMARY KEY,
+  attempt_id         INTEGER NOT NULL,
+  expires_at         TEXT NOT NULL,
+  heartbeat_at       TEXT NOT NULL,
+  sla_accumulated_ms INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS nag_timers (
@@ -77,7 +87,31 @@ CREATE TABLE IF NOT EXISTS nag_timers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_nag_timers_issue ON nag_timers (issue_id);
+-- At most one timer per (issue, kind) so arm/disarm is an idempotent upsert.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nag_timers_issue_kind
+  ON nag_timers (issue_id, kind);
 
+-- Store-side nag delivery queue (U6→U8 seam). When the Slack surface is
+-- absent, a fired nag is enqueued here (delivered = 0) so U8 can flush it once
+-- Slack is online. When Slack IS present the sweep delivers via postNag
+-- directly and never touches this table.
+CREATE TABLE IF NOT EXISTS nag_outbox (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  issue_id   TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  delivered  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_nag_outbox_undelivered
+  ON nag_outbox (delivered);
+
+-- Named mutex (KTD-11). The single dev-deployment lock is acquired around
+-- phases that touch the shared dev stack (Verification, anything running
+-- `db:push`); every other phase runs without it. `holder_issue_id` records the
+-- issue currently holding the lock so a second contender waits visibly and can
+-- see who to wait on.
 CREATE TABLE IF NOT EXISTS locks (
   name            TEXT PRIMARY KEY,
   holder_issue_id TEXT NOT NULL,

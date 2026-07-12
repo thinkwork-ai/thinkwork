@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  TEMPLATE — rendered and bootstrapped by `factoryd install`. This is a
+  SEPARATE launchd job from the daemon on purpose: it must be able to announce
+  the daemon's death even when the daemon (and its Slack bot connection) are
+  gone. It runs on a fixed interval, reads the daemon heartbeat file's age, and
+  posts to a plain Slack incoming webhook when the daemon is overdue.
+
+  Same launchd pitfalls apply: absolute node/entry, explicit PATH, no
+  home-relative paths.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__LABEL__</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_BIN__</string>
+    <string>__ENTRY__</string>
+    <string>watchdog</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__WORKING_DIR__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>THINKWORK_FACTORY_DIR</key>
+    <string>__STATE_DIR__</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>__START_INTERVAL__</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>__LOG_PATH__</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_PATH__</string>
+</dict>
+</plist>

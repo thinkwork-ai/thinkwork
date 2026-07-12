@@ -26,11 +26,17 @@ import {
   type DaemonDeps,
 } from "./daemon.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
+import { heartbeatPath } from "./heartbeat.js";
+import { reconcile, type ReconcileDeps } from "./reconcile/reconciler.js";
+import { runWatchdog } from "./watchdog.js";
+import { installFactoryd, uninstallFactoryd } from "./cli-install.js";
 import { createLinearGateway, type CommentTrust } from "./linear/client.js";
 import { createLogger } from "./logger.js";
 import { createSlackGateway, type SlackGateway } from "./slack/client.js";
 import { createSlackSync, type SlackSync } from "./slack/sync.js";
 import { buildStatusView, formatStatusView } from "./slack/status.js";
+import { postNag } from "./slack/threads.js";
+import type { FiredNag } from "./sweep/nags.js";
 import { createGhCliGateway } from "./phases/evidence.js";
 import {
   defaultBootstrapScriptPath,
@@ -190,6 +196,41 @@ program
       }
     }
 
+    // Nag delivery seam (U6→U8): when Slack is online, fire the R23 nag through
+    // the issue's thread via postNag. Without Slack, the sweep enqueues nags to
+    // the store outbox instead (deliverNag omitted).
+    const operatorUserIds = config.slack.operatorUserIds ?? [];
+    const deliverNag =
+      slackGateway !== null
+        ? async (nag: FiredNag): Promise<void> => {
+            const row = store.getSlackThreadByIssue(nag.timer.issue_id);
+            if (row === undefined) return;
+            await postNag(
+              { channel: row.channel_id, threadTs: row.thread_ts },
+              nag.text,
+              { slack: slackGateway!, operatorUserIds },
+            );
+          }
+        : undefined;
+
+    const silenceBudgetMinutesFor = (phase: string): number =>
+      config.phases[phase]?.silenceBudgetMinutes ?? 10;
+
+    // U7 reconciliation: repairs partial state at boot + periodically. A scoped
+    // (tracer / --issue) run must NOT rebuild-from-Linear or expire attempts it
+    // is not authoritative over, so reconciliation is wired only for full runs.
+    const reconcileDeps: ReconcileDeps = {
+      store,
+      gateway,
+      transport,
+      github,
+      now: () => new Date(),
+      teamKey: config.linear.teamKey,
+      silenceBudgetMinutesFor,
+      trust,
+      log: log.child("reconcile"),
+    };
+
     const daemonDeps: DaemonDeps = {
       gateway,
       store,
@@ -202,6 +243,12 @@ program
       trust,
       onlyIssues,
       slack: slackSync,
+      // U6 no-orphan sweep wiring.
+      silenceBudgetMinutesFor,
+      deliverNag,
+      // U7 reboot/crash survival wiring.
+      heartbeatPath: heartbeatPath(stateDir),
+      reconcile: onlyIssues ? undefined : () => reconcile(reconcileDeps),
     };
 
     const controller = createDaemonController();
@@ -230,6 +277,8 @@ program
         pollIntervalSeconds: config.pollIntervalSeconds,
         once: opts.once === true,
         controller,
+        // Re-reconcile roughly every 20 ticks (~10 min at the 30s cadence).
+        reconcileEveryTicks: 20,
       });
     } finally {
       if (slackGateway !== null) {
@@ -286,6 +335,81 @@ program
   )
   .action(() => {
     console.log("factoryd halt: not yet implemented");
+  });
+
+program
+  .command("install")
+  .description(
+    "Install the daemon + watchdog as launchd LaunchAgents (renders plists " +
+      "with absolute paths, bootstraps into gui/<uid>, warns on reboot preconditions)",
+  )
+  .option(
+    "--watchdog-interval <seconds>",
+    "watchdog heartbeat-check cadence in seconds",
+    (v) => Number.parseInt(v, 10),
+  )
+  .option(
+    "--working-dir <path>",
+    "daemon working directory (defaults to the factory package root)",
+  )
+  .action(
+    async (opts: { watchdogInterval?: number; workingDir?: string }) => {
+      const log = createLogger({ component: "factoryd.install" });
+      await installFactoryd({
+        stateDir: getStateDir(),
+        workingDir: opts.workingDir,
+        watchdogIntervalSeconds: opts.watchdogInterval,
+        log,
+      });
+    },
+  );
+
+program
+  .command("uninstall")
+  .description("Bootout the daemon + watchdog LaunchAgents and remove the plists")
+  .action(async () => {
+    const log = createLogger({ component: "factoryd.uninstall" });
+    await uninstallFactoryd({ log });
+  });
+
+program
+  .command("watchdog")
+  .description(
+    "Check the daemon heartbeat age and post a Slack webhook alert when overdue " +
+      "(the independent launchd interval job)",
+  )
+  .action(async () => {
+    const log = createLogger({ component: "factoryd.watchdog" });
+    const stateDir = getStateDir();
+    let webhookUrl: string | undefined;
+    let pollIntervalSeconds = 30;
+    try {
+      const config = loadConfig();
+      webhookUrl = config.slack.webhookUrl;
+      pollIntervalSeconds = config.pollIntervalSeconds;
+    } catch (e) {
+      // The watchdog is deliberately resilient: it still checks the heartbeat
+      // even when config is unreadable — it just cannot alert without a webhook.
+      log.warn("watchdog: config unreadable — proceeding without a webhook", {
+        error: String(e),
+      });
+    }
+    // Overdue when the heartbeat is older than ~6 poll cycles (floor 5 min).
+    const overdueMs = Math.max(pollIntervalSeconds * 6, 300) * 1000;
+    const result = await runWatchdog({
+      heartbeatPath: heartbeatPath(stateDir),
+      overdueMs,
+      webhookUrl,
+      hostname: process.env.HOSTNAME ?? undefined,
+      log,
+    });
+    log.info("watchdog check complete", {
+      posted: result.posted,
+      overdue: result.overdue,
+      ageMs: result.ageMs,
+      reason: result.reason,
+    });
+    if (result.overdue && !result.posted) process.exitCode = 1;
   });
 
 program.parse();

@@ -226,3 +226,121 @@ describe("slack_threads (U8)", () => {
     expect(store.listSlackThreads()).toHaveLength(2);
   });
 });
+
+describe("attempts — sweep queries (U6)", () => {
+  it("listActiveAttempts / listAttemptsForPhase / getLatestTerminalAttempt", () => {
+    const a1 = store.insertAttempt({
+      issueId: "iss_a",
+      phase: "implement",
+      attemptNumber: 1,
+      state: "Running",
+    });
+    store.transitionAttempt(a1, "Failed", "kill 1");
+    const a2 = store.insertAttempt({
+      issueId: "iss_a",
+      phase: "implement",
+      attemptNumber: 2,
+      state: "Running",
+    });
+    store.insertAttempt({
+      issueId: "iss_b",
+      phase: "verify",
+      attemptNumber: 1,
+      state: "Running",
+    });
+
+    // Only the two Running attempts are active.
+    expect(store.listActiveAttempts().map((a) => a.id).sort()).toEqual(
+      [a2, store.getActiveAttempt("iss_b", "verify")!.id].sort(),
+    );
+    // Newest-first per phase.
+    expect(
+      store.listAttemptsForPhase("iss_a", "implement").map((a) => a.attempt_number),
+    ).toEqual([2, 1]);
+    // Latest terminal ignores the still-running a2.
+    expect(store.getLatestTerminalAttempt("iss_a")!.id).toBe(a1);
+    expect(store.getLatestTerminalAttempt("iss_none")).toBeUndefined();
+  });
+});
+
+describe("leases (U6)", () => {
+  it("upsert/get/delete round-trips and accumulates the SLA field", () => {
+    store.upsertLease({
+      issueId: "iss_l",
+      attemptId: 3,
+      expiresAt: "2026-07-12T00:15:00.000Z",
+      heartbeatAt: "2026-07-12T00:00:00.000Z",
+      slaAccumulatedMs: 5000,
+    });
+    const row = store.getLease("iss_l");
+    expect(row!.attempt_id).toBe(3);
+    expect(row!.sla_accumulated_ms).toBe(5000);
+    // Upsert overwrites (advancing heartbeat + SLA).
+    store.upsertLease({
+      issueId: "iss_l",
+      attemptId: 3,
+      expiresAt: "2026-07-12T00:30:00.000Z",
+      heartbeatAt: "2026-07-12T00:15:00.000Z",
+      slaAccumulatedMs: 9000,
+    });
+    expect(store.getLease("iss_l")!.sla_accumulated_ms).toBe(9000);
+    expect(store.listLeases()).toHaveLength(1);
+    store.deleteLease("iss_l");
+    expect(store.getLease("iss_l")).toBeUndefined();
+  });
+});
+
+describe("nag timers + outbox (U6)", () => {
+  it("upsert is idempotent per (issue, kind); armed toggles; due filter respects the clock", () => {
+    store.upsertNagTimer({
+      issueId: "iss_n",
+      kind: "question",
+      nextFireAt: "2026-07-12T04:00:00.000Z",
+      intervalMinutes: 1440,
+    });
+    // Same (issue, kind) upserts in place — one row.
+    store.upsertNagTimer({
+      issueId: "iss_n",
+      kind: "question",
+      nextFireAt: "2026-07-12T05:00:00.000Z",
+      intervalMinutes: 1440,
+    });
+    expect(store.listNagTimers()).toHaveLength(1);
+    expect(store.getNagTimer("iss_n", "question")!.next_fire_at).toBe(
+      "2026-07-12T05:00:00.000Z",
+    );
+
+    // Not due before the deadline; due after.
+    expect(store.listDueNagTimers("2026-07-12T04:30:00.000Z")).toHaveLength(0);
+    expect(store.listDueNagTimers("2026-07-12T06:00:00.000Z")).toHaveLength(1);
+
+    // Disarmed timers never surface as due.
+    store.setNagArmed("iss_n", "question", false);
+    expect(store.listDueNagTimers("2026-07-12T06:00:00.000Z")).toHaveLength(0);
+  });
+
+  it("outbox enqueue → list undelivered → mark delivered", () => {
+    store.enqueueNag({ issueId: "iss_o", kind: "question", text: "ping" });
+    const rows = store.listUndeliveredNags();
+    expect(rows).toHaveLength(1);
+    store.markNagDelivered(rows[0].id);
+    expect(store.listUndeliveredNags()).toHaveLength(0);
+  });
+});
+
+describe("locks (U6, KTD-11)", () => {
+  it("acquire is exclusive + reentrant; release is holder-scoped", () => {
+    const t = "2026-07-12T00:00:00.000Z";
+    expect(store.acquireLock("dev-deployment", "iss_1", t)).toBe(true);
+    // Reentrant for the same holder.
+    expect(store.acquireLock("dev-deployment", "iss_1", t)).toBe(true);
+    // Exclusive against another.
+    expect(store.acquireLock("dev-deployment", "iss_2", t)).toBe(false);
+    expect(store.getLock("dev-deployment")!.holder_issue_id).toBe("iss_1");
+    // A non-holder cannot release it.
+    expect(store.releaseLock("dev-deployment", "iss_2")).toBe(false);
+    expect(store.releaseLock("dev-deployment", "iss_1")).toBe(true);
+    // Now free for the other issue.
+    expect(store.acquireLock("dev-deployment", "iss_2", t)).toBe(true);
+  });
+});

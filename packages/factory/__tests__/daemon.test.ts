@@ -4,10 +4,12 @@
  * current issue finishes, remaining candidates skipped, loop exits).
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { heartbeatPath, readHeartbeatAgeMs } from "../src/heartbeat.js";
 
 import { DEFAULT_PHASES, type FactoryConfig, type HostConfig } from "../src/config.js";
 import {
@@ -70,6 +72,9 @@ class FakeTransport implements HostTransport {
   }
   async readTail(): Promise<string> {
     return "";
+  }
+  async statMtimeMs(): Promise<number | null> {
+    return null;
   }
   async writeFileText(): Promise<void> {}
   async killPidGroup(): Promise<boolean> {
@@ -462,5 +467,56 @@ describe("runDaemon — shutdown contract", () => {
 
     await runDaemon(deps, { pollIntervalSeconds: 60, once: true });
     expect(executed).toEqual(["THINK-22"]);
+  });
+});
+
+describe("runDaemon — heartbeat decoupled from tick progress (KTD-6)", () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it("keeps the heartbeat fresh while a tick is awaiting a long worker", async () => {
+    const gateway = new FakeGateway([
+      makeIssue({ identifier: "THINK-30", state: "Todo", labels: ["Claude"] }),
+    ]);
+    // Hang the tick: listTeamIssues awaits a gate the test controls, so the
+    // whole tick is stuck in an await (as it would be during a 120-min worker).
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const origList = gateway.listTeamIssues.bind(gateway);
+    gateway.listTeamIssues = async (teamKey: string) => {
+      await gate;
+      return origList(teamKey);
+    };
+
+    const hbPath = heartbeatPath(stateDir);
+    const controller = createDaemonController();
+    const deps: DaemonDeps = {
+      ...makeDeps(gateway, async () => {}),
+      heartbeatPath: hbPath,
+    };
+
+    const done = runDaemon(deps, {
+      pollIntervalSeconds: 60,
+      controller,
+      sleepGranularityMs: 5,
+      heartbeatIntervalMs: 10, // stamp every 10ms regardless of tick progress
+    });
+
+    // The immediate boot stamp exists...
+    expect(readHeartbeatAgeMs(hbPath)).not.toBeNull();
+    const firstMtime = statSync(hbPath).mtimeMs;
+
+    // ...and while the tick is STILL awaiting `gate`, the independent interval
+    // keeps advancing the file's mtime (a per-cycle-only stamp would be frozen).
+    await sleep(80);
+    const laterMtime = statSync(hbPath).mtimeMs;
+    expect(laterMtime).toBeGreaterThan(firstMtime);
+    // The file is nowhere near the interval-stale threshold.
+    expect(readHeartbeatAgeMs(hbPath)!).toBeLessThan(60);
+
+    release(); // let the hung tick complete
+    controller.stop();
+    await done;
   });
 });

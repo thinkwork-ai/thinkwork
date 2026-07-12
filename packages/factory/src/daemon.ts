@@ -24,8 +24,32 @@ import {
 import type { FactoryStore, AttemptRow } from "./store/db.js";
 import { TERMINAL_ATTEMPT_STATES } from "./store/db.js";
 import type { HostTransport } from "./workers/transport.js";
-import { decideAction, type EngineAction, type StoreView } from "./phases/engine.js";
+import {
+  decideAction,
+  phaseForStatus,
+  type EngineAction,
+  type StoreView,
+} from "./phases/engine.js";
+import { classifyQuota } from "./sweep/quota.js";
+import { devLockHeldByOther } from "./sweep/locks.js";
+import { runSweep, type SweepResult } from "./sweep/classifier.js";
+import type { FiredNag } from "./sweep/nags.js";
 import type { SlackSync } from "./slack/sync.js";
+import { writeHeartbeat } from "./heartbeat.js";
+
+/** Trailing terminal states that count as a "kill" for the attempt ceiling. */
+const KILL_TERMINALS = new Set(["Stalled", "TimedOut", "Failed"]);
+
+/**
+ * Default cadence for the INDEPENDENT heartbeat interval (KTD-6). The daemon
+ * stamps the heartbeat file on this timer regardless of tick progress, so a
+ * long-running worker (implement can run for wallClockSlaMinutes) never lets
+ * the file age past the watchdog's overdue threshold. The interval callback
+ * fires on the event loop even while a tick is awaiting async worker I/O — so
+ * the file stays fresh during a long tick, but goes stale precisely when the
+ * event loop genuinely hangs (which is what the watchdog must catch).
+ */
+export const DEFAULT_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export interface DaemonController {
   readonly stopping: boolean;
@@ -76,6 +100,69 @@ export interface DaemonDeps {
    * failure is caught here and never blocks phase progress.
    */
   slack?: SlackSync;
+
+  // ---- U6 no-orphan sweep wiring (all optional; sensible defaults) --------
+  /** Injected clock for every sweep timer/SLA/quota computation (tests fake it). */
+  now?: () => Date;
+  /** Per-phase silence budget for stall detection (default 10 min when absent). */
+  silenceBudgetMinutesFor?: (phase: string) => number;
+  /** Quota cooldown window in minutes (default 30). */
+  quotaCooldownMinutes?: number;
+  /** Lease TTL in minutes (default 15). */
+  leaseTtlMinutes?: number;
+  /**
+   * Nag delivery seam (wired to the Slack surface's postNag). Absent → due nags
+   * enqueue to the store outbox for U8 to flush.
+   */
+  deliverNag?: (nag: FiredNag) => Promise<void>;
+
+  // ---- U7 reboot/crash survival wiring (all optional) ---------------------
+  /**
+   * Heartbeat file the daemon stamps once per poll cycle (U7, KTD-6). The
+   * INDEPENDENT watchdog reads this file's age to detect daemon silence. Absent
+   * → no heartbeat is written (tests that don't exercise reboot survival).
+   */
+  heartbeatPath?: string;
+  /**
+   * Reconciliation pass (U7, F4/AE6). Run once at boot BEFORE the first tick
+   * and then every `reconcileEveryTicks` ticks (see RunDaemonOptions). Repairs
+   * orphaned attempts, adopts externally-merged PRs, and rebuilds a deleted
+   * store. Absent → no reconciliation (backward compatible with U5/U6).
+   */
+  reconcile?: () => Promise<unknown>;
+}
+
+/** Default per-phase silence budget when the daemon is not given a config lookup. */
+const DEFAULT_SILENCE_BUDGET_MINUTES = 10;
+
+/**
+ * Run the no-orphan sweep, isolated so a sweep failure never crashes the tick
+ * (mirrors the Slack-sync isolation contract). Returns the sweep result on
+ * success, or null when the sweep threw.
+ */
+async function runSweepIsolated(
+  deps: DaemonDeps,
+  candidates: readonly PollCandidate[],
+): Promise<SweepResult | null> {
+  try {
+    return await runSweep(candidates, {
+      store: deps.store,
+      transport: deps.transport,
+      now: deps.now ?? (() => new Date()),
+      silenceBudgetMinutesFor:
+        deps.silenceBudgetMinutesFor ??
+        (() => DEFAULT_SILENCE_BUDGET_MINUTES),
+      quotaCooldownMinutes: deps.quotaCooldownMinutes,
+      leaseTtlMinutes: deps.leaseTtlMinutes,
+      log: deps.log,
+      deliverNag: deps.deliverNag,
+    });
+  } catch (e) {
+    deps.log.error("no-orphan sweep failed — continuing tick", {
+      error: String(e),
+    });
+    return null;
+  }
 }
 
 /** Mirror one processed candidate to Slack; swallow + log any failure. */
@@ -128,7 +215,10 @@ function worktreeKnown(store: FactoryStore, path: string): boolean {
  * not know (duplicate-worker guard), and the Linear child-issue read.
  */
 export async function buildStoreView(
-  deps: Pick<DaemonDeps, "gateway" | "store" | "transport" | "repoPath">,
+  deps: Pick<
+    DaemonDeps,
+    "gateway" | "store" | "transport" | "repoPath" | "now" | "quotaCooldownMinutes"
+  >,
   candidate: PollCandidate,
 ): Promise<StoreView> {
   const { issue } = candidate;
@@ -182,10 +272,41 @@ export async function buildStoreView(
 
   const hasChildIssues = await deps.gateway.hasChildIssues(issue.id);
 
+  // ---- U6 signals: quota cooldown, attempt ceiling, dev-deployment lock. ----
+  const now = deps.now?.() ?? new Date();
+  const quotaVerdict = classifyQuota(
+    deps.store,
+    issue.id,
+    now,
+    deps.quotaCooldownMinutes,
+  );
+  const quota: StoreView["quota"] =
+    quotaVerdict.kind === "cooldown"
+      ? { kind: "cooldown", until: quotaVerdict.until.toISOString() }
+      : quotaVerdict.kind === "expired"
+        ? { kind: "expired" }
+        : null;
+
+  // Trailing consecutive kill/stall count for the phase this status would
+  // launch (attempts come back newest-first; a non-kill terminal resets it).
+  const consecutiveKillsByPhase: Record<string, number> = {};
+  const targetPhase = phaseForStatus(issue.state);
+  if (targetPhase !== null) {
+    let kills = 0;
+    for (const a of deps.store.listAttemptsForPhase(issue.id, targetPhase)) {
+      if (KILL_TERMINALS.has(a.state)) kills += 1;
+      else break;
+    }
+    consecutiveKillsByPhase[targetPhase] = kills;
+  }
+
   return {
     activeAttempt,
     hasChildIssues,
     externalWorkerSignals,
+    quota,
+    consecutiveKillsByPhase,
+    devLockHeldByOther: devLockHeldByOther(deps.store, issue.id),
   };
 }
 
@@ -225,6 +346,13 @@ export async function runTick(
       inScope: candidates.length,
     });
   }
+
+  // ---- No-orphan sweep (U6): reconcile liveness/leases/quota/nags into the
+  // store BEFORE deciding, so decideAction sees post-sweep reality (a settled
+  // stalled/dead attempt frees its slot → relaunch this same tick). A sweep
+  // failure must never crash the tick — wrap + log, exactly like the Slack
+  // sync. ----
+  await runSweepIsolated(deps, candidates);
 
   for (const candidate of candidates) {
     if (shouldStop()) {
@@ -279,7 +407,11 @@ export async function runTick(
       }
 
       const view = await buildStoreView(deps, candidate);
-      const action = decideAction(candidate, view);
+      // Thread the daemon's trust allowlist so the escalation-override marker
+      // check is author-gated (an untrusted commenter must not be able to
+      // pre-post a `factory-block:` marker to pre-empt a ceiling/quota
+      // escalation). PollCandidate carries comments; trust is added here.
+      const action = decideAction({ ...candidate, trust: deps.trust }, view);
       deps.log.info("decision", {
         issue: id,
         state: candidate.issue.state,
@@ -316,6 +448,33 @@ export interface RunDaemonOptions {
   controller?: DaemonController;
   /** Injectable for tests. */
   sleepGranularityMs?: number;
+  /**
+   * Run `deps.reconcile` every N ticks (in addition to the boot pass). 0 or
+   * undefined disables the PERIODIC pass; the boot pass still runs whenever
+   * `deps.reconcile` is present.
+   */
+  reconcileEveryTicks?: number;
+  /**
+   * Cadence of the independent heartbeat interval (ms). Defaults to
+   * `min(pollIntervalSeconds*1000, DEFAULT_HEARTBEAT_INTERVAL_MS)` so it never
+   * lags the poll interval. Injectable for deterministic tests.
+   */
+  heartbeatIntervalMs?: number;
+}
+
+/** Run a reconciliation pass, isolated so a failure never crashes the loop. */
+async function runReconcileIsolated(
+  deps: DaemonDeps,
+  phase: "boot" | "periodic",
+): Promise<void> {
+  if (deps.reconcile === undefined) return;
+  try {
+    await deps.reconcile();
+  } catch (e) {
+    deps.log.error(`${phase} reconcile failed — continuing`, {
+      error: String(e),
+    });
+  }
 }
 
 /**
@@ -331,31 +490,89 @@ export async function runDaemon(
   const controller = options.controller ?? createDaemonController();
   const granularity = options.sleepGranularityMs ?? 200;
 
-  for (;;) {
+  // Independent heartbeat interval (KTD-6). DECOUPLED from the tick: the tick
+  // awaits driveAttempt for the worker's entire run (up to wallClockSlaMinutes),
+  // so a heartbeat stamped only per-cycle would go stale for the whole run and
+  // trip the watchdog's overdue threshold on EVERY worker >5min. Stamping on a
+  // self-scheduling interval keeps the file fresh while the loop is merely
+  // awaiting async worker I/O, yet lets it go stale if the event loop genuinely
+  // hangs — exactly the condition the watchdog should catch. Unref'd so the
+  // timer alone never keeps the process alive.
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  const stampHeartbeat = (): void => {
+    if (deps.heartbeatPath === undefined) return;
     try {
-      const tick = await runTick(deps, () => controller.stopping);
-      deps.log.info("tick complete", {
-        decided: tick.decisions.length,
-        stopped: tick.stopped,
-      });
+      writeHeartbeat(deps.heartbeatPath, new Date());
     } catch (e) {
-      if (e instanceof PollAbortedError) {
-        deps.log.warn("poll tick aborted — retrying next interval", {
-          error: e.message,
+      deps.log.warn("heartbeat write failed", { error: String(e) });
+    }
+  };
+  if (deps.heartbeatPath !== undefined) {
+    // Stamp once immediately so the watchdog sees liveness before the first
+    // (possibly long) tick, then let the interval carry it.
+    stampHeartbeat();
+    const intervalMs = Math.max(
+      1,
+      Math.min(
+        options.heartbeatIntervalMs ??
+          Math.min(
+            options.pollIntervalSeconds * 1000,
+            DEFAULT_HEARTBEAT_INTERVAL_MS,
+          ),
+        DEFAULT_HEARTBEAT_INTERVAL_MS,
+      ),
+    );
+    heartbeatTimer = setInterval(stampHeartbeat, intervalMs);
+    // Node's Timeout has unref(); guard for exotic timer shims in tests.
+    heartbeatTimer.unref?.();
+  }
+
+  try {
+    // Boot reconciliation (U7, F4): repair partial state left by a crash/reboot
+    // BEFORE the first tick, so decide() sees a consistent world (an orphaned
+    // attempt is expired here → the first tick relaunches it; a merged PR is
+    // adopted here → the first tick advances instead of relaunching).
+    await runReconcileIsolated(deps, "boot");
+
+    let tickCount = 0;
+    for (;;) {
+      try {
+        const tick = await runTick(deps, () => controller.stopping);
+        deps.log.info("tick complete", {
+          decided: tick.decisions.length,
+          stopped: tick.stopped,
         });
-      } else {
-        deps.log.error("tick failed", { error: String(e) });
+      } catch (e) {
+        if (e instanceof PollAbortedError) {
+          deps.log.warn("poll tick aborted — retrying next interval", {
+            error: e.message,
+          });
+        } else {
+          deps.log.error("tick failed", { error: String(e) });
+        }
+      }
+
+      tickCount += 1;
+      // Periodic reconciliation (U7): routinely re-repair drift while running.
+      if (
+        options.reconcileEveryTicks !== undefined &&
+        options.reconcileEveryTicks > 0 &&
+        tickCount % options.reconcileEveryTicks === 0
+      ) {
+        await runReconcileIsolated(deps, "periodic");
+      }
+
+      if (options.once === true || controller.stopping) return;
+
+      const deadline = Date.now() + options.pollIntervalSeconds * 1000;
+      while (Date.now() < deadline) {
+        if (controller.stopping) return;
+        await new Promise((r) =>
+          setTimeout(r, Math.min(granularity, deadline - Date.now())),
+        );
       }
     }
-
-    if (options.once === true || controller.stopping) return;
-
-    const deadline = Date.now() + options.pollIntervalSeconds * 1000;
-    while (Date.now() < deadline) {
-      if (controller.stopping) return;
-      await new Promise((r) =>
-        setTimeout(r, Math.min(granularity, deadline - Date.now())),
-      );
-    }
+  } finally {
+    if (heartbeatTimer !== undefined) clearInterval(heartbeatTimer);
   }
 }

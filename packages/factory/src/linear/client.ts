@@ -9,6 +9,24 @@
 
 import { LinearClient } from "@linear/sdk";
 
+import {
+  ACTIVE_STATES,
+  LANE_LABELS,
+  VERIFICATION_STATES,
+} from "../domain/statuses.js";
+
+/**
+ * Thrown at gateway construction when the @linear/sdk internal client shape the
+ * raw candidate query depends on is missing (an SDK upgrade broke the reach).
+ * Failing here — at startup — beats failing deep inside the first poll.
+ */
+export class LinearSdkShapeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LinearSdkShapeError";
+  }
+}
+
 export interface LinearIssueSnapshot {
   /** Linear internal id (uuid). */
   id: string;
@@ -110,6 +128,65 @@ async function drain<T>(first: PageOf<T>): Promise<T[]> {
   return all;
 }
 
+/**
+ * Server-side candidate filter + INLINE state/labels selection (U6 poll-cost
+ * fix). The naive `team.issues()` drain then N+1s `issue.state` +
+ * `issue.labels()` per issue — ~2N extra round trips, 60s+ on the real
+ * 245-issue team. This raw GraphQL query instead:
+ *   1. filters to candidates server-side (lane-labeled active issues PLUS every
+ *      Verification-family issue), so only dispatchable issues come back; and
+ *   2. selects `state { name }` and `labels { nodes { name } }` inline, killing
+ *      the N+1 — one request per page, not ~2N.
+ * The poller's client-side `matchesFilter` still runs (belt-and-suspenders), so
+ * this filter is a pure optimization and correctness never depends on it.
+ */
+const TEAM_ISSUES_QUERY = `
+query FactoryTeamIssues($filter: IssueFilter, $after: String) {
+  issues(first: 100, after: $after, includeArchived: false, filter: $filter) {
+    nodes {
+      id
+      identifier
+      title
+      description
+      state { name }
+      labels { nodes { name } }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+interface RawIssueNode {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  state: { name: string } | null;
+  labels: { nodes: { name: string }[] };
+}
+
+interface RawIssuesResponse {
+  issues: {
+    nodes: RawIssueNode[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+}
+
+/** IssueFilter selecting the same candidates the poller enrolls. */
+function candidateIssueFilter(teamId: string): Record<string, unknown> {
+  return {
+    team: { id: { eq: teamId } },
+    or: [
+      {
+        and: [
+          { state: { name: { in: [...ACTIVE_STATES] } } },
+          { labels: { some: { name: { in: [...LANE_LABELS] } } } },
+        ],
+      },
+      { state: { name: { in: [...VERIFICATION_STATES] } } },
+    ],
+  };
+}
+
 export function createLinearGateway(apiKey: string): LinearGateway {
   const client = new LinearClient({ apiKey });
   let cachedViewerId: string | null = null;
@@ -142,31 +219,83 @@ export function createLinearGateway(apiKey: string): LinearGateway {
     return match.id;
   }
 
+  // The SDK's underlying GraphQL client, used for the one raw candidate query
+  // (state + labels inline) that the typed helpers cannot express without an
+  // N+1. Typed minimally so we never depend on @linear/sdk internals.
+  const gql = (
+    client as unknown as {
+      client?: {
+        rawRequest<T>(
+          query: string,
+          variables?: Record<string, unknown>,
+        ): Promise<{ data?: T | null; errors?: unknown }>;
+      };
+    }
+  ).client;
+
+  // Startup guard (fail loudly, not mid-poll): the raw candidate query reaches
+  // into @linear/sdk internals. If that shape ever changes, throw a clear,
+  // named error at construction instead of a cryptic failure on the first poll.
+  if (gql === undefined || typeof gql.rawRequest !== "function") {
+    throw new LinearSdkShapeError(
+      "createLinearGateway: expected @linear/sdk client.client.rawRequest to be a " +
+        "function, but it is missing — the SDK internal shape changed and the raw " +
+        "candidate query (listTeamIssues) cannot run. Pin/adjust @linear/sdk or " +
+        "update the raw-GraphQL reach in linear/client.ts.",
+    );
+  }
+
   return {
     async listTeamIssues(teamKey) {
+      // Resolve the team first so an unknown key still fails loudly (a
+      // server-side filter on a bad key would otherwise just return an empty
+      // board and hide the misconfiguration).
       const team = await teamByKey(teamKey);
-      const issues = await drain(
-        (await team.issues({ first: 100 })) as unknown as PageOf<{
-          id: string;
-          identifier: string;
-          title: string;
-          description?: string;
-          state: Promise<{ name: string } | undefined>;
-          labels(): Promise<PageOf<{ name: string }>>;
-        }>,
-      );
+      const filter = candidateIssueFilter(team.id);
       const snapshots: LinearIssueSnapshot[] = [];
-      for (const issue of issues) {
-        const state = await issue.state;
-        const labels = await drain(await issue.labels());
-        snapshots.push({
-          id: issue.id,
-          identifier: issue.identifier,
-          title: issue.title,
-          description: issue.description ?? "",
-          state: state?.name ?? "",
-          labels: labels.map((l) => l.name),
-        });
+      let after: string | null = null;
+      for (;;) {
+        const res: { data?: RawIssuesResponse | null; errors?: unknown } =
+          await gql.rawRequest<RawIssuesResponse>(TEAM_ISSUES_QUERY, {
+            filter,
+            after,
+          });
+        // A page that resolves with GraphQL `errors` or without a `data.issues`
+        // payload (throttle / partial failure) must NOT silently break the loop
+        // — that would return a TRUNCATED candidate set that looks like success,
+        // silently skipping an enrolled issue. Throw instead: pollTick's
+        // try/catch converts it into a clean PollAbortedError (retried next tick).
+        if (
+          res.errors !== undefined &&
+          res.errors !== null &&
+          !(Array.isArray(res.errors) && res.errors.length === 0)
+        ) {
+          throw new Error(
+            "listTeamIssues: Linear GraphQL returned errors mid-pagination — " +
+              "aborting to avoid a truncated candidate set: " +
+              JSON.stringify(res.errors),
+          );
+        }
+        const page = res.data?.issues;
+        if (!page) {
+          throw new Error(
+            "listTeamIssues: Linear returned a page with no `data.issues` payload " +
+              "(GraphQL error, throttle, or partial failure) — aborting to avoid a " +
+              "truncated candidate set",
+          );
+        }
+        for (const n of page.nodes) {
+          snapshots.push({
+            id: n.id,
+            identifier: n.identifier,
+            title: n.title,
+            description: n.description ?? "",
+            state: n.state?.name ?? "",
+            labels: n.labels.nodes.map((l) => l.name),
+          });
+        }
+        if (!page.pageInfo.hasNextPage) break;
+        after = page.pageInfo.endCursor;
       }
       return snapshots;
     },

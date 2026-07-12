@@ -15,8 +15,14 @@
 
 import type { LaneLabel } from "../domain/statuses.js";
 import { ROUTING_STATUSES } from "../domain/statuses.js";
-import type { LinearIssueSnapshot } from "../linear/client.js";
+import {
+  isTrustedComment,
+  type CommentTrust,
+  type LinearCommentSnapshot,
+  type LinearIssueSnapshot,
+} from "../linear/client.js";
 import type { Ledger } from "../linear/ledger.js";
+import { isMarkerComment } from "../linear/markers.js";
 import { TERMINAL_ATTEMPT_STATES } from "../store/db.js";
 
 /** Factory pipeline phases a launch action can name. */
@@ -80,6 +86,13 @@ export type EngineAction =
       /** True for a Ready to Work repair pass (`Verification Failed`). */
       repair: boolean;
       promptInputs: LaunchPromptInputs;
+      /**
+       * This launch is proceeding only because an operator override cleared a
+       * ceiling/quota escalation. The executor must consume (supersede) the
+       * `factory-block:` marker so the override is ONE-SHOT: if this attempt
+       * also fails, the next tick re-escalates instead of relaunching forever.
+       */
+      consumesEscalationOverride?: boolean;
     }
   | { kind: "advance"; toStatus: string; evidence: string }
   /** Review gates without LFG etc. — zero-SLA waiting; nags arrive in U6/U8. */
@@ -105,6 +118,20 @@ export interface EngineCandidate {
    * it has never touched. Load-bearing for the compound cutoff below.
    */
   ledger: { ledger: Ledger; synthesized: boolean };
+  /**
+   * The issue's comments — used to detect an operator override of a
+   * ceiling/quota escalation (a `factory-block:` marker present while the
+   * `Needs User` label has been removed). PollCandidate satisfies this
+   * structurally, so the daemon's `decideAction(candidate, view)` supplies it
+   * for free. Optional so engine-only callers/tests need not populate it.
+   */
+  comments?: LinearCommentSnapshot[];
+  /**
+   * Baton/marker author allowlist. When present, the override marker must come
+   * from a trusted author (mirrors the preflight-override trust check); when
+   * absent the check is fail-open, exactly as `hasPreflightOverride` is.
+   */
+  trust?: CommentTrust;
 }
 
 /**
@@ -123,9 +150,108 @@ export interface StoreView {
    * Codex thread ids). Non-empty → never launch; wait for reconciliation.
    */
   externalWorkerSignals?: string[];
+  /**
+   * Quota-cooldown signal (U6, R14/AE8) from the newest terminal attempt. When
+   * the latest attempt is `QuotaCooldown`, `cooldown` (still inside the window)
+   * makes decide() wait; `expired` (window exceeded) makes it escalate rather
+   * than hammer a throttling provider with an immediate relaunch.
+   */
+  quota?: { kind: "cooldown" | "expired"; until?: string } | null;
+  /**
+   * Trailing consecutive kill/stall count per phase (U6, R15/AE5) from
+   * MAX(attempt_number) downward. A phase at or above ATTEMPT_CEILING has its
+   * next launch converted to an escalation instead of an Nth attempt.
+   */
+  consecutiveKillsByPhase?: Record<string, number>;
+  /**
+   * The single dev-deployment mutex (KTD-11) is currently held by ANOTHER
+   * issue. Verification (which drives the shared dev stack) waits visibly
+   * rather than racing; other phases ignore this.
+   */
+  devLockHeldByOther?: boolean;
 }
 
 const VERIFICATION_FAILED_LABEL = "Verification Failed";
+
+const NEEDS_USER_LABEL = "Needs User";
+
+/** Block-marker comment prefix (`factory-block:<ISSUE_ID>`), posted by the
+ * executor whenever it applies a block — including a ceiling/quota escalation.
+ * Defined here (not in executor.ts) so both the escalation-override check below
+ * and the executor can share ONE source without a circular import. */
+export const BLOCK_MARKER_PREFIX = "factory-block:";
+
+export function blockMarker(issueIdentifier: string): string {
+  return `${BLOCK_MARKER_PREFIX}${issueIdentifier}`;
+}
+
+/**
+ * Attempt ceiling (R15/AE5): the SECOND consecutive kill/stall on the same
+ * phase escalates instead of launching a third attempt.
+ */
+export const ATTEMPT_CEILING = 2;
+
+/**
+ * The SINGLE status→launch-phase table. `phaseForStatus` and the routing
+ * switch's launch rows both read from it, so the two can never drift (a launch
+ * that names a different phase than `phaseForStatus` reports would mis-key the
+ * attempt-ceiling count). Statuses absent from the table never launch a worker
+ * (advance/wait/noop rows).
+ */
+const STATUS_LAUNCH_PHASE: Readonly<Record<string, Phase>> = {
+  Brainstorming: "brainstorm",
+  Planning: "plan",
+  Debug: "debug",
+  "Ready to Work": "implement",
+  "Ready To Work": "implement",
+  "In Progress": "implement",
+  Verification: "verify",
+  Review: "verify",
+  Done: "compound",
+};
+
+/**
+ * The pipeline phase a launch would use for a given workflow status, or null
+ * for statuses that never launch a worker (advance/wait/noop rows). Used by the
+ * daemon to look up the relevant attempt-ceiling count for a candidate.
+ */
+export function phaseForStatus(state: string): Phase | null {
+  return STATUS_LAUNCH_PHASE[state] ?? null;
+}
+
+/** The launch phase for a status the routing switch has already proven routes
+ * a worker. Throws on drift (a launch row for a status absent from the table). */
+function requireLaunchPhase(state: string): Phase {
+  const phase = phaseForStatus(state);
+  if (phase === null) {
+    throw new Error(
+      `routing-table drift: status "${state}" launches a worker but has no ` +
+        "STATUS_LAUNCH_PHASE entry",
+    );
+  }
+  return phase;
+}
+
+/**
+ * Operator override of a ceiling/quota escalation (Fix: escalation wedge).
+ * Mirrors `hasPreflightOverride`: a ceiling/quota escalation applies the
+ * `Needs User` label + a `factory-block:` marker comment, but the derived
+ * escalation (immutable attempt rows / an expired quota) never clears on its
+ * own — so removing the label would re-block instantly on the next tick. When
+ * the marker is present AND the `Needs User` label has been removed, an
+ * operator deliberately cleared the block: route normally (a fresh attempt may
+ * launch). When trust info is present the marker must be trusted-authored.
+ */
+function hasEscalationOverride(candidate: EngineCandidate): boolean {
+  if (candidate.issue.labels.includes(NEEDS_USER_LABEL)) return false;
+  const comments = candidate.comments ?? [];
+  const marker = blockMarker(candidate.issue.identifier);
+  return comments.some(
+    (c) =>
+      isMarkerComment(c.body, marker) &&
+      (candidate.trust === undefined || isTrustedComment(c, candidate.trust)),
+  );
+}
 
 function isTerminalAttemptState(state: string): boolean {
   return (TERMINAL_ATTEMPT_STATES as readonly string[]).includes(state);
@@ -218,6 +344,26 @@ export function decideAction(
     };
   }
 
+  // Quota cooldown (R14/AE8): the newest terminal attempt hit a provider
+  // rate-limit. Wait inside the window; escalate only once it is exceeded —
+  // never an immediate relaunch that hammers a throttling provider.
+  if (view.quota?.kind === "cooldown") {
+    return {
+      kind: "wait",
+      reason: `latest attempt is in QuotaCooldown${
+        view.quota.until ? ` until ${view.quota.until}` : ""
+      } — waiting out the rate-limit window before retry (R14/AE8)`,
+    };
+  }
+  const quotaExpired = view.quota?.kind === "expired";
+  if (quotaExpired && !hasEscalationOverride(candidate)) {
+    return {
+      kind: "block",
+      label: "Needs User",
+      reason: `${id} exceeded its QuotaCooldown window without recovery — escalating instead of retrying (R14/AE8)`,
+    };
+  }
+
   // Lane routing: only Verification-family statuses route without a lane.
   if (lane === null && !isVerification) {
     return {
@@ -226,6 +372,50 @@ export function decideAction(
     };
   }
 
+  // Verification (and Review) drive the shared dev stack (KTD-11): when the
+  // single dev-deployment mutex is held by another issue, wait visibly rather
+  // than launch a racing Verification worker.
+  if (isVerification && hasLfg && view.devLockHeldByOther === true) {
+    return {
+      kind: "wait",
+      reason: `${id} is ready to verify but the dev-deployment lock is held by another issue — waiting for release (KTD-11)`,
+    };
+  }
+
+  const action = routeByStatus(candidate);
+
+  // Attempt ceiling (R15/AE5): the second consecutive kill/stall on a phase
+  // escalates instead of launching a third attempt.
+  if (action.kind === "launch") {
+    const kills = view.consecutiveKillsByPhase?.[action.phase] ?? 0;
+    const atCeiling = kills >= ATTEMPT_CEILING;
+    if (atCeiling && !hasEscalationOverride(candidate)) {
+      return {
+        kind: "block",
+        label: "Needs User",
+        reason: `${id} phase "${action.phase}" has ${kills} consecutive killed/stalled attempts — escalating to an operator instead of a ${
+          kills + 1
+        }th attempt (R15/AE5)`,
+      };
+    }
+    // This launch is only allowed because the operator cleared an escalation
+    // (ceiling reached, or quota window expired). Mark it so the executor
+    // consumes the block marker — the override is one-shot, so if this attempt
+    // fails too the next tick re-escalates rather than relaunching forever.
+    if (atCeiling || quotaExpired) {
+      return { ...action, consumesEscalationOverride: true };
+    }
+  }
+  return action;
+}
+
+/**
+ * The routing contract's status table. Extracted so `decideAction` can wrap its
+ * launch results with the attempt-ceiling escalation.
+ */
+function routeByStatus(candidate: EngineCandidate): EngineAction {
+  const { issue, hasLfg } = candidate;
+  const id = issue.identifier;
   switch (issue.state) {
     case "Todo":
       return {
@@ -235,7 +425,7 @@ export function decideAction(
       };
 
     case "Brainstorming":
-      return launch(candidate, "brainstorm");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     case "Requirements Review":
       return hasLfg
@@ -250,10 +440,10 @@ export function decideAction(
           };
 
     case "Planning":
-      return launch(candidate, "plan");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     case "Debug":
-      return launch(candidate, "debug");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     case "Plan Review":
       return hasLfg
@@ -269,20 +459,20 @@ export function decideAction(
 
     case "Ready to Work":
     case "Ready To Work":
-      return launch(candidate, "implement", {
+      return launch(candidate, requireLaunchPhase(issue.state), {
         repair: issue.labels.includes(VERIFICATION_FAILED_LABEL),
       });
 
     case "In Progress":
       // No valid recorded worker (checked above) → create implementation/repair.
-      return launch(candidate, "implement", {
+      return launch(candidate, requireLaunchPhase(issue.state), {
         repair: issue.labels.includes(VERIFICATION_FAILED_LABEL),
       });
 
     case "Verification":
     case "Review":
       return hasLfg
-        ? launch(candidate, "verify")
+        ? launch(candidate, requireLaunchPhase(issue.state))
         : {
             kind: "wait",
             reason: "Verification without LFG — waiting for human review (zero SLA)",
@@ -313,7 +503,7 @@ export function decideAction(
           reason: `${id} is Done and already compounded — never relaunch compound`,
         };
       }
-      return launch(candidate, "compound");
+      return launch(candidate, requireLaunchPhase(issue.state));
 
     default:
       return {

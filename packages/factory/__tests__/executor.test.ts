@@ -2,10 +2,12 @@
  * Action executor tests (U5 wiring slice).
  *
  * The launch tests assert the EXACT atomic-launch order from the routing
- * contract: attempt recorded in the store first, then baton posted (when
- * synthesized), then the dispatcher launch-marker comment, then bootstrap,
- * then the provider launch. Written before src/phases/executor.ts existed —
- * observed red on the ordering assertions first.
+ * contract: attempt recorded in the store first, then the bootstrap gate, then
+ * (only once bootstrap is green — U6) the synthesized baton and the dispatcher
+ * launch-marker comment, then the provider launch. Written before
+ * src/phases/executor.ts existed — observed red on the ordering assertions
+ * first. The baton/marker moved AFTER bootstrap in U6 so a refused bootstrap
+ * never spams a launch marker for a worker that never launched.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -192,7 +194,7 @@ async function candidateFor(
 }
 
 describe("executeAction — launch", () => {
-  it("happy path: store attempt → baton → launch marker → bootstrap → runner, then records success", async () => {
+  it("happy path: store attempt → bootstrap → baton → launch marker → runner, then records success", async () => {
     const issue = makeIssue({
       identifier: "THINK-1",
       state: "Planning",
@@ -208,14 +210,14 @@ describe("executeAction — launch", () => {
 
     await executeAction(action, candidate, h.deps);
 
-    // Exact atomic-launch order: synthesized baton posted first, then the
-    // dispatcher launch marker, then bootstrap, then the provider launch,
-    // then the launch-time worker ledger (who is working this), then the
-    // post-success ledger recording (update-in-place of the same comment).
+    // Exact atomic-launch order (U6): bootstrap gate FIRST, then — only once it
+    // is green — the synthesized baton and the dispatcher launch marker, then
+    // the provider launch, then the launch-time worker ledger (who is working
+    // this), then the post-success ledger recording (update-in-place).
     expect(h.order).toEqual([
+      "bootstrap",
       "createComment:handoff:THINK-1:Planning",
       `createComment:${launchMarker("THINK-1", "plan", "claude")}`,
-      "bootstrap",
       "runner.launch",
       "createComment:automation-ledger:THINK-1",
       "updateComment:automation-ledger:THINK-1",
@@ -252,6 +254,39 @@ describe("executeAction — launch", () => {
 
     // Issue row upserted for reconciliation.
     expect(store.getIssue(issue.id)).toBeDefined();
+  });
+
+  it("a consumesEscalationOverride launch supersedes the block marker (one-shot override)", async () => {
+    // The override is one-shot: launching via override must consume the
+    // factory-block marker so a further failure re-escalates instead of looping.
+    const issue = makeIssue({
+      identifier: "THINK-1",
+      state: "Ready to Work",
+      labels: ["Claude", "LFG"], // Needs User removed by the operator
+    });
+    issue.comments.push({
+      id: "c-block",
+      body: `${blockMarker("THINK-1")}\n\nAutomation blocked this issue (Needs User).`,
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Verification" });
+    const candidate = await candidateFor(h.gateway, "THINK-1");
+    const action = {
+      ...(decideAction(candidate, {
+        activeAttempt: null,
+        hasChildIssues: false,
+      }) as Extract<EngineAction, { kind: "launch" }>),
+      consumesEscalationOverride: true,
+    };
+    expect(action.kind).toBe("launch");
+
+    await executeAction(action, candidate, h.deps);
+
+    // The block marker comment was superseded so it no longer matches — the
+    // next tick sees no active override and a further failure re-escalates.
+    const superseded = issue.comments.find((c) => c.id === "c-block");
+    expect(superseded).toBeDefined();
+    expect(superseded!.body.startsWith(blockMarker("THINK-1"))).toBe(false);
+    expect(superseded!.body).toContain("factory-block-cleared:THINK-1");
   });
 
   it("evidence check reads only THIS issue (getIssuesByIdentifier), never drains the whole team", async () => {
@@ -318,12 +353,12 @@ describe("executeAction — launch", () => {
     expect(attempt.detail).toMatch(/target-exists/);
     expect(attempt.detail).toMatch(/67/);
 
-    // The launch marker was posted, but it is NOT orphaned: the store has the
-    // attempt record tying the marker to a Failed attempt.
+    // U6: the launch marker is posted only AFTER a green bootstrap, so a refused
+    // bootstrap leaves NO launch-marker comment (no spam for a worker that never
+    // launched). The store still holds the Failed attempt record — the refusal
+    // is legible, just not as an orphaned launch marker.
     const marker = launchMarker("THINK-2", "plan", "claude");
-    expect(
-      issue.comments.some((c) => c.body.includes(marker)),
-    ).toBe(true);
+    expect(issue.comments.some((c) => c.body.includes(marker))).toBe(false);
     expect(attempt.issue_id).toBe(issue.id);
   });
 
