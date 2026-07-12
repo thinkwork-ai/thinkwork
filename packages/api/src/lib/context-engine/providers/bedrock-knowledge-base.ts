@@ -2,7 +2,8 @@ import {
   BedrockAgentRuntimeClient,
   RetrieveCommand,
 } from "@aws-sdk/client-bedrock-agent-runtime";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { knowledgeBaseDocuments } from "@thinkwork/database-pg/schema";
 import {
   agentKnowledgeBases,
   db,
@@ -103,6 +104,19 @@ export function createBedrockKnowledgeBaseContextProvider(): ContextProviderDesc
         }),
       );
 
+      // THINK-193 U7: attach manifest edition/effective dates to hit
+      // metadata when a knowledge_base_documents row matches the retrieved
+      // document's S3 key — retrieval consumers can cite "edition N,
+      // effective from X" instead of a bare chunk. Best-effort: a manifest
+      // miss (pre-manifest KB) leaves the hit untouched.
+      try {
+        await attachManifestCitations(hits);
+      } catch (err) {
+        console.warn(
+          `[bedrock-knowledge-base] manifest citation lookup failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
       return {
         hits,
         status:
@@ -115,6 +129,63 @@ export function createBedrockKnowledgeBaseContextProvider(): ContextProviderDesc
       };
     },
   };
+}
+
+/** s3://bucket/key → key; passthrough null for non-S3/absent locations. */
+export function documentKeyFromLocationUri(
+  uri: string | null | undefined,
+): string | null {
+  if (!uri || !uri.startsWith("s3://")) return null;
+  const withoutScheme = uri.slice("s3://".length);
+  const slash = withoutScheme.indexOf("/");
+  if (slash < 0) return null;
+  return withoutScheme.slice(slash + 1) || null;
+}
+
+/** Batch-enrich hits with manifest edition/effective-date metadata. */
+async function attachManifestCitations(hits: ContextHit[]): Promise<void> {
+  const wanted = new Map<
+    string,
+    Array<{ hit: ContextHit; knowledgeBaseId: string }>
+  >();
+  for (const hit of hits) {
+    if (hit.providerId !== "bedrock-knowledge-base") continue;
+    const kbId = (hit.metadata as Record<string, unknown> | undefined)
+      ?.knowledgeBaseId;
+    const key = documentKeyFromLocationUri(hit.provenance?.uri);
+    if (!key || typeof kbId !== "string") continue;
+    const list = wanted.get(key) ?? [];
+    list.push({ hit, knowledgeBaseId: kbId });
+    wanted.set(key, list);
+  }
+  if (wanted.size === 0) return;
+
+  const rows = await db
+    .select({
+      knowledge_base_id: knowledgeBaseDocuments.knowledge_base_id,
+      document_key: knowledgeBaseDocuments.document_key,
+      edition: knowledgeBaseDocuments.edition,
+      effective_from: knowledgeBaseDocuments.effective_from,
+      effective_to: knowledgeBaseDocuments.effective_to,
+      ingest_status: knowledgeBaseDocuments.ingest_status,
+    })
+    .from(knowledgeBaseDocuments)
+    .where(inArray(knowledgeBaseDocuments.document_key, [...wanted.keys()]));
+
+  for (const row of rows) {
+    for (const { hit, knowledgeBaseId } of wanted.get(row.document_key) ?? []) {
+      if (row.knowledge_base_id !== knowledgeBaseId) continue;
+      hit.metadata = {
+        ...(hit.metadata ?? {}),
+        manifest: {
+          edition: row.edition,
+          effectiveFrom: row.effective_from?.toISOString() ?? null,
+          effectiveTo: row.effective_to?.toISOString() ?? null,
+          ingestStatus: row.ingest_status,
+        },
+      };
+    }
+  }
 }
 
 type KbRow = { id: string; name: string; awsKbId: string | null };

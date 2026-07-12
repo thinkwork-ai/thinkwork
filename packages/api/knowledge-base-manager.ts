@@ -6,13 +6,21 @@
  */
 
 import { getConfig } from "@thinkwork/runtime-config";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   knowledgeBases,
+  knowledgeBaseDocuments,
   agentKnowledgeBases,
   tenants,
 } from "@thinkwork/database-pg/schema";
+import {
+  enqueueManifestRetractions,
+  normalizeManifestEtag,
+  reconcileKnowledgeBaseDocuments,
+  settleDeletedDocuments,
+  type ManifestS3Object,
+} from "./src/lib/knowledge/kb-document-manifest.js";
 
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 const KB_SERVICE_ROLE_ARN = process.env.KB_SERVICE_ROLE_ARN || "";
@@ -40,8 +48,9 @@ async function getBedrockKbSecretArn(): Promise<string> {
   const stage = process.env.STAGE || "dev";
   const secretName = `thinkwork-${stage}-bedrock-kb-rds-credentials`;
   try {
-    const { SecretsManagerClient, DescribeSecretCommand } =
-      await import("@aws-sdk/client-secrets-manager");
+    const { SecretsManagerClient, DescribeSecretCommand } = await import(
+      "@aws-sdk/client-secrets-manager"
+    );
     const sm = new SecretsManagerClient({ region: AWS_REGION });
     const resp = await sm.send(
       new DescribeSecretCommand({ SecretId: secretName }),
@@ -99,8 +108,9 @@ async function createVectorTable(tableName: string): Promise<void> {
 async function handleCreate(kbId: string): Promise<void> {
   const { kb, tenantSlug } = await resolveKbInfo(kbId);
   const client = await getBedrockAgentClient();
-  const { CreateKnowledgeBaseCommand, CreateDataSourceCommand } =
-    await import("@aws-sdk/client-bedrock-agent");
+  const { CreateKnowledgeBaseCommand, CreateDataSourceCommand } = await import(
+    "@aws-sdk/client-bedrock-agent"
+  );
 
   try {
     // Idempotent resumable provisioning (U9/KTD6): each Bedrock resource is
@@ -244,8 +254,9 @@ async function handleSync(kbId: string): Promise<void> {
   }
 
   const client = await getBedrockAgentClient();
-  const { StartIngestionJobCommand, GetIngestionJobCommand } =
-    await import("@aws-sdk/client-bedrock-agent");
+  const { StartIngestionJobCommand, GetIngestionJobCommand } = await import(
+    "@aws-sdk/client-bedrock-agent"
+  );
 
   try {
     // Start ingestion
@@ -294,6 +305,18 @@ async function handleSync(kbId: string): Promise<void> {
         console.log(
           `[kb-manager] Sync complete for KB ${kbId}: ${stats?.numberOfDocumentsScanned ?? 0} docs`,
         );
+        // THINK-193 U7: reconcile the per-document manifest ONLY after a
+        // successful ingestion job (never racing StartIngestionJob with
+        // direct Ingest calls). A reconciliation failure must not fail the
+        // sync itself — it retries on the next sync.
+        try {
+          await reconcileManifestAfterSync(kbId);
+        } catch (err) {
+          console.error(
+            `[kb-manager] Manifest reconciliation failed for KB ${kbId}:`,
+            err instanceof Error ? err.message : err,
+          );
+        }
         return;
       }
 
@@ -340,6 +363,215 @@ async function handleSync(kbId: string): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// THINK-193 U7 — document manifest reconciliation (post-successful-sync)
+// ---------------------------------------------------------------------------
+
+/** S3 uri for a document key in the workspace bucket. */
+function documentS3Uri(key: string): string {
+  return `s3://${workspaceBucket()}/${key}`;
+}
+
+/**
+ * After a COMPLETE ingestion job:
+ *   1. list the live S3 objects under the KB documents prefix (etag; the
+ *      version id is captured via HeadObject only for new/changed keys —
+ *      ListObjectsV2 doesn't return it and ListObjectVersions would need a
+ *      broader IAM grant);
+ *   2. list Bedrock's per-document statuses (ListKnowledgeBaseDocuments);
+ *   3. reconcile the knowledge_base_documents manifest (new editions on
+ *      changed etags, delete intent for removed keys);
+ *   4. chain the standard Hindsight derivation retraction for documents
+ *      that reached 'deleting' (provider stays 'hindsight');
+ *   5. run deletion settlement: 'deleting' → 'absent_verified' only when
+ *      GetKnowledgeBaseDocuments reports the document absent AND a scoped
+ *      Retrieve returns no hits — retried on every subsequent sync.
+ */
+async function reconcileManifestAfterSync(kbId: string): Promise<void> {
+  const { kb, tenantSlug } = await resolveKbInfo(kbId);
+  if (!kb.aws_kb_id || !kb.aws_data_source_id || !tenantSlug) return;
+  const awsKbId = kb.aws_kb_id;
+  const dataSourceId = kb.aws_data_source_id;
+  const prefix = `tenants/${tenantSlug}/knowledge-bases/${kb.slug}/documents/`;
+
+  // 1. Live S3 objects (paginated), etags normalized.
+  const { S3Client, ListObjectsV2Command, HeadObjectCommand } = await import(
+    "@aws-sdk/client-s3"
+  );
+  const s3 = new S3Client({ region: AWS_REGION });
+  const listed: Array<{ key: string; etag: string | null }> = [];
+  let continuationToken: string | undefined;
+  do {
+    const page = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: workspaceBucket(),
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const object of page.Contents ?? []) {
+      if (!object.Key || object.Key === prefix) continue;
+      listed.push({
+        key: object.Key,
+        etag: normalizeManifestEtag(object.ETag),
+      });
+    }
+    continuationToken = page.IsTruncated
+      ? page.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  // Version ids only for keys the manifest doesn't already know at this
+  // etag (bounded HeadObject fan-out on the changed set).
+  const manifestRows = await db
+    .select({
+      document_key: knowledgeBaseDocuments.document_key,
+      etag: knowledgeBaseDocuments.etag,
+    })
+    .from(knowledgeBaseDocuments)
+    .where(
+      and(
+        eq(knowledgeBaseDocuments.knowledge_base_id, kbId),
+        eq(knowledgeBaseDocuments.data_source_id, dataSourceId),
+      ),
+    );
+  const knownEtagByKey = new Map(
+    manifestRows.map((row) => [
+      row.document_key,
+      normalizeManifestEtag(row.etag),
+    ]),
+  );
+  const s3Objects: ManifestS3Object[] = [];
+  for (const object of listed) {
+    let versionId: string | null | undefined;
+    const known = knownEtagByKey.get(object.key);
+    if (known === undefined || known !== object.etag) {
+      try {
+        const head = await s3.send(
+          new HeadObjectCommand({ Bucket: workspaceBucket(), Key: object.key }),
+        );
+        versionId = head.VersionId ?? null;
+      } catch {
+        versionId = null;
+      }
+    }
+    s3Objects.push({ key: object.key, etag: object.etag, versionId });
+  }
+
+  // 2. Bedrock per-document statuses.
+  const client = await getBedrockAgentClient();
+  const {
+    ListKnowledgeBaseDocumentsCommand,
+    GetKnowledgeBaseDocumentsCommand,
+  } = await import("@aws-sdk/client-bedrock-agent");
+  const bedrockStatusByKey = new Map<string, string>();
+  let nextToken: string | undefined;
+  do {
+    const page = await client.send(
+      new ListKnowledgeBaseDocumentsCommand({
+        knowledgeBaseId: awsKbId,
+        dataSourceId,
+        nextToken,
+      }),
+    );
+    for (const detail of page.documentDetails ?? []) {
+      const uri = detail.identifier?.s3?.uri;
+      if (!uri || !detail.status) continue;
+      const key = uri.replace(/^s3:\/\/[^/]+\//, "");
+      bedrockStatusByKey.set(key, detail.status);
+    }
+    nextToken = page.nextToken;
+  } while (nextToken);
+
+  // 3. Reconcile the manifest.
+  const [tenantRow] = await db
+    .select({ tenant_id: knowledgeBases.tenant_id })
+    .from(knowledgeBases)
+    .where(eq(knowledgeBases.id, kbId));
+  const tenantId = tenantRow!.tenant_id;
+  const result = await reconcileKnowledgeBaseDocuments(db, {
+    tenantId,
+    knowledgeBaseId: kbId,
+    dataSourceId,
+    s3Objects,
+    bedrockStatusByKey,
+  });
+  console.log(
+    `[kb-manager] Manifest reconciled for KB ${kbId}: created=${result.created} editions=${result.editionsBumped} statusUpdated=${result.statusUpdated} unchanged=${result.unchanged} deleting=${result.deletingNeedingRetraction.length}`,
+  );
+
+  // 4. Chain Hindsight retraction for newly-deleting documents.
+  if (result.deletingNeedingRetraction.length > 0) {
+    const { enqueued } = await enqueueManifestRetractions(db, {
+      tenantId,
+      knowledgeBaseId: kbId,
+      rows: result.deletingNeedingRetraction,
+    });
+    console.log(
+      `[kb-manager] Enqueued ${enqueued} Hindsight retraction(s) for deleted KB documents`,
+    );
+  }
+
+  // 5. Deletion settlement (independent of the retraction chain; retried
+  // on every sync until both probes agree the document is gone).
+  const { BedrockAgentRuntimeClient, RetrieveCommand } = await import(
+    "@aws-sdk/client-bedrock-agent-runtime"
+  );
+  const runtime = new BedrockAgentRuntimeClient({ region: AWS_REGION });
+  const settled = await settleDeletedDocuments(db, {
+    tenantId,
+    knowledgeBaseId: kbId,
+    dataSourceId,
+    probes: {
+      async isDocumentAbsent(documentKey: string): Promise<boolean> {
+        const resp = await client.send(
+          new GetKnowledgeBaseDocumentsCommand({
+            knowledgeBaseId: awsKbId,
+            dataSourceId,
+            documentIdentifiers: [
+              {
+                dataSourceType: "S3",
+                s3: { uri: documentS3Uri(documentKey) },
+              },
+            ],
+          }),
+        );
+        const detail = (resp.documentDetails ?? [])[0];
+        return !detail || detail.status === "NOT_FOUND";
+      },
+      async retrieveHasResidue(documentKey: string): Promise<boolean> {
+        const resp = await runtime.send(
+          new RetrieveCommand({
+            knowledgeBaseId: awsKbId,
+            retrievalQuery: {
+              text:
+                documentKey.slice(documentKey.lastIndexOf("/") + 1) ||
+                "document",
+            },
+            retrievalConfiguration: {
+              vectorSearchConfiguration: {
+                numberOfResults: 1,
+                filter: {
+                  equals: {
+                    key: "x-amz-bedrock-kb-source-uri",
+                    value: documentS3Uri(documentKey),
+                  },
+                },
+              },
+            },
+          }),
+        );
+        return (resp.retrievalResults ?? []).length > 0;
+      },
+    },
+  });
+  if (settled.settled > 0 || settled.pending > 0) {
+    console.log(
+      `[kb-manager] Deletion settlement: settled=${settled.settled} pending=${settled.pending}`,
+    );
+  }
+}
+
 async function handleDelete(kbId: string): Promise<void> {
   const [kb] = await db
     .select()
@@ -348,8 +580,9 @@ async function handleDelete(kbId: string): Promise<void> {
   if (!kb) return;
 
   const client = await getBedrockAgentClient();
-  const { DeleteDataSourceCommand, DeleteKnowledgeBaseCommand } =
-    await import("@aws-sdk/client-bedrock-agent");
+  const { DeleteDataSourceCommand, DeleteKnowledgeBaseCommand } = await import(
+    "@aws-sdk/client-bedrock-agent"
+  );
 
   try {
     // Delete data source first, then KB
@@ -429,7 +662,8 @@ async function handleRechunk(kbId: string): Promise<void> {
       .update(knowledgeBases)
       .set({
         status: "failed",
-        error_message: "Cannot re-chunk a knowledge base that is not provisioned",
+        error_message:
+          "Cannot re-chunk a knowledge base that is not provisioned",
         updated_at: new Date(),
       })
       .where(eq(knowledgeBases.id, kbId));
@@ -495,7 +729,9 @@ async function handleRechunk(kbId: string): Promise<void> {
 
     const newDsId = createDsResp.dataSource?.dataSourceId;
     if (!newDsId)
-      throw new Error("Failed to recreate Bedrock data source — no ID returned");
+      throw new Error(
+        "Failed to recreate Bedrock data source — no ID returned",
+      );
     await db
       .update(knowledgeBases)
       .set({ aws_data_source_id: newDsId, updated_at: new Date() })

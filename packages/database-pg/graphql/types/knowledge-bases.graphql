@@ -18,6 +18,32 @@ type KnowledgeBase {
   errorMessage: String
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
+  # THINK-193 U7: per-document edition manifest for operator visibility.
+  documents: [KnowledgeBaseDocument!]!
+}
+
+# One row per (data source, document key): the document's stable manifest
+# identity across editions (THINK-193 U7). `edition` increments when the
+# S3 object's content changes; ingestStatus tracks Bedrock's per-document
+# lifecycle plus the ThinkWork deletion states ('deleting',
+# 'absent_verified'); projectionStatus is the coarse Hindsight-projection
+# signal (memory derivations are the fine-grained truth).
+type KnowledgeBaseDocument {
+  id: ID!
+  knowledgeBaseId: ID!
+  dataSourceId: String!
+  documentKey: String!
+  s3VersionId: String
+  etag: String
+  contentHash: String
+  edition: Int!
+  effectiveFrom: AWSDateTime
+  effectiveTo: AWSDateTime
+  ingestStatus: String!
+  projectionStatus: String!
+  lastError: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
 }
 
 type AgentKnowledgeBase {
