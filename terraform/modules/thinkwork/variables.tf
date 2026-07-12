@@ -1149,6 +1149,12 @@ variable "enable_slack_workspace_app" {
   default     = true
 }
 
+variable "enable_msteams_app" {
+  description = "Provision Microsoft Teams app install/link Lambdas, API routes, and credentials placeholder secret."
+  type        = bool
+  default     = false
+}
+
 # ---------------------------------------------------------------------------
 # SES inbound email (delegated tenant subzones — Option A)
 # ---------------------------------------------------------------------------

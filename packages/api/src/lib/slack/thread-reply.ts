@@ -7,6 +7,7 @@ import {
   slackWorkspaces,
   threadTurns,
 } from "@thinkwork/database-pg/schema";
+import { randomUUID as nodeRandomUUID } from "node:crypto";
 import { postSlackThreadMessage } from "./provider.js";
 import { getSlackBotToken } from "./workspace-store.js";
 
@@ -82,7 +83,7 @@ interface SlackDeliveryState {
 
 export interface SlackThreadReplyStore {
   loadContext(
-    input: SendThreadReplySlackInput,
+    input: SendThreadReplySlackInput
   ): Promise<SlackReplyContext | null>;
   loadTarget(input: {
     tenantId: string;
@@ -114,7 +115,7 @@ export interface SlackThreadReplyStore {
     failedAt: Date;
   }): Promise<boolean>;
   findAssistantMessageForTurn(
-    input: RetryThreadReplySlackInput,
+    input: RetryThreadReplySlackInput
   ): Promise<string | null>;
 }
 
@@ -137,13 +138,18 @@ export interface SlackThreadReplyDeps {
  */
 export async function sendThreadReplySlack(
   input: SendThreadReplySlackInput,
-  deps: SlackThreadReplyDeps = {},
+  deps: SlackThreadReplyDeps = {}
 ): Promise<SendThreadReplySlackResult> {
   const store = deps.store ?? createDrizzleSlackThreadReplyStore();
   const now = deps.now ?? (() => new Date());
   const getBotToken = deps.getBotToken ?? getSlackBotToken;
   const postMessage = deps.postMessage ?? postSlackThreadMessage;
-  const randomUUID = deps.randomUUID ?? crypto.randomUUID;
+  // Use node:crypto's randomUUID, not `crypto.randomUUID` — the latter, when
+  // detached from the global `crypto` receiver and called, throws
+  // ERR_INVALID_THIS ("Value of 'this' must be of type Crypto") on the
+  // deployed Node runtime. (Unit tests inject deps.randomUUID, so this only
+  // surfaced once real Slack delivery ran in production — THINK-84 U4.)
+  const randomUUID = deps.randomUUID ?? nodeRandomUUID;
 
   const context = await store.loadContext(input);
   if (!context) {
@@ -252,7 +258,7 @@ export async function sendThreadReplySlack(
       throw new Error("Slack delivery claim changed before success persisted");
     }
     console.log(
-      `[slack-thread-reply] delivered assistant=${input.assistantMessageId} thread=${input.threadId} slackTs=${posted.ts}`,
+      `[slack-thread-reply] delivered assistant=${input.assistantMessageId} thread=${input.threadId} slackTs=${posted.ts}`
     );
     return {
       delivered: true,
@@ -275,7 +281,7 @@ export async function sendThreadReplySlack(
 /** Retry only the assistant message produced by this finalized turn. */
 export async function retryThreadReplySlackForTurn(
   input: RetryThreadReplySlackInput,
-  deps: SlackThreadReplyDeps = {},
+  deps: SlackThreadReplyDeps = {}
 ): Promise<SendThreadReplySlackResult> {
   const store = deps.store ?? createDrizzleSlackThreadReplyStore();
   const assistantMessageId = await store.findAssistantMessageForTurn(input);
@@ -286,12 +292,12 @@ export async function retryThreadReplySlackForTurn(
       threadId: input.threadId,
       assistantMessageId,
     },
-    { ...deps, store },
+    { ...deps, store }
   );
 }
 
 function createDrizzleSlackThreadReplyStore(
-  dbClient: any = db,
+  dbClient: any = db
 ): SlackThreadReplyStore {
   return {
     async loadContext(input) {
@@ -308,8 +314,8 @@ function createDrizzleSlackThreadReplyStore(
           and(
             sql`${threadTurns.id}::text = ${messages.metadata} ->> 'sourceTurnId'`,
             eq(threadTurns.tenant_id, input.tenantId),
-            eq(threadTurns.thread_id, input.threadId),
-          ),
+            eq(threadTurns.thread_id, input.threadId)
+          )
         )
         .leftJoin(
           triggeringMessages,
@@ -317,16 +323,16 @@ function createDrizzleSlackThreadReplyStore(
             eq(triggeringMessages.id, threadTurns.triggering_message_id),
             eq(triggeringMessages.tenant_id, input.tenantId),
             eq(triggeringMessages.thread_id, input.threadId),
-            eq(triggeringMessages.role, "user"),
-          ),
+            eq(triggeringMessages.role, "user")
+          )
         )
         .where(
           and(
             eq(messages.id, input.assistantMessageId),
             eq(messages.tenant_id, input.tenantId),
             eq(messages.thread_id, input.threadId),
-            eq(messages.role, "assistant"),
-          ),
+            eq(messages.role, "assistant")
+          )
         )
         .limit(1);
       if (!assistant) return null;
@@ -350,8 +356,8 @@ function createDrizzleSlackThreadReplyStore(
             eq(slackThreads.channel_id, input.channelId),
             input.rootThreadTs
               ? eq(slackThreads.root_thread_ts, input.rootThreadTs)
-              : isNull(slackThreads.root_thread_ts),
-          ),
+              : isNull(slackThreads.root_thread_ts)
+          )
         )
         .limit(1);
       if (!mapping) return { status: "missing_thread_mapping" };
@@ -363,8 +369,8 @@ function createDrizzleSlackThreadReplyStore(
           and(
             eq(slackWorkspaces.tenant_id, input.tenantId),
             eq(slackWorkspaces.slack_team_id, input.slackTeamId),
-            eq(slackWorkspaces.status, "active"),
-          ),
+            eq(slackWorkspaces.status, "active")
+          )
         )
         .limit(1);
       return workspace
@@ -381,8 +387,8 @@ function createDrizzleSlackThreadReplyStore(
         .where(
           and(
             eq(messages.id, input.assistantMessageId),
-            eq(messages.tenant_id, input.tenantId),
-          ),
+            eq(messages.tenant_id, input.tenantId)
+          )
         )
         .limit(1);
       const existing = slackDeliveryFromMetadata(current?.metadata);
@@ -397,12 +403,16 @@ function createDrizzleSlackThreadReplyStore(
         claimedAt: input.now.toISOString(),
       };
       const staleBefore = new Date(
-        input.now.getTime() - CLAIM_STALE_AFTER_MS,
+        input.now.getTime() - CLAIM_STALE_AFTER_MS
       ).toISOString();
       const [claimed] = await dbClient
         .update(messages)
         .set({
-          metadata: sql`jsonb_set(coalesce(${messages.metadata}, '{}'::jsonb), '{slackDelivery}', ${JSON.stringify(delivery)}::jsonb, true)`,
+          metadata: sql`jsonb_set(coalesce(${
+            messages.metadata
+          }, '{}'::jsonb), '{slackDelivery}', ${JSON.stringify(
+            delivery
+          )}::jsonb, true)`,
         })
         .where(
           and(
@@ -415,8 +425,8 @@ function createDrizzleSlackThreadReplyStore(
                 ${messages.metadata} #>> '{slackDelivery,status}' = 'sending'
                 and coalesce(${messages.metadata} #>> '{slackDelivery,claimedAt}', '') < ${staleBefore}
               )
-            )`,
-          ),
+            )`
+          )
         )
         .returning({ id: messages.id });
       if (claimed) return { claimed: true };
@@ -427,8 +437,8 @@ function createDrizzleSlackThreadReplyStore(
         .where(
           and(
             eq(messages.id, input.assistantMessageId),
-            eq(messages.tenant_id, input.tenantId),
-          ),
+            eq(messages.tenant_id, input.tenantId)
+          )
         )
         .limit(1);
       return {
@@ -463,8 +473,8 @@ function createDrizzleSlackThreadReplyStore(
             eq(messages.tenant_id, input.tenantId),
             eq(messages.thread_id, input.threadId),
             eq(messages.role, "assistant"),
-            sql`${messages.metadata} ->> 'sourceTurnId' = ${input.threadTurnId}`,
-          ),
+            sql`${messages.metadata} ->> 'sourceTurnId' = ${input.threadTurnId}`
+          )
         )
         .orderBy(desc(messages.created_at), desc(messages.id))
         .limit(1);
@@ -480,7 +490,7 @@ async function mutateClaimedDelivery(
     assistantMessageId: string;
     claimId: string;
   },
-  mutate: (current: SlackDeliveryState) => SlackDeliveryState,
+  mutate: (current: SlackDeliveryState) => SlackDeliveryState
 ): Promise<boolean> {
   const [row] = await dbClient
     .select({ metadata: messages.metadata })
@@ -488,8 +498,8 @@ async function mutateClaimedDelivery(
     .where(
       and(
         eq(messages.id, input.assistantMessageId),
-        eq(messages.tenant_id, input.tenantId),
-      ),
+        eq(messages.tenant_id, input.tenantId)
+      )
     )
     .limit(1);
   const current = slackDeliveryFromMetadata(row?.metadata);
@@ -498,14 +508,18 @@ async function mutateClaimedDelivery(
   const updated = await dbClient
     .update(messages)
     .set({
-      metadata: sql`jsonb_set(coalesce(${messages.metadata}, '{}'::jsonb), '{slackDelivery}', ${JSON.stringify(next)}::jsonb, true)`,
+      metadata: sql`jsonb_set(coalesce(${
+        messages.metadata
+      }, '{}'::jsonb), '{slackDelivery}', ${JSON.stringify(
+        next
+      )}::jsonb, true)`,
     })
     .where(
       and(
         eq(messages.id, input.assistantMessageId),
         eq(messages.tenant_id, input.tenantId),
-        sql`${messages.metadata} #>> '{slackDelivery,claimId}' = ${input.claimId}`,
-      ),
+        sql`${messages.metadata} #>> '{slackDelivery,claimId}' = ${input.claimId}`
+      )
     )
     .returning({ id: messages.id });
   return updated.length > 0;
@@ -544,7 +558,7 @@ function sourceTurnIdFromMetadata(metadata: unknown): string | null {
 }
 
 function slackDeliveryFromMetadata(
-  metadata: unknown,
+  metadata: unknown
 ): SlackDeliveryState | null {
   const delivery = asRecord(asRecord(metadata)?.slackDelivery);
   if (!delivery) return null;
@@ -579,7 +593,7 @@ function skip(reason: SlackReplySkipReason): SendThreadReplySlackResult {
 
 function failure(
   reason: SlackReplyFailureReason,
-  error: string,
+  error: string
 ): SendThreadReplySlackResult {
   return {
     delivered: false,

@@ -25,6 +25,14 @@ import { orchestrationQueries } from "./orchestration/index.js";
 import { messageQueries } from "./messages/index.js";
 import { webhookQueries } from "./webhooks/index.js";
 import { memoryQueries, memoryMutations } from "./memory/index.js";
+import {
+  memorySourceQueries,
+  memorySourceMutations,
+} from "./memory-sources/index.js";
+import {
+  entityIdentityQueries,
+  entityIdentityMutations,
+} from "./entity-identity/index.js";
 import { recipeQueries, recipeMutations } from "./recipes/index.js";
 import { coreMutations } from "./core/index.js";
 import { analystMutations, analystQueries } from "./analyst/index.js";
@@ -171,6 +179,8 @@ export const queryResolvers: Record<string, any> = {
   ...messageQueries,
   ...webhookQueries,
   ...memoryQueries,
+  ...memorySourceQueries,
+  ...entityIdentityQueries,
   ...recipeQueries,
   ...evaluationsQueries,
   ...evalDatasetQueries,
@@ -225,6 +235,8 @@ export const mutationResolvers: Record<string, any> = {
   ...orchestrationMutations,
   ...webhookMutations,
   ...memoryMutations,
+  ...memorySourceMutations,
+  ...entityIdentityMutations,
   ...recipeMutations,
   ...evaluationsMutations,
   ...evalDatasetMutations,

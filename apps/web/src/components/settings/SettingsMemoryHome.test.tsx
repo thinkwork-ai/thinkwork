@@ -30,7 +30,7 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain('{ to: MEMORY, label: "Memory" }');
     expect(source).toContain('{ to: WIKI, label: "Wiki" }');
     expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
-    expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
+    expect(source).toContain('{ to: ONTOLOGY, label: "Knowledge Model" }');
     expect(source).not.toContain('label: "Graph"');
   });
 
@@ -45,14 +45,14 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain("tabForPath");
     expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
     expect(source).toContain("<SettingsKnowledgeBases embedded");
-    expect(source).toContain("<KnowledgeGraphTab");
+    expect(source).toContain("<KnowledgeModelTab");
     expect(source).toContain("<SettingsWiki embedded");
     // No in-body tab strip — the tabs live in the header now.
     expect(source).not.toContain("TabsList");
   });
 
-  it("keeps Ontology as definitions-only memory tab", () => {
-    expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
+  it("keeps the Knowledge Model tab on the ontology route", () => {
+    expect(source).toContain('{ to: ONTOLOGY, label: "Knowledge Model" }');
     expect(source).toContain('activeTab === "ontology"');
     expect(source).not.toContain("ontologyEnabled");
     expect(source).not.toContain("SettingsPluginCatalogQuery");

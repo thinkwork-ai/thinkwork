@@ -76,7 +76,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -253,6 +253,17 @@ build_handler "requester-memory-dreaming" \
   "$REPO_ROOT/packages/api/src/handlers/requester-memory-dreaming.ts"
 build_handler "brain-dream-state" \
   "$REPO_ROOT/packages/api/src/handlers/brain-dream-state.ts"
+build_handler "memory-stage-worker" \
+  "$REPO_ROOT/packages/api/src/handlers/memory-stage-worker.ts"
+# THINK-193 U2: scheduled retraction-saga retry drainer. Bundled flags —
+# it resolves the memory adapter via getMemoryServices (bedrock-agentcore SDK).
+build_handler "memory-retraction-drainer" \
+  "$REPO_ROOT/packages/api/src/handlers/memory-retraction-drainer.ts"
+# THINK-193 U3: scheduled recovery for stalled memory_stage task tokens —
+# re-invokes the worker (claim CAS dedupes) or terminal-fails an
+# unrecoverable park. Plain flags: no bedrock/agentcore SDK use.
+build_handler "memory-stage-sweeper" \
+  "$REPO_ROOT/packages/api/src/handlers/memory-stage-sweeper.ts"
 
 build_handler "connector-poller" \
   "$REPO_ROOT/packages/api/src/handlers/connector-poller.ts"
@@ -492,6 +503,15 @@ build_handler "slack-events" \
 
 build_handler "slack-oauth-install" \
   "$REPO_ROOT/packages/api/src/handlers/slack/oauth-install.ts"
+
+build_handler "msteams-install-start" \
+  "$REPO_ROOT/packages/api/src/handlers/msteams/install-start.ts"
+
+build_handler "msteams-install-complete" \
+  "$REPO_ROOT/packages/api/src/handlers/msteams/install-complete.ts"
+
+build_handler "msteams-account-link-complete" \
+  "$REPO_ROOT/packages/api/src/handlers/msteams/account-link-complete.ts"
 
 
 build_handler "webhooks" \

@@ -95,6 +95,23 @@ export async function assertCanReadWorkflowTenant(
   await requireTenantMember(ctx, tenantId);
 }
 
+/**
+ * THINK-193 U3: user-owned agent_private workflows (personal memory
+ * automations) are visible to their OWNER only — user A must not see user
+ * B's personal automation in lists, reads, or run queries. Agent-owned
+ * private workflows keep today's tenant visibility (operator inventory).
+ */
+export function isWorkflowHiddenFromCaller(
+  row: { visibility?: string | null; owner_user_id?: string | null },
+  callerUserId: string | null,
+): boolean {
+  return (
+    row.visibility === "agent_private" &&
+    row.owner_user_id != null &&
+    row.owner_user_id !== callerUserId
+  );
+}
+
 export function clampWorkflowQueryLimit(limit?: number | null): number {
   return Math.min(Math.max(limit ?? 25, 1), 100);
 }

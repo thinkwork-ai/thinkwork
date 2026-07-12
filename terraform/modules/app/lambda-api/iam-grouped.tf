@@ -146,6 +146,31 @@ locals {
         Action   = ["s3:ListBucket"]
         Resource = aws_s3_bucket.brain_artifacts.arn
       },
+      # THINK-193 U2 (Codex S2 + round-6 P1): bulk/prefix destruction of
+      # evidence snapshots lives EXCLUSIVELY on the memory-retraction-drainer's
+      # dedicated role (handlers.tf). The SHARED role gets only the narrow
+      # erase-fence COMPENSATION capability: a stage worker that loses the
+      # fence mid-PutObject must delete the EXACT object version it just
+      # wrote (VersionId from its own PutObject response) and verify the key
+      # is gone. Without ListBucketVersions-driven enumeration + bulk delete
+      # this cannot destroy anything the caller did not itself write —
+      # version ids are unguessable. ListBucketVersions is granted read-only
+      # for the verification step, prefix-conditioned.
+      {
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObjectVersion"]
+        Resource = "${aws_s3_bucket.brain_artifacts.arn}/evidence-snapshots/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucketVersions"]
+        Resource = aws_s3_bucket.brain_artifacts.arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = "evidence-snapshots/*"
+          }
+        }
+      },
       # (was inline policy "cognito-access")
       {
         Effect = "Allow"
@@ -472,9 +497,13 @@ locals {
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
           # knowledge-graph-observations-ingest: graphql-http's
           # startKnowledgeGraphObservationsIngest mutation invokes this with
-          # RequestResponse. (The worker's self-invoke drain is retired —
-          # AWS recursive-loop detection terminated those chains; backlog
-          # drains in-process now.)
+          # RequestResponse, and memory-stage-worker's graph stage (THINK-193
+          # U4 stitch) RequestResponse-invokes it with a targeted bankIds
+          # payload — the Bedrock classifier/extraction model config lives on
+          # the ingest Lambda's own env, so the worker never runs the ingest
+          # in-process. (The worker's self-invoke drain is retired — AWS
+          # recursive-loop detection terminated those chains; backlog drains
+          # in-process now.)
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-observations-ingest",
           # wiki-bootstrap-import: bootstrapJournalImport admin mutation
           # Event-invokes this for the long-running ingest path.
@@ -518,6 +547,11 @@ locals {
           # step RequestResponse-invokes its workflow-delivery mode to email
           # the maintained report to the operator-configured recipient list.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-artifact-deliver",
+          # memory-stage-worker (external-memory-compounding U1):
+          # workflow-step-dispatch's memory_stage step Event-invokes it after
+          # parking on the task token; the worker resumes the token via
+          # SendTaskSuccess when the pipeline stage ends.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-memory-stage-worker",
           # job-trigger self-target (plan 2026-07-03-004 U5, KTD-3): the
           # manual GraphQL trigger Event-invokes job-trigger with the
           # agent_loop_continue_dispatch event so routine actions never run

@@ -46,6 +46,8 @@ import {
   claimNextCompileJob,
   completeCompileJob,
   listGraphMaterializedTenantPages,
+  parseDirtyCanonicalEntityIds,
+  upsertCanonicalEntityPage,
   upsertPage,
   upsertPageLink,
   type DbClient,
@@ -147,6 +149,7 @@ interface MirrorEntityRow {
   label: string;
   normalized_label: string;
   ontology_type_slug: string | null;
+  canonical_entity_id: string | null;
   summary: string | null;
   aliases: string[] | null;
 }
@@ -165,6 +168,7 @@ interface MirrorEvidenceRow {
   relationship_id: string | null;
   evidence_source_ref: string;
   thread_id: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 function rowsOf<T>(result: unknown): T[] {
@@ -187,11 +191,27 @@ function dedupeCap(ids: string[], cap: number): string[] {
 /**
  * Materialize the tenant wiki from the knowledge-graph mirror. Pure data
  * transformation + repository writes; never reads env, never calls a model.
+ *
+ * THINK-193 U4: pages are keyed by canonical entity id when the mirror rows
+ * carry one (partition by canonical id; slug/title/aliases become
+ * presentation, renames update the same page and alias the old slug).
+ * Legacy rows without canonical ids keep the slug-keyed path. A dirty
+ * canonical-id scope (from the ingest run's enqueue) restricts the pass to
+ * those canonical entities; the archive reconciliation only runs on FULL
+ * passes (a scoped pass cannot see the full live set).
  */
 export async function materializeTenantWikiFromGraph(
-  args: { tenantId: string },
+  args: {
+    tenantId: string;
+    /** Dirty canonical scope; null/undefined = full pass. */
+    dirtyCanonicalEntityIds?: string[] | null;
+  },
   db: DbClient = defaultDb,
 ): Promise<GraphMaterializeResult> {
+  const dirtyScope =
+    args.dirtyCanonicalEntityIds && args.dirtyCanonicalEntityIds.length > 0
+      ? args.dirtyCanonicalEntityIds
+      : null;
   const metrics: GraphMaterializeMetrics = {
     entities_seen: 0,
     relationships_seen: 0,
@@ -200,16 +220,24 @@ export async function materializeTenantWikiFromGraph(
     pages_below_threshold: 0,
     pages_archived: 0,
     links_written: 0,
+    scoped_pass: dirtyScope ? 1 : 0,
   };
 
   // -- Mirror reads (grounded observations rows only) -----------------------
+  const scopeFilter = dirtyScope
+    ? sql` AND canonical_entity_id IN (${sql.join(
+        dirtyScope.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
+    : sql``;
   const entityRows = rowsOf<MirrorEntityRow>(
     await db.execute(sql`
-			SELECT id, label, normalized_label, ontology_type_slug, summary, aliases
+			SELECT id, label, normalized_label, ontology_type_slug,
+			       canonical_entity_id, summary, aliases
 			FROM knowledge_graph_entities
 			WHERE tenant_id = ${args.tenantId}
 			  AND source_kind = ${GRAPH_SOURCE_KIND}
-			  AND grounding_status = 'grounded'
+			  AND grounding_status = 'grounded'${scopeFilter}
 			ORDER BY normalized_label ASC, id ASC
 		`),
   );
@@ -232,7 +260,7 @@ export async function materializeTenantWikiFromGraph(
 
   const evidenceRows = rowsOf<MirrorEvidenceRow>(
     await db.execute(sql`
-			SELECT entity_id, relationship_id, evidence_source_ref, thread_id
+			SELECT entity_id, relationship_id, evidence_source_ref, thread_id, metadata
 			FROM knowledge_graph_evidence
 			WHERE tenant_id = ${args.tenantId}
 			  AND source_kind = ${GRAPH_SOURCE_KIND}
@@ -244,11 +272,23 @@ export async function materializeTenantWikiFromGraph(
 
   const observationIdsByEntity = new Map<string, string[]>();
   const observationIdsByRelationship = new Map<string, string[]>();
+  const claimIdsByEntity = new Map<string, string[]>();
   for (const row of evidenceRows) {
+    const claimIds = Array.isArray(row.metadata?.claimIds)
+      ? (row.metadata!.claimIds as unknown[]).filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [];
     if (row.entity_id) {
       const list = observationIdsByEntity.get(row.entity_id) ?? [];
       list.push(row.evidence_source_ref);
       observationIdsByEntity.set(row.entity_id, list);
+      if (claimIds.length > 0) {
+        claimIdsByEntity.set(row.entity_id, [
+          ...(claimIdsByEntity.get(row.entity_id) ?? []),
+          ...claimIds,
+        ]);
+      }
     }
     if (row.relationship_id) {
       const list = observationIdsByRelationship.get(row.relationship_id) ?? [];
@@ -296,46 +336,91 @@ export async function materializeTenantWikiFromGraph(
     adjacency,
   });
 
-  // -- Page materialization (slug-keyed upserts, deterministic sections) ----
-  // First entity per slug wins; later same-slug entities fold into the same
-  // page row via the upsert, so we track the page id per slug for linking.
+  // -- Canonical partitioning ------------------------------------------------
+  // One page per canonical entity id; legacy rows (NULL canonical) fall back
+  // to one slug-keyed page each. A canonical group promotes when ANY member
+  // row is promoted.
+  interface PageGroup {
+    canonicalEntityId: string | null;
+    members: MirrorEntityRow[];
+  }
+  const groupsByCanonical = new Map<string, PageGroup>();
+  const legacyGroups: PageGroup[] = [];
+  for (const entity of entityRows) {
+    if (entity.canonical_entity_id) {
+      const group = groupsByCanonical.get(entity.canonical_entity_id) ?? {
+        canonicalEntityId: entity.canonical_entity_id,
+        members: [],
+      };
+      group.members.push(entity);
+      groupsByCanonical.set(entity.canonical_entity_id, group);
+    } else {
+      legacyGroups.push({ canonicalEntityId: null, members: [entity] });
+    }
+  }
+  const groups = [...groupsByCanonical.values(), ...legacyGroups];
+
+  // -- Page materialization (canonical-keyed upserts, deterministic slugs) --
   const pageIdBySlug = new Map<string, string>();
   const pageIdByEntityId = new Map<string, string>();
 
-  for (const entity of entityRows) {
+  for (const group of groups) {
     // Promotion controls the wiki window, not agent visibility (R9):
     // sub-threshold entities stay fully queryable in the KG; they simply
     // emit no page. Demotion is handled by the reconciliation pass below —
-    // a previously-promoted entity that falls under threshold drops out of
-    // liveSlugs and its page archives (never deletes).
-    if (!promotedEntityIds.has(entity.id)) {
+    // pages that drop below threshold archive (never delete), and the
+    // canonical REGISTRY row is untouched either way.
+    if (!group.members.some((member) => promotedEntityIds.has(member.id))) {
       metrics.pages_below_threshold += 1;
       continue;
     }
-    const slug = slugifyTitle(entity.label);
+    // Primary member drives label/summary: most distinct evidence wins.
+    const primary = [...group.members].sort(
+      (a, b) =>
+        (evidenceKeysByEntity.get(b.id)?.size ?? 0) -
+        (evidenceKeysByEntity.get(a.id)?.size ?? 0),
+    )[0]!;
+    const slug = slugifyTitle(primary.label);
     if (!slug) {
       metrics.pages_skipped += 1;
       continue;
     }
 
+    const memberIds = group.members.map((member) => member.id);
     const entityObservationIds = dedupeCap(
-      observationIdsByEntity.get(entity.id) ?? [],
+      memberIds.flatMap((id) => observationIdsByEntity.get(id) ?? []),
       MAX_SECTION_SOURCES,
     );
-    const entityRelationships = relationshipsByEntity.get(entity.id) ?? [];
+    const entityClaimIds = dedupeCap(
+      memberIds.flatMap((id) => claimIdsByEntity.get(id) ?? []),
+      MAX_SECTION_SOURCES,
+    );
+    const entityRelationships = memberIds.flatMap(
+      (id) => relationshipsByEntity.get(id) ?? [],
+    );
 
     const sections: WikiSectionInput[] = [
       {
         section_slug: "overview",
         heading: "Overview",
         body_md:
-          entity.summary?.trim() ||
-          `${entity.label} is tracked in the tenant knowledge graph.`,
+          primary.summary?.trim() ||
+          `${primary.label} is tracked in the tenant knowledge graph.`,
         position: 0,
-        sources: entityObservationIds.map((ref) => ({
-          kind: "hindsight_observation" as const,
-          ref,
-        })),
+        sources: [
+          ...entityObservationIds.map((ref) => ({
+            kind: "hindsight_observation" as const,
+            ref,
+          })),
+          // Durable claim provenance (U4): stable claim-ledger ids ride
+          // section_sources so one source can retract without deleting
+          // corroborated text (the ledger, not prose, is authoritative).
+          ...entityClaimIds.map((ref) => ({
+            kind: "claim" as const,
+            ref,
+          })),
+        ],
+        replaceSourceKinds: ["hindsight_observation", "claim"],
       },
     ];
 
@@ -346,44 +431,77 @@ export async function materializeTenantWikiFromGraph(
         ),
         MAX_SECTION_SOURCES,
       );
+      const seenRelLines = new Set<string>();
+      const relLines: string[] = [];
+      for (const rel of entityRelationships) {
+        const line = `- ${rel.from_label} — ${rel.label} — ${rel.to_label}`;
+        if (seenRelLines.has(line)) continue;
+        seenRelLines.add(line);
+        relLines.push(line);
+      }
       sections.push({
         section_slug: "relationships",
         heading: "Relationships",
-        body_md: entityRelationships
-          .map((rel) => `- ${rel.from_label} — ${rel.label} — ${rel.to_label}`)
-          .join("\n"),
+        body_md: relLines.join("\n"),
         position: 1,
         sources: relationshipObservationIds.map((ref) => ({
           kind: "hindsight_observation" as const,
           ref,
         })),
+        replaceSourceKinds: ["hindsight_observation"],
       });
     }
 
-    const page = await upsertPage(
-      {
-        tenant_id: args.tenantId,
-        owner_id: null, // tenant scope
-        type: "entity",
-        entity_subtype: entity.ontology_type_slug ?? null,
-        slug,
-        title: entity.label,
-        summary: entity.summary ?? null,
-        markCompiled: true,
-        sections,
-        aliases: [
-          ...seedAliasesForTitle(entity.label),
-          ...(entity.aliases ?? []),
-        ].map((alias) => ({ alias, source: "compiler" })),
-      },
-      db,
-    );
+    const aliases = [
+      ...seedAliasesForTitle(primary.label),
+      ...group.members.flatMap((member) => member.aliases ?? []),
+    ].map((alias) => ({ alias, source: "compiler" }));
 
-    if (!pageIdBySlug.has(slug)) {
-      metrics.pages_upserted += 1;
-      pageIdBySlug.set(slug, page.id);
+    let pageId: string;
+    let pageSlug: string;
+    if (group.canonicalEntityId) {
+      const page = await upsertCanonicalEntityPage(
+        {
+          tenant_id: args.tenantId,
+          canonical_entity_id: group.canonicalEntityId,
+          entity_subtype: primary.ontology_type_slug ?? null,
+          slug,
+          title: primary.label,
+          summary: primary.summary ?? null,
+          sections,
+          aliases,
+        },
+        db,
+      );
+      pageId = page.id;
+      pageSlug = page.slug;
+    } else {
+      const page = await upsertPage(
+        {
+          tenant_id: args.tenantId,
+          owner_id: null, // tenant scope
+          type: "entity",
+          entity_subtype: primary.ontology_type_slug ?? null,
+          slug,
+          title: primary.label,
+          summary: primary.summary ?? null,
+          markCompiled: true,
+          sections,
+          aliases,
+        },
+        db,
+      );
+      pageId = page.id;
+      pageSlug = page.slug;
     }
-    pageIdByEntityId.set(entity.id, page.id);
+
+    if (!pageIdBySlug.has(pageSlug)) {
+      metrics.pages_upserted += 1;
+      pageIdBySlug.set(pageSlug, pageId);
+    }
+    for (const member of group.members) {
+      pageIdByEntityId.set(member.id, pageId);
+    }
   }
 
   // -- Links between co-materialized entity pages ---------------------------
@@ -404,16 +522,24 @@ export async function materializeTenantWikiFromGraph(
   }
 
   // -- Reconciliation: archive pages whose backing entity vanished ----------
-  const materializedPages = await listGraphMaterializedTenantPages(
-    { tenantId: args.tenantId },
-    db,
-  );
-  const liveSlugs = new Set(pageIdBySlug.keys());
-  const staleIds = materializedPages
-    .filter((page) => page.type === "entity" && !liveSlugs.has(page.slug))
-    .map((page) => page.id);
-  if (staleIds.length > 0) {
-    metrics.pages_archived = await archivePagesByIds({ pageIds: staleIds }, db);
+  // FULL passes only — a dirty-scoped pass sees a subset of live slugs and
+  // would archive everything else. Archiving never touches the canonical
+  // registry row (identity.canonical_entities survives page demotion).
+  if (!dirtyScope) {
+    const materializedPages = await listGraphMaterializedTenantPages(
+      { tenantId: args.tenantId },
+      db,
+    );
+    const liveSlugs = new Set(pageIdBySlug.keys());
+    const staleIds = materializedPages
+      .filter((page) => page.type === "entity" && !liveSlugs.has(page.slug))
+      .map((page) => page.id);
+    if (staleIds.length > 0) {
+      metrics.pages_archived = await archivePagesByIds(
+        { pageIds: staleIds },
+        db,
+      );
+    }
   }
 
   return { tenantId: args.tenantId, metrics };
@@ -453,8 +579,12 @@ async function runClaimedGraphCompileJob(
     return { jobId: job.id, status: "skipped" };
   }
   try {
+    // Dirty canonical scope rides the job's input jsonb (set by the ingest
+    // enqueue; unioned across deduped enqueues). NULL input = full pass —
+    // the rebuild path and the safety default.
+    const dirtyCanonicalEntityIds = parseDirtyCanonicalEntityIds(job.input);
     const { metrics } = await materializeTenantWikiFromGraph(
-      { tenantId: job.tenant_id },
+      { tenantId: job.tenant_id, dirtyCanonicalEntityIds },
       db,
     );
     await completeCompileJob(

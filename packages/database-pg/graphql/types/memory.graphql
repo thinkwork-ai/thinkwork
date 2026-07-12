@@ -512,3 +512,295 @@ extend type Mutation {
     captureId: ID!
   ): Boolean!
 }
+
+"""
+External Memory Compounding (THINK-193 U2). Operator-only inspection and
+control surface for external memory sources: processor configs, source
+bindings, authorization grants, the evidence ledger, ontology claims, and
+the retraction ledger. All queries and mutations below require tenant admin.
+"""
+type MemoryProcessorConfig {
+  id: ID!
+  mode: String!
+  targetScope: String!
+  targetId: ID!
+  enabled: Boolean!
+  status: String!
+  budget: AWSJSON
+  createdByUserId: ID
+  createdAt: AWSDateTime
+}
+
+type MemorySourceConfig {
+  id: ID!
+  processorConfigId: ID!
+  sourceFamily: String!
+  sourceBindingKey: String!
+  enabled: Boolean!
+  boundary: AWSJSON
+  createdAt: AWSDateTime
+}
+
+"""
+Explicit source-access grant — the MAXIMUM readable envelope for a binding.
+At most one active grant exists per (processorConfig, sourceFamily,
+sourceBindingKey); granting again supersedes the previous grant.
+"""
+type MemorySourceAuthorization {
+  id: ID!
+  processorConfigId: ID!
+  sourceFamily: String!
+  sourceBindingKey: String!
+  boundary: AWSJSON
+  status: String!
+  grantVersion: Int!
+  grantedByUserId: ID
+  expiresAt: AWSDateTime
+  revokedAt: AWSDateTime
+  createdAt: AWSDateTime
+}
+
+"""
+Evidence-ledger row WITHOUT snapshot content. The normalized snapshot and
+S3 snapshot ref are redacted by design — operators inspect lineage and
+lifecycle here, not source payloads.
+"""
+type MemoryEvidenceItemSummary {
+  id: ID!
+  sourceConfigId: ID!
+  sourceItemId: String!
+  sourceVersion: String!
+  contentHash: String!
+  lifecycle: String!
+  acquisitionRunId: ID
+  createdAt: AWSDateTime
+}
+
+"""
+Durable ontology-shaped claim. supportCount is the number of ACTIVE
+evidence support edges (memory_claim_evidence status = 'active').
+"""
+type MemoryClaim {
+  id: ID!
+  subjectKey: String!
+  subjectEntityType: String!
+  ontologyPredicate: String!
+  value: AWSJSON
+  valueHash: String!
+  status: String!
+  conflictState: String!
+  effectiveFrom: AWSDateTime
+  effectiveTo: AWSDateTime
+  extractionVersion: String!
+  supportCount: Int!
+}
+
+"""
+Evidence → Hindsight projection lineage row.
+"""
+type MemoryDerivation {
+  id: ID!
+  sourceConfigId: ID!
+  projectionKey: String!
+  targetBankId: String!
+  hindsightDocumentId: String!
+  currentVersion: String!
+  lifecycle: String!
+  retractedAt: AWSDateTime
+}
+
+"""
+Idempotent multi-system retraction ledger row — one per provider document
+being retracted or erased.
+"""
+type MemoryRetractionAttempt {
+  id: ID!
+  scope: String!
+  sourceConfigId: ID!
+  providerDocumentId: String!
+  targetBankId: String!
+  status: String!
+  attemptCount: Int!
+  maxAttempts: Int!
+  nextRetryAt: AWSDateTime
+  lockedBy: String
+  lockGeneration: Int!
+  """
+  When the current worker's lease is presumed dead (locked_at + the stale
+  window); null when unclaimed.
+  """
+  leaseExpiresAt: AWSDateTime
+  eraseGeneration: Int!
+  reconsolidationNote: String
+  errorClass: String
+  errorMessage: String
+  createdAt: AWSDateTime
+  completedAt: AWSDateTime
+}
+
+"""
+Durable status of a source-level erase aggregate: 'completed' only after all
+derivations are retracted via the saga, S3 evidence snapshots are deleted,
+snapshot payloads cleared / non-derived evidence rows removed, and
+checkpoints purged. 'pending' = retractions still in flight; the scheduled
+memory-retraction-drainer self-finalizes the erase (child retries AND the
+cleanup phase) — no further operator action is required. 'failed' =
+dead-lettered children need operator attention.
+"""
+enum MemorySourceEraseStatus {
+  completed
+  pending
+  failed
+}
+
+type MemorySourceEraseResult {
+  status: MemorySourceEraseStatus!
+  attemptsTotal: Int!
+  attemptsRetracted: Int!
+  attemptsPending: Int!
+  attemptsDeadLettered: Int!
+  processedThisCall: Int!
+  snapshotObjectsDeleted: Int!
+  """
+  Object VERSIONS + delete markers removed from the versioned
+  brain-artifacts bucket (S1: erase completeness proof).
+  """
+  snapshotVersionsDeleted: Int!
+  evidenceRowsCleared: Int!
+  evidenceRowsDeleted: Int!
+  checkpointsDeleted: Boolean!
+}
+
+"""
+A managed memory processor plus its blueprint-owned Workflow (THINK-193 U3).
+Personal: one per user (mode personal, agent_private workflow owned by the
+user). Shared: operator-owned per Space/Tenant target (tenant_shared
+workflow). The workflow definition is always the platform blueprint —
+ensured lazily, never hand-authored.
+"""
+type ManagedMemoryWorkflow {
+  processor: MemoryProcessorConfig!
+  workflow: Workflow
+  sources: [MemorySourceConfig!]!
+  """
+  ready | blocked_not_ready — computed from workflow readiness and the
+  configured source set.
+  """
+  readiness: String!
+  """
+  JSON array of {code, message} readiness reasons (empty when ready).
+  """
+  readinessReasons: AWSJSON
+}
+
+extend type Query {
+  """
+  Owner-only: the signed-in user's Personal Memory Automation. Lazily
+  provisions the processor + workflow + current blueprint version on read.
+  """
+  personalMemoryAutomation: ManagedMemoryWorkflow!
+  memoryProcessorConfigs(tenantId: ID): [MemoryProcessorConfig!]!
+  memorySourceConfigs(
+    tenantId: ID
+    processorConfigId: ID!
+  ): [MemorySourceConfig!]!
+  memorySourceAuthorizations(
+    tenantId: ID
+    processorConfigId: ID!
+  ): [MemorySourceAuthorization!]!
+  memoryEvidenceItems(
+    tenantId: ID
+    sourceConfigId: ID!
+    limit: Int
+  ): [MemoryEvidenceItemSummary!]!
+  memoryClaims(
+    tenantId: ID
+    targetScope: String!
+    targetId: ID!
+    subjectKey: String
+    limit: Int
+  ): [MemoryClaim!]!
+  memoryRetractionAttempts(
+    tenantId: ID
+    sourceConfigId: ID
+    limit: Int
+  ): [MemoryRetractionAttempt!]!
+}
+
+extend type Mutation {
+  """
+  Operator-only: idempotently ensure the shared Memory Workflow (processor +
+  tenant_shared blueprint workflow) for one Space or Tenant target.
+  """
+  ensureSharedMemoryWorkflow(
+    tenantId: ID
+    targetScope: String!
+    targetId: ID!
+  ): ManagedMemoryWorkflow!
+  """
+  Owner-only: set/clear the caller's personal memory automation schedule.
+  enabled=true requires a rate(...)/cron(...) scheduleExpression; false
+  disables the scheduled trigger (manual runs stay available).
+  """
+  setPersonalMemoryAutomationSchedule(
+    scheduleExpression: String
+    timezone: String
+    enabled: Boolean!
+  ): ManagedMemoryWorkflow!
+  """
+  Insert an active grant for a source binding, superseding (revoking) any
+  existing active grant for the same binding — one active grant per binding.
+  """
+  grantMemorySourceAuthorization(
+    tenantId: ID
+    processorConfigId: ID!
+    sourceFamily: String!
+    sourceBindingKey: String!
+    boundary: AWSJSON
+    expiresAt: AWSDateTime
+  ): MemorySourceAuthorization!
+  """
+  Create, update, or disable a source config on a SHARED processor
+  (THINK-193 U5). The boundary is validated against the family's governed
+  dimension schema and — when an active grant exists for the binding —
+  proven within the grant envelope. sourceFamily/sourceBindingKey are
+  required on create and immutable afterwards.
+  """
+  setMemorySourceConfig(
+    tenantId: ID
+    processorConfigId: ID!
+    sourceConfigId: ID
+    sourceFamily: String
+    sourceBindingKey: String
+    boundary: AWSJSON
+    enabled: Boolean
+  ): MemorySourceConfig!
+  revokeMemorySourceAuthorization(tenantId: ID, authorizationId: ID!): Boolean!
+  """
+  Enqueue a retraction for one derivation's Hindsight document and process
+  it inline once (RequestResponse semantics — errors surface to the caller).
+  """
+  retractMemoryDerivation(
+    tenantId: ID
+    derivationId: ID!
+  ): MemoryRetractionAttempt!
+  """
+  Disable a source config and run the durable erase aggregate: enqueue erase
+  attempts for its derivations, drain a bounded batch inline, and — only when
+  every derivation is retracted — delete S3 evidence snapshots, clear
+  snapshot payloads, remove non-derived evidence rows, and purge checkpoints.
+  Partial progress surfaces as status 'pending' and self-finalizes via the
+  scheduled drainer (no second mutation needed); dead-lettered children
+  surface as status 'failed'.
+  """
+  eraseMemorySource(tenantId: ID, sourceConfigId: ID!): MemorySourceEraseResult!
+  """
+  Operator DLQ retry: reset a dead_lettered (or failed) retraction attempt —
+  saga child or erase marker — to a due queued state with a fresh attempt
+  budget, fenced against stale workers.
+  """
+  retryMemoryRetractionAttempt(
+    tenantId: ID
+    attemptId: ID!
+  ): MemoryRetractionAttempt!
+}

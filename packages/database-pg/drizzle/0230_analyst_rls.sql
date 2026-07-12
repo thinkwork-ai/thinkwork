@@ -62,6 +62,15 @@
 -- creates-policy: public.agent_operation_leases.analyst_tenant_isolation
 -- creates-policy: public.eval_results.analyst_tenant_isolation
 -- creates-policy: public.plugin_components.analyst_tenant_isolation
+--
+-- THINK-84 U6: the msteams tables landed after this file was first applied,
+-- so their policies are declared explicitly — the drift gate must force a
+-- re-apply on databases that ran 0230 before the msteams tables existed.
+-- (0227's grants for the same tables are not marker-checkable; re-apply
+-- 0227 alongside 0233 and this file — see the 0233 header.)
+-- creates-policy: public.msteams_tenant_installs.analyst_tenant_isolation
+-- creates-policy: public.msteams_user_links.analyst_tenant_isolation
+-- creates-policy: public.msteams_threads.analyst_tenant_isolation
 
 \set ON_ERROR_STOP on
 
@@ -758,6 +767,51 @@ BEGIN
   ELSE
     missing := missing || 'managed_applications'::text;
   END IF;
+  IF to_regclass('public.memory_claim_evidence') IS NOT NULL THEN
+    ALTER TABLE public.memory_claim_evidence ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_claim_evidence;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_claim_evidence
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_claim_evidence'::text;
+  END IF;
+  IF to_regclass('public.memory_claims') IS NOT NULL THEN
+    ALTER TABLE public.memory_claims ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_claims;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_claims
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_claims'::text;
+  END IF;
+  IF to_regclass('public.memory_derivations') IS NOT NULL THEN
+    ALTER TABLE public.memory_derivations ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_derivations;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_derivations
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_derivations'::text;
+  END IF;
+  IF to_regclass('public.memory_evidence_items') IS NOT NULL THEN
+    ALTER TABLE public.memory_evidence_items ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_evidence_items;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_evidence_items
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_evidence_items'::text;
+  END IF;
+  IF to_regclass('public.memory_processor_configs') IS NOT NULL THEN
+    ALTER TABLE public.memory_processor_configs ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_processor_configs;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_processor_configs
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_processor_configs'::text;
+  END IF;
   IF to_regclass('public.memory_retain_attempts') IS NOT NULL THEN
     ALTER TABLE public.memory_retain_attempts ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_retain_attempts;
@@ -766,6 +820,51 @@ BEGIN
       USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
   ELSE
     missing := missing || 'memory_retain_attempts'::text;
+  END IF;
+  IF to_regclass('public.memory_retraction_attempts') IS NOT NULL THEN
+    ALTER TABLE public.memory_retraction_attempts ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_retraction_attempts;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_retraction_attempts
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_retraction_attempts'::text;
+  END IF;
+  IF to_regclass('public.memory_run_items') IS NOT NULL THEN
+    ALTER TABLE public.memory_run_items ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_run_items;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_run_items
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_run_items'::text;
+  END IF;
+  IF to_regclass('public.memory_source_authorizations') IS NOT NULL THEN
+    ALTER TABLE public.memory_source_authorizations ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_source_authorizations;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_source_authorizations
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_source_authorizations'::text;
+  END IF;
+  IF to_regclass('public.memory_source_checkpoints') IS NOT NULL THEN
+    ALTER TABLE public.memory_source_checkpoints ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_source_checkpoints;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_source_checkpoints
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_source_checkpoints'::text;
+  END IF;
+  IF to_regclass('public.memory_source_configs') IS NOT NULL THEN
+    ALTER TABLE public.memory_source_configs ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_source_configs;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_source_configs
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_source_configs'::text;
   END IF;
   IF to_regclass('public.message_artifacts') IS NOT NULL THEN
     ALTER TABLE public.message_artifacts ENABLE ROW LEVEL SECURITY;
@@ -793,6 +892,33 @@ BEGIN
       USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
   ELSE
     missing := missing || 'messages'::text;
+  END IF;
+  IF to_regclass('public.msteams_tenant_installs') IS NOT NULL THEN
+    ALTER TABLE public.msteams_tenant_installs ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.msteams_tenant_installs;
+    CREATE POLICY analyst_tenant_isolation ON public.msteams_tenant_installs
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'msteams_tenant_installs'::text;
+  END IF;
+  IF to_regclass('public.msteams_threads') IS NOT NULL THEN
+    ALTER TABLE public.msteams_threads ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.msteams_threads;
+    CREATE POLICY analyst_tenant_isolation ON public.msteams_threads
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'msteams_threads'::text;
+  END IF;
+  IF to_regclass('public.msteams_user_links') IS NOT NULL THEN
+    ALTER TABLE public.msteams_user_links ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.msteams_user_links;
+    CREATE POLICY analyst_tenant_isolation ON public.msteams_user_links
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'msteams_user_links'::text;
   END IF;
   IF to_regclass('public.mutation_idempotency') IS NOT NULL THEN
     ALTER TABLE public.mutation_idempotency ENABLE ROW LEVEL SECURITY;

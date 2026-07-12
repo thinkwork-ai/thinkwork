@@ -38,6 +38,7 @@ import {
   loadAgentLoopRunRepairState,
   markInterpreterRunStarted,
   recordWorkflowStepEvent,
+  ensureMemoryBlueprintVersion,
 } from "@thinkwork/database-pg";
 import {
   agents,
@@ -526,9 +527,8 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -626,9 +626,8 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -672,9 +671,8 @@ type JobTriggerDb = ReturnType<typeof getDb>;
 const runRoutineActionHook: NonNullable<
   AgentLoopDispatchLedger["runRoutineAction"]
 > = async (input) => {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "ROUTINE_EXEC_GIT_FUNCTION_NAME",
@@ -1156,6 +1154,24 @@ export async function handleWorkflowSchedule(input: {
       `[job-trigger] workflow_schedule ${triggerId} references missing workflow ${workflowId}; skipping`,
     );
     return;
+  }
+
+  // THINK-193 U3: blueprint-managed memory workflows lazily adopt the
+  // current code-owned blueprint at run start — a bumped blueprint version
+  // appears on the NEXT scheduled run with no fan-out update, while runs
+  // already in flight stay pinned to the version they captured.
+  try {
+    const ensured = await ensureMemoryBlueprintVersion(db, {
+      tenantId,
+      workflowId: workflow.id,
+    });
+    if (ensured.managed && ensured.versionId) {
+      workflow.current_version_id = ensured.versionId;
+    }
+  } catch (err) {
+    console.error(
+      `[job-trigger] workflow_schedule ${triggerId} blueprint ensure failed (continuing on the stored version): ${(err as Error)?.message}`,
+    );
   }
 
   const stateMachineArn = await resolveInterpreterStateMachineArn();
@@ -1870,9 +1886,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -2208,9 +2223,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         process.env.CANVAS_REFRESH_FN_ARN ||
         `thinkwork-${stage}-api-canvas-refresh`;
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const res = await lambda.send(
           new InvokeCommand({
@@ -2468,9 +2482,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } = await import(
-          "@aws-sdk/client-scheduler"
-        );
+        const { SchedulerClient, DeleteScheduleCommand } =
+          await import("@aws-sdk/client-scheduler");
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({

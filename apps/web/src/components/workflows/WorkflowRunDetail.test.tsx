@@ -242,6 +242,7 @@ describe("WorkflowRunDetail", () => {
       runId: "run-1",
       approve: true,
       note: null,
+      override: null,
     });
   });
 
@@ -257,9 +258,7 @@ describe("WorkflowRunDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
 
     await waitFor(() =>
-      expect(
-        screen.getByText(/already left the waiting state/i),
-      ).toBeTruthy(),
+      expect(screen.getByText(/already left the waiting state/i)).toBeTruthy(),
     );
     expect(
       (screen.getByRole("button", { name: "Approve" }) as HTMLButtonElement)

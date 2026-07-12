@@ -192,6 +192,8 @@ export async function replaceKnowledgeGraphSnapshot(args: {
               ontology_type_slug: entity.ontologyTypeSlug,
               grounding_status: entity.groundingStatus,
               provenance_status: entity.provenanceStatus,
+              canonical_entity_id: entity.canonicalEntityId ?? null,
+              resolution_state: entity.resolutionState ?? "legacy",
               summary: entity.summary,
               aliases: entity.aliases,
               properties: entity.properties,
@@ -445,11 +447,19 @@ export async function mergeKnowledgeGraphSnapshot(args: {
   const { run, snapshot } = args;
   await args.db.transaction(async (tx) => {
     // -- Entities: load existing for this source, upsert by merge key ------
+    // Merge key is canonical-ID-first (THINK-193 U4): a resolved snapshot
+    // entity folds onto the existing mirror row carrying the same canonical
+    // id even when the label changed (renames stay one row). Label+type is
+    // the fallback: a canonical-resolved entity ADOPTS a legacy same-label
+    // row that lacks a canonical id (stamping it — the backfill-before-
+    // cutover hazard), and two sides that both lack canonical ids merge on
+    // label+type exactly as before.
     const existingEntities = await tx
       .select({
         id: knowledgeGraphEntities.id,
         normalized_label: knowledgeGraphEntities.normalized_label,
         ontology_type_slug: knowledgeGraphEntities.ontology_type_slug,
+        canonical_entity_id: knowledgeGraphEntities.canonical_entity_id,
       })
       .from(knowledgeGraphEntities)
       .where(
@@ -459,12 +469,15 @@ export async function mergeKnowledgeGraphSnapshot(args: {
           eq(knowledgeGraphEntities.source_ref, run.source_ref),
         ),
       );
-    const entityIdByKey = new Map<string, string>();
+    const entityIdByCanonical = new Map<string, string>();
+    const legacyEntityIdByKey = new Map<string, string>();
     for (const row of existingEntities) {
-      entityIdByKey.set(
-        entityMergeKey(row.normalized_label, row.ontology_type_slug),
-        row.id,
-      );
+      const key = entityMergeKey(row.normalized_label, row.ontology_type_slug);
+      if (row.canonical_entity_id) {
+        entityIdByCanonical.set(row.canonical_entity_id, row.id);
+      } else {
+        legacyEntityIdByKey.set(key, row.id);
+      }
     }
 
     const entityIdByTempId = new Map<string, string>();
@@ -488,13 +501,20 @@ export async function mergeKnowledgeGraphSnapshot(args: {
         ontology_type_slug: entity.ontologyTypeSlug,
         grounding_status: entity.groundingStatus,
         provenance_status: entity.provenanceStatus,
+        canonical_entity_id: entity.canonicalEntityId ?? null,
+        resolution_state: entity.resolutionState ?? "legacy",
         summary: entity.summary,
         aliases: entity.aliases,
         properties: entity.properties,
         diagnostics: entity.diagnostics,
         last_seen_at: entity.lastSeenAt,
       };
-      const existingId = entityIdByKey.get(key);
+      const existingId = entity.canonicalEntityId
+        ? // Canonical first; then adopt a same-key legacy row (stamps it).
+          (entityIdByCanonical.get(entity.canonicalEntityId) ??
+          legacyEntityIdByKey.get(key))
+        : // Both sides lack canonical ids → label+type fallback.
+          legacyEntityIdByKey.get(key);
       if (existingId) {
         await tx
           .update(knowledgeGraphEntities)
@@ -502,13 +522,22 @@ export async function mergeKnowledgeGraphSnapshot(args: {
           .where(eq(knowledgeGraphEntities.id, existingId));
         entityIdByTempId.set(entity.tempId, existingId);
         touchedEntityIds.add(existingId);
+        if (entity.canonicalEntityId) {
+          entityIdByCanonical.set(entity.canonicalEntityId, existingId);
+          legacyEntityIdByKey.delete(key); // adopted — no longer legacy
+        }
       } else {
         const [inserted] = await tx
           .insert(knowledgeGraphEntities)
           .values(values)
           .returning({ id: knowledgeGraphEntities.id });
         const newId = inserted!.id;
-        entityIdByKey.set(key, newId); // intra-run duplicates fold together
+        // Intra-run duplicates fold together via the canonical/legacy maps.
+        if (entity.canonicalEntityId) {
+          entityIdByCanonical.set(entity.canonicalEntityId, newId);
+        } else {
+          legacyEntityIdByKey.set(key, newId);
+        }
         entityIdByTempId.set(entity.tempId, newId);
         touchedEntityIds.add(newId);
       }

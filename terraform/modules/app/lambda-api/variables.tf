@@ -435,6 +435,12 @@ variable "enable_slack_workspace_app" {
   default     = true
 }
 
+variable "enable_msteams_app" {
+  description = "Provision Microsoft Teams app Lambdas, API routes, and credentials placeholder secret."
+  type        = bool
+  default     = false
+}
+
 variable "appsync_realtime_url" {
   description = "AppSync realtime/WebSocket endpoint URL"
   type        = string

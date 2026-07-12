@@ -136,6 +136,20 @@ export const ontologyEntityTypes = ontology.table(
       .notNull()
       .default(sql`ARRAY[]::text[]`),
     properties_schema: jsonb("properties_schema").notNull().default({}),
+    /**
+     * Versioned identity rules (THINK-193 U4). Array of
+     * `{ slug, keyKind, normalization, unique, uniquenessScope,
+     *    sourcePrecedence: string[], autoLink, version }`.
+     * Rules describe how instances of this type resolve to canonical
+     * entities — the instances themselves live in identity.*.
+     */
+    identity_rules: jsonb("identity_rules")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    identity_rules_version: integer("identity_rules_version")
+      .notNull()
+      .default(0),
     guidance_notes: text("guidance_notes"),
     lifecycle_status: text("lifecycle_status").notNull().default("proposed"),
     proposed_by_user_id: uuid("proposed_by_user_id").references(

@@ -17,11 +17,13 @@ import {
 } from "@thinkwork/agent-loops-core";
 
 import {
+  handleAwaitMemoryStage,
   handleDispatchAgent,
   handleExecuteStep,
   handleLoadNext,
   handleRecordAdvance,
   handleRecordApproval,
+  handleRecordMemoryStage,
   type StepExecutors,
 } from "../workflow-step-dispatch";
 
@@ -513,6 +515,7 @@ function makeExecutors(overrides: Partial<StepExecutors> = {}): StepExecutors {
       subject: "Report",
       shareUrl: "https://api.example.com/share/tok",
     }),
+    invokeMemoryStageWorker: async () => {},
     ...overrides,
   };
 }
@@ -843,6 +846,209 @@ describe("execute_step", () => {
 });
 
 // ---------------------------------------------------------------------------
+// memory_stage step (external-memory-compounding U1)
+// ---------------------------------------------------------------------------
+
+const MEMORY_STAGE_DEF: WorkflowDefinition = {
+  version: 1,
+  steps: [
+    {
+      id: "extract-memories",
+      kind: "memory_stage",
+      stage: "extract",
+      processorConfigId: "cfg-1",
+      sourceConfigId: "{{ run.input.sourceConfigId }}",
+      options: { batchSize: 5 },
+    },
+  ],
+};
+
+describe("memory_stage step", () => {
+  it("load_next records step_started (running) and parks on await_memory_stage", async () => {
+    fake.selectQueue.push([runRow()], [versionRow(MEMORY_STAGE_DEF)]);
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("await_memory_stage");
+    const started = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_started",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(started?.payload_summary).toMatchObject({
+      stepId: "extract-memories",
+      stepKind: "memory_stage",
+      status: "running",
+    });
+  });
+
+  it("await_memory_stage stores a memory_stage token then Event-invokes the worker with the resolved payload", async () => {
+    const calls: unknown[] = [];
+    fake.selectQueue.push(
+      [runRow({ input_summary: { agentId: "a1", sourceConfigId: "src-9" } })],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior step outputs (template context)
+    );
+    const result = await handleAwaitMemoryStage(
+      fake.db as never,
+      {
+        phase: "await_memory_stage",
+        cursor: cursor({ iteration: 2 }),
+        taskToken: "tok-mem-1",
+      },
+      NOW,
+      makeExecutors({
+        invokeMemoryStageWorker: async (payload) => {
+          calls.push(payload);
+        },
+      }),
+    );
+    expect(result).toEqual({ ok: true });
+    const token = fake.inserts.find((i) => i.purpose === "memory_stage");
+    expect(token?.token).toBe("tok-mem-1");
+    expect(token?.step_id).toBe("extract-memories");
+    expect(calls).toEqual([
+      {
+        workflowRunId: "run-1",
+        tenantId: "t1",
+        stepId: "extract-memories",
+        iteration: 2,
+        stage: "extract",
+        processorConfigId: "cfg-1",
+        sourceConfigId: "src-9",
+        options: { batchSize: 5 },
+      },
+    ]);
+  });
+
+  it("await_memory_stage records step_failed and throws when the worker invoke fails (never parks forever)", async () => {
+    fake.selectQueue.push(
+      [runRow({ input_summary: { agentId: "a1", sourceConfigId: "src-9" } })],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior step outputs
+    );
+    await expect(
+      handleAwaitMemoryStage(
+        fake.db as never,
+        {
+          phase: "await_memory_stage",
+          cursor: cursor(),
+          taskToken: "tok-mem-2",
+        },
+        NOW,
+        makeExecutors({
+          invokeMemoryStageWorker: async () => {
+            throw new Error("AccessDenied");
+          },
+        }),
+      ),
+    ).rejects.toThrow(/could not be started/);
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toMatch(/AccessDenied/);
+    expect(fake.updates.some((u) => u.status === "failed")).toBe(true);
+  });
+
+  it("await_memory_stage fails the step when its template references do not resolve", async () => {
+    fake.selectQueue.push(
+      [runRow()], // input_summary has no sourceConfigId
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior step outputs
+    );
+    await expect(
+      handleAwaitMemoryStage(
+        fake.db as never,
+        {
+          phase: "await_memory_stage",
+          cursor: cursor(),
+          taskToken: "tok-mem-3",
+        },
+        NOW,
+        makeExecutors(),
+      ),
+    ).rejects.toThrow(/did not resolve/);
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toContain(
+      "run.input.sourceConfigId",
+    );
+  });
+
+  it("record_memory_stage on succeeded records step output and advances (terminal_success on the last step)", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior policy decision (advance tail)
+    );
+    const result = await handleRecordMemoryStage(
+      fake.db as never,
+      {
+        phase: "record_memory_stage",
+        cursor: cursor(),
+        result: {
+          status: "succeeded",
+          stage: "extract",
+          counts: { extracted: 12 },
+          output: { batchId: "b-7" },
+        },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("terminal_success");
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as {
+      summary?: {
+        output?: {
+          stage?: string;
+          counts?: { extracted?: number };
+          batchId?: string;
+        };
+      };
+    };
+    expect(output?.summary?.output?.stage).toBe("extract");
+    expect(output?.summary?.output?.counts?.extracted).toBe(12);
+    expect(output?.summary?.output?.batchId).toBe("b-7");
+    const types = fake.inserts.map((r) => r.event_type);
+    expect(types).toContain("workflow_step_finished");
+    expect(types).not.toContain("workflow_step_failed");
+  });
+
+  it("record_memory_stage on failed records step_failed with the worker's error and fails the run", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior policy decision
+    );
+    const result = await handleRecordMemoryStage(
+      fake.db as never,
+      {
+        phase: "record_memory_stage",
+        cursor: cursor(),
+        result: {
+          status: "failed",
+          stage: "extract",
+          error: "processor config cfg-1 not found",
+        },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("terminal_failure");
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toBe(
+      "processor config cfg-1 not found",
+    );
+    expect(fake.inserts.some((r) => r.evidence_type === "step_output")).toBe(
+      false,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // approval step (THINK-215)
 // ---------------------------------------------------------------------------
 
@@ -919,6 +1125,193 @@ describe("approval step", () => {
     expect(decision?.payload_summary).toMatchObject({
       stepId: "sign-off",
       decision: "rejected",
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: approval trigger predicate + approved-plan override
+// ---------------------------------------------------------------------------
+
+const GATED_APPROVAL_DEF: WorkflowDefinition = {
+  version: 1,
+  steps: [
+    {
+      id: "plan-review",
+      kind: "approval",
+      prompt: "Review the plan",
+      when: { triggerFamily: ["manual"] },
+    },
+    { id: "announce", kind: "emit_event", eventType: "x.y" },
+  ],
+};
+
+describe("approval `when` predicate (U3, AE2)", () => {
+  it("a scheduled run records a VISIBLE workflow_approval_skipped event and advances", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "schedule" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+      [], // no prior policy decision (advance tail dedupe)
+    );
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("continue");
+    expect(result.cursor).toMatchObject({ stepPointer: 1, iteration: 1 });
+    const skipped = fake.inserts.find(
+      (r) => r.event_type === "workflow_approval_skipped",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(skipped?.payload_summary).toMatchObject({
+      stepId: "plan-review",
+      status: "skipped",
+      reason: "trigger_family_not_reviewed",
+      triggerFamily: "schedule",
+    });
+    // The run never enters waiting_for_human.
+    expect(fake.updates.some((u) => u.status === "waiting_for_human")).toBe(
+      false,
+    );
+  });
+
+  it("a manual run still parks on await_approval as waiting_for_human", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "manual" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+    );
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("await_approval");
+    expect(fake.updates.some((u) => u.status === "waiting_for_human")).toBe(
+      true,
+    );
+  });
+
+  it("a run with an unknown/null trigger family fails safe and waits", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: null })],
+      [versionRow(GATED_APPROVAL_DEF)],
+    );
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("await_approval");
+  });
+});
+
+describe("approved-plan override (U3)", () => {
+  it("record_approval persists the sanitized override as the approval step's output", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "manual" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+      [], // prior policy decision check (advance tail)
+    );
+    const result = await handleRecordApproval(
+      fake.db as never,
+      {
+        phase: "record_approval",
+        cursor: cursor(),
+        approval: {
+          approved: true,
+          note: "narrowed",
+          override: {
+            sourceConfigIds: ["sc-1", "sc-2"],
+            maxRecords: 40,
+            timeRange: { from: "2026-07-01T00:00:00Z" },
+          },
+        },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("continue");
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as {
+      summary?: { stepId?: string; output?: Record<string, unknown> };
+    };
+    expect(output?.summary?.stepId).toBe("plan-review");
+    expect(output?.summary?.output).toEqual({
+      approvalOverride: {
+        sourceConfigIds: ["sc-1", "sc-2"],
+        maxRecords: 40,
+        timeRange: { from: "2026-07-01T00:00:00Z" },
+      },
+    });
+    const decision = fake.inserts.find(
+      (r) => r.event_type === "workflow_approval_decision",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(decision?.payload_summary).toMatchObject({
+      decision: "approved",
+      overrideSourceCount: 2,
+      overrideMaxRecords: 40,
+      overrideTimeFrom: "2026-07-01T00:00:00Z",
+    });
+  });
+
+  it("record_approval without an override records no step output", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "manual" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+      [],
+    );
+    await handleRecordApproval(
+      fake.db as never,
+      {
+        phase: "record_approval",
+        cursor: cursor(),
+        approval: { approved: true },
+      },
+      NOW,
+    );
+    expect(fake.inserts.some((r) => r.evidence_type === "step_output")).toBe(
+      false,
+    );
+  });
+
+  it("await_memory_stage merges a recorded approvalOverride into the worker options", async () => {
+    const calls: Array<{ options: Record<string, unknown> | null }> = [];
+    fake.selectQueue.push(
+      [
+        runRow({
+          trigger_family: "manual",
+          input_summary: { agentId: "a1", sourceConfigId: "src-9" },
+        }),
+      ],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [
+        {
+          summary: {
+            stepId: "plan-review",
+            output: { approvalOverride: { sourceConfigIds: ["sc-1"] } },
+          },
+          created_at: NOW,
+        },
+      ], // prior step outputs (template context)
+    );
+    await handleAwaitMemoryStage(
+      fake.db as never,
+      {
+        phase: "await_memory_stage",
+        cursor: cursor(),
+        taskToken: "tok-mem-9",
+      },
+      NOW,
+      makeExecutors({
+        invokeMemoryStageWorker: async (payload) => {
+          calls.push(payload);
+        },
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.options).toEqual({
+      batchSize: 5,
+      override: { sourceConfigIds: ["sc-1"] },
     });
   });
 });

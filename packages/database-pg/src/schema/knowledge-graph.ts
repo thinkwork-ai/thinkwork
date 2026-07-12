@@ -24,6 +24,7 @@ import { tenants, users } from "./core";
 import { threads } from "./threads";
 import { messages } from "./messages";
 import { ontologyEntityTypes, ontologyRelationshipTypes } from "./ontology";
+import { canonicalEntities } from "./entity-identity";
 
 export const KNOWLEDGE_GRAPH_INGEST_STATUSES = [
   "queued",
@@ -189,6 +190,17 @@ export const knowledgeGraphEntities = pgTable(
       { onDelete: "set null" },
     ),
     ontology_type_slug: text("ontology_type_slug"),
+    /** THINK-193 U4: stable canonical identity for shared/grounded entities. */
+    canonical_entity_id: uuid("canonical_entity_id").references(
+      () => canonicalEntities.id,
+      { onDelete: "set null" },
+    ),
+    /**
+     * 'resolved' — canonical id assigned; 'deferred' — shared entity awaiting
+     * an operator resolution case; 'private' — personal-scope row that must
+     * not create tenant identity; 'legacy' — pre-U4 row not yet backfilled.
+     */
+    resolution_state: text("resolution_state").notNull().default("legacy"),
     grounding_status: text("grounding_status").notNull().default("unknown"),
     provenance_status: text("provenance_status").notNull().default("missing"),
     summary: text("summary"),
@@ -250,6 +262,13 @@ export const knowledgeGraphEntities = pgTable(
     check(
       "knowledge_graph_entities_source_kind_allowed",
       sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
+    ),
+    index("idx_kg_entities_tenant_canonical")
+      .on(table.tenant_id, table.canonical_entity_id)
+      .where(sql`${table.canonical_entity_id} IS NOT NULL`),
+    check(
+      "knowledge_graph_entities_resolution_state_allowed",
+      sql`${table.resolution_state} IN ('resolved','deferred','private','legacy')`,
     ),
   ],
 );

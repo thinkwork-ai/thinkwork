@@ -2424,3 +2424,133 @@ export const SettingsRegisterInternalAnalystDataSourceMutation = graphql(`
     }
   }
 `);
+
+// ─── Knowledge Model (THINK-193 U4) ─────────────────────────────────────
+
+export const SettingsCanonicalEntitiesQuery = graphql(`
+  query SettingsCanonicalEntities(
+    $tenantId: ID
+    $entityTypeSlug: String
+    $search: String
+    $status: String
+    $limit: Int
+  ) {
+    canonicalEntities(
+      tenantId: $tenantId
+      entityTypeSlug: $entityTypeSlug
+      search: $search
+      status: $status
+      limit: $limit
+    ) {
+      id
+      entityTypeSlug
+      displayName
+      normalizedName
+      status
+      mergedIntoId
+      version
+      updatedAt
+      sourceMappings {
+        id
+        sourceSystem
+        namespace
+        externalId
+        visibility
+        createdBy
+      }
+    }
+  }
+`);
+
+export const SettingsEntityResolutionCasesQuery = graphql(`
+  query SettingsEntityResolutionCases(
+    $tenantId: ID
+    $status: String
+    $limit: Int
+  ) {
+    entityResolutionCases(tenantId: $tenantId, status: $status, limit: $limit) {
+      id
+      entityTypeSlug
+      displayHint
+      candidates
+      conflictingClaims
+      impactSummary
+      itemCount
+      status
+      decision
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsResolveEntityResolutionCaseMutation = graphql(`
+  mutation SettingsResolveEntityResolutionCase(
+    $tenantId: ID
+    $caseId: ID!
+    $decision: EntityResolutionDecision!
+    $canonicalEntityId: ID
+    $displayName: String
+  ) {
+    resolveEntityResolutionCase(
+      tenantId: $tenantId
+      caseId: $caseId
+      decision: $decision
+      canonicalEntityId: $canonicalEntityId
+      displayName: $displayName
+    ) {
+      id
+      status
+      decision
+      resolvedCanonicalEntityId
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsCanonicalEntityMergePreviewQuery = graphql(`
+  query SettingsCanonicalEntityMergePreview(
+    $tenantId: ID
+    $survivorId: ID!
+    $loserId: ID!
+  ) {
+    canonicalEntityMergePreview(
+      tenantId: $tenantId
+      survivorId: $survivorId
+      loserId: $loserId
+    ) {
+      sourceMappingCount
+      identityClaimCount
+      memoryClaimCount
+      graphEntityCount
+      loserWikiPageId
+      loserWikiPageSlug
+      survivorWikiPageId
+    }
+  }
+`);
+
+export const SettingsMergeCanonicalEntitiesMutation = graphql(`
+  mutation SettingsMergeCanonicalEntities(
+    $tenantId: ID
+    $survivorId: ID!
+    $loserId: ID!
+    $confirmImpact: CanonicalEntityMergeImpactInput!
+  ) {
+    mergeCanonicalEntities(
+      tenantId: $tenantId
+      survivorId: $survivorId
+      loserId: $loserId
+      confirmImpact: $confirmImpact
+    ) {
+      survivorId
+      loserId
+      impact {
+        sourceMappingCount
+        identityClaimCount
+        memoryClaimCount
+        graphEntityCount
+      }
+    }
+  }
+`);

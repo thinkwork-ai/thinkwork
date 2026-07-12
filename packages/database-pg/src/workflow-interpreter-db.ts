@@ -52,6 +52,9 @@ export const WORKFLOW_STEP_EVENT_TYPES = [
   "workflow_policy_decision",
   "workflow_run_rollover",
   "workflow_approval_decision",
+  // THINK-193 U3: an approval step whose `when.triggerFamily` predicate
+  // excludes the run's trigger family records this VISIBLE skip and advances.
+  "workflow_approval_skipped",
 ] as const;
 
 export type WorkflowStepEventType = (typeof WORKFLOW_STEP_EVENT_TYPES)[number];
@@ -74,6 +77,14 @@ export interface WorkflowStepEventSummary {
   nextIteration?: number;
   tokensUsed?: number;
   supersededExecutionArn?: string;
+  /** THINK-193 U3: the run trigger family a skipped approval gated on. */
+  triggerFamily?: string;
+  /** THINK-193 U3: approved-plan override audit scalars. */
+  overrideSourceCount?: number;
+  overrideFocusCount?: number;
+  overrideTimeFrom?: string;
+  overrideTimeTo?: string;
+  overrideMaxRecords?: number;
 }
 
 function safeSummary(
@@ -94,6 +105,12 @@ function safeSummary(
     "nextIteration",
     "tokensUsed",
     "supersededExecutionArn",
+    "triggerFamily",
+    "overrideSourceCount",
+    "overrideFocusCount",
+    "overrideTimeFrom",
+    "overrideTimeTo",
+    "overrideMaxRecords",
   ];
   for (const key of scalarKeys) {
     const value = input[key];
@@ -388,7 +405,7 @@ export async function storeTaskToken(
     workflowRunId: string;
     stepId: string;
     iteration: number;
-    purpose: "agent_step" | "approval";
+    purpose: "agent_step" | "approval" | "memory_stage";
     token: string;
     now?: Date;
   },
@@ -416,8 +433,164 @@ export async function storeTaskToken(
         token: input.token,
         status: "pending",
         consumed_at: null,
+        locked_at: null,
+        locked_by: null,
+        result: null,
       },
+      // Monotonic for ALL purposes (Codex F1): a row that is already
+      // consumed or executing is left untouched — a duplicate/late dispatch
+      // storing a fresh SFN token must never resurrect a resolved step, or a
+      // duplicate worker could resume the machine twice / re-run side
+      // effects. Re-parking the same logical step legitimately happens only
+      // with a bumped iteration (a new row), never by overwriting the same
+      // (run, step, iteration, purpose) key.
+      setWhere: sql`${workflowTaskTokens.status} IN ('pending', 'expired')`,
     });
+}
+
+/** Default lease window after which an `executing` claim is re-claimable. */
+export const TASK_TOKEN_LEASE_STALE_AFTER_MS = 600_000;
+
+export type ClaimTaskTokenExecutionResult =
+  | { token: string }
+  | { redrive: { token: string; result: unknown } }
+  | null;
+
+/**
+ * Durable pre-execution claim (Codex F1/F7): single-winner CAS that flips
+ * pending -> executing (recording locked_at/locked_by), or re-claims an
+ * `executing` row whose lease is stale (a crashed worker's retry or a
+ * continuation self-invoke). When no row is claimable:
+ *  - a consumed row with a persisted result returns the redrive shape so the
+ *    caller can re-send the stored result WITHOUT re-executing (F9);
+ *  - anything else returns null — the caller must perform zero side effects.
+ */
+export async function claimTaskTokenExecution(
+  db: WorkflowDb,
+  input: {
+    workflowRunId: string;
+    stepId: string;
+    iteration: number;
+    purpose: "agent_step" | "approval" | "memory_stage";
+    lockedBy: string;
+    now?: Date;
+    staleAfterMs?: number;
+  },
+): Promise<ClaimTaskTokenExecutionResult> {
+  const now = input.now ?? new Date();
+  const staleBefore = new Date(
+    now.getTime() - (input.staleAfterMs ?? TASK_TOKEN_LEASE_STALE_AFTER_MS),
+  );
+  const rows = await db
+    .update(workflowTaskTokens)
+    .set({ status: "executing", locked_at: now, locked_by: input.lockedBy })
+    .where(
+      and(
+        eq(workflowTaskTokens.workflow_run_id, input.workflowRunId),
+        eq(workflowTaskTokens.step_id, input.stepId),
+        eq(workflowTaskTokens.iteration, input.iteration),
+        eq(workflowTaskTokens.purpose, input.purpose),
+        sql`(${workflowTaskTokens.status} = 'pending' OR (${workflowTaskTokens.status} = 'executing' AND ${workflowTaskTokens.locked_at} IS NOT NULL AND ${workflowTaskTokens.locked_at} < ${staleBefore}))`,
+      ),
+    )
+    .returning({ token: workflowTaskTokens.token });
+  if (rows && rows.length > 0) return { token: rows[0].token };
+
+  const [existing] = await db
+    .select({
+      status: workflowTaskTokens.status,
+      token: workflowTaskTokens.token,
+      result: workflowTaskTokens.result,
+    })
+    .from(workflowTaskTokens)
+    .where(
+      and(
+        eq(workflowTaskTokens.workflow_run_id, input.workflowRunId),
+        eq(workflowTaskTokens.step_id, input.stepId),
+        eq(workflowTaskTokens.iteration, input.iteration),
+        eq(workflowTaskTokens.purpose, input.purpose),
+      ),
+    )
+    .limit(1);
+  if (
+    existing &&
+    existing.status === "consumed" &&
+    existing.result !== null &&
+    existing.result !== undefined
+  ) {
+    return { redrive: { token: existing.token, result: existing.result } };
+  }
+  return null;
+}
+
+/**
+ * Persist the completion result and consume the claim in one CAS (Codex F9):
+ * executing -> consumed, storing the result durably BEFORE SendTaskSuccess.
+ * Returns null when the row is no longer executing (claim lost/taken over).
+ */
+export async function persistTaskTokenResult(
+  db: WorkflowDb,
+  input: {
+    workflowRunId: string;
+    stepId: string;
+    iteration: number;
+    purpose: "agent_step" | "approval" | "memory_stage";
+    result: unknown;
+    now?: Date;
+  },
+): Promise<{ token: string } | null> {
+  const rows = await db
+    .update(workflowTaskTokens)
+    .set({
+      status: "consumed",
+      consumed_at: input.now ?? new Date(),
+      result: input.result ?? null,
+    })
+    .where(
+      and(
+        eq(workflowTaskTokens.workflow_run_id, input.workflowRunId),
+        eq(workflowTaskTokens.step_id, input.stepId),
+        eq(workflowTaskTokens.iteration, input.iteration),
+        eq(workflowTaskTokens.purpose, input.purpose),
+        eq(workflowTaskTokens.status, "executing"),
+      ),
+    )
+    .returning({ token: workflowTaskTokens.token });
+  if (!rows || rows.length === 0) return null;
+  return { token: rows[0].token };
+}
+
+/**
+ * Bump the claim's lease (Codex F7): keeps a long-running stage or a
+ * continuation self-invoke from being treated as crashed. Only the current
+ * lease holder may renew; false means the claim was lost or resolved.
+ */
+export async function renewTaskTokenLease(
+  db: WorkflowDb,
+  input: {
+    workflowRunId: string;
+    stepId: string;
+    iteration: number;
+    purpose: "agent_step" | "approval" | "memory_stage";
+    lockedBy: string;
+    now?: Date;
+  },
+): Promise<boolean> {
+  const rows = await db
+    .update(workflowTaskTokens)
+    .set({ locked_at: input.now ?? new Date() })
+    .where(
+      and(
+        eq(workflowTaskTokens.workflow_run_id, input.workflowRunId),
+        eq(workflowTaskTokens.step_id, input.stepId),
+        eq(workflowTaskTokens.iteration, input.iteration),
+        eq(workflowTaskTokens.purpose, input.purpose),
+        eq(workflowTaskTokens.status, "executing"),
+        eq(workflowTaskTokens.locked_by, input.lockedBy),
+      ),
+    )
+    .returning({ id: workflowTaskTokens.id });
+  return Boolean(rows && rows.length > 0);
 }
 
 /**
@@ -430,7 +603,7 @@ export async function consumeTaskToken(
     workflowRunId: string;
     stepId: string;
     iteration: number;
-    purpose: "agent_step" | "approval";
+    purpose: "agent_step" | "approval" | "memory_stage";
     now?: Date;
   },
 ): Promise<{ token: string } | null> {

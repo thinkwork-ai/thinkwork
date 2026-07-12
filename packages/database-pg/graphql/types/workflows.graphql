@@ -331,6 +331,20 @@ type SaveWorkflowResult {
   webhookToken: String
 }
 
+"""
+Approved-plan narrowing override (THINK-193 U3): applies only to memory
+workflow plan-review approvals. Server-side validated to only NARROW the
+saved processor configuration — sources must already be configured, caps
+must not exceed saved boundaries. Ignored on deny.
+"""
+input WorkflowApprovalOverrideInput {
+  sourceConfigIds: [ID!]
+  focusKeys: [String!]
+  timeRangeFrom: AWSDateTime
+  timeRangeTo: AWSDateTime
+  maxRecords: Int
+}
+
 extend type Mutation {
   saveWorkflow(input: SaveWorkflowInput!): SaveWorkflowResult!
   deleteWorkflow(id: ID!): ID!
@@ -339,5 +353,6 @@ extend type Mutation {
     runId: ID!
     approve: Boolean!
     note: String
+    override: WorkflowApprovalOverrideInput
   ): WorkflowRun!
 }

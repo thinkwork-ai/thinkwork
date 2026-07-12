@@ -5,9 +5,11 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
   assertCanReadWorkflowTenant,
   clampWorkflowQueryLimit,
+  isWorkflowHiddenFromCaller,
   normalizeWorkflowEnum,
   resolveReadableTenantId,
 } from "./types.js";
@@ -27,12 +29,20 @@ export async function workflowRuns(
 
   if (args.workflowId) {
     const [workflow] = await db
-      .select({ tenant_id: workflowsTable.tenant_id })
+      .select({
+        tenant_id: workflowsTable.tenant_id,
+        visibility: workflowsTable.visibility,
+        owner_user_id: workflowsTable.owner_user_id,
+      })
       .from(workflowsTable)
       .where(eq(workflowsTable.id, args.workflowId))
       .limit(1);
     if (!workflow) return [];
     await assertCanReadWorkflowTenant(ctx, workflow.tenant_id);
+    // THINK-193 U3: another user's personal automation runs read as absent.
+    if (isWorkflowHiddenFromCaller(workflow, await resolveCallerUserId(ctx))) {
+      return [];
+    }
     conditions.push(eq(workflowRunsTable.tenant_id, workflow.tenant_id));
     conditions.push(eq(workflowRunsTable.workflow_id, args.workflowId));
   } else {

@@ -17,7 +17,11 @@
 import { eq } from "drizzle-orm";
 import { tenants } from "@thinkwork/database-pg/schema";
 import { db } from "../db.js";
-import { enqueueCompileJob, enqueueGraphCompileJob } from "./repository.js";
+import {
+  enqueueCompileJob,
+  enqueueGraphCompileJob,
+  type DbClient,
+} from "./repository.js";
 
 export interface PostTurnCompileArgs {
   tenantId: string;
@@ -90,76 +94,75 @@ export async function maybeEnqueuePostTurnCompile(
 }
 
 // ---------------------------------------------------------------------------
-// Graph-mode enqueue (plan 2026-06-09-004 U10). In graph mode the post-turn
-// memory-retain enqueue isn't the trigger — the natural trigger is a
-// successful observations ingest run (the mirror just changed). Called
-// best-effort from the END of the observations ingest worker's success path;
-// never throws, never fails the ingest run.
+// Transactional (outbox) enqueue — THINK-193 U4 dead-handoff fix.
+//
+// The observations ingest worker calls this INSIDE mergeKnowledgeGraphSnapshot's
+// extraWork transaction: the compile-job row commits atomically with the
+// mirror replace + run completion (an ingest can never report succeeded with
+// no compile job on the ledger). The async invoke happens POST-COMMIT in the
+// worker via `invokeWikiCompile`; if that invoke fails the job row survives
+// for the scheduled wiki-compile drainer.
+//
+// Kill switches (documented choice): the stage-global WIKI_SOURCE flag gates
+// graph-mode compile exactly as wiki-compile's own dispatch does, and the
+// existing per-tenant `tenants.wiki_compile_enabled` flag is the per-tenant
+// kill switch — no new mechanism. Flipping one tenant off stops its compile
+// jobs without touching the stage.
 // ---------------------------------------------------------------------------
 
-export interface GraphCompileEnqueueResult {
+export interface GraphCompileTxEnqueueResult {
   status:
     | "skipped_source_not_graph"
-    | "skipped_missing_inputs"
     | "skipped_tenant_not_found"
     | "skipped_flag_off"
     | "deduped"
-    | "enqueued"
-    | "enqueued_invoke_failed"
-    | "error";
+    | "enqueued";
   jobId?: string;
-  error?: string;
+  /** True only when THIS call inserted the job row (caller should invoke). */
+  inserted: boolean;
 }
 
 /**
- * Enqueue a tenant-keyed graph compile job (owner_id NULL) when
- * WIKI_SOURCE='graph'. The env read happens inside the function (Lambda env
- * + vitest env-timing rule — module-load capture locks in "" before
- * beforeEach). Honors the same tenant-level `wiki_compile_enabled` kill
- * switch as the planner enqueue.
+ * Enqueue the tenant-keyed graph compile job on the caller's transaction.
+ * Throws on database errors — inside the ingest tx that correctly fails the
+ * whole run rather than silently succeeding without a compile handoff.
  */
-export async function maybeEnqueueGraphWikiCompile(args: {
-  tenantId: string;
-}): Promise<GraphCompileEnqueueResult> {
+export async function enqueueGraphWikiCompileTx(
+  tx: DbClient,
+  args: {
+    tenantId: string;
+    /** Dirty canonical-entity scope for the compile (jsonb input). */
+    dirtyCanonicalEntityIds?: string[];
+  },
+): Promise<GraphCompileTxEnqueueResult> {
   if (process.env.WIKI_SOURCE !== "graph") {
-    return { status: "skipped_source_not_graph" };
+    return { status: "skipped_source_not_graph", inserted: false };
   }
-  if (!args.tenantId) {
-    return { status: "skipped_missing_inputs" };
+  const [tenantRow] = await tx
+    .select({ enabled: tenants.wiki_compile_enabled })
+    .from(tenants)
+    .where(eq(tenants.id, args.tenantId))
+    .limit(1);
+  if (!tenantRow) {
+    return { status: "skipped_tenant_not_found", inserted: false };
+  }
+  if (!tenantRow.enabled) {
+    return { status: "skipped_flag_off", inserted: false };
   }
 
-  try {
-    const [tenantRow] = await db
-      .select({ enabled: tenants.wiki_compile_enabled })
-      .from(tenants)
-      .where(eq(tenants.id, args.tenantId))
-      .limit(1);
-
-    if (!tenantRow) return { status: "skipped_tenant_not_found" };
-    if (!tenantRow.enabled) return { status: "skipped_flag_off" };
-
-    const { inserted, job } = await enqueueGraphCompileJob({
+  const { inserted, job } = await enqueueGraphCompileJob(
+    {
       tenantId: args.tenantId,
       trigger: "graph_materialize",
-    });
-
-    if (!inserted) {
-      return { status: "deduped", jobId: job.id };
-    }
-
-    const invokeErr = await invokeWikiCompile(job.id).catch((err) => err);
-    if (invokeErr instanceof Error) {
-      return {
-        status: "enqueued_invoke_failed",
-        jobId: job.id,
-        error: invokeErr.message,
-      };
-    }
-
-    return { status: "enqueued", jobId: job.id };
-  } catch (err) {
-    return { status: "error", error: (err as Error)?.message ?? String(err) };
-  }
+      dirtyCanonicalEntityIds: args.dirtyCanonicalEntityIds,
+    },
+    tx,
+  );
+  return {
+    status: inserted ? "enqueued" : "deduped",
+    jobId: job.id,
+    inserted,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -177,8 +180,9 @@ export async function invokeWikiCompile(jobId: string): Promise<void> {
     return;
   }
 
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   await lambda.send(
     new InvokeCommand({

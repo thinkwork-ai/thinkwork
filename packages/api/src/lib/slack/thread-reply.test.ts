@@ -83,6 +83,23 @@ describe("sendThreadReplySlack", () => {
       assistantMessageId: ASSISTANT_MESSAGE_ID,
       providerMessageTs: "1710000002.000000",
     });
+  });
+
+  it("mints a claim id with the default randomUUID (no ERR_INVALID_THIS)", async () => {
+    // Regression: the default randomUUID must not be `crypto.randomUUID`
+    // detached from its receiver, which throws ERR_INVALID_THIS when called
+    // on the deployed Node runtime (THINK-84 U4). Omit the injected
+    // randomUUID so the real default runs.
+    const result = await sendThreadReplySlack(
+      {
+        tenantId: TENANT_ID,
+        threadId: THREAD_ID,
+        assistantMessageId: ASSISTANT_MESSAGE_ID,
+      },
+      { store, getBotToken, postMessage, now: () => new Date() },
+    );
+    expect(result.delivered).toBe(true);
+    expect(store.claimed).toBe(1);
 
     expect(getBotToken).toHaveBeenCalledWith(
       "thinkwork/tenants/t/slack/workspaces/T123/bot-token",

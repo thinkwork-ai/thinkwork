@@ -1,0 +1,38 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "${BOT_APP_ID}",
+  "developer": {
+    "name": "thinkwork.ai",
+    "websiteUrl": "https://thinkwork.ai",
+    "privacyUrl": "https://thinkwork.ai/privacy",
+    "termsOfUseUrl": "https://thinkwork.ai/terms"
+  },
+  "name": {
+    "short": "ThinkWork${STAGE_SUFFIX}",
+    "full": "ThinkWork for Microsoft Teams${STAGE_SUFFIX}"
+  },
+  "description": {
+    "short": "Chat with your organization's ThinkWork agents.",
+    "full": "Hand work to your organization's ThinkWork agents from Microsoft Teams. Mention the bot in a channel or group chat, or message it directly, and the agent replies in the same conversation. The bot only receives messages that are sent to it — it does not read channel history or other conversations."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#1B2A4A",
+  "bots": [
+    {
+      "botId": "${BOT_APP_ID}",
+      "scopes": ["personal", "team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "validDomains": ["${API_BASE_DOMAIN}"],
+  "webApplicationInfo": {
+    "id": "${BOT_APP_ID}",
+    "resource": "https://RscBasedStoreApp"
+  }
+}

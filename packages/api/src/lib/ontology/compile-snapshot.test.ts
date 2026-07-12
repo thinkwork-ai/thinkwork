@@ -204,6 +204,8 @@ function entityType(overrides: Record<string, unknown> = {}) {
     broadType: "organization",
     aliases: [],
     propertiesSchema: {},
+    identityRules: [],
+    identityRulesVersion: 0,
     guidanceNotes: null,
     lifecycleStatus: "APPROVED",
     approvedAt: null,

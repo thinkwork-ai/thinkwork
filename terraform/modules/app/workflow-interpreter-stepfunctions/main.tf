@@ -211,8 +211,8 @@ resource "aws_iam_role_policy" "execution_states" {
 #
 # See KTD1 for the loop shape. Directives are the FROZEN protocol the
 # step-dispatch Lambda emits: dispatch_agent, wait_until, execute_step,
-# await_approval, continue, rollover, terminal_success, terminal_failure,
-# terminal_canceled.
+# await_approval, await_memory_stage, continue, rollover, terminal_success,
+# terminal_failure, terminal_canceled.
 ################################################################################
 
 resource "aws_sfn_state_machine" "interpreter" {
@@ -254,6 +254,7 @@ resource "aws_sfn_state_machine" "interpreter" {
           { Variable = "$.directive", StringEquals = "wait_until", Next = "WaitState" },
           { Variable = "$.directive", StringEquals = "execute_step", Next = "ExecuteStep" },
           { Variable = "$.directive", StringEquals = "await_approval", Next = "ApprovalStep" },
+          { Variable = "$.directive", StringEquals = "await_memory_stage", Next = "MemoryStageStep" },
           { Variable = "$.directive", StringEquals = "continue", Next = "LoadNextStep" },
           { Variable = "$.directive", StringEquals = "rollover", Next = "RolloverStart" },
           { Variable = "$.directive", StringEquals = "terminal_success", Next = "SucceedState" },
@@ -362,6 +363,46 @@ resource "aws_sfn_state_machine" "interpreter" {
             phase        = "record_approval"
             "cursor.$"   = "$.cursor"
             "approval.$" = "$.approval"
+          }
+        }
+        OutputPath = "$.Payload"
+        Retry      = local.lambda_invoke_retry
+        Next       = "DirectiveChoice"
+      }
+
+      # ---- Memory-stage step: park on a task token while the async memory-
+      # stage worker runs one pipeline stage; the await phase Event-invokes the
+      # worker, which resumes the token via SendTaskSuccess with a result JSON.
+      MemoryStageStep = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::lambda:invoke.waitForTaskToken"
+        Parameters = {
+          FunctionName = local.step_dispatch_lambda_arn
+          Payload = {
+            phase         = "await_memory_stage"
+            "cursor.$"    = "$.cursor"
+            "taskToken.$" = "$$.Task.Token"
+          }
+        }
+        ResultPath       = "$.result"
+        TimeoutSeconds   = 7200
+        HeartbeatSeconds = 3600
+        Catch = [{
+          ErrorEquals = ["States.Timeout"]
+          Next        = "FailState"
+        }]
+        Next = "RecordMemoryStage"
+      }
+
+      RecordMemoryStage = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = local.step_dispatch_lambda_arn
+          Payload = {
+            phase      = "record_memory_stage"
+            "cursor.$" = "$.cursor"
+            "result.$" = "$.result"
           }
         }
         OutputPath = "$.Payload"

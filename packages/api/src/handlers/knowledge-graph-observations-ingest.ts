@@ -11,8 +11,9 @@
  * snapshot re-sends identical content on the re-read instead of duplicating.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
+  knowledgeGraphIngestRuns,
   knowledgeGraphObservationCursors,
   tenants,
 } from "@thinkwork/database-pg/schema";
@@ -40,6 +41,12 @@ import {
   reapStaleObservationIngestRuns,
 } from "../lib/knowledge-graph/runs.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
+import { resolveSnapshotCanonicalIdentity } from "../lib/entity-identity/snapshot-resolution.js";
+import {
+  enqueueGraphWikiCompileTx,
+  invokeWikiCompile,
+  type GraphCompileTxEnqueueResult,
+} from "../lib/wiki/enqueue.js";
 
 export interface KnowledgeGraphObservationsIngestEvent {
   runId?: string;
@@ -48,6 +55,12 @@ export interface KnowledgeGraphObservationsIngestEvent {
   sweep?: boolean;
   fullRebuild?: boolean;
   trigger?: "manual" | "scheduled";
+  /**
+   * Targeted shared-bank ingest (THINK-193 U4): restrict the read to these
+   * banks. Only `space_*` / `tenant_*` are accepted — `user_*` rejects (the
+   * estate sweep remains the personal-bank path).
+   */
+  bankIds?: string[];
 }
 
 export interface KnowledgeGraphObservationsIngestResult {
@@ -151,6 +164,7 @@ export async function processKnowledgeGraphObservationsIngest(
       runId: event.runId,
       fullRebuild: event.fullRebuild,
       trigger: event.trigger ?? "manual",
+      bankIds: event.bankIds,
     },
     deps,
     database,
@@ -171,6 +185,7 @@ async function drainTenantObservationsIngest(
     runId?: string;
     fullRebuild?: boolean;
     trigger: "manual" | "scheduled";
+    bankIds?: string[];
   },
   deps: KnowledgeGraphObservationsIngestDeps,
   database: Database,
@@ -216,6 +231,7 @@ async function processTenantObservationsIngest(
     runId?: string;
     fullRebuild?: boolean;
     trigger: "manual" | "scheduled";
+    bankIds?: string[];
   },
   deps: KnowledgeGraphObservationsIngestDeps,
   database: Database,
@@ -297,6 +313,7 @@ async function processTenantObservationsIngest(
       sourceRef: run.source_ref,
       sourceLabel: run.source_label ?? "Hindsight observations",
       maxCandidates: maxCandidatesPerRun(),
+      bankIds: args.bankIds,
       // THINK-245 U6: attribute classifier spend to the tenant/run.
       gateDeps: {
         costContext: { tenantId: run.tenant_id, runId: run.id },
@@ -388,16 +405,45 @@ async function processTenantObservationsIngest(
       // The extractor emits only this source's nodes, so no NodeSet scoping
       // is needed (unlike the previous global-graph fetch).
     });
-    const snapshot = applySourceDeclaredFallback({
+    const fallbackSnapshot = applySourceDeclaredFallback({
       snapshot: normalizedSnapshot,
       source: source.bundle,
       ontology,
     });
 
+    // Canonical identity resolution (THINK-193 U4): runs between fallback
+    // and merge. Resolved entities carry canonicalEntityId; unresolved
+    // shared entities are EXCLUDED from the merged snapshot and recorded as
+    // item-level deferrals with their resolution-case id. Cursors still
+    // advance — a deferred item re-reads on later ingests only via its
+    // signature coalescing onto the same open case.
+    const identity = await resolveSnapshotCanonicalIdentity({
+      db: database,
+      tenantId: run.tenant_id,
+      snapshot: fallbackSnapshot,
+    });
+    const snapshot = identity.snapshot;
+    const dirtyCanonicalEntityIds = [
+      ...new Set(
+        snapshot.entities
+          .map((entity) => entity.canonicalEntityId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    const identityMetrics = {
+      ...identity.metrics,
+      identityDeferrals: identity.deferrals.slice(0, 50),
+    };
+
     // Merge-upsert (not replace): the observations source shares one
     // source_ref across runs and each run sees only its cursor-gated new
     // packets — a full-snapshot replace would wipe the mirror to the newest
     // batch every sweep. The merge is additive, so the shrink guard is moot.
+    //
+    // The graph→wiki compile handoff (U4 dead-trigger fix) enqueues INSIDE
+    // this transaction (outbox): a run can never commit as succeeded
+    // without a compile-job outcome. The async invoke happens post-commit.
+    let compileEnqueue: GraphCompileTxEnqueueResult | null = null;
     await mergeKnowledgeGraphSnapshot({
       db: database,
       run,
@@ -407,6 +453,7 @@ async function processTenantObservationsIngest(
       ontologyMechanism: ontology.mechanism,
       sourceMetrics: {
         ...auditMetrics,
+        ...identityMetrics,
         sourceLabel: run.source_label,
         sourcePacketCount: source.bundle.packetCount,
         skippedSourceCount: source.bundle.skippedCount,
@@ -425,9 +472,35 @@ async function processTenantObservationsIngest(
         },
       },
       runMetadata: fullRebuild ? { fullRebuild: true } : undefined,
-      extraWork: async (tx) =>
-        upsertObservationCursors(tx, run.tenant_id, source.nextCursors),
+      extraWork: async (tx) => {
+        await upsertObservationCursors(tx, run.tenant_id, source.nextCursors);
+        compileEnqueue = await enqueueGraphWikiCompileTx(tx, {
+          tenantId: run.tenant_id,
+          dirtyCanonicalEntityIds,
+        });
+      },
     });
+
+    // Post-commit: invoke wiki-compile for a freshly inserted job. Invoke
+    // failure is non-fatal (the job row survives for the drainer) but is
+    // surfaced in the run metrics rather than silently dropped.
+    const enqueueOutcome = compileEnqueue as GraphCompileTxEnqueueResult | null;
+    let wikiCompileEnqueue: Record<string, unknown> = {
+      status: enqueueOutcome?.status ?? "error_not_attempted",
+      ...(enqueueOutcome?.jobId ? { jobId: enqueueOutcome.jobId } : {}),
+    };
+    if (enqueueOutcome?.inserted && enqueueOutcome.jobId) {
+      const invokeErr = await invokeWikiCompile(enqueueOutcome.jobId).catch(
+        (err) => err as Error,
+      );
+      wikiCompileEnqueue = {
+        ...wikiCompileEnqueue,
+        status:
+          invokeErr instanceof Error ? "enqueued_invoke_failed" : "enqueued",
+        ...(invokeErr instanceof Error ? { error: invokeErr.message } : {}),
+      };
+    }
+    await patchRunMetrics(database, run.id, { wikiCompileEnqueue });
 
     // Backlog signal: this run hit the per-run candidate cap AND made
     // forward progress (promoted something or advanced cursors), so more
@@ -446,11 +519,13 @@ async function processTenantObservationsIngest(
       continueDrain: source.truncated && madeProgress,
       metrics: {
         ...auditMetrics,
+        ...identityMetrics,
         entityCount: snapshot.entities.length,
         relationshipCount: snapshot.relationships.length,
         evidenceCount: snapshot.evidence.length,
         ingestMode: "bedrock_extraction",
         extractionBatchesTotal: extraction.batchesTotal,
+        wikiCompileEnqueue,
       },
     };
   } catch (err) {
@@ -478,6 +553,31 @@ async function processTenantObservationsIngest(
       status: "failed",
       error: message,
     };
+  }
+}
+
+/**
+ * Merge a post-commit metrics fragment onto the run row (jsonb shallow
+ * merge). Best-effort — a metrics-patch failure must not fail an already
+ * committed run.
+ */
+async function patchRunMetrics(
+  db: Database,
+  runId: string,
+  fragment: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await db
+      .update(knowledgeGraphIngestRuns)
+      .set({
+        metrics: sql`COALESCE(${knowledgeGraphIngestRuns.metrics}, '{}'::jsonb) || ${JSON.stringify(fragment)}::jsonb`,
+      })
+      .where(eq(knowledgeGraphIngestRuns.id, runId));
+  } catch (err) {
+    console.warn("[knowledge-graph-observations-ingest] metrics patch failed", {
+      runId,
+      error: (err as Error)?.message ?? String(err),
+    });
   }
 }
 

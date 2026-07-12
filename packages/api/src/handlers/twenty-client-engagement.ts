@@ -2,7 +2,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, desc, eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { authenticate } from "../lib/cognito-auth.js";
@@ -14,12 +14,17 @@ import {
   notFound,
   unauthorized,
 } from "../lib/response.js";
-import { createPluginDispatchAuthResolver } from "../lib/plugins/activation.js";
+import {
+  HttpError,
+  TwentyRestClient,
+  recordOrNull,
+  resolveTwentyContext,
+  stringValue,
+} from "../lib/twenty/rest-client.js";
 
-const { managedApplications, tenantMcpServers, users } = schema;
+const { users } = schema;
 
 const LOG_PREFIX = "[twenty-client-engagement]";
-const TWENTY_MCP_SLUG = "twenty--crm";
 const API_BASE_PATH = "/api/plugin-apps/twenty/client-engagement";
 
 type EngagementCompany = {
@@ -144,13 +149,18 @@ export async function handler(
     .limit(1);
   if (!userRow?.tenant_id) return forbidden("No tenant resolved for caller");
 
-  const context = await resolveTwentyContext({
+  const resolved = await resolveTwentyContext(db, {
     tenantId: userRow.tenant_id,
     userId: userRow.id,
+    logPrefix: LOG_PREFIX,
   });
-  if (!context) {
+  if (!resolved) {
     return notFound("Twenty CRM plugin is not installed for this tenant");
   }
+  const context: TwentyContext = {
+    baseUrl: resolved.baseUrl,
+    client: new TwentyRestClient(resolved.baseUrl, resolved.token),
+  };
 
   const method = event.requestContext.http.method.toUpperCase();
   const subpath = normalizedSubpath(event);
@@ -237,65 +247,6 @@ export async function handler(
   }
 }
 
-async function resolveTwentyContext(args: {
-  tenantId: string;
-  userId: string;
-}): Promise<TwentyContext | null> {
-  const [mcpServer] = await db
-    .select({
-      url: tenantMcpServers.url,
-      plugin_install_id: tenantMcpServers.plugin_install_id,
-    })
-    .from(tenantMcpServers)
-    .where(
-      and(
-        eq(tenantMcpServers.tenant_id, args.tenantId),
-        eq(tenantMcpServers.enabled, true),
-        eq(tenantMcpServers.status, "approved"),
-        or(
-          eq(tenantMcpServers.slug, TWENTY_MCP_SLUG),
-          eq(tenantMcpServers.managed_application_key, "twenty"),
-        ),
-      ),
-    )
-    .limit(1);
-
-  const [app] = await db
-    .select({ desired_config: managedApplications.desired_config })
-    .from(managedApplications)
-    .where(
-      and(
-        eq(managedApplications.tenant_id, args.tenantId),
-        eq(managedApplications.key, "twenty"),
-      ),
-    )
-    .orderBy(desc(managedApplications.updated_at))
-    .limit(1);
-
-  const baseUrl =
-    publicHttpUrl(recordOrNull(app?.desired_config)?.publicUrl) ??
-    baseUrlFromMcpUrl(mcpServer?.url);
-  if (!baseUrl || !mcpServer?.url || !mcpServer.plugin_install_id) {
-    return null;
-  }
-
-  const token = await createPluginDispatchAuthResolver().resolveToken({
-    requesterUserId: args.userId,
-    pluginInstallId: mcpServer.plugin_install_id,
-    resource: mcpServer.url,
-    slug: TWENTY_MCP_SLUG,
-    logPrefix: LOG_PREFIX,
-  });
-  if (!token) {
-    throw new HttpError(
-      "Connect your Twenty CRM account before opening Client Engagement",
-      403,
-    );
-  }
-
-  return { baseUrl, client: new TwentyRestClient(baseUrl, token) };
-}
-
 async function loadDashboard(context: TwentyContext): Promise<{
   accounts: EngagementAccount[];
 }> {
@@ -331,77 +282,6 @@ async function loadDashboard(context: TwentyContext): Promise<{
       context.baseUrl,
     ),
   };
-}
-
-class TwentyRestClient {
-  constructor(
-    private readonly baseUrl: string,
-    private readonly token: string,
-  ) {}
-
-  async list(
-    objectName: string,
-    collectionKeys: string[],
-    options: { depth?: 0 | 1 } = {},
-  ) {
-    const depth = options.depth ?? 0;
-    const payload = await this.request(
-      `${objectName}?limit=200&depth=${depth}`,
-      {
-        method: "GET",
-      },
-    );
-    return recordsFromPayload(payload, collectionKeys);
-  }
-
-  async post(objectName: string, body: Record<string, unknown>) {
-    const payload = await this.request(objectName, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    return firstRecordFromPayload(payload) ?? payload;
-  }
-
-  async patch(objectPath: string, body: Record<string, unknown>) {
-    const payload = await this.request(objectPath, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    });
-    return firstRecordFromPayload(payload) ?? payload;
-  }
-
-  private async request(path: string, init: RequestInit) {
-    const url = `${this.baseUrl}/rest/${path.replace(/^\/+/, "")}`;
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.token}`,
-        ...(init.headers ?? {}),
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-    const text = await res.text();
-    const body = text ? parseJsonResponse(text) : null;
-    if (!res.ok) {
-      throw new HttpError(
-        `Twenty API ${res.status}: ${errorMessage(body) ?? res.statusText}`,
-        res.status,
-      );
-    }
-    return body;
-  }
-}
-
-class HttpError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "HttpError";
-  }
 }
 
 function buildAccounts(
@@ -587,38 +467,6 @@ function stakeholderPayload(
   });
 }
 
-function recordsFromPayload(
-  payload: unknown,
-  collectionKeys: string[],
-): Record<string, unknown>[] {
-  const root = recordOrNull(payload);
-  if (Array.isArray(payload)) return payload.filter(isRecord);
-  if (!root) return [];
-  if (Array.isArray(root.data)) return root.data.filter(isRecord);
-  if (Array.isArray(root.records)) return root.records.filter(isRecord);
-  const data = recordOrNull(root.data);
-  if (data) {
-    const nested = recordsFromPayload(data, collectionKeys);
-    if (nested.length > 0) return nested;
-  }
-  for (const key of collectionKeys) {
-    const value = root[key];
-    if (Array.isArray(value)) return value.filter(isRecord);
-    const nested = recordOrNull(value);
-    if (nested) {
-      const records = recordsFromPayload(nested, collectionKeys);
-      if (records.length > 0) return records;
-    }
-  }
-  return typeof root.id === "string" ? [root] : [];
-}
-
-function firstRecordFromPayload(
-  payload: unknown,
-): Record<string, unknown> | null {
-  return recordsFromPayload(payload, [])[0] ?? null;
-}
-
 function mapValidRecords<T>(
   records: Record<string, unknown>[],
   mapRecord: (record: Record<string, unknown>) => T,
@@ -663,32 +511,6 @@ function normalizedSubpath(event: APIGatewayProxyEventV2): string {
   const baseIndex = rawPath.indexOf(API_BASE_PATH);
   if (baseIndex < 0) return "";
   return rawPath.slice(baseIndex + API_BASE_PATH.length).replace(/\/+$/, "");
-}
-
-function publicHttpUrl(value: unknown): string | null {
-  const raw = stringValue(value);
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-function baseUrlFromMcpUrl(value: unknown): string | null {
-  const raw = stringValue(value);
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    url.pathname = url.pathname.replace(/\/mcp\/?$/, "");
-    url.search = "";
-    url.hash = "";
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return null;
-  }
 }
 
 function crmRecordUrl(baseUrl: string, pluralObjectName: string, id: string) {
@@ -875,22 +697,8 @@ function emailString(value: unknown): string | null {
   );
 }
 
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function recordOrNull(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(recordOrNull(value));
 }
 
 function parseJsonBody(body: string | undefined): Record<string, unknown> {
@@ -898,24 +706,6 @@ function parseJsonBody(body: string | undefined): Record<string, unknown> {
   const record = recordOrNull(parsed);
   if (!record) throw new SyntaxError("Expected object JSON body");
   return record;
-}
-
-function parseJsonResponse(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
-function errorMessage(body: unknown): string | null {
-  const record = recordOrNull(body);
-  return (
-    stringValue(record?.message) ??
-    stringValue(record?.error) ??
-    stringValue(record?.detail) ??
-    (typeof body === "string" ? body : null)
-  );
 }
 
 function pruneUndefined(

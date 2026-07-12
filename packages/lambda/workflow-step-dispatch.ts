@@ -14,14 +14,18 @@
 
 import {
   advanceCursor,
+  approvalStepWaits,
+  APPROVAL_OVERRIDE_OUTPUT_KEY,
   boundDocumentIdFromTargetSpec,
   buildWorkflowStepWakeupPayload,
   decideWorkflowContinuation,
+  mergeApprovalOverrideIntoOptions,
   normalizeTargetSpec,
   planNextStep,
   planRollover,
   readWorkflowDefinition,
   resolveStepTemplates,
+  sanitizeApprovalPlanOverride,
   type ExecutableWorkflowStep,
   type InterpreterCursor,
   type StepTemplateContext,
@@ -61,6 +65,7 @@ export type WorkflowDirective =
   | "wait_until"
   | "execute_step"
   | "await_approval"
+  | "await_memory_stage"
   | "continue"
   | "rollover"
   | "terminal_success"
@@ -100,8 +105,31 @@ export type WorkflowStepDispatchEvent =
   | {
       phase: "record_approval";
       cursor: InterpreterCursor;
-      approval: { approved: boolean; note?: string | null };
+      approval: {
+        approved: boolean;
+        note?: string | null;
+        /** THINK-193 U3: approved-plan narrowing override (frozen protocol
+         * shape from agent-loops-core; validated upstream by
+         * resolveWorkflowApproval and re-sanitized here). */
+        override?: unknown;
+      };
+    }
+  | {
+      phase: "await_memory_stage";
+      cursor: InterpreterCursor;
+      taskToken: string;
+    }
+  | {
+      phase: "record_memory_stage";
+      cursor: InterpreterCursor;
+      result: MemoryStageWorkerResult;
     };
+
+import type {
+  MemoryStageWorkerInvokePayload,
+  MemoryStageWorkerResult,
+} from "@thinkwork/agent-loops-core";
+export type { MemoryStageWorkerInvokePayload, MemoryStageWorkerResult };
 
 // ---------------------------------------------------------------------------
 // Loaders (ThinkWork-terms errors, never ASL / Step Functions vocabulary).
@@ -115,6 +143,10 @@ interface RunRow {
   backend_execution_id: string | null;
   workflow_version_id: string | null;
   input_summary: Record<string, unknown> | null;
+  /** THINK-193 U3: approval steps with a `when.triggerFamily` predicate gate
+   * on this — a run whose family the predicate excludes records a visible
+   * skipped approval and advances. */
+  trigger_family: string | null;
   /** THINK-227 U4: the deliver step's new-edition gate compares the bound
    * document's last successful refresh against this. */
   started_at: Date | string | null;
@@ -133,6 +165,7 @@ async function loadRun(
       backend_execution_id: workflowRuns.backend_execution_id,
       workflow_version_id: workflowRuns.workflow_version_id,
       input_summary: workflowRuns.input_summary,
+      trigger_family: workflowRuns.trigger_family,
       started_at: workflowRuns.started_at,
     })
     .from(workflowRuns)
@@ -225,7 +258,40 @@ export async function handleLoadNext(
 
   // Approval step: mark the run waiting BEFORE the machine parks on the task
   // token, so operators see the pending decision the moment the step starts.
+  // A `when.triggerFamily` predicate that excludes this run's family records
+  // a VISIBLE skipped approval instead and advances (THINK-193 U3, AE2): the
+  // scheduled run proceeds inside its saved envelope with no human pause.
   if (plan.type === "approval_step") {
+    if (!approvalStepWaits(plan.step, run.trigger_family)) {
+      await recordWorkflowStepEvent(db, {
+        tenantId: cursor.tenantId,
+        workflowRunId: run.id,
+        eventType: "workflow_approval_skipped",
+        summary: {
+          stepId: plan.step.id,
+          stepKind: "approval",
+          iteration: cursor.iteration,
+          status: "skipped",
+          reason: "trigger_family_not_reviewed",
+          triggerFamily: run.trigger_family ?? undefined,
+          summary: `plan review skipped: ${run.trigger_family} runs proceed inside the saved configuration without human review`,
+        },
+        runStatus: "running",
+        now,
+      });
+      return await advanceAfterStepOutcome(db, {
+        cursor,
+        run,
+        definition,
+        step: plan.step,
+        turnStatus: "completed",
+        evidence: null,
+        stepErrorSummary: undefined,
+        // The skip event above IS the step's completion record.
+        completionAlreadyRecorded: true,
+        now,
+      });
+    }
     await recordWorkflowStepEvent(db, {
       tenantId: cursor.tenantId,
       workflowRunId: run.id,
@@ -241,6 +307,26 @@ export async function handleLoadNext(
       now,
     });
     return { directive: "await_approval", cursor };
+  }
+
+  // Memory-stage step: the run stays running while the machine parks on the
+  // task token and the async worker executes the pipeline stage.
+  if (plan.type === "memory_stage_step") {
+    await recordWorkflowStepEvent(db, {
+      tenantId: cursor.tenantId,
+      workflowRunId: run.id,
+      eventType: "workflow_step_started",
+      summary: {
+        stepId: plan.step.id,
+        stepKind: "memory_stage",
+        iteration: cursor.iteration,
+        status: "running",
+        summary: `memory pipeline stage "${plan.step.stage}"`,
+      },
+      runStatus: "running",
+      now,
+    });
+    return { directive: "await_memory_stage", cursor };
   }
 
   // Step kinds that validate but are not yet executable (`tool` has no
@@ -602,13 +688,17 @@ export interface StepExecutors {
     shareUrl?: string | null;
     error?: string | null;
   }>;
+  /** External-memory-compounding U1: async Event invoke of the memory-stage
+   * worker; the worker resumes the parked task token when the stage ends. */
+  invokeMemoryStageWorker: (
+    payload: MemoryStageWorkerInvokePayload,
+  ) => Promise<void>;
 }
 
 export const defaultStepExecutors: StepExecutors = {
   invokeRoutine: async ({ routineId, input }) => {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const explicit = process.env.ROUTINE_EXEC_GIT_FUNCTION_NAME;
     const stage = process.env.STAGE;
@@ -652,9 +742,8 @@ export const defaultStepExecutors: StepExecutors = {
   },
   httpFetch: fetch,
   invokeArtifactDeliver: async (input) => {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const explicit = process.env.ARTIFACT_DELIVER_FUNCTION_NAME;
     const stage = process.env.STAGE;
@@ -690,6 +779,30 @@ export const defaultStepExecutors: StepExecutors = {
     } catch {
       return { ok: false, error: "delivery returned malformed JSON" };
     }
+  },
+  invokeMemoryStageWorker: async (payload) => {
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
+    const lambda = new LambdaClient({});
+    const explicit = process.env.MEMORY_STAGE_WORKER_FUNCTION_NAME;
+    const stage = process.env.STAGE;
+    const fnName =
+      explicit ??
+      (stage ? `thinkwork-${stage}-api-memory-stage-worker` : undefined);
+    if (!fnName) {
+      throw new Error(
+        "memory_stage step cannot dispatch: MEMORY_STAGE_WORKER_FUNCTION_NAME / STAGE are unset",
+      );
+    }
+    // Async Event invoke — the worker resumes the task token itself, so this
+    // call only has to be accepted, never awaited to completion.
+    await lambda.send(
+      new InvokeCommand({
+        FunctionName: fnName,
+        InvocationType: "Event",
+        Payload: new TextEncoder().encode(JSON.stringify(payload)),
+      }),
+    );
   },
 };
 
@@ -1297,6 +1410,22 @@ export async function handleRecordApproval(
     return { directive: "terminal_canceled", cursor };
   }
 
+  // Approved-plan override (THINK-193 U3): a reviewer's narrowing rides the
+  // resume payload. Sanitize into the frozen protocol shape; a malformed
+  // override degrades to none (the mutation validated it — this is a second
+  // fence, not the primary validator) and the stages' narrow-only semantics
+  // hold regardless.
+  let override: ReturnType<typeof sanitizeApprovalPlanOverride> = null;
+  if (isApprovalStep && approval.override != null) {
+    try {
+      override = sanitizeApprovalPlanOverride(approval.override);
+    } catch (error) {
+      console.warn(
+        `[workflow-step-dispatch] run ${run.id}: dropping malformed approval override: ${boundedMessage(error)}`,
+      );
+    }
+  }
+
   await recordWorkflowStepEvent(db, {
     tenantId: cursor.tenantId,
     workflowRunId: run.id,
@@ -1307,10 +1436,35 @@ export async function handleRecordApproval(
       iteration: cursor.iteration,
       decision: "approved",
       summary: approval.note ?? undefined,
+      ...(override
+        ? {
+            overrideSourceCount: override.sourceConfigIds?.length,
+            overrideFocusCount: override.focusKeys?.length,
+            overrideTimeFrom: override.timeRange?.from,
+            overrideTimeTo: override.timeRange?.to,
+            overrideMaxRecords: override.maxRecords,
+          }
+        : {}),
     },
     runStatus: "running",
     now,
   });
+
+  // Persist the override as the approval step's OUTPUT so downstream
+  // memory_stage dispatches (and the sweeper's payload reconstruction) merge
+  // it into stage options — a skipped approval simply records no output.
+  if (isApprovalStep && override) {
+    await recordWorkflowStepOutput(db, {
+      tenantId: cursor.tenantId,
+      workflowId: run.workflow_id,
+      workflowRunId: run.id,
+      stepId: step.id,
+      stepKind: step.kind,
+      iteration: cursor.iteration,
+      output: { [APPROVAL_OVERRIDE_OUTPUT_KEY]: override },
+      now,
+    });
+  }
 
   if (isApprovalStep) {
     return await advanceAfterStepOutcome(db, {
@@ -1330,6 +1484,174 @@ export async function handleRecordApproval(
     cursor,
     run,
     record: true,
+    now,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: await_memory_stage (waitForTaskToken; parks) — external-memory-
+// compounding U1. Stores the token FIRST (so the worker's SendTaskSuccess
+// always finds it), then async-Event-invokes the memory-stage worker. An
+// invoke failure records a step-failed event and rethrows — the machine must
+// never park forever on a worker that was never started.
+// ---------------------------------------------------------------------------
+
+export async function handleAwaitMemoryStage(
+  db: WorkflowDb,
+  event: Extract<WorkflowStepDispatchEvent, { phase: "await_memory_stage" }>,
+  now: Date = new Date(),
+  executors: StepExecutors = defaultStepExecutors,
+): Promise<ParkResult> {
+  const { cursor, taskToken } = event;
+  const run = await loadRun(db, cursor);
+  const definition = await loadDefinition(db, run);
+  const step = definition.steps[cursor.stepPointer];
+  if (!step || step.kind !== "memory_stage") {
+    throw new Error(
+      `workflow run ${run.id} step pointer ${cursor.stepPointer} is not a memory_stage step — cannot dispatch`,
+    );
+  }
+
+  await storeTaskToken(db, {
+    tenantId: cursor.tenantId,
+    workflowRunId: run.id,
+    stepId: step.id,
+    iteration: cursor.iteration,
+    purpose: "memory_stage",
+    token: taskToken,
+    now,
+  });
+
+  const failStep = async (errorSummary: string): Promise<never> => {
+    await recordWorkflowStepEvent(db, {
+      tenantId: cursor.tenantId,
+      workflowRunId: run.id,
+      eventType: "workflow_step_failed",
+      summary: {
+        stepId: step.id,
+        stepKind: "memory_stage",
+        iteration: cursor.iteration,
+        status: "failed",
+        errorSummary,
+      },
+      runStatus: "failed",
+      now,
+    });
+    throw new Error(errorSummary);
+  };
+
+  // Resolve {{ }} templates in the step's config references the same way
+  // executable steps resolve their inputs at dispatch time.
+  const context = await buildTemplateContext(db, run);
+  const resolved = resolveStepTemplates(
+    {
+      processorConfigId: step.processorConfigId,
+      ...(step.sourceConfigId !== undefined
+        ? { sourceConfigId: step.sourceConfigId }
+        : {}),
+      ...(step.options !== undefined ? { options: step.options } : {}),
+    },
+    context,
+  );
+  if (!resolved.ok) {
+    return await failStep(
+      `memory_stage step references that did not resolve: ${resolved.missing.join(", ")}`,
+    );
+  }
+  const { processorConfigId, sourceConfigId, options } = resolved.value as {
+    processorConfigId: unknown;
+    sourceConfigId?: unknown;
+    options?: Record<string, unknown>;
+  };
+  if (typeof processorConfigId !== "string" || !processorConfigId.trim()) {
+    return await failStep(
+      "memory_stage step's processorConfigId did not resolve to a non-empty string",
+    );
+  }
+
+  // THINK-193 U3: fold an approved-plan override (persisted as an approval
+  // step's output) into the stage options. Narrow-only enforcement happens
+  // in the worker/stages; a skipped approval recorded no output, so
+  // scheduled runs pass through unchanged.
+  const optionsWithOverride = mergeApprovalOverrideIntoOptions(
+    context.steps,
+    options ?? null,
+  );
+
+  try {
+    await executors.invokeMemoryStageWorker({
+      workflowRunId: run.id,
+      tenantId: cursor.tenantId,
+      stepId: step.id,
+      iteration: cursor.iteration,
+      stage: step.stage,
+      processorConfigId,
+      sourceConfigId:
+        typeof sourceConfigId === "string" && sourceConfigId
+          ? sourceConfigId
+          : null,
+      options: optionsWithOverride,
+    });
+  } catch (error) {
+    return await failStep(
+      `memory stage worker could not be started: ${boundedMessage(error)}`,
+    );
+  }
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: record_memory_stage — the worker's SendTaskSuccess result lands
+// here. Succeeded records step output evidence (feeding
+// {{ steps.<id>.output.* }}) and advances; failed records a step-failed event
+// and fails the run through the shared advance tail.
+// ---------------------------------------------------------------------------
+
+export async function handleRecordMemoryStage(
+  db: WorkflowDb,
+  event: Extract<WorkflowStepDispatchEvent, { phase: "record_memory_stage" }>,
+  now: Date = new Date(),
+): Promise<DirectiveResult> {
+  const { cursor, result } = event;
+  const run = await loadRun(db, cursor);
+  const definition = await loadDefinition(db, run);
+  const step = definition.steps[cursor.stepPointer];
+  if (!step || step.kind !== "memory_stage") {
+    throw new Error(
+      `workflow run ${run.id} step pointer ${cursor.stepPointer} is not a memory_stage step — cannot record its result`,
+    );
+  }
+
+  const succeeded = result?.status === "succeeded";
+  if (succeeded) {
+    await recordWorkflowStepOutput(db, {
+      tenantId: cursor.tenantId,
+      workflowId: run.workflow_id,
+      workflowRunId: run.id,
+      stepId: step.id,
+      stepKind: step.kind,
+      iteration: cursor.iteration,
+      output: {
+        stage: result.stage,
+        counts: result.counts ?? {},
+        ...(result.output ?? {}),
+      },
+      now,
+    });
+  }
+
+  return await advanceAfterStepOutcome(db, {
+    cursor,
+    run,
+    definition,
+    step,
+    turnStatus: succeeded ? "completed" : "failed",
+    evidence: null,
+    stepErrorSummary: succeeded
+      ? undefined
+      : (result?.error ??
+        `memory stage "${result?.stage ?? step.stage}" failed without an error summary`),
     now,
   });
 }
@@ -1355,6 +1677,10 @@ export async function handler(
       return await handleAwaitApproval(db, event);
     case "record_approval":
       return await handleRecordApproval(db, event);
+    case "await_memory_stage":
+      return await handleAwaitMemoryStage(db, event);
+    case "record_memory_stage":
+      return await handleRecordMemoryStage(db, event);
     default: {
       const exhaustive: never = event;
       throw new Error(

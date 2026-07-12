@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { parseIdentityRules } from "../entity-identity/normalizers.js";
 import {
   activityLog,
   ontologyChangeSetItems,
@@ -262,6 +263,54 @@ export async function updateOntologyEntityType(args: {
 
   return loadOntologyEntityType({
     tenantId: args.input.tenantId,
+    entityTypeId: updated.id,
+    db,
+  });
+}
+
+/**
+ * Replace an entity type's identity rules (THINK-193 U4). Validated via
+ * parseIdentityRules (malformed entries drop); bumps identity_rules_version
+ * so the matcher/audit can pin which rule set produced a link.
+ */
+export async function setOntologyEntityTypeIdentityRules(args: {
+  tenantId: string;
+  entityTypeId: string;
+  rules: unknown;
+  actorUserId: string | null;
+  db?: DbLike;
+}) {
+  const db = args.db ?? defaultDb;
+  const parsed = parseIdentityRules(args.rules);
+  const now = new Date();
+  const [updated] = await db
+    .update(ontologyEntityTypes)
+    .set({
+      identity_rules: parsed as unknown as Array<Record<string, unknown>>,
+      identity_rules_version: sql`${ontologyEntityTypes.identity_rules_version} + 1`,
+      updated_at: now,
+    })
+    .where(
+      and(
+        eq(ontologyEntityTypes.id, args.entityTypeId),
+        eq(ontologyEntityTypes.tenant_id, args.tenantId),
+      ),
+    )
+    .returning({ id: ontologyEntityTypes.id });
+  if (!updated) throw new Error("Ontology entity type not found");
+
+  await recordOntologyActivity({
+    db,
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    action: "ontology_entity_type_identity_rules_updated",
+    entityType: "ontology_entity_type",
+    entityId: updated.id,
+    metadata: { ruleCount: parsed.length },
+  });
+
+  return loadOntologyEntityType({
+    tenantId: args.tenantId,
     entityTypeId: updated.id,
     db,
   });
