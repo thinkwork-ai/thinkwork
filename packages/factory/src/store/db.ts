@@ -159,6 +159,11 @@ export interface FactoryStore {
   ): void;
   /** Every mapped thread, for the R18 status view. */
   listSlackThreads(): SlackThreadRow[];
+  /**
+   * Delete the Slack thread mapping for an issue (un-enrollment). Idempotent:
+   * deleting a non-existent mapping is a silent no-op.
+   */
+  deleteSlackThread(issueId: string): void;
   insertAttempt(input: InsertAttemptInput): number;
   /**
    * Move an attempt to a new state. Throws if the attempt does not exist.
@@ -215,6 +220,8 @@ export interface FactoryStore {
     armed?: boolean;
   }): void;
   getNagTimer(issueId: string, kind: string): NagTimerRow | undefined;
+  /** Delete every nag timer for an issue (un-enrollment cleanup). Idempotent. */
+  deleteNagTimersForIssue(issueId: string): void;
   setNagArmed(issueId: string, kind: string, armed: boolean): void;
   setNagNextFire(issueId: string, kind: string, nextFireAt: string): void;
   /** Armed timers whose next_fire_at <= the given ISO instant. */
@@ -235,6 +242,11 @@ export interface FactoryStore {
   acquireLock(name: string, holderIssueId: string, acquiredAt: string): boolean;
   /** Release the lock only if `holderIssueId` holds it. Returns true if released. */
   releaseLock(name: string, holderIssueId: string): boolean;
+  /**
+   * Release EVERY named lock held by an issue (un-enrollment cleanup). Idempotent;
+   * covers the dev-deployment mutex and any future per-issue lock.
+   */
+  releaseLocksHeldBy(issueId: string): void;
   getLock(name: string): LockRow | undefined;
 
   close(): void;
@@ -422,6 +434,9 @@ export function openStore(
   const getNagTimerStmt = db.prepare(
     "SELECT * FROM nag_timers WHERE issue_id = ? AND kind = ?",
   );
+  const deleteNagTimersForIssueStmt = db.prepare(
+    "DELETE FROM nag_timers WHERE issue_id = ?",
+  );
   const setNagArmedStmt = db.prepare(
     "UPDATE nag_timers SET armed = @armed WHERE issue_id = @issue_id AND kind = @kind",
   );
@@ -455,6 +470,9 @@ export function openStore(
   const releaseLockStmt = db.prepare(
     "DELETE FROM locks WHERE name = ? AND holder_issue_id = ?",
   );
+  const releaseLocksHeldByStmt = db.prepare(
+    "DELETE FROM locks WHERE holder_issue_id = ?",
+  );
 
   const insertSlackThreadStmt = db.prepare(`
     INSERT INTO slack_threads (issue_id, identifier, channel_id, thread_ts, created_at, updated_at)
@@ -469,6 +487,9 @@ export function openStore(
   );
   const listSlackThreadsStmt = db.prepare(
     "SELECT * FROM slack_threads ORDER BY created_at ASC",
+  );
+  const deleteSlackThreadStmt = db.prepare(
+    "DELETE FROM slack_threads WHERE issue_id = ?",
   );
 
   return {
@@ -595,6 +616,10 @@ export function openStore(
       return getNagTimerStmt.get(issueId, kind) as NagTimerRow | undefined;
     },
 
+    deleteNagTimersForIssue(issueId) {
+      deleteNagTimersForIssueStmt.run(issueId);
+    },
+
     setNagArmed(issueId, kind, armed) {
       setNagArmedStmt.run({ issue_id: issueId, kind, armed: armed ? 1 : 0 });
     },
@@ -643,6 +668,10 @@ export function openStore(
       return result.changes > 0;
     },
 
+    releaseLocksHeldBy(issueId) {
+      releaseLocksHeldByStmt.run(issueId);
+    },
+
     getLock(name) {
       return getLockStmt.get(name) as LockRow | undefined;
     },
@@ -685,6 +714,10 @@ export function openStore(
 
     listSlackThreads() {
       return listSlackThreadsStmt.all() as SlackThreadRow[];
+    },
+
+    deleteSlackThread(issueId) {
+      deleteSlackThreadStmt.run(issueId);
     },
 
     close() {

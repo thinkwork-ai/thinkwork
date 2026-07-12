@@ -113,6 +113,48 @@ describe("syncCandidate", () => {
     expect(slack.posts.filter((p) => p.text.includes("Launched"))).toHaveLength(1);
   });
 
+  it("opens NO thread for a noop action (a Done issue the daemon only noops)", async () => {
+    const issue = makeIssue({ identifier: "THINK-9", state: "Done", labels: ["Claude"] });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    await sync.syncCandidate(candidateFor(issue), {
+      kind: "noop",
+      reason: "Done and already compounded",
+    });
+
+    // No thread opened, no post at all — a noop never enrolls.
+    expect(store.getSlackThreadByIssue(issue.id)).toBeUndefined();
+    expect(slack.posts).toHaveLength(0);
+  });
+
+  it("opens the thread for advance and block actions", async () => {
+    const advanceIssue = makeIssue({
+      identifier: "THINK-7",
+      state: "Todo",
+      labels: ["Claude"],
+    });
+    const blockIssue = makeIssue({
+      identifier: "THINK-8",
+      state: "Planning",
+      labels: ["Claude"],
+    });
+    const gateway = new FakeGateway([advanceIssue, blockIssue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    await sync.syncCandidate(candidateFor(advanceIssue), advance);
+    await sync.syncCandidate(candidateFor(blockIssue), {
+      kind: "block",
+      label: "Needs Credentials",
+      reason: "r",
+    });
+
+    expect(store.getSlackThreadByIssue(advanceIssue.id)).toBeDefined();
+    expect(store.getSlackThreadByIssue(blockIssue.id)).toBeDefined();
+  });
+
   it("escalates a Needs-User question WITH an @mention, deduped by question comment", async () => {
     const issue = makeIssue({
       identifier: "THINK-2",
