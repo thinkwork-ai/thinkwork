@@ -444,23 +444,29 @@ export function extractEmailThreadClaims(input: {
  *      effective_from — a same-value reassertion from a newer evidence
  *      edition is the same fact, not a new claim, and must never mint a
  *      duplicate active row. With no active same-value row, an
- *      exact-fingerprint row (incl. effective_from, any status) is reused
- *      idempotently WITHOUT touching its status — reprocessing an older
- *      edition must not resurrect a superseded historical value over the
- *      current claim. EXCEPTION (U8 erase epoch): when the matched row is
- *      NON-ACTIVE, has ZERO evidence edges left (the erase cleanup
- *      hard-deleted the supporting evidence and its edges), and the source
- *      config carries erase_generation > 0, the row is a dead pre-erase
- *      epoch remnant — it is DELETED and a NEW active claim edition is
- *      minted, so re-onboarding an erased source with identical provider
- *      content produces live claims instead of silently reusing the dead
- *      row. The anti-resurrection rule is unaffected: older-edition
- *      reprocessing always finds surviving evidence edges (retracted edges
- *      are kept as rows, only erase cascades remove them). Only then
- *      insert (status 'active'); a value that recurs later (77→91→77)
- *      becomes a NEW temporal edition with the new effective_from,
- *      preserving the interval history. Hash matches with a differing
- *      stored value throw ClaimHashCollisionError;
+ *      exact-fingerprint row (incl. effective_from, any status) is matched.
+ *      What happens to that dead row depends on WHY it died:
+ *        · SUPERSEDED (a newer value legitimately won) — reused
+ *          idempotently WITHOUT touching its status. Reprocessing an older
+ *          edition attaches provenance to the historical row but must never
+ *          resurrect it over the current active value (anti-resurrection).
+ *        · RETRACTED (the fact left the source, or an erase wiped it) —
+ *          this upsert is attaching support from a live evidence edition
+ *          that re-asserts the fact, so it comes back as a NEW ACTIVE claim
+ *          edition (REVIVAL). The fingerprint unique index forbids a second
+ *          row with the same effective_from, so the revival is a swap: the
+ *          dead row's still-ACTIVE support edges (corroboration from OTHER
+ *          evidence items) are captured, the dead row's edges are deleted,
+ *          the dead row is deleted, the fresh active claim is inserted, and
+ *          the captured edges are re-inserted onto it. Retracted edge rows
+ *          die with the dead row. This subsumes the U8 erase-epoch case
+ *          (erase hard-deletes evidence, so the dead rows have zero edges);
+ *          a NON-retracted dead row with ZERO edges at erase_generation > 0
+ *          is likewise a pre-erase remnant and is revived the same way.
+ *      Only then insert (status 'active'); a value that recurs later
+ *      (77→91→77) becomes a NEW temporal edition with the new
+ *      effective_from, preserving the interval history. Hash matches with a
+ *      differing stored value throw ClaimHashCollisionError;
  *  (b) ensure a memory_claim_evidence support edge (claim_id,
  *      evidence_item_id) exists and is active — previously retracted edges
  *      are re-activated;
@@ -585,20 +591,46 @@ export async function upsertClaimsForEvidence(
           `value_hash ${claim.valueHash} for ${claim.subjectKey} ${claim.ontologyPredicate} matches claim ${existing.id} but the stored value differs — sha256 collision, refusing to merge`,
         );
       }
-      // Erase-epoch re-onboarding (U8 P1): a NON-ACTIVE fingerprint match
-      // with ZERO evidence edges (any status) can only be a pre-erase
-      // remnant — the erase cleanup hard-deletes evidence rows and their
-      // edges cascade away, while every other lifecycle path retains
-      // retracted edges as rows. Confirm the source actually went through
-      // an erase (erase_generation > 0), then delete the dead row and fall
-      // through to mint a NEW active claim edition.
+      // Revival of a dead fingerprint match (P1 retract→re-ingest, and the
+      // U8 erase-epoch case it subsumes). A RETRACTED row means the fact
+      // left the source (ordinary retraction saga) or an erase wiped it;
+      // this upsert is attaching support from a live evidence edition that
+      // re-asserts the very same content, so the fact must come back as a
+      // NEW ACTIVE claim edition rather than stay dead forever. A
+      // NON-retracted (superseded) row with ZERO evidence edges at
+      // erase_generation > 0 can only be a pre-erase remnant (the erase
+      // cleanup hard-deletes evidence and its edges cascade away) and is
+      // revived the same way. Plain superseded rows are NEVER revived —
+      // older-edition reprocessing must not displace the current value.
+      //
+      // The fingerprint unique index (…, COALESCE(effective_from,
+      // '-infinity')) forbids a second row with the same effective_from, so
+      // revival is a SWAP, ordered so no FK/unique violation occurs and no
+      // corroboration is lost:
+      //   1. capture the dead row's still-ACTIVE support edges (they may
+      //      come from OTHER, still-active evidence items),
+      //   2. delete ALL of the dead row's edges (retracted ones die with it;
+      //      explicit so the claim delete never depends on FK cascade),
+      //   3. delete the dead claim row (frees the fingerprint slot),
+      //   4. insert the fresh ACTIVE claim (below),
+      //   5. re-insert the captured edges onto the new claim id (below).
+      let repointedEdges: Array<{
+        evidence_item_id: string;
+        source_config_id: string;
+        created_at: Date;
+      }> = [];
       if (existing && existing.status !== "active") {
-        const anyEdge = await tx
-          .select({ id: memoryClaimEvidence.id })
+        const edges = await tx
+          .select({
+            status: memoryClaimEvidence.status,
+            evidence_item_id: memoryClaimEvidence.evidence_item_id,
+            source_config_id: memoryClaimEvidence.source_config_id,
+            created_at: memoryClaimEvidence.created_at,
+          })
           .from(memoryClaimEvidence)
-          .where(eq(memoryClaimEvidence.claim_id, existing.id))
-          .limit(1);
-        if (anyEdge.length === 0) {
+          .where(eq(memoryClaimEvidence.claim_id, existing.id));
+        let revive = existing.status === "retracted";
+        if (!revive && edges.length === 0) {
           const sources = await tx
             .select({
               erase_generation: dbSchema.memorySourceConfigs.erase_generation,
@@ -611,12 +643,21 @@ export async function upsertClaimsForEvidence(
               ),
             )
             .limit(1);
-          if ((sources[0]?.erase_generation ?? 0) > 0) {
-            await tx
-              .delete(memoryClaims)
-              .where(eq(memoryClaims.id, existing.id));
-            existing = undefined;
-          }
+          revive = (sources[0]?.erase_generation ?? 0) > 0;
+        }
+        if (revive) {
+          repointedEdges = edges
+            .filter((edge) => edge.status === "active")
+            .map((edge) => ({
+              evidence_item_id: edge.evidence_item_id,
+              source_config_id: edge.source_config_id,
+              created_at: edge.created_at,
+            }));
+          await tx
+            .delete(memoryClaimEvidence)
+            .where(eq(memoryClaimEvidence.claim_id, existing.id));
+          await tx.delete(memoryClaims).where(eq(memoryClaims.id, existing.id));
+          existing = undefined;
         }
       }
 
@@ -646,6 +687,21 @@ export async function upsertClaimsForEvidence(
         claimId = inserted.id;
         claimIsActive = true;
         created += 1;
+        // Step 5 of the revival swap: corroboration from other evidence
+        // items survives onto the new claim edition, still active.
+        if (repointedEdges.length > 0) {
+          await tx.insert(memoryClaimEvidence).values(
+            repointedEdges.map((edge) => ({
+              tenant_id: args.tenantId,
+              claim_id: claimId,
+              evidence_item_id: edge.evidence_item_id,
+              source_config_id: edge.source_config_id,
+              status: "active",
+              created_at: edge.created_at,
+              retracted_at: null,
+            })),
+          );
+        }
       }
       keptClaimIds.set(claimTupleKey(claim), {
         id: claimId,
