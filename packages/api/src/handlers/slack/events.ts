@@ -1,4 +1,6 @@
 import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import { and, eq, sql } from "drizzle-orm";
+import { messages } from "@thinkwork/database-pg/schema";
 import { db } from "../../lib/db.js";
 import { dispatchDefaultAgentTurn } from "../../lib/mentions/default-agent-routing.js";
 import { json } from "../../lib/response.js";
@@ -93,6 +95,11 @@ export interface SlackEventsDeps {
     fileRefs: ReturnType<typeof buildSlackThreadTurnInput>["fileRefs"];
   }) => Promise<MaterializedSlackAttachment[]>;
   dispatchDefaultAgent?: DispatchDefaultAgent;
+  persistAckTs?: (input: {
+    tenantId: string;
+    messageId: string;
+    ackTs: string;
+  }) => Promise<void>;
   metrics?: Pick<
     SlackMetrics,
     "dedupeHit" | "dispatchSuccess" | "dispatchFailure"
@@ -155,6 +162,8 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     deps.materializeSlackFiles ?? materializeSlackFilesAsThreadAttachments;
   const dispatchDefaultAgent =
     deps.dispatchDefaultAgent ?? dispatchDefaultAgentTurn;
+  const persistAckTs =
+    deps.persistAckTs ?? ((input) => persistSlackAckTs(dbClient, input));
   const metrics = deps.metrics ?? slackMetrics;
 
   return async function dispatchSlackEvent(
@@ -255,11 +264,21 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     }
 
     if (mapping.messageCreated || wakeup.enqueued) {
-      await safePostAcknowledgement(slackApi, {
+      const ackTs = await safePostAcknowledgement(slackApi, {
         token: args.botToken,
         channel: channelId,
         threadTs,
       });
+      // Stamp the ack ts onto the triggering user message so the finalizer
+      // can update that message in place instead of posting a second one.
+      // Best-effort: a stamp failure must never fail ingress.
+      if (ackTs) {
+        await safeStampAckTs(persistAckTs, {
+          tenantId: args.workspace.tenantId,
+          messageId: mapping.messageId,
+          ackTs,
+        });
+      }
     }
 
     if (!mapping.messageCreated) {
@@ -360,7 +379,7 @@ async function safeFetchThreadContext(
 async function safePostAcknowledgement(
   slackApi: SlackApi,
   input: { token: string; channel: string; threadTs: string },
-): Promise<void> {
+): Promise<string | null> {
   try {
     const result = await slackApi.postMessage({
       ...input,
@@ -370,12 +389,55 @@ async function safePostAcknowledgement(
       console.warn("[slack:events] acknowledgement post failed", {
         error: result.error ?? "unknown",
       });
+      return null;
     }
+    return result.ts ?? null;
   } catch (error) {
     console.warn("[slack:events] acknowledgement post failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+    return null;
   }
+}
+
+async function safeStampAckTs(
+  persistAckTs: NonNullable<SlackEventsDeps["persistAckTs"]>,
+  input: { tenantId: string; messageId: string; ackTs: string },
+): Promise<void> {
+  try {
+    await persistAckTs(input);
+  } catch (error) {
+    console.warn("[slack:events] failed to stamp acknowledgement ts", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Record the acknowledgement message ts on the triggering user message's
+ * metadata (`slack.ackTs`). Slack-origin messages always persist a
+ * `metadata.slack` object, so a targeted jsonb_set of `{slack,ackTs}` is
+ * sufficient — no intermediate object needs to be created.
+ */
+async function persistSlackAckTs(
+  dbClient: DbClient,
+  input: { tenantId: string; messageId: string; ackTs: string },
+): Promise<void> {
+  await dbClient
+    .update(messages)
+    .set({
+      metadata: sql`jsonb_set(coalesce(${
+        messages.metadata
+      }, '{}'::jsonb), '{slack,ackTs}', ${JSON.stringify(
+        input.ackTs,
+      )}::jsonb, true)`,
+    })
+    .where(
+      and(
+        eq(messages.id, input.messageId),
+        eq(messages.tenant_id, input.tenantId),
+      ),
+    );
 }
 
 const defaultSlackApi: SlackApi = {
