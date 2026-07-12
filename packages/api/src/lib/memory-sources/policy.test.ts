@@ -3,9 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   assertBoundaryWithin,
   assertGrantBoundaryValid,
+  assertSourceConfigBoundaryValid,
   BOUNDARY_SCHEMAS,
   grantInactiveReason,
+  isUrlWithinUrlSet,
   MemoryAuthorizationError,
+  normalizeExactUrl,
+  parseUrlSetEntry,
+  resolveExactUrls,
 } from "./policy.js";
 import { TWENTY_GOVERNED_OBJECTS } from "./adapters/twenty.js";
 
@@ -271,8 +276,9 @@ describe("assertGrantBoundaryValid (grant-time validation)", () => {
   });
 
   it("fails closed for an unregistered source family", () => {
+    // firecrawl gained a schema in U5; email stays unregistered until U6.
     expect(() =>
-      assertGrantBoundaryValid({}, { sourceFamily: "firecrawl" }),
+      assertGrantBoundaryValid({}, { sourceFamily: "email" }),
     ).toThrow(MemoryAuthorizationError);
   });
 });
@@ -331,3 +337,203 @@ describe("grantInactiveReason (pure expiry logic)", () => {
 // landed schema plus a pg test double or a dev-stage run. Deferred to dev
 // verification per the U1 precedent — the pure decision logic they lean on
 // (grantInactiveReason, assertBoundaryWithin) is covered above.
+
+// ---------------------------------------------------------------------------
+// urlSet boundary dimension (THINK-193 U5)
+// ---------------------------------------------------------------------------
+
+describe("normalizeExactUrl / parseUrlSetEntry", () => {
+  it("normalizes host case, trailing slashes, and drops fragments", () => {
+    expect(normalizeExactUrl("https://Example.com/Pricing/")).toBe(
+      "https://example.com/Pricing",
+    );
+    expect(normalizeExactUrl("https://example.com")).toBe(
+      "https://example.com/",
+    );
+    expect(normalizeExactUrl("https://example.com/a#section")).toBe(
+      "https://example.com/a",
+    );
+    // Query strings are preserved: distinct queries are distinct pages.
+    expect(normalizeExactUrl("https://example.com/a?p=2")).toBe(
+      "https://example.com/a?p=2",
+    );
+  });
+
+  it("rejects http, credentials, and garbage (fail closed)", () => {
+    expect(() => normalizeExactUrl("http://example.com/a")).toThrow(/https/);
+    expect(() => normalizeExactUrl("https://user:pw@example.com/a")).toThrow(
+      /credentials/,
+    );
+    expect(() => normalizeExactUrl("not a url")).toThrow(/not a valid URL/);
+  });
+
+  it("parses bounded domain rules and rejects wildcards/paths/ports", () => {
+    expect(parseUrlSetEntry("domain:example.com")).toEqual({
+      kind: "domain",
+      host: "example.com",
+    });
+    for (const bad of [
+      "domain:*.example.com",
+      "domain:example.com/path",
+      "domain:example.com:8443",
+      "domain:EXAMPLE.com",
+      "domain:localhost",
+      "domain:",
+    ]) {
+      expect(() => parseUrlSetEntry(bad), bad).toThrow();
+    }
+  });
+});
+
+describe("isUrlWithinUrlSet / resolveExactUrls", () => {
+  const envelope = ["https://example.com/pricing", "domain:docs.example.com"];
+
+  it("allows exact matches and pages under a granted domain rule", () => {
+    expect(isUrlWithinUrlSet("https://example.com/pricing/", envelope)).toBe(
+      true,
+    );
+    expect(
+      isUrlWithinUrlSet("https://docs.example.com/anything/here", envelope),
+    ).toBe(true);
+  });
+
+  it("rejects other paths, subdomains, and malformed urls (fail closed)", () => {
+    expect(isUrlWithinUrlSet("https://example.com/blog", envelope)).toBe(false);
+    // No subdomain widening: domain:docs.example.com ≠ sub.docs.example.com.
+    expect(isUrlWithinUrlSet("https://sub.docs.example.com/a", envelope)).toBe(
+      false,
+    );
+    expect(isUrlWithinUrlSet("http://example.com/pricing", envelope)).toBe(
+      false,
+    );
+    expect(isUrlWithinUrlSet("garbage", envelope)).toBe(false);
+    // An empty envelope allows nothing.
+    expect(isUrlWithinUrlSet("https://example.com/pricing", [])).toBe(false);
+  });
+
+  it("resolveExactUrls keeps exact urls only — domain rules select nothing", () => {
+    expect(
+      resolveExactUrls([
+        "https://b.com/x/",
+        "https://a.com/y",
+        "domain:c.com",
+        "https://a.com/y#frag",
+      ]),
+    ).toEqual(["https://a.com/y", "https://b.com/x"]);
+  });
+});
+
+describe("firecrawl boundary schema (urlSet envelope)", () => {
+  it("registers the firecrawl schema with urls defaulting to []", () => {
+    const schema = BOUNDARY_SCHEMAS.firecrawl!;
+    expect(schema.urls).toEqual({ kind: "urlSet", default: [] });
+    expect(schema.maxPages).toMatchObject({ kind: "cap", default: 5, max: 50 });
+  });
+
+  it("grant-time validation rejects malformed url values on either side", () => {
+    for (const urls of [
+      ["http://example.com/a"],
+      ["https://u:p@example.com/a"],
+      ["domain:*.example.com"],
+      [42],
+      "https://example.com/a",
+    ]) {
+      expect(() =>
+        assertGrantBoundaryValid({ urls }, { sourceFamily: "firecrawl" }),
+      ).toThrow(MemoryAuthorizationError);
+      expect(
+        within({ urls: ["https://example.com/a"] }, { urls }, "firecrawl"),
+      ).toThrow(MemoryAuthorizationError);
+    }
+  });
+
+  it("an omitted/empty grant urls value means NOTHING is readable", () => {
+    expect(
+      within({}, { urls: ["https://example.com/a"] }, "firecrawl"),
+    ).toThrow(/outside the granted URL envelope/);
+    expect(
+      within({ urls: [] }, { urls: ["https://example.com/a"] }, "firecrawl"),
+    ).toThrow(/outside the granted URL envelope/);
+    // Empty config inside empty grant is fine (a run just reads nothing).
+    expect(within({}, {}, "firecrawl")).not.toThrow();
+  });
+
+  it("exact config urls fit inside exact grants (normalized) and domain rules", () => {
+    expect(
+      within(
+        { urls: ["https://Example.com/pricing/"] },
+        { urls: ["https://example.com/pricing"] },
+        "firecrawl",
+      ),
+    ).not.toThrow();
+    expect(
+      within(
+        { urls: ["domain:example.com"] },
+        { urls: ["https://example.com/pricing", "https://example.com/about"] },
+        "firecrawl",
+      ),
+    ).not.toThrow();
+    // …but not under a different host or a subdomain of the rule.
+    expect(
+      within(
+        { urls: ["domain:example.com"] },
+        { urls: ["https://www.example.com/pricing"] },
+        "firecrawl",
+      ),
+    ).toThrow(/outside the granted URL envelope/);
+  });
+
+  it("a requested domain rule fits only inside an EQUAL granted domain rule", () => {
+    expect(
+      within(
+        { urls: ["domain:example.com"] },
+        { urls: ["domain:example.com"] },
+        "firecrawl",
+      ),
+    ).not.toThrow();
+    expect(
+      within(
+        { urls: ["https://example.com/pricing"] },
+        { urls: ["domain:example.com"] },
+        "firecrawl",
+      ),
+    ).toThrow(/outside the granted URL envelope/);
+    expect(
+      within(
+        { urls: ["domain:example.com"] },
+        { urls: ["domain:docs.example.com"] },
+        "firecrawl",
+      ),
+    ).toThrow(/outside the granted URL envelope/);
+  });
+
+  it("maxPages compares as a cap envelope", () => {
+    expect(
+      within({ maxPages: 10 }, { maxPages: 10 }, "firecrawl"),
+    ).not.toThrow();
+    expect(within({ maxPages: 5 }, { maxPages: 10 }, "firecrawl")).toThrow(
+      /maxPages/,
+    );
+  });
+
+  it("assertSourceConfigBoundaryValid validates the config side standalone", () => {
+    expect(() =>
+      assertSourceConfigBoundaryValid(
+        { urls: ["https://example.com/a"], maxPages: 5 },
+        { sourceFamily: "firecrawl" },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertSourceConfigBoundaryValid(
+        { urls: ["http://example.com/a"] },
+        { sourceFamily: "firecrawl" },
+      ),
+    ).toThrow(MemoryAuthorizationError);
+    expect(() =>
+      assertSourceConfigBoundaryValid(
+        { maxRecord: 5 },
+        { sourceFamily: "twenty" },
+      ),
+    ).toThrow(/maxRecord/);
+  });
+});
