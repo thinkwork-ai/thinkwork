@@ -7,6 +7,7 @@ const repoMocks = vi.hoisted(() => ({
 }));
 const stageMocks = vi.hoisted(() => ({
   runAcquire: vi.fn(),
+  runWiki: vi.fn(),
 }));
 
 vi.mock("../lib/memory-sources/stages.js", async (importOriginal) => {
@@ -15,6 +16,7 @@ vi.mock("../lib/memory-sources/stages.js", async (importOriginal) => {
   return {
     ...actual,
     runAcquire: stageMocks.runAcquire,
+    runWiki: stageMocks.runWiki,
   };
 });
 
@@ -243,7 +245,7 @@ describe("memory-stage-worker", () => {
     expect((state.row?.result as { status?: string })?.status).toBe("failed");
   });
 
-  it("wiki runs as a shared-only stub for shared processors (U3)", async () => {
+  it("wiki dispatches to the real runWiki implementation for shared processors (U4)", async () => {
     repoMocks.getProcessorConfig.mockResolvedValue(activeProcessor());
     repoMocks.getSourceConfig.mockResolvedValue({
       source: {
@@ -253,6 +255,12 @@ describe("memory-stage-worker", () => {
         boundary: {},
       },
       processor: activeProcessor(),
+    });
+    stageMocks.runWiki.mockResolvedValue({
+      status: "succeeded",
+      stage: "wiki",
+      counts: { compiled: 1 },
+      output: { jobId: "job-1", jobStatus: "succeeded" },
     });
     const { tokenOps } = makeTokenOps(pendingRow());
 
@@ -266,9 +274,11 @@ describe("memory-stage-worker", () => {
     );
 
     // assertTargetInTenant's tenant target check passes (target_id ===
-    // tenant_id), then the U4-deferred stub records a visible no-op.
+    // tenant_id), then the wiki stage settles the compile job (U4).
+    expect(stageMocks.runWiki).toHaveBeenCalledTimes(1);
     expect(result.status).toBe("succeeded");
-    expect(result.output?.note).toContain("U4");
+    expect(result.counts?.compiled).toBe(1);
+    expect(result.output?.jobId).toBe("job-1");
   });
 
   it("wiki hard-rejects a user_* target bank (AE7)", async () => {

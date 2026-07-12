@@ -9,9 +9,12 @@
  */
 
 import type { S3Client } from "@aws-sdk/client-s3";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
-import { memoryEvidenceItems } from "@thinkwork/database-pg/schema";
+import {
+  memoryEvidenceItems,
+  memoryRunItems,
+} from "@thinkwork/database-pg/schema";
 import {
   sanitizeApprovalPlanOverride,
   type ApprovalPlanOverride,
@@ -64,6 +67,8 @@ import {
   requireActiveGrant,
   revalidateGrant,
 } from "./policy.js";
+import { getCompileJob, type WikiCompileJobRow } from "../wiki/repository.js";
+import { invokeWikiCompile } from "../wiki/enqueue.js";
 import {
   acquireCompaniesPage,
   buildCompanyDossier,
@@ -107,6 +112,46 @@ export interface StageContext {
   lease?: StageLease;
   /** Injected S3 client for snapshot IO; defaults to the lazy module client. */
   s3?: S3Client;
+  /** Test/ops seams for the graph/wiki stages (THINK-193 U4 stitch).
+   * Defaults are the real Lambda invoke + wiki compile-job repository. */
+  graphWiki?: GraphWikiStageDeps;
+}
+
+/** Injectable dependencies for runGraph / runWiki (defaults in this module). */
+export interface GraphWikiStageDeps {
+  /** RequestResponse-invoke the targeted observations ingest Lambda. */
+  invokeObservationsIngest?: (
+    payload: GraphIngestInvokePayload,
+  ) => Promise<GraphIngestInvokeResult>;
+  /** Load a wiki compile job row by id (defaults to the wiki repository). */
+  getCompileJob?: (jobId: string) => Promise<WikiCompileJobRow | null>;
+  /** Best-effort Event-invoke of the wiki-compile Lambda for a job id. */
+  invokeCompile?: (jobId: string) => Promise<void>;
+  /** Poll sleep; injectable so tests settle without wall-clock waits. */
+  sleep?: (ms: number) => Promise<void>;
+  pollIntervalMs?: number;
+  /** Per-invocation settle budget for runWiki (continuation beyond it). */
+  settleBudgetMs?: number;
+}
+
+/** Payload sent to thinkwork-<stage>-api-knowledge-graph-observations-ingest. */
+export interface GraphIngestInvokePayload {
+  tenantId: string;
+  bankIds: string[];
+  trigger: "manual" | "scheduled";
+}
+
+/**
+ * Structural mirror of KnowledgeGraphObservationsIngestResult (the handler's
+ * response shape). Declared here so lib code does not import from handlers/.
+ */
+export interface GraphIngestInvokeResult {
+  ok: boolean;
+  status: "succeeded" | "failed" | "stale_noop" | "skipped" | "sweep";
+  runId?: string;
+  tenantId?: string;
+  metrics?: Record<string, unknown>;
+  error?: string;
 }
 
 /**
@@ -1244,37 +1289,448 @@ export async function runResolve(
   };
 }
 
-/** Graph/wiki stubs share one guard: `user_*` banks are hard-rejected. */
-function runSharedOnlyStub(
+// ---------------------------------------------------------------------------
+// Graph + Wiki stages (THINK-193 U4 run-orchestration stitch).
+//
+// runGraph RequestResponse-invokes the targeted observations ingest Lambda
+// for the processor's shared bank; runWiki settles the compile job that the
+// ingest transactionally enqueued. Both are SHARED-ONLY: `user_*` banks are
+// hard-rejected (AE7) on top of the worker's own scope gate and the personal
+// blueprint structurally omitting these steps.
+//
+// In-process vs. Lambda-invoke (documented choice): the ingest performs
+// Bedrock classifier + extraction calls whose model ids
+// (OBSERVATION_CLASSIFIER_MODEL_ID / KG_EXTRACTION_MODEL_ID) and memory/
+// timeout sizing (1024MB / 480s, bundled Bedrock SDK) live on the ingest
+// Lambda's own env — the memory-stage-worker (256MB) carries none of that.
+// The worker therefore invokes the ingest function RequestResponse (its
+// 900s timeout comfortably brackets the ingest's 480s) and consumes the
+// structured response. The shared api role already grants
+// lambda:InvokeFunction on the ingest function (iam-grouped.tf).
+// ---------------------------------------------------------------------------
+
+/** Shared-only guard for graph/wiki: `user_*` banks are hard-rejected. */
+function requireSharedGraphWikiProcessor(
   ctx: StageContext,
   what: string,
-): MemoryStageWorkerResult {
+):
+  | {
+      ok: true;
+      processor: MemoryProcessorConfig & { target_scope: "space" | "tenant" };
+    }
+  | { ok: false; result: MemoryStageWorkerResult } {
   const shared = requireSharedProcessor(ctx);
   if (!shared || ctx.processor.mode !== "shared") {
-    return failed(
-      ctx.event.stage,
-      `stage '${ctx.event.stage}' rejects bank '${resolveTargetBankId(ctx.processor)}' — ${what} publishes shared knowledge and never reads or writes user_* banks (AE7)`,
+    return {
+      ok: false,
+      result: failed(
+        ctx.event.stage,
+        `stage '${ctx.event.stage}' rejects bank '${resolveTargetBankId(ctx.processor)}' — ${what} publishes shared knowledge and never reads or writes user_* banks (AE7)`,
+      ),
+    };
+  }
+  return { ok: true, processor: shared };
+}
+
+/** Default RequestResponse invoke of the observations-ingest Lambda. */
+async function defaultInvokeObservationsIngest(
+  payload: GraphIngestInvokePayload,
+): Promise<GraphIngestInvokeResult> {
+  const fnName =
+    process.env.KG_OBSERVATIONS_INGEST_FN ??
+    (process.env.STAGE
+      ? `thinkwork-${process.env.STAGE}-api-knowledge-graph-observations-ingest`
+      : null);
+  if (!fnName) {
+    throw new Error(
+      "observations-ingest function name unresolved (no STAGE or KG_OBSERVATIONS_INGEST_FN)",
     );
   }
-  return {
-    status: "succeeded",
-    stage: ctx.event.stage,
-    counts: { noop: 1 },
-    output: {
-      targetBankId: resolveTargetBankId(shared),
-      note: `${what} materialization lands in U4 — this run recorded a deferred no-op`,
-    },
-  };
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
+  const response = await new LambdaClient({}).send(
+    new InvokeCommand({
+      FunctionName: fnName,
+      InvocationType: "RequestResponse",
+      Payload: new TextEncoder().encode(JSON.stringify(payload)),
+    }),
+  );
+  const body = response.Payload
+    ? new TextDecoder().decode(response.Payload)
+    : "";
+  if (response.FunctionError) {
+    throw new Error(
+      `observations-ingest invoke errored (${response.FunctionError}): ${body.slice(0, 300)}`,
+    );
+  }
+  return JSON.parse(body) as GraphIngestInvokeResult;
 }
+
+/** Enqueue outcomes that carry a settleable compile job for runWiki. */
+const SETTLEABLE_ENQUEUE_STATUSES = new Set([
+  "enqueued",
+  "enqueued_invoke_failed",
+  "deduped",
+]);
+/** Explicit kill-switch skips: compile intentionally off, not a dead handoff. */
+const SKIP_ENQUEUE_STATUSES = new Set([
+  "skipped_source_not_graph",
+  "skipped_flag_off",
+]);
+
+/**
+ * Minimum lease headroom before starting the synchronous ingest invoke: the
+ * ingest Lambda can legitimately run its full 480s timeout, and an invoke
+ * cut off by the WORKER's own deadline would strand the claim mid-flight.
+ * Only enforced when the harness wired remainingMs.
+ */
+const GRAPH_INGEST_MIN_LEASE_MS = 540_000;
 
 export async function runGraph(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
-  return runSharedOnlyStub(ctx, "targeted graph ingest");
+  const guard = requireSharedGraphWikiProcessor(ctx, "targeted graph ingest");
+  if (!guard.ok) return guard.result;
+  const { db, event } = ctx;
+  const processor = guard.processor;
+  const targetBankId = resolveTargetBankId(processor);
+
+  const remainingMs = ctx.lease?.remainingMs?.();
+  if (remainingMs !== undefined && remainingMs < GRAPH_INGEST_MIN_LEASE_MS) {
+    // Not enough runway for a full ingest invoke — hand back a continuation
+    // so the harness re-invokes this worker fresh instead of failing
+    // spuriously mid-flight.
+    return {
+      status: "succeeded",
+      stage: event.stage,
+      counts: { noop: 1 },
+      output: {
+        continuation: true,
+        note: "insufficient lease headroom to start the targeted graph ingest — continuing on a fresh invocation",
+      },
+    };
+  }
+
+  const invoke =
+    ctx.graphWiki?.invokeObservationsIngest ?? defaultInvokeObservationsIngest;
+  let ingest: GraphIngestInvokeResult;
+  try {
+    ingest = await invoke({
+      tenantId: processor.tenant_id,
+      bankIds: [targetBankId],
+      trigger: "manual",
+    });
+  } catch (err) {
+    return failed(
+      event.stage,
+      `targeted graph ingest invoke failed for bank ${targetBankId}: ${(err as Error)?.message ?? String(err)}`,
+    );
+  }
+
+  if (ingest.status === "skipped") {
+    // Another observations ingest run is already active for this tenant —
+    // fail visibly/resumably rather than silently skipping the graph pass.
+    return failed(
+      event.stage,
+      `targeted graph ingest was skipped: another observations ingest run is active for this tenant (runId=${ingest.runId ?? "unknown"}) — re-run the stage after it settles`,
+    );
+  }
+  if (ingest.status === "stale_noop") {
+    // Zero candidates: nothing to publish, no compile job expected. Record
+    // the visible no-op so runWiki can settle as a no-op too.
+    const detail = {
+      ingestRunId: ingest.runId ?? null,
+      ingestStatus: "stale_noop",
+      wikiCompileEnqueue: null,
+    };
+    await recordRunItem(db, {
+      tenantId: processor.tenant_id,
+      workflowRunId: event.workflowRunId,
+      sourceConfigId: ctx.sources[0]?.id ?? processor.id,
+      sourceItemId: targetBankId,
+      stage: "graph",
+      result: "noop",
+      detail,
+    });
+    return {
+      status: "succeeded",
+      stage: event.stage,
+      counts: { noop: 1 },
+      output: {
+        targetBankId,
+        ...detail,
+        note: "no new observation candidates in the target bank",
+      },
+    };
+  }
+  if (!ingest.ok || ingest.status !== "succeeded") {
+    return failed(
+      event.stage,
+      `targeted graph ingest ${ingest.runId ?? ""} failed for bank ${targetBankId}: ${ingest.error ?? `status ${ingest.status}`}`,
+    );
+  }
+
+  const metrics = ingest.metrics ?? {};
+  const enqueue = metrics.wikiCompileEnqueue as
+    | Record<string, unknown>
+    | undefined;
+  const enqueueStatus =
+    typeof enqueue?.status === "string" ? enqueue.status : null;
+  const settleable =
+    enqueueStatus !== null && SETTLEABLE_ENQUEUE_STATUSES.has(enqueueStatus);
+  const skipped =
+    enqueueStatus !== null && SKIP_ENQUEUE_STATUSES.has(enqueueStatus);
+  if (!settleable && !skipped) {
+    // A succeeded ingest with no usable compile handoff is exactly the dead
+    // trigger U4 closed — fail the stage visibly so the run cannot report
+    // success while the Wiki silently never compiles. Re-running the stage
+    // re-ingests (idempotent: cursors advanced, deferrals coalesce) and
+    // re-attempts the enqueue.
+    return failed(
+      event.stage,
+      `targeted graph ingest ${ingest.runId ?? ""} succeeded but reported no usable wiki-compile enqueue outcome (${enqueueStatus ?? "missing"}) — failing so the graph→wiki handoff cannot die silently`,
+    );
+  }
+
+  const deferrals = Array.isArray(metrics.identityDeferrals)
+    ? (metrics.identityDeferrals as Array<Record<string, unknown>>)
+    : [];
+  const counts = {
+    candidates: boundedInt(
+      metrics.candidateCount,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    ),
+    gated: Array.isArray(metrics.promotedIds) ? metrics.promotedIds.length : 0,
+    merged: boundedInt(metrics.entityCount, 0, 0, Number.MAX_SAFE_INTEGER),
+    deferred: boundedInt(
+      metrics.identityDeferredCount,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    ),
+  };
+  const detail = {
+    ingestRunId: ingest.runId ?? null,
+    ingestStatus: "succeeded",
+    counts,
+    deferredCaseIds: deferrals
+      .map((d) => d.caseId)
+      .filter((id): id is string => typeof id === "string")
+      .slice(0, 50),
+    wikiCompileEnqueue: enqueue ?? null,
+  };
+  await recordRunItem(db, {
+    tenantId: processor.tenant_id,
+    workflowRunId: event.workflowRunId,
+    sourceConfigId: ctx.sources[0]?.id ?? processor.id,
+    sourceItemId: targetBankId,
+    stage: "graph",
+    result: counts.merged > 0 || counts.gated > 0 ? "changed" : "noop",
+    detail,
+  });
+
+  return {
+    status: "succeeded",
+    stage: event.stage,
+    counts,
+    output: { targetBankId, ...detail },
+  };
+}
+
+const DEFAULT_WIKI_POLL_INTERVAL_MS = 5_000;
+/** Per-invocation settle budget; a still-running compile continues on a
+ * fresh invocation instead of failing spuriously. */
+const DEFAULT_WIKI_SETTLE_BUDGET_MS = 300_000;
+
+/**
+ * The durable graph→wiki job reference: the graph stage's run-item detail
+ * for THIS workflow run (recorded only on graph success, so it cannot go
+ * stale on a graph retry).
+ */
+async function findGraphStageDetail(
+  ctx: StageContext,
+): Promise<Record<string, unknown> | null> {
+  const [row] = await ctx.db
+    .select({ detail: memoryRunItems.detail })
+    .from(memoryRunItems)
+    .where(
+      and(
+        eq(memoryRunItems.workflow_run_id, ctx.event.workflowRunId),
+        eq(memoryRunItems.stage, "graph"),
+      ),
+    )
+    .orderBy(desc(memoryRunItems.created_at))
+    .limit(1);
+  return (row?.detail as Record<string, unknown> | undefined) ?? null;
 }
 
 export async function runWiki(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
-  return runSharedOnlyStub(ctx, "canonical Wiki compile");
+  const guard = requireSharedGraphWikiProcessor(ctx, "canonical Wiki compile");
+  if (!guard.ok) return guard.result;
+  const { db, event } = ctx;
+  const processor = guard.processor;
+  const targetBankId = resolveTargetBankId(processor);
+
+  // Job reference: explicit option (ops/tests) beats the graph stage's
+  // durable run-item record for this run.
+  let jobId =
+    typeof ctx.event.options?.wikiCompileJobId === "string"
+      ? (ctx.event.options.wikiCompileJobId as string)
+      : null;
+  if (!jobId) {
+    const graphDetail = await findGraphStageDetail(ctx);
+    if (!graphDetail) {
+      return failed(
+        event.stage,
+        "no graph-stage record found for this run — the wiki stage settles the compile job the graph stage enqueued, so run graph first",
+      );
+    }
+    const enqueue = graphDetail.wikiCompileEnqueue as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const recordedJobId =
+      typeof enqueue?.jobId === "string" ? enqueue.jobId : null;
+    if (!recordedJobId) {
+      // Graph recorded a no-op (stale ingest) or an explicit kill-switch
+      // skip — there is no compile to settle. Visible no-op, not a failure.
+      const status =
+        typeof enqueue?.status === "string" ? enqueue.status : null;
+      await recordRunItem(db, {
+        tenantId: processor.tenant_id,
+        workflowRunId: event.workflowRunId,
+        sourceConfigId: ctx.sources[0]?.id ?? processor.id,
+        sourceItemId: targetBankId,
+        stage: "wiki",
+        result: "noop",
+        detail: { reason: status ?? "graph stage recorded no compile job" },
+      });
+      return {
+        status: "succeeded",
+        stage: event.stage,
+        counts: { noop: 1 },
+        output: {
+          targetBankId,
+          note: `no wiki compile job to settle (${status ?? "graph stage was a no-op"})`,
+        },
+      };
+    }
+    jobId = recordedJobId;
+  }
+
+  const deps = ctx.graphWiki ?? {};
+  const getJob =
+    deps.getCompileJob ?? ((id: string) => getCompileJob(id, db as never));
+  const kick = deps.invokeCompile ?? invokeWikiCompile;
+  const sleep =
+    deps.sleep ??
+    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_WIKI_POLL_INTERVAL_MS;
+  const settleBudgetMs = deps.settleBudgetMs ?? DEFAULT_WIKI_SETTLE_BUDGET_MS;
+  const startedAt = Date.now();
+  let kicked = false;
+
+  for (;;) {
+    const job = await getJob(jobId);
+    if (!job) {
+      return failed(event.stage, `wiki compile job ${jobId} not found`);
+    }
+    if (job.tenant_id !== processor.tenant_id) {
+      return failed(
+        event.stage,
+        `wiki compile job ${jobId} belongs to another tenant — refusing cross-tenant settlement`,
+      );
+    }
+    if (job.status === "succeeded") {
+      // Idempotent settle: recordRunItem no-ops on a duplicate settle of the
+      // same job within this run.
+      await recordRunItem(db, {
+        tenantId: processor.tenant_id,
+        workflowRunId: event.workflowRunId,
+        sourceConfigId: ctx.sources[0]?.id ?? processor.id,
+        sourceItemId: jobId,
+        stage: "wiki",
+        result: "changed",
+        detail: { jobId, jobStatus: job.status, attempt: job.attempt },
+      });
+      return {
+        status: "succeeded",
+        stage: event.stage,
+        counts: { compiled: 1 },
+        output: { targetBankId, jobId, jobStatus: job.status },
+      };
+    }
+    if (job.status === "failed" || job.status === "skipped") {
+      // Visible, resumable failure: the run stays failed instead of falsely
+      // successful. A re-run of this stage re-checks the same job id and can
+      // settle it idempotently if an operator rerun later completed it.
+      return failed(
+        event.stage,
+        `wiki compile job ${jobId} finished '${job.status}'${job.error ? `: ${job.error}` : ""} — the graph ingest succeeded but the canonical Wiki did not compile`,
+      );
+    }
+
+    // pending | running
+    if (job.status === "pending" && !kicked) {
+      // Cover deduped / enqueued_invoke_failed handoffs: the job row exists
+      // but nothing may have invoked the compile Lambda. claimCompileJobById
+      // CAS inside wiki-compile makes a duplicate kick harmless.
+      kicked = true;
+      try {
+        await kick(jobId);
+      } catch (err) {
+        console.warn(
+          `[memory-sources:wiki] compile kick for job ${jobId} failed: ${(err as Error)?.message}`,
+        );
+      }
+    }
+
+    if (ctx.lease) {
+      const renewed = await ctx.lease.renew().catch(() => false);
+      if (!renewed) {
+        // Lease taken over — the new claimant owns settlement; hand back a
+        // continuation result (the harness detects the superseded lease).
+        return {
+          status: "succeeded",
+          stage: event.stage,
+          counts: { noop: 1 },
+          output: { continuation: true, jobId, jobStatus: job.status },
+        };
+      }
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    const exhausted =
+      elapsedMs + pollIntervalMs > settleBudgetMs || leaseExhausted(ctx);
+    if (exhausted) {
+      if (job.status === "running") {
+        // The compile is progressing — continue on a fresh invocation
+        // rather than failing spuriously.
+        return {
+          status: "succeeded",
+          stage: event.stage,
+          counts: { noop: 1 },
+          output: {
+            continuation: true,
+            jobId,
+            jobStatus: job.status,
+            waitedMs: elapsedMs,
+          },
+        };
+      }
+      // Still pending after the budget (kick failed or the worker crashed
+      // pre-claim): fail visibly/resumably — the job row survives for the
+      // drainer, and a re-run of this stage re-checks and settles it.
+      return failed(
+        event.stage,
+        `wiki compile job ${jobId} is still '${job.status}' after ${Math.round(elapsedMs / 1000)}s — re-run the stage to settle it once a compile worker picks it up`,
+      );
+    }
+    await sleep(pollIntervalMs);
+  }
 }
