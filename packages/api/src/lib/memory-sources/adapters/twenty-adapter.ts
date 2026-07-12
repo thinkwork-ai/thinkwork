@@ -343,6 +343,8 @@ export const twentyAdapter: MemorySourceAdapter = {
   partitionKey: PARTITION_KEY,
   pathSegment: "twenty",
   requiresOwnerUser: true,
+  // CRM data is shared company memory — never a personal User Bank source.
+  supportsPersonalScope: false,
   checkReadiness: (db, args) =>
     checkTwentyReadiness(db, {
       tenantId: args.tenantId,

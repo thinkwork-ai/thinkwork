@@ -273,6 +273,7 @@ describe("SINGLE_VALUED_PREDICATES", () => {
         // U7 KB-document predicates.
         "document.title",
         "document.effective_date",
+        "email.subject",
       ].sort(),
     );
   });

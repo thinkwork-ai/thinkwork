@@ -8,6 +8,7 @@ import {
   grantInactiveReason,
   isUrlWithinUrlSet,
   MemoryAuthorizationError,
+  stringSetValueInvalidReason,
   normalizeExactUrl,
   parseUrlSetEntry,
   resolveExactUrls,
@@ -276,9 +277,10 @@ describe("assertGrantBoundaryValid (grant-time validation)", () => {
   });
 
   it("fails closed for an unregistered source family", () => {
-    // firecrawl gained a schema in U5; email stays unregistered until U6.
+    // Every V1 family (twenty/firecrawl/email/bedrock_kb) now has a
+    // schema; a future/unknown family still fails closed.
     expect(() =>
-      assertGrantBoundaryValid({}, { sourceFamily: "email" }),
+      assertGrantBoundaryValid({}, { sourceFamily: "salesforce" }),
     ).toThrow(MemoryAuthorizationError);
   });
 });
@@ -624,5 +626,90 @@ describe("bedrock_kb boundary schema (stringSet envelope, U7)", () => {
         { sourceFamily: "bedrock_kb" },
       ),
     ).toThrow(/knowledgeBaseIds/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stringSet dimension (U6 — email label envelopes; shares the U7 validator)
+// ---------------------------------------------------------------------------
+
+describe("stringSet dimension (email labels)", () => {
+  it("stringSetValueInvalidReason accepts opaque provider ids and names why malformed values fail", () => {
+    expect(stringSetValueInvalidReason("INBOX")).toBeNull();
+    expect(stringSetValueInvalidReason("Label_1234567890")).toBeNull();
+    expect(stringSetValueInvalidReason("")).toMatch(/non-empty trimmed/);
+    expect(stringSetValueInvalidReason("   ")).toMatch(/non-empty trimmed/);
+    expect(stringSetValueInvalidReason(" padded ")).toMatch(
+      /non-empty trimmed/,
+    );
+    expect(stringSetValueInvalidReason("a".repeat(257))).toMatch(/longer than/);
+    expect(stringSetValueInvalidReason("evil\nlabel")).toMatch(
+      /control characters/,
+    );
+    expect(stringSetValueInvalidReason("evil\u0000label")).toMatch(
+      /control characters/,
+    );
+    expect(stringSetValueInvalidReason(42)).toMatch(/not a string/);
+    expect(stringSetValueInvalidReason(null)).toMatch(/not a string/);
+  });
+
+  it("config labels must be a verbatim subset of grant labels", () => {
+    expect(
+      within(
+        { labels: ["INBOX", "Label_work"] },
+        { labels: ["Label_work"] },
+        "email",
+      ),
+    ).not.toThrow();
+    expect(
+      within({ labels: ["INBOX"] }, { labels: ["Label_other"] }, "email"),
+    ).toThrow(/outside the granted identifier set/);
+  });
+
+  it("an EMPTY or omitted grant label set admits nothing (fail closed)", () => {
+    expect(within({ labels: [] }, { labels: ["INBOX"] }, "email")).toThrow(
+      /outside the granted identifier set/,
+    );
+    expect(within({}, { labels: ["INBOX"] }, "email")).toThrow(
+      /outside the granted identifier set/,
+    );
+    // …and both empty is fine (nothing requested).
+    expect(within({}, {}, "email")).not.toThrow();
+  });
+
+  it("malformed label values fail closed on either side", () => {
+    expect(within({ labels: ["ok", ""] }, { labels: ["ok"] }, "email")).toThrow(
+      MemoryAuthorizationError,
+    );
+    expect(
+      within({ labels: ["ok"] }, { labels: [123] as never }, "email"),
+    ).toThrow(MemoryAuthorizationError);
+    expect(within({ labels: "INBOX" }, {}, "email")).toThrow(
+      /array of identifier strings/,
+    );
+  });
+
+  it("email caps compare as envelopes and unknown keys are rejected", () => {
+    expect(
+      within({ maxMessages: 100 }, { maxMessages: 100 }, "email"),
+    ).not.toThrow();
+    expect(within({ maxMessages: 10 }, { maxMessages: 100 }, "email")).toThrow(
+      /maxMessages/,
+    );
+    expect(within({}, { labelz: ["INBOX"] }, "email")).toThrow(/labelz/);
+    // Omitted maxMessages defaults on both sides (50) — comparable.
+    expect(within({}, { maxMessages: 50 }, "email")).not.toThrow();
+    expect(within({}, { maxMessages: 51 }, "email")).toThrow(/maxMessages/);
+  });
+
+  it("the email schema is registered with a fail-closed default label set", () => {
+    const schema = BOUNDARY_SCHEMAS.email!;
+    expect(schema.labels).toEqual({ kind: "stringSet", default: [] });
+    expect(schema.maxMessages).toMatchObject({
+      kind: "cap",
+      default: 50,
+      min: 1,
+      max: 500,
+    });
   });
 });

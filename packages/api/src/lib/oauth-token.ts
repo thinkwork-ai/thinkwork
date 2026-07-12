@@ -12,7 +12,11 @@
  * 5. On failure: mark connection status="expired" + notify
  */
 
-import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
+import {
+  getConfig,
+  getApiAuthSecret,
+  getAppsyncApiKey,
+} from "@thinkwork/runtime-config";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { schema } from "@thinkwork/database-pg";
@@ -501,16 +505,18 @@ export async function buildSkillEnvOverrides(
 
   // Always provide the API URL and secret so skills can call back
   envOverrides.THINKWORK_API_URL = process.env.MCP_BASE_URL || "";
-  envOverrides.THINKWORK_API_SECRET =
-    getApiAuthSecret();
+  envOverrides.THINKWORK_API_SECRET = getApiAuthSecret();
 
   return envOverrides;
 }
 
 /**
  * Mark a connection as expired and optionally notify the user.
+ * Exported for the memory-source Gmail adapter (THINK-193 U6): a 401 from
+ * Gmail mid-acquisition marks the connection expired so the UI shows the
+ * reconnect prompt, and the stage fails visibly/resumably.
  */
-async function markConnectionExpired(
+export async function markConnectionExpired(
   connectionId: string,
   tenantId: string,
   reason: string,

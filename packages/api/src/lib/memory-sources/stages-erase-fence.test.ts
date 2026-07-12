@@ -25,6 +25,11 @@ vi.mock("../memory/index.js", () => ({
 vi.mock("../brain/dream/runner.js", () => ({ runBrainDreamState: vi.fn() }));
 vi.mock("./claims.js", () => ({
   extractCompanyClaims: vi.fn(() => []),
+  // U6 email exports pulled in via the adapter registry module graph.
+  extractWebPageClaims: vi.fn(() => []),
+  extractEmailThreadClaims: vi.fn(() => []),
+  subjectKeyForEmailThread: (threadId: string) => `email:thread:${threadId}`,
+  boundedInlineText: (value: string) => value,
   upsertClaimsForEvidence: vi.fn(async () => ({
     created: 0,
     supported: 0,

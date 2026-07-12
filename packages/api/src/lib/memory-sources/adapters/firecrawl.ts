@@ -468,6 +468,8 @@ export const firecrawlAdapter: MemorySourceAdapter = {
   // Credentials are tenant-level (web-extract builtin tool) — no owner
   // user needed to mint tokens.
   requiresOwnerUser: false,
+  // Personal firecrawl is an explicit U5 NON-GOAL: shared banks only.
+  supportsPersonalScope: false,
   checkReadiness: (db, args) =>
     checkFirecrawlReadiness(db, {
       tenantId: args.tenantId,

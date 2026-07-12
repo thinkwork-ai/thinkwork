@@ -68,7 +68,11 @@ import {
 } from "../repository.js";
 import { effectiveLimit } from "../acquire-helpers.js";
 import type { ClaimUpsert } from "../claims.js";
-import type { DbHandle, EvidenceUpsert, SharedTargetScope } from "../types.js";
+import type {
+  DbHandle,
+  EvidenceTargetScope,
+  EvidenceUpsert,
+} from "../types.js";
 import type {
   AdapterAcquireArgs,
   AdapterAcquireOutcome,
@@ -298,7 +302,7 @@ const POLICY_SIGNAL_RE =
 export function extractKbDocumentClaims(input: {
   snapshot: Record<string, unknown>;
   sourceItemId: string;
-  targetScope: SharedTargetScope;
+  targetScope: EvidenceTargetScope;
   targetId: string;
   extractionVersion?: string;
 }): ClaimUpsert[] {
@@ -838,6 +842,8 @@ export const bedrockKbAdapter: MemorySourceAdapter = {
   pathSegment: "bedrock-kb",
   // The KB is tenant infrastructure — no owner user needed to mint tokens.
   requiresOwnerUser: false,
+  // KB documents are shared company memory — never a personal source.
+  supportsPersonalScope: false,
   checkReadiness: (db, args) =>
     checkBedrockKbReadiness(db, {
       tenantId: args.tenantId,

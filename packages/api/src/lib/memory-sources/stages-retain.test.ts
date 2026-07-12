@@ -20,6 +20,11 @@ const upsertMarkdownMemoryDocument = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("./claims.js", () => ({
   extractCompanyClaims: vi.fn(() => []),
+  // U6 email exports pulled in via the adapter registry module graph.
+  extractWebPageClaims: vi.fn(() => []),
+  extractEmailThreadClaims: vi.fn(() => []),
+  subjectKeyForEmailThread: (threadId: string) => `email:thread:${threadId}`,
+  boundedInlineText: (value: string) => value,
   upsertClaimsForEvidence: vi.fn(async () => ({
     created: 0,
     supported: 0,

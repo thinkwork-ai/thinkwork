@@ -17,9 +17,9 @@ import type { ApprovalPlanOverride } from "@thinkwork/agent-loops-core";
 
 import type { ClaimUpsert } from "../claims.js";
 import type {
+  EvidenceTargetScope,
   MemoryProcessorConfig,
   MemorySourceConfig,
-  SharedTargetScope,
 } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -47,7 +47,12 @@ export interface AdapterAcquireArgs {
   db: Database;
   /** The opaque client checkReadiness produced. */
   client: unknown;
-  processor: MemoryProcessorConfig & { target_scope: SharedTargetScope };
+  /** Injected S3 client for S3-first snapshot uploads (U6 email privacy);
+   * undefined falls back to the lazy module client in snapshots.ts. */
+  s3?: import("@aws-sdk/client-s3").S3Client;
+  /** U6: personal-capable families additionally see target_scope 'user'
+   * (the owner's User Bank); shared families keep space/tenant. */
+  processor: MemoryProcessorConfig & { target_scope: EvidenceTargetScope };
   source: MemorySourceConfig;
   workflowRunId: string;
   /** Saved source boundary (already proven WITHIN the grant envelope). */
@@ -91,6 +96,11 @@ export interface MemorySourceAdapter {
   /** Family mints provider tokens as the processor's owning user; the
    * runner fails visibly when created_by_user_id is missing. */
   readonly requiresOwnerUser: boolean;
+  /** U6: whether this family may run on PERSONAL (user-scoped) processors
+   * writing the owner's User Bank. Shared-only families (twenty, firecrawl,
+   * bedrock_kb) declare false and are rejected on user scope both by the
+   * worker's family policy and the stage-level gate. */
+  readonly supportsPersonalScope: boolean;
 
   /** Resolve provider credentials/config into a usable client — fail
    * closed with a reason, never throw for expected misconfiguration. */
@@ -119,7 +129,7 @@ export interface MemorySourceAdapter {
   extractClaims(input: {
     snapshot: Record<string, unknown>;
     sourceItemId: string;
-    targetScope: SharedTargetScope;
+    targetScope: EvidenceTargetScope;
     targetId: string;
   }): ClaimUpsert[];
   /** Edition timestamp used to close superseded claim intervals (null when
@@ -139,11 +149,13 @@ export interface MemorySourceAdapter {
 import { twentyAdapter } from "./twenty-adapter.js";
 import { firecrawlAdapter } from "./firecrawl.js";
 import { bedrockKbAdapter } from "./bedrock-kb.js";
+import { emailAdapter } from "./email.js";
 
 const ADAPTERS: Record<string, MemorySourceAdapter> = {
   [twentyAdapter.family]: twentyAdapter,
   [firecrawlAdapter.family]: firecrawlAdapter,
   [bedrockKbAdapter.family]: bedrockKbAdapter,
+  [emailAdapter.family]: emailAdapter,
 };
 
 /** The adapter for a source family, or null (caller fails visibly). */

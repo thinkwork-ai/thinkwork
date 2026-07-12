@@ -46,6 +46,7 @@ import {
 } from "./snapshots.js";
 import type {
   EvidenceRow,
+  EvidenceTargetScope,
   MemoryProcessorConfig,
   MemorySourceConfig,
 } from "./types.js";
@@ -201,6 +202,37 @@ function requireSharedProcessor(
   };
 }
 
+/**
+ * Scope narrowing for the evidence-writing stages (THINK-193 U6): personal
+ * processors (target_scope 'user') run acquire/project/retain into the
+ * owner's User Bank for personal-capable families; shared processors keep
+ * space/tenant. Anything else is a mis-seeded row → visible failure.
+ */
+function requireWritableProcessor(
+  ctx: StageContext,
+): (MemoryProcessorConfig & { target_scope: EvidenceTargetScope }) | null {
+  const scope = ctx.processor.target_scope;
+  if (scope !== "user" && scope !== "space" && scope !== "tenant") return null;
+  return ctx.processor as MemoryProcessorConfig & {
+    target_scope: EvidenceTargetScope;
+  };
+}
+
+/**
+ * Per-source personal-scope gate (U6, defense-in-depth under the worker's
+ * SHARED_ONLY_SOURCE_FAMILIES policy): a user-scoped processor may only run
+ * families whose adapter declares supportsPersonalScope.
+ */
+function personalScopeRejection(
+  processor: Pick<MemoryProcessorConfig, "id" | "target_scope">,
+  source: MemorySourceConfig,
+  adapter: MemorySourceAdapter,
+): string | null {
+  if (processor.target_scope !== "user") return null;
+  if (adapter.supportsPersonalScope) return null;
+  return `source family "${source.source_family}" writes shared banks only — personal processor ${processor.id} may not run it`;
+}
+
 export function failed(stage: string, error: string): MemoryStageWorkerResult {
   return { status: "failed", stage, error };
 }
@@ -268,13 +300,14 @@ async function runAcquireInner(
       output: { note: "no enabled sources selected for this run" },
     };
   }
-  // U3/U5: every implemented source family (twenty, firecrawl) writes
-  // shared evidence; personal families arrive with the Gmail tracer (U6).
-  const processor = requireSharedProcessor(ctx);
+  // U6: shared families (twenty, firecrawl) write shared banks; the email
+  // family additionally runs on personal processors into the owner's User
+  // Bank. Anything else is a mis-seeded row → visible failure.
+  const processor = requireWritableProcessor(ctx);
   if (!processor) {
     return failed(
       event.stage,
-      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — the configured source families write shared banks only`,
+      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — acquisition may only target 'user', 'space', or 'tenant' banks`,
     );
   }
 
@@ -284,6 +317,8 @@ async function runAcquireInner(
     const resolved = adapterForSource(event.stage, source);
     if (!resolved.ok) return resolved.result;
     const adapter = resolved.adapter;
+    const scopeRejection = personalScopeRejection(processor, source, adapter);
+    if (scopeRejection) return failed(event.stage, scopeRejection);
     if (adapter.requiresOwnerUser && !processor.created_by_user_id) {
       return failed(
         event.stage,
@@ -352,6 +387,7 @@ async function runAcquireInner(
       outcome = await adapter.runAcquire({
         db,
         client: readiness.client,
+        s3: ctx.s3,
         processor,
         source,
         workflowRunId: event.workflowRunId,
@@ -451,20 +487,26 @@ function snapshotTtlDaysFor(ctx: StageContext): number {
 }
 
 /**
- * Resolve an evidence item's normalized snapshot: inline column when
- * present (pre-S3 back-compat rows), else fetch from the S3 ref. Null when
- * neither exists or the S3 object lifecycle-expired.
+ * Resolve an evidence item's FULL normalized snapshot. The S3 ref wins when
+ * present (U6: email rows keep only a content-free skeleton inline — marked
+ * `contentFree: true` — that must never be projected as content); the inline
+ * column remains the pre-S3 back-compat path. Null when neither a full
+ * snapshot exists nor the S3 object survived its lifecycle expiry — a
+ * content-free skeleton is never returned as a snapshot substitute.
  */
 export async function loadSnapshot(
   ctx: Pick<StageContext, "s3">,
   item: EvidenceRow,
 ): Promise<Record<string, unknown> | null> {
   const inline = item.normalized_snapshot as Record<string, unknown> | null;
-  if (inline) return inline;
   if (item.snapshot_ref) {
-    return await getEvidenceSnapshot(ctx.s3, { ref: item.snapshot_ref });
+    const fetched = await getEvidenceSnapshot(ctx.s3, {
+      ref: item.snapshot_ref,
+    });
+    if (fetched) return fetched;
+    return inline && inline.contentFree !== true ? inline : null;
   }
-  return null;
+  return inline && inline.contentFree !== true ? inline : null;
 }
 
 /**
@@ -594,13 +636,11 @@ async function runProjectInner(
   const backlog = await changedEvidence(ctx);
   const items = backlog.slice(0, evidenceBatchLimit(ctx, "projectBatch"));
   const counts = { changed: 0, noop: 0, failed: 0 };
-  const shared = requireSharedProcessor(ctx);
-  if (items.length > 0 && !shared) {
-    // Unreachable via the worker (shared-only families cannot bind personal
-    // processors), but never silently mint claims under a user scope.
+  const writable = requireWritableProcessor(ctx);
+  if (items.length > 0 && !writable) {
     return failed(
       event.stage,
-      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — external-source claim projection writes shared scopes only`,
+      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — claim projection may only target 'user', 'space', or 'tenant' scopes`,
     );
   }
   const sourceById = new Map(ctx.sources.map((source) => [source.id, source]));
@@ -655,6 +695,8 @@ async function runProjectInner(
       continue;
     }
     const adapter = resolved.adapter;
+    const scopeRejection = personalScopeRejection(writable!, source, adapter);
+    if (scopeRejection) return failed(event.stage, scopeRejection);
     const eraseFence = fenceFor(item.source_config_id);
     const snapshot = await loadSnapshot(ctx, item);
     if (!snapshot) {
@@ -677,14 +719,14 @@ async function runProjectInner(
     const claims = adapter.extractClaims({
       snapshot,
       sourceItemId: item.source_item_id,
-      targetScope: shared!.target_scope,
-      targetId: shared!.target_id,
+      targetScope: writable!.target_scope,
+      targetId: writable!.target_id,
     });
     const editionEffectiveFrom = adapter.editionEffectiveFrom(snapshot);
     const claimResult = await upsertClaimsForEvidence(db, {
       tenantId: item.tenant_id,
-      targetScope: shared!.target_scope,
-      targetId: shared!.target_id,
+      targetScope: writable!.target_scope,
+      targetId: writable!.target_id,
       sourceConfigId: item.source_config_id,
       evidenceItemId: item.id,
       subjectKey: adapter.subjectKeyFor(item.source_item_id),
@@ -766,11 +808,11 @@ async function runRetainInner(
   const backlog = await changedEvidence(ctx);
   const items = backlog.slice(0, evidenceBatchLimit(ctx, "retainBatch"));
   const counts = { changed: 0, noop: 0 };
-  const shared = requireSharedProcessor(ctx);
-  if (items.length > 0 && !shared) {
+  const writable = requireWritableProcessor(ctx);
+  if (items.length > 0 && !writable) {
     return failed(
       event.stage,
-      `processor ${processor.id} targets '${processor.target_scope}' — external-source projection retain writes shared banks only`,
+      `processor ${processor.id} targets '${processor.target_scope}' — projection retain may only target 'user', 'space', or 'tenant' banks`,
     );
   }
   const targetBankId = resolveTargetBankId(processor);
@@ -802,6 +844,12 @@ async function runRetainInner(
       continue;
     }
     const sourceAdapter = resolved.adapter;
+    const scopeRejection = personalScopeRejection(
+      writable!,
+      source,
+      sourceAdapter,
+    );
+    if (scopeRejection) return failed(event.stage, scopeRejection);
     const eraseFence = fenceFor(item.source_config_id);
     const snapshot = await loadSnapshot(ctx, item);
     if (!snapshot) {
@@ -834,8 +882,8 @@ async function runRetainInner(
     const subjectKey = sourceAdapter.subjectKeyFor(item.source_item_id);
     const activeClaims = await listActiveClaimsForSubject(db, {
       tenantId: processor.tenant_id,
-      targetScope: shared!.target_scope,
-      targetId: shared!.target_id,
+      targetScope: writable!.target_scope,
+      targetId: writable!.target_id,
       subjectKey,
     });
     const content =
@@ -859,8 +907,8 @@ async function runRetainInner(
     // that already contains this projection.
     await adapter.upsertMarkdownMemoryDocument({
       tenantId: processor.tenant_id,
-      ownerType: shared!.target_scope,
-      ownerId: shared!.target_id,
+      ownerType: writable!.target_scope,
+      ownerId: writable!.target_id,
       path: `memory-sources/${sourceAdapter.pathSegment}/${projectionKey.replace(":", "/")}.md`,
       documentId,
       context: "external_source_projection",
@@ -890,8 +938,8 @@ async function runRetainInner(
             }
             await adapter.deleteDocument({
               tenantId: processor.tenant_id,
-              ownerType: shared!.target_scope,
-              ownerId: shared!.target_id,
+              ownerType: writable!.target_scope,
+              ownerId: writable!.target_id,
               documentId,
             });
           } catch (compensationErr) {

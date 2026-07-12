@@ -21,7 +21,7 @@ import { computeContentHash } from "../evidence.js";
 import type {
   AcquiredPage,
   EvidenceUpsert,
-  SharedTargetScope,
+  EvidenceTargetScope,
 } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -614,7 +614,7 @@ export async function acquireCompaniesPage(
     cursor: TwentyCompaniesCursor | null;
     pageSize: number;
     boundary?: { maxRecords?: number };
-    targetScope: SharedTargetScope;
+    targetScope: EvidenceTargetScope;
     targetId: string;
     recipeVersion?: string;
     /**
@@ -695,7 +695,7 @@ export async function acquireCompaniesPage(
 function toEvidenceUpsert(
   record: Record<string, unknown>,
   args: {
-    targetScope: SharedTargetScope;
+    targetScope: EvidenceTargetScope;
     targetId: string;
     recipeVersion?: string;
   },
@@ -744,7 +744,7 @@ export async function reconcileCompaniesPage(
   args: {
     startingAfter: string | null;
     pageSize: number;
-    targetScope: SharedTargetScope;
+    targetScope: EvidenceTargetScope;
     targetId: string;
     recipeVersion?: string;
     /** Same capability semantics as acquireCompaniesPage. */
