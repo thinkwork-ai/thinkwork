@@ -565,10 +565,40 @@ BEGIN
   ELSE
     missing := missing || 'managed_applications'::text;
   END IF;
+  IF to_regclass('public.memory_derivations') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_derivations TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_derivations'::text;
+  END IF;
+  IF to_regclass('public.memory_evidence_items') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_evidence_items TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_evidence_items'::text;
+  END IF;
+  IF to_regclass('public.memory_processor_configs') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_processor_configs TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_processor_configs'::text;
+  END IF;
   IF to_regclass('public.memory_retain_attempts') IS NOT NULL THEN
     GRANT SELECT ON public.memory_retain_attempts TO analyst_reader;
   ELSE
     missing := missing || 'memory_retain_attempts'::text;
+  END IF;
+  IF to_regclass('public.memory_run_items') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_run_items TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_run_items'::text;
+  END IF;
+  IF to_regclass('public.memory_source_checkpoints') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_source_checkpoints TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_source_checkpoints'::text;
+  END IF;
+  IF to_regclass('public.memory_source_configs') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_source_configs TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_source_configs'::text;
   END IF;
   IF to_regclass('public.message_artifacts') IS NOT NULL THEN
     GRANT SELECT ON public.message_artifacts TO analyst_reader;
