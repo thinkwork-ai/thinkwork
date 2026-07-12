@@ -512,3 +512,175 @@ extend type Mutation {
     captureId: ID!
   ): Boolean!
 }
+
+"""
+External Memory Compounding (THINK-193 U2). Operator-only inspection and
+control surface for external memory sources: processor configs, source
+bindings, authorization grants, the evidence ledger, ontology claims, and
+the retraction ledger. All queries and mutations below require tenant admin.
+"""
+type MemoryProcessorConfig {
+  id: ID!
+  mode: String!
+  targetScope: String!
+  targetId: ID!
+  enabled: Boolean!
+  status: String!
+  budget: AWSJSON
+  createdByUserId: ID
+  createdAt: AWSDateTime
+}
+
+type MemorySourceConfig {
+  id: ID!
+  processorConfigId: ID!
+  sourceFamily: String!
+  sourceBindingKey: String!
+  enabled: Boolean!
+  boundary: AWSJSON
+  createdAt: AWSDateTime
+}
+
+"""
+Explicit source-access grant — the MAXIMUM readable envelope for a binding.
+At most one active grant exists per (processorConfig, sourceFamily,
+sourceBindingKey); granting again supersedes the previous grant.
+"""
+type MemorySourceAuthorization {
+  id: ID!
+  processorConfigId: ID!
+  sourceFamily: String!
+  sourceBindingKey: String!
+  boundary: AWSJSON
+  status: String!
+  grantVersion: Int!
+  grantedByUserId: ID
+  expiresAt: AWSDateTime
+  revokedAt: AWSDateTime
+  createdAt: AWSDateTime
+}
+
+"""
+Evidence-ledger row WITHOUT snapshot content. The normalized snapshot and
+S3 snapshot ref are redacted by design — operators inspect lineage and
+lifecycle here, not source payloads.
+"""
+type MemoryEvidenceItemSummary {
+  id: ID!
+  sourceConfigId: ID!
+  sourceItemId: String!
+  sourceVersion: String!
+  contentHash: String!
+  lifecycle: String!
+  acquisitionRunId: ID
+  createdAt: AWSDateTime
+}
+
+"""
+Durable ontology-shaped claim. supportCount is the number of ACTIVE
+evidence support edges (memory_claim_evidence status = 'active').
+"""
+type MemoryClaim {
+  id: ID!
+  subjectKey: String!
+  subjectEntityType: String!
+  ontologyPredicate: String!
+  value: AWSJSON
+  valueHash: String!
+  status: String!
+  conflictState: String!
+  effectiveFrom: AWSDateTime
+  effectiveTo: AWSDateTime
+  extractionVersion: String!
+  supportCount: Int!
+}
+
+"""
+Evidence → Hindsight projection lineage row.
+"""
+type MemoryDerivation {
+  id: ID!
+  sourceConfigId: ID!
+  projectionKey: String!
+  targetBankId: String!
+  hindsightDocumentId: String!
+  currentVersion: String!
+  lifecycle: String!
+  retractedAt: AWSDateTime
+}
+
+"""
+Idempotent multi-system retraction ledger row — one per provider document
+being retracted or erased.
+"""
+type MemoryRetractionAttempt {
+  id: ID!
+  scope: String!
+  providerDocumentId: String!
+  targetBankId: String!
+  status: String!
+  attemptCount: Int!
+  errorClass: String
+  errorMessage: String
+  createdAt: AWSDateTime
+  completedAt: AWSDateTime
+}
+
+extend type Query {
+  memoryProcessorConfigs(tenantId: ID): [MemoryProcessorConfig!]!
+  memorySourceConfigs(
+    tenantId: ID
+    processorConfigId: ID!
+  ): [MemorySourceConfig!]!
+  memorySourceAuthorizations(
+    tenantId: ID
+    processorConfigId: ID!
+  ): [MemorySourceAuthorization!]!
+  memoryEvidenceItems(
+    tenantId: ID
+    sourceConfigId: ID!
+    limit: Int
+  ): [MemoryEvidenceItemSummary!]!
+  memoryClaims(
+    tenantId: ID
+    targetScope: String!
+    targetId: ID!
+    subjectKey: String
+    limit: Int
+  ): [MemoryClaim!]!
+  memoryRetractionAttempts(
+    tenantId: ID
+    sourceConfigId: ID
+    limit: Int
+  ): [MemoryRetractionAttempt!]!
+}
+
+extend type Mutation {
+  """
+  Insert an active grant for a source binding, superseding (revoking) any
+  existing active grant for the same binding — one active grant per binding.
+  """
+  grantMemorySourceAuthorization(
+    tenantId: ID
+    processorConfigId: ID!
+    sourceFamily: String!
+    sourceBindingKey: String!
+    boundary: AWSJSON
+    expiresAt: AWSDateTime
+  ): MemorySourceAuthorization!
+  revokeMemorySourceAuthorization(tenantId: ID, authorizationId: ID!): Boolean!
+  """
+  Enqueue a retraction for one derivation's Hindsight document and process
+  it inline once (RequestResponse semantics — errors surface to the caller).
+  """
+  retractMemoryDerivation(
+    tenantId: ID
+    derivationId: ID!
+  ): MemoryRetractionAttempt!
+  """
+  Disable a source config, enqueue erase attempts for all of its active
+  derivations, process each inline, purge its checkpoints, and return the
+  number of processed attempts.
+  """
+  eraseMemorySource(tenantId: ID, sourceConfigId: ID!): Int!
+}

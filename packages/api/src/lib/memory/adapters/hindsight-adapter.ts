@@ -598,11 +598,13 @@ export class HindsightAdapter implements MemoryAdapter {
       return [];
     }
     const bankOwners = new Map<string, { ownerType: string; ownerId: string }>(
-      ((bankRows.rows ?? []) as Array<{
-        bank_id: string;
-        owner_type: string;
-        owner_id: string;
-      }>).map((row) => [
+      (
+        (bankRows.rows ?? []) as Array<{
+          bank_id: string;
+          owner_type: string;
+          owner_id: string;
+        }>
+      ).map((row) => [
         row.bank_id,
         { ownerType: row.owner_type, ownerId: row.owner_id },
       ]),
@@ -619,9 +621,9 @@ export class HindsightAdapter implements MemoryAdapter {
           m.metadata, m.created_at, m.updated_at
         FROM ${hindsightSql()}memory_units m
         WHERE (m.metadata->>'tenantId' = ${req.tenantId} OR m.bank_id = ANY(ARRAY[${sql.join(
-            bankIds.map((bankId) => sql`${bankId}`),
-            sql`, `,
-          )}]::text[]))
+          bankIds.map((bankId) => sql`${bankId}`),
+          sql`, `,
+        )}]::text[]))
           ${
             searchPattern
               ? sql`AND (
@@ -643,10 +645,7 @@ export class HindsightAdapter implements MemoryAdapter {
     }
 
     return (result.rows || []).map((row: any) =>
-      this.mapOperatorRow(
-        withInferredOwner(row, bankOwners),
-        req.tenantId,
-      ),
+      this.mapOperatorRow(withInferredOwner(row, bankOwners), req.tenantId),
     );
   }
 
@@ -1038,6 +1037,56 @@ export class HindsightAdapter implements MemoryAdapter {
         `[hindsight-adapter] ensureBankConfigured failed (write proceeds) bank=${bankId.slice(0, 18)} message=${(err as Error)?.message}`,
       );
     }
+  }
+
+  /**
+   * Delete one Hindsight document by document id. Pinned to the 0.8.4
+   * contract (`DELETE /v1/default/banks/<bankId>/documents/<documentId>`
+   * cascades to memory units and links) — see the U1 probe doc and the
+   * document-lifecycle contract test. 404 is idempotent success
+   * ("not_found"). Deliberately does NOT call ensureBankConfiguredById: a
+   * delete must never create or patch bank config.
+   */
+  async deleteDocument(req: {
+    tenantId: string;
+    ownerType: "user" | "agent" | "space" | "tenant";
+    ownerId: string;
+    documentId: string;
+  }): Promise<"deleted" | "not_found"> {
+    const bankId = await this.resolveBankId(req);
+    let resp: Response;
+    try {
+      resp = await fetch(
+        `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/documents/${encodeURIComponent(req.documentId)}`,
+        {
+          method: "DELETE",
+          signal: AbortSignal.timeout(this.timeoutMs),
+        },
+      );
+    } catch (err) {
+      throw new HindsightRetainError({
+        action: "deleteDocument",
+        retryable: true,
+        message: (err as Error)?.message || String(err),
+        cause: err,
+      });
+    }
+    if (resp.status === 200 || resp.status === 204) {
+      console.log(
+        `[hindsight-adapter] deleteDocument ok bank=${bankId.slice(0, 18)} document=${req.documentId.slice(0, 64)}`,
+      );
+      return "deleted";
+    }
+    if (resp.status === 404) {
+      return "not_found";
+    }
+    const body = await resp.text().catch(() => "");
+    throw new HindsightRetainError({
+      action: "deleteDocument",
+      statusCode: resp.status,
+      retryable: resp.status >= 500,
+      message: `hindsight deleteDocument ${resp.status}: ${body.slice(0, 300)}`,
+    });
   }
 
   private async postItems(

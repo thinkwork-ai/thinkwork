@@ -70,6 +70,26 @@ export interface MemoryAdapter {
    */
   consolidateBankById?(bankId: string): Promise<void>;
 
+  /**
+   * Delete one engine document by its stable document id, cascading to the
+   * memory units and links extracted from it.
+   *
+   * Pinned to the Hindsight 0.8.4 document-delete contract
+   * (`DELETE /v1/default/banks/<bankId>/documents/<documentId>` returns 200
+   * and cascades to units/links; see
+   * docs/solutions/tooling-decisions/hindsight-084-document-lifecycle-probe-2026-07-11.md).
+   * Gated by the lifecycle contract test
+   * (`adapters/hindsight-document-lifecycle.test.ts`). Returns "not_found"
+   * for an already-absent document (idempotent success). Callers must treat
+   * absence of this method as retraction-unsupported for the engine.
+   */
+  deleteDocument?(req: {
+    tenantId: string;
+    ownerType: "user" | "agent" | "space" | "tenant";
+    ownerId: string;
+    documentId: string;
+  }): Promise<"deleted" | "not_found">;
+
   inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
 
   inspectTenant?(

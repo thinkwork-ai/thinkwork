@@ -25,6 +25,7 @@ import {
 import { getDb } from "@thinkwork/database-pg";
 import {
   memoryProcessorConfigs,
+  memorySourceAuthorizations,
   memorySourceConfigs,
   workflows,
   workflowVersions,
@@ -114,6 +115,35 @@ async function main() {
       .returning();
   }
   if (!source) throw new Error("failed to create source config");
+
+  // U2: acquisition requires an explicit active grant whose boundary is the
+  // MAXIMUM envelope; the source config boundary must sit inside it.
+  let [grant] = await db
+    .select()
+    .from(memorySourceAuthorizations)
+    .where(
+      and(
+        eq(memorySourceAuthorizations.processor_config_id, processor.id),
+        eq(memorySourceAuthorizations.source_family, "twenty"),
+        eq(memorySourceAuthorizations.source_binding_key, "twenty"),
+        eq(memorySourceAuthorizations.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (!grant) {
+    [grant] = await db
+      .insert(memorySourceAuthorizations)
+      .values({
+        tenant_id: tenantId,
+        processor_config_id: processor.id,
+        source_family: "twenty",
+        source_binding_key: "twenty",
+        boundary: { maxRecords: Math.max(maxRecords, 200) },
+        granted_by_user_id: userId,
+      })
+      .returning();
+  }
+  if (!grant) throw new Error("failed to create authorization grant");
 
   // ---- Workflow definition ---------------------------------------------------
   const stageStep = (stage: string) => ({
@@ -214,6 +244,7 @@ async function main() {
   const summary = {
     processorConfigId: processor.id,
     sourceConfigId: source.id,
+    authorizationId: grant.id,
     workflowId: workflow.id,
     workflowVersionId: versionId,
     targetBankId: `${scope}_${targetId}`,

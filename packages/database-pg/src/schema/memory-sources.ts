@@ -87,6 +87,51 @@ export const MEMORY_RUN_ITEM_RESULTS = [
 
 export type MemoryRunItemResult = (typeof MEMORY_RUN_ITEM_RESULTS)[number];
 
+export const MEMORY_SOURCE_AUTHORIZATION_STATUSES = [
+  "active",
+  "revoked",
+  "expired",
+] as const;
+
+export type MemorySourceAuthorizationStatus =
+  (typeof MEMORY_SOURCE_AUTHORIZATION_STATUSES)[number];
+
+export const MEMORY_CLAIM_STATUSES = [
+  "active",
+  "superseded",
+  "retracted",
+] as const;
+
+export type MemoryClaimStatus = (typeof MEMORY_CLAIM_STATUSES)[number];
+
+export const MEMORY_CLAIM_CONFLICT_STATES = ["none", "conflicted"] as const;
+
+export type MemoryClaimConflictState =
+  (typeof MEMORY_CLAIM_CONFLICT_STATES)[number];
+
+export const MEMORY_CLAIM_EVIDENCE_STATUSES = ["active", "retracted"] as const;
+
+export type MemoryClaimEvidenceStatus =
+  (typeof MEMORY_CLAIM_EVIDENCE_STATUSES)[number];
+
+export const MEMORY_RETRACTION_SCOPES = ["derivation", "source"] as const;
+
+export type MemoryRetractionScope = (typeof MEMORY_RETRACTION_SCOPES)[number];
+
+export const MEMORY_RETRACTION_STATUSES = [
+  "queued",
+  "running",
+  "supports_updated",
+  "provider_deleted",
+  "reconsolidated",
+  "retracted",
+  "failed",
+  "dead_lettered",
+] as const;
+
+export type MemoryRetractionStatus =
+  (typeof MEMORY_RETRACTION_STATUSES)[number];
+
 // ---------------------------------------------------------------------------
 // memory_processor_configs — one processor per shared scope
 // ---------------------------------------------------------------------------
@@ -258,6 +303,10 @@ export const memoryEvidenceItems = pgTable(
     sensitivity: text("sensitivity"),
     /** S3 ref for the raw snapshot. */
     snapshot_ref: text("snapshot_ref"),
+    /** App-enforced TTL for the S3 snapshot (no DB-side expiry). */
+    snapshot_expires_at: timestamp("snapshot_expires_at", {
+      withTimezone: true,
+    }),
     /** Bounded normalized record kept inline for thin-slice inspectability. */
     normalized_snapshot: jsonb("normalized_snapshot").$type<Record<
       string,
@@ -395,6 +444,256 @@ export const memoryDerivations = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// memory_source_authorizations — explicit grant, the MAXIMUM readable envelope
+// ---------------------------------------------------------------------------
+
+export const memorySourceAuthorizations = pgTable(
+  "memory_source_authorizations",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    processor_config_id: uuid("processor_config_id")
+      .notNull()
+      .references(() => memoryProcessorConfigs.id, { onDelete: "cascade" }),
+    source_family: text("source_family").notNull(),
+    source_binding_key: text("source_binding_key").notNull(),
+    /** Maximum readable envelope — source-config boundaries must fit inside. */
+    boundary: jsonb("boundary")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    granted_by_user_id: uuid("granted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    grant_version: integer("grant_version").notNull().default(1),
+    status: text("status").notNull().default("active"),
+    expires_at: timestamp("expires_at", { withTimezone: true }),
+    revoked_at: timestamp("revoked_at", { withTimezone: true }),
+    sensitivity: jsonb("sensitivity")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("memory_source_authorizations_active_uidx")
+      .on(
+        table.processor_config_id,
+        table.source_family,
+        table.source_binding_key,
+      )
+      .where(sql`${table.status} = 'active'`),
+    index("memory_source_authorizations_tenant_idx").on(table.tenant_id),
+    check(
+      "memory_source_authorizations_source_family_check",
+      sql`${table.source_family} IN ('twenty', 'firecrawl', 'email', 'bedrock_kb')`,
+    ),
+    check(
+      "memory_source_authorizations_status_check",
+      sql`${table.status} IN ('active', 'revoked', 'expired')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// memory_claims — durable ontology-shaped claims
+// ---------------------------------------------------------------------------
+
+export const memoryClaims = pgTable(
+  "memory_claims",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    target_scope: text("target_scope").notNull(),
+    target_id: uuid("target_id").notNull(),
+    /** U4 canonical-identity fill — no FK until the identity tables land. */
+    canonical_subject_id: uuid("canonical_subject_id"),
+    /** Pre-canonical stable subject, e.g. 'twenty:company:<id>'. */
+    subject_key: text("subject_key").notNull(),
+    /** Ontology entity-type slug. */
+    subject_entity_type: text("subject_entity_type")
+      .notNull()
+      .default("customer"),
+    /** e.g. 'customer.employees'. */
+    ontology_predicate: text("ontology_predicate").notNull(),
+    /** FULL normalized value — never in an index. */
+    value: jsonb("value").$type<Record<string, unknown>>().notNull(),
+    /** sha256 hex of the normalized value — fixed-length index material. */
+    value_hash: text("value_hash").notNull(),
+    effective_from: timestamp("effective_from", { withTimezone: true }),
+    effective_to: timestamp("effective_to", { withTimezone: true }),
+    status: text("status").notNull().default("active"),
+    conflict_state: text("conflict_state").notNull().default("none"),
+    extraction_version: text("extraction_version").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    // Null-safe fingerprint: COALESCE folds NULL effective_from into a single
+    // sentinel so duplicate open-ended claims collide instead of coexisting.
+    uniqueIndex("memory_claims_fingerprint_uidx").on(
+      table.tenant_id,
+      table.target_scope,
+      table.target_id,
+      table.subject_key,
+      table.ontology_predicate,
+      table.value_hash,
+      sql`COALESCE(${table.effective_from}, '-infinity'::timestamptz)`,
+    ),
+    index("memory_claims_target_subject_idx").on(
+      table.tenant_id,
+      table.target_scope,
+      table.target_id,
+      table.subject_key,
+    ),
+    index("memory_claims_tenant_status_idx").on(table.tenant_id, table.status),
+    check(
+      "memory_claims_target_scope_check",
+      sql`${table.target_scope} IN ('space', 'tenant')`,
+    ),
+    check(
+      "memory_claims_status_check",
+      sql`${table.status} IN ('active', 'superseded', 'retracted')`,
+    ),
+    check(
+      "memory_claims_conflict_state_check",
+      sql`${table.conflict_state} IN ('none', 'conflicted')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// memory_claim_evidence — many-to-many claim <- evidence support edges
+// ---------------------------------------------------------------------------
+
+export const memoryClaimEvidence = pgTable(
+  "memory_claim_evidence",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    claim_id: uuid("claim_id")
+      .notNull()
+      .references(() => memoryClaims.id, { onDelete: "cascade" }),
+    evidence_item_id: uuid("evidence_item_id")
+      .notNull()
+      .references(() => memoryEvidenceItems.id, { onDelete: "cascade" }),
+    source_config_id: uuid("source_config_id")
+      .notNull()
+      .references(() => memorySourceConfigs.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    retracted_at: timestamp("retracted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("memory_claim_evidence_pair_uidx").on(
+      table.claim_id,
+      table.evidence_item_id,
+    ),
+    index("memory_claim_evidence_evidence_idx").on(table.evidence_item_id),
+    index("memory_claim_evidence_claim_status_idx").on(
+      table.claim_id,
+      table.status,
+    ),
+    check(
+      "memory_claim_evidence_status_check",
+      sql`${table.status} IN ('active', 'retracted')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// memory_retraction_attempts — idempotent multi-system retraction ledger
+// ---------------------------------------------------------------------------
+
+export const memoryRetractionAttempts = pgTable(
+  "memory_retraction_attempts",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    derivation_id: uuid("derivation_id").references(
+      () => memoryDerivations.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    source_config_id: uuid("source_config_id")
+      .notNull()
+      .references(() => memorySourceConfigs.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("hindsight"),
+    provider_document_id: text("provider_document_id").notNull(),
+    target_bank_id: text("target_bank_id").notNull(),
+    status: text("status").notNull().default("queued"),
+    attempt_count: integer("attempt_count").notNull().default(0),
+    max_attempts: integer("max_attempts").notNull().default(5),
+    next_retry_at: timestamp("next_retry_at", { withTimezone: true }),
+    locked_at: timestamp("locked_at", { withTimezone: true }),
+    locked_by: text("locked_by"),
+    error_class: text("error_class"),
+    error_message: text("error_message"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    completed_at: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    // Partial unique — a completed retraction can be re-queued later.
+    uniqueIndex("memory_retraction_attempts_document_uidx")
+      .on(table.tenant_id, table.provider, table.provider_document_id)
+      .where(sql`${table.status} NOT IN ('retracted', 'dead_lettered')`),
+    index("memory_retraction_attempts_due_idx").on(
+      table.status,
+      table.next_retry_at,
+      table.created_at,
+    ),
+    check(
+      "memory_retraction_attempts_scope_check",
+      sql`${table.scope} IN ('derivation', 'source')`,
+    ),
+    check(
+      "memory_retraction_attempts_status_check",
+      sql`${table.status} IN ('queued', 'running', 'supports_updated', 'provider_deleted', 'reconsolidated', 'retracted', 'failed', 'dead_lettered')`,
+    ),
+    check(
+      "memory_retraction_attempts_attempt_count_nonnegative",
+      sql`${table.attempt_count} >= 0`,
+    ),
+    check(
+      "memory_retraction_attempts_max_attempts_positive",
+      sql`${table.max_attempts} > 0`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
@@ -414,6 +713,7 @@ export const memoryProcessorConfigsRelations = relations(
       references: [users.id],
     }),
     sourceConfigs: many(memorySourceConfigs),
+    sourceAuthorizations: many(memorySourceAuthorizations),
   }),
 );
 
@@ -431,6 +731,8 @@ export const memorySourceConfigsRelations = relations(
     checkpoints: many(memorySourceCheckpoints),
     evidenceItems: many(memoryEvidenceItems),
     derivations: many(memoryDerivations),
+    claimEvidence: many(memoryClaimEvidence),
+    retractionAttempts: many(memoryRetractionAttempts),
   }),
 );
 
@@ -464,6 +766,7 @@ export const memoryEvidenceItemsRelations = relations(
       references: [workflowRuns.id],
     }),
     derivations: many(memoryDerivations),
+    claimEvidence: many(memoryClaimEvidence),
   }),
 );
 
@@ -484,7 +787,7 @@ export const memoryRunItemsRelations = relations(memoryRunItems, ({ one }) => ({
 
 export const memoryDerivationsRelations = relations(
   memoryDerivations,
-  ({ one }) => ({
+  ({ one, many }) => ({
     tenant: one(tenants, {
       fields: [memoryDerivations.tenant_id],
       references: [tenants.id],
@@ -496,6 +799,76 @@ export const memoryDerivationsRelations = relations(
     evidenceItem: one(memoryEvidenceItems, {
       fields: [memoryDerivations.evidence_item_id],
       references: [memoryEvidenceItems.id],
+    }),
+    retractionAttempts: many(memoryRetractionAttempts),
+  }),
+);
+
+export const memorySourceAuthorizationsRelations = relations(
+  memorySourceAuthorizations,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [memorySourceAuthorizations.tenant_id],
+      references: [tenants.id],
+    }),
+    processorConfig: one(memoryProcessorConfigs, {
+      fields: [memorySourceAuthorizations.processor_config_id],
+      references: [memoryProcessorConfigs.id],
+    }),
+    grantedByUser: one(users, {
+      fields: [memorySourceAuthorizations.granted_by_user_id],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const memoryClaimsRelations = relations(
+  memoryClaims,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [memoryClaims.tenant_id],
+      references: [tenants.id],
+    }),
+    claimEvidence: many(memoryClaimEvidence),
+  }),
+);
+
+export const memoryClaimEvidenceRelations = relations(
+  memoryClaimEvidence,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [memoryClaimEvidence.tenant_id],
+      references: [tenants.id],
+    }),
+    claim: one(memoryClaims, {
+      fields: [memoryClaimEvidence.claim_id],
+      references: [memoryClaims.id],
+    }),
+    evidenceItem: one(memoryEvidenceItems, {
+      fields: [memoryClaimEvidence.evidence_item_id],
+      references: [memoryEvidenceItems.id],
+    }),
+    sourceConfig: one(memorySourceConfigs, {
+      fields: [memoryClaimEvidence.source_config_id],
+      references: [memorySourceConfigs.id],
+    }),
+  }),
+);
+
+export const memoryRetractionAttemptsRelations = relations(
+  memoryRetractionAttempts,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [memoryRetractionAttempts.tenant_id],
+      references: [tenants.id],
+    }),
+    derivation: one(memoryDerivations, {
+      fields: [memoryRetractionAttempts.derivation_id],
+      references: [memoryDerivations.id],
+    }),
+    sourceConfig: one(memorySourceConfigs, {
+      fields: [memoryRetractionAttempts.source_config_id],
+      references: [memorySourceConfigs.id],
     }),
   }),
 );

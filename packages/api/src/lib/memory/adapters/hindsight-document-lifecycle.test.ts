@@ -24,8 +24,9 @@ const SOURCE_CONFIG_ID = "7f4b2a90-11a2-4a5f-9d1b-3c8e5f6a7b8c";
 // identity"): one replaceable Hindsight document per durable projection with
 // document_id=external:<sourceConfigId>:<projectionKey> and
 // update_mode=replace, targeted at exactly one shared (space_/tenant_) bank.
-// Destructive retraction (document delete) stays DISABLED until U2 lands the
-// pinned 0.8.4 saga — the retain path must never issue a delete.
+// Destructive retraction is a SEPARATE explicit call (U2 `deleteDocument`,
+// pinned to the 0.8.4 document-delete contract below) — the projection/retain
+// path itself must still never issue a delete.
 describe("Hindsight document lifecycle contract (U1)", () => {
   beforeEach(() => {
     executeMock.mockReset();
@@ -141,7 +142,10 @@ describe("Hindsight document lifecycle contract (U1)", () => {
     expect(body).not.toHaveProperty("async");
   });
 
-  it("never issues a destructive request from the projection path (retraction disabled until U2)", async () => {
+  // Retraction exists as of U2, but only as the explicit deleteDocument call
+  // driven by the retraction saga — projecting (even empty content) must
+  // never delete.
+  it("never issues a destructive request from the projection path (deleteDocument is a separate explicit call)", async () => {
     const fetchMock = okFetch();
     const a = adapter();
 
@@ -195,5 +199,109 @@ describe("Hindsight document lifecycle contract (U1)", () => {
       (err: unknown) =>
         err instanceof HindsightRetainError && err.retryable === true,
     );
+  });
+
+  // U2 pinned 0.8.4 document-delete contract (probe doc
+  // docs/solutions/tooling-decisions/hindsight-084-document-lifecycle-probe-2026-07-11.md):
+  // DELETE /v1/default/banks/<bankId>/documents/<documentId> returns 200 and
+  // cascades to memory_units and memory_links. deleteDocument is the only
+  // destructive surface; it never touches bank config.
+  describe("deleteDocument (U2 retraction contract)", () => {
+    function deleteFetch(status: number) {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: status < 400,
+        status,
+        json: async () => ({}),
+        text: async () => (status >= 400 ? "boom" : ""),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    }
+
+    it("issues exactly the pinned DELETE request shape against the tenant_ bank", async () => {
+      const fetchMock = deleteFetch(200);
+
+      const result = await adapter().deleteDocument({
+        tenantId: TENANT_ID,
+        ownerType: "tenant",
+        ownerId: TENANT_ID,
+        documentId,
+      });
+
+      expect(result).toBe("deleted");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0]!;
+      expect(url).toBe(
+        `https://hindsight.example/v1/default/banks/tenant_${TENANT_ID}/documents/${encodeURIComponent(documentId)}`,
+      );
+      expect(init?.method).toBe("DELETE");
+      expect(init?.body).toBeUndefined();
+    });
+
+    it("resolves a space owner to the space_ bank in the DELETE URL", async () => {
+      const fetchMock = deleteFetch(200);
+
+      await adapter().deleteDocument({
+        tenantId: TENANT_ID,
+        ownerType: "space",
+        ownerId: SPACE_ID,
+        documentId,
+      });
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        `https://hindsight.example/v1/default/banks/space_${SPACE_ID}/documents/${encodeURIComponent(documentId)}`,
+      );
+    });
+
+    it("treats 404 as idempotent success (not_found), without throwing", async () => {
+      deleteFetch(404);
+
+      await expect(
+        adapter().deleteDocument({
+          tenantId: TENANT_ID,
+          ownerType: "tenant",
+          ownerId: TENANT_ID,
+          documentId,
+        }),
+      ).resolves.toBe("not_found");
+    });
+
+    it("surfaces a retryable HindsightRetainError on 503", async () => {
+      deleteFetch(503);
+
+      await expect(
+        adapter().deleteDocument({
+          tenantId: TENANT_ID,
+          ownerType: "tenant",
+          ownerId: TENANT_ID,
+          documentId,
+        }),
+      ).rejects.toSatisfy(
+        (err: unknown) =>
+          err instanceof HindsightRetainError &&
+          err.retryable === true &&
+          err.statusCode === 503 &&
+          err.action === "deleteDocument",
+      );
+    });
+
+    it("never reads or patches bank config on the delete path", async () => {
+      const fetchMock = deleteFetch(200);
+
+      await new HindsightAdapter({
+        endpoint: "https://hindsight.example",
+        bankConfig: { observations_mission: "configured" },
+      }).deleteDocument({
+        tenantId: TENANT_ID,
+        ownerType: "tenant",
+        ownerId: TENANT_ID,
+        documentId,
+      });
+
+      // A configured adapter would GET/PATCH .../config before a write; the
+      // delete path must issue only the single DELETE.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("DELETE");
+    });
   });
 });

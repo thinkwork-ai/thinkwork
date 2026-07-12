@@ -8,11 +8,15 @@
  * resume.
  */
 
+import type { S3Client } from "@aws-sdk/client-s3";
+import { eq } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
+import { memoryEvidenceItems } from "@thinkwork/database-pg/schema";
 import type { MemoryStageWorkerResult } from "@thinkwork/agent-loops-core";
 import { getMemoryServices } from "../memory/index.js";
 import { runBrainDreamState } from "../brain/dream/runner.js";
 import {
+  advanceCheckpoint,
   ensureCheckpoint,
   getCheckpoint,
   resolveTargetBankId,
@@ -21,20 +25,39 @@ import { CheckpointConflictError } from "./repository.js";
 import {
   listEvidenceForProjection,
   recordAcquiredPage,
-  recordDerivation,
+  recordDerivationWithRunItem,
   recordRunItem,
 } from "./evidence.js";
+import {
+  clampSnapshotTtlDays,
+  getEvidenceSnapshot,
+  putEvidenceSnapshot,
+  resolveSnapshotBucket,
+  snapshotKeyFor,
+} from "./snapshots.js";
 import type {
   EvidenceRow,
   MemoryProcessorConfig,
   MemorySourceConfig,
 } from "./types.js";
 import {
+  buildClaimProjection,
+  extractCompanyClaims,
+  listActiveClaimsForSubject,
+  upsertClaimsForEvidence,
+} from "./claims.js";
+import {
+  assertBoundaryWithin,
+  MemoryAuthorizationError,
+  requireActiveGrant,
+} from "./policy.js";
+import {
   acquireCompaniesPage,
   buildCompanyDossier,
   checkTwentyReadiness,
   hindsightDocumentIdFor,
   projectionKeyForCompany,
+  reconcileCompaniesPage,
   type TwentyCompaniesCursor,
 } from "./adapters/twenty.js";
 
@@ -49,11 +72,26 @@ export interface MemoryStageWorkerEventShape {
   options: Record<string, unknown> | null;
 }
 
+/**
+ * Optional invocation lease injected by the handler harness (Codex F7).
+ * Stages consult remainingMs() between items and stop starting new work
+ * when the Lambda deadline approaches; the harness owns re-invocation.
+ */
+export interface StageLease {
+  renew(): Promise<boolean>;
+  deadlineMs?: number;
+  remainingMs?: () => number;
+}
+
 export interface StageContext {
   db: Database;
   event: MemoryStageWorkerEventShape;
   processor: MemoryProcessorConfig & { target_scope: "space" | "tenant" };
   sources: MemorySourceConfig[];
+  /** Injected by the harness; absent in tests/back-compat callers. */
+  lease?: StageLease;
+  /** Injected S3 client for snapshot IO; defaults to the lazy module client. */
+  s3?: S3Client;
 }
 
 export function failed(stage: string, error: string): MemoryStageWorkerResult {
@@ -71,6 +109,61 @@ export function boundedInt(
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
+const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_MAX_RECORDS = 200;
+
+/**
+ * Narrow-only effective limit (Codex F2): the minimum over every PRESENT
+ * numeric value (saved source boundary, processor budget, requested run
+ * options), falling back to `fallback` when none is present, clamped to
+ * [min, max]. Run options can therefore only NARROW the persisted
+ * boundary/budget — never widen them.
+ */
+export function effectiveLimit(
+  values: Array<unknown>,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const present = values
+    .map((value) => (typeof value === "number" ? value : Number(value)))
+    .filter((n, i) => values[i] != null && Number.isFinite(n));
+  const chosen = present.length > 0 ? Math.min(...present) : fallback;
+  return Math.max(min, Math.min(max, Math.floor(chosen)));
+}
+
+// ---------------------------------------------------------------------------
+// Paging no-progress guard (Codex F5)
+// ---------------------------------------------------------------------------
+
+export interface PageProgressState {
+  token: string | null;
+  fingerprint: string;
+}
+
+/** Deterministic fingerprint of a page's returned record ids. */
+export function pageFingerprint(ids: string[]): string {
+  return ids.join("|");
+}
+
+/**
+ * True when the provider made no progress between two consecutive pages:
+ * it returned the same continuation token again, or the identical
+ * non-empty id set. Callers must stop with a VISIBLE failure — silently
+ * looping would spin the budget without ever completing.
+ */
+export function isNoProgress(
+  prev: PageProgressState | null,
+  next: PageProgressState,
+): boolean {
+  if (!prev) return false;
+  if (next.token !== null && next.token === prev.token) return true;
+  if (next.fingerprint !== "" && next.fingerprint === prev.fingerprint) {
+    return true;
+  }
+  return false;
+}
+
 export function cursorFromCheckpoint(
   cursor: Record<string, unknown> | null | undefined,
 ): TwentyCompaniesCursor | null {
@@ -80,6 +173,14 @@ export function cursorFromCheckpoint(
     return null;
   }
   return { lastUpdatedAt, lastId };
+}
+
+/** Opaque backscan sweep position stored inside the checkpoint cursor. */
+export function backscanTokenFrom(
+  cursor: Record<string, unknown> | null | undefined,
+): string | null {
+  const token = cursor?.backscanToken;
+  return typeof token === "string" && token ? token : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,9 +208,33 @@ export async function runAcquire(
       );
     }
 
+    // U2 R9-R11: an explicit, current authorization grant is the maximum
+    // readable envelope; the saved source boundary must sit inside it.
+    // Revocation/expiry blocks acquisition immediately and visibly.
+    try {
+      const grant = await requireActiveGrant(db, {
+        tenantId: processor.tenant_id,
+        processorConfigId: processor.id,
+        sourceFamily: source.source_family,
+        sourceBindingKey: source.source_binding_key,
+      });
+      assertBoundaryWithin(
+        (grant.boundary ?? {}) as Record<string, unknown>,
+        (source.boundary ?? {}) as Record<string, unknown>,
+      );
+    } catch (err) {
+      if (err instanceof MemoryAuthorizationError) {
+        return failed(event.stage, err.message);
+      }
+      throw err;
+    }
+
     const readiness = await checkTwentyReadiness(db, {
       tenantId: processor.tenant_id,
       userId: processor.created_by_user_id,
+      // Codex F3: resolve exactly the persisted tenant-owned binding —
+      // readiness fails closed when it is missing/disabled/unapproved.
+      bindingKey: source.source_binding_key,
     });
     if (!readiness.ready) {
       // blocked_not_ready semantics: visible failure, checkpoint untouched.
@@ -119,16 +244,20 @@ export async function runAcquire(
       );
     }
 
+    // Codex F2: run options may only NARROW the saved source boundary and
+    // the processor budget — the effective limit is the minimum of all
+    // present values.
     const boundary = (source.boundary ?? {}) as Record<string, unknown>;
+    const budget = (processor.budget ?? {}) as Record<string, unknown>;
     const options = event.options ?? {};
-    const pageSize = boundedInt(
-      options.pageSize ?? boundary.pageSize,
+    const pageSize = effectiveLimit(
+      [boundary.pageSize, budget.pageSize, options.pageSize],
       DEFAULT_PAGE_SIZE,
       1,
       200,
     );
-    const maxRecords = boundedInt(
-      options.maxRecords ?? boundary.maxRecords,
+    const maxRecords = effectiveLimit(
+      [boundary.maxRecords, budget.maxRecords, options.maxRecords],
       DEFAULT_MAX_RECORDS,
       1,
       2000,
@@ -143,6 +272,7 @@ export async function runAcquire(
     let pageToken: string | null = null;
     let fetched = 0;
     let casRetries = 0;
+    let progress: PageProgressState | null = null;
 
     while (fetched < maxRecords) {
       const page = await acquireCompaniesPage(readiness.client, {
@@ -155,6 +285,23 @@ export async function runAcquire(
       counts.pages += 1;
       fetched += page.rawCount;
       pageToken = page.pageToken ?? null;
+
+      // No-progress guard (Codex F5): a repeated provider token or an
+      // identical consecutive id set means paging is stuck — stop VISIBLY
+      // instead of spinning the budget or advancing a bogus cursor.
+      const observedProgress: PageProgressState = {
+        token: pageToken,
+        fingerprint: pageFingerprint(
+          page.items.map((item) => item.sourceItemId),
+        ),
+      };
+      if (isNoProgress(progress, observedProgress)) {
+        return failed(
+          event.stage,
+          `acquisition made no progress on source ${source.id}: Twenty returned a repeated page token or an identical record set twice in a row — aborting the incremental pass`,
+        );
+      }
+      progress = observedProgress;
 
       if (page.items.length === 0) {
         // A full raw page whose kept set is empty means every record is
@@ -172,19 +319,41 @@ export async function runAcquire(
         break;
       }
 
-      // High-water cursor: last kept item's (updatedAt, id) — but only from
-      // items with a real timestamp version. A hash-fallback sourceVersion
-      // must never become lastUpdatedAt (it would be compared against ISO
-      // timestamps); such items are re-seen next run and deduped instead.
+      // High-water cursor: last kept item's (updatedAt, id) — from the
+      // ORDERING timestamp only (Codex F4: sourceVersion now embeds a
+      // content-hash edition suffix and must never become lastUpdatedAt).
+      // Items without a timestamp are re-seen next run and deduped instead.
       const lastTimestamped = [...page.items]
         .reverse()
         .find((item) => item.sourceTimestamp != null);
-      const highWater: TwentyCompaniesCursor = lastTimestamped
-        ? {
-            lastUpdatedAt: lastTimestamped.sourceVersion,
-            lastId: lastTimestamped.sourceItemId,
-          }
-        : (cursor ?? { lastUpdatedAt: null, lastId: null });
+      const observed: { lastUpdatedAt: string; lastId: string } | null =
+        lastTimestamped
+          ? {
+              lastUpdatedAt: lastTimestamped.sourceTimestamp!.toISOString(),
+              lastId: lastTimestamped.sourceItemId,
+            }
+          : null;
+      // Monotonic guard (Codex F5): never regress the high-water mark.
+      // A filtered response containing older records means provider
+      // ordering/filtering is best-effort — log and rely on the backscan.
+      // Compare parsed instants (not strings): mixed timestamp precision
+      // ("…00Z" vs "…00.000Z") breaks lexical ordering.
+      let highWater: TwentyCompaniesCursor;
+      if (
+        observed &&
+        (!cursor?.lastUpdatedAt ||
+          Date.parse(observed.lastUpdatedAt) >=
+            Date.parse(cursor.lastUpdatedAt))
+      ) {
+        highWater = observed;
+      } else {
+        if (observed) {
+          console.warn(
+            `[memory-sources:twenty] filtered page for source ${source.id} contained records older than cursor ${cursor?.lastUpdatedAt} — keeping the cursor and relying on backscan reconciliation`,
+          );
+        }
+        highWater = cursor ?? { lastUpdatedAt: null, lastId: null };
+      }
 
       try {
         const recorded = await recordAcquiredPage(db, {
@@ -193,7 +362,12 @@ export async function runAcquire(
           workflowRunId: event.workflowRunId,
           partitionKey: "companies",
           expectedCheckpointVersion: checkpoint.version,
-          nextCursor: highWater as unknown as Record<string, unknown>,
+          nextCursor: {
+            ...highWater,
+            // Preserve the round-robin backscan position across incremental
+            // checkpoint advances.
+            backscanToken: backscanTokenFrom(checkpoint.cursor),
+          } as unknown as Record<string, unknown>,
           items: page.items,
         });
         counts.changed += recorded.changed.length;
@@ -219,6 +393,7 @@ export async function runAcquire(
             }));
           cursor = cursorFromCheckpoint(checkpoint.cursor);
           pageToken = null;
+          progress = null;
           continue;
         }
         throw err;
@@ -228,10 +403,90 @@ export async function runAcquire(
       if (page.nextCursor === null) break;
     }
 
+    // Bounded relation reconciliation / backscan (Codex F4/F5): the
+    // incremental gte-filtered pass never re-sees a company whose people/
+    // opportunities/notes changed without touching the parent updatedAt.
+    // Sweep unfiltered pages with the REMAINING record budget, recording
+    // evidence WITHOUT advancing the incremental checkpoint (content-
+    // sensitive editions make unchanged records cheap dedupe no-ops). The
+    // sweep position round-robins across runs via cursor.backscanToken.
+    let backscanToken = backscanTokenFrom(checkpoint.cursor);
+    let backscanPages = 0;
+    let backscanProgress: PageProgressState | null = null;
+    while (fetched < maxRecords) {
+      const page = await reconcileCompaniesPage(readiness.client, {
+        startingAfter: backscanToken,
+        pageSize: Math.min(pageSize, maxRecords - fetched),
+        targetScope: processor.target_scope,
+        targetId: processor.target_id,
+      });
+      counts.pages += 1;
+      fetched += page.rawCount;
+      backscanPages += 1;
+
+      const observedProgress: PageProgressState = {
+        token: page.pageToken ?? null,
+        fingerprint: pageFingerprint(
+          page.items.map((item) => item.sourceItemId),
+        ),
+      };
+      if (isNoProgress(backscanProgress, observedProgress)) {
+        return failed(
+          event.stage,
+          `backscan made no progress on source ${source.id}: Twenty returned a repeated page token or an identical record set twice in a row — aborting the reconciliation sweep`,
+        );
+      }
+      backscanProgress = observedProgress;
+
+      if (page.items.length > 0) {
+        const recorded = await recordAcquiredPage(db, {
+          tenantId: processor.tenant_id,
+          sourceConfigId: source.id,
+          workflowRunId: event.workflowRunId,
+          partitionKey: "companies",
+          expectedCheckpointVersion: checkpoint.version,
+          nextCursor: checkpoint.cursor ?? {},
+          items: page.items,
+          skipCheckpointAdvance: true,
+        });
+        counts.changed += recorded.changed.length;
+        counts.seen += recorded.seen;
+      }
+
+      backscanToken = page.pageToken ?? null;
+      // Token exhausted: the sweep finished (or the provider exposes no
+      // paging) — a null token restarts the round-robin next run.
+      if (!backscanToken) break;
+    }
+
+    if (backscanPages > 0) {
+      // Persist the sweep position with the same version CAS the
+      // incremental pass uses. A lost CAS is benign: evidence is already
+      // recorded and the sweep resumes from the surviving cursor next run.
+      const advanced = await advanceCheckpoint(db, {
+        sourceConfigId: source.id,
+        partitionKey: "companies",
+        expectedVersion: checkpoint.version,
+        cursor: {
+          ...((checkpoint.cursor ?? {}) as Record<string, unknown>),
+          backscanToken,
+        },
+      });
+      if (advanced) {
+        checkpoint = advanced;
+      } else {
+        console.warn(
+          `[memory-sources:twenty] backscan checkpoint CAS lost for source ${source.id} — sweep position not persisted this run`,
+        );
+      }
+    }
+
     perSource[source.id] = {
       family: source.source_family,
       fetched,
       checkpointVersion: checkpoint.version,
+      backscanPages,
+      backscanToken,
     };
   }
 
@@ -255,15 +510,138 @@ async function changedEvidence(ctx: StageContext): Promise<EvidenceRow[]> {
   return rows;
 }
 
+// ---------------------------------------------------------------------------
+// Bounded batches + lease (Codex F7) and snapshot boundary (Codex F6)
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_EVIDENCE_BATCH = 25;
+export const MAX_EVIDENCE_BATCH = 100;
+/** Stop starting new items when less than this remains on the lease. */
+const LEASE_STOP_THRESHOLD_MS = 60_000;
+
+/**
+ * Deterministic per-invocation bound over the projection/retain work list.
+ * Options and boundary can narrow it; 100 is the hard ceiling. Because the
+ * work list is staleness-based (active evidence without an active
+ * derivation) and stably ordered by evidence id, a continuation invocation
+ * naturally resumes exactly where the previous batch stopped.
+ */
+function evidenceBatchLimit(
+  ctx: StageContext,
+  optionKey: "projectBatch" | "retainBatch",
+): number {
+  const boundary = (ctx.sources[0]?.boundary ?? {}) as Record<string, unknown>;
+  const options = ctx.event.options ?? {};
+  return boundedInt(
+    options[optionKey] ?? boundary[optionKey],
+    DEFAULT_EVIDENCE_BATCH,
+    1,
+    MAX_EVIDENCE_BATCH,
+  );
+}
+
+/** True when the harness lease reports too little time to start an item. */
+function leaseExhausted(ctx: StageContext): boolean {
+  const remainingMs = ctx.lease?.remainingMs;
+  if (!remainingMs) return false;
+  return remainingMs() < LEASE_STOP_THRESHOLD_MS;
+}
+
+/** Snapshot TTL: processor budget beats source boundary; clamped 7-90d. */
+function snapshotTtlDaysFor(ctx: StageContext): number {
+  const budget = (ctx.processor.budget ?? {}) as Record<string, unknown>;
+  const boundary = (ctx.sources[0]?.boundary ?? {}) as Record<string, unknown>;
+  return clampSnapshotTtlDays(
+    budget.snapshotTtlDays ?? boundary.snapshotTtlDays,
+  );
+}
+
+/**
+ * Resolve an evidence item's normalized snapshot: inline column when
+ * present (pre-S3 back-compat rows), else fetch from the S3 ref. Null when
+ * neither exists or the S3 object lifecycle-expired.
+ */
+export async function loadSnapshot(
+  ctx: Pick<StageContext, "s3">,
+  item: EvidenceRow,
+): Promise<Record<string, unknown> | null> {
+  const inline = item.normalized_snapshot as Record<string, unknown> | null;
+  if (inline) return inline;
+  if (item.snapshot_ref) {
+    return await getEvidenceSnapshot(ctx.s3, { ref: item.snapshot_ref });
+  }
+  return null;
+}
+
+/**
+ * F6 snapshot boundary: move inline normalized snapshots (which carry raw
+ * source content — emails, note bodies) out of Postgres into the encrypted
+ * brain-artifacts bucket, leaving only the s3:// ref + app-side expiry on
+ * the row. Runs bounded to the caller's batch at the start of runProject,
+ * so rows written by the acquire path before its own S3-first pre-upload
+ * lands still get offloaded promptly. Returns the number of rows moved.
+ */
+export async function offloadSnapshots(
+  db: Database,
+  s3: S3Client | undefined,
+  args: { items: EvidenceRow[]; ttlDays?: number },
+): Promise<number> {
+  const pending = args.items.filter(
+    (item) => item.normalized_snapshot && !item.snapshot_ref,
+  );
+  if (pending.length === 0) return 0;
+  const bucket = resolveSnapshotBucket();
+  let offloaded = 0;
+  for (const item of pending) {
+    const key = snapshotKeyFor({
+      tenantId: item.tenant_id,
+      sourceConfigId: item.source_config_id,
+      sourceItemId: item.source_item_id,
+      sourceVersion: item.source_version,
+    });
+    const { ref, expiresAt } = await putEvidenceSnapshot(s3, {
+      bucket,
+      key,
+      snapshot: item.normalized_snapshot as Record<string, unknown>,
+      ttlDays: args.ttlDays,
+    });
+    await db
+      .update(memoryEvidenceItems)
+      .set({
+        snapshot_ref: ref,
+        snapshot_expires_at: expiresAt,
+        normalized_snapshot: null,
+        updated_at: new Date(),
+      })
+      .where(eq(memoryEvidenceItems.id, item.id));
+    // Keep the in-memory copy so this run's stages read it without a
+    // round-trip; only the Postgres column is cleared.
+    item.snapshot_ref = ref;
+    item.snapshot_expires_at = expiresAt;
+    offloaded += 1;
+  }
+  return offloaded;
+}
+
 export async function runProject(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
   const { db, event } = ctx;
-  const items = await changedEvidence(ctx);
+  const backlog = await changedEvidence(ctx);
+  const items = backlog.slice(0, evidenceBatchLimit(ctx, "projectBatch"));
   const counts = { changed: 0, noop: 0, failed: 0 };
 
+  // F6: migrate any inline snapshots in this batch to S3 before projecting.
+  await offloadSnapshots(db, ctx.s3, {
+    items,
+    ttlDays: snapshotTtlDaysFor(ctx),
+  });
+
+  let processed = 0;
   for (const item of items) {
-    const snapshot = item.normalized_snapshot as Record<string, unknown> | null;
+    if (leaseExhausted(ctx)) break;
+    processed += 1;
+    const snapshot = await loadSnapshot(ctx, item);
     if (!snapshot) {
       counts.failed += 1;
       await recordRunItem(db, {
@@ -279,6 +657,22 @@ export async function runProject(
     }
     const dossier = buildCompanyDossier(snapshot);
     const projectionKey = projectionKeyForCompany(item.source_item_id);
+    // U2: extract durable ontology-shaped claims and attach support edges to
+    // this evidence item. Idempotent per (fingerprint, evidence) pair.
+    const claims = extractCompanyClaims({
+      snapshot,
+      sourceItemId: item.source_item_id,
+      targetScope: ctx.processor.target_scope,
+      targetId: ctx.processor.target_id,
+    });
+    const claimResult = await upsertClaimsForEvidence(db, {
+      tenantId: item.tenant_id,
+      targetScope: ctx.processor.target_scope,
+      targetId: ctx.processor.target_id,
+      sourceConfigId: item.source_config_id,
+      evidenceItemId: item.id,
+      claims,
+    });
     counts.changed += 1;
     await recordRunItem(db, {
       tenantId: item.tenant_id,
@@ -291,12 +685,23 @@ export async function runProject(
         projectionKey,
         title: dossier.title,
         bytes: dossier.markdown.length,
+        claims: claims.length,
+        claimsCreated: claimResult.created,
+        claimsSupported: claimResult.supported,
       },
     });
   }
 
-  if (items.length === 0) counts.noop = 1;
-  return { status: "succeeded", stage: event.stage, counts };
+  const remaining = backlog.length - processed;
+  if (backlog.length === 0) counts.noop = 1;
+  return {
+    status: "succeeded",
+    stage: event.stage,
+    counts,
+    // Continuation marker (F7): the harness re-invokes; the staleness-based
+    // work list resumes exactly where this bounded batch stopped.
+    ...(remaining > 0 ? { output: { continuation: true, remaining } } : {}),
+  };
 }
 
 export async function runRetain(
@@ -311,13 +716,17 @@ export async function runRetain(
     );
   }
 
-  const items = await changedEvidence(ctx);
+  const backlog = await changedEvidence(ctx);
+  const items = backlog.slice(0, evidenceBatchLimit(ctx, "retainBatch"));
   const counts = { changed: 0, noop: 0 };
   const targetBankId = resolveTargetBankId(processor);
   const documents: string[] = [];
 
+  let processed = 0;
   for (const item of items) {
-    const snapshot = item.normalized_snapshot as Record<string, unknown> | null;
+    if (leaseExhausted(ctx)) break;
+    processed += 1;
+    const snapshot = await loadSnapshot(ctx, item);
     if (!snapshot) {
       counts.noop += 1;
       await recordRunItem(db, {
@@ -338,6 +747,30 @@ export async function runRetain(
       projectionKey,
     );
 
+    // U2: the durable claim ledger is authoritative — project from ACTIVE
+    // claims (with embedded claim ids for provenance) when the subject has
+    // any; the raw dossier remains the defensive fallback for evidence
+    // acquired before claim extraction existed.
+    const subjectKey = `twenty:company:${item.source_item_id}`;
+    const activeClaims = await listActiveClaimsForSubject(db, {
+      tenantId: processor.tenant_id,
+      targetScope: processor.target_scope,
+      targetId: processor.target_id,
+      subjectKey,
+    });
+    const content =
+      activeClaims.length > 0
+        ? buildClaimProjection(
+            activeClaims.map((claim) => ({
+              id: claim.id,
+              ontologyPredicate: claim.ontology_predicate,
+              value: claim.value as Record<string, unknown>,
+              effectiveFrom: claim.effective_from,
+            })),
+            { title: dossier.title, subjectKey },
+          ).markdown
+        : dossier.markdown;
+
     // Synchronous replace: the workflow's compound stage must observe a bank
     // that already contains this projection.
     await adapter.upsertMarkdownMemoryDocument({
@@ -347,7 +780,7 @@ export async function runRetain(
       path: `memory-sources/twenty/${projectionKey.replace(":", "/")}.md`,
       documentId,
       context: "external_source_projection",
-      content: dossier.markdown,
+      content,
       async: false,
       metadata: {
         source: "twenty",
@@ -358,34 +791,47 @@ export async function runRetain(
       },
     });
 
-    await recordDerivation(db, {
-      tenantId: processor.tenant_id,
-      sourceConfigId: item.source_config_id,
-      evidenceItemId: item.id,
-      projectionKey,
-      targetBankId,
-      hindsightDocumentId: documentId,
-      currentVersion: item.source_version,
-    });
-    await recordRunItem(db, {
-      tenantId: processor.tenant_id,
-      workflowRunId: event.workflowRunId,
-      sourceConfigId: item.source_config_id,
-      sourceItemId: item.source_item_id,
-      stage: "retain",
-      result: "changed",
-      detail: { documentId, targetBankId, bytes: dossier.markdown.length },
+    // F8: derivation + run item commit in ONE transaction after the
+    // (idempotent) Hindsight write. Separate commits let a crash strand the
+    // evidence: the derivation alone marks it "done" for the staleness
+    // work list, so a retry would skip it forever.
+    await recordDerivationWithRunItem(db, {
+      derivation: {
+        tenantId: processor.tenant_id,
+        sourceConfigId: item.source_config_id,
+        evidenceItemId: item.id,
+        projectionKey,
+        targetBankId,
+        hindsightDocumentId: documentId,
+        currentVersion: item.source_version,
+      },
+      runItem: {
+        tenantId: processor.tenant_id,
+        workflowRunId: event.workflowRunId,
+        sourceConfigId: item.source_config_id,
+        sourceItemId: item.source_item_id,
+        stage: "retain",
+        result: "changed",
+        detail: { documentId, targetBankId, bytes: content.length },
+      },
     });
     counts.changed += 1;
     documents.push(documentId);
   }
 
-  if (items.length === 0) counts.noop = 1;
+  const remaining = backlog.length - processed;
+  if (backlog.length === 0) counts.noop = 1;
   return {
     status: "succeeded",
     stage: event.stage,
     counts,
-    output: { targetBankId, documents: documents.slice(0, 50) },
+    output: {
+      targetBankId,
+      documents: documents.slice(0, 50),
+      // Continuation marker (F7): the harness re-invokes; the staleness-
+      // based work list resumes where this bounded batch stopped.
+      ...(remaining > 0 ? { continuation: true, remaining } : {}),
+    },
   };
 }
 
