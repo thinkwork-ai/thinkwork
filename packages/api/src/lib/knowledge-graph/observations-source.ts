@@ -19,6 +19,7 @@
 import { sql } from "drizzle-orm";
 import { hindsightSql, resolveHindsightDb } from "@thinkwork/database-pg";
 import type { Database } from "../db.js";
+import { resolveObservationClaimSupport } from "./claim-support.js";
 import {
   applyPromotionGate,
   type GateCandidate,
@@ -48,6 +49,33 @@ export interface ObservationCandidateBatch {
   truncated: boolean;
 }
 
+/**
+ * Validate an explicit bank list for targeted ingest (THINK-193 U4).
+ * Shared banks only: `space_*` and `tenant_*` are allowed; `user_*` (and
+ * anything else) is rejected — a shared run must never read personal banks.
+ * The enumerate-users fan-in below remains the scheduled estate-sweep
+ * backstop when no explicit list is supplied.
+ */
+export function validateExplicitBankIds(
+  bankIds: string[],
+): Array<{ bankId: string; userId: null }> {
+  const seen = new Set<string>();
+  const banks: Array<{ bankId: string; userId: null }> = [];
+  for (const bankId of bankIds) {
+    if (!/^(space|tenant)_[A-Za-z0-9_-]+$/.test(bankId)) {
+      throw new Error(
+        `Explicit observations ingest bank '${bankId}' is not allowed: ` +
+          "only shared 'space_*' / 'tenant_*' banks may be targeted " +
+          "(user_* banks are personal and flow only through the estate sweep)",
+      );
+    }
+    if (seen.has(bankId)) continue;
+    seen.add(bankId);
+    banks.push({ bankId, userId: null });
+  }
+  return banks;
+}
+
 /** Tenant fan-in: one `user_<uuid>` bank per active tenant user. */
 export async function enumerateTenantBanks(
   db: Database,
@@ -72,7 +100,7 @@ export async function enumerateTenantBanks(
 async function readBankObservations(args: {
   db: Database;
   bankId: string;
-  userId: string;
+  userId: string | null;
   cursor: ObservationCursor;
   limit: number;
 }): Promise<{
@@ -184,9 +212,14 @@ export async function collectTenantObservationCandidates(args: {
   tenantId: string;
   cursors: Map<string, ObservationCursor>;
   maxCandidates?: number;
+  /** Explicit shared banks (validated) — omits the user-bank estate sweep. */
+  bankIds?: string[];
 }): Promise<ObservationCandidateBatch> {
   const cap = Math.max(1, args.maxCandidates ?? DEFAULT_MAX_CANDIDATES_PER_RUN);
-  const banks = await enumerateTenantBanks(args.db, args.tenantId);
+  const banks: Array<{ bankId: string; userId: string | null }> =
+    args.bankIds && args.bankIds.length > 0
+      ? validateExplicitBankIds(args.bankIds)
+      : await enumerateTenantBanks(args.db, args.tenantId);
   const candidates: GateCandidate[] = [];
   const nextCursors = new Map<string, ObservationCursor>();
   let truncated = false;
@@ -229,6 +262,8 @@ export async function loadObservationsKnowledgeGraphSource(args: {
   sourceRef: string;
   sourceLabel: string;
   maxCandidates?: number;
+  /** Explicit shared banks (`space_*`/`tenant_*` only) for targeted ingest. */
+  bankIds?: string[];
   gateDeps?: Omit<PromotionGateDeps, "db">;
 }): Promise<{
   bundle: KnowledgeGraphSourceBundle;
@@ -243,12 +278,34 @@ export async function loadObservationsKnowledgeGraphSource(args: {
     tenantId: args.tenantId,
     cursors,
     maxCandidates: args.maxCandidates,
+    bankIds: args.bankIds,
   });
 
   const gate = await applyPromotionGate(batch.candidates, {
     db: args.db,
     ...(args.gateDeps ?? {}),
   });
+
+  // Durable claim support (U4): out-of-band join from each observation's
+  // world units to the claim ledger. Empty for observations without
+  // document linkage — see claim-support.ts. Best-effort: a claim-support
+  // failure degrades to enrichment prose, never fails the ingest.
+  let claimIdsByObservation = new Map<string, string[]>();
+  try {
+    claimIdsByObservation = await resolveObservationClaimSupport({
+      db: args.db,
+      tenantId: args.tenantId,
+      observations: gate.promoted.map((candidate) => ({
+        id: candidate.id,
+        sourceMemoryIds: candidate.sourceMemoryIds,
+      })),
+    });
+  } catch (err) {
+    console.warn("[observations-source] claim support resolution failed", {
+      tenantId: args.tenantId,
+      error: (err as Error)?.message ?? String(err),
+    });
+  }
 
   const packets: KnowledgeGraphSourcePacket[] = gate.promoted.map(
     (candidate, index) => ({
@@ -261,6 +318,9 @@ export async function loadObservationsKnowledgeGraphSource(args: {
         observationId: candidate.id,
         bankId: candidate.bankId,
         proofCount: candidate.sourceMemoryIds.length,
+        ...(claimIdsByObservation.has(candidate.id)
+          ? { claimIds: claimIdsByObservation.get(candidate.id) }
+          : {}),
       },
     }),
   );
@@ -286,6 +346,9 @@ export async function loadObservationsKnowledgeGraphSource(args: {
         observationId: candidate.id,
         bankId: candidate.bankId,
         proofCount: candidate.sourceMemoryIds.length,
+        ...(claimIdsByObservation.has(candidate.id)
+          ? { claimIds: claimIdsByObservation.get(candidate.id) }
+          : {}),
       },
     })),
     packets,

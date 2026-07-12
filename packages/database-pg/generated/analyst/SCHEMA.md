@@ -1830,6 +1830,8 @@ Join hints:
 | type_label | text |  |
 | ontology_entity_type_id | uuid |  |
 | ontology_type_slug | text |  |
+| canonical_entity_id | uuid |  |
+| resolution_state | text | not null |
 | grounding_status | text | not null |
 | provenance_status | text | not null |
 | summary | text |  |
@@ -1845,11 +1847,13 @@ Join hints:
 Enum values:
 
 - `source_kind`: `thread`, `wiki`, `brain`, `observations`
+- `resolution_state`: `resolved`, `deferred`, `private`, `legacy`
 - `grounding_status`: `grounded`, `unapproved_type`, `ungrounded`, `conflict`, `unknown`
 - `provenance_status`: `strong`, `weak`, `missing`
 
 Join hints:
 
+- `knowledge_graph_entities.canonical_entity_id` → `canonical_entities.id`
 - `knowledge_graph_entities.ingest_run_id` → `knowledge_graph_ingest_runs.id`
 - `knowledge_graph_entities.ontology_entity_type_id` → `entity_types.id`
 - `knowledge_graph_entities.tenant_id` → `tenants.id`
@@ -2192,6 +2196,7 @@ Enum values:
 
 Join hints:
 
+- `memory_claims.canonical_subject_id` → `canonical_entities.id`
 - `memory_claims.tenant_id` → `tenants.id`
 
 Not granted (do not query): `value`.

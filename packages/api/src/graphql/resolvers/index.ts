@@ -29,6 +29,10 @@ import {
   memorySourceQueries,
   memorySourceMutations,
 } from "./memory-sources/index.js";
+import {
+  entityIdentityQueries,
+  entityIdentityMutations,
+} from "./entity-identity/index.js";
 import { recipeQueries, recipeMutations } from "./recipes/index.js";
 import { coreMutations } from "./core/index.js";
 import { analystMutations, analystQueries } from "./analyst/index.js";
@@ -176,6 +180,7 @@ export const queryResolvers: Record<string, any> = {
   ...webhookQueries,
   ...memoryQueries,
   ...memorySourceQueries,
+  ...entityIdentityQueries,
   ...recipeQueries,
   ...evaluationsQueries,
   ...evalDatasetQueries,
@@ -231,6 +236,7 @@ export const mutationResolvers: Record<string, any> = {
   ...webhookMutations,
   ...memoryMutations,
   ...memorySourceMutations,
+  ...entityIdentityMutations,
   ...recipeMutations,
   ...evaluationsMutations,
   ...evalDatasetMutations,

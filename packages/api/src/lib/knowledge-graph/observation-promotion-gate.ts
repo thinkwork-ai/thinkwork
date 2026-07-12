@@ -41,7 +41,8 @@ export interface GateCandidate {
   /** Hindsight memory unit id of the observation. */
   id: string;
   bankId: string;
-  userId: string;
+  /** Owning user for `user_*` banks; null for `space_*` / `tenant_*` banks. */
+  userId: string | null;
   text: string;
   /** Proof set — memory unit ids the engine consolidated this from. */
   sourceMemoryIds: string[];

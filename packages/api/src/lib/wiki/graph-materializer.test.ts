@@ -4,6 +4,7 @@ import type { SQL } from "drizzle-orm";
 
 const mocks = vi.hoisted(() => ({
   upsertPage: vi.fn(),
+  upsertCanonicalEntityPage: vi.fn(),
   upsertPageLink: vi.fn(),
   listGraphMaterializedTenantPages: vi.fn(),
   archivePagesByIds: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./repository.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./repository.js")>()),
   upsertPage: mocks.upsertPage,
+  upsertCanonicalEntityPage: mocks.upsertCanonicalEntityPage,
   upsertPageLink: mocks.upsertPageLink,
   listGraphMaterializedTenantPages: mocks.listGraphMaterializedTenantPages,
   archivePagesByIds: mocks.archivePagesByIds,
@@ -125,6 +127,12 @@ beforeEach(() => {
     id: `page-${input.slug}-${++pageSeq && ""}${input.slug}`,
     ...input,
   }));
+  mocks.upsertCanonicalEntityPage.mockImplementation(
+    async (input: { slug: string }) => ({
+      id: `page-${input.slug}`,
+      ...input,
+    }),
+  );
   mocks.upsertPageLink.mockResolvedValue(true);
   mocks.listGraphMaterializedTenantPages.mockResolvedValue([]);
   mocks.archivePagesByIds.mockResolvedValue(0);
@@ -191,7 +199,11 @@ describe("evidence-threshold promotion (THINK-133 U5)", () => {
       entities: [loner],
       relationships: [],
       evidence: [
-        { entity_id: "ent-loner", relationship_id: null, evidence_source_ref: "obs-1" },
+        {
+          entity_id: "ent-loner",
+          relationship_id: null,
+          evidence_source_ref: "obs-1",
+        },
       ],
     });
 
@@ -350,9 +362,21 @@ describe("materializeTenantWikiFromGraph", () => {
       // Three distinct observations: acme stays above the promotion gate so
       // this test isolates vanished-entity reconciliation.
       evidence: [
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-100" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-101" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-102" },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-100",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-101",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-102",
+        },
       ],
     });
     mocks.listGraphMaterializedTenantPages.mockResolvedValue([
@@ -379,9 +403,21 @@ describe("materializeTenantWikiFromGraph", () => {
       relationships: [],
       // Promoted (3 distinct observations) so the slug check is what skips.
       evidence: [
-        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-100" },
-        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-101" },
-        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-102" },
+        {
+          entity_id: "ent-x",
+          relationship_id: null,
+          evidence_source_ref: "obs-100",
+        },
+        {
+          entity_id: "ent-x",
+          relationship_id: null,
+          evidence_source_ref: "obs-101",
+        },
+        {
+          entity_id: "ent-x",
+          relationship_id: null,
+          evidence_source_ref: "obs-102",
+        },
       ],
     });
     const { metrics } = await materializeTenantWikiFromGraph(
@@ -452,9 +488,21 @@ describe("graph compile job runner", () => {
       relationships: [],
       // Above the promotion gate: three distinct observations.
       evidence: [
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-100" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-101" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-102" },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-100",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-101",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-102",
+        },
       ],
     });
     const result = await runGraphCompileJobById("job-1", db as never);
@@ -466,6 +514,175 @@ describe("graph compile job runner", () => {
         metrics: expect.objectContaining({ pages_upserted: 1 }),
       }),
       expect.anything(),
+    );
+  });
+});
+
+// ─── THINK-193 U4: canonical-ID materialization ──────────────────────────────
+
+describe("materializeTenantWikiFromGraph — canonical identity (U4)", () => {
+  const canonicalAcme = {
+    ...acmeEntity,
+    canonical_entity_id: "22222222-2222-4222-8222-222222222222",
+  };
+  const evidenceWithClaims = [
+    {
+      entity_id: "ent-acme",
+      relationship_id: null,
+      evidence_source_ref: "obs-100",
+      thread_id: null,
+      metadata: { claimIds: ["claim-1", "claim-2"] },
+    },
+    {
+      entity_id: "ent-acme",
+      relationship_id: null,
+      evidence_source_ref: "obs-101",
+      thread_id: null,
+      metadata: {},
+    },
+    {
+      entity_id: "ent-acme",
+      relationship_id: null,
+      evidence_source_ref: "obs-102",
+      thread_id: null,
+      metadata: null,
+    },
+  ];
+
+  it("keys canonical entities through upsertCanonicalEntityPage with claim provenance", async () => {
+    const { db } = mirrorDb({
+      entities: [canonicalAcme],
+      relationships: [],
+      evidence: evidenceWithClaims,
+    });
+
+    const { metrics } = await materializeTenantWikiFromGraph(
+      { tenantId: TENANT },
+      db as never,
+    );
+
+    expect(metrics.pages_upserted).toBe(1);
+    expect(mocks.upsertPage).not.toHaveBeenCalled();
+    expect(mocks.upsertCanonicalEntityPage).toHaveBeenCalledTimes(1);
+    const input = mocks.upsertCanonicalEntityPage.mock.calls[0]![0];
+    expect(input).toEqual(
+      expect.objectContaining({
+        tenant_id: TENANT,
+        canonical_entity_id: canonicalAcme.canonical_entity_id,
+        slug: "acme-corp",
+        title: "Acme Corp",
+      }),
+    );
+    // Overview section carries BOTH observation and durable-claim sources,
+    // and owns those kinds for reconciliation (retraction drops the row
+    // without deleting corroborated text).
+    const overview = input.sections[0];
+    expect(overview.replaceSourceKinds).toEqual([
+      "hindsight_observation",
+      "claim",
+    ]);
+    expect(overview.sources).toEqual(
+      expect.arrayContaining([
+        { kind: "hindsight_observation", ref: "obs-100" },
+        { kind: "claim", ref: "claim-1" },
+        { kind: "claim", ref: "claim-2" },
+      ]),
+    );
+  });
+
+  it("legacy rows without canonical ids keep the slug-keyed upsertPage path", async () => {
+    const { db } = mirrorDb({
+      entities: [{ ...acmeEntity, canonical_entity_id: null }],
+      relationships: [],
+      evidence: evidenceWithClaims,
+    });
+
+    await materializeTenantWikiFromGraph({ tenantId: TENANT }, db as never);
+
+    expect(mocks.upsertCanonicalEntityPage).not.toHaveBeenCalled();
+    expect(mocks.upsertPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("dirty-scoped pass filters the mirror read and NEVER runs archive reconciliation", async () => {
+    const { db, sqlSeen } = mirrorDb({
+      entities: [canonicalAcme],
+      relationships: [],
+      evidence: evidenceWithClaims,
+    });
+
+    const { metrics } = await materializeTenantWikiFromGraph(
+      {
+        tenantId: TENANT,
+        dirtyCanonicalEntityIds: [canonicalAcme.canonical_entity_id],
+      },
+      db as never,
+    );
+
+    expect(metrics.scoped_pass).toBe(1);
+    expect(sqlSeen[0]).toContain("canonical_entity_id IN");
+    // A scoped pass sees a subset of live slugs — reconciliation would
+    // archive every out-of-scope page, so it must not run.
+    expect(mocks.listGraphMaterializedTenantPages).not.toHaveBeenCalled();
+    expect(mocks.archivePagesByIds).not.toHaveBeenCalled();
+  });
+
+  it("full pass archives stale/below-threshold pages without touching the canonical registry", async () => {
+    const { db } = mirrorDb({
+      entities: [canonicalAcme],
+      relationships: [],
+      evidence: evidenceWithClaims,
+    });
+    mocks.listGraphMaterializedTenantPages.mockResolvedValueOnce([
+      { id: "page-old", type: "entity", slug: "vanished-entity" },
+    ]);
+    mocks.archivePagesByIds.mockResolvedValueOnce(1);
+
+    const { metrics } = await materializeTenantWikiFromGraph(
+      { tenantId: TENANT },
+      db as never,
+    );
+
+    expect(metrics.pages_archived).toBe(1);
+    // Archive is a wiki.pages status flip only — the materializer holds no
+    // handle that could delete identity.canonical_entities rows.
+    expect(mocks.archivePagesByIds).toHaveBeenCalledWith(
+      { pageIds: ["page-old"] },
+      expect.anything(),
+    );
+  });
+
+  it("duplicate mirror rows sharing one canonical id fold into ONE page (merge convergence)", async () => {
+    const dupe = {
+      ...canonicalAcme,
+      id: "ent-acme-dupe",
+      label: "Acme Corporation",
+      normalized_label: "acme corporation",
+    };
+    const { db } = mirrorDb({
+      entities: [canonicalAcme, dupe],
+      relationships: [],
+      evidence: [
+        ...evidenceWithClaims,
+        {
+          entity_id: "ent-acme-dupe",
+          relationship_id: null,
+          evidence_source_ref: "obs-300",
+          thread_id: null,
+          metadata: {},
+        },
+      ],
+    });
+
+    const { metrics } = await materializeTenantWikiFromGraph(
+      { tenantId: TENANT },
+      db as never,
+    );
+
+    expect(metrics.pages_upserted).toBe(1);
+    expect(mocks.upsertCanonicalEntityPage).toHaveBeenCalledTimes(1);
+    // Primary member (most distinct evidence) drives the title.
+    expect(mocks.upsertCanonicalEntityPage.mock.calls[0]![0].title).toBe(
+      "Acme Corp",
     );
   });
 });

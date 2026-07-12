@@ -403,6 +403,15 @@ locals {
       # invocation (never Lambda self-invoke — AWS recursive-loop
       # detection terminates worker-to-self Event chains).
       KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
+      # THINK-193 U4 dead-handoff fix: a successful observations ingest
+      # enqueues the tenant graph wiki-compile job inside its own commit
+      # and Event-invokes wiki-compile post-commit. WIKI_SOURCE must match
+      # the wiki-compile handler's dispatch flag (stage-global); the
+      # per-tenant kill switch stays tenants.wiki_compile_enabled. The
+      # invoke rides the shared lambda role's existing wiki-compile
+      # lambda:InvokeFunction grant (iam-grouped.tf); the function name is
+      # derived from STAGE (common_env) at call time.
+      WIKI_SOURCE = var.wiki_source
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is

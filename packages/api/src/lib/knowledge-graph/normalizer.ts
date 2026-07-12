@@ -26,6 +26,14 @@ export interface NormalizedKnowledgeGraphEntity {
   properties: Record<string, unknown>;
   diagnostics: Record<string, unknown>;
   lastSeenAt: Date | null;
+  /**
+   * THINK-193 U4: stamped by the canonical identity step
+   * (entity-identity/snapshot-resolution.ts) between normalization and the
+   * mirror merge. Absent/undefined on snapshots that never ran identity
+   * resolution (thread/wiki/brain sources) — persisted as NULL + 'legacy'.
+   */
+  canonicalEntityId?: string | null;
+  resolutionState?: "resolved" | "deferred" | "private" | "legacy";
 }
 
 export interface NormalizedKnowledgeGraphRelationship {
@@ -94,7 +102,9 @@ export interface DroppedNodeSample {
   label: string;
   rawType: string | null;
   dropReason:
-    "structural_node" | "unapproved_entity_type" | "out_of_scope_nodeset";
+    | "structural_node"
+    | "unapproved_entity_type"
+    | "out_of_scope_nodeset";
   propertyKeys: string[];
 }
 

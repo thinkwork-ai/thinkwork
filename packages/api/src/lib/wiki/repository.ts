@@ -25,7 +25,18 @@
  * continuation-chaining logic.
  */
 
-import { and, asc, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { PgColumn, PgTransaction } from "drizzle-orm/pg-core";
 import {
@@ -66,6 +77,7 @@ export type WikiSectionSourceKind =
   | "journal_idea"
   | "hindsight_observation"
   | "hindsight_memory_unit"
+  | "claim"
   | "erp_customer"
   | "crm_opportunity"
   | "erp_order"
@@ -159,6 +171,8 @@ export interface WikiPageRow {
   owner_id: string | null;
   type: WikiPageType;
   entity_subtype?: string | null;
+  /** Canonical entity identity (U4) — set on tenant Entity pages. */
+  canonical_entity_id?: string | null;
   slug: string;
   title: string;
   summary: string | null;
@@ -216,6 +230,13 @@ export interface WikiSectionInput {
   position: number;
   /** Source references for provenance; recorded per section on upsert. */
   sources?: Array<{ kind: WikiSectionSourceKind; ref: string }>;
+  /**
+   * Provenance reconciliation (U4): source kinds this writer OWNS for the
+   * section. Existing rows of these kinds that are absent from `sources`
+   * are deleted on upsert (e.g. a retracted claim drops off provenance
+   * while corroborated text stays). Rows of other kinds are untouched.
+   */
+  replaceSourceKinds?: WikiSectionSourceKind[];
 }
 
 export interface UpsertPageInput {
@@ -500,6 +521,15 @@ export async function enqueueGraphCompileJob(
      * 5-minute bucket. Appending a fifth part keeps the key un-parseable
      * by `parseCompileDedupeBucket` (which requires exactly 3 parts). */
     dedupeDiscriminator?: string;
+    /**
+     * Dirty canonical-entity compile scope (THINK-193 U4). Stored as the
+     * job's `input` jsonb — the graph materializer restricts its pass to
+     * these canonical ids. Omit (or overflow the cap) for a full pass.
+     * On dedupe against a PENDING job the scopes union; unioning past
+     * {@link MAX_DIRTY_CANONICAL_IDS_PER_JOB} widens to a full pass (input
+     * NULL) so scope can only grow, never silently drop ids.
+     */
+    dirtyCanonicalEntityIds?: string[];
   },
   db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
@@ -511,6 +541,13 @@ export async function enqueueGraphCompileJob(
     ? `${baseDedupeKey}:${args.dedupeDiscriminator}`
     : baseDedupeKey;
 
+  const scopedInput =
+    args.dirtyCanonicalEntityIds &&
+    args.dirtyCanonicalEntityIds.length > 0 &&
+    args.dirtyCanonicalEntityIds.length <= MAX_DIRTY_CANONICAL_IDS_PER_JOB
+      ? { dirtyCanonicalEntityIds: [...new Set(args.dirtyCanonicalEntityIds)] }
+      : null;
+
   const [inserted] = await db
     .insert(wikiCompileJobs)
     .values({
@@ -518,6 +555,7 @@ export async function enqueueGraphCompileJob(
       owner_id: null,
       dedupe_key: dedupeKey,
       trigger: args.trigger,
+      input: scopedInput,
     })
     .onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
     .returning();
@@ -537,7 +575,58 @@ export async function enqueueGraphCompileJob(
       `enqueueGraphCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
     );
   }
-  return { inserted: false, job: existing[0] as WikiCompileJobRow };
+  let job = existing[0] as WikiCompileJobRow;
+
+  // Scope union on dedupe: a pending scoped job must not lose the new dirty
+  // ids. NULL input (full pass) always wins; overflow widens to full pass.
+  if (job.status === "pending") {
+    const existingScope = parseDirtyCanonicalEntityIds(job.input);
+    const existingIsFull = existingScope === null;
+    if (!existingIsFull) {
+      const nextInput = scopedInput
+        ? unionDirtyScope(existingScope, scopedInput.dirtyCanonicalEntityIds)
+        : null; // incoming full pass widens the pending job
+      const [updated] = await db
+        .update(wikiCompileJobs)
+        .set({ input: nextInput })
+        .where(
+          and(
+            eq(wikiCompileJobs.id, job.id),
+            eq(wikiCompileJobs.status, "pending"),
+          ),
+        )
+        .returning();
+      if (updated) job = updated as WikiCompileJobRow;
+    }
+  }
+  return { inserted: false, job };
+}
+
+/** Cap on per-job dirty canonical ids; beyond this a full pass is cheaper. */
+export const MAX_DIRTY_CANONICAL_IDS_PER_JOB = 500;
+
+/**
+ * Parse the dirty canonical-entity scope from a compile job's input jsonb.
+ * `null` = full pass (no scope or malformed/overflowed scope).
+ */
+export function parseDirtyCanonicalEntityIds(input: unknown): string[] | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = (input as Record<string, unknown>).dirtyCanonicalEntityIds;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const ids = raw.filter((id): id is string => typeof id === "string");
+  if (ids.length === 0 || ids.length > MAX_DIRTY_CANONICAL_IDS_PER_JOB) {
+    return null;
+  }
+  return ids;
+}
+
+function unionDirtyScope(
+  existing: string[],
+  incoming: string[],
+): { dirtyCanonicalEntityIds: string[] } | null {
+  const union = [...new Set([...existing, ...incoming])];
+  if (union.length > MAX_DIRTY_CANONICAL_IDS_PER_JOB) return null;
+  return { dirtyCanonicalEntityIds: union };
 }
 
 /**
@@ -1448,6 +1537,163 @@ export async function upsertPage(
   });
 }
 
+export interface UpsertCanonicalEntityPageInput {
+  tenant_id: string;
+  canonical_entity_id: string;
+  /** Approved ontology entity type slug. */
+  entity_subtype?: string | null;
+  /** Desired presentation slug (from the current display label). */
+  slug: string;
+  title: string;
+  summary?: string | null;
+  sections?: WikiSectionInput[];
+  aliases?: Array<{ alias: string; source?: string }>;
+}
+
+/**
+ * Canonical-ID-keyed tenant Entity page upsert (THINK-193 U4).
+ *
+ * Identity = canonical_entity_id (partial unique
+ * `uq_pages_tenant_canonical_entity`); slug/title/aliases are presentation.
+ *
+ *   - Existing canonical page + changed label → RENAME in place: title and
+ *     slug update on the SAME row, and the old slug is seeded as an alias so
+ *     links keep resolving. No second page.
+ *   - No canonical page yet → adopt a legacy slug-keyed tenant Entity page
+ *     that lacks a canonical id (stamps it) before inserting fresh.
+ *   - Slug collisions with a DIFFERENT page resolve deterministically by
+ *     suffixing the first 8 chars of the canonical id (stable across runs).
+ *
+ * Page + sections + aliases commit in one transaction (mobile rendering
+ * invariant: body_md and wiki_page_sections never split).
+ */
+export async function upsertCanonicalEntityPage(
+  input: UpsertCanonicalEntityPageInput,
+  db: DbClient = defaultDb,
+): Promise<WikiPageRow> {
+  return db.transaction(async (tx) => {
+    const txc = tx as DbClient;
+    const [existingByCanonical] = await tx
+      .select()
+      .from(wikiPages)
+      .where(
+        and(
+          eq(wikiPages.tenant_id, input.tenant_id),
+          eq(wikiPages.type, "entity"),
+          eq(wikiPages.canonical_entity_id, input.canonical_entity_id),
+          sql`${wikiPages.owner_id} IS NULL`,
+        ),
+      )
+      .limit(1);
+
+    let existing = (existingByCanonical as WikiPageRow | undefined) ?? null;
+
+    if (!existing) {
+      // Backfill-adoption: a legacy tenant page on the same slug without a
+      // canonical id becomes this canonical entity's page.
+      const legacy = await findPageBySlug(
+        {
+          tenantId: input.tenant_id,
+          ownerId: null,
+          type: "entity",
+          slug: input.slug,
+        },
+        txc,
+      );
+      if (
+        legacy &&
+        !(legacy as WikiPageRow & { canonical_entity_id?: string | null })
+          .canonical_entity_id
+      ) {
+        existing = legacy;
+      }
+    }
+
+    // Deterministic slug resolution: desired slug unless a DIFFERENT live
+    // tenant entity page already owns it.
+    const resolveSlug = async (pageIdToIgnore: string | null) => {
+      const holder = await findPageBySlug(
+        {
+          tenantId: input.tenant_id,
+          ownerId: null,
+          type: "entity",
+          slug: input.slug,
+        },
+        txc,
+      );
+      if (!holder || holder.id === pageIdToIgnore) return input.slug;
+      return `${input.slug}-${input.canonical_entity_id.slice(0, 8)}`;
+    };
+
+    let page: WikiPageRow;
+    if (existing) {
+      const nextSlug = await resolveSlug(existing.id);
+      const renamed = nextSlug !== existing.slug;
+      const [updated] = await tx
+        .update(wikiPages)
+        .set({
+          canonical_entity_id: input.canonical_entity_id,
+          slug: nextSlug,
+          title: input.title,
+          summary: input.summary ?? existing.summary,
+          entity_subtype:
+            input.entity_subtype !== undefined
+              ? (input.entity_subtype ?? null)
+              : existing.entity_subtype,
+          status: "active",
+          last_compiled_at: sql`now()` as any,
+          updated_at: sql`now()` as any,
+        })
+        .where(eq(wikiPages.id, existing.id))
+        .returning();
+      page = updated as WikiPageRow;
+      if (renamed) {
+        // The old slug lives on as an alias — rename never breaks lookups.
+        await tx
+          .insert(wikiPageAliases)
+          .values({
+            page_id: page.id,
+            alias: existing.slug,
+            source: "compiler",
+          })
+          .onConflictDoNothing();
+      }
+    } else {
+      const nextSlug = await resolveSlug(null);
+      const [inserted] = await tx
+        .insert(wikiPages)
+        .values({
+          tenant_id: input.tenant_id,
+          owner_id: null,
+          type: "entity",
+          canonical_entity_id: input.canonical_entity_id,
+          entity_subtype: input.entity_subtype ?? null,
+          slug: nextSlug,
+          title: input.title,
+          summary: input.summary ?? null,
+          status: "active",
+          last_compiled_at: sql`now()` as any,
+        })
+        .returning();
+      page = inserted as WikiPageRow;
+    }
+
+    if (input.sections && input.sections.length > 0) {
+      await upsertSections(page.id, input.sections, txc);
+    }
+    if (input.aliases && input.aliases.length > 0) {
+      for (const { alias, source } of input.aliases) {
+        if (!alias) continue;
+        await tx
+          .insert(wikiPageAliases)
+          .values({ page_id: page.id, alias, source: source ?? "compiler" })
+          .onConflictDoNothing();
+      }
+    }
+    return page;
+  });
+}
+
 /**
  * Upsert sections for a page. Each incoming section matches an existing row
  * via (page_id, section_slug). New sections are inserted, existing ones are
@@ -1507,6 +1753,32 @@ export async function upsertSections(
         })
         .returning({ id: wikiPageSections.id });
       sectionId = inserted!.id;
+    }
+
+    // Provenance reconciliation for writer-owned kinds: stale refs (e.g. a
+    // retracted claim) drop off; still-present refs keep their first_seen_at
+    // (the delete filters them out, the insert below no-ops on conflict).
+    if (section.replaceSourceKinds && section.replaceSourceKinds.length > 0) {
+      const keepRefsByKind = new Map<string, string[]>();
+      for (const source of section.sources ?? []) {
+        const list = keepRefsByKind.get(source.kind) ?? [];
+        list.push(source.ref);
+        keepRefsByKind.set(source.kind, list);
+      }
+      for (const kind of section.replaceSourceKinds) {
+        const keepRefs = keepRefsByKind.get(kind) ?? [];
+        await db
+          .delete(wikiSectionSources)
+          .where(
+            and(
+              eq(wikiSectionSources.section_id, sectionId),
+              eq(wikiSectionSources.source_kind, kind),
+              ...(keepRefs.length > 0
+                ? [notInArray(wikiSectionSources.source_ref, keepRefs)]
+                : []),
+            ),
+          );
+      }
     }
 
     if (section.sources && section.sources.length > 0) {
