@@ -1,0 +1,274 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const selectMock = vi.hoisted(() => vi.fn());
+const insertMock = vi.hoisted(() => vi.fn());
+const executeMock = vi.hoisted(() => vi.fn());
+const recallMock = vi.hoisted(() => vi.fn());
+const searchWikiMock = vi.hoisted(() => vi.fn());
+const searchKgMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@thinkwork/database-pg", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@thinkwork/database-pg")>();
+  return {
+    ...actual,
+    getDb: () => ({
+      select: selectMock,
+      insert: insertMock,
+      execute: executeMock,
+    }),
+  };
+});
+
+vi.mock("../memory/index.js", () => ({
+  getMemoryServices: () => ({ recall: { recall: recallMock } }),
+}));
+
+vi.mock("../wiki/search.js", () => ({
+  searchWikiForReadScope: searchWikiMock,
+}));
+
+vi.mock("../knowledge-graph/graph-search.js", () => ({
+  searchKnowledgeGraph: searchKgMock,
+}));
+
+import { searchBroker, type SearchSource } from "./broker.js";
+
+const TENANT = "11111111-1111-1111-1111-111111111111";
+const USER = "22222222-2222-2222-2222-222222222222";
+const WIKI_SCOPE = { kind: "tenantUnion", userId: USER } as never;
+
+function threadSelectChain(rows: unknown[]) {
+  const limit = vi.fn().mockResolvedValue(rows);
+  const orderBy = vi.fn().mockReturnValue({ limit });
+  const where = vi.fn().mockReturnValue({ orderBy, limit });
+  const from = vi.fn().mockReturnValue({ where });
+  return { from, where, orderBy, limit };
+}
+
+function insertChain() {
+  const values = vi.fn().mockResolvedValue(undefined);
+  insertMock.mockReturnValue({ values });
+  return values;
+}
+
+function baseArgs(
+  sources: SearchSource[],
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    tenantId: TENANT,
+    callerUserId: USER,
+    query: "acme",
+    sources,
+    limit: 10,
+    wikiScope: WIKI_SCOPE,
+    ...extra,
+  };
+}
+
+describe("searchBroker", () => {
+  beforeEach(() => {
+    selectMock.mockReset();
+    insertMock.mockReset();
+    executeMock.mockReset();
+    recallMock.mockReset();
+    searchWikiMock.mockReset();
+    searchKgMock.mockReset();
+    insertChain();
+  });
+
+  it("returns tagged results from the requested legs", async () => {
+    const chain = threadSelectChain([
+      {
+        id: "t1",
+        title: "Acme SOW",
+        identifier: "TH-1",
+        space_id: null,
+        updated_at: new Date("2026-07-01T00:00:00Z"),
+      },
+    ]);
+    selectMock.mockReturnValue({ from: chain.from });
+    searchWikiMock.mockResolvedValue([
+      { page: { id: "w1" }, score: 2, matchedAlias: null },
+    ]);
+    searchKgMock.mockResolvedValue({
+      entities: [
+        {
+          id: "e1",
+          label: "Acme",
+          typeSlug: "organization",
+          summary: null,
+          aliases: ["ACME Corp"],
+          relationshipCount: 3,
+          evidenceCount: 5,
+          observationIds: [],
+        },
+      ],
+      relationships: [],
+    });
+
+    const result = await searchBroker(
+      baseArgs(["THREADS", "WIKI", "ENTITIES"]),
+    );
+
+    expect(result.legs.map((l) => [l.source, l.status])).toEqual([
+      ["THREADS", "OK"],
+      ["WIKI", "OK"],
+      ["ENTITIES", "OK"],
+    ]);
+    expect(result.legs[0].threadHits?.[0]).toMatchObject({
+      id: "t1",
+      title: "Acme SOW",
+    });
+    expect(result.legs[1].wikiHits?.[0]).toMatchObject({ score: 2 });
+    expect(result.legs[2].entityHits?.[0]).toMatchObject({
+      entityId: "e1",
+      label: "Acme",
+      ontologyTypeSlug: "organization",
+    });
+    expect(recallMock).not.toHaveBeenCalled();
+  });
+
+  it("a timing-out leg yields TIMEOUT for its rail while others return OK", async () => {
+    const chain = threadSelectChain([]);
+    selectMock.mockReturnValue({ from: chain.from });
+    searchWikiMock.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve([]), 250)),
+    );
+    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
+
+    const result = await searchBroker(
+      baseArgs(["THREADS", "WIKI", "ENTITIES"], {
+        timeoutMs: { WIKI: 20 },
+      }),
+    );
+
+    const bySource = Object.fromEntries(
+      result.legs.map((l) => [l.source, l.status]),
+    );
+    expect(bySource.WIKI).toBe("TIMEOUT");
+    expect(bySource.THREADS).toBe("OK");
+    expect(bySource.ENTITIES).toBe("OK");
+  });
+
+  it("a throwing leg yields per-leg ERROR, not a query-level failure", async () => {
+    const chain = threadSelectChain([]);
+    selectMock.mockReturnValue({ from: chain.from });
+    searchWikiMock.mockRejectedValue(new Error("wiki exploded"));
+    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
+
+    const result = await searchBroker(
+      baseArgs(["THREADS", "WIKI", "ENTITIES"]),
+    );
+
+    const wiki = result.legs.find((l) => l.source === "WIKI");
+    expect(wiki?.status).toBe("ERROR");
+    expect(wiki?.error).toContain("wiki exploded");
+    expect(result.legs.filter((l) => l.status === "OK")).toHaveLength(2);
+  });
+
+  it("excludes memory hits whose stamped thread the caller cannot access; keeps unstamped hits", async () => {
+    recallMock.mockResolvedValue([
+      {
+        score: 0.9,
+        record: {
+          id: "m-accessible",
+          threadId: "thread-ok",
+          content: { text: "visible" },
+          createdAt: "2026-07-01T00:00:00Z",
+        },
+      },
+      {
+        score: 0.8,
+        record: {
+          id: "m-blocked",
+          threadId: "thread-private",
+          content: { text: "hidden" },
+          createdAt: "2026-07-01T00:00:00Z",
+        },
+      },
+      {
+        score: 0.7,
+        record: {
+          id: "m-unstamped",
+          content: { text: "own-bank note" },
+          createdAt: "2026-07-01T00:00:00Z",
+        },
+      },
+    ]);
+    // Access check returns only thread-ok as visible.
+    const where = vi.fn().mockResolvedValue([{ id: "thread-ok" }]);
+    const from = vi.fn().mockReturnValue({ where });
+    selectMock.mockReturnValue({ from });
+
+    const result = await searchBroker(baseArgs(["MEMORY"]));
+
+    const memory = result.legs[0];
+    expect(memory.status).toBe("OK");
+    expect(memory.memoryHits?.map((m) => m.memoryRecordId)).toEqual([
+      "m-accessible",
+      "m-unstamped",
+    ]);
+  });
+
+  it("never invokes the memory adapter when MEMORY is not requested", async () => {
+    const chain = threadSelectChain([]);
+    selectMock.mockReturnValue({ from: chain.from });
+    searchWikiMock.mockResolvedValue([]);
+    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
+
+    await searchBroker(baseArgs(["THREADS", "WIKI", "ENTITIES"]));
+    expect(recallMock).not.toHaveBeenCalled();
+  });
+
+  it("telemetry write failure does not fail the query", async () => {
+    const chain = threadSelectChain([]);
+    selectMock.mockReturnValue({ from: chain.from });
+    const values = vi.fn().mockRejectedValue(new Error("insert failed"));
+    insertMock.mockReturnValue({ values });
+
+    const result = await searchBroker(baseArgs(["THREADS"]));
+    expect(result.legs[0].status).toBe("OK");
+    // Let the fire-and-forget rejection settle so vitest doesn't flag it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  it("records telemetry with per-leg hit counts and statuses", async () => {
+    const chain = threadSelectChain([
+      {
+        id: "t1",
+        title: "Acme",
+        identifier: null,
+        space_id: null,
+        updated_at: null,
+      },
+    ]);
+    selectMock.mockReturnValue({ from: chain.from });
+    searchWikiMock.mockResolvedValue([]);
+    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
+    const values = insertChain();
+
+    await searchBroker(baseArgs(["THREADS", "WIKI", "ENTITIES"]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(values).toHaveBeenCalledTimes(1);
+    expect(values.mock.calls[0][0]).toMatchObject({
+      tenant_id: TENANT,
+      user_id: USER,
+      query_text: "acme",
+      total_hits: 1,
+      escalated: false,
+      leg_hit_counts: { THREADS: 1, WIKI: 0, ENTITIES: 0 },
+      leg_statuses: { THREADS: "OK", WIKI: "OK", ENTITIES: "OK" },
+    });
+  });
+
+  it("empty query returns no legs and writes no telemetry", async () => {
+    const values = insertChain();
+    const result = await searchBroker(baseArgs(["THREADS"], { query: "  " }));
+    expect(result.legs).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(values).not.toHaveBeenCalled();
+  });
+});

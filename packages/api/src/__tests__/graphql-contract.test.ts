@@ -83,6 +83,8 @@ describe("GraphQL Schema Contract", () => {
       "threadLinkedTasks",
       // Messages
       "messages",
+      // Search (THINK-263)
+      "search",
       // Core
       "me",
       "tenant",

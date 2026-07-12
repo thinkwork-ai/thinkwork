@@ -1,0 +1,83 @@
+# THINK-263 — unified search broker (find rung).
+#
+# One fan-out operation over the tenant brain's fast retrieval legs. Each leg
+# returns independently (per-leg status) so a slow or failing leg never blanks
+# the others. The memory leg is excluded from keystroke find by callers
+# (`sources`) and serves ask/dossier surfaces; it reads the caller's own bank.
+
+enum SearchSource {
+  THREADS
+  WIKI
+  ENTITIES
+  MEMORY
+}
+
+enum SearchLegStatus {
+  OK
+  TIMEOUT
+  ERROR
+}
+
+type SearchThreadHit {
+  id: ID!
+  title: String
+  identifier: String
+  spaceId: ID
+  updatedAt: String
+}
+
+type SearchWikiHit {
+  page: WikiPage!
+  score: Float!
+  matchedAlias: String
+}
+
+type SearchEntityHit {
+  entityId: ID!
+  label: String!
+  ontologyTypeSlug: String
+  summary: String
+  aliases: [String!]
+  relationshipCount: Int
+  evidenceCount: Int
+}
+
+type SearchMemoryHit {
+  memoryRecordId: ID!
+  text: String!
+  score: Float
+  threadId: ID
+  createdAt: String
+}
+
+type SearchLeg {
+  source: SearchSource!
+  status: SearchLegStatus!
+  error: String
+  threadHits: [SearchThreadHit!]
+  wikiHits: [SearchWikiHit!]
+  entityHits: [SearchEntityHit!]
+  memoryHits: [SearchMemoryHit!]
+}
+
+type SearchResults {
+  "Shared id across the parallel per-rail calls of one palette query."
+  queryId: ID!
+  legs: [SearchLeg!]!
+}
+
+extend type Query {
+  """
+  Fan-out search over the requested legs with per-leg timeout isolation.
+  Thread results are caller-visibility and hidden-thread filtered; memory
+  results read the caller's own bank and exclude hits whose source thread
+  the caller cannot open.
+  """
+  search(
+    tenantId: ID!
+    query: String!
+    sources: [SearchSource!]
+    limit: Int = 10
+    queryId: ID
+  ): SearchResults!
+}
