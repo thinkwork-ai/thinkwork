@@ -336,6 +336,53 @@ describe("memory-retain handler", () => {
     expect(result).toEqual({ ok: false, error: "MISSING_DOCUMENT_ID" });
   });
 
+  // THINK-263 U1 — conversation retains stamp thread provenance at write
+  // time, mirroring the high-confidence-fact path.
+  it("stamps threadId and threadTurnId onto conversation retain metadata", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+    const attemptWithTurn = { ...BASE_ATTEMPT, thread_turn_id: "turn-777" };
+    upsertRetainAttemptMock.mockResolvedValue(attemptWithTurn);
+    claimRetainAttemptMock.mockResolvedValue(attemptWithTurn);
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      threadTurnId: "turn-777",
+      transcript: [
+        { role: "user", content: "where did we land on Acme pricing?" },
+        { role: "assistant", content: "Summarized in the SOW thread." },
+      ],
+      metadata: { channel: "CHAT" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(retainConversationMock).toHaveBeenCalledTimes(1);
+    expect(retainConversationMock.mock.calls[0][0].metadata).toMatchObject({
+      channel: "CHAT",
+      threadId: THREAD_ID,
+      threadTurnId: "turn-777",
+    });
+  });
+
+  it("omits threadTurnId from the stamp when the event carries none", async () => {
+    buildRetainConversationServices();
+    buildSelectChain([]);
+
+    const result = await handler({
+      tenantId: TENANT_A,
+      userId: USER_ID,
+      threadId: THREAD_ID,
+      transcript: [{ role: "user", content: "hello" }],
+    });
+
+    expect(result.ok).toBe(true);
+    const metadata = retainConversationMock.mock.calls[0][0].metadata;
+    expect(metadata.threadId).toBe(THREAD_ID);
+    expect(metadata).not.toHaveProperty("threadTurnId");
+  });
+
   it("eval-marked events retain the marked conversation but skip fact extraction and wiki compile", async () => {
     buildRetainConversationServices();
     buildSelectChain([]);
@@ -481,7 +528,11 @@ describe("memory-retain handler", () => {
       threadId: THREAD_ID,
     });
     expect(spaceCall.hindsight.tags).toEqual(
-      expect.arrayContaining([`space:${SPACE_ID}`, "scope:space", "source:thread"]),
+      expect.arrayContaining([
+        `space:${SPACE_ID}`,
+        "scope:space",
+        "source:thread",
+      ]),
     );
     // Same merged transcript both writes.
     expect(spaceCall.messages).toEqual(personalCall.messages);
