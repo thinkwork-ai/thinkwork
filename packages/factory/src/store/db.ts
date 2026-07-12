@@ -97,6 +97,39 @@ export interface SlackThreadRow {
   updated_at: string;
 }
 
+export interface LeaseRow {
+  issue_id: string;
+  attempt_id: number;
+  expires_at: string;
+  heartbeat_at: string;
+  /** Observed-reachable phase wall-clock (R11): frozen while host-unreachable. */
+  sla_accumulated_ms: number;
+}
+
+export interface NagTimerRow {
+  id: number;
+  issue_id: string;
+  kind: string;
+  next_fire_at: string;
+  interval_minutes: number;
+  armed: number;
+}
+
+export interface NagOutboxRow {
+  id: number;
+  issue_id: string;
+  kind: string;
+  text: string;
+  created_at: string;
+  delivered: number;
+}
+
+export interface LockRow {
+  name: string;
+  holder_issue_id: string;
+  acquired_at: string;
+}
+
 export interface FactoryStore {
   readonly db: Database.Database;
   upsertIssue(input: UpsertIssueInput): void;
@@ -149,6 +182,61 @@ export interface FactoryStore {
   ): void;
   getAttempt(attemptId: number): AttemptRow | undefined;
   getActiveAttempt(issueId: string, phase: string): AttemptRow | undefined;
+  /** Every active (non-terminal) attempt across all issues — the sweep's input. */
+  listActiveAttempts(): AttemptRow[];
+  /** All attempts for one issue+phase, newest attempt_number first. */
+  listAttemptsForPhase(issueId: string, phase: string): AttemptRow[];
+  /**
+   * The newest terminal attempt for an issue (any phase), by insertion order —
+   * used by the quota classifier to read the most-recent QuotaCooldown + its
+   * ended_at.
+   */
+  getLatestTerminalAttempt(issueId: string): AttemptRow | undefined;
+
+  // ---- Leases (U6, R10/R11/R15) -----------------------------------------
+  upsertLease(input: {
+    issueId: string;
+    attemptId: number;
+    expiresAt: string;
+    heartbeatAt: string;
+    slaAccumulatedMs?: number;
+  }): void;
+  getLease(issueId: string): LeaseRow | undefined;
+  deleteLease(issueId: string): void;
+  listLeases(): LeaseRow[];
+
+  // ---- Nag timers (U6, R23) ---------------------------------------------
+  /** Arm/refresh a timer for (issue, kind). Idempotent on the unique index. */
+  upsertNagTimer(input: {
+    issueId: string;
+    kind: string;
+    nextFireAt: string;
+    intervalMinutes: number;
+    armed?: boolean;
+  }): void;
+  getNagTimer(issueId: string, kind: string): NagTimerRow | undefined;
+  setNagArmed(issueId: string, kind: string, armed: boolean): void;
+  setNagNextFire(issueId: string, kind: string, nextFireAt: string): void;
+  /** Armed timers whose next_fire_at <= the given ISO instant. */
+  listDueNagTimers(nowIso: string): NagTimerRow[];
+  listNagTimers(): NagTimerRow[];
+
+  // ---- Nag outbox (U6→U8 delivery queue) --------------------------------
+  enqueueNag(input: { issueId: string; kind: string; text: string }): void;
+  listUndeliveredNags(): NagOutboxRow[];
+  markNagDelivered(id: number): void;
+
+  // ---- Locks (KTD-11 dev-deployment mutex) ------------------------------
+  /**
+   * Acquire a named lock for `holderIssueId`. Returns true when the caller now
+   * holds it (freshly acquired, or already held by the same issue — reentrant),
+   * false when another issue holds it.
+   */
+  acquireLock(name: string, holderIssueId: string, acquiredAt: string): boolean;
+  /** Release the lock only if `holderIssueId` holds it. Returns true if released. */
+  releaseLock(name: string, holderIssueId: string): boolean;
+  getLock(name: string): LockRow | undefined;
+
   close(): void;
 }
 
@@ -220,6 +308,20 @@ function assertDbTerminalStatesMatch(db: Database.Database): void {
   }
 }
 
+/** Add a column to a table if it is not already present (idempotent). */
+function ensureColumn(
+  db: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const cols = db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all() as { name: string }[];
+  if (cols.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
 export function openStore(
   stateDir: string,
   clock: () => Date = () => new Date(),
@@ -229,6 +331,11 @@ export function openStore(
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(schemaSql());
+  // Idempotent additive migration: a factory.db created before U6 has a
+  // `leases` table without sla_accumulated_ms. CREATE TABLE IF NOT EXISTS never
+  // alters an existing table, so add the column here (the store is a
+  // rebuildable cache — no data migration needed, it just starts at 0).
+  ensureColumn(db, "leases", "sla_accumulated_ms", "INTEGER NOT NULL DEFAULT 0");
   try {
     assertDbTerminalStatesMatch(db);
   } catch (err) {
@@ -277,6 +384,76 @@ export function openStore(
 
   const getActiveAttemptStmt = db.prepare(
     "SELECT * FROM attempts WHERE issue_id = ? AND phase = ? AND active = 1",
+  );
+
+  const listActiveAttemptsStmt = db.prepare(
+    "SELECT * FROM attempts WHERE active = 1 ORDER BY id ASC",
+  );
+  const listAttemptsForPhaseStmt = db.prepare(
+    "SELECT * FROM attempts WHERE issue_id = ? AND phase = ? ORDER BY attempt_number DESC",
+  );
+  const getLatestTerminalAttemptStmt = db.prepare(
+    "SELECT * FROM attempts WHERE issue_id = ? AND active = 0 ORDER BY id DESC LIMIT 1",
+  );
+
+  const upsertLeaseStmt = db.prepare(`
+    INSERT INTO leases (issue_id, attempt_id, expires_at, heartbeat_at, sla_accumulated_ms)
+    VALUES (@issue_id, @attempt_id, @expires_at, @heartbeat_at, @sla_accumulated_ms)
+    ON CONFLICT (issue_id) DO UPDATE SET
+      attempt_id = excluded.attempt_id,
+      expires_at = excluded.expires_at,
+      heartbeat_at = excluded.heartbeat_at,
+      sla_accumulated_ms = excluded.sla_accumulated_ms
+  `);
+  const getLeaseStmt = db.prepare("SELECT * FROM leases WHERE issue_id = ?");
+  const deleteLeaseStmt = db.prepare("DELETE FROM leases WHERE issue_id = ?");
+  const listLeasesStmt = db.prepare(
+    "SELECT * FROM leases ORDER BY issue_id ASC",
+  );
+
+  const upsertNagTimerStmt = db.prepare(`
+    INSERT INTO nag_timers (issue_id, kind, next_fire_at, interval_minutes, armed)
+    VALUES (@issue_id, @kind, @next_fire_at, @interval_minutes, @armed)
+    ON CONFLICT (issue_id, kind) DO UPDATE SET
+      next_fire_at = excluded.next_fire_at,
+      interval_minutes = excluded.interval_minutes,
+      armed = excluded.armed
+  `);
+  const getNagTimerStmt = db.prepare(
+    "SELECT * FROM nag_timers WHERE issue_id = ? AND kind = ?",
+  );
+  const setNagArmedStmt = db.prepare(
+    "UPDATE nag_timers SET armed = @armed WHERE issue_id = @issue_id AND kind = @kind",
+  );
+  const setNagNextFireStmt = db.prepare(
+    "UPDATE nag_timers SET next_fire_at = @next_fire_at WHERE issue_id = @issue_id AND kind = @kind",
+  );
+  const listDueNagTimersStmt = db.prepare(
+    "SELECT * FROM nag_timers WHERE armed = 1 AND next_fire_at <= ? ORDER BY next_fire_at ASC",
+  );
+  const listNagTimersStmt = db.prepare(
+    "SELECT * FROM nag_timers ORDER BY id ASC",
+  );
+
+  const enqueueNagStmt = db.prepare(`
+    INSERT INTO nag_outbox (issue_id, kind, text, created_at, delivered)
+    VALUES (@issue_id, @kind, @text, @created_at, 0)
+  `);
+  const listUndeliveredNagsStmt = db.prepare(
+    "SELECT * FROM nag_outbox WHERE delivered = 0 ORDER BY id ASC",
+  );
+  const markNagDeliveredStmt = db.prepare(
+    "UPDATE nag_outbox SET delivered = 1 WHERE id = ?",
+  );
+
+  const acquireLockStmt = db.prepare(`
+    INSERT INTO locks (name, holder_issue_id, acquired_at)
+    VALUES (@name, @holder_issue_id, @acquired_at)
+    ON CONFLICT (name) DO NOTHING
+  `);
+  const getLockStmt = db.prepare("SELECT * FROM locks WHERE name = ?");
+  const releaseLockStmt = db.prepare(
+    "DELETE FROM locks WHERE name = ? AND holder_issue_id = ?",
   );
 
   const insertSlackThreadStmt = db.prepare(`
@@ -366,6 +543,108 @@ export function openStore(
 
     getActiveAttempt(issueId, phase) {
       return getActiveAttemptStmt.get(issueId, phase) as AttemptRow | undefined;
+    },
+
+    listActiveAttempts() {
+      return listActiveAttemptsStmt.all() as AttemptRow[];
+    },
+
+    listAttemptsForPhase(issueId, phase) {
+      return listAttemptsForPhaseStmt.all(issueId, phase) as AttemptRow[];
+    },
+
+    getLatestTerminalAttempt(issueId) {
+      return getLatestTerminalAttemptStmt.get(issueId) as
+        | AttemptRow
+        | undefined;
+    },
+
+    upsertLease(input) {
+      upsertLeaseStmt.run({
+        issue_id: input.issueId,
+        attempt_id: input.attemptId,
+        expires_at: input.expiresAt,
+        heartbeat_at: input.heartbeatAt,
+        sla_accumulated_ms: input.slaAccumulatedMs ?? 0,
+      });
+    },
+
+    getLease(issueId) {
+      return getLeaseStmt.get(issueId) as LeaseRow | undefined;
+    },
+
+    deleteLease(issueId) {
+      deleteLeaseStmt.run(issueId);
+    },
+
+    listLeases() {
+      return listLeasesStmt.all() as LeaseRow[];
+    },
+
+    upsertNagTimer(input) {
+      upsertNagTimerStmt.run({
+        issue_id: input.issueId,
+        kind: input.kind,
+        next_fire_at: input.nextFireAt,
+        interval_minutes: input.intervalMinutes,
+        armed: input.armed === false ? 0 : 1,
+      });
+    },
+
+    getNagTimer(issueId, kind) {
+      return getNagTimerStmt.get(issueId, kind) as NagTimerRow | undefined;
+    },
+
+    setNagArmed(issueId, kind, armed) {
+      setNagArmedStmt.run({ issue_id: issueId, kind, armed: armed ? 1 : 0 });
+    },
+
+    setNagNextFire(issueId, kind, nextFireAt) {
+      setNagNextFireStmt.run({ issue_id: issueId, kind, next_fire_at: nextFireAt });
+    },
+
+    listDueNagTimers(nowIso) {
+      return listDueNagTimersStmt.all(nowIso) as NagTimerRow[];
+    },
+
+    listNagTimers() {
+      return listNagTimersStmt.all() as NagTimerRow[];
+    },
+
+    enqueueNag(input) {
+      enqueueNagStmt.run({
+        issue_id: input.issueId,
+        kind: input.kind,
+        text: input.text,
+        created_at: now(),
+      });
+    },
+
+    listUndeliveredNags() {
+      return listUndeliveredNagsStmt.all() as NagOutboxRow[];
+    },
+
+    markNagDelivered(id) {
+      markNagDeliveredStmt.run(id);
+    },
+
+    acquireLock(name, holderIssueId, acquiredAt) {
+      acquireLockStmt.run({
+        name,
+        holder_issue_id: holderIssueId,
+        acquired_at: acquiredAt,
+      });
+      const row = getLockStmt.get(name) as LockRow | undefined;
+      return row !== undefined && row.holder_issue_id === holderIssueId;
+    },
+
+    releaseLock(name, holderIssueId) {
+      const result = releaseLockStmt.run(name, holderIssueId);
+      return result.changes > 0;
+    },
+
+    getLock(name) {
+      return getLockStmt.get(name) as LockRow | undefined;
     },
 
     upsertSlackThread(input) {

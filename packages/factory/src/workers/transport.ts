@@ -9,7 +9,7 @@
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, closeSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export interface ExecResult {
@@ -55,6 +55,13 @@ export interface HostTransport {
   readFileText(path: string): Promise<string>;
   /** Last n lines of a file; empty string when absent. */
   readTail(path: string, lines: number): Promise<string>;
+  /**
+   * Modification time of a file in epoch-ms, or null when the file is absent
+   * or unreadable. The daemon's heartbeat/stall detector (U6) uses a worker
+   * log's mtime as its liveness signal: a live pid whose log has not grown
+   * past the phase silence budget is Stalled, not healthy.
+   */
+  statMtimeMs(path: string): Promise<number | null>;
   /** Write a small file (pid sidecars etc.), creating parent dirs. */
   writeFileText(path: string, content: string): Promise<void>;
   /**
@@ -131,6 +138,15 @@ export class LocalTransport implements HostTransport {
     if (text === "") return "";
     const all = text.replace(/\n$/, "").split("\n");
     return all.slice(-lines).join("\n");
+  }
+
+  async statMtimeMs(path: string): Promise<number | null> {
+    try {
+      const s = await stat(path);
+      return s.mtimeMs;
+    } catch {
+      return null;
+    }
   }
 
   async writeFileText(path: string, content: string): Promise<void> {

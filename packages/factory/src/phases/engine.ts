@@ -123,9 +123,61 @@ export interface StoreView {
    * Codex thread ids). Non-empty → never launch; wait for reconciliation.
    */
   externalWorkerSignals?: string[];
+  /**
+   * Quota-cooldown signal (U6, R14/AE8) from the newest terminal attempt. When
+   * the latest attempt is `QuotaCooldown`, `cooldown` (still inside the window)
+   * makes decide() wait; `expired` (window exceeded) makes it escalate rather
+   * than hammer a throttling provider with an immediate relaunch.
+   */
+  quota?: { kind: "cooldown" | "expired"; until?: string } | null;
+  /**
+   * Trailing consecutive kill/stall count per phase (U6, R15/AE5) from
+   * MAX(attempt_number) downward. A phase at or above ATTEMPT_CEILING has its
+   * next launch converted to an escalation instead of an Nth attempt.
+   */
+  consecutiveKillsByPhase?: Record<string, number>;
+  /**
+   * The single dev-deployment mutex (KTD-11) is currently held by ANOTHER
+   * issue. Verification (which drives the shared dev stack) waits visibly
+   * rather than racing; other phases ignore this.
+   */
+  devLockHeldByOther?: boolean;
 }
 
 const VERIFICATION_FAILED_LABEL = "Verification Failed";
+
+/**
+ * Attempt ceiling (R15/AE5): the SECOND consecutive kill/stall on the same
+ * phase escalates instead of launching a third attempt.
+ */
+export const ATTEMPT_CEILING = 2;
+
+/**
+ * The pipeline phase a launch would use for a given workflow status, or null
+ * for statuses that never launch a worker (advance/wait/noop rows). Used by the
+ * daemon to look up the relevant attempt-ceiling count for a candidate.
+ */
+export function phaseForStatus(state: string): Phase | null {
+  switch (state) {
+    case "Brainstorming":
+      return "brainstorm";
+    case "Planning":
+      return "plan";
+    case "Debug":
+      return "debug";
+    case "Ready to Work":
+    case "Ready To Work":
+    case "In Progress":
+      return "implement";
+    case "Verification":
+    case "Review":
+      return "verify";
+    case "Done":
+      return "compound";
+    default:
+      return null;
+  }
+}
 
 function isTerminalAttemptState(state: string): boolean {
   return (TERMINAL_ATTEMPT_STATES as readonly string[]).includes(state);
@@ -218,6 +270,25 @@ export function decideAction(
     };
   }
 
+  // Quota cooldown (R14/AE8): the newest terminal attempt hit a provider
+  // rate-limit. Wait inside the window; escalate only once it is exceeded —
+  // never an immediate relaunch that hammers a throttling provider.
+  if (view.quota?.kind === "cooldown") {
+    return {
+      kind: "wait",
+      reason: `latest attempt is in QuotaCooldown${
+        view.quota.until ? ` until ${view.quota.until}` : ""
+      } — waiting out the rate-limit window before retry (R14/AE8)`,
+    };
+  }
+  if (view.quota?.kind === "expired") {
+    return {
+      kind: "block",
+      label: "Needs User",
+      reason: `${id} exceeded its QuotaCooldown window without recovery — escalating instead of retrying (R14/AE8)`,
+    };
+  }
+
   // Lane routing: only Verification-family statuses route without a lane.
   if (lane === null && !isVerification) {
     return {
@@ -226,6 +297,42 @@ export function decideAction(
     };
   }
 
+  // Verification (and Review) drive the shared dev stack (KTD-11): when the
+  // single dev-deployment mutex is held by another issue, wait visibly rather
+  // than launch a racing Verification worker.
+  if (isVerification && hasLfg && view.devLockHeldByOther === true) {
+    return {
+      kind: "wait",
+      reason: `${id} is ready to verify but the dev-deployment lock is held by another issue — waiting for release (KTD-11)`,
+    };
+  }
+
+  const action = routeByStatus(candidate);
+
+  // Attempt ceiling (R15/AE5): the second consecutive kill/stall on a phase
+  // escalates instead of launching a third attempt.
+  if (action.kind === "launch") {
+    const kills = view.consecutiveKillsByPhase?.[action.phase] ?? 0;
+    if (kills >= ATTEMPT_CEILING) {
+      return {
+        kind: "block",
+        label: "Needs User",
+        reason: `${id} phase "${action.phase}" has ${kills} consecutive killed/stalled attempts — escalating to an operator instead of a ${
+          kills + 1
+        }th attempt (R15/AE5)`,
+      };
+    }
+  }
+  return action;
+}
+
+/**
+ * The routing contract's status table. Extracted so `decideAction` can wrap its
+ * launch results with the attempt-ceiling escalation.
+ */
+function routeByStatus(candidate: EngineCandidate): EngineAction {
+  const { issue, hasLfg } = candidate;
+  const id = issue.identifier;
   switch (issue.state) {
     case "Todo":
       return {

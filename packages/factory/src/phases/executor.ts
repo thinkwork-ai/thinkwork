@@ -37,6 +37,11 @@ import {
   type AttemptState,
 } from "../workers/attempts.js";
 import type { ProviderRunner, ResultOptions } from "../workers/runner.js";
+import {
+  acquireDevLock,
+  phaseNeedsDevLock,
+  releaseDevLock,
+} from "../sweep/locks.js";
 import type { EngineAction, RunnerKind } from "./engine.js";
 import {
   detectPhaseEvidence,
@@ -312,6 +317,46 @@ async function executeLaunch(
     return { kind: "launch", wrote: false, detail: "no-phase-config" };
   }
 
+  // ---- 0. Dev-deployment mutex (KTD-11): Verification drives the shared dev
+  // stack, so it must hold the single dev-deployment lock for the duration of
+  // the run. decideAction already deferred a launch when the lock was held by
+  // another issue; this is the belt-and-suspenders acquire (and it also covers
+  // the reentrant/self-held case). Contended → defer without creating an
+  // attempt; released in the finally below. ----
+  const needsDevLock = phaseNeedsDevLock(action.phase);
+  if (needsDevLock) {
+    const lock = acquireDevLock(deps.store, issue.id, new Date());
+    if (!lock.acquired) {
+      deps.log.info(
+        "dev-deployment lock held by another issue — deferring this launch",
+        { issue: id, phase: action.phase, heldBy: lock.heldBy },
+      );
+      return {
+        kind: "launch",
+        wrote: false,
+        detail: `dev-lock held by ${lock.heldBy}`,
+      };
+    }
+  }
+
+  try {
+    return await runLaunch(action, candidate, deps, runner, phaseConfig);
+  } finally {
+    if (needsDevLock) releaseDevLock(deps.store, issue.id);
+  }
+}
+
+/** The launch body, wrapped by executeLaunch's dev-deployment lock lifecycle. */
+async function runLaunch(
+  action: Extract<EngineAction, { kind: "launch" }>,
+  candidate: PollCandidate,
+  deps: ExecutorDeps,
+  runner: ProviderRunner,
+  phaseConfig: FactoryConfig["phases"][string],
+): Promise<ExecuteResult> {
+  const { issue } = candidate;
+  const id = issue.identifier;
+
   // ---- 1. Store record FIRST: attempt N+1 in PreparingWorkspace. ----------
   const slug = id.toLowerCase();
   let plan;
@@ -376,8 +421,12 @@ async function executeLaunch(
   const statusAtLaunch = issue.state;
   const commentIdsAtLaunch = new Set(candidate.comments.map((c) => c.id));
 
-  // ---- 3. Baton (when synthesized) then launch marker — both pre-spawn. ---
-  try {
+  // ---- 3. Baton (when synthesized) + launch marker are posted AFTER the
+  // bootstrap gate succeeds (see the bootstrap hook below). A refused bootstrap
+  // must not spam a launch-marker comment for a worker that never launched —
+  // both are still pre-spawn (a Linear failure there fails the attempt with
+  // nothing running), just gated on a green bootstrap. ----
+  const postBatonAndMarker = async (): Promise<void> => {
     if (assembled.batonToPost !== null) {
       await deps.gateway.createComment(issue.id, assembled.batonToPost);
       commentIdsAtLaunch.add(
@@ -399,10 +448,7 @@ async function executeLaunch(
       `- expected stop: durable evidence per the routing contract (baton/status/PR)`,
     ].join("\n");
     await deps.gateway.createComment(issue.id, markerBody);
-  } catch (e) {
-    // Nothing spawned yet — safe to fail the attempt outright.
-    return failBeforeSpawn(`pre-launch Linear write failed: ${String(e)}`);
-  }
+  };
 
   // ---- 4+5. Bootstrap gate + drive the attempt lifecycle. -----------------
   const runBootstrap = deps.runBootstrap ?? defaultRunBootstrap;
@@ -436,6 +482,10 @@ async function executeLaunch(
           `worker-bootstrap refused: ${name} (exit ${result.code}): ${result.stderr.trim()}`,
         );
       }
+      // Bootstrap gate is green — NOW post the synthesized baton (if any) and
+      // the launch marker. A Linear failure here still precedes the spawn, so
+      // driveAttempt lands the attempt Failed with nothing running.
+      await postBatonAndMarker();
     },
     buildPrompt: async () => assembled.prompt,
     launchOptions: {

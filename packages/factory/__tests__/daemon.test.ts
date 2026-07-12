@@ -71,6 +71,9 @@ class FakeTransport implements HostTransport {
   async readTail(): Promise<string> {
     return "";
   }
+  async statMtimeMs(): Promise<number | null> {
+    return null;
+  }
   async writeFileText(): Promise<void> {}
   async killPidGroup(): Promise<boolean> {
     return false;

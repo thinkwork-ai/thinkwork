@@ -31,6 +31,8 @@ import { createLogger } from "./logger.js";
 import { createSlackGateway, type SlackGateway } from "./slack/client.js";
 import { createSlackSync, type SlackSync } from "./slack/sync.js";
 import { buildStatusView, formatStatusView } from "./slack/status.js";
+import { postNag } from "./slack/threads.js";
+import type { FiredNag } from "./sweep/nags.js";
 import { createGhCliGateway } from "./phases/evidence.js";
 import {
   defaultBootstrapScriptPath,
@@ -190,6 +192,23 @@ program
       }
     }
 
+    // Nag delivery seam (U6→U8): when Slack is online, fire the R23 nag through
+    // the issue's thread via postNag. Without Slack, the sweep enqueues nags to
+    // the store outbox instead (deliverNag omitted).
+    const operatorUserIds = config.slack.operatorUserIds ?? [];
+    const deliverNag =
+      slackGateway !== null
+        ? async (nag: FiredNag): Promise<void> => {
+            const row = store.getSlackThreadByIssue(nag.timer.issue_id);
+            if (row === undefined) return;
+            await postNag(
+              { channel: row.channel_id, threadTs: row.thread_ts },
+              nag.text,
+              { slack: slackGateway!, operatorUserIds },
+            );
+          }
+        : undefined;
+
     const daemonDeps: DaemonDeps = {
       gateway,
       store,
@@ -202,6 +221,10 @@ program
       trust,
       onlyIssues,
       slack: slackSync,
+      // U6 no-orphan sweep wiring.
+      silenceBudgetMinutesFor: (phase) =>
+        config.phases[phase]?.silenceBudgetMinutes ?? 10,
+      deliverNag,
     };
 
     const controller = createDaemonController();

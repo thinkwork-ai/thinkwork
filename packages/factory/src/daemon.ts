@@ -24,8 +24,20 @@ import {
 import type { FactoryStore, AttemptRow } from "./store/db.js";
 import { TERMINAL_ATTEMPT_STATES } from "./store/db.js";
 import type { HostTransport } from "./workers/transport.js";
-import { decideAction, type EngineAction, type StoreView } from "./phases/engine.js";
+import {
+  decideAction,
+  phaseForStatus,
+  type EngineAction,
+  type StoreView,
+} from "./phases/engine.js";
+import { classifyQuota } from "./sweep/quota.js";
+import { devLockHeldByOther } from "./sweep/locks.js";
+import { runSweep, type SweepResult } from "./sweep/classifier.js";
+import type { FiredNag } from "./sweep/nags.js";
 import type { SlackSync } from "./slack/sync.js";
+
+/** Trailing terminal states that count as a "kill" for the attempt ceiling. */
+const KILL_TERMINALS = new Set(["Stalled", "TimedOut", "Failed"]);
 
 export interface DaemonController {
   readonly stopping: boolean;
@@ -76,6 +88,54 @@ export interface DaemonDeps {
    * failure is caught here and never blocks phase progress.
    */
   slack?: SlackSync;
+
+  // ---- U6 no-orphan sweep wiring (all optional; sensible defaults) --------
+  /** Injected clock for every sweep timer/SLA/quota computation (tests fake it). */
+  now?: () => Date;
+  /** Per-phase silence budget for stall detection (default 10 min when absent). */
+  silenceBudgetMinutesFor?: (phase: string) => number;
+  /** Quota cooldown window in minutes (default 30). */
+  quotaCooldownMinutes?: number;
+  /** Lease TTL in minutes (default 15). */
+  leaseTtlMinutes?: number;
+  /**
+   * Nag delivery seam (wired to the Slack surface's postNag). Absent → due nags
+   * enqueue to the store outbox for U8 to flush.
+   */
+  deliverNag?: (nag: FiredNag) => Promise<void>;
+}
+
+/** Default per-phase silence budget when the daemon is not given a config lookup. */
+const DEFAULT_SILENCE_BUDGET_MINUTES = 10;
+
+/**
+ * Run the no-orphan sweep, isolated so a sweep failure never crashes the tick
+ * (mirrors the Slack-sync isolation contract). Returns the sweep result on
+ * success, or null when the sweep threw.
+ */
+async function runSweepIsolated(
+  deps: DaemonDeps,
+  candidates: readonly PollCandidate[],
+): Promise<SweepResult | null> {
+  try {
+    return await runSweep(candidates, {
+      store: deps.store,
+      transport: deps.transport,
+      now: deps.now ?? (() => new Date()),
+      silenceBudgetMinutesFor:
+        deps.silenceBudgetMinutesFor ??
+        (() => DEFAULT_SILENCE_BUDGET_MINUTES),
+      quotaCooldownMinutes: deps.quotaCooldownMinutes,
+      leaseTtlMinutes: deps.leaseTtlMinutes,
+      log: deps.log,
+      deliverNag: deps.deliverNag,
+    });
+  } catch (e) {
+    deps.log.error("no-orphan sweep failed — continuing tick", {
+      error: String(e),
+    });
+    return null;
+  }
 }
 
 /** Mirror one processed candidate to Slack; swallow + log any failure. */
@@ -128,7 +188,10 @@ function worktreeKnown(store: FactoryStore, path: string): boolean {
  * not know (duplicate-worker guard), and the Linear child-issue read.
  */
 export async function buildStoreView(
-  deps: Pick<DaemonDeps, "gateway" | "store" | "transport" | "repoPath">,
+  deps: Pick<
+    DaemonDeps,
+    "gateway" | "store" | "transport" | "repoPath" | "now" | "quotaCooldownMinutes"
+  >,
   candidate: PollCandidate,
 ): Promise<StoreView> {
   const { issue } = candidate;
@@ -182,10 +245,41 @@ export async function buildStoreView(
 
   const hasChildIssues = await deps.gateway.hasChildIssues(issue.id);
 
+  // ---- U6 signals: quota cooldown, attempt ceiling, dev-deployment lock. ----
+  const now = deps.now?.() ?? new Date();
+  const quotaVerdict = classifyQuota(
+    deps.store,
+    issue.id,
+    now,
+    deps.quotaCooldownMinutes,
+  );
+  const quota: StoreView["quota"] =
+    quotaVerdict.kind === "cooldown"
+      ? { kind: "cooldown", until: quotaVerdict.until.toISOString() }
+      : quotaVerdict.kind === "expired"
+        ? { kind: "expired" }
+        : null;
+
+  // Trailing consecutive kill/stall count for the phase this status would
+  // launch (attempts come back newest-first; a non-kill terminal resets it).
+  const consecutiveKillsByPhase: Record<string, number> = {};
+  const targetPhase = phaseForStatus(issue.state);
+  if (targetPhase !== null) {
+    let kills = 0;
+    for (const a of deps.store.listAttemptsForPhase(issue.id, targetPhase)) {
+      if (KILL_TERMINALS.has(a.state)) kills += 1;
+      else break;
+    }
+    consecutiveKillsByPhase[targetPhase] = kills;
+  }
+
   return {
     activeAttempt,
     hasChildIssues,
     externalWorkerSignals,
+    quota,
+    consecutiveKillsByPhase,
+    devLockHeldByOther: devLockHeldByOther(deps.store, issue.id),
   };
 }
 
@@ -225,6 +319,13 @@ export async function runTick(
       inScope: candidates.length,
     });
   }
+
+  // ---- No-orphan sweep (U6): reconcile liveness/leases/quota/nags into the
+  // store BEFORE deciding, so decideAction sees post-sweep reality (a settled
+  // stalled/dead attempt frees its slot → relaunch this same tick). A sweep
+  // failure must never crash the tick — wrap + log, exactly like the Slack
+  // sync. ----
+  await runSweepIsolated(deps, candidates);
 
   for (const candidate of candidates) {
     if (shouldStop()) {
