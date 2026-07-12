@@ -186,6 +186,7 @@ export async function pollTick(
   gateway: LinearGateway,
   teamKey: string,
   log?: Logger,
+  onlyIssues?: ReadonlySet<string>,
 ): Promise<PollTickResult> {
   // ---- Phase 1: reads only. Any failure aborts before any write. ----
   let matched: {
@@ -193,7 +194,12 @@ export async function pollTick(
     comments: LinearCommentSnapshot[];
   }[];
   try {
-    const issues = await gateway.listTeamIssues(teamKey);
+    // Scoped run (tracer / safe rollout): fetch only the named issues by
+    // identifier instead of draining the whole team (which also N+1s state +
+    // labels per issue). Unscoped: the full board.
+    const issues = onlyIssues
+      ? await gateway.getIssuesByIdentifier([...onlyIssues])
+      : await gateway.listTeamIssues(teamKey);
     matched = [];
     for (const issue of issues.filter(matchesFilter)) {
       matched.push({ issue, comments: await gateway.listComments(issue.id) });

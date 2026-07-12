@@ -62,6 +62,12 @@ export function isTrustedComment(
 export interface LinearGateway {
   /** All non-archived issues for the configured team (paginated fully). */
   listTeamIssues(teamKey: string): Promise<LinearIssueSnapshot[]>;
+  /**
+   * Fetch specific issues by human identifier (e.g. "THINK-123"). Used by the
+   * tracer / safe-rollout scope so a scoped run fetches only those issues
+   * instead of draining the whole team. Unknown identifiers are skipped.
+   */
+  getIssuesByIdentifier(identifiers: string[]): Promise<LinearIssueSnapshot[]>;
   listComments(issueId: string): Promise<LinearCommentSnapshot[]>;
   createComment(issueId: string, body: string): Promise<void>;
   updateComment(commentId: string, body: string): Promise<void>;
@@ -153,6 +159,34 @@ export function createLinearGateway(apiKey: string): LinearGateway {
       for (const issue of issues) {
         const state = await issue.state;
         const labels = await drain(await issue.labels());
+        snapshots.push({
+          id: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          description: issue.description ?? "",
+          state: state?.name ?? "",
+          labels: labels.map((l) => l.name),
+        });
+      }
+      return snapshots;
+    },
+
+    async getIssuesByIdentifier(identifiers) {
+      const snapshots: LinearIssueSnapshot[] = [];
+      for (const identifier of identifiers) {
+        // `client.issue` accepts the human identifier (e.g. "THINK-123").
+        // Skip unknown/invalid ids rather than aborting the whole scoped run.
+        let issue;
+        try {
+          issue = await client.issue(identifier);
+        } catch {
+          continue;
+        }
+        if (!issue) continue;
+        const state = await issue.state;
+        const labels = await drain(
+          (await issue.labels()) as unknown as PageOf<{ name: string }>,
+        );
         snapshots.push({
           id: issue.id,
           identifier: issue.identifier,

@@ -62,6 +62,12 @@ export interface DaemonDeps {
    * accepted from any author.
    */
   trust?: CommentTrust;
+  /**
+   * Tracer / safe-rollout scope. When set, only issues whose identifier is in
+   * this set are processed in a tick; every other candidate is skipped (and
+   * logged) without any Linear write. Undefined = process the whole queue.
+   */
+  onlyIssues?: ReadonlySet<string>;
 }
 
 /**
@@ -174,13 +180,31 @@ export async function runTick(
   deps: DaemonDeps,
   shouldStop: () => boolean = () => false,
 ): Promise<TickResult> {
-  const result = await pollTick(deps.gateway, deps.teamKey, deps.log);
+  const result = await pollTick(
+    deps.gateway,
+    deps.teamKey,
+    deps.log,
+    deps.onlyIssues,
+  );
   const decisions: TickResult["decisions"] = [];
 
-  for (const candidate of result.candidates) {
+  // pollTick already restricted reads to the scope; this second filter is a
+  // belt-and-suspenders guard so a scoped run can never act on an issue the
+  // poller surfaced through some other path (e.g. lane-conflict remediation).
+  const candidates = deps.onlyIssues
+    ? result.candidates.filter((c) => deps.onlyIssues!.has(c.issue.identifier))
+    : result.candidates;
+  if (deps.onlyIssues) {
+    deps.log.info("issue scope active", {
+      scope: [...deps.onlyIssues],
+      inScope: candidates.length,
+    });
+  }
+
+  for (const candidate of candidates) {
     if (shouldStop()) {
       deps.log.info("stop requested — skipping remaining candidates", {
-        remaining: result.candidates.length - decisions.length,
+        remaining: candidates.length - decisions.length,
       });
       return { decisions, stopped: true };
     }

@@ -328,6 +328,13 @@ describe("executeAction — launch", () => {
       state: "Done",
       labels: ["Claude", "LFG"],
     });
+    // A factory-driven issue reaching Done already carries an authored ledger
+    // from its earlier phases (synthesized:false) — required for the compound
+    // cutoff to allow compounding (a synthesized ledger = pre-factory issue).
+    issue.comments.push({
+      id: "c-ledger-seed",
+      body: "automation-ledger:THINK-4\n\n```yaml\nphase: verify\nlane: Claude\nworker: null\nattempt: 1\nblocker: null\ncompounded: false\n```",
+    });
     const h = makeHarness(issue, {});
     // Compound never moves status; simulate the worker updating the ledger
     // by having evidence come from the ledger-compounded flag we write? No —

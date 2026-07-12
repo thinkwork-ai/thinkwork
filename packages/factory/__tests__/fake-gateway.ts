@@ -75,6 +75,19 @@ export class FakeGateway implements LinearGateway {
     }));
   }
 
+  async getIssuesByIdentifier(
+    identifiers: string[],
+  ): Promise<LinearIssueSnapshot[]> {
+    if (this.failNextListIssues) {
+      this.failNextListIssues = false;
+      throw new Error("fake: getIssuesByIdentifier 500");
+    }
+    const wanted = new Set(identifiers);
+    return this.issues
+      .filter((i) => wanted.has(i.identifier))
+      .map(({ comments: _c, ...snapshot }) => ({ ...snapshot }));
+  }
+
   async listComments(issueId: string): Promise<LinearCommentSnapshot[]> {
     if (this.failListCommentsFor === issueId) {
       this.failListCommentsFor = null;

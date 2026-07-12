@@ -98,7 +98,13 @@ export interface EngineCandidate {
   hasLfg: boolean;
   isVerification: boolean;
   blockerLabels: string[];
-  ledger: { ledger: Ledger };
+  /**
+   * Parsed rolling ledger. `synthesized` is true when no factory-authored
+   * block existed and defaults were invented (absent, legacy-prose, or
+   * malformed) — it distinguishes an issue the factory actually drove from one
+   * it has never touched. Load-bearing for the compound cutoff below.
+   */
+  ledger: { ledger: Ledger; synthesized: boolean };
 }
 
 /**
@@ -287,6 +293,18 @@ export function decideAction(
         return {
           kind: "noop",
           reason: `${id} is Done without LFG — no automated compounding`,
+        };
+      }
+      // Compound cutoff: only compound issues the factory actually drove. A
+      // synthesized ledger means no factory-authored block ever existed, so
+      // this is a pre-factory / externally-completed Done issue — the routing
+      // contract scopes compounding to "recently completed CE-driven issues,"
+      // never a historical backlog. Without this, the first real poll would
+      // launch a compound worker on every legacy Done issue at once.
+      if (candidate.ledger.synthesized) {
+        return {
+          kind: "noop",
+          reason: `${id} is Done but the factory never drove it (no ledger) — not compounding a pre-existing issue`,
         };
       }
       if (candidate.ledger.ledger.compounded) {

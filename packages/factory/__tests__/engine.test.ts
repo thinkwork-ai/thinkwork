@@ -39,6 +39,7 @@ function makeCandidate(
     state: string;
     labels: string[];
     ledger: Partial<Ledger>;
+    synthesized: boolean;
     comments: LinearCommentSnapshot[];
   }> = {},
 ): EngineCandidate {
@@ -66,7 +67,12 @@ function makeCandidate(
         "Blocked: Auth",
       ].includes(l),
     ),
-    ledger: { ledger: { ...DEFAULT_LEDGER, ...partial.ledger } },
+    ledger: {
+      ledger: { ...DEFAULT_LEDGER, ...partial.ledger },
+      // Default false: most tests model an issue the factory drove (real
+      // block). The compound-cutoff tests set this true for a legacy issue.
+      synthesized: partial.synthesized ?? false,
+    },
   };
 }
 
@@ -290,12 +296,35 @@ describe("phase table — exhaustive routing-contract coverage", () => {
 // ---------------------------------------------------------------------------
 
 describe("Done / compound guard", () => {
-  it("Done + LFG + not compounded → launch compound", () => {
+  it("Done + LFG + not compounded + factory-driven (real ledger) → launch compound", () => {
     const action = decideAction(
-      makeCandidate({ state: "Done", labels: ["Claude", "LFG"] }),
+      // synthesized:false = the factory wrote this ledger, i.e. it drove the issue.
+      makeCandidate({
+        state: "Done",
+        labels: ["Claude", "LFG"],
+        synthesized: false,
+      }),
       emptyView(),
     );
     expect(action).toMatchObject({ kind: "launch", phase: "compound" });
+  });
+
+  it("Done + LFG but synthesized ledger (pre-factory issue) → noop, never compound a backlog issue", () => {
+    // The compound cutoff: a legacy Done issue the factory never enrolled has
+    // no authored ledger (synthesized). Guards the first real poll from
+    // mass-dispatching compound workers across the historical Done backlog.
+    const action = decideAction(
+      makeCandidate({
+        state: "Done",
+        labels: ["Claude", "LFG"],
+        synthesized: true,
+      }),
+      emptyView(),
+    );
+    expect(action.kind).toBe("noop");
+    expect(action).toMatchObject({
+      reason: expect.stringContaining("never drove it"),
+    });
   });
 
   it("Done + LFG + compounded=true → noop, never relaunch compound", () => {

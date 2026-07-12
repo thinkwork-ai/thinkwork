@@ -166,6 +166,38 @@ describe("runTick — end-to-end with the real executor", () => {
     expect(executed).toEqual([]); // engine/executor never ran
     expect(issue.labels).toContain("Needs Credentials");
   });
+
+  it("onlyIssues scope processes the in-scope issue and skips every other candidate", async () => {
+    const inScope = makeIssue({
+      identifier: "THINK-20",
+      state: "Todo",
+      labels: ["Claude"],
+    });
+    const outOfScope = makeIssue({
+      identifier: "THINK-21",
+      state: "Todo",
+      labels: ["Codex"],
+    });
+    const gateway = new FakeGateway([inScope, outOfScope]);
+    const executed: string[] = [];
+    const deps: DaemonDeps = {
+      ...makeDeps(gateway, async (_a, c) => {
+        executed.push(c.issue.identifier);
+      }),
+      onlyIssues: new Set(["THINK-20"]),
+    };
+
+    const tick = await runTick(deps);
+
+    // Only the scoped issue is decided/executed; the out-of-scope Codex Todo
+    // issue is never touched (no advance, no ledger write).
+    expect(tick.decisions).toEqual([{ issue: "THINK-20", kind: "advance" }]);
+    expect(executed).toEqual(["THINK-20"]);
+    expect(outOfScope.state).toBe("Todo");
+    expect(
+      outOfScope.comments.some((c) => c.body.includes("automation-ledger")),
+    ).toBe(false);
+  });
 });
 
 describe("runTick — preflight operator override", () => {

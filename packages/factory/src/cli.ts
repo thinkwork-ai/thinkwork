@@ -44,7 +44,11 @@ program
   .command("run")
   .description("Start the daemon poll loop (single dispatch authority)")
   .option("--once", "run a single poll tick and exit (tracer mode)")
-  .action(async (opts: { once?: boolean }) => {
+  .option(
+    "--issue <ids...>",
+    "restrict this run to the given issue identifier(s); every other candidate is skipped (safe-rollout / tracer scope)",
+  )
+  .action(async (opts: { once?: boolean; issue?: string[] }) => {
     const log = createLogger({ component: "factoryd" });
     let config;
     try {
@@ -132,6 +136,11 @@ program
       trust,
     };
 
+    const onlyIssues =
+      opts.issue && opts.issue.length > 0
+        ? new Set(opts.issue.map((s) => s.trim()).filter((s) => s !== ""))
+        : undefined;
+
     const daemonDeps: DaemonDeps = {
       gateway,
       store,
@@ -142,6 +151,7 @@ program
       execute: (action, candidate) =>
         executeAction(action, candidate, executorDeps),
       trust,
+      onlyIssues,
     };
 
     const controller = createDaemonController();
@@ -162,6 +172,7 @@ program
       pollIntervalSeconds: config.pollIntervalSeconds,
       phases: Object.keys(config.phases),
       once: opts.once === true,
+      ...(onlyIssues ? { issueScope: [...onlyIssues] } : {}),
     });
 
     try {
