@@ -900,7 +900,7 @@ function makeEraseHarness(opts: EraseHarnessOpts = {}) {
       calls.push("clearPayloads");
       return 3;
     },
-    async purgeNonDerivedEvidence(_t, _s, purgeOpts) {
+    async purgeSourceEvidence(_t, _s, purgeOpts) {
       calls.push(
         `purge:cursor=${purgeOpts.cursor ?? "null"}:limit=${purgeOpts.limit}`,
       );
@@ -1409,7 +1409,7 @@ describe("erase of a source whose derivations share one stable provider document
       async clearEvidencePayloads() {
         return 3;
       },
-      async purgeNonDerivedEvidence() {
+      async purgeSourceEvidence() {
         return { deleted: 0, nextCursor: null };
       },
       async deleteCheckpoints() {
