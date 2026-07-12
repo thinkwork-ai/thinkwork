@@ -252,6 +252,46 @@ describe("executeAction — launch", () => {
     expect(store.getIssue(issue.id)).toBeDefined();
   });
 
+  it("evidence check reads only THIS issue (getIssuesByIdentifier), never drains the whole team", async () => {
+    // Regression: checkEvidence used listTeamIssues (whole-board N+1) to find
+    // one issue's fresh status, which stalled the single-dispatch tick for
+    // minutes under Linear rate-limiting (observed live on THINK-265).
+    const issue = makeIssue({
+      identifier: "THINK-9",
+      state: "Planning",
+      labels: ["Claude"],
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Ready to Work" });
+    const candidate = await candidateFor(h.gateway, "THINK-9");
+    const action = decideAction(candidate, {
+      activeAttempt: null,
+      hasChildIssues: false,
+    });
+
+    // Install spies AFTER candidate setup so we measure only the launch /
+    // evidence path, not the unscoped pollTick inside candidateFor.
+    let listTeamIssuesCalls = 0;
+    const scopedCalls: string[][] = [];
+    const origList = h.gateway.listTeamIssues.bind(h.gateway);
+    h.gateway.listTeamIssues = async (teamKey: string) => {
+      listTeamIssuesCalls++;
+      return origList(teamKey);
+    };
+    const origScoped = h.gateway.getIssuesByIdentifier.bind(h.gateway);
+    h.gateway.getIssuesByIdentifier = async (ids: string[]) => {
+      scopedCalls.push(ids);
+      return origScoped(ids);
+    };
+
+    await executeAction(action, candidate, h.deps);
+
+    // Evidence detected via the fresh single-issue read; the whole-board drain
+    // is never called during the launch/evidence path.
+    expect(listTeamIssuesCalls).toBe(0);
+    expect(scopedCalls).toContainEqual(["THINK-9"]);
+    expect(store.getAttempt(1)!.state).toBe("Succeeded");
+  });
+
   it("bootstrap refusal → attempt Failed with named exit code, runner never launched", async () => {
     const issue = makeIssue({
       identifier: "THINK-2",

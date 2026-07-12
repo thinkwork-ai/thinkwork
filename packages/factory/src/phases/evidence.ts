@@ -51,6 +51,12 @@ const defaultExecFile: ExecFileFn = async (cmd, args, opts) => {
   const { stdout } = await promisify(execFile)(cmd, args, {
     cwd: opts?.cwd,
     maxBuffer: 4 * 1024 * 1024,
+    // Bound the call: a hung `gh` (auth prompt, network stall, rate limit)
+    // must never freeze the single-dispatch tick. On timeout execFile rejects,
+    // checkEvidence throws, and the attempt fails cleanly (recoverable) rather
+    // than hanging forever.
+    timeout: 20_000,
+    killSignal: "SIGKILL",
   });
   return { stdout };
 };

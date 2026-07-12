@@ -487,8 +487,13 @@ async function executeLaunch(
     // 120-minute implement phase is not cut off by the runner's default.
     wallClockSlaMinutes: phaseConfig.wallClockSlaMinutes,
     checkEvidence: async () => {
-      const issues = await deps.gateway.listTeamIssues(deps.teamKey);
-      const fresh = issues.find((i) => i.id === issue.id);
+      // Re-read ONLY this issue's fresh state — never drain the whole team.
+      // listTeamIssues N+1s state+labels over every team issue; running that
+      // inside driveAttempt's Finishing step stalls the single-dispatch tick
+      // for minutes under Linear rate-limiting (observed live on THINK-265).
+      const [fresh] = await deps.gateway.getIssuesByIdentifier([
+        issue.identifier,
+      ]);
       const freshComments = await deps.gateway.listComments(issue.id);
       freshCommentsForRecording = freshComments;
       const freshLedgerComment = findLedgerComment(id, freshComments);
