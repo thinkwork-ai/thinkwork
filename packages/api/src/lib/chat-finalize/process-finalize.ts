@@ -52,6 +52,10 @@ import {
 import { notifyThreadUpdate } from "../../graphql/notify.js";
 import { sendTurnCompletedPush } from "../push-notifications.js";
 import { sendThreadReplyEmail } from "../email/thread-reply.js";
+import {
+  retryThreadReplySlackForTurn,
+  sendThreadReplySlack,
+} from "../slack/thread-reply.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "../spaces/customer-onboarding-goal-md.js";
 import {
   appendThreadTurnEvent,
@@ -123,8 +127,8 @@ export function diagnosticsFromFinalizePayload(
 /**
  * Runs the post-AgentCore finalize chain. Reconcile is claimed before
  * `thread_turns.finalized_at` becomes terminal, so non-empty diff failures can
- * be retried. A second call after finalized_at is set returns
- * `{ finalized: false, messageId: null }` without re-running side-effects.
+ * be retried. A second call after finalized_at is set skips ordinary finalize
+ * side effects but may retry a persisted external reply delivery.
  */
 export async function processFinalize(
   payload: FinalizePayload,
@@ -183,6 +187,23 @@ export async function processFinalize(
       contextSnapshot: threadTurns.context_snapshot,
     });
   if (claimed.length === 0) {
+    try {
+      const retry = await retryThreadReplySlackForTurn({
+        tenantId,
+        threadId,
+        threadTurnId: turnId,
+      });
+      if (!retry.delivered && retry.retryable) {
+        console.error(
+          `[chat-finalize] Slack reply retry remains failed turn=${turnId} reason=${retry.reason}`,
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[chat-finalize] Slack reply retry failed turn=${turnId}:`,
+        err,
+      );
+    }
     console.log(
       `[chat-finalize] Idempotent — turn ${turnId} already finalized; skipping`,
     );
@@ -277,7 +298,7 @@ export async function processFinalize(
       reconcileReport,
       reconcileDurationMs,
     );
-    await handleFailedTurn({
+    const failedMessageId = await handleFailedTurn({
       turnId,
       tenantId,
       threadId,
@@ -288,6 +309,25 @@ export async function processFinalize(
       systemPrompt: capturedSystemPromptFromFinalizePayload(payload),
       suppressAssistantMessage: hiddenDesktopDelegation,
     });
+    if (failedMessageId) {
+      try {
+        const delivery = await sendThreadReplySlack({
+          tenantId,
+          threadId,
+          assistantMessageId: failedMessageId,
+        });
+        if (!delivery.delivered && delivery.retryable) {
+          console.error(
+            `[chat-finalize] Failed-turn Slack reply dispatch failed assistant=${failedMessageId} reason=${delivery.reason} error=${delivery.error ?? "unknown"}`,
+          );
+        }
+      } catch (err) {
+        console.error(
+          "[chat-finalize] Failed-turn Slack reply dispatch failed:",
+          err,
+        );
+      }
+    }
     await projectAgentLoopFinalizeSafely({
       tenantId,
       threadTurnId: turnId,
@@ -327,7 +367,11 @@ export async function processFinalize(
     });
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
-    return { finalized: true, messageId: null, reconcile: reconcileReport };
+    return {
+      finalized: true,
+      messageId: failedMessageId,
+      reconcile: reconcileReport,
+    };
   }
 
   // ---- Completed-turn finalize chain ----------------------------------
@@ -705,7 +749,7 @@ export async function processFinalize(
         displayResponse,
         toolInvocations,
         invokeResult.ui_message_parts,
-        skillDraftMessageMetadata(skillDraftRegistration, threadId, turnId),
+        assistantMessageMetadata(skillDraftRegistration, threadId, turnId),
       );
 
   if (
@@ -841,6 +885,27 @@ export async function processFinalize(
     }
   }
 
+  // 7g. Project a persisted assistant response back to Slack only when this
+  // turn's immutable triggering message is Slack-originated. Delivery
+  // state lives on the assistant message, so finalize retries cannot double
+  // post and a failed attempt remains independently retryable.
+  if (assistantMsg && !computerThreadResponse?.responseMessageId) {
+    try {
+      const delivery = await sendThreadReplySlack({
+        tenantId,
+        threadId,
+        assistantMessageId: assistantMsg.id,
+      });
+      if (!delivery.delivered && delivery.retryable) {
+        console.error(
+          `[chat-finalize] Slack reply dispatch failed assistant=${assistantMsg.id} reason=${delivery.reason} error=${delivery.error ?? "unknown"}`,
+        );
+      }
+    } catch (err) {
+      console.error("[chat-finalize] Slack reply dispatch failed:", err);
+    }
+  }
+
   if (assistantMsg) {
     await refreshCustomerOnboardingGoalFolderSafely({
       tenantId,
@@ -874,26 +939,30 @@ export function goalRunProjectionFromFinalizePayload(
   return normalizeGoalRunProjection(candidate);
 }
 
-function skillDraftMessageMetadata(
+function assistantMessageMetadata(
   registration: Awaited<ReturnType<typeof autoSubmitSkillCreatorDraft>> | null,
   threadId: string,
   threadTurnId: string,
-): Record<string, unknown> | undefined {
-  if (!registration || registration.status === "skipped") return undefined;
+): Record<string, unknown> {
   return {
-    skillDraft: {
-      id: registration.draftId,
-      slug: registration.slug,
-      status: registration.status,
-      source: "skill_creator",
-      sourceThreadId: threadId,
-      sourceTurnId: threadTurnId,
-      fileCount: registration.fileCount,
-      currentContentHash: registration.currentContentHash,
-      ...(registration.failureMessage
-        ? { failureMessage: registration.failureMessage }
-        : {}),
-    },
+    sourceTurnId: threadTurnId,
+    ...(!registration || registration.status === "skipped"
+      ? {}
+      : {
+          skillDraft: {
+            id: registration.draftId,
+            slug: registration.slug,
+            status: registration.status,
+            source: "skill_creator",
+            sourceThreadId: threadId,
+            sourceTurnId: threadTurnId,
+            fileCount: registration.fileCount,
+            currentContentHash: registration.currentContentHash,
+            ...(registration.failureMessage
+              ? { failureMessage: registration.failureMessage }
+              : {}),
+          },
+        }),
   };
 }
 
@@ -2332,7 +2401,9 @@ interface HandleFailedTurnInput {
   suppressAssistantMessage?: boolean;
 }
 
-async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
+async function handleFailedTurn(
+  input: HandleFailedTurnInput,
+): Promise<string | null> {
   const { turnId, tenantId, threadId, agentId, computerId, computerTaskId } =
     input;
   const errMessage = input.errorMessage || GENERIC_AGENT_ERROR_MESSAGE;
@@ -2346,7 +2417,7 @@ async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
     code: "agent_runtime_failed",
   });
 
-  if (input.suppressAssistantMessage) return;
+  if (input.suppressAssistantMessage) return null;
 
   try {
     await db
@@ -2380,6 +2451,9 @@ async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
       tenantId,
       agentId,
       GENERIC_AGENT_ERROR_MESSAGE,
+      undefined,
+      undefined,
+      { sourceTurnId: turnId },
     );
     if (errMsg) {
       await notifyNewMessage({
@@ -2391,10 +2465,12 @@ async function handleFailedTurn(input: HandleFailedTurnInput): Promise<void> {
         senderType: "agent",
         senderId: agentId,
       });
+      return errMsg.id;
     }
   } catch (innerErr) {
     console.error(`[chat-finalize] Failed to insert error message:`, innerErr);
   }
+  return null;
 }
 
 /** Convert processFinalize result to the FinalizeResponse HTTP body shape. */

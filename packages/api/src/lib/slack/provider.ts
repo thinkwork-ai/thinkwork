@@ -17,7 +17,6 @@ import {
 import {
   callSlackApi,
   fetchSlackThreadReplies,
-  postSlackMessage,
   SlackApiError,
 } from "@chat-adapter/slack/api";
 import {
@@ -257,6 +256,8 @@ export interface SlackApiCallInput {
   token: string;
   /** Test seam; defaults to global fetch. */
   fetchFn?: typeof fetch;
+  /** Per-request transport deadline. */
+  timeoutMs?: number;
 }
 
 export interface SlackPostMessageResult {
@@ -275,17 +276,35 @@ export async function postSlackThreadMessage(
     channel: string;
     text: string;
     threadTs?: string | null;
+    /** Stable UUID used by Slack to deduplicate ambiguous client retries. */
+    clientMessageId?: string;
   },
 ): Promise<SlackPostMessageResult> {
-  try {
-    const posted = await postSlackMessage({
-      token: input.token,
-      channel: input.channel,
-      text: input.text,
-      threadTs: input.threadTs || undefined,
-      fetch: input.fetchFn,
+  const request = input.fetchFn ?? fetch;
+  const timeoutSignal = AbortSignal.timeout(input.timeoutMs ?? 10_000);
+  const fetchWithDeadline: typeof fetch = (url, init) =>
+    request(url, {
+      ...init,
+      signal: init?.signal ?? timeoutSignal,
     });
-    return { ok: true, ts: posted.id || undefined };
+  try {
+    const posted = await callSlackApi(
+      "chat.postMessage",
+      {
+        channel: input.channel,
+        text: input.text,
+        thread_ts: input.threadTs || undefined,
+        client_msg_id: input.clientMessageId || undefined,
+      },
+      { token: input.token, fetch: fetchWithDeadline },
+    );
+    if (posted.ok !== true) {
+      return {
+        ok: false,
+        error: optionalString(posted.error) ?? "unknown_error",
+      };
+    }
+    return { ok: true, ts: optionalString(posted.ts) ?? undefined };
   } catch (error) {
     const apiFailure = asSlackApiFailure(error);
     if (apiFailure) return apiFailure;
