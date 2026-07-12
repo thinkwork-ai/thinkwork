@@ -27,7 +27,10 @@ describe.skipIf(!DATABASE_URL)(
     const domain = `probe-${marker}.example.com`;
     const companySubject = `twenty:company:probe-${marker}`;
     const pageSubject = `web:page:https://${domain}/pricing`;
-    const workflowRunId = randomUUID();
+    // memory_run_items.workflow_run_id is a real FK — the fixture needs a
+    // persisted workflow + run, not a synthetic uuid.
+    let workflowId = "";
+    let workflowRunId = "";
     const evidenceIds: string[] = [];
     let db: import("@thinkwork/database-pg").Database;
     let eraseGeneration = 0;
@@ -45,6 +48,33 @@ describe.skipIf(!DATABASE_URL)(
         "../../../src/lib/memory-sources/evidence.js"
       );
       db = getDb();
+      {
+        const { workflowRuns, workflows } = await import(
+          "@thinkwork/database-pg/schema"
+        );
+        const [wf] = await db
+          .insert(workflows)
+          .values({
+            tenant_id: TENANT_ID,
+            name: "Resolve cross-source fixture",
+            slug: `resolve-fixture-${marker}-${randomUUID()}`,
+            lifecycle_status: "active",
+            primary_trigger_family: "manual",
+          })
+          .returning({ id: workflows.id });
+        workflowId = wf!.id;
+        const [run] = await db
+          .insert(workflowRuns)
+          .values({
+            tenant_id: TENANT_ID,
+            workflow_id: workflowId,
+            status: "succeeded",
+            trigger_family: "manual",
+            trigger_source: "resolve-fixture",
+          })
+          .returning({ id: workflowRuns.id });
+        workflowRunId = run!.id;
+      }
 
       const [source] = await db
         .select({ erase_generation: memorySourceConfigs.erase_generation })
@@ -167,6 +197,12 @@ describe.skipIf(!DATABASE_URL)(
         await db
           .delete(canonicalEntities)
           .where(inArray(canonicalEntities.id, ids));
+      }
+      if (workflowId) {
+        const { workflows } = await import("@thinkwork/database-pg/schema");
+        const { eq: eqOp } = await import("drizzle-orm");
+        // workflow_runs (and their run items) cascade from the workflow.
+        await db.delete(workflows).where(eqOp(workflows.id, workflowId));
       }
     });
 
