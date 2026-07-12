@@ -295,8 +295,17 @@ export function decideAction(
   const { issue, lane, hasLfg, isVerification } = candidate;
   const id = issue.identifier;
 
+  // A Done issue is TERMINAL: route it straight to the Done handling (compound
+  // or noop) via the status table below. The block gates that follow — lane
+  // conflict, blocker labels, child issues — are about IN-FLIGHT work; a stale
+  // months-old label on a finished issue must NOT produce a `block`. It would
+  // open a Slack thread + escalate, then the un-enroll pass closes it as
+  // completed, and the next tick repeats — a thread-open/@mention/close loop
+  // every poll. The active-attempt / duplicate-worker guards still apply.
+  const isDone = issue.state === "Done";
+
   // Lane conflict: both lane labels → never route (routing contract rule 1).
-  if (issue.labels.includes("Claude") && issue.labels.includes("Codex")) {
+  if (!isDone && issue.labels.includes("Claude") && issue.labels.includes("Codex")) {
     return {
       kind: "block",
       label: "Needs User",
@@ -305,7 +314,7 @@ export function decideAction(
   }
 
   // Blocker labels stop automation. Re-assert the block (idempotent).
-  if (candidate.blockerLabels.length > 0) {
+  if (!isDone && candidate.blockerLabels.length > 0) {
     const label = candidate.blockerLabels[0];
     return {
       kind: "block",
@@ -315,7 +324,7 @@ export function decideAction(
   }
 
   // KTD-12: child issues are out of v1 — block the parent with Needs User.
-  if (view.hasChildIssues) {
+  if (!isDone && view.hasChildIssues) {
     return {
       kind: "block",
       label: "Needs User",
