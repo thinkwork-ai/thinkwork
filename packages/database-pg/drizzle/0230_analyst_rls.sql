@@ -884,6 +884,33 @@ BEGIN
   ELSE
     missing := missing || 'messages'::text;
   END IF;
+  IF to_regclass('public.msteams_tenant_installs') IS NOT NULL THEN
+    ALTER TABLE public.msteams_tenant_installs ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.msteams_tenant_installs;
+    CREATE POLICY analyst_tenant_isolation ON public.msteams_tenant_installs
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'msteams_tenant_installs'::text;
+  END IF;
+  IF to_regclass('public.msteams_threads') IS NOT NULL THEN
+    ALTER TABLE public.msteams_threads ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.msteams_threads;
+    CREATE POLICY analyst_tenant_isolation ON public.msteams_threads
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'msteams_threads'::text;
+  END IF;
+  IF to_regclass('public.msteams_user_links') IS NOT NULL THEN
+    ALTER TABLE public.msteams_user_links ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.msteams_user_links;
+    CREATE POLICY analyst_tenant_isolation ON public.msteams_user_links
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'msteams_user_links'::text;
+  END IF;
   IF to_regclass('public.mutation_idempotency') IS NOT NULL THEN
     ALTER TABLE public.mutation_idempotency ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.mutation_idempotency;

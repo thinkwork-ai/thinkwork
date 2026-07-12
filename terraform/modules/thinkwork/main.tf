@@ -1097,6 +1097,7 @@ module "api" {
   deployment_release_manifest_sha256            = var.deployment_release_manifest_sha256
   enable_stripe_billing                         = var.enable_stripe_billing
   enable_slack_workspace_app                    = var.enable_slack_workspace_app
+  enable_msteams_app                            = var.enable_msteams_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   wiki_compile_model_id                         = var.wiki_compile_model_id
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
