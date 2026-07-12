@@ -63,6 +63,15 @@ type OntologyEntityType {
   broadType: String!
   aliases: [String!]!
   propertiesSchema: AWSJSON!
+  """
+  Versioned identity rules (THINK-193 U4): array of
+  { slug, keyKind, normalization, unique, uniquenessScope,
+    sourcePrecedence, autoLink, version }. Rules govern how instances of
+  this type resolve to canonical entities; the instances live in the
+  identity registry, never in ontology tables.
+  """
+  identityRules: AWSJSON!
+  identityRulesVersion: Int!
   guidanceNotes: String
   lifecycleStatus: OntologyLifecycleStatus!
   approvedAt: AWSDateTime
@@ -314,4 +323,13 @@ extend type Mutation {
   updateOntologyRelationshipType(
     input: UpdateOntologyRelationshipTypeInput!
   ): OntologyRelationshipType!
+  """
+  Replace an entity type's identity rules (THINK-193 U4). Bumps
+  identityRulesVersion. Tenant-admin gated.
+  """
+  setOntologyEntityTypeIdentityRules(
+    tenantId: ID
+    entityTypeId: ID!
+    rules: AWSJSON!
+  ): OntologyEntityType!
 }

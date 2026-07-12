@@ -8,6 +8,7 @@ import { approveOntologyChangeSetMutation } from "./approveOntologyChangeSet.mut
 import { rejectOntologyChangeSetMutation } from "./rejectOntologyChangeSet.mutation.js";
 import { updateOntologyEntityTypeMutation } from "./updateOntologyEntityType.mutation.js";
 import { updateOntologyRelationshipTypeMutation } from "./updateOntologyRelationshipType.mutation.js";
+import { setOntologyEntityTypeIdentityRulesMutation } from "./setOntologyEntityTypeIdentityRules.mutation.js";
 
 export const ontologyQueries = {
   ontologyDefinitions,
@@ -23,4 +24,5 @@ export const ontologyMutations = {
   rejectOntologyChangeSet: rejectOntologyChangeSetMutation,
   updateOntologyEntityType: updateOntologyEntityTypeMutation,
   updateOntologyRelationshipType: updateOntologyRelationshipTypeMutation,
+  setOntologyEntityTypeIdentityRules: setOntologyEntityTypeIdentityRulesMutation,
 };

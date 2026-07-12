@@ -1110,6 +1110,56 @@ export type BudgetStatus = {
   visibleSpendUsd: Scalars['Float']['output'];
 };
 
+/**
+ * A stable canonical entity instance ("Acme"), distinct from the ontology type
+ * definition ("Customer"). Merged entities persist as redirects.
+ */
+export type CanonicalEntity = {
+  __typename?: 'CanonicalEntity';
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  displayName: Scalars['String']['output'];
+  entityTypeSlug: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  mergedIntoId?: Maybe<Scalars['ID']['output']>;
+  normalizedName: Scalars['String']['output'];
+  sourceMappings: Array<EntitySourceMapping>;
+  status: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  version: Scalars['Int']['output'];
+};
+
+/**
+ * Merge impact preview — computed before the merge and echoed back as the
+ * confirmation input; a stale preview aborts the merge.
+ */
+export type CanonicalEntityMergeImpact = {
+  __typename?: 'CanonicalEntityMergeImpact';
+  graphEntityCount: Scalars['Int']['output'];
+  identityClaimCount: Scalars['Int']['output'];
+  loserWikiPageId?: Maybe<Scalars['ID']['output']>;
+  loserWikiPageSlug?: Maybe<Scalars['String']['output']>;
+  memoryClaimCount: Scalars['Int']['output'];
+  sourceMappingCount: Scalars['Int']['output'];
+  survivorWikiPageId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type CanonicalEntityMergeImpactInput = {
+  graphEntityCount: Scalars['Int']['input'];
+  identityClaimCount: Scalars['Int']['input'];
+  loserWikiPageId?: InputMaybe<Scalars['ID']['input']>;
+  loserWikiPageSlug?: InputMaybe<Scalars['String']['input']>;
+  memoryClaimCount: Scalars['Int']['input'];
+  sourceMappingCount: Scalars['Int']['input'];
+  survivorWikiPageId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+export type CanonicalEntityMergeResult = {
+  __typename?: 'CanonicalEntityMergeResult';
+  impact: CanonicalEntityMergeImpact;
+  loserId: Scalars['ID']['output'];
+  survivorId: Scalars['ID']['output'];
+};
+
 export type CanvasRefreshBindingResult = {
   __typename?: 'CanvasRefreshBindingResult';
   bindingId: Scalars['ID']['output'];
@@ -2338,6 +2388,52 @@ export type EnableWorkflowInput = {
 export type EnableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
+};
+
+/**
+ * An open/resolved ambiguity case. Candidates and conflicting claims are
+ * source-safe identity evidence only — never private content.
+ */
+export type EntityResolutionCase = {
+  __typename?: 'EntityResolutionCase';
+  candidates: Scalars['AWSJSON']['output'];
+  conflictingClaims: Scalars['AWSJSON']['output'];
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  decidedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  decidedByUserId?: Maybe<Scalars['ID']['output']>;
+  decision?: Maybe<Scalars['String']['output']>;
+  displayHint?: Maybe<Scalars['String']['output']>;
+  entityTypeSlug: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  impactSummary: Scalars['AWSJSON']['output'];
+  itemCount: Scalars['Int']['output'];
+  resolvedCanonicalEntityId?: Maybe<Scalars['ID']['output']>;
+  signatureHash: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+};
+
+export enum EntityResolutionDecision {
+  Create = 'create',
+  Defer = 'defer',
+  Link = 'link',
+  Reject = 'reject'
+}
+
+/**
+ * Exact source mapping — one canonical entity per (source system, namespace,
+ * external id). Exact mapping always wins in the matcher.
+ */
+export type EntitySourceMapping = {
+  __typename?: 'EntitySourceMapping';
+  canonicalEntityId: Scalars['ID']['output'];
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdBy: Scalars['String']['output'];
+  externalId: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  namespace: Scalars['String']['output'];
+  sourceSystem: Scalars['String']['output'];
+  visibility: Scalars['String']['output'];
 };
 
 export type EscalateThreadInput = {
@@ -4038,6 +4134,12 @@ export type Mutation = {
    */
   issuePremiumPluginInstallKey: IssuePremiumPluginInstallKeyResult;
   markThreadsRead: MarkThreadsReadResult;
+  /**
+   * Guarded merge repair: the loser becomes a redirect (status merged) and its
+   * mappings/claims/graph rows/wiki page repoint or archive onto the survivor.
+   * `confirmImpact` must echo the preview exactly or the merge aborts.
+   */
+  mergeCanonicalEntities: CanonicalEntityMergeResult;
   mintArtifactShareLink: MintArtifactShareLinkResult;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
@@ -4140,6 +4242,13 @@ export type Mutation = {
    * next compile rebuilds from scratch. Destructive when force=true.
    */
   resetWikiCursor: WikiResetCursorResult;
+  /**
+   * Apply Link / Create / Defer / Reject to an open resolution case.
+   * `canonicalEntityId` is required for link; `displayName` optionally names a
+   * created entity (defaults to the case's display hint). Defer keeps the case
+   * open and resets its expiry clock. Every decision appends an audit event.
+   */
+  resolveEntityResolutionCase: EntityResolutionCase;
   resolveWorkflowApproval: WorkflowRun;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
@@ -4185,6 +4294,11 @@ export type Mutation = {
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
+  /**
+   * Replace an entity type's identity rules (THINK-193 U4). Bumps
+   * identityRulesVersion. Tenant-admin gated.
+   */
+  setOntologyEntityTypeIdentityRules: OntologyEntityType;
   setRoutineTrigger: RoutineTrigger;
   setSkillEvalGate: SkillEvalGate;
   setSpaceEmailTriggers: Space;
@@ -4919,6 +5033,14 @@ export type MutationMarkThreadsReadArgs = {
 };
 
 
+export type MutationMergeCanonicalEntitiesArgs = {
+  confirmImpact: CanonicalEntityMergeImpactInput;
+  loserId: Scalars['ID']['input'];
+  survivorId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type MutationMintArtifactShareLinkArgs = {
   artifactId: Scalars['ID']['input'];
 };
@@ -5287,6 +5409,15 @@ export type MutationResetWikiCursorArgs = {
 };
 
 
+export type MutationResolveEntityResolutionCaseArgs = {
+  canonicalEntityId?: InputMaybe<Scalars['ID']['input']>;
+  caseId: Scalars['ID']['input'];
+  decision: EntityResolutionDecision;
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type MutationResolveWorkflowApprovalArgs = {
   approve: Scalars['Boolean']['input'];
   note?: InputMaybe<Scalars['String']['input']>;
@@ -5452,6 +5583,13 @@ export type MutationSetDefaultEvalProfileArgs = {
 
 export type MutationSetManagedApplicationDeploymentArgs = {
   input: SetManagedApplicationDeploymentInput;
+};
+
+
+export type MutationSetOntologyEntityTypeIdentityRulesArgs = {
+  entityTypeId: Scalars['ID']['input'];
+  rules: Scalars['AWSJSON']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -6082,6 +6220,15 @@ export type OntologyEntityType = {
   facetTemplates: Array<OntologyFacetTemplate>;
   guidanceNotes?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
+  /**
+   * Versioned identity rules (THINK-193 U4): array of
+   * { slug, keyKind, normalization, unique, uniquenessScope,
+   *   sourcePrecedence, autoLink, version }. Rules govern how instances of
+   * this type resolve to canonical entities; the instances live in the
+   * identity registry, never in ontology tables.
+   */
+  identityRules: Scalars['AWSJSON']['output'];
+  identityRulesVersion: Scalars['Int']['output'];
   lifecycleStatus: OntologyLifecycleStatus;
   name: Scalars['String']['output'];
   propertiesSchema: Scalars['AWSJSON']['output'];
@@ -6661,6 +6808,9 @@ export type Query = {
   brainDreamRuns: Array<BrainDreamRun>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  canonicalEntities: Array<CanonicalEntity>;
+  canonicalEntity?: Maybe<CanonicalEntity>;
+  canonicalEntityMergePreview: CanonicalEntityMergeImpact;
   capabilityInspector: CapabilityInspection;
   /**
    * Single event by event_id. Non-operator callers reading another tenant's
@@ -6724,6 +6874,8 @@ export type Query = {
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
+  entityResolutionCase?: Maybe<EntityResolutionCase>;
+  entityResolutionCases: Array<EntityResolutionCase>;
   evalDataset?: Maybe<EvalDataset>;
   evalDatasets: Array<EvalDataset>;
   evalProfiles: Array<EvalProfile>;
@@ -7166,6 +7318,28 @@ export type QueryBudgetStatusArgs = {
 };
 
 
+export type QueryCanonicalEntitiesArgs = {
+  entityTypeSlug?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryCanonicalEntityArgs = {
+  id: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryCanonicalEntityMergePreviewArgs = {
+  loserId: Scalars['ID']['input'];
+  survivorId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type QueryCapabilityInspectorArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentProfileId?: InputMaybe<Scalars['ID']['input']>;
@@ -7284,6 +7458,19 @@ export type QueryEmailChannelLedgerArgs = {
 
 export type QueryEmailSpaceEmailPolicyArgs = {
   spaceId: Scalars['ID']['input'];
+};
+
+
+export type QueryEntityResolutionCaseArgs = {
+  caseId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryEntityResolutionCasesArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
