@@ -6830,6 +6830,13 @@ export type Query = {
   runtimeManifestsByAgent: Array<RuntimeManifest>;
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
+  /**
+   * Fan-out search over the requested legs with per-leg timeout isolation.
+   * Thread results are caller-visibility and hidden-thread filtered; memory
+   * results read the caller's own bank and exclude hits whose source thread
+   * the caller cannot open.
+   */
+  search: SearchResults;
   singleAgentPerformance?: Maybe<AgentPerformance>;
   /** Read a single tenant-scoped draft. */
   skillDraft?: Maybe<SkillDraft>;
@@ -7672,6 +7679,14 @@ export type QueryScheduledJobsArgs = {
   spaceId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   triggerType?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type QuerySearchArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query: Scalars["String"]["input"];
+  queryId?: InputMaybe<Scalars["ID"]["input"]>;
+  sources?: InputMaybe<Array<SearchSource>>;
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type QuerySingleAgentPerformanceArgs = {
@@ -8823,6 +8838,73 @@ export type ScheduledJob = {
   timezone: Scalars["String"]["output"];
   triggerType: Scalars["String"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type SearchEntityHit = {
+  __typename?: "SearchEntityHit";
+  aliases?: Maybe<Array<Scalars["String"]["output"]>>;
+  entityId: Scalars["ID"]["output"];
+  evidenceCount?: Maybe<Scalars["Int"]["output"]>;
+  label: Scalars["String"]["output"];
+  ontologyTypeSlug?: Maybe<Scalars["String"]["output"]>;
+  relationshipCount?: Maybe<Scalars["Int"]["output"]>;
+  summary?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type SearchLeg = {
+  __typename?: "SearchLeg";
+  entityHits?: Maybe<Array<SearchEntityHit>>;
+  error?: Maybe<Scalars["String"]["output"]>;
+  memoryHits?: Maybe<Array<SearchMemoryHit>>;
+  source: SearchSource;
+  status: SearchLegStatus;
+  threadHits?: Maybe<Array<SearchThreadHit>>;
+  wikiHits?: Maybe<Array<SearchWikiHit>>;
+};
+
+export enum SearchLegStatus {
+  Error = "ERROR",
+  Ok = "OK",
+  Timeout = "TIMEOUT",
+}
+
+export type SearchMemoryHit = {
+  __typename?: "SearchMemoryHit";
+  createdAt?: Maybe<Scalars["String"]["output"]>;
+  memoryRecordId: Scalars["ID"]["output"];
+  score?: Maybe<Scalars["Float"]["output"]>;
+  text: Scalars["String"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+};
+
+export type SearchResults = {
+  __typename?: "SearchResults";
+  legs: Array<SearchLeg>;
+  /** Shared id across the parallel per-rail calls of one palette query. */
+  queryId: Scalars["ID"]["output"];
+};
+
+export enum SearchSource {
+  Entities = "ENTITIES",
+  Memory = "MEMORY",
+  Threads = "THREADS",
+  Wiki = "WIKI",
+}
+
+export type SearchThreadHit = {
+  __typename?: "SearchThreadHit";
+  id: Scalars["ID"]["output"];
+  identifier?: Maybe<Scalars["String"]["output"]>;
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
+  title?: Maybe<Scalars["String"]["output"]>;
+  updatedAt?: Maybe<Scalars["String"]["output"]>;
+};
+
+export type SearchWikiHit = {
+  __typename?: "SearchWikiHit";
+  matchedAlias?: Maybe<Scalars["String"]["output"]>;
+  page: WikiPage;
+  score: Scalars["Float"]["output"];
 };
 
 export type SendMessageInput = {

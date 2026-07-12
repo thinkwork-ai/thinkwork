@@ -89,3 +89,4 @@ export * from "./document-plates";
 export * from "./document-section-waivers";
 export * from "./document-conformance-reports";
 export * from "./artifact-shares";
+export * from "./search";

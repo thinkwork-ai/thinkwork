@@ -57,6 +57,7 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "tenant_mcp_admin_keys", // admin key hashes
   "user_mcp_tokens", // per-user MCP token refs
   "user_plugin_activation_tokens", // activation token secret refs
+  "search_queries", // THINK-263: search telemetry — raw query text + per-user rows, operational sensor not tenant analytics
   "webhook_deliveries", // signature material + raw delivery payloads
   "webhooks", // raw webhook tokens
   "workflow_task_tokens", // raw Step Functions task tokens
