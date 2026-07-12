@@ -42,3 +42,8 @@ export {
   type WorkflowStepEventSummary,
   type WorkflowStepEventType,
 } from "./workflow-interpreter-db";
+export {
+  ensureMemoryBlueprintVersion,
+  findMemoryProcessorForWorkflow,
+  type EnsureMemoryBlueprintResult,
+} from "./workflow-blueprint-db";

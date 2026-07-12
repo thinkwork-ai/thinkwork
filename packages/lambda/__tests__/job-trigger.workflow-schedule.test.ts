@@ -120,7 +120,7 @@ describe("handleWorkflowSchedule", () => {
       startDate: new Date("2026-07-07T00:00:00Z"),
     });
     const { db, insertValuesCalls, updateSetCalls } = makeDb({
-      selects: [[WORKFLOW], [{ id: "agent-1" }], []],
+      selects: [[WORKFLOW], [], [{ id: "agent-1" }], []],
       inserts: [[{ id: "binding-1" }], [{ id: "run-1", status: "queued" }], []],
     });
 
@@ -171,7 +171,7 @@ describe("handleWorkflowSchedule", () => {
       startDate: new Date("2026-07-07T00:00:00Z"),
     });
     const { db, insertValuesCalls } = makeDb({
-      selects: [[WORKFLOW], [{ id: "agent-1" }], []],
+      selects: [[WORKFLOW], [], [{ id: "agent-1" }], []],
       inserts: [[{ id: "binding-1" }], [{ id: "run-2", status: "queued" }], []],
     });
 
@@ -199,6 +199,7 @@ describe("handleWorkflowSchedule", () => {
     const { db } = makeDb({
       selects: [
         [WORKFLOW],
+        [], // no memory processor (blueprint ensure no-op)
         [{ id: "agent-1" }],
         [], // no existing binding
         [{ id: "run-1", status: "running" }], // adapter conflict lookup
@@ -222,6 +223,7 @@ describe("handleWorkflowSchedule", () => {
     const { db, updateSetCalls } = makeDb({
       selects: [
         [WORKFLOW],
+        [], // no memory processor (blueprint ensure no-op)
         [{ id: "agent-1" }],
         [],
         [{ id: "run-1", status: "queued" }], // adapter conflict lookup
@@ -248,6 +250,7 @@ describe("handleWorkflowSchedule", () => {
     const { db, insertValuesCalls } = makeDb({
       selects: [
         [{ ...WORKFLOW, current_version_id: null }],
+        [], // no memory processor (blueprint ensure no-op)
         [{ id: "agent-1" }],
         [],
       ],
@@ -268,5 +271,51 @@ describe("handleWorkflowSchedule", () => {
     expect(
       (failureEvent?.payload_summary as Record<string, unknown>)?.reason,
     ).toBe("workflow_has_no_published_version");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: blueprint-managed workflows adopt the current blueprint
+// version lazily at scheduled run start.
+// ---------------------------------------------------------------------------
+
+describe("handleWorkflowSchedule — blueprint ensure (U3)", () => {
+  it("a blueprint-managed workflow's scheduled run pins the freshly ensured version", async () => {
+    mockSfnSend.mockResolvedValue({
+      executionArn: "arn:aws:states:exec-bp",
+      startDate: new Date("2026-07-07T00:00:00Z"),
+    });
+    const { db, insertValuesCalls } = makeDb({
+      selects: [
+        [{ ...WORKFLOW, current_version_id: "ver-stale" }],
+        // ensureMemoryBlueprintVersion: active personal processor manages wf-1
+        [{ id: "proc-1", mode: "personal", status: "active" }],
+        [], // no active version yet -> publish
+        [{ id: "agent-1" }],
+        [],
+      ],
+      inserts: [
+        [{ id: "ver-new" }], // new blueprint version insert
+        [{ id: "binding-1" }],
+        [{ id: "run-bp", status: "queued" }],
+        [],
+      ],
+    });
+
+    await handleWorkflowSchedule({ db, ...baseArgs });
+
+    expect(mockSfnSend).toHaveBeenCalledTimes(1);
+    const runInsert = insertValuesCalls.find(
+      (v) => v.idempotency_key === "workflow_schedule:trigger-1:fire-1",
+    );
+    // The run pinned the freshly ensured blueprint version, not the stale one.
+    expect(runInsert?.workflow_version_id).toBe("ver-new");
+    const versionInsert = insertValuesCalls.find(
+      (v) => v.version_status === "active",
+    );
+    expect(versionInsert?.source_metadata).toMatchObject({
+      blueprintKey: "personal-memory",
+      processorConfigId: "proc-1",
+    });
   });
 });
