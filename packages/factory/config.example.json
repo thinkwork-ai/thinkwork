@@ -1,0 +1,38 @@
+{
+  "linear": {
+    "apiKey": "lin_api_REPLACE_ME",
+    "teamKey": "THINK",
+    "trustedUserIds": []
+  },
+  "slack": {
+    "botToken": "xoxb-REPLACE_ME",
+    "appToken": "xapp-REPLACE_ME",
+    "channelId": "C_REPLACE_ME",
+    "operatorUserIds": ["U_REPLACE_ME"],
+    "webhookUrl": "https://hooks.slack.com/services/REPLACE_ME"
+  },
+  "hosts": [
+    {
+      "name": "mini",
+      "kind": "local",
+      "repoPath": "/absolute/path/to/thinkwork",
+      "capabilities": ["claude", "codex"],
+      "maxConcurrent": 2,
+      "claudeBin": "/absolute/path/to/claude",
+      "codexBin": "/absolute/path/to/codex"
+    },
+    {
+      "name": "laptop",
+      "kind": "ssh",
+      "sshTarget": "user@laptop.local",
+      "repoPath": "/absolute/path/to/thinkwork",
+      "capabilities": ["claude", "codex", "browser-auth"],
+      "maxConcurrent": 1,
+      "claudeBin": "/absolute/path/to/claude",
+      "codexBin": "/absolute/path/to/codex"
+    }
+  ],
+  "phases": {},
+  "pollIntervalSeconds": 30,
+  "enforceBudgetUsd": false
+}
