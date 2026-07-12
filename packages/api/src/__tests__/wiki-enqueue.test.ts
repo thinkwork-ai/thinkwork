@@ -71,7 +71,7 @@ vi.mock("@aws-sdk/client-lambda", () => ({
 }));
 
 import {
-  maybeEnqueueGraphWikiCompile,
+  enqueueGraphWikiCompileTx,
   maybeEnqueuePostTurnCompile,
 } from "../lib/wiki/enqueue.js";
 import {
@@ -355,56 +355,83 @@ describe("maybeEnqueuePostTurnCompile", () => {
   });
 });
 
-// ─── maybeEnqueueGraphWikiCompile branches (plan 2026-06-09-004 U10) ─────────
+// ─── enqueueGraphWikiCompileTx branches (THINK-193 U4 dead-handoff fix) ──────
+//
+// The transactional variant runs INSIDE mergeKnowledgeGraphSnapshot's
+// extraWork so the compile-job row commits atomically with the mirror +
+// run completion. DB errors THROW (failing the ingest tx) instead of being
+// swallowed — a "succeeded" ingest with no compile handoff is the dead-
+// trigger condition this exists to kill.
 
-describe("maybeEnqueueGraphWikiCompile", () => {
+function makeTxStub() {
+  return {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(() => mockTenantRows()),
+        })),
+      })),
+    })),
+  } as any;
+}
+
+describe("enqueueGraphWikiCompileTx", () => {
   it("no-ops unless WIKI_SOURCE is 'graph' (env read at call time)", async () => {
-    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+    const tx = makeTxStub();
+    const r = await enqueueGraphWikiCompileTx(tx, { tenantId: "t" });
     expect(r.status).toBe("skipped_source_not_graph");
-    expect(mockTenantRows).not.toHaveBeenCalled();
+    expect(r.inserted).toBe(false);
     expect(mockGraphEnqueue).not.toHaveBeenCalled();
 
     process.env.WIKI_SOURCE = "planner";
-    const r2 = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+    const r2 = await enqueueGraphWikiCompileTx(tx, { tenantId: "t" });
     expect(r2.status).toBe("skipped_source_not_graph");
-  });
-
-  it("returns skipped_missing_inputs when tenant absent", async () => {
-    process.env.WIKI_SOURCE = "graph";
-    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "" });
-    expect(r.status).toBe("skipped_missing_inputs");
-    expect(mockGraphEnqueue).not.toHaveBeenCalled();
   });
 
   it("honors the tenant wiki_compile_enabled kill switch", async () => {
     process.env.WIKI_SOURCE = "graph";
     mockTenantRows.mockResolvedValueOnce([{ enabled: false }]);
-    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+    const r = await enqueueGraphWikiCompileTx(makeTxStub(), { tenantId: "t" });
     expect(r.status).toBe("skipped_flag_off");
     expect(mockGraphEnqueue).not.toHaveBeenCalled();
   });
 
-  it("enqueues a tenant-keyed graph job and invokes wiki-compile", async () => {
+  it("returns skipped_tenant_not_found when the tenant row is missing", async () => {
     process.env.WIKI_SOURCE = "graph";
-    process.env.STAGE = "dev";
+    mockTenantRows.mockResolvedValueOnce([]);
+    const r = await enqueueGraphWikiCompileTx(makeTxStub(), { tenantId: "t" });
+    expect(r.status).toBe("skipped_tenant_not_found");
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("enqueues a tenant-keyed job on the CALLER's tx and carries dirty scope", async () => {
+    process.env.WIKI_SOURCE = "graph";
     mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
     mockGraphEnqueue.mockResolvedValueOnce({
       inserted: true,
       job: { id: "graph-job-1" },
     });
-    mockInvoke.mockResolvedValueOnce({});
+    const tx = makeTxStub();
 
-    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
-
-    expect(r).toEqual({ status: "enqueued", jobId: "graph-job-1" });
-    expect(mockGraphEnqueue).toHaveBeenCalledWith({
+    const r = await enqueueGraphWikiCompileTx(tx, {
       tenantId: "t",
-      trigger: "graph_materialize",
+      dirtyCanonicalEntityIds: ["c1", "c2"],
     });
-    expect(mockInvoke).toHaveBeenCalledTimes(1);
+
+    expect(r).toEqual({ status: "enqueued", jobId: "graph-job-1", inserted: true });
+    expect(mockGraphEnqueue).toHaveBeenCalledWith(
+      {
+        tenantId: "t",
+        trigger: "graph_materialize",
+        dirtyCanonicalEntityIds: ["c1", "c2"],
+      },
+      tx, // outbox: the job row rides the ingest transaction
+    );
+    // The tx variant NEVER invokes the Lambda itself — post-commit only.
+    expect(mockInvoke).not.toHaveBeenCalled();
   });
 
-  it("dedupes against an existing job in the bucket", async () => {
+  it("dedupes against an existing job in the bucket (inserted=false)", async () => {
     process.env.WIKI_SOURCE = "graph";
     mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
     mockGraphEnqueue.mockResolvedValueOnce({
@@ -412,17 +439,22 @@ describe("maybeEnqueueGraphWikiCompile", () => {
       job: { id: "graph-job-existing" },
     });
 
-    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
+    const r = await enqueueGraphWikiCompileTx(makeTxStub(), { tenantId: "t" });
 
-    expect(r).toEqual({ status: "deduped", jobId: "graph-job-existing" });
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(r).toEqual({
+      status: "deduped",
+      jobId: "graph-job-existing",
+      inserted: false,
+    });
   });
 
-  it("returns error (never throws) when the repository blows up", async () => {
+  it("THROWS on repository failure so the ingest tx rolls back (no silent success)", async () => {
     process.env.WIKI_SOURCE = "graph";
-    mockTenantRows.mockRejectedValueOnce(new Error("DB down"));
-    const r = await maybeEnqueueGraphWikiCompile({ tenantId: "t" });
-    expect(r.status).toBe("error");
-    expect(r.error).toBe("DB down");
+    mockTenantRows.mockResolvedValueOnce([{ enabled: true }]);
+    mockGraphEnqueue.mockRejectedValueOnce(new Error("DB down"));
+
+    await expect(
+      enqueueGraphWikiCompileTx(makeTxStub(), { tenantId: "t" }),
+    ).rejects.toThrow("DB down");
   });
 });

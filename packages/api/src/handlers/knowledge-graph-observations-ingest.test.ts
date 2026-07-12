@@ -12,6 +12,9 @@ const {
   purgeKnowledgeGraphSourceMock,
   createKnowledgeGraphObservationsIngestRunMock,
   reapStaleObservationIngestRunsMock,
+  resolveSnapshotCanonicalIdentityMock,
+  enqueueGraphWikiCompileTxMock,
+  invokeWikiCompileMock,
 } = vi.hoisted(() => ({
   extractorMock: vi.fn(),
   loadApprovedOntologyExportMock: vi.fn(),
@@ -24,6 +27,9 @@ const {
   purgeKnowledgeGraphSourceMock: vi.fn(),
   createKnowledgeGraphObservationsIngestRunMock: vi.fn(),
   reapStaleObservationIngestRunsMock: vi.fn(),
+  resolveSnapshotCanonicalIdentityMock: vi.fn(),
+  enqueueGraphWikiCompileTxMock: vi.fn(),
+  invokeWikiCompileMock: vi.fn(),
 }));
 
 vi.mock("../lib/knowledge-graph/bedrock-graph-extractor.js", () => ({
@@ -66,6 +72,15 @@ vi.mock("../lib/knowledge-graph/runs.js", async () => {
   };
 });
 
+vi.mock("../lib/entity-identity/snapshot-resolution.js", () => ({
+  resolveSnapshotCanonicalIdentity: resolveSnapshotCanonicalIdentityMock,
+}));
+
+vi.mock("../lib/wiki/enqueue.js", () => ({
+  enqueueGraphWikiCompileTx: enqueueGraphWikiCompileTxMock,
+  invokeWikiCompile: invokeWikiCompileMock,
+}));
+
 import { processKnowledgeGraphObservationsIngest } from "./knowledge-graph-observations-ingest.js";
 
 const TENANT_ID = "tenant-1";
@@ -106,9 +121,12 @@ function makeCursorDeleteChain() {
 
 function makeDb() {
   const chains = makeCursorDeleteChain();
+  const updateWhere = vi.fn(async () => undefined);
+  const update = vi.fn(() => ({ set: vi.fn(() => ({ where: updateWhere })) }));
   return {
-    db: { marker: "db", delete: chains.delete } as any,
+    db: { marker: "db", delete: chains.delete, update } as any,
     cursorDelete: chains,
+    update,
   };
 }
 
@@ -217,13 +235,49 @@ beforeEach(() => {
   markKnowledgeGraphRunRunningMock.mockReset().mockResolvedValue(undefined);
   markKnowledgeGraphRunFailedMock.mockReset().mockResolvedValue(undefined);
   markKnowledgeGraphRunStaleNoopMock.mockReset().mockResolvedValue(undefined);
-  mergeKnowledgeGraphSnapshotMock.mockReset().mockResolvedValue(undefined);
+  // Like the real repository, run extraWork on a stub tx so the outbox
+  // enqueue (wiki compile handoff) executes inside the "transaction".
+  mergeKnowledgeGraphSnapshotMock
+    .mockReset()
+    .mockImplementation(async (args: any) => {
+      if (args.extraWork) {
+        const onConflictDoUpdate = vi.fn(async () => undefined);
+        const values = vi.fn(() => ({ onConflictDoUpdate }));
+        await args.extraWork({ marker: "tx", insert: vi.fn(() => ({ values })) });
+      }
+    });
   purgeKnowledgeGraphSourceMock.mockReset().mockResolvedValue(undefined);
   loadApprovedOntologyExportMock.mockReset().mockResolvedValue(ontology);
   loadObservationsKnowledgeGraphSourceMock
     .mockReset()
     .mockResolvedValue(makeSourceResult());
   extractorMock.mockReset().mockResolvedValue(makeExtraction());
+  // Identity pass-through: annotate every entity as resolved to canon-1.
+  resolveSnapshotCanonicalIdentityMock
+    .mockReset()
+    .mockImplementation(async ({ snapshot }: any) => ({
+      snapshot: {
+        ...snapshot,
+        entities: snapshot.entities.map((entity: any) => ({
+          ...entity,
+          canonicalEntityId: "canon-1",
+          resolutionState: "resolved",
+        })),
+      },
+      deferrals: [],
+      metrics: {
+        identityResolvedCount: snapshot.entities.length,
+        identityCreatedCount: 0,
+        identityDeferredCount: 0,
+        identityOutOfScopeCount: 0,
+      },
+    }));
+  enqueueGraphWikiCompileTxMock.mockReset().mockResolvedValue({
+    status: "enqueued",
+    jobId: "wiki-job-1",
+    inserted: true,
+  });
+  invokeWikiCompileMock.mockReset().mockResolvedValue(undefined);
   delete process.env.KG_OBS_MAX_CANDIDATES_PER_RUN;
   delete process.env.KG_OBS_DRAIN_BUDGET_MS;
   delete process.env.BRAIN_ARTIFACTS_BUCKET;
@@ -490,6 +544,139 @@ describe("knowledge-graph-observations-ingest handler", () => {
     await expect(
       processKnowledgeGraphObservationsIngest({}, { db }),
     ).rejects.toThrow(/tenantId/);
+  });
+});
+
+// ─── U4: canonical identity + graph→wiki compile handoff ────────────────────
+
+describe("knowledge-graph-observations-ingest U4 identity + compile handoff", () => {
+  it("REGRESSION (dead trigger): a succeeded ingest always produces an enqueued compile outcome riding the merge tx", async () => {
+    const { db } = makeDb();
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("succeeded");
+    // Outbox: the enqueue executed INSIDE extraWork with the tx handle and
+    // the run's dirty canonical scope.
+    expect(enqueueGraphWikiCompileTxMock).toHaveBeenCalledTimes(1);
+    const [txArg, enqueueArgs] = enqueueGraphWikiCompileTxMock.mock.calls[0]!;
+    expect(txArg).toEqual(expect.objectContaining({ marker: "tx" }));
+    expect(enqueueArgs).toEqual({
+      tenantId: TENANT_ID,
+      dirtyCanonicalEntityIds: ["canon-1"],
+    });
+    // Post-commit invoke of the freshly inserted job.
+    expect(invokeWikiCompileMock).toHaveBeenCalledWith("wiki-job-1");
+    // The outcome is surfaced — never silently absent.
+    expect(result.metrics?.wikiCompileEnqueue).toEqual({
+      status: "enqueued",
+      jobId: "wiki-job-1",
+    });
+  });
+
+  it("surfaces a missing enqueue outcome as error_not_attempted instead of silence", async () => {
+    const { db } = makeDb();
+    // Simulate a merge path that never ran extraWork (the dead-trigger shape).
+    mergeKnowledgeGraphSnapshotMock.mockImplementationOnce(async () => {});
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(result.metrics?.wikiCompileEnqueue).toEqual(
+      expect.objectContaining({ status: "error_not_attempted" }),
+    );
+  });
+
+  it("dedupes onto an existing compile job without invoking", async () => {
+    const { db } = makeDb();
+    enqueueGraphWikiCompileTxMock.mockResolvedValueOnce({
+      status: "deduped",
+      jobId: "wiki-job-existing",
+      inserted: false,
+    });
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(invokeWikiCompileMock).not.toHaveBeenCalled();
+    expect(result.metrics?.wikiCompileEnqueue).toEqual({
+      status: "deduped",
+      jobId: "wiki-job-existing",
+    });
+  });
+
+  it("marks enqueued_invoke_failed (job row survives for the drainer) without failing the run", async () => {
+    const { db } = makeDb();
+    invokeWikiCompileMock.mockRejectedValueOnce(new Error("lambda down"));
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.metrics?.wikiCompileEnqueue).toEqual(
+      expect.objectContaining({
+        status: "enqueued_invoke_failed",
+        jobId: "wiki-job-1",
+        error: expect.stringContaining("lambda down"),
+      }),
+    );
+  });
+
+  it("threads explicit bankIds through to the source loader (targeted ingest)", async () => {
+    const { db } = makeDb();
+
+    await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID, bankIds: ["tenant_abc123"] },
+      { db },
+    );
+
+    expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ bankIds: ["tenant_abc123"] }),
+    );
+  });
+
+  it("records item-level deferrals with case ids and merges only the resolved snapshot", async () => {
+    const { db } = makeDb();
+    resolveSnapshotCanonicalIdentityMock.mockImplementationOnce(
+      async ({ snapshot }: any) => ({
+        snapshot: { ...snapshot, entities: [], relationships: [], evidence: [] },
+        deferrals: [
+          { label: "Acme", ontologyTypeSlug: "company", caseId: "case-1" },
+        ],
+        metrics: {
+          identityResolvedCount: 0,
+          identityCreatedCount: 0,
+          identityDeferredCount: 1,
+          identityOutOfScopeCount: 0,
+        },
+      }),
+    );
+
+    const result = await processKnowledgeGraphObservationsIngest(
+      { tenantId: TENANT_ID },
+      { db },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(result.metrics?.identityDeferredCount).toBe(1);
+    expect(result.metrics?.identityDeferrals).toEqual([
+      { label: "Acme", ontologyTypeSlug: "company", caseId: "case-1" },
+    ]);
+    // The excluded entity never reaches the mirror merge; cursors (extraWork)
+    // still advance inside the same call.
+    const mergeArgs = mergeKnowledgeGraphSnapshotMock.mock.calls[0]![0];
+    expect(mergeArgs.snapshot.entities).toHaveLength(0);
   });
 });
 

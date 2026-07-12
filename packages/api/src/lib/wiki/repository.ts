@@ -500,6 +500,15 @@ export async function enqueueGraphCompileJob(
      * 5-minute bucket. Appending a fifth part keeps the key un-parseable
      * by `parseCompileDedupeBucket` (which requires exactly 3 parts). */
     dedupeDiscriminator?: string;
+    /**
+     * Dirty canonical-entity compile scope (THINK-193 U4). Stored as the
+     * job's `input` jsonb — the graph materializer restricts its pass to
+     * these canonical ids. Omit (or overflow the cap) for a full pass.
+     * On dedupe against a PENDING job the scopes union; unioning past
+     * {@link MAX_DIRTY_CANONICAL_IDS_PER_JOB} widens to a full pass (input
+     * NULL) so scope can only grow, never silently drop ids.
+     */
+    dirtyCanonicalEntityIds?: string[];
   },
   db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
@@ -511,6 +520,13 @@ export async function enqueueGraphCompileJob(
     ? `${baseDedupeKey}:${args.dedupeDiscriminator}`
     : baseDedupeKey;
 
+  const scopedInput =
+    args.dirtyCanonicalEntityIds &&
+    args.dirtyCanonicalEntityIds.length > 0 &&
+    args.dirtyCanonicalEntityIds.length <= MAX_DIRTY_CANONICAL_IDS_PER_JOB
+      ? { dirtyCanonicalEntityIds: [...new Set(args.dirtyCanonicalEntityIds)] }
+      : null;
+
   const [inserted] = await db
     .insert(wikiCompileJobs)
     .values({
@@ -518,6 +534,7 @@ export async function enqueueGraphCompileJob(
       owner_id: null,
       dedupe_key: dedupeKey,
       trigger: args.trigger,
+      input: scopedInput,
     })
     .onConflictDoNothing({ target: wikiCompileJobs.dedupe_key })
     .returning();
@@ -537,7 +554,58 @@ export async function enqueueGraphCompileJob(
       `enqueueGraphCompileJob: dedupe conflict but no existing row found for key=${dedupeKey}`,
     );
   }
-  return { inserted: false, job: existing[0] as WikiCompileJobRow };
+  let job = existing[0] as WikiCompileJobRow;
+
+  // Scope union on dedupe: a pending scoped job must not lose the new dirty
+  // ids. NULL input (full pass) always wins; overflow widens to full pass.
+  if (job.status === "pending") {
+    const existingScope = parseDirtyCanonicalEntityIds(job.input);
+    const existingIsFull = existingScope === null;
+    if (!existingIsFull) {
+      const nextInput = scopedInput
+        ? unionDirtyScope(existingScope, scopedInput.dirtyCanonicalEntityIds)
+        : null; // incoming full pass widens the pending job
+      const [updated] = await db
+        .update(wikiCompileJobs)
+        .set({ input: nextInput })
+        .where(
+          and(
+            eq(wikiCompileJobs.id, job.id),
+            eq(wikiCompileJobs.status, "pending"),
+          ),
+        )
+        .returning();
+      if (updated) job = updated as WikiCompileJobRow;
+    }
+  }
+  return { inserted: false, job };
+}
+
+/** Cap on per-job dirty canonical ids; beyond this a full pass is cheaper. */
+export const MAX_DIRTY_CANONICAL_IDS_PER_JOB = 500;
+
+/**
+ * Parse the dirty canonical-entity scope from a compile job's input jsonb.
+ * `null` = full pass (no scope or malformed/overflowed scope).
+ */
+export function parseDirtyCanonicalEntityIds(input: unknown): string[] | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = (input as Record<string, unknown>).dirtyCanonicalEntityIds;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const ids = raw.filter((id): id is string => typeof id === "string");
+  if (ids.length === 0 || ids.length > MAX_DIRTY_CANONICAL_IDS_PER_JOB) {
+    return null;
+  }
+  return ids;
+}
+
+function unionDirtyScope(
+  existing: string[],
+  incoming: string[],
+): { dirtyCanonicalEntityIds: string[] } | null {
+  const union = [...new Set([...existing, ...incoming])];
+  if (union.length > MAX_DIRTY_CANONICAL_IDS_PER_JOB) return null;
+  return { dirtyCanonicalEntityIds: union };
 }
 
 /**
