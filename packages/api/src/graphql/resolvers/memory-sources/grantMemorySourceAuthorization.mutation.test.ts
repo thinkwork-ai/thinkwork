@@ -238,11 +238,11 @@ describe("grantMemorySourceAuthorization mutation", () => {
     });
     await grantMemorySourceAuthorization(
       {},
-      { ...BASE_ARGS, boundary: '{"objects":["company"]}' },
+      { ...BASE_ARGS, boundary: '{"objects":["companies"]}' },
       good.ctx,
     );
     expect(good.insertValues).toHaveBeenCalledWith(
-      expect.objectContaining({ boundary: { objects: ["company"] } }),
+      expect.objectContaining({ boundary: { objects: ["companies"] } }),
     );
 
     const bad = buildCtx({
@@ -256,5 +256,49 @@ describe("grantMemorySourceAuthorization mutation", () => {
         bad.ctx,
       ),
     ).rejects.toThrow(/boundary must be a JSON object/);
+  });
+
+  // Codex U2 P2: operators must see boundary mistakes at grant time —
+  // a typo'd key or out-of-domain value cannot become a stored envelope
+  // that later evaluates as the default.
+  it("rejects unknown boundary keys, out-of-domain caps, and ungoverned objects before any write", async () => {
+    for (const boundary of [
+      { maxRecord: 100 },
+      { maxRecords: 0 },
+      { pageSize: 2.5 },
+      { objects: ["webhooks"] },
+      // Per-relation subsets are not grantable: the Twenty wire is binary
+      // (depth 0/1), so 'people' alone would over-read notes/opportunities.
+      { objects: ["companies", "people"] },
+    ]) {
+      const { ctx, transaction } = buildCtx({
+        processorRows: [PROCESSOR_ROW],
+        existingGrants: [],
+      });
+      await expect(
+        grantMemorySourceAuthorization({}, { ...BASE_ARGS, boundary }, ctx),
+      ).rejects.toThrow(new RegExp(Object.keys(boundary)[0]!));
+      expect(transaction).not.toHaveBeenCalled();
+    }
+  });
+
+  it("accepts a valid governed boundary", async () => {
+    const { ctx, insertValues } = buildCtx({
+      processorRows: [PROCESSOR_ROW],
+      existingGrants: [],
+    });
+    await grantMemorySourceAuthorization(
+      {},
+      {
+        ...BASE_ARGS,
+        boundary: { maxRecords: 500, objects: ["companies", "relations"] },
+      },
+      ctx,
+    );
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boundary: { maxRecords: 500, objects: ["companies", "relations"] },
+      }),
+    );
   });
 });

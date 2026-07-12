@@ -25,15 +25,23 @@ import { CheckpointConflictError } from "./repository.js";
 import {
   listEvidenceForProjection,
   recordAcquiredPage,
+  recordDerivation,
   recordDerivationWithRunItem,
   recordRunItem,
 } from "./evidence.js";
 import {
+  assertSourceWritable,
+  rearmEraseCleanup,
+  SourceEraseFencedError,
+} from "./erase-fence.js";
+import {
   clampSnapshotTtlDays,
+  deleteEvidenceSnapshotVersion,
   getEvidenceSnapshot,
   putEvidenceSnapshot,
   resolveSnapshotBucket,
   snapshotKeyFor,
+  verifyNoSnapshotVersions,
 } from "./snapshots.js";
 import type {
   EvidenceRow,
@@ -191,6 +199,22 @@ export function backscanTokenFrom(
 export async function runAcquire(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
+  try {
+    return await runAcquireInner(ctx);
+  } catch (err) {
+    // Erase write-fence (round-3 P1-2): the source was disabled or its
+    // erase generation advanced mid-run — the offending page transaction
+    // rolled back; fail the stage visibly.
+    if (err instanceof SourceEraseFencedError) {
+      return failed(ctx.event.stage, err.message);
+    }
+    throw err;
+  }
+}
+
+async function runAcquireInner(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
   const { db, event, processor } = ctx;
   const counts = { changed: 0, seen: 0, pages: 0 };
   const perSource: Record<string, unknown> = {};
@@ -256,6 +280,15 @@ export async function runAcquire(
     const boundary = (source.boundary ?? {}) as Record<string, unknown>;
     const budget = (processor.budget ?? {}) as Record<string, unknown>;
     const options = event.options ?? {};
+    // Erase write-fence captured with the source row at stage start
+    // (round-3 P1-2): every page commit CASes on it in-transaction.
+    const eraseFence = {
+      expectedEraseGeneration: source.erase_generation ?? 0,
+    };
+    // Binary object capability (policy agent contract): the saved source
+    // boundary's already-validated `objects` selection — omitted means the
+    // adapter's companies-only (depth-0) default.
+    const approvedObjects = boundary.objects as readonly string[] | undefined;
     const pageSize = effectiveLimit(
       [boundary.pageSize, budget.pageSize, options.pageSize],
       DEFAULT_PAGE_SIZE,
@@ -302,6 +335,7 @@ export async function runAcquire(
         targetScope: processor.target_scope,
         targetId: processor.target_id,
         startingAfter: pageToken,
+        objects: approvedObjects,
       });
       counts.pages += 1;
       fetched += page.rawCount;
@@ -390,6 +424,7 @@ export async function runAcquire(
             backscanToken: backscanTokenFrom(checkpoint.cursor),
           } as unknown as Record<string, unknown>,
           items: page.items,
+          eraseFence,
         });
         counts.changed += recorded.changed.length;
         counts.seen += recorded.seen;
@@ -452,6 +487,7 @@ export async function runAcquire(
         pageSize: Math.min(pageSize, maxRecords - fetched),
         targetScope: processor.target_scope,
         targetId: processor.target_id,
+        objects: approvedObjects,
       });
       counts.pages += 1;
       fetched += page.rawCount;
@@ -481,6 +517,7 @@ export async function runAcquire(
           nextCursor: checkpoint.cursor ?? {},
           items: page.items,
           skipCheckpointAdvance: true,
+          eraseFence,
         });
         counts.changed += recorded.changed.length;
         counts.seen += recorded.seen;
@@ -617,7 +654,17 @@ export async function loadSnapshot(
 export async function offloadSnapshots(
   db: Database,
   s3: S3Client | undefined,
-  args: { items: EvidenceRow[]; ttlDays?: number },
+  args: {
+    items: EvidenceRow[];
+    ttlDays?: number;
+    /** Erase write-fence (round-3 P1-2 / round-6 P1): checked immediately
+     * before AND after every S3 put, with exact-version compensation. */
+    eraseFence?: {
+      tenantId: string;
+      sourceConfigId: string;
+      expectedEraseGeneration: number;
+    };
+  },
 ): Promise<number> {
   const pending = args.items.filter(
     (item) => item.normalized_snapshot && !item.snapshot_ref,
@@ -632,12 +679,59 @@ export async function offloadSnapshots(
       sourceItemId: item.source_item_id,
       sourceVersion: item.source_version,
     });
-    const { ref, expiresAt } = await putEvidenceSnapshot(s3, {
+    // (b) external-write fence: pre-check…
+    if (args.eraseFence) {
+      await assertSourceWritable(db, {
+        tenantId: args.eraseFence.tenantId,
+        sourceConfigId: args.eraseFence.sourceConfigId,
+        expectedEraseGeneration: args.eraseFence.expectedEraseGeneration,
+      });
+    }
+    const { ref, expiresAt, versionId } = await putEvidenceSnapshot(s3, {
       bucket,
       key,
       snapshot: item.normalized_snapshot as Record<string, unknown>,
       ttlDays: args.ttlDays,
     });
+    // …and post-check with EXACT-VERSION compensation (round-6 P1): a
+    // generation moved during the put means the erase sweep may already
+    // have passed (or completed) — remove precisely the version just
+    // written and prove the key is gone; if that fails, durably reopen the
+    // erase marker so the dedicated drainer re-sweeps.
+    if (args.eraseFence) {
+      try {
+        await assertSourceWritable(db, {
+          tenantId: args.eraseFence.tenantId,
+          sourceConfigId: args.eraseFence.sourceConfigId,
+          expectedEraseGeneration: args.eraseFence.expectedEraseGeneration,
+        });
+      } catch (err) {
+        if (err instanceof SourceEraseFencedError) {
+          try {
+            await deleteEvidenceSnapshotVersion(s3, {
+              bucket,
+              key,
+              versionId,
+            });
+            const clean = await verifyNoSnapshotVersions(s3, { bucket, key });
+            if (!clean) {
+              throw new Error(
+                `snapshot versions remain for ${key} after compensation`,
+              );
+            }
+          } catch (compensationErr) {
+            console.error(
+              `[memory-sources] snapshot write compensation failed for ${key} — reopening erase marker: ${(compensationErr as Error)?.message}`,
+            );
+            await rearmEraseCleanup(db, {
+              tenantId: args.eraseFence.tenantId,
+              sourceConfigId: args.eraseFence.sourceConfigId,
+            });
+          }
+        }
+        throw err;
+      }
+    }
     await db
       .update(memoryEvidenceItems)
       .set({
@@ -659,15 +753,37 @@ export async function offloadSnapshots(
 export async function runProject(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
+  try {
+    return await runProjectInner(ctx);
+  } catch (err) {
+    if (err instanceof SourceEraseFencedError) {
+      return failed(ctx.event.stage, err.message);
+    }
+    throw err;
+  }
+}
+
+async function runProjectInner(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
   const { db, event } = ctx;
   const backlog = await changedEvidence(ctx);
   const items = backlog.slice(0, evidenceBatchLimit(ctx, "projectBatch"));
   const counts = { changed: 0, noop: 0, failed: 0 };
+  const fenceSource = ctx.sources[0];
+  const eraseFence = fenceSource
+    ? {
+        tenantId: ctx.processor.tenant_id,
+        sourceConfigId: fenceSource.id,
+        expectedEraseGeneration: fenceSource.erase_generation ?? 0,
+      }
+    : undefined;
 
   // F6: migrate any inline snapshots in this batch to S3 before projecting.
   await offloadSnapshots(db, ctx.s3, {
     items,
     ttlDays: snapshotTtlDaysFor(ctx),
+    eraseFence,
   });
 
   let processed = 0;
@@ -712,6 +828,10 @@ export async function runProject(
       subjectKey: `twenty:company:${item.source_item_id}`,
       effectiveFrom: editionEffectiveFrom,
       claims,
+      // In-transaction erase fence CAS (round-3 P1-2).
+      eraseFence: eraseFence
+        ? { expectedEraseGeneration: eraseFence.expectedEraseGeneration }
+        : undefined,
     });
     counts.changed += 1;
     await recordRunItem(db, {
@@ -748,6 +868,19 @@ export async function runProject(
 export async function runRetain(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
+  try {
+    return await runRetainInner(ctx);
+  } catch (err) {
+    if (err instanceof SourceEraseFencedError) {
+      return failed(ctx.event.stage, err.message);
+    }
+    throw err;
+  }
+}
+
+async function runRetainInner(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
   const { db, event, processor } = ctx;
   const { adapter, config } = getMemoryServices();
   if (config.engine !== "hindsight" || !adapter.upsertMarkdownMemoryDocument) {
@@ -756,6 +889,14 @@ export async function runRetain(
       `memory engine "${config.engine}" has no document upsert — Hindsight required`,
     );
   }
+  const fenceSource = ctx.sources[0];
+  const eraseFence = fenceSource
+    ? {
+        tenantId: processor.tenant_id,
+        sourceConfigId: fenceSource.id,
+        expectedEraseGeneration: fenceSource.erase_generation ?? 0,
+      }
+    : undefined;
 
   const backlog = await changedEvidence(ctx);
   const items = backlog.slice(0, evidenceBatchLimit(ctx, "retainBatch"));
@@ -812,6 +953,10 @@ export async function runRetain(
           ).markdown
         : dossier.markdown;
 
+    // (b) external-write fence: pre-check immediately before the upsert…
+    if (eraseFence) {
+      await assertSourceWritable(db, eraseFence);
+    }
     // Synchronous replace: the workflow's compound stage must observe a bank
     // that already contains this projection.
     await adapter.upsertMarkdownMemoryDocument({
@@ -831,12 +976,58 @@ export async function runRetain(
         sourceVersion: item.source_version,
       },
     });
+    // …and post-check with compensation (round-6 P1): the generation moved
+    // during the upsert, so the erase sweep may already have deleted this
+    // document set — delete the just-written document directly; if that
+    // fails, durably record the derivation (so a fresh erase child targets
+    // the document) AND reopen the erase marker.
+    if (eraseFence) {
+      try {
+        await assertSourceWritable(db, eraseFence);
+      } catch (err) {
+        if (err instanceof SourceEraseFencedError) {
+          try {
+            if (typeof adapter.deleteDocument !== "function") {
+              throw new Error("adapter has no deleteDocument");
+            }
+            await adapter.deleteDocument({
+              tenantId: processor.tenant_id,
+              ownerType: processor.target_scope,
+              ownerId: processor.target_id,
+              documentId,
+            });
+          } catch (compensationErr) {
+            console.error(
+              `[memory-sources] Hindsight write compensation failed for ${documentId} — recording derivation + reopening erase marker: ${(compensationErr as Error)?.message}`,
+            );
+            await recordDerivation(db, {
+              tenantId: processor.tenant_id,
+              sourceConfigId: item.source_config_id,
+              evidenceItemId: item.id,
+              projectionKey,
+              targetBankId,
+              hindsightDocumentId: documentId,
+              currentVersion: item.source_version,
+            });
+            await rearmEraseCleanup(db, {
+              tenantId: eraseFence.tenantId,
+              sourceConfigId: eraseFence.sourceConfigId,
+            });
+          }
+        }
+        throw err;
+      }
+    }
 
     // F8: derivation + run item commit in ONE transaction after the
     // (idempotent) Hindsight write. Separate commits let a crash strand the
     // evidence: the derivation alone marks it "done" for the staleness
     // work list, so a retry would skip it forever.
     await recordDerivationWithRunItem(db, {
+      // In-transaction erase fence CAS (round-3 P1-2).
+      eraseFence: eraseFence
+        ? { expectedEraseGeneration: eraseFence.expectedEraseGeneration }
+        : undefined,
       derivation: {
         tenantId: processor.tenant_id,
         sourceConfigId: item.source_config_id,

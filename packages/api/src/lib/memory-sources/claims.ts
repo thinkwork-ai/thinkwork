@@ -278,6 +278,13 @@ export async function upsertClaimsForEvidence(
     /** Edition timestamp used to close swept single-valued intervals. */
     effectiveFrom: Date | null;
     claims: ClaimUpsert[];
+    /**
+     * Erase write-fence (round-3 P1-2): when present, the transaction FOR
+     * SHARE-locks the source config row and aborts if the source is
+     * disabled or its erase_generation moved past the value captured at
+     * stage start.
+     */
+    eraseFence?: { expectedEraseGeneration: number };
   },
 ): Promise<{
   created: number;
@@ -303,6 +310,15 @@ export async function upsertClaimsForEvidence(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${subjectLockKey}, 0))`,
     );
+    if (args.eraseFence) {
+      const { assertSourceWritable } = await import("./erase-fence.js");
+      await assertSourceWritable(tx, {
+        tenantId: args.tenantId,
+        sourceConfigId: args.sourceConfigId,
+        expectedEraseGeneration: args.eraseFence.expectedEraseGeneration,
+        lock: true,
+      });
+    }
     let created = 0;
     let supported = 0;
     let supersededSupports = 0;
@@ -414,6 +430,71 @@ export async function upsertClaimsForEvidence(
       supported += 1;
     }
 
+    // (b′) Retire superseded-edition support edges — moved here from
+    // acquire time (Codex round-4 P1-A): old supports stay ACTIVE through
+    // acquire so a project crash between the stages never leaves active
+    // claims with zero active support while the old Hindsight document
+    // still exists. Now that the NEW edition's supports are durably in this
+    // transaction, retract this subject's active edges that point at
+    // NON-ACTIVE evidence (superseded/deleted editions).
+    const subjectClaimRows = await tx
+      .select({ id: memoryClaims.id })
+      .from(memoryClaims)
+      .where(
+        and(
+          eq(memoryClaims.tenant_id, args.tenantId),
+          eq(memoryClaims.target_scope, args.targetScope),
+          eq(memoryClaims.target_id, args.targetId),
+          eq(memoryClaims.subject_key, args.subjectKey),
+        ),
+      );
+    if (subjectClaimRows.length > 0) {
+      const subjectClaimIds = subjectClaimRows.map((row) => row.id);
+      const activeEdges = await tx
+        .select({
+          id: dbSchema.memoryClaimEvidence.id,
+          evidence_item_id: dbSchema.memoryClaimEvidence.evidence_item_id,
+        })
+        .from(memoryClaimEvidence)
+        .where(
+          and(
+            inArray(memoryClaimEvidence.claim_id, subjectClaimIds),
+            eq(memoryClaimEvidence.status, "active"),
+            ne(memoryClaimEvidence.evidence_item_id, args.evidenceItemId),
+          ),
+        );
+      if (activeEdges.length > 0) {
+        const evidenceIds = [
+          ...new Set(activeEdges.map((edge) => edge.evidence_item_id)),
+        ];
+        const evidenceRows = await tx
+          .select({
+            id: dbSchema.memoryEvidenceItems.id,
+            lifecycle: dbSchema.memoryEvidenceItems.lifecycle,
+          })
+          .from(dbSchema.memoryEvidenceItems)
+          .where(inArray(dbSchema.memoryEvidenceItems.id, evidenceIds));
+        const nonActiveEvidence = evidenceRows
+          .filter((row) => row.lifecycle !== "active")
+          .map((row) => row.id);
+        if (nonActiveEvidence.length > 0) {
+          await tx
+            .update(memoryClaimEvidence)
+            .set({ status: "retracted", retracted_at: new Date() })
+            .where(
+              and(
+                inArray(memoryClaimEvidence.claim_id, subjectClaimIds),
+                eq(memoryClaimEvidence.status, "active"),
+                inArray(
+                  memoryClaimEvidence.evidence_item_id,
+                  nonActiveEvidence,
+                ),
+              ),
+            );
+        }
+      }
+    }
+
     // (c) Supersede stale single-valued claims by predicate: every ACTIVE
     // row that is not the kept claim — different values AND identical-value
     // duplicates alike — closing the losing interval at the incoming
@@ -431,7 +512,9 @@ export async function upsertClaimsForEvidence(
         .update(memoryClaims)
         .set({
           status: "superseded",
-          effective_to: claim.effectiveFrom,
+          // P2-D: every ended interval closes — provider timestamp when
+          // available, else the durable transition time.
+          effective_to: claim.effectiveFrom ?? new Date(),
           updated_at: new Date(),
         })
         .where(
@@ -498,7 +581,8 @@ export async function upsertClaimsForEvidence(
           .update(memoryClaims)
           .set({
             status: "superseded",
-            effective_to: args.effectiveFrom,
+            // P2-D: null edition timestamp still closes the interval.
+            effective_to: args.effectiveFrom ?? new Date(),
             updated_at: new Date(),
           })
           .where(inArray(memoryClaims.id, singleValuedIds));
@@ -506,7 +590,13 @@ export async function upsertClaimsForEvidence(
       if (multiValuedIds.length > 0) {
         await tx
           .update(memoryClaims)
-          .set({ status: "retracted", updated_at: new Date() })
+          .set({
+            status: "retracted",
+            // P2-D: retracted multi-valued facts close their interval at
+            // the edition timestamp, else the durable transition time.
+            effective_to: args.effectiveFrom ?? new Date(),
+            updated_at: new Date(),
+          })
           .where(inArray(memoryClaims.id, multiValuedIds));
       }
       unsupportedRetracted = unsupported.length;
@@ -588,9 +678,16 @@ export async function deactivateOrphanedClaims(
     const orphaned = candidateIds.filter((id) => !supportedSet.has(id));
     if (orphaned.length === 0) return 0;
 
+    const now = new Date();
     const retracted = await tx
       .update(memoryClaims)
-      .set({ status: "retracted", updated_at: new Date() })
+      .set({
+        status: "retracted",
+        // P2-D: retraction closes the interval — no provider timestamp is
+        // available on this path, so the durable transition time is used.
+        effective_to: now,
+        updated_at: now,
+      })
       .where(
         and(
           inArray(memoryClaims.id, orphaned),

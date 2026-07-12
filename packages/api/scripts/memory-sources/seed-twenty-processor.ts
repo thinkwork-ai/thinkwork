@@ -116,7 +116,9 @@ async function main() {
         source_family: "twenty",
         source_binding_key: bindingKey,
         enabled: true,
-        boundary: { maxRecords },
+        // "relations" opts into the whole depth-1 dossier (people +
+        // opportunities + notes); omitting objects means companies-only.
+        boundary: { maxRecords, objects: ["companies", "relations"] },
       })
       .returning();
   }
@@ -144,7 +146,10 @@ async function main() {
         processor_config_id: processor.id,
         source_family: "twenty",
         source_binding_key: bindingKey,
-        boundary: { maxRecords: Math.max(maxRecords, 200) },
+        boundary: {
+          maxRecords: Math.max(maxRecords, 200),
+          objects: ["companies", "relations"],
+        },
         granted_by_user_id: userId,
       })
       .returning();

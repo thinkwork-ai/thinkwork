@@ -31,6 +31,7 @@ import {
   memoryEvidenceItems,
   memoryRunItems,
   memorySourceCheckpoints,
+  memorySourceConfigs,
 } from "@thinkwork/database-pg/schema";
 
 export type Row = Record<string, unknown>;
@@ -92,13 +93,16 @@ export interface FakeMemoryStore {
   evidenceItems: Row[];
   runItems: Row[];
   checkpoints: Row[];
+  /** memory_source_configs rows — the erase write-fence reads these. */
+  sourceConfigs: Row[];
 }
 
 /**
- * Mirror of the acquire-time behavior in recordAcquiredPage: superseding an
- * evidence edition retracts its ACTIVE claim-support edges. Tests that drive
- * upsertClaimsForEvidence directly call this between editions to reproduce
- * the state the project stage actually sees.
+ * Test helper that force-retracts an edition's ACTIVE support edges.
+ * NOTE (round-4 P1-A): production no longer does this at acquire time —
+ * superseded-edition edges stay active until upsertClaimsForEvidence's
+ * transaction retires them. Tests use this only to fabricate historical
+ * states (e.g. pre-fix rows).
  */
 export function retractSupportEdges(
   store: FakeMemoryStore,
@@ -144,6 +148,7 @@ export function makeFakeMemoryDb(): {
     evidenceItems: [],
     runItems: [],
     checkpoints: [],
+    sourceConfigs: [],
   };
 
   const claimFingerprint = (row: Row): string =>
@@ -219,6 +224,17 @@ export function makeFakeMemoryDb(): {
     [
       memorySourceCheckpoints,
       { rows: store.checkpoints, defaults: () => ({ id: ++seq }) },
+    ],
+    [
+      memorySourceConfigs,
+      {
+        rows: store.sourceConfigs,
+        defaults: () => ({
+          id: `gen-source-${++seq}`,
+          enabled: true,
+          erase_generation: 0,
+        }),
+      },
     ],
   ]);
 

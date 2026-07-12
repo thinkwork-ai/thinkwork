@@ -51,6 +51,9 @@ function makeAttempt(
     locked_at: null,
     locked_by: null,
     lock_generation: 0,
+    erase_generation: 0,
+    cleanup_phase: null,
+    cleanup_cursor: null,
     reconsolidation_note: null,
     error_class: null,
     error_message: null,
@@ -837,251 +840,402 @@ describe("enqueueDerivationRetraction", () => {
 });
 
 // ---------------------------------------------------------------------------
-// runSourceErase — durable erase AGGREGATE
+// runSourceErase — durable erase AGGREGATE (rounds 3-7 semantics)
 // ---------------------------------------------------------------------------
 
-describe("runSourceErase", () => {
-  type EraseFixture = {
-    pendingIds: string[];
-    statusCounts: Record<string, number>;
-    remainingDerivations: number;
-    calls: string[];
+type EraseHarnessOpts = {
+  markerStatus?: string;
+  markerGeneration?: number;
+  markerPhase?: string | null;
+  markerCursor?: string | null;
+  markerAttemptCount?: number;
+  markerMaxAttempts?: number;
+  /** status counts keyed by erase generation. */
+  countsByGeneration?: Record<number, Record<string, number>>;
+  remainingDerivations?: number;
+  pendingIds?: string[];
+  /** Scripted purge responses, consumed per call. */
+  purgeResponses?: Array<{ deleted: number; nextCursor: string | null }>;
+  /** When true, claimEraseMarker returns null (another claimant). */
+  claimLost?: boolean;
+};
+
+function makeEraseHarness(opts: EraseHarnessOpts = {}) {
+  const calls: string[] = [];
+  const marker = makeAttempt({
+    id: "marker-1",
+    scope: "erase",
+    status: opts.markerStatus ?? "queued",
+    erase_generation: opts.markerGeneration ?? 1,
+    cleanup_phase: (opts.markerPhase ?? null) as never,
+    cleanup_cursor: (opts.markerCursor ?? null) as never,
+    attempt_count: opts.markerAttemptCount ?? 0,
+    max_attempts: opts.markerMaxAttempts ?? 5,
+    provider: "erase_aggregate",
+    provider_document_id: `erase:${SOURCE_CONFIG_ID}`,
+  });
+  const purgeResponses = [
+    ...(opts.purgeResponses ?? [{ deleted: 0, nextCursor: null }]),
+  ];
+  const countsByGeneration = opts.countsByGeneration ?? {};
+
+  const eraseStore: SourceEraseStore = {
+    async listPendingSourceAttemptIds(_t, _s, limit) {
+      calls.push(`list:${limit}`);
+      return (opts.pendingIds ?? []).slice(0, limit);
+    },
+    async countSourceAttemptsByStatus(_t, _s, generation) {
+      calls.push(`count:gen=${generation}`);
+      return { ...(countsByGeneration[generation] ?? {}) };
+    },
+    async countRemainingDerivations() {
+      return opts.remainingDerivations ?? 0;
+    },
+    async clearEvidencePayloads() {
+      calls.push("clearPayloads");
+      return 3;
+    },
+    async purgeNonDerivedEvidence(_t, _s, purgeOpts) {
+      calls.push(
+        `purge:cursor=${purgeOpts.cursor ?? "null"}:limit=${purgeOpts.limit}`,
+      );
+      return purgeResponses.shift() ?? { deleted: 0, nextCursor: null };
+    },
+    async deleteCheckpoints() {
+      calls.push("deleteCheckpoints");
+    },
+    async loadEraseMarker() {
+      return { ...marker };
+    },
+    async claimEraseMarker(_t, _s, claimOpts) {
+      if (opts.claimLost) {
+        calls.push("claim:lost");
+        return null;
+      }
+      if (marker.status === "retracted" || marker.status === "dead_lettered") {
+        calls.push("claim:terminal");
+        return null;
+      }
+      const hasProgress =
+        marker.cleanup_phase !== null || marker.cleanup_cursor !== null;
+      if (marker.attempt_count >= marker.max_attempts && !hasProgress) {
+        calls.push("claim:exhausted");
+        return null;
+      }
+      marker.status = "running";
+      marker.attempt_count += 1;
+      marker.lock_generation += 1;
+      marker.locked_by = claimOpts.lockedBy;
+      marker.locked_at = claimOpts.now;
+      calls.push("claim:ok");
+      return { ...marker };
+    },
+    async recordEraseCleanupProgress(_id, fence, patch, progressOpts) {
+      if (!fenceMatches(marker, fence)) return false;
+      if (patch.cleanupPhase !== undefined) {
+        marker.cleanup_phase = patch.cleanupPhase as never;
+      }
+      if (patch.cleanupCursor !== undefined) {
+        marker.cleanup_cursor = patch.cleanupCursor as never;
+      }
+      marker.attempt_count = 0; // durable progress returns the budget
+      if (progressOpts.release) {
+        marker.status = "queued";
+        marker.next_retry_at = progressOpts.now;
+        marker.locked_at = null;
+        marker.locked_by = null;
+      }
+      calls.push(
+        `progress:phase=${marker.cleanup_phase ?? "null"}:cursor=${marker.cleanup_cursor ?? "null"}:release=${progressOpts.release}`,
+      );
+      return true;
+    },
+    async markEraseCleanupFailed(m, message, now, fence) {
+      if (!fenceMatches(marker, fence)) return "stale";
+      const transition = resolveFailureTransition(
+        m,
+        {
+          errorClass: "cleanup_failed",
+          errorMessage: message,
+          retryable: true,
+        },
+        now,
+      );
+      marker.status = transition.status;
+      marker.next_retry_at = transition.nextRetryAt;
+      marker.locked_at = null;
+      marker.locked_by = null;
+      marker.error_class = "cleanup_failed";
+      marker.error_message = message;
+      calls.push(`cleanupFailed:${transition.status}`);
+      return { ...marker };
+    },
+    async markEraseCompleted(_id, now, fence) {
+      if (!fenceMatches(marker, fence)) return false;
+      marker.status = "retracted";
+      marker.completed_at = now;
+      marker.locked_at = null;
+      marker.locked_by = null;
+      calls.push("markEraseCompleted");
+      return true;
+    },
+    async markEraseFailed(_t, _s, reason) {
+      marker.status = "dead_lettered";
+      marker.error_class = "children_dead_lettered";
+      marker.error_message = reason;
+      calls.push("markEraseFailed");
+    },
+    async listEraseAggregatesNeedingCleanup() {
+      return [];
+    },
   };
 
-  function makeEraseStore(fx: EraseFixture): SourceEraseStore {
-    return {
-      async listPendingSourceAttemptIds(_t, _s, limit) {
-        fx.calls.push(`list:${limit}`);
-        return fx.pendingIds.slice(0, limit);
-      },
-      async countSourceAttemptsByStatus() {
-        fx.calls.push("count");
-        return { ...fx.statusCounts };
-      },
-      async countRemainingDerivations() {
-        return fx.remainingDerivations;
-      },
-      async clearAndPurgeEvidence() {
-        fx.calls.push("purgeEvidence");
-        return { cleared: 3, deleted: 2 };
-      },
-      async deleteCheckpoints() {
-        fx.calls.push("deleteCheckpoints");
-      },
-      async listEraseAggregatesNeedingCleanup() {
-        return [];
-      },
-      async markEraseCompleted() {
-        fx.calls.push("markEraseCompleted");
-      },
-      async markEraseFailed(_t, _s, reason) {
-        fx.calls.push(`markEraseFailed:${reason.slice(0, 20)}`);
-      },
-    };
-  }
+  return { calls, marker, eraseStore };
+}
 
-  const baseDeps = () => ({
+function eraseDeps(
+  harness: ReturnType<typeof makeEraseHarness>,
+  overrides: Partial<import("./retraction.js").SourceEraseDeps> = {},
+): import("./retraction.js").SourceEraseDeps {
+  return {
     db: noDb,
     adapter: makeAdapter(),
+    eraseStore: harness.eraseStore,
+    enqueue: vi.fn(async () => ({
+      enqueued: 0,
+      eraseGeneration: harness.marker.erase_generation,
+    })),
+    process: vi.fn(async (id: string) => makeAttempt({ id })),
+    deleteSnapshots: vi.fn(async () => ({
+      objects: 2,
+      versions: 4,
+      truncated: false,
+    })),
+    destructiveCleanup: true,
+    ...overrides,
+  };
+}
+
+const ERASE_ARGS = { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID };
+
+describe("runSourceErase", () => {
+  it("S2: WITHOUT destructiveCleanup (GraphQL path) it never claims the marker or touches S3, and reports pending", async () => {
+    const harness = makeEraseHarness({
+      countsByGeneration: { 1: { retracted: 2 } },
+    });
+    const deleteSnapshots = vi.fn(async () => ({
+      objects: 0,
+      versions: 0,
+      truncated: false,
+    }));
+    const result = await runSourceErase(
+      eraseDeps(harness, { destructiveCleanup: false, deleteSnapshots }),
+      ERASE_ARGS,
+    );
+    expect(result.status).toBe("pending");
+    expect(deleteSnapshots).not.toHaveBeenCalled();
+    expect(harness.calls).not.toContain("claim:ok");
+    expect(harness.calls).not.toContain("deleteCheckpoints");
   });
 
-  it("completes: processes attempts, deletes snapshots, purges evidence, then checkpoints — in order", async () => {
-    const fx: EraseFixture = {
-      pendingIds: ["a1", "a2"],
-      statusCounts: { retracted: 2 },
-      remainingDerivations: 0,
-      calls: [],
-    };
-    const processed: string[] = [];
-    const deleteSnapshots = vi.fn(async () => {
-      fx.calls.push("deleteSnapshots");
-      return 4;
+  it("completes: fenced claim → S3 versions → payload scrub + purge → checkpoints LAST → marker retired, in order", async () => {
+    const harness = makeEraseHarness({
+      countsByGeneration: { 1: { retracted: 2 } },
     });
+    const deps = eraseDeps(harness);
+    const result = await runSourceErase(deps, ERASE_ARGS);
 
-    const result = await runSourceErase(
-      {
-        ...baseDeps(),
-        eraseStore: makeEraseStore(fx),
-        enqueue: vi.fn(async () => ({ enqueued: 2 })),
-        process: vi.fn(async (id: string) => {
-          processed.push(id);
-          return makeAttempt({ id, status: "retracted" });
-        }),
-        deleteSnapshots,
-      },
-      { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID },
-    );
-
-    expect(processed).toEqual(["a1", "a2"]);
     expect(result.status).toBe("completed");
-    expect(result.attempts).toEqual({
-      total: 2,
-      retracted: 2,
-      pending: 0,
-      deadLettered: 0,
-      processedThisCall: 2,
-    });
-    expect(result.snapshotObjectsDeleted).toBe(4);
+    expect(result.snapshotObjectsDeleted).toBe(2);
+    expect(result.snapshotVersionsDeleted).toBe(4);
     expect(result.evidenceRowsCleared).toBe(3);
-    expect(result.evidenceRowsDeleted).toBe(2);
     expect(result.checkpointsDeleted).toBe(true);
-    // Cleanup strictly after processing, checkpoints strictly last.
-    const order = fx.calls;
-    expect(order.indexOf("deleteSnapshots")).toBeGreaterThan(
-      order.indexOf("count"),
+    const order = harness.calls;
+    expect(order.indexOf("claim:ok")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("clearPayloads")).toBeGreaterThan(
+      order.indexOf("claim:ok"),
     );
     expect(order.indexOf("deleteCheckpoints")).toBeGreaterThan(
-      order.indexOf("purgeEvidence"),
+      order.indexOf("clearPayloads"),
     );
-    expect(order.indexOf("purgeEvidence")).toBeGreaterThan(
-      order.indexOf("deleteSnapshots"),
-    );
-    // The durable erase marker is retired only after full cleanup.
     expect(order.indexOf("markEraseCompleted")).toBeGreaterThan(
       order.indexOf("deleteCheckpoints"),
     );
+    expect(harness.marker.status).toBe("retracted");
   });
 
-  it("returns pending and performs NO cleanup while attempts remain non-terminal", async () => {
-    const fx: EraseFixture = {
-      pendingIds: ["a1"],
-      statusCounts: { retracted: 1, failed: 1 },
-      remainingDerivations: 1,
-      calls: [],
-    };
-    const deleteSnapshots = vi.fn(async () => 0);
-
-    const result = await runSourceErase(
-      {
-        ...baseDeps(),
-        eraseStore: makeEraseStore(fx),
-        enqueue: vi.fn(async () => ({ enqueued: 0 })),
-        process: vi.fn(async (id: string) =>
-          makeAttempt({ id, status: "failed" }),
-        ),
-        deleteSnapshots,
-      },
-      { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID },
-    );
-
+  it("overlap prevention: a lost marker claim performs no destructive work and reports pending", async () => {
+    const harness = makeEraseHarness({
+      claimLost: true,
+      countsByGeneration: { 1: { retracted: 1 } },
+    });
+    const deps = eraseDeps(harness);
+    const result = await runSourceErase(deps, ERASE_ARGS);
     expect(result.status).toBe("pending");
-    expect(result.attempts.pending).toBe(1);
-    expect(deleteSnapshots).not.toHaveBeenCalled();
-    expect(fx.calls).not.toContain("purgeEvidence");
-    expect(fx.calls).not.toContain("deleteCheckpoints");
-    expect(result.checkpointsDeleted).toBe(false);
+    expect(deps.deleteSnapshots).not.toHaveBeenCalled();
+    expect(harness.calls).not.toContain("deleteCheckpoints");
   });
 
-  it("surfaces dead-lettered children as failed and performs NO cleanup", async () => {
-    const fx: EraseFixture = {
-      pendingIds: [],
-      statusCounts: { retracted: 1, dead_lettered: 2 },
-      remainingDerivations: 0,
-      calls: [],
-    };
-    const deleteSnapshots = vi.fn(async () => 0);
+  it("a TRUNCATED S3 pass yields (released, due now) and later resumes without redoing phases", async () => {
+    const harness = makeEraseHarness({
+      countsByGeneration: { 1: { retracted: 1 } },
+    });
+    const deleteSnapshots = vi
+      .fn<
+        () => Promise<{ objects: number; versions: number; truncated: boolean }>
+      >()
+      .mockResolvedValueOnce({ objects: 1, versions: 1000, truncated: true })
+      .mockResolvedValueOnce({ objects: 1, versions: 3, truncated: false });
+    const deps = eraseDeps(harness, { deleteSnapshots });
 
-    const result = await runSourceErase(
-      {
-        ...baseDeps(),
-        eraseStore: makeEraseStore(fx),
-        enqueue: vi.fn(async () => ({ enqueued: 0 })),
-        process: vi.fn(),
-        deleteSnapshots,
-      },
-      { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID },
-    );
+    const first = await runSourceErase(deps, ERASE_ARGS);
+    expect(first.status).toBe("pending");
+    expect(harness.marker.status).toBe("queued"); // released for the next tick
+    expect(harness.calls).not.toContain("deleteCheckpoints");
 
+    const second = await runSourceErase(deps, ERASE_ARGS);
+    expect(second.status).toBe("completed");
+    expect(deleteSnapshots).toHaveBeenCalledTimes(2);
+  });
+
+  it("bounded evidence purge yields with a durable cursor and resumes from it", async () => {
+    const harness = makeEraseHarness({
+      countsByGeneration: { 1: { retracted: 1 } },
+      purgeResponses: [
+        { deleted: 200, nextCursor: "ev-200" },
+        { deleted: 40, nextCursor: null },
+      ],
+    });
+    const deps = eraseDeps(harness, { cleanupBatch: 200 });
+
+    const first = await runSourceErase(deps, ERASE_ARGS);
+    expect(first.status).toBe("pending");
+    expect(harness.marker.cleanup_cursor).toBe("ev-200");
+    expect(harness.calls).not.toContain("deleteCheckpoints");
+
+    const second = await runSourceErase(deps, ERASE_ARGS);
+    expect(second.status).toBe("completed");
+    // Second pass resumed at the durable cursor and skipped the S3 phase.
+    expect(harness.calls).toContain("purge:cursor=ev-200:limit=200");
+    expect(deps.deleteSnapshots).toHaveBeenCalledTimes(1);
+  });
+
+  it("a cleanup needing MORE successful bounded passes than max_attempts still completes (budget counts caught failures only)", async () => {
+    const harness = makeEraseHarness({
+      markerMaxAttempts: 2,
+      countsByGeneration: { 1: { retracted: 1 } },
+      purgeResponses: [
+        { deleted: 10, nextCursor: "c1" },
+        { deleted: 10, nextCursor: "c2" },
+        { deleted: 10, nextCursor: "c3" },
+        { deleted: 10, nextCursor: null },
+      ],
+    });
+    const deps = eraseDeps(harness, { cleanupBatch: 10 });
+    let result: Awaited<ReturnType<typeof runSourceErase>> | null = null;
+    for (let i = 0; i < 5; i += 1) {
+      result = await runSourceErase(deps, ERASE_ARGS);
+      if (result.status === "completed") break;
+    }
+    expect(result?.status).toBe("completed");
+    expect(harness.marker.status).toBe("retracted");
+  });
+
+  it("a marker that crashed after durable phase progress on its nominally-final claim RESUMES (not DLQ)", async () => {
+    const harness = makeEraseHarness({
+      markerStatus: "running", // crashed while claimed
+      markerPhase: "snapshots_deleted",
+      markerAttemptCount: 5,
+      markerMaxAttempts: 5,
+      countsByGeneration: { 1: { retracted: 1 } },
+    });
+    // Stale lock so the reclaim path is exercised.
+    harness.marker.locked_at = new Date(Date.now() - 10 * 60_000);
+    harness.marker.locked_by = "dead-worker";
+    const deps = eraseDeps(harness);
+    const result = await runSourceErase(deps, ERASE_ARGS);
+    expect(result.status).toBe("completed");
+    // The S3 phase was NOT redone — resume honored the durable phase.
+    expect(deps.deleteSnapshots).not.toHaveBeenCalled();
+  });
+
+  it("repeated caught cleanup failures back off and dead-letter at the budget; the aggregate surfaces failed", async () => {
+    const harness = makeEraseHarness({
+      markerMaxAttempts: 2,
+      countsByGeneration: { 1: { retracted: 1 } },
+    });
+    const deps = eraseDeps(harness, {
+      deleteSnapshots: vi.fn(async () => {
+        throw new Error("s3 down");
+      }),
+    });
+
+    const first = await runSourceErase(deps, ERASE_ARGS);
+    expect(first.status).toBe("pending");
+    expect(harness.marker.status).toBe("failed");
+    expect(harness.marker.next_retry_at).not.toBeNull();
+
+    // Make the retry due, then exhaust the budget.
+    harness.marker.next_retry_at = new Date(Date.now() - 1);
+    const second = await runSourceErase(deps, ERASE_ARGS);
+    expect(second.status).toBe("failed");
+    expect(harness.marker.status).toBe("dead_lettered");
+    expect(harness.marker.error_class).toBe("cleanup_failed");
+
+    // Terminal: further passes surface failed without retrying.
+    const third = await runSourceErase(deps, ERASE_ARGS);
+    expect(third.status).toBe("failed");
+  });
+
+  it("dead-lettered children of THIS generation fail the aggregate (marker dead-lettered, no cleanup)", async () => {
+    const harness = makeEraseHarness({
+      markerGeneration: 2,
+      countsByGeneration: { 2: { retracted: 1, dead_lettered: 1 } },
+    });
+    const deps = eraseDeps(harness, {
+      enqueue: vi.fn(async () => ({ enqueued: 0, eraseGeneration: 2 })),
+    });
+    const result = await runSourceErase(deps, ERASE_ARGS);
     expect(result.status).toBe("failed");
-    expect(result.attempts.deadLettered).toBe(2);
-    expect(deleteSnapshots).not.toHaveBeenCalled();
-    expect(fx.calls).not.toContain("deleteCheckpoints");
-    // The erase marker is dead-lettered too — never silently pending.
-    expect(fx.calls.some((c) => c.startsWith("markEraseFailed:"))).toBe(true);
-    expect(fx.calls).not.toContain("markEraseCompleted");
+    expect(harness.calls).toContain("markEraseFailed");
+    expect(harness.marker.status).toBe("dead_lettered");
+    expect(deps.deleteSnapshots).not.toHaveBeenCalled();
   });
 
-  it("returns pending (marker kept alive) when the cleanup phase fails, without deleting checkpoints", async () => {
-    const fx: EraseFixture = {
-      pendingIds: [],
-      statusCounts: { retracted: 2 },
-      remainingDerivations: 0,
-      calls: [],
-    };
-    const result = await runSourceErase(
-      {
-        ...baseDeps(),
-        eraseStore: makeEraseStore(fx),
-        enqueue: vi.fn(async () => ({ enqueued: 0 })),
-        process: vi.fn(),
-        deleteSnapshots: vi.fn(async () => {
-          throw new Error("s3 unavailable");
-        }),
+  it("P1-C: dead-lettered children from a PREVIOUS generation do not fail the current erase", async () => {
+    const harness = makeEraseHarness({
+      markerGeneration: 2,
+      countsByGeneration: {
+        1: { dead_lettered: 3 }, // remediated history
+        2: { retracted: 2 }, // current generation is clean
       },
-      { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID },
-    );
-
-    expect(result.status).toBe("pending");
-    expect(result.checkpointsDeleted).toBe(false);
-    // Checkpoints are NEVER deleted before S3 + evidence cleanup succeed,
-    // and the marker is not retired, so the drainer retries later.
-    expect(fx.calls).not.toContain("deleteCheckpoints");
-    expect(fx.calls).not.toContain("markEraseCompleted");
+    });
+    const deps = eraseDeps(harness, {
+      enqueue: vi.fn(async () => ({ enqueued: 0, eraseGeneration: 2 })),
+    });
+    const result = await runSourceErase(deps, ERASE_ARGS);
+    expect(result.status).toBe("completed");
+    expect(harness.calls).toContain("count:gen=2");
+    expect(harness.calls).not.toContain("count:gen=1");
   });
 
-  it("bounds inline processing by maxInlineAttempts", async () => {
-    const fx: EraseFixture = {
-      pendingIds: ["a1", "a2", "a3", "a4", "a5"],
-      statusCounts: { retracted: 2, queued: 3 },
+  it("bounds inline child processing and keeps draining when one attempt throws", async () => {
+    const harness = makeEraseHarness({
+      pendingIds: ["a1", "a2", "a3"],
+      countsByGeneration: { 1: { queued: 3 } },
       remainingDerivations: 3,
-      calls: [],
-    };
-    const process = vi.fn(async (id: string) =>
-      makeAttempt({ id, status: "retracted" }),
-    );
-
-    const result = await runSourceErase(
-      {
-        ...baseDeps(),
-        eraseStore: makeEraseStore(fx),
-        enqueue: vi.fn(async () => ({ enqueued: 5 })),
-        process,
-        deleteSnapshots: vi.fn(async () => 0),
-        maxInlineAttempts: 2,
-      },
-      { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID },
-    );
-
-    expect(process).toHaveBeenCalledTimes(2);
-    expect(result.status).toBe("pending");
-    expect(result.attempts.processedThisCall).toBe(2);
-  });
-
-  it("keeps draining when one inline attempt throws", async () => {
-    const fx: EraseFixture = {
-      pendingIds: ["a1", "a2"],
-      statusCounts: { retracted: 1, failed: 1 },
-      remainingDerivations: 1,
-      calls: [],
-    };
+    });
     const process = vi
       .fn<(id: string) => Promise<RetractionAttemptRow>>()
       .mockRejectedValueOnce(new Error("attempt vanished"))
-      .mockResolvedValueOnce(makeAttempt({ id: "a2", status: "retracted" }));
-
+      .mockResolvedValue(makeAttempt({ id: "a2", status: "retracted" }));
     const result = await runSourceErase(
-      {
-        ...baseDeps(),
-        eraseStore: makeEraseStore(fx),
-        enqueue: vi.fn(async () => ({ enqueued: 0 })),
-        process,
-        deleteSnapshots: vi.fn(async () => 0),
-      },
-      { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID },
+      eraseDeps(harness, { process, maxInlineAttempts: 2 }),
+      ERASE_ARGS,
     );
-
     expect(process).toHaveBeenCalledTimes(2);
     expect(result.status).toBe("pending");
+    expect(result.attempts.processedThisCall).toBe(2);
   });
 });
 
@@ -1132,7 +1286,7 @@ describe("erase of a source whose derivations share one stable provider document
         );
         enqueued += 1;
       }
-      return { enqueued };
+      return { enqueued, eraseGeneration: 0 };
     };
 
     const findAttempt = (id: string) => attempts.find((a) => a.id === id);
@@ -1214,6 +1368,14 @@ describe("erase of a source whose derivations share one stable provider document
       },
     };
 
+    const marker = makeAttempt({
+      id: "marker-multi",
+      scope: "erase",
+      status: "queued",
+      erase_generation: 0,
+      provider: "erase_aggregate",
+      provider_document_id: `erase:${SOURCE_CONFIG_ID}`,
+    });
     const eraseStore: SourceEraseStore = {
       async listPendingSourceAttemptIds(_t, _s, limit) {
         return attempts
@@ -1239,17 +1401,48 @@ describe("erase of a source whose derivations share one stable provider document
           (d) => d.lifecycle === "active" || d.lifecycle === "superseded",
         ).length;
       },
-      async clearAndPurgeEvidence() {
-        return { cleared: 3, deleted: 0 };
+      async clearEvidencePayloads() {
+        return 3;
+      },
+      async purgeNonDerivedEvidence() {
+        return { deleted: 0, nextCursor: null };
       },
       async deleteCheckpoints() {
         checkpointsDeleted = true;
       },
+      async loadEraseMarker() {
+        return { ...marker };
+      },
+      async claimEraseMarker(_t, _s, claimOpts) {
+        if (marker.status === "retracted") return null;
+        marker.status = "running";
+        marker.attempt_count += 1;
+        marker.lock_generation += 1;
+        marker.locked_by = claimOpts.lockedBy;
+        marker.locked_at = claimOpts.now;
+        return { ...marker };
+      },
+      async recordEraseCleanupProgress(_id, _fence, patch, progressOpts) {
+        if (patch.cleanupPhase !== undefined) {
+          marker.cleanup_phase = patch.cleanupPhase as never;
+        }
+        if (patch.cleanupCursor !== undefined) {
+          marker.cleanup_cursor = patch.cleanupCursor as never;
+        }
+        if (progressOpts.release) marker.status = "queued";
+        return true;
+      },
+      async markEraseCleanupFailed() {
+        return "stale" as const;
+      },
+      async markEraseCompleted() {
+        marker.status = "retracted";
+        return true;
+      },
+      async markEraseFailed() {},
       async listEraseAggregatesNeedingCleanup() {
         return [];
       },
-      async markEraseCompleted() {},
-      async markEraseFailed() {},
     };
 
     const adapter = makeAdapter();
@@ -1265,7 +1458,12 @@ describe("erase of a source whose derivations share one stable provider document
             attemptId,
             { lockedBy: "memory-source-erase" },
           ),
-        deleteSnapshots: vi.fn(async () => 3),
+        deleteSnapshots: vi.fn(async () => ({
+          objects: 3,
+          versions: 3,
+          truncated: false,
+        })),
+        destructiveCleanup: true,
       },
       { tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID },
     );
@@ -1381,5 +1579,195 @@ describe("createDrizzleRetractionStore.finalizeInternalState source scoping", ()
       recorded.find((r) => r.kind === "update#4")!.cond,
     );
     expect(evidenceUpdate.params).toContain("evi-a");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-3 P1-1: crash resumability — recorded in-flight progress resumes
+// after a stale lease REGARDLESS of the attempt budget; only caught step
+// failures consume it.
+// ---------------------------------------------------------------------------
+
+describe("crash resumability at the attempt budget (round-3 P1-1)", () => {
+  const staleLock = () => new Date(Date.now() - 10 * 60_000);
+
+  for (const status of [
+    "provider_deleted",
+    "supports_updated",
+    "reconsolidated",
+  ] as const) {
+    it(`a worker that crashed at '${status}' on its FINAL claim resumes to retracted (never dead-lettered)`, async () => {
+      const row = makeAttempt({
+        status,
+        attempt_count: 5,
+        max_attempts: 5,
+        locked_at: staleLock(),
+        locked_by: "dead-worker",
+        lock_generation: 5,
+      });
+      // Claimable despite the exhausted budget…
+      expect(isAttemptClaimable(row, new Date())).toBe(true);
+
+      // …and the saga resumes at the recorded progress and completes.
+      const { store } = makeStore(row);
+      const adapter = makeAdapter();
+      const result = await processRetractionAttempt(
+        { db: noDb, adapter, store },
+        ATTEMPT_ID,
+      );
+      expect(result.status).toBe("retracted");
+      if (status !== "reconsolidated" && status !== "supports_updated") {
+        // Resumed AFTER the provider delete: no re-delete.
+        expect(adapter.deleteDocument).not.toHaveBeenCalled();
+      }
+    });
+  }
+
+  it("'running' (no recorded progress) at the budget is NOT claimable — the sweep owns it", () => {
+    expect(
+      isAttemptClaimable(
+        makeAttempt({
+          status: "running",
+          attempt_count: 5,
+          max_attempts: 5,
+          locked_at: staleLock(),
+        }),
+        new Date(),
+      ),
+    ).toBe(false);
+  });
+
+  it("queued/failed at the budget are NOT claimable", () => {
+    expect(
+      isAttemptClaimable(
+        makeAttempt({ status: "failed", attempt_count: 5, max_attempts: 5 }),
+        new Date(),
+      ),
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drizzle where-clause guards: exhausted sweep + due listing must never touch
+// progressed rows / progressed erase markers (rendered SQL assertions).
+// ---------------------------------------------------------------------------
+
+describe("deadLetterExhaustedAttempts / listDueRetractionAttempts guards", () => {
+  async function renderWhere(
+    run: (db: never) => Promise<unknown>,
+  ): Promise<{ sql: string; params: unknown[] }> {
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const dialect = new PgDialect();
+    let captured: unknown;
+    const chain: Record<string, unknown> = {};
+    for (const m of ["set", "orderBy", "limit", "from", "select"]) {
+      chain[m] = () => chain;
+    }
+    chain.where = (cond: unknown) => {
+      captured = cond;
+      return chain;
+    };
+    chain.returning = async () => [];
+    chain.then = (resolve: (v: unknown[]) => unknown) =>
+      Promise.resolve().then(() => resolve([]));
+    const db = {
+      update: () => chain,
+      select: () => chain,
+    } as never;
+    await run(db);
+    return dialect.sqlToQuery(captured as never) as {
+      sql: string;
+      params: unknown[];
+    };
+  }
+
+  it("the exhausted sweep targets ONLY queued/failed/running and skips progressed erase markers", async () => {
+    const { deadLetterExhaustedAttempts } = await import("./retraction.js");
+    const rendered = await renderWhere((db) => deadLetterExhaustedAttempts(db));
+    // Budget-bound statuses only — progressed saga statuses are absent.
+    expect(rendered.params).toContain("queued");
+    expect(rendered.params).toContain("failed");
+    expect(rendered.params).toContain("running");
+    expect(rendered.params).not.toContain("provider_deleted");
+    expect(rendered.params).not.toContain("supports_updated");
+    expect(rendered.params).not.toContain("reconsolidated");
+    // Progressed erase markers (durable cleanup phase/cursor) are excluded.
+    expect(rendered.sql).toContain('"cleanup_phase" IS NOT NULL');
+    expect(rendered.sql).toContain('"cleanup_cursor" IS NOT NULL');
+  });
+
+  it("the due listing exempts progressed statuses from the attempt budget", async () => {
+    const { listDueRetractionAttempts } = await import("./retraction.js");
+    const rendered = await renderWhere((db) =>
+      listDueRetractionAttempts(db, { limit: 10 }),
+    );
+    expect(rendered.params).toContain("provider_deleted");
+    expect(rendered.params).toContain("supports_updated");
+    expect(rendered.params).toContain("reconsolidated");
+    // The budget comparison appears for the budget-bound branches only:
+    // two occurrences (queued/failed branch + running branch), not three.
+    const budgetOccurrences =
+      rendered.sql.split('"attempt_count" < ').length - 1;
+    expect(budgetOccurrences).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-5 P2: operator DLQ retry
+// ---------------------------------------------------------------------------
+
+describe("requeueRetractionAttempt", () => {
+  async function runRequeue(returned: RetractionAttemptRow[]) {
+    const { requeueRetractionAttempt } = await import("./retraction.js");
+    const captured: { set?: Record<string, unknown>; where?: unknown } = {};
+    const db = {
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          captured.set = values;
+          return {
+            where: (cond: unknown) => {
+              captured.where = cond;
+              return { returning: async () => returned };
+            },
+          };
+        },
+      }),
+    } as never;
+    const row = await requeueRetractionAttempt(db, {
+      tenantId: TENANT_ID,
+      attemptId: ATTEMPT_ID,
+    });
+    return { row, captured };
+  }
+
+  it("resets a dead_lettered attempt to due-queued with a fresh budget and a bumped fence", async () => {
+    const requeued = makeAttempt({ status: "queued", lock_generation: 7 });
+    const { row, captured } = await runRequeue([requeued]);
+    expect(row).toEqual(requeued);
+    expect(captured.set).toMatchObject({
+      status: "queued",
+      attempt_count: 0,
+      locked_at: null,
+      locked_by: null,
+      error_class: null,
+      completed_at: null,
+    });
+    expect(captured.set!.next_retry_at).toBeInstanceOf(Date);
+    // lock_generation bump is a SQL increment — fences out stale workers.
+    const { PgDialect } = await import("drizzle-orm/pg-core");
+    const rendered = new PgDialect().sqlToQuery(
+      captured.set!.lock_generation as never,
+    );
+    expect(rendered.sql).toContain('"lock_generation" + 1');
+    // Only failed/dead_lettered rows qualify.
+    const where = new PgDialect().sqlToQuery(captured.where as never);
+    expect(where.params).toContain("dead_lettered");
+    expect(where.params).toContain("failed");
+    expect(where.params).toContain(TENANT_ID);
+  });
+
+  it("returns null when the attempt is not retryable (no row matched)", async () => {
+    const { row } = await runRequeue([]);
+    expect(row).toBeNull();
   });
 });

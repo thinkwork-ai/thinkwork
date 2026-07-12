@@ -13,6 +13,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { and, eq, inArray } from "../../utils.js";
+import { assertGrantBoundaryValid } from "../../../lib/memory-sources/policy.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import {
   resolveCallerTenantId,
@@ -48,6 +49,12 @@ export async function grantMemorySourceAuthorization(
   }
 
   const boundary = parseBoundary(args.boundary);
+  // Codex U2 P2: validate against the family's governed-dimension schema
+  // at grant time — a typo'd key ('maxRecord') or out-of-domain value must
+  // be an immediate operator error, never a stored envelope that later
+  // evaluates as the defaults. Families without a registered schema fail
+  // closed here too.
+  assertGrantBoundaryValid(boundary, { sourceFamily: args.sourceFamily });
   const grantedByUserId = await resolveCallerUserId(ctx);
 
   // Codex U2 residual A: supersession is revoke + insert; run both in one

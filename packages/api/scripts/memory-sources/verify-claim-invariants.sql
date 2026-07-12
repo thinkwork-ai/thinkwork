@@ -20,6 +20,11 @@ SELECT
               ontology_predicate
      HAVING count(*) > 1) t) AS active_single_valued_duplicates,
   -- Superseded/deleted evidence must not count as active support.
+  -- QUIESCENT invariant (Codex round-4 P1-A): superseded-edition edges are
+  -- retired in the PROJECT stage's claim transaction, not at acquire time —
+  -- so between a completed acquire and its project pass this count is
+  -- transiently nonzero BY DESIGN. Only evaluate it on a quiesced pipeline
+  -- (no in-flight memory_stage runs).
   (SELECT count(*) FROM memory_claim_evidence e
      JOIN memory_evidence_items ev ON ev.id = e.evidence_item_id
      WHERE e.status = 'active'

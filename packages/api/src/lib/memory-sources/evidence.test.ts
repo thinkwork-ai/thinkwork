@@ -139,7 +139,7 @@ describe("buildAcquireRunItemValues (changed-vs-seen partitioning)", () => {
 // ---------------------------------------------------------------------------
 
 describe("recordAcquiredPage supersession", () => {
-  it("retracts the superseded edition's active support edges in the same transaction", async () => {
+  it("supersedes the old edition but leaves its support edges ACTIVE (retirement is the project stage's transaction — round-4 P1-A)", async () => {
     const { db, store, txCount } = makeFakeMemoryDb();
     // Prior edition of company-1 with an active claim-support edge, plus an
     // unrelated evidence item whose edge must stay untouched.
@@ -184,13 +184,16 @@ describe("recordAcquiredPage supersession", () => {
 
     expect(result.changed).toHaveLength(1);
     expect(result.seen).toBe(0);
-    // The old edition is superseded and its support edge retracted…
+    // The old edition is superseded, but its support edge stays ACTIVE:
+    // a project crash between acquire and project must never leave active
+    // claims with zero active support. upsertClaimsForEvidence retires the
+    // edge atomically with the new edition's supports (claims.test.ts).
     const oldEvidence = store.evidenceItems.find((row) => row.id === "ev-1")!;
     expect(oldEvidence.lifecycle).toBe("superseded");
     const oldEdge = store.claimEdges.find((edge) => edge.id === 1)!;
-    expect(oldEdge.status).toBe("retracted");
-    expect(oldEdge.retracted_at).toBeInstanceOf(Date);
-    // …edges from OTHER evidence items are untouched…
+    expect(oldEdge.status).toBe("active");
+    expect(oldEdge.retracted_at).toBeNull();
+    // Edges from OTHER evidence items are untouched too…
     expect(store.claimEdges.find((edge) => edge.id === 2)!.status).toBe(
       "active",
     );
@@ -238,5 +241,61 @@ describe("recordAcquiredPage supersession", () => {
       store.evidenceItems.find((row) => row.id === "ev-1")!.lifecycle,
     ).toBe("active");
     expect(store.claimEdges[0]!.status).toBe("active");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-3 P1-2: erase write-fence inside the acquisition transaction
+// ---------------------------------------------------------------------------
+
+describe("recordAcquiredPage erase fence", () => {
+  it("rolls the whole page back (no evidence, no run items) when the erase generation advanced", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    store.sourceConfigs.push({
+      id: SOURCE_CONFIG_ID,
+      tenant_id: TENANT_ID,
+      enabled: true,
+      erase_generation: 2, // erase began after the stage captured gen 1
+    });
+
+    await expect(
+      recordAcquiredPage(db, {
+        tenantId: TENANT_ID,
+        sourceConfigId: SOURCE_CONFIG_ID,
+        workflowRunId: RUN_ID,
+        partitionKey: "companies",
+        expectedCheckpointVersion: 0,
+        nextCursor: {},
+        items: [upsert({ sourceItemId: "company-1", sourceVersion: "v1" })],
+        eraseFence: { expectedEraseGeneration: 1 },
+      }),
+    ).rejects.toThrow(/erase generation advanced/);
+
+    expect(store.evidenceItems).toHaveLength(0);
+    expect(store.runItems).toHaveLength(0);
+  });
+
+  it("a disabled source aborts the page too", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    store.sourceConfigs.push({
+      id: SOURCE_CONFIG_ID,
+      tenant_id: TENANT_ID,
+      enabled: false,
+      erase_generation: 1,
+    });
+
+    await expect(
+      recordAcquiredPage(db, {
+        tenantId: TENANT_ID,
+        sourceConfigId: SOURCE_CONFIG_ID,
+        workflowRunId: RUN_ID,
+        partitionKey: "companies",
+        expectedCheckpointVersion: 0,
+        nextCursor: {},
+        items: [upsert({ sourceItemId: "company-1", sourceVersion: "v1" })],
+        eraseFence: { expectedEraseGeneration: 1 },
+      }),
+    ).rejects.toThrow(/disabled/);
+    expect(store.evidenceItems).toHaveLength(0);
   });
 });

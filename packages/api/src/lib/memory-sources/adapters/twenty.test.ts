@@ -14,6 +14,12 @@ import {
 
 const TENANT_ID = "0015953e-aa13-4cab-8398-2e70f73dda63";
 
+// Full dossier capability — relation tests opt in explicitly; omitting
+// `objects` must always mean companies-only (fail closed). The capability
+// is BINARY: 'relations' grants the whole depth-1 dossier, because the
+// Twenty wire offers no per-relation selection.
+const ALL_OBJECTS = ["companies", "relations"] as const;
+
 function company(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
@@ -85,6 +91,7 @@ describe("normalizeCompany", () => {
           },
         ],
       }),
+      { objects: ALL_OBJECTS },
     );
     expect(snapshot.people).toEqual([
       {
@@ -114,6 +121,7 @@ describe("normalizeCompany", () => {
           ],
         },
       }),
+      { objects: ALL_OBJECTS },
     );
     expect(snapshot.opportunities).toEqual([
       {
@@ -130,7 +138,9 @@ describe("normalizeCompany", () => {
       id: `p${String(i).padStart(2, "0")}`,
       name: `Person ${i}`,
     }));
-    const snapshot = normalizeCompany(company({ people }));
+    const snapshot = normalizeCompany(company({ people }), {
+      objects: ALL_OBJECTS,
+    });
     expect((snapshot.people as unknown[]).length).toBe(20);
     expect(snapshot.truncated).toBe(true);
   });
@@ -142,6 +152,7 @@ describe("normalizeCompany", () => {
           { id: "n1", title: "Long", bodyV2: { markdown: "x".repeat(5000) } },
         ],
       }),
+      { objects: ALL_OBJECTS },
     );
     const note = (snapshot.notes as Record<string, unknown>[])[0]!;
     expect((note.body as string).length).toBe(2000);
@@ -163,6 +174,7 @@ describe("normalizeCompany", () => {
     }));
     const snapshot = normalizeCompany(
       company({ notes, people, opportunities }),
+      { objects: ALL_OBJECTS },
     );
     expect(
       Buffer.byteLength(JSON.stringify(snapshot), "utf8"),
@@ -172,6 +184,215 @@ describe("normalizeCompany", () => {
 
   it("omits the truncated marker when nothing was cut", () => {
     expect(normalizeCompany(company())).not.toHaveProperty("truncated");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Object capability enforcement (Codex U2 P1)
+// ---------------------------------------------------------------------------
+
+describe("normalizeCompany object capability", () => {
+  const raw = () =>
+    company({
+      people: [{ id: "p1", name: "Ada", email: "ada@acme.com" }],
+      opportunities: [{ id: "o1", name: "Big deal", stage: "PROPOSAL" }],
+      notes: [{ id: "n1", title: "Kickoff", body: "Secret note body." }],
+    });
+
+  it("drops ALL relations by default — omitted objects means companies-only", () => {
+    const snapshot = normalizeCompany(raw());
+    expect(snapshot).not.toHaveProperty("people");
+    expect(snapshot).not.toHaveProperty("opportunities");
+    expect(snapshot).not.toHaveProperty("notes");
+    expect(JSON.stringify(snapshot)).not.toContain("Secret note body");
+    expect(JSON.stringify(snapshot)).not.toContain("ada@acme.com");
+  });
+
+  it("keeps all relations when the binary 'relations' capability is granted", () => {
+    const snapshot = normalizeCompany(raw(), {
+      objects: ["companies", "relations"],
+    });
+    expect(snapshot.people).toEqual([
+      { id: "p1", name: "Ada", email: "ada@acme.com" },
+    ]);
+    expect(snapshot).toHaveProperty("opportunities");
+    expect(snapshot).toHaveProperty("notes");
+  });
+
+  it("rejects unknown object names and per-relation subsets fail-closed", () => {
+    expect(() =>
+      normalizeCompany(raw(), { objects: ["companies", "webhooks"] }),
+    ).toThrow(/webhooks/);
+    // No per-relation granularity: the wire reads all-or-nothing at depth 1.
+    expect(() =>
+      normalizeCompany(raw(), { objects: ["companies", "people"] }),
+    ).toThrow(/people/);
+  });
+});
+
+describe("acquireCompaniesPage object capability", () => {
+  const rawRecord = () =>
+    company({
+      people: [{ id: "p1", name: "Ada" }],
+      notes: [{ id: "n1", title: "Kickoff", body: "Secret note body." }],
+    });
+
+  it("defaults to companies-only: depth 0 and no relations in snapshots even if the server returns them", () => {
+    const { client, calls } = stubClient([rawRecord()]);
+    return acquireCompaniesPage(client, {
+      cursor: null,
+      pageSize: 10,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+    }).then((page) => {
+      expect((calls[0]![1] as { depth?: number }).depth).toBe(0);
+      const snapshot = page.items[0]!.normalizedSnapshot;
+      expect(snapshot).not.toHaveProperty("people");
+      expect(snapshot).not.toHaveProperty("notes");
+      expect(JSON.stringify(snapshot)).not.toContain("Secret note body");
+    });
+  });
+
+  it("requests depth 1 and keeps relations when 'relations' is granted", async () => {
+    const { client, calls } = stubClient([rawRecord()]);
+    const page = await acquireCompaniesPage(client, {
+      cursor: null,
+      pageSize: 10,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+      objects: ["companies", "relations"],
+    });
+    expect((calls[0]![1] as { depth?: number }).depth).toBe(1);
+    const snapshot = page.items[0]!.normalizedSnapshot!;
+    expect(snapshot.people).toEqual([{ id: "p1", name: "Ada" }]);
+    expect(snapshot).toHaveProperty("notes");
+    expect(page.items[0]!.extractionRecipe).toMatchObject({
+      depth: 1,
+      objects: ["companies", "relations"],
+    });
+  });
+
+  it("rejects a per-relation subset BEFORE any wire request (no depth-1 over-read)", async () => {
+    const { client, calls } = stubClient([rawRecord()]);
+    await expect(
+      acquireCompaniesPage(client, {
+        cursor: null,
+        pageSize: 10,
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+        objects: ["companies", "people"],
+      }),
+    ).rejects.toThrow(/people/);
+    expect(calls.length).toBe(0);
+  });
+
+  it("refuses to read at all when 'companies' is not approved", async () => {
+    const { client, calls } = stubClient([rawRecord()]);
+    await expect(
+      acquireCompaniesPage(client, {
+        cursor: null,
+        pageSize: 10,
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+        objects: [],
+      }),
+    ).rejects.toThrow(/companies/);
+    await expect(
+      acquireCompaniesPage(client, {
+        cursor: null,
+        pageSize: 10,
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+        objects: ["relations"],
+      }),
+    ).rejects.toThrow(/companies/);
+    expect(calls.length).toBe(0);
+  });
+
+  it("rejects unknown object names before any provider call", async () => {
+    const { client, calls } = stubClient([rawRecord()]);
+    await expect(
+      acquireCompaniesPage(client, {
+        cursor: null,
+        pageSize: 10,
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+        objects: ["companies", "tasks"],
+      }),
+    ).rejects.toThrow(/tasks/);
+    expect(calls.length).toBe(0);
+  });
+});
+
+describe("reconcileCompaniesPage object capability", () => {
+  const rawRecord = () =>
+    company({
+      notes: [{ id: "n1", title: "Kickoff", body: "Secret note body." }],
+    });
+
+  it("defaults to companies-only: depth 0 and relation data never enters snapshots", async () => {
+    const listPage = vi.fn().mockResolvedValue({
+      records: [rawRecord()],
+      pageInfo: { hasNextPage: false },
+      payload: {},
+    });
+    const page = await reconcileCompaniesPage({ listPage } as never, {
+      startingAfter: null,
+      pageSize: 10,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+    });
+    expect((listPage.mock.calls[0]?.[1] as Record<string, unknown>).depth).toBe(
+      0,
+    );
+    const snapshot = page.items[0]!.normalizedSnapshot;
+    expect(snapshot).not.toHaveProperty("notes");
+    expect(JSON.stringify(snapshot)).not.toContain("Secret note body");
+  });
+
+  it("requests depth 1 and keeps relations when granted", async () => {
+    const listPage = vi.fn().mockResolvedValue({
+      records: [rawRecord()],
+      pageInfo: { hasNextPage: false },
+      payload: {},
+    });
+    const page = await reconcileCompaniesPage({ listPage } as never, {
+      startingAfter: null,
+      pageSize: 10,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+      objects: ["companies", "relations"],
+    });
+    expect((listPage.mock.calls[0]?.[1] as Record<string, unknown>).depth).toBe(
+      1,
+    );
+    const note = (
+      page.items[0]!.normalizedSnapshot!.notes as Record<string, unknown>[]
+    )[0]!;
+    expect(note.body).toBe("Secret note body.");
+  });
+
+  it("fails closed on empty or unknown object sets", async () => {
+    const listPage = vi.fn();
+    await expect(
+      reconcileCompaniesPage({ listPage } as never, {
+        startingAfter: null,
+        pageSize: 10,
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+        objects: [],
+      }),
+    ).rejects.toThrow(/companies/);
+    await expect(
+      reconcileCompaniesPage({ listPage } as never, {
+        startingAfter: null,
+        pageSize: 10,
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+        objects: ["companies", "webhooks"],
+      }),
+    ).rejects.toThrow(/webhooks/);
+    expect(listPage).not.toHaveBeenCalled();
   });
 });
 
@@ -189,6 +410,7 @@ describe("buildCompanyDossier", () => {
         ],
         notes: [{ id: "n1", title: "Kickoff", body: "Met the team." }],
       }),
+      { objects: ALL_OBJECTS },
     );
     const one = buildCompanyDossier(snapshot);
     const two = buildCompanyDossier(snapshot);
@@ -231,6 +453,7 @@ describe("buildCompanyDossier", () => {
           { id: "n1", title: "Kickoff", body: "Met the team.\nGood vibes." },
         ],
       }),
+      { objects: ALL_OBJECTS },
     );
     const { markdown } = buildCompanyDossier(snapshot);
     expect(markdown.indexOf("- Ada — CTO")).toBeLessThan(
@@ -250,7 +473,7 @@ describe("buildCompanyDossier", () => {
       body: "y".repeat(2000),
     }));
     const { markdown } = buildCompanyDossier(
-      normalizeCompany(company({ notes })),
+      normalizeCompany(company({ notes }), { objects: ALL_OBJECTS }),
     );
     expect(markdown.length).toBeLessThanOrEqual(16 * 1024 + 100);
     expect(markdown).toContain("…truncated");
@@ -304,7 +527,7 @@ describe("acquireCompaniesPage", () => {
     expect(calls[0]![0]).toBe("companies");
     expect(calls[0]![1]).toEqual({
       limit: 25,
-      depth: 1,
+      depth: 0,
       orderBy: "updatedAt[AscNullsFirst]",
       filter: "updatedAt[gte]:2026-01-01T00:00:00Z",
     });
@@ -417,7 +640,8 @@ describe("acquireCompaniesPage", () => {
       source: "twenty",
       kind: "company_dossier",
       recipeVersion: "u1.1",
-      depth: 1,
+      depth: 0,
+      objects: ["companies"],
     });
     expect(item.normalizedSnapshot).toEqual(normalizeCompany(record));
   });
@@ -476,6 +700,7 @@ describe("evidenceVersionFor", () => {
       pageSize: 10,
       targetScope: "tenant" as const,
       targetId: TENANT_ID,
+      objects: ["companies", "relations"] as const,
     };
     const base = company({
       people: [{ id: "p1", name: "Ada", jobTitle: "CTO" }],
@@ -600,7 +825,7 @@ describe("reconcileCompaniesPage", () => {
     expect(opts.orderBy).toBeUndefined();
     expect(opts.startingAfter).toBeUndefined();
     expect(opts.limit).toBe(10);
-    expect(opts.depth).toBe(1);
+    expect(opts.depth).toBe(0);
     expect(page.pageToken).toBe("bk-2");
     // Never a checkpoint cursor: this pass must not advance the high-water.
     expect(page.nextCursor).toBeNull();

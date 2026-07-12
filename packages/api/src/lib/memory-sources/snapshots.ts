@@ -10,7 +10,9 @@
  */
 
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectVersionsCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -101,11 +103,11 @@ export async function putEvidenceSnapshot(
     snapshot: Record<string, unknown>;
     ttlDays?: number;
   },
-): Promise<{ ref: string; expiresAt: Date }> {
+): Promise<{ ref: string; expiresAt: Date; versionId: string | null }> {
   const ttlDays = clampSnapshotTtlDays(
     args.ttlDays ?? DEFAULT_SNAPSHOT_TTL_DAYS,
   );
-  await resolveClient(s3).send(
+  const response = await resolveClient(s3).send(
     new PutObjectCommand({
       Bucket: args.bucket,
       Key: args.key,
@@ -116,7 +118,50 @@ export async function putEvidenceSnapshot(
   return {
     ref: `s3://${args.bucket}/${args.key}`,
     expiresAt: new Date(Date.now() + ttlDays * DAY_MS),
+    // Versioned bucket: the exact version written, so an erase-fence
+    // post-write compensation can remove precisely this object version.
+    versionId: response.VersionId ?? null,
   };
+}
+
+/**
+ * Erase-fence compensation (round-6 P1): permanently remove ONE exact
+ * object version that the caller just wrote (a version-targeted delete
+ * leaves no delete marker). versionId=null falls back to a plain delete for
+ * non-versioned buckets.
+ */
+export async function deleteEvidenceSnapshotVersion(
+  s3: S3Client | undefined,
+  args: { bucket: string; key: string; versionId: string | null },
+): Promise<void> {
+  await resolveClient(s3).send(
+    new DeleteObjectCommand({
+      Bucket: args.bucket,
+      Key: args.key,
+      ...(args.versionId ? { VersionId: args.versionId } : {}),
+    }),
+  );
+}
+
+/**
+ * Verify that NO current or noncurrent version (and no delete marker) of
+ * exactly this key remains — the erase-fence compensation's proof step.
+ */
+export async function verifyNoSnapshotVersions(
+  s3: S3Client | undefined,
+  args: { bucket: string; key: string },
+): Promise<boolean> {
+  const page = await resolveClient(s3).send(
+    new ListObjectVersionsCommand({
+      Bucket: args.bucket,
+      Prefix: args.key,
+    }),
+  );
+  const matches = [
+    ...(page.Versions ?? []),
+    ...(page.DeleteMarkers ?? []),
+  ].filter((v) => v.Key === args.key);
+  return matches.length === 0;
 }
 
 /**

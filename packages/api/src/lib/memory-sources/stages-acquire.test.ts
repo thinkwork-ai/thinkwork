@@ -516,3 +516,146 @@ describe("runAcquire", () => {
     expect(vi.mocked(advanceCheckpoint)).not.toHaveBeenCalled();
   });
 });
+
+function baselineAcquireMocks() {
+  vi.clearAllMocks();
+  vi.mocked(checkTwentyReadiness).mockResolvedValue({
+    ready: true,
+    client: {} as never,
+  });
+  vi.mocked(ensureCheckpoint).mockResolvedValue({
+    id: "cp-1",
+    tenant_id: TENANT_ID,
+    source_config_id: SOURCE_ID,
+    partition_key: "companies",
+    cursor: {},
+    version: 0,
+  } as never);
+  vi.mocked(recordAcquiredPage).mockImplementation(
+    async (_db, args: { items: unknown[] }) =>
+      ({
+        changed: args.items,
+        seen: 0,
+        checkpoint: { id: "cp-1", cursor: {}, version: 1 },
+      }) as never,
+  );
+  vi.mocked(advanceCheckpoint).mockResolvedValue({
+    id: "cp-1",
+    cursor: {},
+    version: 2,
+  } as never);
+  vi.mocked(reconcileCompaniesPage).mockResolvedValue({
+    items: [],
+    nextCursor: null,
+    rawCount: 0,
+    pageToken: null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Binary object capability wiring (policy-agent contract) + erase fence
+// ---------------------------------------------------------------------------
+
+describe("runAcquire approved-objects wiring", () => {
+  beforeEach(baselineAcquireMocks);
+  function onePage() {
+    vi.mocked(acquireCompaniesPage).mockResolvedValue({
+      items: [item("c1", "2026-06-01T00:00:00Z")],
+      nextCursor: null,
+      rawCount: 1,
+      pageToken: null,
+    });
+  }
+
+  it("companies-only default: objects omitted on the source boundary reaches BOTH reads as undefined (depth-0)", async () => {
+    onePage();
+    const result = await runAcquire(makeCtx({ boundary: {} }));
+    expect(result.status).toBe("succeeded");
+    expect(vi.mocked(acquireCompaniesPage).mock.calls[0]![1]).toMatchObject({
+      objects: undefined,
+    });
+    expect(vi.mocked(reconcileCompaniesPage).mock.calls[0]![1]).toMatchObject({
+      objects: undefined,
+    });
+  });
+
+  it('["companies","relations"] propagates from the SAVED source boundary to BOTH the incremental read and the backscan', async () => {
+    onePage();
+    const result = await runAcquire(
+      makeCtx({ boundary: { objects: ["companies", "relations"] } }),
+    );
+    expect(result.status).toBe("succeeded");
+    expect(vi.mocked(acquireCompaniesPage).mock.calls[0]![1].objects).toEqual([
+      "companies",
+      "relations",
+    ]);
+    expect(vi.mocked(reconcileCompaniesPage).mock.calls[0]![1].objects).toEqual(
+      ["companies", "relations"],
+    );
+  });
+
+  it("companies-only reads record exactly what the adapter returned — no unapproved relation keys are invented downstream", async () => {
+    // The adapter owns relation filtering; the stage must pass its items to
+    // recordAcquiredPage byte-for-byte (companies-only snapshots carry no
+    // relation arrays).
+    const companiesOnlyItem = item("c1", "2026-06-01T00:00:00Z");
+    companiesOnlyItem.normalizedSnapshot = { id: "c1", name: "Acme" };
+    vi.mocked(acquireCompaniesPage).mockResolvedValue({
+      items: [companiesOnlyItem],
+      nextCursor: null,
+      rawCount: 1,
+      pageToken: null,
+    });
+    await runAcquire(makeCtx({ boundary: {} }));
+    const recorded = vi.mocked(recordAcquiredPage).mock.calls[0]![1] as {
+      items: Array<{ normalizedSnapshot: Record<string, unknown> }>;
+    };
+    expect(recorded.items).toHaveLength(1);
+    const snapshot = recorded.items[0]!.normalizedSnapshot;
+    expect(Object.keys(snapshot)).toEqual(["id", "name"]);
+    expect(snapshot).not.toHaveProperty("people");
+    expect(snapshot).not.toHaveProperty("opportunities");
+    expect(snapshot).not.toHaveProperty("notes");
+  });
+});
+
+describe("runAcquire erase write-fence (round-3 P1-2)", () => {
+  beforeEach(baselineAcquireMocks);
+  it("passes the source's captured erase generation into every page commit", async () => {
+    vi.mocked(acquireCompaniesPage).mockResolvedValue({
+      items: [item("c1", "2026-06-01T00:00:00Z")],
+      nextCursor: null,
+      rawCount: 1,
+      pageToken: null,
+    });
+    const ctx = makeCtx({});
+    (ctx.sources[0] as { erase_generation?: number }).erase_generation = 4;
+    await runAcquire(ctx);
+    for (const call of vi.mocked(recordAcquiredPage).mock.calls) {
+      expect(call[1]).toMatchObject({
+        eraseFence: { expectedEraseGeneration: 4 },
+      });
+    }
+  });
+
+  it("a fenced page commit fails the stage VISIBLY (no retry loop, no partial success)", async () => {
+    const { SourceEraseFencedError } = await import("./erase-fence.js");
+    vi.mocked(acquireCompaniesPage).mockResolvedValue({
+      items: [item("c1", "2026-06-01T00:00:00Z")],
+      nextCursor: null,
+      rawCount: 1,
+      pageToken: null,
+    });
+    vi.mocked(recordAcquiredPage).mockRejectedValue(
+      new SourceEraseFencedError(
+        "generation_advanced",
+        "erase generation advanced (0 → 1) — an erase is in progress, aborting write",
+      ),
+    );
+    const result = await runAcquire(makeCtx({}));
+    expect(result.status).toBe("failed");
+    expect((result as { error?: string }).error).toMatch(
+      /erase is in progress/,
+    );
+  });
+});

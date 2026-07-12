@@ -3508,11 +3508,23 @@ export type MemoryRetractionAttempt = {
   attemptCount: Scalars['Int']['output'];
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  eraseGeneration: Scalars['Int']['output'];
   errorClass?: Maybe<Scalars['String']['output']>;
   errorMessage?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
+  /**
+   * When the current worker's lease is presumed dead (locked_at + the stale
+   * window); null when unclaimed.
+   */
+  leaseExpiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lockGeneration: Scalars['Int']['output'];
+  lockedBy?: Maybe<Scalars['String']['output']>;
+  maxAttempts: Scalars['Int']['output'];
+  nextRetryAt?: Maybe<Scalars['AWSDateTime']['output']>;
   providerDocumentId: Scalars['String']['output'];
+  reconsolidationNote?: Maybe<Scalars['String']['output']>;
   scope: Scalars['String']['output'];
+  sourceConfigId: Scalars['ID']['output'];
   status: Scalars['String']['output'];
   targetBankId: Scalars['String']['output'];
 };
@@ -3554,15 +3566,6 @@ export type MemorySourceConfig = {
   sourceFamily: Scalars['String']['output'];
 };
 
-/**
- * Durable status of a source-level erase aggregate: 'completed' only after all
- * derivations are retracted via the saga, S3 evidence snapshots are deleted,
- * snapshot payloads cleared / non-derived evidence rows removed, and
- * checkpoints purged. 'pending' = retractions still in flight; the scheduled
- * memory-retraction-drainer self-finalizes the erase (child retries AND the
- * cleanup phase) — no further operator action is required. 'failed' =
- * dead-lettered children need operator attention.
- */
 export type MemorySourceEraseResult = {
   __typename?: 'MemorySourceEraseResult';
   attemptsDeadLettered: Scalars['Int']['output'];
@@ -3574,8 +3577,28 @@ export type MemorySourceEraseResult = {
   evidenceRowsDeleted: Scalars['Int']['output'];
   processedThisCall: Scalars['Int']['output'];
   snapshotObjectsDeleted: Scalars['Int']['output'];
-  status: Scalars['String']['output'];
+  /**
+   * Object VERSIONS + delete markers removed from the versioned
+   * brain-artifacts bucket (S1: erase completeness proof).
+   */
+  snapshotVersionsDeleted: Scalars['Int']['output'];
+  status: MemorySourceEraseStatus;
 };
+
+/**
+ * Durable status of a source-level erase aggregate: 'completed' only after all
+ * derivations are retracted via the saga, S3 evidence snapshots are deleted,
+ * snapshot payloads cleared / non-derived evidence rows removed, and
+ * checkpoints purged. 'pending' = retractions still in flight; the scheduled
+ * memory-retraction-drainer self-finalizes the erase (child retries AND the
+ * cleanup phase) — no further operator action is required. 'failed' =
+ * dead-lettered children need operator attention.
+ */
+export enum MemorySourceEraseStatus {
+  Completed = 'completed',
+  Failed = 'failed',
+  Pending = 'pending'
+}
 
 export enum MemoryStrategy {
   Episodes = 'EPISODES',
@@ -4127,6 +4150,12 @@ export type Mutation = {
   retractMemoryDerivation: MemoryRetractionAttempt;
   retryAgentDispatch: Message;
   retryKnowledgeBase: KnowledgeBase;
+  /**
+   * Operator DLQ retry: reset a dead_lettered (or failed) retraction attempt —
+   * saga child or erase marker — to a due queued state with a fresh attempt
+   * budget, fenced against stale workers.
+   */
+  retryMemoryRetractionAttempt: MemoryRetractionAttempt;
   /** Re-drive one failed component (failed → pending) and re-run its handler (tenant admin). */
   retryPluginComponent: PluginInstall;
   reviewGoal: ReviewGoalPayload;
@@ -5290,6 +5319,12 @@ export type MutationRetryAgentDispatchArgs = {
 
 export type MutationRetryKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationRetryMemoryRetractionAttemptArgs = {
+  attemptId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 

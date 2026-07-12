@@ -213,6 +213,14 @@ export const memorySourceConfigs = pgTable(
       .notNull()
       .default(sql`'{}'::jsonb`),
     policy_version: integer("policy_version").notNull().default(1),
+    // Erase write-fence (THINK-193 U2, Codex round-3 P1-2): bumped in the
+    // SAME transaction that disables the source and persists the erase
+    // marker (beginSourceErase). Stage writers capture the generation with
+    // the source row; every internal write CASes on it and external writes
+    // (Hindsight upsert, S3 put) re-check it first, so an in-flight
+    // acquire/project/retain can never resurrect claims/snapshots/documents
+    // after erase begins.
+    erase_generation: integer("erase_generation").notNull().default(0),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -227,6 +235,10 @@ export const memorySourceConfigs = pgTable(
       table.source_binding_key,
     ),
     index("memory_source_configs_tenant_idx").on(table.tenant_id),
+    check(
+      "memory_source_configs_erase_generation_nonnegative",
+      sql`${table.erase_generation} >= 0`,
+    ),
     check(
       "memory_source_configs_source_family_check",
       sql`${table.source_family} IN ('twenty', 'firecrawl', 'email', 'bedrock_kb')`,
@@ -659,6 +671,18 @@ export const memoryRetractionAttempts = pgTable(
     // so a stale worker reclaimed past its lease can never clobber the
     // newer claimant's progress.
     lock_generation: integer("lock_generation").notNull().default(0),
+    // Which erase generation of the source this row belongs to (Codex
+    // round-4 P1-C): 'erase' markers and their 'source'-scoped children are
+    // tagged with memory_source_configs.erase_generation at enqueue time so
+    // aggregate child accounting never counts dead-lettered children from a
+    // PREVIOUS (remediated) erase. 0 for derivation-scoped rows.
+    erase_generation: integer("erase_generation").notNull().default(0),
+    // Durable bounded-cleanup progress on 'erase' marker rows: NULL (not
+    // started) → 'snapshots_deleted' → 'evidence_purged'; checkpoints are
+    // deleted last and the marker goes terminal. cleanup_cursor carries the
+    // bounded evidence-purge resume position (last processed evidence id).
+    cleanup_phase: text("cleanup_phase"),
+    cleanup_cursor: text("cleanup_cursor"),
     // Non-null when the reconsolidation step was skipped (e.g. the adapter
     // is delete-capable but exposes no consolidator) — a durable
     // skipped-with-reason record, distinct from success.
@@ -683,6 +707,14 @@ export const memoryRetractionAttempts = pgTable(
       table.next_retry_at,
       table.created_at,
     ),
+    // Per-generation erase accounting (countSourceAttemptsByStatus /
+    // cleanup discovery).
+    index("memory_retraction_attempts_erase_accounting_idx").on(
+      table.source_config_id,
+      table.erase_generation,
+      table.scope,
+      table.status,
+    ),
     // v2 (THINK-193 U2): 'erase' rows are durable source-erase AGGREGATE
     // markers — one non-terminal marker per source (via the partial unique
     // document index on a synthetic erase:<sourceConfigId> document id).
@@ -705,6 +737,23 @@ export const memoryRetractionAttempts = pgTable(
     check(
       "memory_retraction_attempts_max_attempts_positive",
       sql`${table.max_attempts} > 0`,
+    ),
+    check(
+      "memory_retraction_attempts_erase_generation_nonnegative",
+      sql`${table.erase_generation} >= 0`,
+    ),
+    // Derivation-scoped rows never belong to an erase generation; erase
+    // markers and their 'source' children carry the generation they were
+    // enqueued/promoted under.
+    check(
+      "memory_retraction_attempts_derivation_generation_check",
+      sql`${table.scope} <> 'derivation' OR ${table.erase_generation} = 0`,
+    ),
+    // Cleanup phase progress is meaningful ONLY on erase markers and is a
+    // closed domain.
+    check(
+      "memory_retraction_attempts_cleanup_phase_check",
+      sql`${table.cleanup_phase} IS NULL OR (${table.scope} = 'erase' AND ${table.cleanup_phase} IN ('snapshots_deleted', 'evidence_purged'))`,
     ),
   ],
 );

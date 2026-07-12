@@ -47,6 +47,63 @@ const MAX_SNAPSHOT_BYTES = 64 * 1024;
 const MAX_DOSSIER_CHARS = 16 * 1024;
 const RELATION_KEYS = ["people", "opportunities", "notes"] as const;
 
+// ---------------------------------------------------------------------------
+// Object capability model (Codex U2 P1)
+// ---------------------------------------------------------------------------
+
+/**
+ * The governed Twenty dossier capability is BINARY: `companies` is the
+ * root record set (depth 0); `relations` grants the whole depth-1 dossier
+ * (people+opportunities+notes) as one unit. Twenty's REST listing offers
+ * only a depth 0/1 switch — no per-relation selection — so per-relation
+ * names would be dishonest: any single relation would still read every
+ * relation body over the wire. Per-relation entries are therefore NOT
+ * governed values and fail closed. The policy schema's `objects` domain
+ * (BOUNDARY_SCHEMAS.twenty.objects) must match this list — a policy test
+ * pins them together.
+ */
+export const TWENTY_GOVERNED_OBJECTS = ["companies", "relations"] as const;
+
+export type TwentyObjectName = (typeof TWENTY_GOVERNED_OBJECTS)[number];
+
+/** Omitted approval means the boundary default: companies scalars only. */
+const DEFAULT_OBJECTS: readonly TwentyObjectName[] = ["companies"];
+
+type RelationKey = (typeof RELATION_KEYS)[number];
+
+/**
+ * Canonicalize an approved-objects value: unknown names — including
+ * per-relation subsets like 'people' — throw (fail closed; an ungoverned
+ * name must never silently widen or narrow reads). `requireCompanies` is
+ * set at the page-read entry points: without the root record set approved
+ * there is nothing this adapter may read at all.
+ */
+
+function resolveApprovedObjects(
+  objects: readonly string[] | undefined,
+  opts: { requireCompanies: boolean },
+): { objects: readonly TwentyObjectName[]; relations: Set<RelationKey> } {
+  const list = objects ?? DEFAULT_OBJECTS;
+  for (const name of list) {
+    if (!(TWENTY_GOVERNED_OBJECTS as readonly string[]).includes(name)) {
+      throw new Error(
+        `unknown Twenty object '${name}' in approved objects — governed values are ${TWENTY_GOVERNED_OBJECTS.join(", ")} (relations are all-or-nothing: the wire has no per-relation selection)`,
+      );
+    }
+  }
+  if (opts.requireCompanies && !list.includes("companies")) {
+    throw new Error(
+      "the approved objects set does not include 'companies' — the authorization grant does not permit reading company records",
+    );
+  }
+  return {
+    objects: [...new Set(list)].sort() as TwentyObjectName[],
+    relations: list.includes("relations")
+      ? new Set<RelationKey>(RELATION_KEYS)
+      : new Set<RelationKey>(),
+  };
+}
+
 /** Per-relation scalar identity fields we keep. Nothing else survives. */
 const RELATION_FIELDS: Record<(typeof RELATION_KEYS)[number], string[]> = {
   people: [
@@ -206,16 +263,23 @@ function normalizeRelationItem(
 
 /**
  * Pure: reduce a raw depth-1 Twenty company record to a stable, bounded
- * plain object. Scalar identity fields plus at most 20 items each of
+ * plain object. Scalar identity fields plus — only when the binary
+ * 'relations' capability is approved — at most 20 items each of
  * people/opportunities/notes (scalar identity fields only, note bodies
- * truncated). Null/undefined keys are dropped; no token/credential fields
- * are ever copied (only allow-listed fields survive). The serialized
- * snapshot is capped at ~64KB by dropping relation tails, recording
- * `truncated: true` when anything was cut.
+ * truncated). Without 'relations', relation data is dropped here, BEFORE
+ * anything can land in a snapshot, even when the provider returned it
+ * (Codex U2 P1). Omitting `options.objects` means companies-only. Null/undefined keys are dropped; no token/credential
+ * fields are ever copied (only allow-listed fields survive). The
+ * serialized snapshot is capped at ~64KB by dropping relation tails,
+ * recording `truncated: true` when anything was cut.
  */
 export function normalizeCompany(
   record: Record<string, unknown>,
+  options?: { objects?: readonly string[] },
 ): Record<string, unknown> {
+  const { relations } = resolveApprovedObjects(options?.objects, {
+    requireCompanies: false,
+  });
   const out: Record<string, unknown> = {};
   setIfPresent(out, "id", stringOrNull(record.id));
   setIfPresent(out, "name", normalizeName(record.name));
@@ -240,6 +304,7 @@ export function normalizeCompany(
 
   let truncated = false;
   for (const key of RELATION_KEYS) {
+    if (!relations.has(key)) continue;
     const items = relationRecords(record[key]);
     if (items.length === 0) continue;
     if (items.length > MAX_RELATION_ITEMS) truncated = true;
@@ -553,6 +618,14 @@ export async function acquireCompaniesPage(
     targetId: string;
     recipeVersion?: string;
     /**
+     * Approved object capability from the authorization boundary
+     * (grant/config `objects`). Omitted means companies-only; the set
+     * must include 'companies' or the read is refused outright. The
+     * capability is binary — 'relations' selects depth 1 (whole dossier),
+     * otherwise depth 0 keeps every relation body off the wire.
+     */
+    objects?: readonly string[];
+    /**
      * Opaque Twenty pageInfo.endCursor from the PREVIOUS page of this run.
      * Threading it is what lets acquisition advance through a cohort of
      * records sharing one updatedAt (bulk imports) — the gte filter alone
@@ -561,12 +634,18 @@ export async function acquireCompaniesPage(
     startingAfter?: string | null;
   },
 ): Promise<AcquiredPage<TwentyCompaniesCursor>> {
+  const approved = resolveApprovedObjects(args.objects, {
+    requireCompanies: true,
+  });
   // The original query shape (filter + orderBy) is preserved on EVERY page
   // of a run, including page-token continuations (Codex F5) — dropping the
   // filter mid-walk would silently widen the result set.
   const { records, pageInfo } = await client.listPage("companies", {
     limit: args.pageSize,
-    depth: 1,
+    // Binary capability: depth 1 only when 'relations' is granted; depth 0
+    // keeps ALL relation bodies off the wire (there is no per-relation
+    // selection to honor a subset).
+    depth: approved.relations.size > 0 ? 1 : 0,
     orderBy: "updatedAt[AscNullsFirst]",
     startingAfter: args.startingAfter ?? undefined,
     filter: args.cursor?.lastUpdatedAt
@@ -588,7 +667,7 @@ export async function acquireCompaniesPage(
   if (trimmedByBoundary) kept = kept.slice(0, maxRecords);
 
   const items: EvidenceUpsert[] = kept.map((record) =>
-    toEvidenceUpsert(record, args),
+    toEvidenceUpsert(record, args, approved),
   );
 
   const last = kept[kept.length - 1];
@@ -620,8 +699,14 @@ function toEvidenceUpsert(
     targetId: string;
     recipeVersion?: string;
   },
+  approved: {
+    objects: readonly TwentyObjectName[];
+    relations: Set<RelationKey>;
+  },
 ): EvidenceUpsert {
-  const normalizedSnapshot = normalizeCompany(record);
+  const normalizedSnapshot = normalizeCompany(record, {
+    objects: approved.objects,
+  });
   const contentHash = computeContentHash(normalizedSnapshot);
   const updatedAt = stringOrNull(record.updatedAt);
   const parsed = updatedAt ? new Date(updatedAt) : null;
@@ -635,7 +720,9 @@ function toEvidenceUpsert(
       source: "twenty",
       kind: "company_dossier",
       recipeVersion: args.recipeVersion ?? "u1.1",
-      depth: 1,
+      // Audit trail: what the read was actually allowed to touch.
+      depth: approved.relations.size > 0 ? 1 : 0,
+      objects: [...approved.objects],
     },
     targetScope: args.targetScope,
     targetId: args.targetId,
@@ -660,15 +747,20 @@ export async function reconcileCompaniesPage(
     targetScope: SharedTargetScope;
     targetId: string;
     recipeVersion?: string;
+    /** Same capability semantics as acquireCompaniesPage. */
+    objects?: readonly string[];
   },
 ): Promise<AcquiredPage<TwentyCompaniesCursor>> {
+  const approved = resolveApprovedObjects(args.objects, {
+    requireCompanies: true,
+  });
   const { records, pageInfo } = await client.listPage("companies", {
     limit: args.pageSize,
-    depth: 1,
+    depth: approved.relations.size > 0 ? 1 : 0,
     startingAfter: args.startingAfter ?? undefined,
   });
   return {
-    items: records.map((record) => toEvidenceUpsert(record, args)),
+    items: records.map((record) => toEvidenceUpsert(record, args, approved)),
     nextCursor: null,
     rawCount: records.length,
     pageToken:

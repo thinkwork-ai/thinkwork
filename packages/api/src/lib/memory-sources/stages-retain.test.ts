@@ -40,10 +40,23 @@ vi.mock("../brain/dream/runner.js", () => ({
   runBrainDreamState: vi.fn(),
 }));
 
+// Erase write-fence: pass-through here — the fence's own behavior (pre/post
+// checks, exact-version compensation, marker reopen) is covered in
+// stages-erase-fence.test.ts.
+vi.mock("./erase-fence.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./erase-fence.js")>();
+  return {
+    ...actual,
+    assertSourceWritable: vi.fn(async () => {}),
+    rearmEraseCleanup: vi.fn(async () => true),
+  };
+});
+
 const putEvidenceSnapshot = vi.fn(
   async (_s3: unknown, args: { bucket: string; key: string }) => ({
     ref: `s3://${args.bucket}/${args.key}`,
     expiresAt: new Date("2026-08-10T00:00:00.000Z"),
+    versionId: "v1",
   }),
 );
 const getEvidenceSnapshot = vi.fn(async () => ({ name: "From S3" }));

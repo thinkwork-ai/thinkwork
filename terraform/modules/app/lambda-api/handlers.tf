@@ -209,12 +209,6 @@ locals {
     # secretsmanager:GetSecretValue on the thinkwork/* wildcard, so no
     # new IAM resource is needed.
     COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
-    # THINK-193 U2 (Codex P1 #4): the eraseMemorySource aggregate (resolved
-    # in graphql-http) deletes the source's evidence-snapshot objects from
-    # the brain-artifacts bucket. Rides the SSM runtime-config document, not
-    # the near-4KB graphql-http env block; the code resolves it via
-    # process.env first, then getConfig("BRAIN_ARTIFACTS_BUCKET").
-    BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
   }
 
   # Identity env + the secrets still in their one-release transition
@@ -351,6 +345,12 @@ locals {
     # encrypted brain-artifacts bucket under evidence-snapshots/ — Postgres
     # keeps only the s3:// ref + hash. 30-day lifecycle expiration below.
     "memory-stage-worker" = {
+      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
+    }
+    # THINK-193 U2 (Codex S1/S2): the retraction drainer performs the
+    # versioned evidence-snapshot deletion for source erases under its
+    # DEDICATED role (below) — the only place bulk destructive S3 runs.
+    "memory-retraction-drainer" = {
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
     }
     "oauth-authorize"     = local.slack_handler_env
@@ -845,9 +845,13 @@ resource "aws_lambda_function" "handler" {
   ]), toset(local.optional_integration_handler_names)) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
-  role          = aws_iam_role.lambda.arn
-  handler       = "index.handler"
-  runtime       = local.runtime
+  # S2 (THINK-193 U2): memory-retraction-drainer runs under a DEDICATED role
+  # so its destructive evidence-snapshot S3 capability (version enumeration +
+  # bulk version deletion) never leaks into the 90+ handlers on the shared
+  # role. Everything else keeps the shared role.
+  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : aws_iam_role.lambda.arn
+  handler = "index.handler"
+  runtime = local.runtime
   # Parameters and Secrets extension: container-local cache for the SSM
   # runtime-config document + Secrets Manager reads (runtime-config.tf).
   layers = local.api_handler_layers
@@ -1095,6 +1099,96 @@ resource "aws_lambda_function_event_invoke_config" "memory_retain" {
   function_name                = aws_lambda_function.handler["memory-retain"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
+}
+
+# ---------------------------------------------------------------------------
+# THINK-193 U2 (Codex S2): dedicated IAM role for memory-retraction-drainer.
+#
+# The drainer is the ONLY principal allowed to enumerate and bulk-delete
+# evidence-snapshot object VERSIONS (S1: the brain-artifacts bucket is
+# versioned; erase completeness requires deleting every noncurrent version
+# and delete marker under the source prefix). Granting that on the shared
+# api-lambda role would let every unrelated handler destroy any tenant's
+# evidence — hence the sibling-role pattern (same as
+# compliance-anchor-watchdog). The role otherwise carries only what the
+# drainer actually uses: logs (managed basic policy), Secrets Manager +
+# SSM runtime-config reads, and conditional KMS for the encrypted bucket.
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_role" "memory_retraction_drainer" {
+  name = "thinkwork-${var.stage}-memory-retraction-drainer-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "memory_retraction_drainer_basic" {
+  role       = aws_iam_role.memory_retraction_drainer.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "memory_retraction_drainer" {
+  name = "memory-retraction-drainer"
+  role = aws_iam_role.memory_retraction_drainer.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        # Versioned evidence-snapshot destruction, evidence-snapshots/ only.
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:DeleteObject",
+            "s3:DeleteObjectVersion",
+          ]
+          Resource = "${aws_s3_bucket.brain_artifacts.arn}/evidence-snapshots/*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:ListBucket",
+            "s3:ListBucketVersions",
+          ]
+          Resource = aws_s3_bucket.brain_artifacts.arn
+          Condition = {
+            StringLike = {
+              "s3:prefix" = "evidence-snapshots/*"
+            }
+          }
+        },
+        # Runtime-config document + platform secrets (DATABASE_URL rides the
+        # env during the R8 transition window; the loader prefetches the
+        # api-auth/appsync secrets at cold start).
+        {
+          Effect   = "Allow"
+          Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+          Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/*"
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["secretsmanager:GetSecretValue"]
+          Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"
+        },
+      ],
+      var.brain_artifacts_kms_key_arn != "" ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "kms:Decrypt",
+            "kms:GenerateDataKey",
+          ]
+          Resource = var.brain_artifacts_kms_key_arn
+        },
+      ] : [],
+    )
+  })
 }
 
 # memory-retraction-drainer (THINK-193 U2, Codex P1 #3): the retraction

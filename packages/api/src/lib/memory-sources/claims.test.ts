@@ -693,3 +693,251 @@ describe("upsertClaimsForEvidence claim lifecycle", () => {
     expect(bulletLines.filter((l) => l.includes("Address:"))).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Round-4 P1-A: superseded-edition edge retirement moved INTO the project
+// transaction — acquire leaves old supports active; project heals.
+// ---------------------------------------------------------------------------
+
+describe("upsertClaimsForEvidence superseded-edition edge retirement (P1-A)", () => {
+  const snapshotV1 = {
+    id: "co-1",
+    name: "Acme",
+    employees: 77,
+    updatedAt: T1,
+  };
+  const snapshotV2 = {
+    id: "co-1",
+    name: "Acme",
+    employees: 91,
+    updatedAt: T2,
+  };
+
+  function seedEvidence(store: FakeMemoryStore) {
+    store.evidenceItems.push(
+      {
+        id: "ev-1",
+        tenant_id: TENANT_ID,
+        source_config_id: SOURCE_CONFIG_ID,
+        source_item_id: "co-1",
+        source_version: "v1",
+        lifecycle: "active",
+      },
+      {
+        id: "ev-2",
+        tenant_id: TENANT_ID,
+        source_config_id: SOURCE_CONFIG_ID,
+        source_item_id: "co-1",
+        source_version: "v2",
+        lifecycle: "active",
+      },
+    );
+  }
+
+  it("a project crash between acquire and project leaves the OLD supports (and claims) fully active", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedEvidence(store);
+    await applyEdition(db, store, {
+      evidenceItemId: "ev-1",
+      snapshot: snapshotV1,
+    });
+    // Acquire of edition 2: the evidence is superseded but NO edge is
+    // retracted (recordAcquiredPage no longer touches edges) — and edition
+    // 2's project never runs (crash).
+    store.evidenceItems.find((r) => r.id === "ev-1")!.lifecycle = "superseded";
+
+    for (const claim of activeClaims(store)) {
+      const activeEdges = store.claimEdges.filter(
+        (e) => e.claim_id === claim.id && e.status === "active",
+      );
+      expect(activeEdges.length).toBeGreaterThan(0);
+      expect(activeEdges.every((e) => e.evidence_item_id === "ev-1")).toBe(
+        true,
+      );
+    }
+  });
+
+  it("the next successful project retires the superseded edition's edges atomically and heals the graph", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedEvidence(store);
+    await applyEdition(db, store, {
+      evidenceItemId: "ev-1",
+      snapshot: snapshotV1,
+    });
+    store.evidenceItems.find((r) => r.id === "ev-1")!.lifecycle = "superseded";
+
+    // Edition 2 projects WITHOUT any acquire-time retraction helper: the
+    // upsert transaction itself retires ev-1's edges.
+    await applyEdition(db, store, {
+      evidenceItemId: "ev-2",
+      snapshot: snapshotV2,
+    });
+
+    const ev1Edges = store.claimEdges.filter(
+      (e) => e.evidence_item_id === "ev-1",
+    );
+    expect(ev1Edges.length).toBeGreaterThan(0);
+    expect(ev1Edges.every((e) => e.status === "retracted")).toBe(true);
+    // Every active claim is supported by the NEW edition only.
+    for (const claim of activeClaims(store)) {
+      const activeEdges = store.claimEdges.filter(
+        (e) => e.claim_id === claim.id && e.status === "active",
+      );
+      expect(activeEdges.length).toBeGreaterThan(0);
+      expect(activeEdges.every((e) => e.evidence_item_id === "ev-2")).toBe(
+        true,
+      );
+    }
+    // And the employees value transitioned 77 → 91 with a closed interval.
+    const employees = claimsFor(store, "customer.employees");
+    const old = employees.find(
+      (c) => (c.value as { count: number }).count === 77,
+    )!;
+    expect(old.status).toBe("superseded");
+    expect(old.effective_to).toBeInstanceOf(Date);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-4 P2-D: interval closure on retraction, incl. null provider timestamp
+// ---------------------------------------------------------------------------
+
+describe("interval closure on retraction (P2-D)", () => {
+  it("multi-valued claims swept with a NULL edition timestamp close effective_to at the durable transition time", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    store.evidenceItems.push(
+      {
+        id: "ev-1",
+        tenant_id: TENANT_ID,
+        source_config_id: SOURCE_CONFIG_ID,
+        source_item_id: "co-1",
+        source_version: "v1",
+        lifecycle: "active",
+      },
+      {
+        id: "ev-2",
+        tenant_id: TENANT_ID,
+        source_config_id: SOURCE_CONFIG_ID,
+        source_item_id: "co-1",
+        source_version: "v2",
+        lifecycle: "active",
+      },
+    );
+    // Edition 1 (ev-1) asserts a person; edition 2 (ev-2) removes it.
+    const withPerson = {
+      id: "co-1",
+      name: "Acme",
+      people: [{ id: "p-1", name: "Pat" }],
+      updatedAt: T1,
+    };
+    await applyEdition(db, store, {
+      evidenceItemId: "ev-1",
+      snapshot: withPerson,
+    });
+    // Acquire supersedes ev-1; the new edition extracts no person and has
+    // NO provider timestamp at all.
+    store.evidenceItems.find((r) => r.id === "ev-1")!.lifecycle = "superseded";
+    await upsertClaimsForEvidence(db, {
+      tenantId: TENANT_ID,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+      sourceConfigId: SOURCE_CONFIG_ID,
+      evidenceItemId: "ev-2",
+      subjectKey: SUBJECT_KEY,
+      effectiveFrom: null,
+      claims: extractCompanyClaims({
+        snapshot: { id: "co-1", name: "Acme" },
+        sourceItemId: "co-1",
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+      }),
+    });
+
+    const person = claimsFor(store, "customer.person")[0]!;
+    expect(person.status).toBe("retracted");
+    expect(person.effective_to).toBeInstanceOf(Date);
+  });
+
+  it("deactivateOrphanedClaims closes effective_to at the durable transition time", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    await applyEdition(db, store, {
+      evidenceItemId: "ev-1",
+      snapshot: { id: "co-1", name: "Acme", updatedAt: T1 },
+    });
+    // All of ev-1's support disappears (erase finalize path).
+    retractSupportEdges(store, "ev-1");
+    const { deactivateOrphanedClaims } = await import("./claims.js");
+    const count = await deactivateOrphanedClaims(db, {
+      tenantId: TENANT_ID,
+      sourceConfigId: SOURCE_CONFIG_ID,
+      evidenceItemId: "ev-1",
+    });
+    expect(count).toBeGreaterThan(0);
+    for (const claim of store.claims.filter((c) => c.status === "retracted")) {
+      expect(claim.effective_to).toBeInstanceOf(Date);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Round-3 P1-2: erase write-fence inside the claim transaction
+// ---------------------------------------------------------------------------
+
+describe("upsertClaimsForEvidence erase fence", () => {
+  function seedSource(store: FakeMemoryStore, eraseGeneration: number) {
+    store.sourceConfigs.push({
+      id: SOURCE_CONFIG_ID,
+      tenant_id: TENANT_ID,
+      enabled: true,
+      erase_generation: eraseGeneration,
+    });
+  }
+
+  it("aborts the transaction (no claims, no edges) when the erase generation advanced", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 1); // erase already began: generation moved 0 → 1
+    await expect(
+      upsertClaimsForEvidence(db, {
+        tenantId: TENANT_ID,
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+        sourceConfigId: SOURCE_CONFIG_ID,
+        evidenceItemId: "ev-1",
+        subjectKey: SUBJECT_KEY,
+        effectiveFrom: new Date(T1),
+        eraseFence: { expectedEraseGeneration: 0 },
+        claims: extractCompanyClaims({
+          snapshot: { id: "co-1", name: "Acme", updatedAt: T1 },
+          sourceItemId: "co-1",
+          targetScope: "tenant",
+          targetId: TENANT_ID,
+        }),
+      }),
+    ).rejects.toThrow(/erase generation advanced/);
+    expect(store.claims).toHaveLength(0);
+    expect(store.claimEdges).toHaveLength(0);
+  });
+
+  it("writes normally when the fence matches", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 3);
+    const result = await upsertClaimsForEvidence(db, {
+      tenantId: TENANT_ID,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+      sourceConfigId: SOURCE_CONFIG_ID,
+      evidenceItemId: "ev-1",
+      subjectKey: SUBJECT_KEY,
+      effectiveFrom: new Date(T1),
+      eraseFence: { expectedEraseGeneration: 3 },
+      claims: extractCompanyClaims({
+        snapshot: { id: "co-1", name: "Acme", updatedAt: T1 },
+        sourceItemId: "co-1",
+        targetScope: "tenant",
+        targetId: TENANT_ID,
+      }),
+    });
+    expect(result.created).toBeGreaterThan(0);
+    expect(store.claims.length).toBeGreaterThan(0);
+  });
+});

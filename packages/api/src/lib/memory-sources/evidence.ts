@@ -130,6 +130,13 @@ export async function recordAcquiredPage(
      * dedupe by content-sensitive source_version makes rescans no-ops.
      */
     skipCheckpointAdvance?: boolean;
+    /**
+     * Erase write-fence (round-3 P1-2): when present, the transaction FOR
+     * SHARE-locks the source config row and aborts (rolls the whole page
+     * back) if the source is disabled or its erase_generation moved past
+     * the value captured at stage start.
+     */
+    eraseFence?: { expectedEraseGeneration: number };
   },
 ): Promise<{
   changed: EvidenceRow[];
@@ -137,6 +144,15 @@ export async function recordAcquiredPage(
   checkpoint: SourceCheckpoint;
 }> {
   return await db.transaction(async (tx) => {
+    if (args.eraseFence) {
+      const { assertSourceWritable } = await import("./erase-fence.js");
+      await assertSourceWritable(tx, {
+        tenantId: args.tenantId,
+        sourceConfigId: args.sourceConfigId,
+        expectedEraseGeneration: args.eraseFence.expectedEraseGeneration,
+        lock: true,
+      });
+    }
     // (a) Evidence upsert — RETURNING yields only freshly-inserted rows.
     let changed: EvidenceRow[] = [];
     if (args.items.length > 0) {
@@ -177,13 +193,19 @@ export async function recordAcquiredPage(
         .returning();
     }
 
-    // Supersede older active versions of items that just got a new version,
-    // and retract their claim-support edges in the same transaction — a
-    // superseded edition must stop counting as support (supportCount,
-    // orphan sweeps). The project stage re-supports surviving claims from
-    // the new edition, re-activating edges as needed.
+    // Supersede older active versions of items that just got a new version.
+    // Their claim-support edges deliberately STAY ACTIVE here (Codex round-4
+    // P1-A): retracting them at acquire time left active claims with zero
+    // active support if the project stage crashed before the replacement
+    // edition's supports landed. The retirement of superseded-edition edges
+    // now happens atomically inside upsertClaimsForEvidence's transaction,
+    // together with the new edition's supports and the zero-support sweep.
+    // Between acquire and project the invariant "active edges only point at
+    // active evidence" is therefore transiently violated BY DESIGN (see
+    // scripts/memory-sources/verify-claim-invariants.sql — quiescent
+    // invariant).
     if (changed.length > 0) {
-      const superseded = await tx
+      await tx
         .update(memoryEvidenceItems)
         .set({ lifecycle: "superseded", updated_at: new Date() })
         .where(
@@ -199,22 +221,7 @@ export async function recordAcquiredPage(
               changed.map((row) => row.id),
             ),
           ),
-        )
-        .returning({ id: memoryEvidenceItems.id });
-      if (superseded.length > 0) {
-        await tx
-          .update(memoryClaimEvidence)
-          .set({ status: "retracted", retracted_at: new Date() })
-          .where(
-            and(
-              inArray(
-                memoryClaimEvidence.evidence_item_id,
-                superseded.map((row) => row.id),
-              ),
-              eq(memoryClaimEvidence.status, "active"),
-            ),
-          );
-      }
+        );
     }
 
     // (b) Run-item idempotency ledger (replay-safe within the run).
@@ -462,9 +469,20 @@ export async function recordDerivationWithRunItem(
   args: {
     derivation: RecordDerivationArgs;
     runItem: RecordRunItemArgs;
+    /** Erase write-fence (round-3 P1-2) — see recordAcquiredPage. */
+    eraseFence?: { expectedEraseGeneration: number };
   },
 ): Promise<MemoryDerivationRow> {
   return await db.transaction(async (tx) => {
+    if (args.eraseFence) {
+      const { assertSourceWritable } = await import("./erase-fence.js");
+      await assertSourceWritable(tx, {
+        tenantId: args.derivation.tenantId,
+        sourceConfigId: args.derivation.sourceConfigId,
+        expectedEraseGeneration: args.eraseFence.expectedEraseGeneration,
+        lock: true,
+      });
+    }
     const derivation = await upsertDerivationInTx(tx, args.derivation);
     await recordRunItem(tx, args.runItem);
     return derivation;

@@ -54,40 +54,143 @@ export function grantInactiveReason(
  * requests the runtime default rather than slipping under the check.
  */
 export type BoundaryDimension =
-  /** Numeric ceiling: requested must be a finite number <= allowance. */
-  | { kind: "cap"; default: number }
-  /** Allowlist: requested must be an array whose elements all appear. */
-  | { kind: "allowlist"; default: readonly unknown[] };
+  /**
+   * Numeric ceiling. Values on BOTH sides must be integers inside
+   * [min, max] — the runtime clamps/floors out-of-domain values UPWARD
+   * (effectiveLimit min 1, clampSnapshotTtlDays min 7), so a
+   * zero/negative/fractional value must never pass comparison as if it
+   * were narrower (Codex P2).
+   */
+  | { kind: "cap"; default: number; min: number; max: number }
+  /**
+   * Allowlist over a closed value domain. Values on BOTH sides must be
+   * strings drawn from `domain` — an ungoverned value can neither be
+   * granted nor requested.
+   */
+  | {
+      kind: "allowlist";
+      default: readonly string[];
+      domain: readonly string[];
+    };
 
 export type BoundarySchema = Record<string, BoundaryDimension>;
 
 /**
  * Defaults track the runtime fallbacks in stages.ts / snapshots.ts
  * (DEFAULT_MAX_RECORDS, DEFAULT_PAGE_SIZE, DEFAULT_EVIDENCE_BATCH,
- * DEFAULT_SNAPSHOT_TTL_DAYS) and the single acquired partition 'companies'.
- * New source families register their schema here; a family without a
- * schema fails closed in assertBoundaryWithin.
+ * DEFAULT_SNAPSHOT_TTL_DAYS); cap min/max track the runtime clamps
+ * (effectiveLimit bounds, MAX_EVIDENCE_BATCH, clampSnapshotTtlDays). The
+ * `objects` domain must stay in lockstep with the adapter's
+ * TWENTY_GOVERNED_OBJECTS — a policy test pins them together. New source
+ * families register their schema here; a family without a schema fails
+ * closed in assertBoundaryWithin/assertGrantBoundaryValid.
  */
 export const BOUNDARY_SCHEMAS: Record<string, BoundarySchema> = {
   twenty: {
-    maxRecords: { kind: "cap", default: 200 },
-    pageSize: { kind: "cap", default: 50 },
-    projectBatch: { kind: "cap", default: 25 },
-    retainBatch: { kind: "cap", default: 25 },
-    snapshotTtlDays: { kind: "cap", default: 30 },
-    objects: { kind: "allowlist", default: ["companies"] },
+    maxRecords: { kind: "cap", default: 200, min: 1, max: 2000 },
+    pageSize: { kind: "cap", default: 50, min: 1, max: 200 },
+    projectBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },
+    // BINARY object capability: Twenty's REST listing offers only depth
+    // 0/1 — no per-relation selection — so 'relations' grants the whole
+    // depth-1 dossier (people+opportunities+notes) or nothing. Claiming
+    // finer granularity would filter storage while still reading
+    // ungranted relation bodies over the wire.
+    objects: {
+      kind: "allowlist",
+      default: ["companies"],
+      domain: ["companies", "relations"],
+    },
   },
 };
 
+function schemaFor(sourceFamily: string | undefined): BoundarySchema {
+  const schema = sourceFamily ? BOUNDARY_SCHEMAS[sourceFamily] : undefined;
+  if (!schema) {
+    throw new MemoryAuthorizationError(
+      `no boundary schema is registered for source family '${sourceFamily}' — refusing to evaluate boundaries`,
+    );
+  }
+  return schema;
+}
+
+/**
+ * Every key must be a governed dimension and every value must sit inside
+ * the dimension's canonical domain. On the grant side this stops a typo
+ * like `maxRecord` from silently falling back to the default envelope
+ * (Codex P2); on the requested side it is the fail-closed rejection of
+ * unknown/non-comparable config.
+ */
+function assertBoundarySideValid(
+  boundary: Record<string, unknown>,
+  schema: BoundarySchema,
+  sourceFamily: string | undefined,
+  side: "grant" | "source-config",
+): void {
+  for (const [key, value] of Object.entries(boundary)) {
+    const dimension = schema[key];
+    if (!dimension) {
+      throw new MemoryAuthorizationError(
+        `${side} boundary key '${key}' is not a governed dimension for source family '${sourceFamily}'`,
+      );
+    }
+    if (dimension.kind === "cap") {
+      if (
+        typeof value !== "number" ||
+        !Number.isInteger(value) ||
+        value < dimension.min ||
+        value > dimension.max
+      ) {
+        throw new MemoryAuthorizationError(
+          `${side} boundary key '${key}' (${JSON.stringify(value)}) must be an integer between ${dimension.min} and ${dimension.max}`,
+        );
+      }
+      continue;
+    }
+    if (!Array.isArray(value)) {
+      throw new MemoryAuthorizationError(
+        `${side} boundary key '${key}' (${JSON.stringify(value)}) must be an array of governed values (${dimension.domain.join(", ")})`,
+      );
+    }
+    for (const item of value) {
+      if (typeof item !== "string" || !dimension.domain.includes(item)) {
+        throw new MemoryAuthorizationError(
+          `${side} boundary key '${key}' includes ${JSON.stringify(item)}, which is not a governed value (${dimension.domain.join(", ")})`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * PURE: validate a grant boundary against its family schema at GRANT time,
+ * so operators get an immediate error for typo'd keys or out-of-domain
+ * values instead of storing an envelope that later evaluates as the
+ * defaults. Throws MemoryAuthorizationError naming the violating key.
+ */
+export function assertGrantBoundaryValid(
+  grantBoundary: Record<string, unknown>,
+  options: { sourceFamily: string },
+): void {
+  const sourceFamily = options?.sourceFamily;
+  assertBoundarySideValid(
+    grantBoundary,
+    schemaFor(sourceFamily),
+    sourceFamily,
+    "grant",
+  );
+}
+
 /**
  * PURE: assert the processor's source-config boundary is WITHIN the grant
- * envelope, compared over the family's governed dimensions using EFFECTIVE
- * values: a side that omits a dimension gets the schema default (fail
- * closed) — an empty grant allows exactly the defaults, not everything.
- * Unknown or non-comparable keys in the REQUESTED boundary throw; grant
- * keys outside the schema grant nothing and are ignored. `sourceFamily`
- * is REQUIRED so a future family without a registered schema fails closed
- * instead of silently evaluating under another family's policy. Throws
+ * envelope. Both sides are first validated against the family schema
+ * (unknown keys and out-of-domain values throw — on EITHER side), then
+ * compared per governed dimension using EFFECTIVE values: a side that
+ * omits a dimension gets the schema default (fail closed) — an empty
+ * grant allows exactly the defaults, not everything. `sourceFamily` is
+ * REQUIRED so a family without a registered schema fails closed instead
+ * of silently evaluating under another family's policy. Throws
  * MemoryAuthorizationError naming the violating key.
  */
 export function assertBoundaryWithin(
@@ -96,20 +199,14 @@ export function assertBoundaryWithin(
   options: { sourceFamily: string },
 ): void {
   const sourceFamily = options?.sourceFamily;
-  const schema = sourceFamily ? BOUNDARY_SCHEMAS[sourceFamily] : undefined;
-  if (!schema) {
-    throw new MemoryAuthorizationError(
-      `no boundary schema is registered for source family '${sourceFamily}' — refusing to compare boundaries`,
-    );
-  }
-
-  for (const key of Object.keys(configBoundary)) {
-    if (!(key in schema)) {
-      throw new MemoryAuthorizationError(
-        `source-config boundary key '${key}' is not a governed dimension for source family '${sourceFamily}'`,
-      );
-    }
-  }
+  const schema = schemaFor(sourceFamily);
+  assertBoundarySideValid(grantBoundary, schema, sourceFamily, "grant");
+  assertBoundarySideValid(
+    configBoundary,
+    schema,
+    sourceFamily,
+    "source-config",
+  );
 
   for (const [key, dimension] of Object.entries(schema)) {
     const allowance =
@@ -117,37 +214,19 @@ export function assertBoundaryWithin(
     const requested =
       key in configBoundary ? configBoundary[key] : dimension.default;
 
+    // Side validation above guarantees the shapes; only the envelope
+    // relation is left to check.
     if (dimension.kind === "cap") {
-      if (typeof allowance !== "number" || !Number.isFinite(allowance)) {
+      if ((requested as number) > (allowance as number)) {
         throw new MemoryAuthorizationError(
-          `grant boundary key '${key}' (${JSON.stringify(allowance)}) is not a finite number — re-issue the grant`,
-        );
-      }
-      if (
-        typeof requested !== "number" ||
-        !Number.isFinite(requested) ||
-        requested > allowance
-      ) {
-        throw new MemoryAuthorizationError(
-          `source-config boundary key '${key}' (${JSON.stringify(requested)}) exceeds the grant envelope cap ${allowance}`,
+          `source-config boundary key '${key}' (${JSON.stringify(requested)}) exceeds the grant envelope cap ${JSON.stringify(allowance)}`,
         );
       }
       continue;
     }
-
-    if (!Array.isArray(allowance)) {
-      throw new MemoryAuthorizationError(
-        `grant boundary key '${key}' (${JSON.stringify(allowance)}) is not an allowlist array — re-issue the grant`,
-      );
-    }
-    if (!Array.isArray(requested)) {
-      throw new MemoryAuthorizationError(
-        `source-config boundary key '${key}' (${JSON.stringify(requested)}) must be an array subset of the grant allowlist`,
-      );
-    }
-    const allowed = new Set(allowance.map((item) => JSON.stringify(item)));
-    for (const item of requested) {
-      if (!allowed.has(JSON.stringify(item))) {
+    const allowed = new Set(allowance as readonly string[]);
+    for (const item of requested as readonly string[]) {
+      if (!allowed.has(item)) {
         throw new MemoryAuthorizationError(
           `source-config boundary key '${key}' includes ${JSON.stringify(item)}, which is outside the grant allowlist`,
         );

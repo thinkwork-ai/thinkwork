@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertBoundaryWithin,
+  assertGrantBoundaryValid,
+  BOUNDARY_SCHEMAS,
   grantInactiveReason,
   MemoryAuthorizationError,
 } from "./policy.js";
+import { TWENTY_GOVERNED_OBJECTS } from "./adapters/twenty.js";
 
 describe("MemoryAuthorizationError", () => {
   it("has a stable name for callers that switch on it", () => {
@@ -29,7 +32,11 @@ describe("assertBoundaryWithin", () => {
   it("passes when the config boundary is a subset of the grant envelope", () => {
     expect(
       within(
-        { maxRecords: 100, pageSize: 50, objects: ["companies", "people"] },
+        {
+          maxRecords: 100,
+          pageSize: 50,
+          objects: ["companies", "relations"],
+        },
         { maxRecords: 100, pageSize: 10, objects: ["companies"] },
       ),
     ).not.toThrow();
@@ -74,7 +81,7 @@ describe("assertBoundaryWithin", () => {
     // … above throws. An empty grant is NOT an unlimited grant.
     expect(within({}, { maxRecords: 10_000 })).toThrow(/maxRecords/);
     expect(within({}, { pageSize: 51 })).toThrow(/pageSize/);
-    expect(within({}, { objects: ["people"] })).toThrow(/objects/);
+    expect(within({}, { objects: ["relations"] })).toThrow(/objects/);
     expect(within({}, { objects: ["companies"] })).not.toThrow();
   });
 
@@ -92,10 +99,13 @@ describe("assertBoundaryWithin", () => {
     expect(within({ maxRecords: 200 }, {})).not.toThrow();
   });
 
-  it("a grant may widen a dimension beyond its default", () => {
-    expect(within({ maxRecords: 5000 }, { maxRecords: 5000 })).not.toThrow();
+  it("a grant may widen a dimension beyond its default, up to the dimension max", () => {
+    expect(within({ maxRecords: 2000 }, { maxRecords: 2000 })).not.toThrow();
     expect(
-      within({ objects: ["companies", "people"] }, { objects: ["people"] }),
+      within(
+        { objects: ["companies", "relations"] },
+        { objects: ["relations"] },
+      ),
     ).not.toThrow();
   });
 
@@ -120,10 +130,57 @@ describe("assertBoundaryWithin", () => {
     ).toThrow(/objects/);
   });
 
-  it("ignores ungoverned keys that appear only in the grant", () => {
+  it("rejects unknown keys in the GRANT boundary (a typo must not fall back to defaults)", () => {
+    // 'maxRecord' (typo) silently granting the default 200 envelope was the
+    // Codex P2 finding — the grant must be rejected, not reinterpreted.
+    expect(within({ maxRecord: 100 }, {})).toThrow(/maxRecord/);
+    expect(within({ note: "operator comment" }, { maxRecords: 10 })).toThrow(
+      /note/,
+    );
+  });
+
+  it("rejects zero/negative/fractional numeric values on BOTH sides", () => {
+    // Runtime clamps floor values UPWARD (effectiveLimit min 1,
+    // snapshotTtlDays min 7), so out-of-domain values must never pass
+    // comparison as if they were narrower.
+    expect(within({}, { maxRecords: 0 })).toThrow(/maxRecords/);
+    expect(within({}, { pageSize: -1 })).toThrow(/pageSize/);
+    expect(within({}, { maxRecords: 2.5 })).toThrow(/maxRecords/);
+    expect(within({}, { snapshotTtlDays: 3 })).toThrow(/snapshotTtlDays/);
+    expect(within({ maxRecords: 0 }, {})).toThrow(/maxRecords/);
+    expect(within({ pageSize: 0.5 }, {})).toThrow(/pageSize/);
+    expect(within({ snapshotTtlDays: 3 }, {})).toThrow(/snapshotTtlDays/);
+    // Above the per-dimension max is equally invalid on either side.
+    expect(within({ maxRecords: 5000 }, {})).toThrow(/maxRecords/);
+    expect(within({}, { pageSize: 201 })).toThrow(/pageSize/);
+  });
+
+  it("rejects objects values outside the governed Twenty domain on BOTH sides", () => {
     expect(
-      within({ note: "operator comment" }, { maxRecords: 10 }),
+      within({ objects: ["webhooks"] }, { objects: ["webhooks"] }),
+    ).toThrow(/webhooks/);
+    expect(within({}, { objects: ["companies", "tasks"] })).toThrow(/tasks/);
+    expect(within({}, { objects: [42] })).toThrow(/objects/);
+    expect(
+      within(
+        { objects: ["companies", "relations"] },
+        { objects: ["companies", "relations"] },
+      ),
     ).not.toThrow();
+  });
+
+  it("rejects per-relation subsets: the wire is depth 0/1, so finer granularity cannot be honored", () => {
+    // 'people'/'opportunities'/'notes' are NOT governed values — a mixed
+    // subset like companies+people would still read every relation body
+    // over the wire at depth 1, so it must fail closed on BOTH sides.
+    expect(
+      within(
+        { objects: ["companies", "people"] },
+        { objects: ["companies", "people"] },
+      ),
+    ).toThrow(/people/);
+    expect(within({}, { objects: ["companies", "notes"] })).toThrow(/notes/);
+    expect(within({ objects: ["opportunities"] }, {})).toThrow(/opportunities/);
   });
 
   it("fails closed for a source family with no registered schema", () => {
@@ -147,6 +204,88 @@ describe("assertBoundaryWithin", () => {
     expect(within({}, { projectBatch: 26 })).toThrow(/projectBatch/);
     expect(within({}, { retainBatch: 26 })).toThrow(/retainBatch/);
     expect(within({}, { snapshotTtlDays: 31 })).toThrow(/snapshotTtlDays/);
+  });
+});
+
+describe("assertGrantBoundaryValid (grant-time validation)", () => {
+  it("accepts a well-formed grant boundary", () => {
+    expect(() =>
+      assertGrantBoundaryValid(
+        {
+          maxRecords: 500,
+          pageSize: 100,
+          objects: ["companies", "relations"],
+        },
+        { sourceFamily: "twenty" },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertGrantBoundaryValid({}, { sourceFamily: "twenty" }),
+    ).not.toThrow();
+  });
+
+  it("rejects unknown keys so operators see typos immediately", () => {
+    expect(() =>
+      assertGrantBoundaryValid({ maxRecord: 100 }, { sourceFamily: "twenty" }),
+    ).toThrow(/maxRecord/);
+    expect(() =>
+      assertGrantBoundaryValid({ maxRecord: 100 }, { sourceFamily: "twenty" }),
+    ).toThrow(MemoryAuthorizationError);
+  });
+
+  it("rejects out-of-domain numeric values", () => {
+    expect(() =>
+      assertGrantBoundaryValid({ maxRecords: 0 }, { sourceFamily: "twenty" }),
+    ).toThrow(/maxRecords/);
+    expect(() =>
+      assertGrantBoundaryValid({ pageSize: 2.5 }, { sourceFamily: "twenty" }),
+    ).toThrow(/pageSize/);
+    expect(() =>
+      assertGrantBoundaryValid(
+        { snapshotTtlDays: 365 },
+        { sourceFamily: "twenty" },
+      ),
+    ).toThrow(/snapshotTtlDays/);
+  });
+
+  it("rejects objects entries outside the governed domain", () => {
+    expect(() =>
+      assertGrantBoundaryValid(
+        { objects: ["companies", "webhooks"] },
+        { sourceFamily: "twenty" },
+      ),
+    ).toThrow(/webhooks/);
+    // Per-relation subsets are ungovernable (binary wire capability).
+    expect(() =>
+      assertGrantBoundaryValid(
+        { objects: ["companies", "people"] },
+        { sourceFamily: "twenty" },
+      ),
+    ).toThrow(/people/);
+    expect(() =>
+      assertGrantBoundaryValid(
+        { objects: "companies" },
+        { sourceFamily: "twenty" },
+      ),
+    ).toThrow(/objects/);
+  });
+
+  it("fails closed for an unregistered source family", () => {
+    expect(() =>
+      assertGrantBoundaryValid({}, { sourceFamily: "firecrawl" }),
+    ).toThrow(MemoryAuthorizationError);
+  });
+});
+
+describe("boundary schema <-> adapter capability drift", () => {
+  it("the twenty objects domain matches the adapter's governed object list", () => {
+    const dimension = BOUNDARY_SCHEMAS.twenty!.objects!;
+    expect(dimension.kind).toBe("allowlist");
+    if (dimension.kind === "allowlist") {
+      expect([...dimension.domain].sort()).toEqual(
+        [...TWENTY_GOVERNED_OBJECTS].sort(),
+      );
+    }
   });
 });
 

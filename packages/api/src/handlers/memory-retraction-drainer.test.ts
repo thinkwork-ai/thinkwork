@@ -34,6 +34,9 @@ function makeRow(
     locked_at: null,
     locked_by: null,
     lock_generation: 0,
+    erase_generation: 0,
+    cleanup_phase: null,
+    cleanup_cursor: null,
     reconsolidation_note: null,
     error_class: null,
     error_message: null,
@@ -277,10 +280,11 @@ describe("erase aggregate cleanup sweep", () => {
 
 // ---------------------------------------------------------------------------
 // Acceptance: ONE operator erase mutation → scheduled drainer ticks alone →
-// aggregate 'completed' (Codex P1 + addendum). Covers multi-tick child
-// completion, shared provider documents, S3 cleanup failure + retry with
-// checkpoints deleted LAST, dead-lettered children blocking cleanup, and
-// zero-derivation sources (durable erase marker).
+// aggregate 'completed' (Codex rounds 3-7). Covers multi-tick child
+// completion, shared provider documents, marker fenced claim + backoff +
+// budget, S3 cleanup failure + retry with checkpoints deleted LAST,
+// dead-lettered children blocking cleanup, zero-derivation sources,
+// idempotent initiation, and derivation-attempt collision promotion.
 // ---------------------------------------------------------------------------
 
 import {
@@ -290,16 +294,19 @@ import {
   isAttemptClaimable,
   processRetractionAttempt,
   resolveFailureTransition,
+  retryBackoffAt,
   runSourceErase,
   type RetractionStore,
   type SourceEraseStore,
+  type SnapshotDeleteResult,
 } from "../lib/memory-sources/retraction.js";
 
 const SOURCE_CONFIG_ID = "7f4b2a90-11a2-4a5f-9d1b-3c8e5f6a7b8c";
 const DOC = `external:${SOURCE_CONFIG_ID}:company:twenty-co-1`;
 const BANK = `tenant_${TENANT_ID}`;
 
-/** In-memory erase world: children + durable erase marker + S3/pg residue. */
+/** In-memory erase world: children + durable erase marker (full fenced
+ * claim/backoff/budget semantics) + S3/pg residue. */
 function makeEraseWorld(opts: {
   derivations: Array<{
     id: string;
@@ -309,17 +316,22 @@ function makeEraseWorld(opts: {
   /** Consumed per adapter.deleteDocument call; default "ok". */
   deleteDocumentResults?: Array<"fail" | "ok">;
   /** Consumed per deleteSnapshots call; default "ok". */
-  s3Results?: Array<"fail" | "ok">;
+  s3Results?: Array<"fail" | "ok" | "truncated">;
   s3Objects?: number;
+  markerMaxAttempts?: number;
 }) {
   const derivations = opts.derivations;
   const children: RetractionAttemptRow[] = [];
   let marker: RetractionAttemptRow | null = null;
+  let sourceGeneration = 0;
   const world = {
     derivations,
     children,
     get marker() {
       return marker;
+    },
+    get sourceGeneration() {
+      return sourceGeneration;
     },
     checkpointsPresent: true,
     evidenceResidue: true,
@@ -339,24 +351,42 @@ function makeEraseWorld(opts: {
     consolidateBankById: vi.fn(async () => {}),
   };
 
+  const markerTerminal = () =>
+    !marker ||
+    marker.status === "retracted" ||
+    marker.status === "dead_lettered";
+
+  /** Mirrors beginSourceErase: idempotent per active erase. */
+  const begin = () => {
+    if (!markerTerminal()) return marker!.erase_generation;
+    sourceGeneration += 1;
+    marker = makeRow("erase-marker-" + sourceGeneration, "queued", {
+      scope: "erase",
+      derivation_id: null,
+      source_config_id: SOURCE_CONFIG_ID,
+      provider: ERASE_MARKER_PROVIDER,
+      provider_document_id: eraseMarkerDocumentId(SOURCE_CONFIG_ID),
+      target_bank_id: eraseMarkerDocumentId(SOURCE_CONFIG_ID),
+      erase_generation: sourceGeneration,
+      next_retry_at: null,
+    });
+    return sourceGeneration;
+  };
+
+  /** Mirrors enqueueSourceErase: marker generation authoritative, collision
+   * promotion, generation carry-forward, bounded children. */
   const enqueue = async () => {
-    if (
-      !marker ||
-      marker.status === "retracted" ||
-      marker.status === "dead_lettered"
-    ) {
-      if (!marker) {
-        marker = makeRow("erase-marker", "queued", {
-          scope: "erase",
-          derivation_id: null,
-          source_config_id: SOURCE_CONFIG_ID,
-          provider: ERASE_MARKER_PROVIDER,
-          provider_document_id: eraseMarkerDocumentId(SOURCE_CONFIG_ID),
-          target_bank_id: eraseMarkerDocumentId(SOURCE_CONFIG_ID),
-        });
-      }
-    }
+    if (markerTerminal()) begin();
+    const generation = marker!.erase_generation;
     let enqueued = 0;
+    for (const child of children) {
+      if (child.status === "retracted" || child.status === "dead_lettered") {
+        continue;
+      }
+      // Collision promotion + generation carry-forward.
+      child.scope = "source";
+      child.erase_generation = generation;
+    }
     for (const d of derivations) {
       if (d.lifecycle !== "active" && d.lifecycle !== "superseded") continue;
       const nonTerminal = children.find(
@@ -373,11 +403,12 @@ function makeEraseWorld(opts: {
           source_config_id: SOURCE_CONFIG_ID,
           provider_document_id: DOC,
           target_bank_id: BANK,
+          erase_generation: generation,
         }),
       );
       enqueued += 1;
     }
-    return { enqueued };
+    return { enqueued, eraseGeneration: generation };
   };
 
   const findChild = (id: string) => children.find((a) => a.id === id);
@@ -473,9 +504,11 @@ function makeEraseWorld(opts: {
         .slice(0, limit)
         .map((a) => a.id);
     },
-    async countSourceAttemptsByStatus() {
+    async countSourceAttemptsByStatus(_t, _s, generation) {
       const counts: Record<string, number> = {};
       for (const a of children) {
+        if (a.scope !== "source") continue;
+        if (a.erase_generation !== generation) continue;
         counts[a.status] = (counts[a.status] ?? 0) + 1;
       }
       return counts;
@@ -485,23 +518,105 @@ function makeEraseWorld(opts: {
         (d) => d.lifecycle === "active" || d.lifecycle === "superseded",
       ).length;
     },
-    async clearAndPurgeEvidence() {
+    async clearEvidencePayloads() {
       world.cleanupOrder.push("purgeEvidence");
       world.evidenceResidue = false;
-      return { cleared: 2, deleted: 1 };
+      return 2;
+    },
+    async purgeNonDerivedEvidence() {
+      return { deleted: 1, nextCursor: null };
     },
     async deleteCheckpoints() {
       world.cleanupOrder.push("deleteCheckpoints");
       world.checkpointsPresent = false;
     },
-    async listEraseAggregatesNeedingCleanup(limit) {
-      if (!marker) return [];
-      if (marker.status === "retracted" || marker.status === "dead_lettered") {
-        return [];
+    async loadEraseMarker() {
+      return marker ? { ...marker } : null;
+    },
+    async claimEraseMarker(_t, _s, claimOpts) {
+      if (!marker || markerTerminal()) return null;
+      const now = claimOpts.now;
+      const due =
+        (marker.status === "queued" || marker.status === "failed") &&
+        (marker.next_retry_at === null || marker.next_retry_at <= now);
+      const staleRunning =
+        marker.status === "running" &&
+        (marker.locked_at === null ||
+          marker.locked_at.getTime() <= now.getTime() - 6 * 60_000);
+      if (!due && !staleRunning) return null;
+      const hasProgress =
+        marker.cleanup_phase !== null || marker.cleanup_cursor !== null;
+      if (marker.attempt_count >= marker.max_attempts && !hasProgress) {
+        return null;
       }
-      const childrenTerminal = children.every(
-        (a) => a.status === "retracted" || a.status === "dead_lettered",
+      marker.status = "running";
+      marker.attempt_count += 1;
+      marker.lock_generation += 1;
+      marker.locked_by = claimOpts.lockedBy;
+      marker.locked_at = now;
+      return { ...marker };
+    },
+    async recordEraseCleanupProgress(_id, fence, patch, progressOpts) {
+      if (!marker || !fenceMatches(marker, fence)) return false;
+      if (patch.cleanupPhase !== undefined) {
+        marker.cleanup_phase = patch.cleanupPhase as never;
+      }
+      if (patch.cleanupCursor !== undefined) {
+        marker.cleanup_cursor = patch.cleanupCursor as never;
+      }
+      marker.attempt_count = 0;
+      if (progressOpts.release) {
+        marker.status = "queued";
+        marker.next_retry_at = progressOpts.now;
+        marker.locked_at = null;
+        marker.locked_by = null;
+      }
+      return true;
+    },
+    async markEraseCleanupFailed(m, message, now, fence) {
+      if (!marker || !fenceMatches(marker, fence)) return "stale";
+      const transition = resolveFailureTransition(
+        m,
+        {
+          errorClass: "cleanup_failed",
+          errorMessage: message,
+          retryable: true,
+        },
+        now,
       );
+      marker.status = transition.status;
+      marker.next_retry_at = transition.nextRetryAt;
+      marker.locked_at = null;
+      marker.locked_by = null;
+      marker.error_class = "cleanup_failed";
+      marker.error_message = message;
+      marker.completed_at = transition.completedAt;
+      return { ...marker };
+    },
+    async markEraseCompleted(_id, now, fence) {
+      if (!marker || !fenceMatches(marker, fence)) return false;
+      marker.status = "retracted";
+      marker.completed_at = now;
+      marker.locked_at = null;
+      marker.locked_by = null;
+      return true;
+    },
+    async markEraseFailed(_t, _s, reason) {
+      if (marker && !markerTerminal()) {
+        marker.status = "dead_lettered";
+        marker.error_class = "children_dead_lettered";
+        marker.error_message = reason;
+      }
+    },
+    async listEraseAggregatesNeedingCleanup(limit) {
+      if (!marker || markerTerminal()) return [];
+      const childrenTerminal = children
+        .filter(
+          (a) =>
+            a.scope === "source" &&
+            a.erase_generation === marker!.erase_generation,
+        )
+        .every((a) => a.status === "retracted" || a.status === "dead_lettered");
       return childrenTerminal
         ? [{ tenantId: TENANT_ID, sourceConfigId: SOURCE_CONFIG_ID }].slice(
             0,
@@ -509,33 +624,21 @@ function makeEraseWorld(opts: {
           )
         : [];
     },
-    async markEraseCompleted() {
-      if (marker) {
-        marker.status = "retracted";
-        marker.completed_at = new Date();
-      }
-    },
-    async markEraseFailed(_t, _s, reason) {
-      if (marker) {
-        marker.status = "dead_lettered";
-        marker.error_class = "children_dead_lettered";
-        marker.error_message = reason;
-        marker.completed_at = new Date();
-      }
-    },
   };
 
-  const deleteSnapshots = vi.fn(async () => {
-    if ((s3Results.shift() ?? "ok") === "fail") {
-      throw new Error("s3 unavailable");
+  const deleteSnapshots = vi.fn(async (): Promise<SnapshotDeleteResult> => {
+    const mode = s3Results.shift() ?? "ok";
+    if (mode === "fail") throw new Error("s3 unavailable");
+    if (mode === "truncated") {
+      return { objects: 1, versions: 1000, truncated: true };
     }
     world.cleanupOrder.push("deleteSnapshots");
     const n = world.s3Objects;
     world.s3Objects = 0;
-    return n;
+    return { objects: n, versions: n, truncated: false };
   });
 
-  const eraseDeps = (now?: Date) => ({
+  const eraseDeps = (now?: Date, destructive = false) => ({
     db: noDb,
     adapter,
     eraseStore,
@@ -547,13 +650,18 @@ function makeEraseWorld(opts: {
         { lockedBy: "worker", now },
       ),
     deleteSnapshots,
+    destructiveCleanup: destructive,
+    nowFn: () => now ?? new Date(),
   });
 
-  const runMutation = (now?: Date) =>
-    runSourceErase(eraseDeps(now), {
+  /** THE operator mutation: atomic initiation + non-destructive aggregate. */
+  const runMutation = (now?: Date) => {
+    begin();
+    return runSourceErase(eraseDeps(now, false), {
       tenantId: TENANT_ID,
       sourceConfigId: SOURCE_CONFIG_ID,
     });
+  };
 
   const runTick = (tick: Date) =>
     runMemoryRetractionDrainer(
@@ -570,13 +678,24 @@ function makeEraseWorld(opts: {
             { lockedBy: tickOpts.lockedBy, now: tick },
           ),
         deadLetterExhausted: vi.fn(async () => []),
-        listEraseCleanup: (_db, limit) =>
-          eraseStore.listEraseAggregatesNeedingCleanup(limit),
-        runErase: (ref) => runSourceErase(eraseDeps(tick), ref),
+        listEraseCleanup: async (_db, limit) => {
+          // Emulate the due/lock predicate the drizzle listing applies.
+          const m = marker;
+          if (!m || markerTerminal()) return [];
+          if (m.next_retry_at && m.next_retry_at > tick) return [];
+          if (
+            m.locked_at &&
+            m.locked_at.getTime() > tick.getTime() - 6 * 60_000
+          ) {
+            return [];
+          }
+          return eraseStore.listEraseAggregatesNeedingCleanup(limit);
+        },
+        runErase: (ref) => runSourceErase(eraseDeps(tick, true), ref),
       },
     );
 
-  return { world, adapter, deleteSnapshots, runMutation, runTick };
+  return { world, adapter, deleteSnapshots, runMutation, runTick, begin };
 }
 
 const threeEditions = () => [
@@ -598,11 +717,13 @@ describe("acceptance: erase self-finalizes via the drainer alone", () => {
       deleteDocumentResults: ["fail", "fail", "ok"],
     });
 
-    // 1. THE one operator mutation → pending (child failed retryably).
+    // 1. THE one operator mutation → pending (child failed retryably); the
+    //    GraphQL path performs NO destructive S3 work (S2).
     const mutationResult = await fx.runMutation();
     expect(mutationResult.status).toBe("pending");
     expect(fx.world.children).toHaveLength(1); // one attempt for 3 editions
-    expect(fx.world.marker?.status).toBe("queued"); // durable aggregate marker
+    expect(fx.world.marker?.status).toBe("queued"); // durable marker
+    expect(fx.deleteSnapshots).not.toHaveBeenCalled();
 
     // 2. Drainer tick 1: child fails again → still pending, NO cleanup.
     const tick1 = await fx.runTick(futureTick(10));
@@ -625,28 +746,91 @@ describe("acceptance: erase self-finalizes via the drainer alone", () => {
     expect(fx.world.checkpointsPresent).toBe(false);
     expect(fx.world.marker?.status).toBe("retracted");
 
-    // 4. Idempotent re-query reports completed durably.
-    const finalStatus = await fx.runMutation(futureTick(31));
-    expect(finalStatus.status).toBe("completed");
+    // 4. Later ticks are quiet no-ops: the terminal marker is never
+    //    re-claimed and nothing re-runs.
+    const tick3 = await fx.runTick(futureTick(60));
+    expect(tick3.eraseAggregatesCompleted).toBe(0);
+    expect(tick3.eraseAggregatesIncomplete).toBe(0);
+    expect(tick3.errors).toBe(0);
+    expect(fx.world.marker?.status).toBe("retracted");
   });
 
-  it("an S3 cleanup failure is retried on a later tick; checkpoints are deleted LAST, never before S3 + evidence succeed", async () => {
+  it("idempotent initiation: repeated erase mutations while a child is in flight keep ONE generation and still complete", async () => {
+    const fx = makeEraseWorld({
+      derivations: threeEditions(),
+      deleteDocumentResults: ["fail", "ok"],
+    });
+
+    const first = await fx.runMutation();
+    expect(first.status).toBe("pending");
+    const generationAfterFirst = fx.world.marker!.erase_generation;
+
+    // Operator double-click / retry while the child is failed-retryable.
+    const second = await fx.runMutation();
+    expect(second.status).toBe("pending");
+    expect(fx.world.marker!.erase_generation).toBe(generationAfterFirst);
+    // No orphaned children on another generation.
+    expect(
+      fx.world.children.every(
+        (c) => c.erase_generation === generationAfterFirst,
+      ),
+    ).toBe(true);
+
+    const tick = await fx.runTick(futureTick(10));
+    expect(tick.eraseAggregatesCompleted).toBe(1);
+    expect(fx.world.marker?.status).toBe("retracted");
+  });
+
+  it("P1-B: an in-flight derivation-scoped attempt is PROMOTED into the erase and the evidence still ends scrubbed", async () => {
+    const fx = makeEraseWorld({ derivations: threeEditions() });
+    // A user retracted one derivation right before the erase: its attempt
+    // holds the per-document uniqueness slot.
+    fx.world.children.push(
+      makeRow("pre-existing", "queued", {
+        scope: "derivation",
+        derivation_id: "d3",
+        source_config_id: SOURCE_CONFIG_ID,
+        provider_document_id: DOC,
+        target_bank_id: BANK,
+        erase_generation: 0,
+      }),
+    );
+
+    const mutationResult = await fx.runMutation();
+    // Promotion: the colliding attempt is now scope='source' on the active
+    // generation — counted by the aggregate.
+    const promoted = fx.world.children.find((c) => c.id === "pre-existing")!;
+    expect(promoted.scope).toBe("source");
+    expect(promoted.erase_generation).toBe(fx.world.marker!.erase_generation);
+    expect(["pending", "completed"]).toContain(mutationResult.status);
+
+    const tick = await fx.runTick(futureTick(10));
+    expect(tick.eraseAggregatesCompleted).toBe(1);
+    // Defensive evidence scrub ran regardless of which scope semantics the
+    // child finalized under.
+    expect(fx.world.evidenceResidue).toBe(false);
+    expect(fx.world.checkpointsPresent).toBe(false);
+  });
+
+  it("an S3 cleanup failure backs off and is retried on a later tick; checkpoints are deleted LAST, never before S3 + evidence succeed", async () => {
     const fx = makeEraseWorld({
       derivations: threeEditions(),
       s3Results: ["fail", "ok"],
     });
 
-    // Mutation: children retract inline, but the cleanup's S3 delete fails
-    // → pending, marker alive, checkpoints untouched.
-    const mutationResult = await fx.runMutation();
-    expect(mutationResult.status).toBe("pending");
+    // Mutation drains children inline (no S3 — S2), then tick 1's cleanup
+    // S3 delete fails → marker failed with backoff, checkpoints untouched.
+    await fx.runMutation();
+    const tick1 = await fx.runTick(futureTick(1));
+    expect(tick1.eraseAggregatesIncomplete).toBe(1);
     expect(fx.world.checkpointsPresent).toBe(true);
     expect(fx.world.evidenceResidue).toBe(true);
-    expect(fx.world.marker?.status).toBe("queued");
+    expect(fx.world.marker?.status).toBe("failed");
+    expect(fx.world.marker?.next_retry_at).not.toBeNull();
 
-    // Drainer tick: cleanup sweep retries and completes.
-    const tick = await fx.runTick(futureTick(10));
-    expect(tick.eraseAggregatesCompleted).toBe(1);
+    // Next tick past the backoff: cleanup retries and completes.
+    const tick2 = await fx.runTick(futureTick(30));
+    expect(tick2.eraseAggregatesCompleted).toBe(1);
     expect(fx.world.checkpointsPresent).toBe(false);
     expect(fx.world.marker?.status).toBe("retracted");
     // Strict cleanup order: S3 → evidence purge → checkpoints LAST.
@@ -657,22 +841,38 @@ describe("acceptance: erase self-finalizes via the drainer alone", () => {
     ]);
   });
 
+  it("a TRUNCATED S3 sweep progresses across ticks without consuming the failure budget", async () => {
+    const fx = makeEraseWorld({
+      derivations: [],
+      markerMaxAttempts: 5,
+      s3Results: ["truncated", "truncated", "truncated", "truncated", "ok"],
+    });
+    await fx.runMutation();
+    let completedTick = -1;
+    for (let i = 1; i <= 7; i += 1) {
+      const tick = await fx.runTick(futureTick(i));
+      if (tick.eraseAggregatesCompleted > 0) {
+        completedTick = i;
+        break;
+      }
+    }
+    // 5 bounded S3 passes with max_attempts=5: completes because durable
+    // progress returns the budget (only caught failures consume it).
+    expect(completedTick).toBeGreaterThan(0);
+    expect(fx.world.marker?.status).toBe("retracted");
+  });
+
   it("a dead-lettered child PREVENTS cleanup and surfaces the aggregate as failed (marker dead-lettered, never silently pending)", async () => {
     const fx = makeEraseWorld({
       derivations: threeEditions(),
-      // Non-retryable enough: exhaust all 5 attempts.
       deleteDocumentResults: ["fail", "fail", "fail", "fail", "fail"],
     });
 
     await fx.runMutation();
-    // Drive drainer ticks until the child dead-letters (max_attempts = 5).
     for (let i = 1; i <= 6; i += 1) {
       await fx.runTick(futureTick(i * 60));
     }
     expect(fx.world.children[0]!.status).toBe("dead_lettered");
-
-    // The cleanup sweep resolves the aggregate as FAILED: cleanup never ran
-    // and the durable marker is dead-lettered (surfaced, not pending).
     expect(fx.world.checkpointsPresent).toBe(true);
     expect(fx.world.evidenceResidue).toBe(true);
     expect(fx.world.cleanupOrder).toEqual([]);
@@ -680,31 +880,23 @@ describe("acceptance: erase self-finalizes via the drainer alone", () => {
     expect(fx.world.marker?.error_class).toBe("children_dead_lettered");
   });
 
-  it("a source with ZERO derivations (only evidence + checkpoints) survives an operator-call S3 failure via the durable marker", async () => {
+  it("a source with ZERO derivations survives an early S3 failure via the durable marker", async () => {
     const fx = makeEraseWorld({
       derivations: [],
       s3Results: ["fail", "ok"],
     });
 
-    // Operator call: no children to retract; cleanup's S3 delete fails →
-    // pending. Without the durable erase marker the drainer would have no
-    // way to discover this source ever again.
     const mutationResult = await fx.runMutation();
     expect(mutationResult.status).toBe("pending");
     expect(fx.world.children).toHaveLength(0);
     expect(fx.world.marker?.status).toBe("queued");
-    expect(fx.world.checkpointsPresent).toBe(true);
 
-    // A later drainer tick discovers the marker and completes the erase.
-    const tick = await fx.runTick(futureTick(10));
-    expect(tick.eraseAggregatesCompleted).toBe(1);
+    const tick1 = await fx.runTick(futureTick(1));
+    expect(tick1.eraseAggregatesIncomplete).toBe(1);
+    const tick2 = await fx.runTick(futureTick(30));
+    expect(tick2.eraseAggregatesCompleted).toBe(1);
     expect(fx.world.checkpointsPresent).toBe(false);
     expect(fx.world.evidenceResidue).toBe(false);
     expect(fx.world.marker?.status).toBe("retracted");
-    expect(fx.world.cleanupOrder).toEqual([
-      "deleteSnapshots",
-      "purgeEvidence",
-      "deleteCheckpoints",
-    ]);
   });
 });

@@ -146,15 +146,30 @@ locals {
         Action   = ["s3:ListBucket"]
         Resource = aws_s3_bucket.brain_artifacts.arn
       },
-      # THINK-193 U2 (Codex P1 #4): source-level memory erase must delete the
-      # source's evidence-snapshot objects, not wait out the 30-day lifecycle
-      # rule. Delete is scoped to the evidence-snapshots/ prefix only — the
-      # rest of the brain-artifacts bucket (durable source artifacts,
-      # manifests, exports) stays non-deletable from Lambda.
+      # THINK-193 U2 (Codex S2 + round-6 P1): bulk/prefix destruction of
+      # evidence snapshots lives EXCLUSIVELY on the memory-retraction-drainer's
+      # dedicated role (handlers.tf). The SHARED role gets only the narrow
+      # erase-fence COMPENSATION capability: a stage worker that loses the
+      # fence mid-PutObject must delete the EXACT object version it just
+      # wrote (VersionId from its own PutObject response) and verify the key
+      # is gone. Without ListBucketVersions-driven enumeration + bulk delete
+      # this cannot destroy anything the caller did not itself write —
+      # version ids are unguessable. ListBucketVersions is granted read-only
+      # for the verification step, prefix-conditioned.
       {
         Effect   = "Allow"
-        Action   = ["s3:DeleteObject"]
+        Action   = ["s3:DeleteObjectVersion"]
         Resource = "${aws_s3_bucket.brain_artifacts.arn}/evidence-snapshots/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucketVersions"]
+        Resource = aws_s3_bucket.brain_artifacts.arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = "evidence-snapshots/*"
+          }
+        }
       },
       # (was inline policy "cognito-access")
       {

@@ -47,14 +47,34 @@ export async function memoryRetractionAttempts(
   return rows.map(toGraphqlRetractionAttempt);
 }
 
+/** Lease horizon: a lock older than this is presumed dead (mirrors
+ * RETRACTION_LOCK_STALE_AFTER_MS in lib/memory-sources/retraction.ts). */
+const LEASE_TTL_MS = 6 * 60 * 1000;
+
 export function toGraphqlRetractionAttempt(row: RetractionAttemptRow) {
+  const lockedAt =
+    row.locked_at instanceof Date
+      ? row.locked_at
+      : row.locked_at
+        ? new Date(row.locked_at)
+        : null;
   return {
     id: row.id,
     scope: row.scope,
+    sourceConfigId: row.source_config_id,
     providerDocumentId: row.provider_document_id,
     targetBankId: row.target_bank_id,
     status: row.status,
     attemptCount: row.attempt_count,
+    maxAttempts: row.max_attempts,
+    nextRetryAt: toIso(row.next_retry_at),
+    lockedBy: row.locked_by,
+    lockGeneration: row.lock_generation ?? 0,
+    leaseExpiresAt: lockedAt
+      ? new Date(lockedAt.getTime() + LEASE_TTL_MS).toISOString()
+      : null,
+    eraseGeneration: row.erase_generation ?? 0,
+    reconsolidationNote: row.reconsolidation_note,
     errorClass: row.error_class,
     errorMessage: row.error_message,
     createdAt: toIso(row.created_at),

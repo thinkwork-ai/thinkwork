@@ -616,10 +616,22 @@ being retracted or erased.
 type MemoryRetractionAttempt {
   id: ID!
   scope: String!
+  sourceConfigId: ID!
   providerDocumentId: String!
   targetBankId: String!
   status: String!
   attemptCount: Int!
+  maxAttempts: Int!
+  nextRetryAt: AWSDateTime
+  lockedBy: String
+  lockGeneration: Int!
+  """
+  When the current worker's lease is presumed dead (locked_at + the stale
+  window); null when unclaimed.
+  """
+  leaseExpiresAt: AWSDateTime
+  eraseGeneration: Int!
+  reconsolidationNote: String
   errorClass: String
   errorMessage: String
   createdAt: AWSDateTime
@@ -635,14 +647,25 @@ memory-retraction-drainer self-finalizes the erase (child retries AND the
 cleanup phase) — no further operator action is required. 'failed' =
 dead-lettered children need operator attention.
 """
+enum MemorySourceEraseStatus {
+  completed
+  pending
+  failed
+}
+
 type MemorySourceEraseResult {
-  status: String!
+  status: MemorySourceEraseStatus!
   attemptsTotal: Int!
   attemptsRetracted: Int!
   attemptsPending: Int!
   attemptsDeadLettered: Int!
   processedThisCall: Int!
   snapshotObjectsDeleted: Int!
+  """
+  Object VERSIONS + delete markers removed from the versioned
+  brain-artifacts bucket (S1: erase completeness proof).
+  """
+  snapshotVersionsDeleted: Int!
   evidenceRowsCleared: Int!
   evidenceRowsDeleted: Int!
   checkpointsDeleted: Boolean!
@@ -709,4 +732,13 @@ extend type Mutation {
   surface as status 'failed'.
   """
   eraseMemorySource(tenantId: ID, sourceConfigId: ID!): MemorySourceEraseResult!
+  """
+  Operator DLQ retry: reset a dead_lettered (or failed) retraction attempt —
+  saga child or erase marker — to a due queued state with a fresh attempt
+  budget, fenced against stale workers.
+  """
+  retryMemoryRetractionAttempt(
+    tenantId: ID
+    attemptId: ID!
+  ): MemoryRetractionAttempt!
 }

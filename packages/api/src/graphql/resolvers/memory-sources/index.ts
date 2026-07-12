@@ -14,6 +14,7 @@ import { grantMemorySourceAuthorization } from "./grantMemorySourceAuthorization
 import { revokeMemorySourceAuthorization } from "./revokeMemorySourceAuthorization.mutation.js";
 import { retractMemoryDerivation } from "./retractMemoryDerivation.mutation.js";
 import { eraseMemorySource } from "./eraseMemorySource.mutation.js";
+import { retryMemoryRetractionAttempt } from "./retryMemoryRetractionAttempt.mutation.js";
 
 export const memorySourceQueries = {
   memoryProcessorConfigs,
@@ -29,4 +30,5 @@ export const memorySourceMutations = {
   revokeMemorySourceAuthorization,
   retractMemoryDerivation,
   eraseMemorySource,
+  retryMemoryRetractionAttempt,
 };

@@ -2350,6 +2350,9 @@ Join hints:
 | locked_at | timestamp with time zone |  |
 | locked_by | text |  |
 | lock_generation | integer | not null |
+| erase_generation | integer | not null |
+| cleanup_phase | text |  |
+| cleanup_cursor | text |  |
 | reconsolidation_note | text |  |
 | error_class | text |  |
 | error_message | text |  |
@@ -2361,6 +2364,7 @@ Enum values:
 
 - `scope`: `derivation`, `source`, `erase`
 - `status`: `queued`, `running`, `supports_updated`, `provider_deleted`, `reconsolidated`, `retracted`, `failed`, `dead_lettered`
+- `cleanup_phase`: `snapshots_deleted`, `evidence_purged`
 
 Join hints:
 
@@ -2454,6 +2458,7 @@ Join hints:
 | enabled | boolean | not null |
 | boundary | jsonb | not null |
 | policy_version | integer | not null |
+| erase_generation | integer | not null |
 | created_at | timestamp with time zone | not null |
 | updated_at | timestamp with time zone | not null |
 

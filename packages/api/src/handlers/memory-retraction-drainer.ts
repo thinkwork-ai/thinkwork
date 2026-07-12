@@ -195,7 +195,12 @@ export async function runMemoryRetractionDrainer(
     options.runErase ??
     (async (ref: { tenantId: string; sourceConfigId: string }) => {
       const adapter = options.adapter ?? (await resolveAdapter());
-      return runSourceErase({ db, adapter }, ref);
+      // S2: ONLY the drainer (dedicated IAM role with the evidence-snapshots
+      // version-delete grant) performs destructive cleanup.
+      return runSourceErase(
+        { db, adapter, destructiveCleanup: true, cleanupLockedBy: lockedBy },
+        ref,
+      );
     });
   try {
     const aggregates = await listEraseCleanup(
@@ -208,7 +213,7 @@ export async function runMemoryRetractionDrainer(
         if (eraseResult.status === "completed") {
           summary.eraseAggregatesCompleted += 1;
           console.log(
-            `[memory-retraction-drainer] erase aggregate completed tenant=${ref.tenantId} source=${ref.sourceConfigId} snapshots=${eraseResult.snapshotObjectsDeleted} evidenceCleared=${eraseResult.evidenceRowsCleared} evidenceDeleted=${eraseResult.evidenceRowsDeleted}`,
+            `[memory-retraction-drainer] erase aggregate completed tenant=${ref.tenantId} source=${ref.sourceConfigId} snapshotObjects=${eraseResult.snapshotObjectsDeleted} snapshotVersions=${eraseResult.snapshotVersionsDeleted} evidenceCleared=${eraseResult.evidenceRowsCleared} evidenceDeleted=${eraseResult.evidenceRowsDeleted}`,
           );
         } else {
           summary.eraseAggregatesIncomplete += 1;
@@ -224,6 +229,9 @@ export async function runMemoryRetractionDrainer(
       }
     }
   } catch (err) {
+    // Round-3 P2-4: a failed cleanup LISTING is an unhealthy tick — it must
+    // show in the structured metric, not just in a log line.
+    summary.errors += 1;
     console.error(
       `[memory-retraction-drainer] erase cleanup sweep failed: ${(err as Error)?.message ?? String(err)}`,
     );
