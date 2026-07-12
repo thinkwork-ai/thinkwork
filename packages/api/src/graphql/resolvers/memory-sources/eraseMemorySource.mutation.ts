@@ -1,26 +1,25 @@
 /**
  * eraseMemorySource — disable a source config and erase its footprint
- * (THINK-193 U2): enqueue erase attempts for the source's projections,
- * process each inline sequentially (RequestResponse — errors surface),
- * then purge the source's checkpoints so a re-enable starts from scratch.
- * Returns the number of processed retraction attempts.
+ * (THINK-193 U2, Codex P1 #4): the erase is a durable AGGREGATE over the
+ * per-document retraction saga. It only reports "completed" after every
+ * derivation is retracted, every S3 evidence-snapshot object under the
+ * source's prefix is deleted, snapshot payloads are cleared and non-derived
+ * evidence rows removed, and — only then — checkpoints are purged. Partial
+ * progress returns status "pending" and SELF-FINALIZES: the scheduled
+ * memory-retraction-drainer keeps retracting the children and runs the
+ * cleanup phase itself once they are all terminal — a second mutation is
+ * never required. Dead-lettered children return status "failed". Never a
+ * bare success integer.
  *
  * Engines without a `deleteDocument` capability throw a clear error naming
  * the engine (deleteMemoryRecord idiom) before anything is mutated.
  */
 
-import {
-  memoryRetractionAttempts as memoryRetractionAttemptsTable,
-  memorySourceCheckpoints as memorySourceCheckpointsTable,
-  memorySourceConfigs as memorySourceConfigsTable,
-} from "@thinkwork/database-pg/schema";
+import { memorySourceConfigs as memorySourceConfigsTable } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
-import {
-  enqueueSourceErase,
-  processRetractionAttempt,
-} from "../../../lib/memory-sources/retraction.js";
-import { and, eq, notInArray } from "../../utils.js";
+import { runSourceErase } from "../../../lib/memory-sources/retraction.js";
+import { and, eq } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
@@ -58,45 +57,23 @@ export async function eraseMemorySource(
     .set({ enabled: false, updated_at: new Date() })
     .where(sourceFilter);
 
-  // 2. Enqueue erase attempts, then process every non-terminal
-  //    source-scoped attempt for this source inline, sequentially — that
-  //    covers both freshly enqueued attempts and previously stalled ones.
-  //    A failure surfaces immediately (RequestResponse); processed
-  //    attempts stay accounted for in the ledger and re-runs are safe.
-  await enqueueSourceErase(ctx.db, {
-    tenantId,
-    sourceConfigId: args.sourceConfigId,
-  });
-  const pending = await ctx.db
-    .select({ id: memoryRetractionAttemptsTable.id })
-    .from(memoryRetractionAttemptsTable)
-    .where(
-      and(
-        eq(memoryRetractionAttemptsTable.tenant_id, tenantId),
-        eq(memoryRetractionAttemptsTable.source_config_id, args.sourceConfigId),
-        eq(memoryRetractionAttemptsTable.scope, "source"),
-        notInArray(memoryRetractionAttemptsTable.status, [
-          "retracted",
-          "dead_lettered",
-        ]),
-      ),
-    );
-  let processedCount = 0;
-  for (const attempt of pending) {
-    await processRetractionAttempt({ db: ctx.db, adapter }, attempt.id);
-    processedCount += 1;
-  }
+  // 2. Run the erase aggregate (enqueue + bounded inline saga drain +
+  //    conditional cleanup). RequestResponse: errors surface to the caller.
+  const result = await runSourceErase(
+    { db: ctx.db, adapter },
+    { tenantId, sourceConfigId: args.sourceConfigId },
+  );
 
-  // 3. Purge the source's checkpoints so a future re-enable re-acquires
-  //    from the beginning instead of resuming a stale cursor.
-  await ctx.db
-    .delete(memorySourceCheckpointsTable)
-    .where(
-      and(
-        eq(memorySourceCheckpointsTable.tenant_id, tenantId),
-        eq(memorySourceCheckpointsTable.source_config_id, args.sourceConfigId),
-      ),
-    );
-
-  return processedCount;
+  return {
+    status: result.status,
+    attemptsTotal: result.attempts.total,
+    attemptsRetracted: result.attempts.retracted,
+    attemptsPending: result.attempts.pending,
+    attemptsDeadLettered: result.attempts.deadLettered,
+    processedThisCall: result.attempts.processedThisCall,
+    snapshotObjectsDeleted: result.snapshotObjectsDeleted,
+    evidenceRowsCleared: result.evidenceRowsCleared,
+    evidenceRowsDeleted: result.evidenceRowsDeleted,
+    checkpointsDeleted: result.checkpointsDeleted,
+  };
 }

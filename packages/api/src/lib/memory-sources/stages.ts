@@ -50,6 +50,7 @@ import {
   assertBoundaryWithin,
   MemoryAuthorizationError,
   requireActiveGrant,
+  revalidateGrant,
 } from "./policy.js";
 import {
   acquireCompaniesPage,
@@ -211,6 +212,8 @@ export async function runAcquire(
     // U2 R9-R11: an explicit, current authorization grant is the maximum
     // readable envelope; the saved source boundary must sit inside it.
     // Revocation/expiry blocks acquisition immediately and visibly.
+    let grantId: string;
+    let grantVersion: number;
     try {
       const grant = await requireActiveGrant(db, {
         tenantId: processor.tenant_id,
@@ -221,7 +224,10 @@ export async function runAcquire(
       assertBoundaryWithin(
         (grant.boundary ?? {}) as Record<string, unknown>,
         (source.boundary ?? {}) as Record<string, unknown>,
+        { sourceFamily: source.source_family },
       );
+      grantId = grant.id;
+      grantVersion = grant.grant_version;
     } catch (err) {
       if (err instanceof MemoryAuthorizationError) {
         return failed(event.stage, err.message);
@@ -275,6 +281,21 @@ export async function runAcquire(
     let progress: PageProgressState | null = null;
 
     while (fetched < maxRecords) {
+      // Codex U2 #2: the grant is re-checked before EVERY provider page
+      // read — a revoke/expiry/re-issue after page 1 prevents page 2, and
+      // the unread page's checkpoint never advances.
+      try {
+        await revalidateGrant(db, {
+          tenantId: processor.tenant_id,
+          grantId,
+          expectedGrantVersion: grantVersion,
+        });
+      } catch (err) {
+        if (err instanceof MemoryAuthorizationError) {
+          return failed(event.stage, err.message);
+        }
+        throw err;
+      }
       const page = await acquireCompaniesPage(readiness.client, {
         cursor,
         pageSize: Math.min(pageSize, maxRecords - fetched),
@@ -414,6 +435,18 @@ export async function runAcquire(
     let backscanPages = 0;
     let backscanProgress: PageProgressState | null = null;
     while (fetched < maxRecords) {
+      try {
+        await revalidateGrant(db, {
+          tenantId: processor.tenant_id,
+          grantId,
+          expectedGrantVersion: grantVersion,
+        });
+      } catch (err) {
+        if (err instanceof MemoryAuthorizationError) {
+          return failed(event.stage, err.message);
+        }
+        throw err;
+      }
       const page = await reconcileCompaniesPage(readiness.client, {
         startingAfter: backscanToken,
         pageSize: Math.min(pageSize, maxRecords - fetched),
@@ -665,12 +698,19 @@ export async function runProject(
       targetScope: ctx.processor.target_scope,
       targetId: ctx.processor.target_id,
     });
+    const editionEffectiveFrom =
+      typeof snapshot.updatedAt === "string" &&
+      !Number.isNaN(new Date(snapshot.updatedAt).getTime())
+        ? new Date(snapshot.updatedAt)
+        : null;
     const claimResult = await upsertClaimsForEvidence(db, {
       tenantId: item.tenant_id,
       targetScope: ctx.processor.target_scope,
       targetId: ctx.processor.target_id,
       sourceConfigId: item.source_config_id,
       evidenceItemId: item.id,
+      subjectKey: `twenty:company:${item.source_item_id}`,
+      effectiveFrom: editionEffectiveFrom,
       claims,
     });
     counts.changed += 1;
@@ -688,6 +728,7 @@ export async function runProject(
         claims: claims.length,
         claimsCreated: claimResult.created,
         claimsSupported: claimResult.supported,
+        claimsSwept: claimResult.unsupportedRetracted,
       },
     });
   }

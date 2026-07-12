@@ -24,6 +24,7 @@ vi.mock("./claims.js", () => ({
     created: 0,
     supported: 0,
     supersededSupports: 0,
+    unsupportedRetracted: 0,
   })),
   listActiveClaimsForSubject: vi.fn(async () => []),
   buildClaimProjection: vi.fn(() => ({ markdown: "" })),

@@ -654,6 +654,15 @@ export const memoryRetractionAttempts = pgTable(
     next_retry_at: timestamp("next_retry_at", { withTimezone: true }),
     locked_at: timestamp("locked_at", { withTimezone: true }),
     locked_by: text("locked_by"),
+    // Fencing token (THINK-193 U2, Codex P2): every claim increments the
+    // generation; all saga transitions CAS on (locked_by, lock_generation)
+    // so a stale worker reclaimed past its lease can never clobber the
+    // newer claimant's progress.
+    lock_generation: integer("lock_generation").notNull().default(0),
+    // Non-null when the reconsolidation step was skipped (e.g. the adapter
+    // is delete-capable but exposes no consolidator) — a durable
+    // skipped-with-reason record, distinct from success.
+    reconsolidation_note: text("reconsolidation_note"),
     error_class: text("error_class"),
     error_message: text("error_message"),
     created_at: timestamp("created_at", { withTimezone: true })
@@ -674,9 +683,16 @@ export const memoryRetractionAttempts = pgTable(
       table.next_retry_at,
       table.created_at,
     ),
+    // v2 (THINK-193 U2): 'erase' rows are durable source-erase AGGREGATE
+    // markers — one non-terminal marker per source (via the partial unique
+    // document index on a synthetic erase:<sourceConfigId> document id).
+    // They are never processed by the per-document saga; the scheduled
+    // drainer keys its self-finalizing cleanup sweep on them, which is what
+    // lets an erase of a source with ZERO derivations survive an S3 failure
+    // and complete on a later tick.
     check(
-      "memory_retraction_attempts_scope_check",
-      sql`${table.scope} IN ('derivation', 'source')`,
+      "memory_retraction_attempts_scope_check_v2",
+      sql`${table.scope} IN ('derivation', 'source', 'erase')`,
     ),
     check(
       "memory_retraction_attempts_status_check",

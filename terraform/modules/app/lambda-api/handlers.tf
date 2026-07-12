@@ -209,6 +209,12 @@ locals {
     # secretsmanager:GetSecretValue on the thinkwork/* wildcard, so no
     # new IAM resource is needed.
     COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
+    # THINK-193 U2 (Codex P1 #4): the eraseMemorySource aggregate (resolved
+    # in graphql-http) deletes the source's evidence-snapshot objects from
+    # the brain-artifacts bucket. Rides the SSM runtime-config document, not
+    # the near-4KB graphql-http env block; the code resolves it via
+    # process.env first, then getConfig("BRAIN_ARTIFACTS_BUCKET").
+    BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
   }
 
   # Identity env + the secrets still in their one-release transition
@@ -650,6 +656,13 @@ resource "aws_lambda_function" "handler" {
     "memory-retain",
     "brain-dream-state",
     "memory-stage-worker",
+    # THINK-193 U2 (Codex P1 #3): scheduled retry drainer for the retraction
+    # saga ledger. Claims due/stale memory_retraction_attempts rows with the
+    # locked_by + lock_generation fence, processes each via the saga, sweeps
+    # exhausted rows to dead_lettered, and emits structured-log metrics.
+    # rate(5 minutes) EventBridge Scheduler + MaxRetryAttempts=0 (dedicated
+    # resources below) — the next tick IS the retry.
+    "memory-retraction-drainer",
     "wiki-compile",
     "knowledge-graph-observations-ingest",
     "ontology-scan",
@@ -860,7 +873,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -1082,6 +1095,42 @@ resource "aws_lambda_function_event_invoke_config" "memory_retain" {
   function_name                = aws_lambda_function.handler["memory-retain"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
+}
+
+# memory-retraction-drainer (THINK-193 U2, Codex P1 #3): the retraction
+# saga's product-owned retry path. Lambda async retries are disabled — every
+# transition on memory_retraction_attempts is a fenced CAS, so a duplicate
+# invocation is harmless but pointless; the rate(5 minutes) schedule below
+# is the retry. Attempts exceeding max_attempts are swept to dead_lettered
+# by the drainer itself instead of retrying forever.
+resource "aws_lambda_function_event_invoke_config" "memory_retraction_drainer" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["memory-retraction-drainer"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
+resource "aws_scheduler_schedule" "memory_retraction_drainer" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-memory-retraction-drainer"
+  group_name          = "default"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["memory-retraction-drainer"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ limit = 25 })
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
 }
 
 # Product-owned retry path for memory-retain. Lambda async retries remain

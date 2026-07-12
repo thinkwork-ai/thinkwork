@@ -46,48 +46,113 @@ export function grantInactiveReason(
 }
 
 /**
- * PURE: assert the processor's source-config boundary is a SUBSET of the
- * grant envelope. Compared generically over keys present in BOTH objects:
- * where the grant value is a number it is a cap (config must be a number
- * <= it); where the grant value is an array it is an allowlist (config
- * must be an array whose every element appears in it). Keys the grant does
- * not set are unconstrained. Throws MemoryAuthorizationError naming the
- * violating key.
+ * Boundary schemas (Codex U2 P1): the grant envelope is only meaningful over
+ * an explicit, per-source-family list of governed dimensions. Each dimension
+ * has a comparison kind and a DEFAULT that mirrors the value the runtime
+ * uses when the dimension is omitted — so an omitted grant key means "the
+ * default allowance", never "unlimited", and an omitted config key still
+ * requests the runtime default rather than slipping under the check.
+ */
+export type BoundaryDimension =
+  /** Numeric ceiling: requested must be a finite number <= allowance. */
+  | { kind: "cap"; default: number }
+  /** Allowlist: requested must be an array whose elements all appear. */
+  | { kind: "allowlist"; default: readonly unknown[] };
+
+export type BoundarySchema = Record<string, BoundaryDimension>;
+
+/**
+ * Defaults track the runtime fallbacks in stages.ts / snapshots.ts
+ * (DEFAULT_MAX_RECORDS, DEFAULT_PAGE_SIZE, DEFAULT_EVIDENCE_BATCH,
+ * DEFAULT_SNAPSHOT_TTL_DAYS) and the single acquired partition 'companies'.
+ * New source families register their schema here; a family without a
+ * schema fails closed in assertBoundaryWithin.
+ */
+export const BOUNDARY_SCHEMAS: Record<string, BoundarySchema> = {
+  twenty: {
+    maxRecords: { kind: "cap", default: 200 },
+    pageSize: { kind: "cap", default: 50 },
+    projectBatch: { kind: "cap", default: 25 },
+    retainBatch: { kind: "cap", default: 25 },
+    snapshotTtlDays: { kind: "cap", default: 30 },
+    objects: { kind: "allowlist", default: ["companies"] },
+  },
+};
+
+/**
+ * PURE: assert the processor's source-config boundary is WITHIN the grant
+ * envelope, compared over the family's governed dimensions using EFFECTIVE
+ * values: a side that omits a dimension gets the schema default (fail
+ * closed) — an empty grant allows exactly the defaults, not everything.
+ * Unknown or non-comparable keys in the REQUESTED boundary throw; grant
+ * keys outside the schema grant nothing and are ignored. `sourceFamily`
+ * is REQUIRED so a future family without a registered schema fails closed
+ * instead of silently evaluating under another family's policy. Throws
+ * MemoryAuthorizationError naming the violating key.
  */
 export function assertBoundaryWithin(
   grantBoundary: Record<string, unknown>,
   configBoundary: Record<string, unknown>,
+  options: { sourceFamily: string },
 ): void {
-  for (const [key, grantValue] of Object.entries(grantBoundary)) {
-    if (!(key in configBoundary)) continue;
-    const configValue = configBoundary[key];
+  const sourceFamily = options?.sourceFamily;
+  const schema = sourceFamily ? BOUNDARY_SCHEMAS[sourceFamily] : undefined;
+  if (!schema) {
+    throw new MemoryAuthorizationError(
+      `no boundary schema is registered for source family '${sourceFamily}' — refusing to compare boundaries`,
+    );
+  }
 
-    if (typeof grantValue === "number") {
-      if (typeof configValue !== "number" || configValue > grantValue) {
+  for (const key of Object.keys(configBoundary)) {
+    if (!(key in schema)) {
+      throw new MemoryAuthorizationError(
+        `source-config boundary key '${key}' is not a governed dimension for source family '${sourceFamily}'`,
+      );
+    }
+  }
+
+  for (const [key, dimension] of Object.entries(schema)) {
+    const allowance =
+      key in grantBoundary ? grantBoundary[key] : dimension.default;
+    const requested =
+      key in configBoundary ? configBoundary[key] : dimension.default;
+
+    if (dimension.kind === "cap") {
+      if (typeof allowance !== "number" || !Number.isFinite(allowance)) {
         throw new MemoryAuthorizationError(
-          `source-config boundary key '${key}' (${JSON.stringify(configValue)}) exceeds the grant envelope cap ${grantValue}`,
+          `grant boundary key '${key}' (${JSON.stringify(allowance)}) is not a finite number — re-issue the grant`,
+        );
+      }
+      if (
+        typeof requested !== "number" ||
+        !Number.isFinite(requested) ||
+        requested > allowance
+      ) {
+        throw new MemoryAuthorizationError(
+          `source-config boundary key '${key}' (${JSON.stringify(requested)}) exceeds the grant envelope cap ${allowance}`,
         );
       }
       continue;
     }
 
-    if (Array.isArray(grantValue)) {
-      if (!Array.isArray(configValue)) {
+    if (!Array.isArray(allowance)) {
+      throw new MemoryAuthorizationError(
+        `grant boundary key '${key}' (${JSON.stringify(allowance)}) is not an allowlist array — re-issue the grant`,
+      );
+    }
+    if (!Array.isArray(requested)) {
+      throw new MemoryAuthorizationError(
+        `source-config boundary key '${key}' (${JSON.stringify(requested)}) must be an array subset of the grant allowlist`,
+      );
+    }
+    const allowed = new Set(allowance.map((item) => JSON.stringify(item)));
+    for (const item of requested) {
+      if (!allowed.has(JSON.stringify(item))) {
         throw new MemoryAuthorizationError(
-          `source-config boundary key '${key}' (${JSON.stringify(configValue)}) must be an array subset of the grant allowlist`,
+          `source-config boundary key '${key}' includes ${JSON.stringify(item)}, which is outside the grant allowlist`,
         );
       }
-      const allowed = new Set(grantValue.map((item) => JSON.stringify(item)));
-      for (const item of configValue) {
-        if (!allowed.has(JSON.stringify(item))) {
-          throw new MemoryAuthorizationError(
-            `source-config boundary key '${key}' includes ${JSON.stringify(item)}, which is outside the grant allowlist`,
-          );
-        }
-      }
-      continue;
     }
-    // Other grant value types are informational, not enforced constraints.
   }
 }
 
@@ -169,6 +234,42 @@ export async function requireActiveGrant(
   throw new MemoryAuthorizationError(
     `the memory-source authorization for processor ${args.processorConfigId} and source '${binding}' is ${reason} — re-grant access before ingestion runs`,
   );
+}
+
+/**
+ * Codex U2 #2: re-check the SAME grant immediately before a provider page
+ * read. The grant must still exist, still be active/unexpired, and still be
+ * the same grant_version the run started with — a revoke, expiry, or
+ * boundary re-issue between pages stops the very next page read. Throws
+ * MemoryAuthorizationError; callers must not advance the checkpoint for an
+ * unread page.
+ */
+export async function revalidateGrant(
+  db: DbHandle,
+  args: { tenantId: string; grantId: string; expectedGrantVersion: number },
+): Promise<void> {
+  const table = dbSchema.memorySourceAuthorizations;
+  const [row] = await db
+    .select()
+    .from(table)
+    .where(and(eq(table.id, args.grantId), eq(table.tenant_id, args.tenantId)))
+    .limit(1);
+  if (!row) {
+    throw new MemoryAuthorizationError(
+      `authorization grant ${args.grantId} no longer exists — acquisition stopped before the next page`,
+    );
+  }
+  const reason = grantInactiveReason(row, new Date());
+  if (reason !== null) {
+    throw new MemoryAuthorizationError(
+      `authorization grant ${args.grantId} is ${reason} — acquisition stopped before the next page`,
+    );
+  }
+  if (row.grant_version !== args.expectedGrantVersion) {
+    throw new MemoryAuthorizationError(
+      `authorization grant ${args.grantId} changed (version ${row.grant_version}, run started with ${args.expectedGrantVersion}) — acquisition stopped; the next run re-reads the new boundary`,
+    );
+  }
 }
 
 /**

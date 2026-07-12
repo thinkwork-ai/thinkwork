@@ -146,6 +146,16 @@ locals {
         Action   = ["s3:ListBucket"]
         Resource = aws_s3_bucket.brain_artifacts.arn
       },
+      # THINK-193 U2 (Codex P1 #4): source-level memory erase must delete the
+      # source's evidence-snapshot objects, not wait out the 30-day lifecycle
+      # rule. Delete is scoped to the evidence-snapshots/ prefix only — the
+      # rest of the brain-artifacts bucket (durable source artifacts,
+      # manifests, exports) stays non-deletable from Lambda.
+      {
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = "${aws_s3_bucket.brain_artifacts.arn}/evidence-snapshots/*"
+      },
       # (was inline policy "cognito-access")
       {
         Effect = "Allow"

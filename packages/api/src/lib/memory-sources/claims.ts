@@ -17,7 +17,7 @@
  * loadable (and unit-testable) even while the schema exports are pending.
  */
 
-import { and, eq, isNull, ne, inArray } from "drizzle-orm";
+import { and, eq, isNull, ne, inArray, sql } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
 import * as dbSchema from "@thinkwork/database-pg/schema";
 
@@ -95,6 +95,14 @@ function setIfPresent(
   value: unknown,
 ): void {
   if (value !== null && value !== undefined) target[key] = value;
+}
+
+/** JSON-encoded (subject, predicate) tuple — unambiguous for crafted keys. */
+function claimTupleKey(claim: {
+  subjectKey: string;
+  ontologyPredicate: string;
+}): string {
+  return JSON.stringify([claim.subjectKey, claim.ontologyPredicate]);
 }
 
 /** Deep structural equality via the same stable encoding as the hash. */
@@ -223,16 +231,35 @@ export function extractCompanyClaims(input: {
 /**
  * Transactionally upsert claims and their support edges from one evidence
  * item, then supersede stale single-valued claims:
- *  (a) per claim, find the existing row by fingerprint (tenant, scope,
- *      target, subject_key, predicate, value_hash, effective_from
- *      null-safe); insert when missing (status 'active'); hash matches with
+ *  (a) per claim, REUSE the earliest ACTIVE row with the same (tenant,
+ *      scope, target, subject_key, predicate, value_hash) regardless of
+ *      effective_from — a same-value reassertion from a newer evidence
+ *      edition is the same fact, not a new claim, and must never mint a
+ *      duplicate active row. With no active same-value row, an
+ *      exact-fingerprint row (incl. effective_from, any status) is reused
+ *      idempotently WITHOUT touching its status — reprocessing an older
+ *      edition must not resurrect a superseded historical value over the
+ *      current claim. Only then insert (status 'active'); a value that
+ *      recurs later (77→91→77) becomes a NEW temporal edition with the new
+ *      effective_from, preserving the interval history. Hash matches with
  *      a differing stored value throw ClaimHashCollisionError;
  *  (b) ensure a memory_claim_evidence support edge (claim_id,
  *      evidence_item_id) exists and is active — previously retracted edges
  *      are re-activated;
- *  (c) for SINGLE_VALUED_PREDICATES, mark other ACTIVE claims for the same
- *      (tenant, scope, target, subject_key, predicate) with a different
- *      value_hash as 'superseded'. Multi-valued predicates are left alone.
+ *  (c) for SINGLE_VALUED_PREDICATES whose kept claim is ACTIVE, mark OTHER
+ *      ACTIVE claims for the same (tenant, scope, target, subject_key,
+ *      predicate) — any row that is not the kept claim, including
+ *      identical-value duplicates from the pre-fix era — as 'superseded'
+ *      and close their interval (effective_to = the incoming
+ *      effective_from when present). A kept claim that is itself
+ *      superseded (older-edition reprocessing) never displaces the current
+ *      value. Multi-valued predicates are not superseded here — removal is
+ *      handled by the zero-support sweep;
+ *  (d) sweep the subject: ACTIVE claims left with zero active support
+ *      edges were removed from the source in this edition — single-valued
+ *      ones close as 'superseded' (effective_to = edition timestamp),
+ *      multi-valued ones (person/opportunity/note) become 'retracted'.
+ *      Claims corroborated by another active evidence item survive.
  */
 export async function upsertClaimsForEvidence(
   db: Database,
@@ -242,34 +269,84 @@ export async function upsertClaimsForEvidence(
     targetId: string;
     sourceConfigId: string;
     evidenceItemId: string;
+    /**
+     * Subject this evidence edition asserts. Needed independently of
+     * `claims` so step (d) can sweep zero-support claims even when the new
+     * edition extracts nothing (e.g. every relation was removed).
+     */
+    subjectKey: string;
+    /** Edition timestamp used to close swept single-valued intervals. */
+    effectiveFrom: Date | null;
     claims: ClaimUpsert[];
   },
-): Promise<{ created: number; supported: number; supersededSupports: number }> {
+): Promise<{
+  created: number;
+  supported: number;
+  supersededSupports: number;
+  unsupportedRetracted: number;
+}> {
   const { memoryClaims, memoryClaimEvidence } = dbSchema;
   return await db.transaction(async (tx) => {
+    // Serialize claim mutation per (tenant, target, subject): concurrent
+    // editions (multiple scoped automations converging on one shared
+    // target) could otherwise both miss the active-claim lookup and insert
+    // duplicate ACTIVE same-value rows. The advisory lock is
+    // transaction-scoped (released at commit/rollback); the partial unique
+    // index memory_claims_active_value_uidx backstops it structurally.
+    const subjectLockKey = JSON.stringify([
+      "memory_claims",
+      args.tenantId,
+      args.targetScope,
+      args.targetId,
+      args.subjectKey,
+    ]);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${subjectLockKey}, 0))`,
+    );
     let created = 0;
     let supported = 0;
     let supersededSupports = 0;
+    // subjectKey predicate -> the claim kept for this evidence's assertion
+    const keptClaimIds = new Map<string, { id: string; active: boolean }>();
 
     for (const claim of args.claims) {
-      const fingerprint = and(
+      const identity = and(
         eq(memoryClaims.tenant_id, args.tenantId),
         eq(memoryClaims.target_scope, args.targetScope),
         eq(memoryClaims.target_id, args.targetId),
         eq(memoryClaims.subject_key, claim.subjectKey),
         eq(memoryClaims.ontology_predicate, claim.ontologyPredicate),
         eq(memoryClaims.value_hash, claim.valueHash),
-        claim.effectiveFrom === null
-          ? isNull(memoryClaims.effective_from)
-          : eq(memoryClaims.effective_from, claim.effectiveFrom),
       );
-      const [existing] = await tx
+      // Same-value reassertion: reuse the earliest ACTIVE row regardless of
+      // effective_from (preserves the original observation time).
+      let [existing] = await tx
         .select()
         .from(memoryClaims)
-        .where(fingerprint)
+        .where(and(identity, eq(memoryClaims.status, "active")))
+        .orderBy(memoryClaims.created_at)
         .limit(1);
+      if (!existing) {
+        // Exact fingerprint (incl. effective_from, any status) — the unique
+        // index would reject an insert. Reused idempotently with its status
+        // UNCHANGED: reprocessing an older edition must not resurrect a
+        // superseded/retracted historical value.
+        [existing] = await tx
+          .select()
+          .from(memoryClaims)
+          .where(
+            and(
+              identity,
+              claim.effectiveFrom === null
+                ? isNull(memoryClaims.effective_from)
+                : eq(memoryClaims.effective_from, claim.effectiveFrom),
+            ),
+          )
+          .limit(1);
+      }
 
       let claimId: string;
+      let claimIsActive: boolean;
       if (existing) {
         if (!deepEquals(existing.value, claim.value)) {
           throw new ClaimHashCollisionError(
@@ -277,6 +354,7 @@ export async function upsertClaimsForEvidence(
           );
         }
         claimId = existing.id;
+        claimIsActive = existing.status === "active";
       } else {
         const [inserted] = await tx
           .insert(memoryClaims)
@@ -296,8 +374,13 @@ export async function upsertClaimsForEvidence(
           })
           .returning();
         claimId = inserted.id;
+        claimIsActive = true;
         created += 1;
       }
+      keptClaimIds.set(claimTupleKey(claim), {
+        id: claimId,
+        active: claimIsActive,
+      });
 
       // (b) Support edge — idempotent; re-activate if previously retracted.
       const insertedEdge = await tx
@@ -331,16 +414,26 @@ export async function upsertClaimsForEvidence(
       supported += 1;
     }
 
-    // (c) Supersede stale single-valued claims by predicate.
+    // (c) Supersede stale single-valued claims by predicate: every ACTIVE
+    // row that is not the kept claim — different values AND identical-value
+    // duplicates alike — closing the losing interval at the incoming
+    // effective_from. Skipped when the kept claim is not itself active
+    // (older-edition reprocessing must not displace the current value).
     const supersededFor = new Set<string>();
     for (const claim of args.claims) {
       if (!SINGLE_VALUED.has(claim.ontologyPredicate)) continue;
-      const dedupeKey = `${claim.subjectKey} ${claim.ontologyPredicate} ${claim.valueHash}`;
+      const dedupeKey = claimTupleKey(claim);
       if (supersededFor.has(dedupeKey)) continue;
       supersededFor.add(dedupeKey);
+      const kept = keptClaimIds.get(dedupeKey);
+      if (!kept || !kept.active) continue;
       const stale = await tx
         .update(memoryClaims)
-        .set({ status: "superseded", updated_at: new Date() })
+        .set({
+          status: "superseded",
+          effective_to: claim.effectiveFrom,
+          updated_at: new Date(),
+        })
         .where(
           and(
             eq(memoryClaims.tenant_id, args.tenantId),
@@ -349,14 +442,77 @@ export async function upsertClaimsForEvidence(
             eq(memoryClaims.subject_key, claim.subjectKey),
             eq(memoryClaims.ontology_predicate, claim.ontologyPredicate),
             eq(memoryClaims.status, "active"),
-            ne(memoryClaims.value_hash, claim.valueHash),
+            ne(memoryClaims.id, kept.id),
           ),
         )
         .returning({ id: memoryClaims.id });
       supersededSupports += stale.length;
     }
 
-    return { created, supported, supersededSupports };
+    // (d) Zero-support sweep for this subject: with the new edition's
+    // supports in place (and the superseded edition's edges retracted at
+    // acquire time), any still-ACTIVE claim with no active support edge
+    // was removed from the source. Claims corroborated by another active
+    // evidence item keep their edges and survive. Single-valued losers
+    // close their interval as 'superseded'; removed multi-valued facts
+    // (person/opportunity/note) become 'retracted'.
+    let unsupportedRetracted = 0;
+    const activeForSubject = await tx
+      .select({
+        id: memoryClaims.id,
+        ontology_predicate: memoryClaims.ontology_predicate,
+      })
+      .from(memoryClaims)
+      .where(
+        and(
+          eq(memoryClaims.tenant_id, args.tenantId),
+          eq(memoryClaims.target_scope, args.targetScope),
+          eq(memoryClaims.target_id, args.targetId),
+          eq(memoryClaims.subject_key, args.subjectKey),
+          eq(memoryClaims.status, "active"),
+        ),
+      );
+    if (activeForSubject.length > 0) {
+      const activeIds = activeForSubject.map((row) => row.id);
+      const supportedRows = await tx
+        .select({ claimId: memoryClaimEvidence.claim_id })
+        .from(memoryClaimEvidence)
+        .where(
+          and(
+            inArray(memoryClaimEvidence.claim_id, activeIds),
+            eq(memoryClaimEvidence.status, "active"),
+          ),
+        );
+      const supportedSet = new Set(supportedRows.map((row) => row.claimId));
+      const unsupported = activeForSubject.filter(
+        (row) => !supportedSet.has(row.id),
+      );
+      const singleValuedIds = unsupported
+        .filter((row) => SINGLE_VALUED.has(row.ontology_predicate))
+        .map((row) => row.id);
+      const multiValuedIds = unsupported
+        .filter((row) => !SINGLE_VALUED.has(row.ontology_predicate))
+        .map((row) => row.id);
+      if (singleValuedIds.length > 0) {
+        await tx
+          .update(memoryClaims)
+          .set({
+            status: "superseded",
+            effective_to: args.effectiveFrom,
+            updated_at: new Date(),
+          })
+          .where(inArray(memoryClaims.id, singleValuedIds));
+      }
+      if (multiValuedIds.length > 0) {
+        await tx
+          .update(memoryClaims)
+          .set({ status: "retracted", updated_at: new Date() })
+          .where(inArray(memoryClaims.id, multiValuedIds));
+      }
+      unsupportedRetracted = unsupported.length;
+    }
+
+    return { created, supported, supersededSupports, unsupportedRetracted };
   });
 }
 

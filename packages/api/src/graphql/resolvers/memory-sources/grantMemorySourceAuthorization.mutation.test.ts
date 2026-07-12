@@ -50,6 +50,9 @@ function buildCtx(options: {
   processorRows: unknown[];
   existingGrants: unknown[];
 }) {
+  // Codex U2 residual A: the revoke-then-insert replacement must run inside
+  // ONE transaction, so every statement mock lives on the tx handle only —
+  // a resolver bypassing db.transaction has no select/update/insert at all.
   // select #1: processor lookup (…where().limit()); select #2: existing
   // grants for the binding (…where() awaited directly).
   const processorLimit = vi.fn().mockResolvedValue(options.processorRows);
@@ -76,13 +79,23 @@ function buildCtx(options: {
     }));
   const insert = vi.fn().mockReturnValue({ values: insertValues });
 
+  const tx = { select, update, insert };
+  const transaction = vi
+    .fn()
+    .mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn(tx),
+    );
+
   return {
     ctx: {
-      db: { select, update, insert },
+      db: { transaction },
       auth: { tenantId: TENANT },
     } as any,
+    transaction,
+    select,
     update,
     updateSet,
+    insert,
     insertValues,
   };
 }
@@ -157,7 +170,10 @@ describe("grantMemorySourceAuthorization mutation", () => {
   });
 
   it("rejects unknown source families before touching the db", async () => {
-    const { ctx } = buildCtx({ processorRows: [], existingGrants: [] });
+    const { ctx, transaction } = buildCtx({
+      processorRows: [],
+      existingGrants: [],
+    });
     await expect(
       grantMemorySourceAuthorization(
         {},
@@ -165,14 +181,35 @@ describe("grantMemorySourceAuthorization mutation", () => {
         ctx,
       ),
     ).rejects.toThrow(/Unknown source family "slack"/);
-    expect(ctx.db.select).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
   });
 
-  it("rejects processor configs outside the tenant", async () => {
-    const { ctx } = buildCtx({ processorRows: [], existingGrants: [] });
+  // Codex U2 residual B: the tenant-scoped processor lookup is what stops a
+  // forged processorConfigId from another tenant — no row, no grant insert.
+  it("rejects processor configs outside the tenant without inserting", async () => {
+    const { ctx, insert } = buildCtx({ processorRows: [], existingGrants: [] });
     await expect(
       grantMemorySourceAuthorization({}, BASE_ARGS, ctx),
     ).rejects.toThrow(/Memory processor config not found/);
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  // Codex U2 residual A: revoke + replacement insert are one transaction —
+  // a crash between them cannot leave the binding with zero (or two)
+  // active grants.
+  it("runs the revoke and the replacement insert in a single transaction", async () => {
+    const { ctx, transaction, update, insert } = buildCtx({
+      processorRows: [PROCESSOR_ROW],
+      existingGrants: [ACTIVE_GRANT_ROW],
+    });
+
+    await grantMemorySourceAuthorization({}, BASE_ARGS, ctx);
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    // Both writes went through the tx handle (buildCtx exposes statement
+    // mocks on tx only, so reaching here proves it) and both happened.
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledTimes(1);
   });
 
   it("rejects callers without tenant context", async () => {

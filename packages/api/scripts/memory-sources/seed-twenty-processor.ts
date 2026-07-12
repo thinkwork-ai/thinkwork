@@ -12,7 +12,12 @@
  * Usage (from packages/api, with dev DATABASE_URL + AWS creds exported):
  *   npx tsx scripts/memory-sources/seed-twenty-processor.ts \
  *     --tenant <tenantId> --user <ownerUserId> \
- *     --scope tenant --target <tenantId> [--max-records 25] [--run]
+ *     --scope tenant --target <tenantId> \
+ *     [--binding-key twenty-crm] [--max-records 25] [--run]
+ *
+ * --binding-key must equal the tenant MCP server's managed_application_key
+ * (or slug) for the Twenty deployment — resolution is fail-closed, so a
+ * key that matches no enabled+approved server makes acquire fail.
  */
 
 import { and, eq } from "drizzle-orm";
@@ -44,6 +49,7 @@ async function main() {
   const scope = arg("scope") as "space" | "tenant" | undefined;
   const targetId = arg("target");
   const maxRecords = Number(arg("max-records") ?? 25);
+  const bindingKey = arg("binding-key") ?? "twenty-crm";
   const shouldRun = process.argv.includes("--run");
 
   if (!tenantId || !userId || !scope || !targetId) {
@@ -97,7 +103,7 @@ async function main() {
       and(
         eq(memorySourceConfigs.processor_config_id, processor.id),
         eq(memorySourceConfigs.source_family, "twenty"),
-        eq(memorySourceConfigs.source_binding_key, "twenty"),
+        eq(memorySourceConfigs.source_binding_key, bindingKey),
       ),
     )
     .limit(1);
@@ -108,7 +114,7 @@ async function main() {
         tenant_id: tenantId,
         processor_config_id: processor.id,
         source_family: "twenty",
-        source_binding_key: "twenty",
+        source_binding_key: bindingKey,
         enabled: true,
         boundary: { maxRecords },
       })
@@ -125,7 +131,7 @@ async function main() {
       and(
         eq(memorySourceAuthorizations.processor_config_id, processor.id),
         eq(memorySourceAuthorizations.source_family, "twenty"),
-        eq(memorySourceAuthorizations.source_binding_key, "twenty"),
+        eq(memorySourceAuthorizations.source_binding_key, bindingKey),
         eq(memorySourceAuthorizations.status, "active"),
       ),
     )
@@ -137,7 +143,7 @@ async function main() {
         tenant_id: tenantId,
         processor_config_id: processor.id,
         source_family: "twenty",
-        source_binding_key: "twenty",
+        source_binding_key: bindingKey,
         boundary: { maxRecords: Math.max(maxRecords, 200) },
         granted_by_user_id: userId,
       })

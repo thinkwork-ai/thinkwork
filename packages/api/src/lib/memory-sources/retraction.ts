@@ -5,21 +5,42 @@
  * the Hindsight document store, and bank reconsolidation — with no shared
  * transaction. Each saga step is idempotent and commits its own status to the
  * attempt row IN ORDER, so a crash resumes at the recorded status instead of
- * replaying destructive work blindly:
+ * replaying destructive work blindly.
  *
- *   queued/failed → running            (claimed via CAS, retain-attempts style)
- *   running       → supports_updated   (claim-evidence edges retracted, orphaned
- *                                       claims deactivated, derivation retracted;
- *                                       scope 'source' also flips the evidence
- *                                       item lifecycle to 'deleted')
- *   supports_updated → provider_deleted (adapter.deleteDocument — pinned
- *                                       Hindsight 0.8.4 document-delete contract;
- *                                       "deleted" and "not_found" both advance)
- *   provider_deleted → reconsolidated  (bank consolidation, best-effort seam)
+ * Ordering invariant (Codex P1): the PROVIDER delete happens FIRST. Internal
+ * state (support edges, claims, derivation lifecycle) is only finalized —
+ * atomically, in one transaction — AFTER the provider document is gone, so a
+ * provider 5xx can never leave memory recallable in Hindsight while the
+ * ledger claims it was retracted. On provider failure the derivation and its
+ * claims stay ACTIVE and queryable, and the attempt stays due for retry.
+ *
+ *   queued/failed → running            (claimed via fenced CAS)
+ *   running       → provider_deleted   (adapter.deleteDocument — pinned
+ *                                       Hindsight 0.8.4 document-delete
+ *                                       contract; "deleted" and "not_found"
+ *                                       both advance)
+ *   provider_deleted → supports_updated (ONE transaction: claim-evidence
+ *                                       edges retracted, orphaned claims
+ *                                       deactivated, derivation retracted;
+ *                                       scope 'source' also flips the
+ *                                       evidence item lifecycle to 'deleted'
+ *                                       and clears its snapshot payload)
+ *   supports_updated → reconsolidated  (bank consolidation; when no
+ *                                       consolidator exists on a delete-
+ *                                       capable adapter the step is recorded
+ *                                       as SKIPPED with a durable reason —
+ *                                       never silently as success)
  *   reconsolidated → retracted         (terminal, completed_at set)
+ *
+ * Fencing (Codex P2): claimAttempt sets locked_by and increments
+ * lock_generation; every subsequent transition is a CAS on
+ * (id, locked_by, lock_generation) that returns the "stale" conflict
+ * indicator instead of writing when another worker has since re-claimed the
+ * row. The lease (locked_at) is renewed around external calls.
  *
  * On a step error the attempt is marked failed with quadratic backoff
  * (attempt_count^2 minutes) or dead_lettered when non-retryable/exhausted.
+ * The scheduled memory-retraction-drainer Lambda re-claims due rows.
  *
  * The saga runs against a {@link RetractionStore} seam: production uses the
  * drizzle-backed store built from the caller's db handle; unit tests inject
@@ -42,19 +63,21 @@ import {
   memoryDerivations,
   memoryEvidenceItems,
   memoryRetractionAttempts,
+  memorySourceCheckpoints,
 } from "@thinkwork/database-pg/schema";
 
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { HindsightRetainError } from "../memory/adapters/hindsight-adapter.js";
 import { deactivateOrphanedClaims } from "./claims.js";
+import { SNAPSHOT_PREFIX } from "./snapshots.js";
 import type { DbHandle } from "./types.js";
 
 export type RetractionAttemptRow = typeof memoryRetractionAttempts.$inferSelect;
 export type RetractionDerivation = typeof memoryDerivations.$inferSelect;
 
 export type RetractionProgressStatus =
-  | "supports_updated"
   | "provider_deleted"
+  | "supports_updated"
   | "reconsolidated";
 
 export type RetractionFailure = {
@@ -63,24 +86,48 @@ export type RetractionFailure = {
   retryable: boolean;
 };
 
+/** Fencing token minted by claimAttempt; every transition CASes on it. */
+export type RetractionFence = {
+  lockedBy: string;
+  lockGeneration: number;
+};
+
+/** Conflict indicator: the fence no longer matches (row was re-claimed). */
+export type FenceConflict = "stale";
+
 /**
  * Persistence seam for the saga. Every method is a single self-committing
- * operation (never a cross-step transaction) so the saga's crash-resume
- * property holds regardless of where a worker dies.
+ * operation (finalizeInternalState is one transaction) so the saga's
+ * crash-resume property holds regardless of where a worker dies. All
+ * post-claim transitions are fenced: they no-op and return "stale" when the
+ * caller's (locked_by, lock_generation) no longer owns the row.
  */
 export interface RetractionStore {
   loadAttempt(attemptId: string): Promise<RetractionAttemptRow | null>;
-  /** CAS claim: null when the row is not due, locked fresh, or exhausted. */
+  /** Fenced CAS claim: null when the row is not due, locked fresh, or
+   * exhausted. Increments lock_generation and attempt_count. */
   claimAttempt(
     attemptId: string,
     opts: { lockedBy: string; now: Date },
   ): Promise<RetractionAttemptRow | null>;
+  /** Refresh locked_at under the fence; false when the lease was lost. */
+  renewLease(
+    attemptId: string,
+    fence: RetractionFence,
+    now: Date,
+  ): Promise<boolean>;
   recordProgress(
     attemptId: string,
     status: RetractionProgressStatus,
     now: Date,
-  ): Promise<RetractionAttemptRow>;
-  markRetracted(attemptId: string, now: Date): Promise<RetractionAttemptRow>;
+    fence: RetractionFence,
+    opts?: { reconsolidationNote?: string | null },
+  ): Promise<RetractionAttemptRow | FenceConflict>;
+  markRetracted(
+    attemptId: string,
+    now: Date,
+    fence: RetractionFence,
+  ): Promise<RetractionAttemptRow | FenceConflict>;
   markFailed(
     attempt: Pick<
       RetractionAttemptRow,
@@ -88,34 +135,46 @@ export interface RetractionStore {
     >,
     failure: RetractionFailure,
     now: Date,
-  ): Promise<RetractionAttemptRow>;
+    fence: RetractionFence,
+  ): Promise<RetractionAttemptRow | FenceConflict>;
   loadDerivation(
     tenantId: string,
     derivationId: string,
   ): Promise<RetractionDerivation | null>;
   /**
-   * Step 2, in one DB transaction: retract active claim-evidence edges for
-   * the evidence item, deactivate claims left without active support, flip
-   * the derivation lifecycle to 'retracted', and (scope 'source') flip the
-   * evidence item lifecycle to 'deleted'. Idempotent — replays match zero
-   * active rows.
+   * Post-provider-delete internal finalize, in ONE DB transaction guarded by
+   * the fenced CAS provider_deleted → supports_updated on the attempt row.
+   *
+   * Operates on the DOCUMENT SET, not just the attempt's own derivation:
+   * every active/superseded derivation of this tenant that projects into the
+   * deleted provider document (all editions of a stable external document
+   * share provider_document_id — and the partial unique
+   * memory_retraction_attempts_document_uidx allows only ONE non-terminal
+   * attempt per document, so this single attempt is the only chance to
+   * finalize them). For EACH such lineage: retract active claim-evidence
+   * edges for its evidence item, deactivate claims left without active
+   * support, flip the derivation lifecycle to 'retracted', and (scope
+   * 'source') flip the evidence item lifecycle to 'deleted' and clear its
+   * snapshot payload. Idempotent — replays match zero active rows. Returns
+   * "stale" (transaction rolled back) when the fence lost.
    */
-  retractSupports(args: {
+  finalizeInternalState(args: {
+    attemptId: string;
     tenantId: string;
     sourceConfigId: string;
-    evidenceItemId: string;
-    derivationId: string;
+    providerDocumentId: string;
     deleteEvidence: boolean;
     now: Date;
-  }): Promise<void>;
+    fence: RetractionFence;
+  }): Promise<RetractionAttemptRow | FenceConflict>;
 }
 
 const TERMINAL_STATUSES = ["retracted", "dead_lettered"] as const;
 const CLAIMABLE_QUEUED_STATUSES = ["queued", "failed"] as const;
 const IN_FLIGHT_STATUSES = [
   "running",
-  "supports_updated",
   "provider_deleted",
+  "supports_updated",
   "reconsolidated",
 ] as const;
 
@@ -143,6 +202,17 @@ class RetractionStepError extends Error {
 // ---------------------------------------------------------------------------
 // Pure transition helpers (shared by the drizzle store and unit-test stores)
 // ---------------------------------------------------------------------------
+
+/** Owner + generation fence: both must match for a transition to apply. */
+export function fenceMatches(
+  row: Pick<RetractionAttemptRow, "locked_by" | "lock_generation">,
+  fence: RetractionFence,
+): boolean {
+  return (
+    row.locked_by === fence.lockedBy &&
+    row.lock_generation === fence.lockGeneration
+  );
+}
 
 /** Quadratic backoff: attempt_count^2 minutes from now. */
 export function retryBackoffAt(attemptCount: number, now: Date): Date {
@@ -337,15 +407,42 @@ export async function enqueueDerivationRetraction(
   return existing[0] ?? null;
 }
 
+/** Synthetic provider/document identity of the durable erase marker row. */
+export const ERASE_MARKER_PROVIDER = "erase_aggregate";
+export function eraseMarkerDocumentId(sourceConfigId: string): string {
+  return `erase:${sourceConfigId}`;
+}
+
 /**
- * Source-level erase (GDPR-style): queue one 'source'-scoped attempt per
- * active/superseded derivation of the source config. Idempotent — documents
- * with an in-flight attempt count as already enqueued and are skipped.
+ * Source-level erase (GDPR-style): persist ONE durable 'erase'-scoped
+ * aggregate marker for the source (idempotent via the partial unique
+ * document index on the synthetic erase:<sourceConfigId> id — this is what
+ * lets the scheduled drainer retry cleanup for sources with ZERO
+ * derivations), then queue one 'source'-scoped attempt per active/superseded
+ * derivation. Idempotent — documents with an in-flight attempt count as
+ * already enqueued and are skipped.
  */
 export async function enqueueSourceErase(
   db: DbHandle,
   args: { tenantId: string; sourceConfigId: string },
 ): Promise<{ enqueued: number }> {
+  const now = new Date();
+  await db
+    .insert(memoryRetractionAttempts)
+    .values({
+      tenant_id: args.tenantId,
+      scope: "erase",
+      derivation_id: null,
+      source_config_id: args.sourceConfigId,
+      provider: ERASE_MARKER_PROVIDER,
+      provider_document_id: eraseMarkerDocumentId(args.sourceConfigId),
+      target_bank_id: eraseMarkerDocumentId(args.sourceConfigId),
+      status: "queued",
+      next_retry_at: null,
+      updated_at: now,
+    })
+    .onConflictDoNothing();
+
   const derivations = await db
     .select()
     .from(memoryDerivations)
@@ -401,10 +498,54 @@ export async function listDueRetractionAttempts(
           ),
         ),
         sql`${memoryRetractionAttempts.attempt_count} < ${memoryRetractionAttempts.max_attempts}`,
+        // Erase aggregate markers are never processed by the per-document
+        // saga; the drainer's cleanup sweep owns them.
+        sql`${memoryRetractionAttempts.scope} <> 'erase'`,
       ),
     )
     .orderBy(asc(memoryRetractionAttempts.next_retry_at))
     .limit(options.limit);
+}
+
+/**
+ * Terminal sweep for the drainer: a worker that crashed on its FINAL claim
+ * leaves a non-terminal row with attempt_count >= max_attempts that no claim
+ * predicate will ever pick up. Move such rows (with an absent/stale lock) to
+ * 'dead_lettered' so they surface as failures instead of lingering forever.
+ */
+export async function deadLetterExhaustedAttempts(
+  db: DbHandle,
+  options: { now?: Date; staleAfterMs?: number } = {},
+): Promise<RetractionAttemptRow[]> {
+  const now = options.now ?? new Date();
+  const staleLockBefore = new Date(
+    now.getTime() - (options.staleAfterMs ?? RETRACTION_LOCK_STALE_AFTER_MS),
+  );
+  return db
+    .update(memoryRetractionAttempts)
+    .set({
+      status: "dead_lettered",
+      next_retry_at: null,
+      locked_at: null,
+      locked_by: null,
+      error_class: "attempts_exhausted",
+      error_message:
+        "attempt_count reached max_attempts without a terminal transition",
+      completed_at: now,
+      updated_at: now,
+    })
+    .where(
+      and(
+        notInArray(memoryRetractionAttempts.status, [...TERMINAL_STATUSES]),
+        sql`${memoryRetractionAttempts.scope} <> 'erase'`,
+        sql`${memoryRetractionAttempts.attempt_count} >= ${memoryRetractionAttempts.max_attempts}`,
+        or(
+          isNull(memoryRetractionAttempts.locked_at),
+          lte(memoryRetractionAttempts.locked_at, staleLockBefore),
+        ),
+      ),
+    )
+    .returning();
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +553,13 @@ export async function listDueRetractionAttempts(
 // ---------------------------------------------------------------------------
 
 export function createDrizzleRetractionStore(db: DbHandle): RetractionStore {
+  const fenceWhere = (attemptId: string, fence: RetractionFence) =>
+    and(
+      eq(memoryRetractionAttempts.id, attemptId),
+      eq(memoryRetractionAttempts.locked_by, fence.lockedBy),
+      eq(memoryRetractionAttempts.lock_generation, fence.lockGeneration),
+    );
+
   return {
     async loadAttempt(attemptId) {
       const rows = await db
@@ -434,6 +582,7 @@ export function createDrizzleRetractionStore(db: DbHandle): RetractionStore {
           // keep their recorded progress so the saga resumes there.
           status: sql`CASE WHEN ${memoryRetractionAttempts.status} IN ('queued', 'failed') THEN 'running' ELSE ${memoryRetractionAttempts.status} END`,
           attempt_count: sql`${memoryRetractionAttempts.attempt_count} + 1`,
+          lock_generation: sql`${memoryRetractionAttempts.lock_generation} + 1`,
           locked_at: now,
           locked_by: opts.lockedBy,
           updated_at: now,
@@ -468,23 +617,33 @@ export function createDrizzleRetractionStore(db: DbHandle): RetractionStore {
       return rows[0] ?? null;
     },
 
-    async recordProgress(attemptId, status, now) {
+    async renewLease(attemptId, fence, now) {
+      const rows = await db
+        .update(memoryRetractionAttempts)
+        .set({ locked_at: now, updated_at: now })
+        .where(fenceWhere(attemptId, fence))
+        .returning({ id: memoryRetractionAttempts.id });
+      return rows.length > 0;
+    },
+
+    async recordProgress(attemptId, status, now, fence, opts) {
       const rows = await db
         .update(memoryRetractionAttempts)
         .set({
           status,
+          ...(opts?.reconsolidationNote !== undefined
+            ? { reconsolidation_note: opts.reconsolidationNote }
+            : {}),
           error_class: null,
           error_message: null,
           updated_at: now,
         })
-        .where(eq(memoryRetractionAttempts.id, attemptId))
+        .where(fenceWhere(attemptId, fence))
         .returning();
-      const row = rows[0];
-      if (!row) throw new Error(`retraction attempt vanished: ${attemptId}`);
-      return row;
+      return rows[0] ?? "stale";
     },
 
-    async markRetracted(attemptId, now) {
+    async markRetracted(attemptId, now, fence) {
       const rows = await db
         .update(memoryRetractionAttempts)
         .set({
@@ -497,14 +656,12 @@ export function createDrizzleRetractionStore(db: DbHandle): RetractionStore {
           completed_at: now,
           updated_at: now,
         })
-        .where(eq(memoryRetractionAttempts.id, attemptId))
+        .where(fenceWhere(attemptId, fence))
         .returning();
-      const row = rows[0];
-      if (!row) throw new Error(`retraction attempt vanished: ${attemptId}`);
-      return row;
+      return rows[0] ?? "stale";
     },
 
-    async markFailed(attempt, failure, now) {
+    async markFailed(attempt, failure, now, fence) {
       const transition = resolveFailureTransition(attempt, failure, now);
       const rows = await db
         .update(memoryRetractionAttempts)
@@ -518,11 +675,9 @@ export function createDrizzleRetractionStore(db: DbHandle): RetractionStore {
           completed_at: transition.completedAt,
           updated_at: now,
         })
-        .where(eq(memoryRetractionAttempts.id, attempt.id))
+        .where(fenceWhere(attempt.id, fence))
         .returning();
-      const row = rows[0];
-      if (!row) throw new Error(`retraction attempt vanished: ${attempt.id}`);
-      return row;
+      return rows[0] ?? "stale";
     },
 
     async loadDerivation(tenantId, derivationId) {
@@ -539,48 +694,120 @@ export function createDrizzleRetractionStore(db: DbHandle): RetractionStore {
       return rows[0] ?? null;
     },
 
-    async retractSupports(args) {
-      await db.transaction(async (tx) => {
-        await tx
-          .update(memoryClaimEvidence)
-          .set({ status: "retracted", retracted_at: args.now })
-          .where(
-            and(
-              eq(memoryClaimEvidence.tenant_id, args.tenantId),
-              eq(memoryClaimEvidence.evidence_item_id, args.evidenceItemId),
-              eq(memoryClaimEvidence.status, "active"),
-            ),
-          );
-        await deactivateOrphanedClaims(tx, {
-          tenantId: args.tenantId,
-          sourceConfigId: args.sourceConfigId,
-          evidenceItemId: args.evidenceItemId,
-        });
-        await tx
-          .update(memoryDerivations)
+    async finalizeInternalState(args) {
+      return db.transaction(async (tx) => {
+        // Fenced CAS provider_deleted → supports_updated FIRST: when the
+        // fence (or expected status) lost, the whole transaction rolls
+        // back with zero internal mutations.
+        const casRows = await tx
+          .update(memoryRetractionAttempts)
           .set({
-            lifecycle: "retracted",
-            retracted_at: args.now,
+            status: "supports_updated",
+            error_class: null,
+            error_message: null,
             updated_at: args.now,
           })
           .where(
             and(
-              eq(memoryDerivations.id, args.derivationId),
+              eq(memoryRetractionAttempts.id, args.attemptId),
+              eq(memoryRetractionAttempts.locked_by, args.fence.lockedBy),
+              eq(
+                memoryRetractionAttempts.lock_generation,
+                args.fence.lockGeneration,
+              ),
+              eq(memoryRetractionAttempts.status, "provider_deleted"),
+            ),
+          )
+          .returning();
+        const updated = casRows[0];
+        if (!updated) return "stale" as const;
+
+        // Every lineage projecting into the deleted document — all editions
+        // of a stable external document share provider_document_id, and the
+        // partial unique per-document index means no other attempt will
+        // ever finalize them. Pinned to the attempt's OWN source config: a
+        // malformed or colliding provider_document_id must never retract
+        // another source config's derivations/evidence.
+        const lineages = await tx
+          .select({
+            id: memoryDerivations.id,
+            source_config_id: memoryDerivations.source_config_id,
+            evidence_item_id: memoryDerivations.evidence_item_id,
+          })
+          .from(memoryDerivations)
+          .where(
+            and(
               eq(memoryDerivations.tenant_id, args.tenantId),
+              eq(memoryDerivations.source_config_id, args.sourceConfigId),
+              eq(
+                memoryDerivations.hindsight_document_id,
+                args.providerDocumentId,
+              ),
               inArray(memoryDerivations.lifecycle, ["active", "superseded"]),
             ),
           );
-        if (args.deleteEvidence) {
+
+        for (const lineage of lineages) {
           await tx
-            .update(memoryEvidenceItems)
-            .set({ lifecycle: "deleted", updated_at: args.now })
+            .update(memoryClaimEvidence)
+            .set({ status: "retracted", retracted_at: args.now })
             .where(
               and(
-                eq(memoryEvidenceItems.id, args.evidenceItemId),
-                eq(memoryEvidenceItems.tenant_id, args.tenantId),
+                eq(memoryClaimEvidence.tenant_id, args.tenantId),
+                eq(
+                  memoryClaimEvidence.evidence_item_id,
+                  lineage.evidence_item_id,
+                ),
+                eq(memoryClaimEvidence.status, "active"),
               ),
             );
+          await deactivateOrphanedClaims(tx, {
+            tenantId: args.tenantId,
+            sourceConfigId: lineage.source_config_id,
+            evidenceItemId: lineage.evidence_item_id,
+          });
         }
+        if (lineages.length > 0) {
+          await tx
+            .update(memoryDerivations)
+            .set({
+              lifecycle: "retracted",
+              retracted_at: args.now,
+              updated_at: args.now,
+            })
+            .where(
+              and(
+                eq(memoryDerivations.tenant_id, args.tenantId),
+                inArray(
+                  memoryDerivations.id,
+                  lineages.map((l) => l.id),
+                ),
+                inArray(memoryDerivations.lifecycle, ["active", "superseded"]),
+              ),
+            );
+          if (args.deleteEvidence) {
+            // Lifecycle only — snapshot_ref/normalized_snapshot clearing is
+            // owned by the erase aggregate's cleanup phase (the intact ref
+            // is the SQL-visible marker that S3 snapshot objects still
+            // exist, which the drainer's cleanup sweep keys on).
+            await tx
+              .update(memoryEvidenceItems)
+              .set({
+                lifecycle: "deleted",
+                updated_at: args.now,
+              })
+              .where(
+                and(
+                  eq(memoryEvidenceItems.tenant_id, args.tenantId),
+                  inArray(
+                    memoryEvidenceItems.id,
+                    lineages.map((l) => l.evidence_item_id),
+                  ),
+                ),
+              );
+          }
+        }
+        return updated;
       });
     },
   };
@@ -605,11 +832,12 @@ export async function processRetractionAttempt(
   opts: { lockedBy?: string; now?: Date } = {},
 ): Promise<RetractionAttemptRow> {
   const store = deps.store ?? createDrizzleRetractionStore(deps.db);
+  const lockedBy = opts.lockedBy ?? "memory-retraction";
 
-  // Step 1 — CAS claim. A lost claim (fresh lock elsewhere, terminal row,
-  // exhausted attempts) returns the current row unchanged.
+  // Step 1 — fenced CAS claim. A lost claim (fresh lock elsewhere, terminal
+  // row, exhausted attempts) returns the current row unchanged.
   const claimed = await store.claimAttempt(attemptId, {
-    lockedBy: opts.lockedBy ?? "memory-retraction",
+    lockedBy,
     now: opts.now ?? new Date(),
   });
   if (!claimed) {
@@ -620,43 +848,46 @@ export async function processRetractionAttempt(
     return current;
   }
 
+  const fence: RetractionFence = {
+    lockedBy,
+    lockGeneration: claimed.lock_generation,
+  };
+  const onStale = async (): Promise<RetractionAttemptRow> => {
+    console.warn(
+      `[memory-retraction] fence lost attempt=${attemptId} worker=${lockedBy} gen=${fence.lockGeneration} — another claimant owns the saga`,
+    );
+    return (await store.loadAttempt(attemptId)) ?? claimed;
+  };
+
   let row = claimed;
   try {
-    // Step 2 — supports_updated: sever the claim-support graph and retract
-    // the derivation lineage before anything destructive hits the provider.
-    if (row.status === "running") {
+    // Lineage validation before anything destructive: a corrupt attempt row
+    // must not delete provider documents it cannot finalize afterwards.
+    let derivation: RetractionDerivation | null = null;
+    if (row.status === "running" || row.status === "provider_deleted") {
       if (!row.derivation_id) {
         throw new RetractionStepError({
           errorClass: "derivation_missing",
           message: "retraction attempt has no derivation_id",
         });
       }
-      const derivation = await store.loadDerivation(
-        row.tenant_id,
-        row.derivation_id,
-      );
+      derivation = await store.loadDerivation(row.tenant_id, row.derivation_id);
       if (!derivation) {
         throw new RetractionStepError({
           errorClass: "derivation_missing",
           message: `derivation not found: ${row.derivation_id}`,
         });
       }
-      await store.retractSupports({
-        tenantId: row.tenant_id,
-        sourceConfigId: row.source_config_id,
-        evidenceItemId: derivation.evidence_item_id,
-        derivationId: derivation.id,
-        deleteEvidence: row.scope === "source",
-        now: new Date(),
-      });
-      row = await store.recordProgress(row.id, "supports_updated", new Date());
     }
 
-    // Step 3 — provider_deleted: pinned Hindsight 0.8.4 document delete.
-    // "not_found" is idempotent success (a prior attempt's delete landed).
-    if (row.status === "supports_updated") {
+    // Step 2 — provider_deleted: pinned Hindsight 0.8.4 document delete,
+    // FIRST (Codex P1). "not_found" is idempotent success (a prior
+    // attempt's delete landed). On failure the internal state has not been
+    // touched: the derivation and its claims stay ACTIVE and queryable
+    // until a later retry succeeds.
+    if (row.status === "running") {
       if (typeof deps.adapter.deleteDocument !== "function") {
-        return await store.markFailed(
+        const failed = await store.markFailed(
           row,
           {
             errorClass: "unsupported_engine",
@@ -665,37 +896,615 @@ export async function processRetractionAttempt(
             retryable: false,
           },
           new Date(),
+          fence,
         );
+        return failed === "stale" ? onStale() : failed;
       }
       const owner = parseBankOwner(row.target_bank_id);
+      // Renew the lease around the external call so a slow provider delete
+      // does not look like a dead worker to the claim predicate.
+      if (!(await store.renewLease(row.id, fence, new Date()))) {
+        return onStale();
+      }
       await deps.adapter.deleteDocument({
         tenantId: row.tenant_id,
         ownerType: owner.ownerType,
         ownerId: owner.ownerId,
         documentId: row.provider_document_id,
       });
-      row = await store.recordProgress(row.id, "provider_deleted", new Date());
+      const next = await store.recordProgress(
+        row.id,
+        "provider_deleted",
+        new Date(),
+        fence,
+      );
+      if (next === "stale") return onStale();
+      row = next;
+    }
+
+    // Step 3 — supports_updated: with the provider document gone, finalize
+    // ALL internal state atomically in one transaction — for EVERY lineage
+    // sharing the deleted provider document (support edges, orphaned
+    // claims, derivation lifecycles, scope-'source' evidence). The partial
+    // unique per-document index means this attempt is the only one that
+    // will ever finalize those sibling derivations.
+    if (row.status === "provider_deleted") {
+      const next = await store.finalizeInternalState({
+        attemptId: row.id,
+        tenantId: row.tenant_id,
+        sourceConfigId: row.source_config_id,
+        providerDocumentId: row.provider_document_id,
+        deleteEvidence: row.scope === "source",
+        now: new Date(),
+        fence,
+      });
+      if (next === "stale") return onStale();
+      row = next;
     }
 
     // Step 4 — reconsolidated: let the engine reconcile the bank now that
-    // the document's units are gone. No consolidator available is a logged
-    // skip, not a failure.
-    if (row.status === "provider_deleted") {
+    // the document's units are gone. A delete-capable adapter WITHOUT a
+    // consolidator is recorded as skipped-with-reason — durable on the
+    // row, never silently counted as success.
+    if (row.status === "supports_updated") {
+      let reconsolidationNote: string | null = null;
       if (deps.consolidate) {
+        if (!(await store.renewLease(row.id, fence, new Date()))) {
+          return onStale();
+        }
         await deps.consolidate(row.tenant_id, row.target_bank_id);
       } else if (typeof deps.adapter.consolidateBankById === "function") {
+        if (!(await store.renewLease(row.id, fence, new Date()))) {
+          return onStale();
+        }
         await deps.adapter.consolidateBankById(row.target_bank_id);
       } else {
-        console.log(
-          `[memory-retraction] no consolidator available; skipping reconsolidation attempt=${row.id} bank=${row.target_bank_id.slice(0, 18)}`,
+        reconsolidationNote =
+          "skipped: no consolidator available on delete-capable adapter";
+        console.warn(
+          `[memory-retraction] reconsolidation skipped (no consolidator) attempt=${row.id} bank=${row.target_bank_id.slice(0, 18)}`,
         );
       }
-      row = await store.recordProgress(row.id, "reconsolidated", new Date());
+      const next = await store.recordProgress(
+        row.id,
+        "reconsolidated",
+        new Date(),
+        fence,
+        { reconsolidationNote },
+      );
+      if (next === "stale") return onStale();
+      row = next;
     }
 
     // Step 5 — terminal.
-    return await store.markRetracted(row.id, new Date());
+    const done = await store.markRetracted(row.id, new Date(), fence);
+    return done === "stale" ? onStale() : done;
   } catch (err) {
-    return store.markFailed(row, classifyRetractionError(err), new Date());
+    const failed = await store.markFailed(
+      row,
+      classifyRetractionError(err),
+      new Date(),
+      fence,
+    );
+    return failed === "stale" ? onStale() : failed;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Source erase — durable AGGREGATE over the per-document saga (Codex P1 #4)
+// ---------------------------------------------------------------------------
+
+export type SourceEraseStatus = "completed" | "pending" | "failed";
+
+export type SourceEraseResult = {
+  status: SourceEraseStatus;
+  attempts: {
+    total: number;
+    retracted: number;
+    pending: number;
+    deadLettered: number;
+    processedThisCall: number;
+  };
+  snapshotObjectsDeleted: number;
+  evidenceRowsCleared: number;
+  evidenceRowsDeleted: number;
+  checkpointsDeleted: boolean;
+};
+
+/**
+ * Persistence seam for the erase aggregate (drizzle in production, in-memory
+ * in tests).
+ */
+export interface SourceEraseStore {
+  listPendingSourceAttemptIds(
+    tenantId: string,
+    sourceConfigId: string,
+    limit: number,
+  ): Promise<string[]>;
+  countSourceAttemptsByStatus(
+    tenantId: string,
+    sourceConfigId: string,
+  ): Promise<Record<string, number>>;
+  /** Derivations still active/superseded (i.e. not yet retracted). */
+  countRemainingDerivations(
+    tenantId: string,
+    sourceConfigId: string,
+  ): Promise<number>;
+  /**
+   * Clear snapshot_ref + normalized_snapshot on every remaining evidence
+   * row of the source, and hard-delete evidence rows that never produced a
+   * derivation (their claim edges are retracted and orphaned claims
+   * deactivated first). Returns counts.
+   */
+  clearAndPurgeEvidence(
+    tenantId: string,
+    sourceConfigId: string,
+    now: Date,
+  ): Promise<{ cleared: number; deleted: number }>;
+  deleteCheckpoints(tenantId: string, sourceConfigId: string): Promise<void>;
+  /**
+   * Erase aggregates the drainer should drive to a terminal state: sources
+   * with a non-terminal 'erase' marker row (persisted by enqueueSourceErase,
+   * so it exists even for sources with ZERO derivations) whose 'source'
+   * children have all reached a terminal status. runSourceErase then either
+   * runs the cleanup phase (all children retracted) or marks the aggregate
+   * failed (dead-lettered children). Self-finalizing — a second operator
+   * mutation is never required.
+   */
+  listEraseAggregatesNeedingCleanup(
+    limit: number,
+  ): Promise<Array<{ tenantId: string; sourceConfigId: string }>>;
+  /** Terminal transition of the erase marker after successful cleanup. */
+  markEraseCompleted(
+    tenantId: string,
+    sourceConfigId: string,
+    now: Date,
+  ): Promise<void>;
+  /** Terminal failure of the erase marker (dead-lettered children). */
+  markEraseFailed(
+    tenantId: string,
+    sourceConfigId: string,
+    reason: string,
+    now: Date,
+  ): Promise<void>;
+}
+
+export function createDrizzleSourceEraseStore(db: DbHandle): SourceEraseStore {
+  return {
+    async listPendingSourceAttemptIds(tenantId, sourceConfigId, limit) {
+      const rows = await db
+        .select({ id: memoryRetractionAttempts.id })
+        .from(memoryRetractionAttempts)
+        .where(
+          and(
+            eq(memoryRetractionAttempts.tenant_id, tenantId),
+            eq(memoryRetractionAttempts.source_config_id, sourceConfigId),
+            eq(memoryRetractionAttempts.scope, "source"),
+            notInArray(memoryRetractionAttempts.status, [...TERMINAL_STATUSES]),
+          ),
+        )
+        .orderBy(asc(memoryRetractionAttempts.created_at))
+        .limit(limit);
+      return rows.map((r) => r.id);
+    },
+
+    async countSourceAttemptsByStatus(tenantId, sourceConfigId) {
+      const rows = await db
+        .select({
+          status: memoryRetractionAttempts.status,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(memoryRetractionAttempts)
+        .where(
+          and(
+            eq(memoryRetractionAttempts.tenant_id, tenantId),
+            eq(memoryRetractionAttempts.source_config_id, sourceConfigId),
+            eq(memoryRetractionAttempts.scope, "source"),
+          ),
+        )
+        .groupBy(memoryRetractionAttempts.status);
+      return Object.fromEntries(rows.map((r) => [r.status, r.count]));
+    },
+
+    async countRemainingDerivations(tenantId, sourceConfigId) {
+      const rows = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(memoryDerivations)
+        .where(
+          and(
+            eq(memoryDerivations.tenant_id, tenantId),
+            eq(memoryDerivations.source_config_id, sourceConfigId),
+            inArray(memoryDerivations.lifecycle, ["active", "superseded"]),
+          ),
+        );
+      return rows[0]?.count ?? 0;
+    },
+
+    async clearAndPurgeEvidence(tenantId, sourceConfigId, now) {
+      return db.transaction(async (tx) => {
+        const clearedRows = await tx
+          .update(memoryEvidenceItems)
+          .set({
+            snapshot_ref: null,
+            normalized_snapshot: null,
+            updated_at: now,
+          })
+          .where(
+            and(
+              eq(memoryEvidenceItems.tenant_id, tenantId),
+              eq(memoryEvidenceItems.source_config_id, sourceConfigId),
+              or(
+                sql`${memoryEvidenceItems.snapshot_ref} IS NOT NULL`,
+                sql`${memoryEvidenceItems.normalized_snapshot} IS NOT NULL`,
+              ),
+            ),
+          )
+          .returning({ id: memoryEvidenceItems.id });
+
+        // Evidence rows that never produced a derivation have no saga
+        // attempt; erase must still remove them (and deactivate any claims
+        // they alone supported).
+        const nonDerived = await tx
+          .select({ id: memoryEvidenceItems.id })
+          .from(memoryEvidenceItems)
+          .where(
+            and(
+              eq(memoryEvidenceItems.tenant_id, tenantId),
+              eq(memoryEvidenceItems.source_config_id, sourceConfigId),
+              sql`NOT EXISTS (SELECT 1 FROM ${memoryDerivations} WHERE ${memoryDerivations.evidence_item_id} = ${memoryEvidenceItems.id})`,
+            ),
+          );
+        for (const row of nonDerived) {
+          await tx
+            .update(memoryClaimEvidence)
+            .set({ status: "retracted", retracted_at: now })
+            .where(
+              and(
+                eq(memoryClaimEvidence.tenant_id, tenantId),
+                eq(memoryClaimEvidence.evidence_item_id, row.id),
+                eq(memoryClaimEvidence.status, "active"),
+              ),
+            );
+          await deactivateOrphanedClaims(tx, {
+            tenantId,
+            sourceConfigId,
+            evidenceItemId: row.id,
+          });
+        }
+        if (nonDerived.length > 0) {
+          await tx.delete(memoryEvidenceItems).where(
+            and(
+              eq(memoryEvidenceItems.tenant_id, tenantId),
+              inArray(
+                memoryEvidenceItems.id,
+                nonDerived.map((r) => r.id),
+              ),
+            ),
+          );
+        }
+        return { cleared: clearedRows.length, deleted: nonDerived.length };
+      });
+    },
+
+    async deleteCheckpoints(tenantId, sourceConfigId) {
+      await db
+        .delete(memorySourceCheckpoints)
+        .where(
+          and(
+            eq(memorySourceCheckpoints.tenant_id, tenantId),
+            eq(memorySourceCheckpoints.source_config_id, sourceConfigId),
+          ),
+        );
+    },
+
+    async listEraseAggregatesNeedingCleanup(limit) {
+      // Durable-marker driven: any non-terminal 'erase' marker whose
+      // 'source' children have all reached a terminal status. The marker is
+      // persisted by enqueueSourceErase BEFORE any destructive work, so a
+      // crash/S3 failure at any point (including a zero-derivation source)
+      // leaves a row the drainer can pick up on a later tick.
+      const rows = await db
+        .selectDistinct({
+          tenant_id: memoryRetractionAttempts.tenant_id,
+          source_config_id: memoryRetractionAttempts.source_config_id,
+        })
+        .from(memoryRetractionAttempts)
+        .where(
+          and(
+            eq(memoryRetractionAttempts.scope, "erase"),
+            notInArray(memoryRetractionAttempts.status, [...TERMINAL_STATUSES]),
+            sql`NOT EXISTS (
+              SELECT 1 FROM memory_retraction_attempts child
+              WHERE child.tenant_id = ${memoryRetractionAttempts.tenant_id}
+                AND child.source_config_id = ${memoryRetractionAttempts.source_config_id}
+                AND child.scope = 'source'
+                AND child.status NOT IN ('retracted', 'dead_lettered')
+            )`,
+          ),
+        )
+        .limit(limit);
+      return rows.map((r) => ({
+        tenantId: r.tenant_id,
+        sourceConfigId: r.source_config_id,
+      }));
+    },
+
+    async markEraseCompleted(tenantId, sourceConfigId, now) {
+      await db
+        .update(memoryRetractionAttempts)
+        .set({
+          status: "retracted",
+          error_class: null,
+          error_message: null,
+          completed_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(memoryRetractionAttempts.tenant_id, tenantId),
+            eq(memoryRetractionAttempts.source_config_id, sourceConfigId),
+            eq(memoryRetractionAttempts.scope, "erase"),
+            notInArray(memoryRetractionAttempts.status, [...TERMINAL_STATUSES]),
+          ),
+        );
+    },
+
+    async markEraseFailed(tenantId, sourceConfigId, reason, now) {
+      await db
+        .update(memoryRetractionAttempts)
+        .set({
+          status: "dead_lettered",
+          error_class: "children_dead_lettered",
+          error_message: reason.slice(0, MAX_ERROR_MESSAGE_CHARS),
+          completed_at: now,
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(memoryRetractionAttempts.tenant_id, tenantId),
+            eq(memoryRetractionAttempts.source_config_id, sourceConfigId),
+            eq(memoryRetractionAttempts.scope, "erase"),
+            notInArray(memoryRetractionAttempts.status, [...TERMINAL_STATUSES]),
+          ),
+        );
+    },
+  };
+}
+
+/**
+ * Default S3 snapshot deleter: removes every object under the source's
+ * evidence-snapshot prefix in the brain-artifacts bucket. Returns the number
+ * of objects deleted. Lazy-imports the S3 client so unit tests (which inject
+ * deleteSnapshots) never construct AWS clients.
+ */
+async function deleteEvidenceSnapshotObjects(args: {
+  tenantId: string;
+  sourceConfigId: string;
+}): Promise<number> {
+  const [
+    { S3Client, ListObjectsV2Command, DeleteObjectsCommand },
+    runtimeConfig,
+  ] = await Promise.all([
+    import("@aws-sdk/client-s3"),
+    import("@thinkwork/runtime-config"),
+  ]);
+  const bucket =
+    process.env.BRAIN_ARTIFACTS_BUCKET ??
+    runtimeConfig.getConfig("BRAIN_ARTIFACTS_BUCKET");
+  if (!bucket) {
+    throw new Error(
+      "BRAIN_ARTIFACTS_BUCKET is not configured — source erase requires the brain-artifacts bucket to delete evidence snapshots",
+    );
+  }
+  const prefix = `${SNAPSHOT_PREFIX}/${args.tenantId}/${args.sourceConfigId}/`;
+  const s3 = new S3Client({});
+  let deleted = 0;
+  let continuationToken: string | undefined;
+  do {
+    const page = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const keys = (page.Contents ?? [])
+      .map((o) => o.Key)
+      .filter((k): k is string => Boolean(k));
+    if (keys.length > 0) {
+      const result = await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+      const errors = result.Errors ?? [];
+      if (errors.length > 0) {
+        throw new Error(
+          `evidence snapshot delete failed for ${errors.length} object(s): ${errors[0]?.Code ?? "?"} ${errors[0]?.Message ?? ""}`,
+        );
+      }
+      deleted += keys.length;
+    }
+    continuationToken = page.IsTruncated
+      ? page.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+  return deleted;
+}
+
+export type SourceEraseDeps = ProcessRetractionDeps & {
+  /** Test seam; defaults to the drizzle store over deps.db. */
+  eraseStore?: SourceEraseStore;
+  /** Test seam; defaults to {@link enqueueSourceErase}. */
+  enqueue?: (
+    db: DbHandle,
+    args: { tenantId: string; sourceConfigId: string },
+  ) => Promise<{ enqueued: number }>;
+  /** Test seam; defaults to {@link processRetractionAttempt}. */
+  process?: (attemptId: string) => Promise<RetractionAttemptRow>;
+  /** Test seam; defaults to the S3 evidence-snapshot prefix deleter. */
+  deleteSnapshots?: (args: {
+    tenantId: string;
+    sourceConfigId: string;
+  }) => Promise<number>;
+  /** Bound on inline saga processing per call (remainder drains via the
+   * scheduled memory-retraction-drainer). */
+  maxInlineAttempts?: number;
+};
+
+const DEFAULT_MAX_INLINE_ERASE_ATTEMPTS = 20;
+
+/**
+ * Source-level erase as a durable AGGREGATE. It only reports "completed"
+ * after (a) every derivation of the source is retracted through the saga,
+ * (b) every evidence snapshot object under the source's S3 prefix is
+ * deleted, (c) snapshot_ref/normalized_snapshot are cleared and non-derived
+ * evidence rows are removed, and (d) — only then — checkpoints are deleted.
+ *
+ * Partial progress surfaces as status "pending" — and the erase is
+ * SELF-FINALIZING: the scheduled memory-retraction-drainer keeps retracting
+ * the children and, once they are all terminal, runs this aggregate's
+ * cleanup phase itself (listEraseAggregatesNeedingCleanup) — no second
+ * operator mutation is ever required. Dead-lettered children surface as
+ * status "failed". No cleanup happens in either non-completed state.
+ */
+export async function runSourceErase(
+  deps: SourceEraseDeps,
+  args: { tenantId: string; sourceConfigId: string },
+): Promise<SourceEraseResult> {
+  const eraseStore = deps.eraseStore ?? createDrizzleSourceEraseStore(deps.db);
+  const enqueue = deps.enqueue ?? enqueueSourceErase;
+  const process =
+    deps.process ??
+    ((attemptId: string) =>
+      processRetractionAttempt(
+        { db: deps.db, adapter: deps.adapter, consolidate: deps.consolidate },
+        attemptId,
+        { lockedBy: "memory-source-erase" },
+      ));
+  const deleteSnapshots = deps.deleteSnapshots ?? deleteEvidenceSnapshotObjects;
+  const maxInline = deps.maxInlineAttempts ?? DEFAULT_MAX_INLINE_ERASE_ATTEMPTS;
+
+  // 1. Enqueue erase attempts for every remaining derivation (idempotent).
+  await enqueue(deps.db, args);
+
+  // 2. Bounded inline drain of non-terminal source-scoped attempts. A
+  //    per-attempt failure is recorded on its ledger row by the saga; a
+  //    thrown error must not abort the rest of the batch.
+  const pendingIds = await eraseStore.listPendingSourceAttemptIds(
+    args.tenantId,
+    args.sourceConfigId,
+    maxInline,
+  );
+  let processedThisCall = 0;
+  for (const attemptId of pendingIds) {
+    try {
+      await process(attemptId);
+    } catch (err) {
+      console.error(
+        `[memory-source-erase] attempt ${attemptId} processing crashed: ${(err as Error)?.message ?? String(err)}`,
+      );
+    }
+    processedThisCall += 1;
+  }
+
+  // 3. Aggregate accounting AFTER processing.
+  const byStatus = await eraseStore.countSourceAttemptsByStatus(
+    args.tenantId,
+    args.sourceConfigId,
+  );
+  const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
+  const retracted = byStatus["retracted"] ?? 0;
+  const deadLettered = byStatus["dead_lettered"] ?? 0;
+  const pending = total - retracted - deadLettered;
+  const remainingDerivations = await eraseStore.countRemainingDerivations(
+    args.tenantId,
+    args.sourceConfigId,
+  );
+
+  const attempts = {
+    total,
+    retracted,
+    pending,
+    deadLettered,
+    processedThisCall,
+  };
+
+  if (deadLettered > 0) {
+    // Dead-lettered children are surfaced as a FAILED aggregate (the erase
+    // marker is dead-lettered too, so it never lingers silently pending)
+    // and the cleanup phase never runs.
+    await eraseStore.markEraseFailed(
+      args.tenantId,
+      args.sourceConfigId,
+      `${deadLettered} retraction attempt(s) dead-lettered for source ${args.sourceConfigId}`,
+      new Date(),
+    );
+    return {
+      status: "failed",
+      attempts,
+      snapshotObjectsDeleted: 0,
+      evidenceRowsCleared: 0,
+      evidenceRowsDeleted: 0,
+      checkpointsDeleted: false,
+    };
+  }
+  if (pending > 0 || remainingDerivations > 0) {
+    return {
+      status: "pending",
+      attempts,
+      snapshotObjectsDeleted: 0,
+      evidenceRowsCleared: 0,
+      evidenceRowsDeleted: 0,
+      checkpointsDeleted: false,
+    };
+  }
+
+  // 4. Cleanup phase — only reachable when every derivation is retracted.
+  //    Order: S3 snapshot objects, then Postgres snapshot columns +
+  //    non-derived evidence rows, then (LAST) checkpoints. A failure at any
+  //    step returns "pending" WITHOUT touching the later steps — the erase
+  //    marker row stays non-terminal, so the scheduled drainer retries the
+  //    whole idempotent cleanup on a later tick (checkpoints are therefore
+  //    never deleted before S3 + evidence cleanup have succeeded).
+  let snapshotObjectsDeleted: number;
+  let purge: { cleared: number; deleted: number };
+  try {
+    snapshotObjectsDeleted = await deleteSnapshots(args);
+    purge = await eraseStore.clearAndPurgeEvidence(
+      args.tenantId,
+      args.sourceConfigId,
+      new Date(),
+    );
+    await eraseStore.deleteCheckpoints(args.tenantId, args.sourceConfigId);
+  } catch (err) {
+    console.error(
+      `[memory-source-erase] cleanup phase failed (marker stays pending for the drainer) tenant=${args.tenantId} source=${args.sourceConfigId}: ${(err as Error)?.message ?? String(err)}`,
+    );
+    return {
+      status: "pending",
+      attempts,
+      snapshotObjectsDeleted: 0,
+      evidenceRowsCleared: 0,
+      evidenceRowsDeleted: 0,
+      checkpointsDeleted: false,
+    };
+  }
+
+  // 5. Terminal: retire the durable erase marker.
+  await eraseStore.markEraseCompleted(
+    args.tenantId,
+    args.sourceConfigId,
+    new Date(),
+  );
+
+  return {
+    status: "completed",
+    attempts,
+    snapshotObjectsDeleted,
+    evidenceRowsCleared: purge.cleared,
+    evidenceRowsDeleted: purge.deleted,
+    checkpointsDeleted: true,
+  };
 }

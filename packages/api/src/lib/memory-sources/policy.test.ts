@@ -15,10 +15,20 @@ describe("MemoryAuthorizationError", () => {
   });
 });
 
+// sourceFamily is a REQUIRED argument; fixtures evaluate under the
+// registered 'twenty' schema unless a test overrides the family.
+function within(
+  grant: Record<string, unknown>,
+  config: Record<string, unknown>,
+  sourceFamily = "twenty",
+) {
+  return () => assertBoundaryWithin(grant, config, { sourceFamily });
+}
+
 describe("assertBoundaryWithin", () => {
   it("passes when the config boundary is a subset of the grant envelope", () => {
-    expect(() =>
-      assertBoundaryWithin(
+    expect(
+      within(
         { maxRecords: 100, pageSize: 50, objects: ["companies", "people"] },
         { maxRecords: 100, pageSize: 10, objects: ["companies"] },
       ),
@@ -26,48 +36,117 @@ describe("assertBoundaryWithin", () => {
   });
 
   it("rejects a numeric cap above the grant's, naming the key", () => {
-    expect(() =>
-      assertBoundaryWithin({ maxRecords: 100 }, { maxRecords: 101 }),
-    ).toThrow(/maxRecords/);
-    expect(() =>
-      assertBoundaryWithin({ maxRecords: 100 }, { maxRecords: 101 }),
-    ).toThrow(MemoryAuthorizationError);
+    expect(within({ maxRecords: 100 }, { maxRecords: 101 })).toThrow(
+      /maxRecords/,
+    );
+    expect(within({ maxRecords: 100 }, { maxRecords: 101 })).toThrow(
+      MemoryAuthorizationError,
+    );
   });
 
   it("rejects an array value outside the grant allowlist, naming the key", () => {
-    expect(() =>
-      assertBoundaryWithin(
+    expect(
+      within(
         { objects: ["companies"] },
         { objects: ["companies", "opportunities"] },
       ),
     ).toThrow(/objects/);
+    expect(within({ objects: ["companies"] }, { objects: ["people"] })).toThrow(
+      MemoryAuthorizationError,
+    );
+  });
+
+  it("rejects a non-numeric config value against a numeric dimension", () => {
+    expect(within({ pageSize: 50 }, { pageSize: "all" })).toThrow(/pageSize/);
+    expect(within({}, { maxRecords: true })).toThrow(/maxRecords/);
+    expect(within({}, { maxRecords: Number.NaN })).toThrow(/maxRecords/);
+  });
+
+  it("rejects a non-array config value against an allowlist dimension", () => {
+    expect(
+      within({ objects: ["companies"] }, { objects: "companies" }),
+    ).toThrow(/objects/);
+  });
+
+  it("fails closed on an empty grant: config is held to the schema defaults", () => {
+    // Defaults (twenty): maxRecords 200, pageSize 50 — at/below passes …
+    expect(within({}, { maxRecords: 200, pageSize: 50 })).not.toThrow();
+    // … above throws. An empty grant is NOT an unlimited grant.
+    expect(within({}, { maxRecords: 10_000 })).toThrow(/maxRecords/);
+    expect(within({}, { pageSize: 51 })).toThrow(/pageSize/);
+    expect(within({}, { objects: ["people"] })).toThrow(/objects/);
+    expect(within({}, { objects: ["companies"] })).not.toThrow();
+  });
+
+  it("applies the default per dimension when the grant only sets others", () => {
+    expect(
+      within({ pageSize: 100 }, { pageSize: 100, maxRecords: 500 }),
+    ).toThrow(/maxRecords/);
+  });
+
+  it("compares EFFECTIVE values: a config omitting a dimension still requests the runtime default", () => {
+    // stages.ts falls back to DEFAULT_MAX_RECORDS (200) when the config omits
+    // maxRecords, so a grant capping it at 50 must reject the omission.
+    expect(within({ maxRecords: 50 }, {})).toThrow(/maxRecords/);
+    // A grant at/above the runtime default accepts the omission.
+    expect(within({ maxRecords: 200 }, {})).not.toThrow();
+  });
+
+  it("a grant may widen a dimension beyond its default", () => {
+    expect(within({ maxRecords: 5000 }, { maxRecords: 5000 })).not.toThrow();
+    expect(
+      within({ objects: ["companies", "people"] }, { objects: ["people"] }),
+    ).not.toThrow();
+  });
+
+  it("rejects unknown dimensions in the requested boundary, naming the key", () => {
+    expect(within({}, { domains: ["anything"] })).toThrow(/domains/);
+    // Unknown even when the grant echoes the same key — ungoverned keys
+    // grant nothing.
+    expect(
+      within({ webhookUrl: "https://x" }, { webhookUrl: "https://x" }),
+    ).toThrow(/webhookUrl/);
+    expect(within({ maxRecords: 5 }, { maxRecords: 5, extra: true })).toThrow(
+      /extra/,
+    );
+  });
+
+  it("rejects a grant value that is not comparable for its dimension", () => {
+    expect(within({ maxRecords: "lots" }, { maxRecords: 10 })).toThrow(
+      /maxRecords/,
+    );
+    expect(
+      within({ objects: "companies" }, { objects: ["companies"] }),
+    ).toThrow(/objects/);
+  });
+
+  it("ignores ungoverned keys that appear only in the grant", () => {
+    expect(
+      within({ note: "operator comment" }, { maxRecords: 10 }),
+    ).not.toThrow();
+  });
+
+  it("fails closed for a source family with no registered schema", () => {
+    expect(within({}, {}, "salesforce")).toThrow(MemoryAuthorizationError);
+    expect(within({}, {}, "salesforce")).toThrow(/salesforce/);
+    // Untyped callers that drop the required family option fail closed
+    // too — there is no default family.
     expect(() =>
       assertBoundaryWithin(
-        { urls: ["https://a.example"] },
-        { urls: ["https://b.example"] },
+        {},
+        {},
+        undefined as unknown as { sourceFamily: string },
       ),
     ).toThrow(MemoryAuthorizationError);
   });
 
-  it("rejects a non-numeric config value against a numeric grant cap", () => {
-    expect(() =>
-      assertBoundaryWithin({ pageSize: 50 }, { pageSize: "all" }),
-    ).toThrow(/pageSize/);
-  });
-
-  it("rejects a non-array config value against a grant allowlist", () => {
-    expect(() =>
-      assertBoundaryWithin({ labels: ["a"] }, { labels: "a" }),
-    ).toThrow(/labels/);
-  });
-
-  it("leaves keys the grant does not set unconstrained", () => {
-    expect(() =>
-      assertBoundaryWithin({}, { maxRecords: 10_000, domains: ["anything"] }),
+  it("governs the batch and snapshot dimensions read by stages", () => {
+    expect(
+      within({}, { projectBatch: 25, retainBatch: 25, snapshotTtlDays: 30 }),
     ).not.toThrow();
-    expect(() =>
-      assertBoundaryWithin({ maxRecords: 5 }, { maxRecords: 5, extra: true }),
-    ).not.toThrow();
+    expect(within({}, { projectBatch: 26 })).toThrow(/projectBatch/);
+    expect(within({}, { retainBatch: 26 })).toThrow(/retainBatch/);
+    expect(within({}, { snapshotTtlDays: 31 })).toThrow(/snapshotTtlDays/);
   });
 });
 

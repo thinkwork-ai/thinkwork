@@ -9,11 +9,20 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./policy.js", () => ({
-  requireActiveGrant: vi.fn(async () => ({ boundary: {} })),
-  assertBoundaryWithin: vi.fn(),
-  MemoryAuthorizationError: class MemoryAuthorizationError extends Error {},
-}));
+vi.mock("./policy.js", () => {
+  class MemoryAuthorizationError extends Error {}
+  return {
+    requireActiveGrant: vi.fn(async () => ({
+      id: "grant-1",
+      grant_version: 1,
+      boundary: {},
+    })),
+    // U2: runAcquire re-checks the grant before EVERY provider page read.
+    revalidateGrant: vi.fn(async () => undefined),
+    assertBoundaryWithin: vi.fn(),
+    MemoryAuthorizationError,
+  };
+});
 
 vi.mock("../memory/index.js", () => ({ getMemoryServices: vi.fn() }));
 vi.mock("../brain/dream/runner.js", () => ({ runBrainDreamState: vi.fn() }));
@@ -48,6 +57,7 @@ import {
   reconcileCompaniesPage,
 } from "./adapters/twenty.js";
 import { recordAcquiredPage } from "./evidence.js";
+import { MemoryAuthorizationError, revalidateGrant } from "./policy.js";
 import { advanceCheckpoint, ensureCheckpoint } from "./repository.js";
 import {
   effectiveLimit,
@@ -465,5 +475,44 @@ describe("runAcquire", () => {
     };
     expect(call.nextCursor.lastUpdatedAt).toBe("2026-06-15T00:00:00.000Z");
     expect(call.nextCursor.lastId).toBe("zz");
+  });
+
+  it("U2: a grant revoked between pages fails the run before the second provider read", async () => {
+    // Provider would happily keep serving full pages.
+    let nextId = 0;
+    vi.mocked(acquireCompaniesPage).mockImplementation(
+      async (_client, args: { pageSize: number }) => ({
+        items: Array.from({ length: args.pageSize }, () =>
+          item(`c${nextId++}`, "2026-06-01T00:00:00Z"),
+        ),
+        nextCursor: { lastUpdatedAt: "2026-06-01T00:00:00Z", lastId: "x" },
+        rawCount: args.pageSize,
+        pageToken: null,
+      }),
+    );
+    // The pre-page grant re-check passes for page 1, then the grant is
+    // revoked before page 2's read.
+    vi.mocked(revalidateGrant)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(
+        new MemoryAuthorizationError(
+          "authorization grant grant-1 is revoked — acquisition stopped before the next page",
+        ),
+      );
+
+    const result = await runAcquire(
+      makeCtx({ boundary: { maxRecords: 20, pageSize: 10 } }),
+    );
+
+    // Visible failure carrying the authorization message…
+    expect(result.status).toBe("failed");
+    expect((result as { error?: string }).error).toMatch(/revoked/);
+    // …page 2's provider read never happens…
+    expect(vi.mocked(acquireCompaniesPage)).toHaveBeenCalledTimes(1);
+    // …the checkpoint advanced only for the page that WAS read (page 1)…
+    expect(vi.mocked(recordAcquiredPage)).toHaveBeenCalledTimes(1);
+    // …and neither the backscan nor its checkpoint write ever start.
+    expect(vi.mocked(reconcileCompaniesPage)).not.toHaveBeenCalled();
+    expect(vi.mocked(advanceCheckpoint)).not.toHaveBeenCalled();
   });
 });

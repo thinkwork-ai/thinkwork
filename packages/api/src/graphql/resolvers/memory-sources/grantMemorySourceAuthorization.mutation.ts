@@ -47,65 +47,77 @@ export async function grantMemorySourceAuthorization(
     );
   }
 
-  const [processor] = await ctx.db
-    .select()
-    .from(memoryProcessorConfigsTable)
-    .where(
-      and(
-        eq(memoryProcessorConfigsTable.id, args.processorConfigId),
-        eq(memoryProcessorConfigsTable.tenant_id, tenantId),
+  const boundary = parseBoundary(args.boundary);
+  const grantedByUserId = await resolveCallerUserId(ctx);
+
+  // Codex U2 residual A: supersession is revoke + insert; run both in one
+  // transaction so a crash between them cannot leave the binding with zero
+  // active grants (revoked, nothing inserted) or two (with a concurrent
+  // grant). The tenant-scoped processor read sits inside it too — Codex U2
+  // residual B: a processorConfigId forged from another tenant matches no
+  // row here, so no grant carrying this tenant_id can reference it.
+  const inserted = await ctx.db.transaction(async (tx) => {
+    const [processor] = await tx
+      .select()
+      .from(memoryProcessorConfigsTable)
+      .where(
+        and(
+          eq(memoryProcessorConfigsTable.id, args.processorConfigId),
+          eq(memoryProcessorConfigsTable.tenant_id, tenantId),
+        ),
+      )
+      .limit(1);
+    if (!processor) throw new Error("Memory processor config not found");
+
+    const now = new Date();
+    const bindingFilters = and(
+      eq(memorySourceAuthorizationsTable.tenant_id, tenantId),
+      eq(
+        memorySourceAuthorizationsTable.processor_config_id,
+        args.processorConfigId,
       ),
-    )
-    .limit(1);
-  if (!processor) throw new Error("Memory processor config not found");
+      eq(memorySourceAuthorizationsTable.source_family, args.sourceFamily),
+      eq(
+        memorySourceAuthorizationsTable.source_binding_key,
+        args.sourceBindingKey,
+      ),
+    );
 
-  const now = new Date();
-  const bindingFilters = and(
-    eq(memorySourceAuthorizationsTable.tenant_id, tenantId),
-    eq(
-      memorySourceAuthorizationsTable.processor_config_id,
-      args.processorConfigId,
-    ),
-    eq(memorySourceAuthorizationsTable.source_family, args.sourceFamily),
-    eq(
-      memorySourceAuthorizationsTable.source_binding_key,
-      args.sourceBindingKey,
-    ),
-  );
+    const existing: AuthorizationRow[] = await tx
+      .select()
+      .from(memorySourceAuthorizationsTable)
+      .where(bindingFilters);
 
-  const existing: AuthorizationRow[] = await ctx.db
-    .select()
-    .from(memorySourceAuthorizationsTable)
-    .where(bindingFilters);
+    // One active grant per binding: supersede by revoking the current one(s).
+    const activeIds = existing
+      .filter((row) => row.status === "active")
+      .map((row) => row.id);
+    if (activeIds.length > 0) {
+      await tx
+        .update(memorySourceAuthorizationsTable)
+        .set({ status: "revoked", revoked_at: now, updated_at: now })
+        .where(inArray(memorySourceAuthorizationsTable.id, activeIds));
+    }
 
-  // One active grant per binding: supersede by revoking the current one(s).
-  const activeIds = existing
-    .filter((row) => row.status === "active")
-    .map((row) => row.id);
-  if (activeIds.length > 0) {
-    await ctx.db
-      .update(memorySourceAuthorizationsTable)
-      .set({ status: "revoked", revoked_at: now, updated_at: now })
-      .where(inArray(memorySourceAuthorizationsTable.id, activeIds));
-  }
+    const nextGrantVersion =
+      existing.reduce((max, row) => Math.max(max, row.grant_version), 0) + 1;
 
-  const nextGrantVersion =
-    existing.reduce((max, row) => Math.max(max, row.grant_version), 0) + 1;
-
-  const [inserted] = await ctx.db
-    .insert(memorySourceAuthorizationsTable)
-    .values({
-      tenant_id: tenantId,
-      processor_config_id: args.processorConfigId,
-      source_family: args.sourceFamily,
-      source_binding_key: args.sourceBindingKey,
-      boundary: parseBoundary(args.boundary),
-      granted_by_user_id: await resolveCallerUserId(ctx),
-      grant_version: nextGrantVersion,
-      status: "active",
-      expires_at: args.expiresAt ? new Date(args.expiresAt) : null,
-    })
-    .returning();
+    const [row] = await tx
+      .insert(memorySourceAuthorizationsTable)
+      .values({
+        tenant_id: tenantId,
+        processor_config_id: args.processorConfigId,
+        source_family: args.sourceFamily,
+        source_binding_key: args.sourceBindingKey,
+        boundary,
+        granted_by_user_id: grantedByUserId,
+        grant_version: nextGrantVersion,
+        status: "active",
+        expires_at: args.expiresAt ? new Date(args.expiresAt) : null,
+      })
+      .returning();
+    return row;
+  });
 
   return toGraphqlAuthorization(inserted);
 }

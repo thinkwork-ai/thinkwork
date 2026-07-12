@@ -3554,6 +3554,29 @@ export type MemorySourceConfig = {
   sourceFamily: Scalars['String']['output'];
 };
 
+/**
+ * Durable status of a source-level erase aggregate: 'completed' only after all
+ * derivations are retracted via the saga, S3 evidence snapshots are deleted,
+ * snapshot payloads cleared / non-derived evidence rows removed, and
+ * checkpoints purged. 'pending' = retractions still in flight; the scheduled
+ * memory-retraction-drainer self-finalizes the erase (child retries AND the
+ * cleanup phase) — no further operator action is required. 'failed' =
+ * dead-lettered children need operator attention.
+ */
+export type MemorySourceEraseResult = {
+  __typename?: 'MemorySourceEraseResult';
+  attemptsDeadLettered: Scalars['Int']['output'];
+  attemptsPending: Scalars['Int']['output'];
+  attemptsRetracted: Scalars['Int']['output'];
+  attemptsTotal: Scalars['Int']['output'];
+  checkpointsDeleted: Scalars['Boolean']['output'];
+  evidenceRowsCleared: Scalars['Int']['output'];
+  evidenceRowsDeleted: Scalars['Int']['output'];
+  processedThisCall: Scalars['Int']['output'];
+  snapshotObjectsDeleted: Scalars['Int']['output'];
+  status: Scalars['String']['output'];
+};
+
 export enum MemoryStrategy {
   Episodes = 'EPISODES',
   Preferences = 'PREFERENCES',
@@ -3956,11 +3979,15 @@ export type Mutation = {
   enableWorkflow: WorkflowBinding;
   enableWorkflowTemplate: WorkflowTemplateBinding;
   /**
-   * Disable a source config, enqueue erase attempts for all of its active
-   * derivations, process each inline, purge its checkpoints, and return the
-   * number of processed attempts.
+   * Disable a source config and run the durable erase aggregate: enqueue erase
+   * attempts for its derivations, drain a bounded batch inline, and — only when
+   * every derivation is retracted — delete S3 evidence snapshots, clear
+   * snapshot payloads, remove non-derived evidence rows, and purge checkpoints.
+   * Partial progress surfaces as status 'pending' and self-finalizes via the
+   * scheduled drainer (no second mutation needed); dead-lettered children
+   * surface as status 'failed'.
    */
-  eraseMemorySource: Scalars['Int']['output'];
+  eraseMemorySource: MemorySourceEraseResult;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
   grantCapability: CapabilityMutationResult;

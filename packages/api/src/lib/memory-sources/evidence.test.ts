@@ -1,11 +1,29 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// recordAcquiredPage runs for real against the in-memory fake db: only
+// drizzle's comparison builders become descriptor objects the fake interprets.
+vi.mock("drizzle-orm", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("drizzle-orm")>()),
+  ...(await import("./test-support/drizzle-condition-mocks.js"))
+    .drizzleConditionMocks,
+}));
+vi.mock("./repository.js", () => ({
+  CheckpointConflictError: class CheckpointConflictError extends Error {},
+  advanceCheckpoint: vi.fn(async () => ({
+    id: "cp-1",
+    cursor: {},
+    version: 1,
+  })),
+}));
 
 import {
   buildAcquireRunItemValues,
   computeContentHash,
   evidenceConflictKey,
+  recordAcquiredPage,
 } from "./evidence.js";
+import { makeFakeMemoryDb } from "./test-support/fake-claims-db.js";
 import type { EvidenceUpsert } from "./types.js";
 
 const TENANT_ID = "0015953e-aa13-4cab-8398-2e70f73dda63";
@@ -113,5 +131,112 @@ describe("buildAcquireRunItemValues (changed-vs-seen partitioning)", () => {
         changedKeys: new Set(),
       }),
     ).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// recordAcquiredPage — superseded editions lose their claim support (U2)
+// ---------------------------------------------------------------------------
+
+describe("recordAcquiredPage supersession", () => {
+  it("retracts the superseded edition's active support edges in the same transaction", async () => {
+    const { db, store, txCount } = makeFakeMemoryDb();
+    // Prior edition of company-1 with an active claim-support edge, plus an
+    // unrelated evidence item whose edge must stay untouched.
+    store.evidenceItems.push({
+      id: "ev-1",
+      tenant_id: TENANT_ID,
+      source_config_id: SOURCE_CONFIG_ID,
+      source_item_id: "company-1",
+      source_version: "v1",
+      lifecycle: "active",
+    });
+    store.claimEdges.push(
+      {
+        id: 1,
+        tenant_id: TENANT_ID,
+        claim_id: "claim-1",
+        evidence_item_id: "ev-1",
+        source_config_id: SOURCE_CONFIG_ID,
+        status: "active",
+        retracted_at: null,
+      },
+      {
+        id: 2,
+        tenant_id: TENANT_ID,
+        claim_id: "claim-1",
+        evidence_item_id: "ev-other",
+        source_config_id: SOURCE_CONFIG_ID,
+        status: "active",
+        retracted_at: null,
+      },
+    );
+
+    const result = await recordAcquiredPage(db, {
+      tenantId: TENANT_ID,
+      sourceConfigId: SOURCE_CONFIG_ID,
+      workflowRunId: RUN_ID,
+      partitionKey: "companies",
+      expectedCheckpointVersion: 0,
+      nextCursor: {},
+      items: [upsert({ sourceItemId: "company-1", sourceVersion: "v2" })],
+    });
+
+    expect(result.changed).toHaveLength(1);
+    expect(result.seen).toBe(0);
+    // The old edition is superseded and its support edge retracted…
+    const oldEvidence = store.evidenceItems.find((row) => row.id === "ev-1")!;
+    expect(oldEvidence.lifecycle).toBe("superseded");
+    const oldEdge = store.claimEdges.find((edge) => edge.id === 1)!;
+    expect(oldEdge.status).toBe("retracted");
+    expect(oldEdge.retracted_at).toBeInstanceOf(Date);
+    // …edges from OTHER evidence items are untouched…
+    expect(store.claimEdges.find((edge) => edge.id === 2)!.status).toBe(
+      "active",
+    );
+    // …the new edition is active, and everything happened in ONE transaction.
+    const newEvidence = store.evidenceItems.find(
+      (row) => row.source_version === "v2",
+    )!;
+    expect(newEvidence.lifecycle).toBe("active");
+    expect(txCount()).toBe(1);
+  });
+
+  it("a replayed (seen) page supersedes nothing and retracts nothing", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    store.evidenceItems.push({
+      id: "ev-1",
+      tenant_id: TENANT_ID,
+      source_config_id: SOURCE_CONFIG_ID,
+      source_item_id: "company-1",
+      source_version: "v1",
+      lifecycle: "active",
+    });
+    store.claimEdges.push({
+      id: 1,
+      tenant_id: TENANT_ID,
+      claim_id: "claim-1",
+      evidence_item_id: "ev-1",
+      source_config_id: SOURCE_CONFIG_ID,
+      status: "active",
+      retracted_at: null,
+    });
+
+    const result = await recordAcquiredPage(db, {
+      tenantId: TENANT_ID,
+      sourceConfigId: SOURCE_CONFIG_ID,
+      workflowRunId: RUN_ID,
+      partitionKey: "companies",
+      expectedCheckpointVersion: 0,
+      nextCursor: {},
+      items: [upsert({ sourceItemId: "company-1", sourceVersion: "v1" })],
+    });
+
+    expect(result.changed).toHaveLength(0);
+    expect(result.seen).toBe(1);
+    expect(
+      store.evidenceItems.find((row) => row.id === "ev-1")!.lifecycle,
+    ).toBe("active");
+    expect(store.claimEdges[0]!.status).toBe("active");
   });
 });

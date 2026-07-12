@@ -2349,6 +2349,8 @@ Join hints:
 | next_retry_at | timestamp with time zone |  |
 | locked_at | timestamp with time zone |  |
 | locked_by | text |  |
+| lock_generation | integer | not null |
+| reconsolidation_note | text |  |
 | error_class | text |  |
 | error_message | text |  |
 | created_at | timestamp with time zone | not null |
@@ -2357,7 +2359,7 @@ Join hints:
 
 Enum values:
 
-- `scope`: `derivation`, `source`
+- `scope`: `derivation`, `source`, `erase`
 - `status`: `queued`, `running`, `supports_updated`, `provider_deleted`, `reconsolidated`, `retracted`, `failed`, `dead_lettered`
 
 Join hints:
