@@ -84,7 +84,9 @@ export async function resolveObservationClaimSupport(args: {
     list.push(row.evidence_item_id);
     evidenceIdsByDocumentId.set(row.hindsight_document_id, list);
   }
-  const allEvidenceIds = [...new Set(derivationRows.map((r) => r.evidence_item_id))];
+  const allEvidenceIds = [
+    ...new Set(derivationRows.map((r) => r.evidence_item_id)),
+  ];
   if (allEvidenceIds.length === 0) return result;
 
   // 3. evidence items → active claim support edges (Aurora)

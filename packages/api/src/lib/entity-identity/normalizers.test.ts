@@ -17,7 +17,9 @@ describe("normalizeEntityName", () => {
   });
 
   it("does NOT strip meaning-bearing suffix tokens (no over-merge)", () => {
-    expect(normalizeEntityName("Acme")).not.toBe(normalizeEntityName("Acme Inc"));
+    expect(normalizeEntityName("Acme")).not.toBe(
+      normalizeEntityName("Acme Inc"),
+    );
     expect(normalizeEntityName("Acme")).not.toBe(
       normalizeEntityName("Acme Labs"),
     );

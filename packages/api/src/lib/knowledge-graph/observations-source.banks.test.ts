@@ -9,12 +9,12 @@ import { validateExplicitBankIds } from "./observations-source.js";
 
 describe("validateExplicitBankIds", () => {
   it("accepts space_ and tenant_ banks with null userId", () => {
-    expect(
-      validateExplicitBankIds(["tenant_abc123", "space_9f8e-7d"]),
-    ).toEqual([
-      { bankId: "tenant_abc123", userId: null },
-      { bankId: "space_9f8e-7d", userId: null },
-    ]);
+    expect(validateExplicitBankIds(["tenant_abc123", "space_9f8e-7d"])).toEqual(
+      [
+        { bankId: "tenant_abc123", userId: null },
+        { bankId: "space_9f8e-7d", userId: null },
+      ],
+    );
   });
 
   it("rejects user_ banks (personal banks never flow through targeted ingest)", () => {

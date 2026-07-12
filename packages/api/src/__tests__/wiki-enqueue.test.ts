@@ -418,7 +418,11 @@ describe("enqueueGraphWikiCompileTx", () => {
       dirtyCanonicalEntityIds: ["c1", "c2"],
     });
 
-    expect(r).toEqual({ status: "enqueued", jobId: "graph-job-1", inserted: true });
+    expect(r).toEqual({
+      status: "enqueued",
+      jobId: "graph-job-1",
+      inserted: true,
+    });
     expect(mockGraphEnqueue).toHaveBeenCalledWith(
       {
         tenantId: "t",

@@ -240,9 +240,7 @@ export const entityIdentityClaims = identity.table(
       table.key_kind,
       table.value_hash,
     ),
-    index("idx_entity_identity_claims_canonical").on(
-      table.canonical_entity_id,
-    ),
+    index("idx_entity_identity_claims_canonical").on(table.canonical_entity_id),
     check(
       "entity_identity_claims_visibility_allowed",
       sql`${table.visibility} IN ('tenant','private')`,

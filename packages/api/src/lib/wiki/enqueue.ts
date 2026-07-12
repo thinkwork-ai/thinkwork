@@ -180,8 +180,9 @@ export async function invokeWikiCompile(jobId: string): Promise<void> {
     return;
   }
 
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   await lambda.send(
     new InvokeCommand({

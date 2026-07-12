@@ -24,5 +24,6 @@ export const ontologyMutations = {
   rejectOntologyChangeSet: rejectOntologyChangeSetMutation,
   updateOntologyEntityType: updateOntologyEntityTypeMutation,
   updateOntologyRelationshipType: updateOntologyRelationshipTypeMutation,
-  setOntologyEntityTypeIdentityRules: setOntologyEntityTypeIdentityRulesMutation,
+  setOntologyEntityTypeIdentityRules:
+    setOntologyEntityTypeIdentityRulesMutation,
 };

@@ -40,7 +40,10 @@ export async function resolveEntityResolutionCase(
       input = { decision: "link", canonicalEntityId: args.canonicalEntityId };
       break;
     case "create":
-      input = { decision: "create", displayName: args.displayName ?? undefined };
+      input = {
+        decision: "create",
+        displayName: args.displayName ?? undefined,
+      };
       break;
     case "defer":
       input = { decision: "defer" };

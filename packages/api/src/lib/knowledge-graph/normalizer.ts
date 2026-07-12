@@ -102,7 +102,9 @@ export interface DroppedNodeSample {
   label: string;
   rawType: string | null;
   dropReason:
-    "structural_node" | "unapproved_entity_type" | "out_of_scope_nodeset";
+    | "structural_node"
+    | "unapproved_entity_type"
+    | "out_of_scope_nodeset";
   propertyKeys: string[];
 }
 

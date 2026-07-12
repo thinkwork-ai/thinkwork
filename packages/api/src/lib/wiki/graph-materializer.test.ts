@@ -199,7 +199,11 @@ describe("evidence-threshold promotion (THINK-133 U5)", () => {
       entities: [loner],
       relationships: [],
       evidence: [
-        { entity_id: "ent-loner", relationship_id: null, evidence_source_ref: "obs-1" },
+        {
+          entity_id: "ent-loner",
+          relationship_id: null,
+          evidence_source_ref: "obs-1",
+        },
       ],
     });
 
@@ -358,9 +362,21 @@ describe("materializeTenantWikiFromGraph", () => {
       // Three distinct observations: acme stays above the promotion gate so
       // this test isolates vanished-entity reconciliation.
       evidence: [
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-100" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-101" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-102" },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-100",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-101",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-102",
+        },
       ],
     });
     mocks.listGraphMaterializedTenantPages.mockResolvedValue([
@@ -387,9 +403,21 @@ describe("materializeTenantWikiFromGraph", () => {
       relationships: [],
       // Promoted (3 distinct observations) so the slug check is what skips.
       evidence: [
-        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-100" },
-        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-101" },
-        { entity_id: "ent-x", relationship_id: null, evidence_source_ref: "obs-102" },
+        {
+          entity_id: "ent-x",
+          relationship_id: null,
+          evidence_source_ref: "obs-100",
+        },
+        {
+          entity_id: "ent-x",
+          relationship_id: null,
+          evidence_source_ref: "obs-101",
+        },
+        {
+          entity_id: "ent-x",
+          relationship_id: null,
+          evidence_source_ref: "obs-102",
+        },
       ],
     });
     const { metrics } = await materializeTenantWikiFromGraph(
@@ -460,9 +488,21 @@ describe("graph compile job runner", () => {
       relationships: [],
       // Above the promotion gate: three distinct observations.
       evidence: [
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-100" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-101" },
-        { entity_id: "ent-acme", relationship_id: null, evidence_source_ref: "obs-102" },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-100",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-101",
+        },
+        {
+          entity_id: "ent-acme",
+          relationship_id: null,
+          evidence_source_ref: "obs-102",
+        },
       ],
     });
     const result = await runGraphCompileJobById("job-1", db as never);

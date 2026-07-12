@@ -243,7 +243,10 @@ beforeEach(() => {
       if (args.extraWork) {
         const onConflictDoUpdate = vi.fn(async () => undefined);
         const values = vi.fn(() => ({ onConflictDoUpdate }));
-        await args.extraWork({ marker: "tx", insert: vi.fn(() => ({ values })) });
+        await args.extraWork({
+          marker: "tx",
+          insert: vi.fn(() => ({ values })),
+        });
       }
     });
   purgeKnowledgeGraphSourceMock.mockReset().mockResolvedValue(undefined);
@@ -650,7 +653,12 @@ describe("knowledge-graph-observations-ingest U4 identity + compile handoff", ()
     const { db } = makeDb();
     resolveSnapshotCanonicalIdentityMock.mockImplementationOnce(
       async ({ snapshot }: any) => ({
-        snapshot: { ...snapshot, entities: [], relationships: [], evidence: [] },
+        snapshot: {
+          ...snapshot,
+          entities: [],
+          relationships: [],
+          evidence: [],
+        },
         deferrals: [
           { label: "Acme", ontologyTypeSlug: "company", caseId: "case-1" },
         ],
@@ -740,12 +748,10 @@ describe("knowledge-graph-observations-ingest backlog throughput", () => {
     // (default mock: not truncated) — two full runs, one invocation, no
     // Lambda self-invoke.
     expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(2);
-    expect(
-      createKnowledgeGraphObservationsIngestRunMock,
-    ).toHaveBeenCalledTimes(2);
-    expect(result.metrics).toEqual(
-      expect.objectContaining({ drainSweeps: 2 }),
+    expect(createKnowledgeGraphObservationsIngestRunMock).toHaveBeenCalledTimes(
+      2,
     );
+    expect(result.metrics).toEqual(expect.objectContaining({ drainSweeps: 2 }));
   });
 
   it("runs a single sweep when the backlog was not truncated", async () => {
@@ -758,9 +764,7 @@ describe("knowledge-graph-observations-ingest backlog throughput", () => {
 
     expect(result.status).toBe("succeeded");
     expect(loadObservationsKnowledgeGraphSourceMock).toHaveBeenCalledTimes(1);
-    expect(result.metrics).toEqual(
-      expect.objectContaining({ drainSweeps: 1 }),
-    );
+    expect(result.metrics).toEqual(expect.objectContaining({ drainSweeps: 1 }));
   });
 
   it("stops draining once the budget is exhausted (scheduled sweep is the backstop)", async () => {

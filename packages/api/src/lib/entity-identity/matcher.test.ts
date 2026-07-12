@@ -31,11 +31,18 @@ describe("decideMatch", () => {
       rules: [strongDomainRule],
       exactCanonicalEntityId: "canon-exact",
       claimMatches: [
-        { keyKind: "domain", canonicalEntityId: "other", canonicalDisplayName: null },
+        {
+          keyKind: "domain",
+          canonicalEntityId: "other",
+          canonicalDisplayName: null,
+        },
       ],
       nameCandidates: [],
     });
-    expect(verdict).toEqual({ kind: "exact", canonicalEntityId: "canon-exact" });
+    expect(verdict).toEqual({
+      kind: "exact",
+      canonicalEntityId: "canon-exact",
+    });
   });
 
   it("private evidence without an exact mapping is private_unmapped (never creates)", () => {
@@ -44,7 +51,11 @@ describe("decideMatch", () => {
       rules: [strongDomainRule],
       exactCanonicalEntityId: null,
       claimMatches: [
-        { keyKind: "domain", canonicalEntityId: "c1", canonicalDisplayName: null },
+        {
+          keyKind: "domain",
+          canonicalEntityId: "c1",
+          canonicalDisplayName: null,
+        },
       ],
       nameCandidates: [{ canonicalEntityId: "c1", displayName: "Acme" }],
     });
@@ -59,7 +70,10 @@ describe("decideMatch", () => {
       claimMatches: [],
       nameCandidates: [],
     });
-    expect(verdict).toEqual({ kind: "exact", canonicalEntityId: "canon-exact" });
+    expect(verdict).toEqual({
+      kind: "exact",
+      canonicalEntityId: "canon-exact",
+    });
   });
 
   it("auto-links on a single non-conflicting strong-key match", () => {
@@ -68,7 +82,11 @@ describe("decideMatch", () => {
       rules: [strongDomainRule],
       exactCanonicalEntityId: null,
       claimMatches: [
-        { keyKind: "domain", canonicalEntityId: "c1", canonicalDisplayName: "Acme" },
+        {
+          keyKind: "domain",
+          canonicalEntityId: "c1",
+          canonicalDisplayName: "Acme",
+        },
       ],
       nameCandidates: [],
     });
@@ -85,7 +103,11 @@ describe("decideMatch", () => {
       rules: [weakNameRule],
       exactCanonicalEntityId: null,
       claimMatches: [
-        { keyKind: "name", canonicalEntityId: "c1", canonicalDisplayName: "Acme" },
+        {
+          keyKind: "name",
+          canonicalEntityId: "c1",
+          canonicalDisplayName: "Acme",
+        },
       ],
       nameCandidates: [],
     });
@@ -98,8 +120,16 @@ describe("decideMatch", () => {
       rules: [strongDomainRule],
       exactCanonicalEntityId: null,
       claimMatches: [
-        { keyKind: "domain", canonicalEntityId: "c1", canonicalDisplayName: "A" },
-        { keyKind: "domain", canonicalEntityId: "c2", canonicalDisplayName: "B" },
+        {
+          keyKind: "domain",
+          canonicalEntityId: "c1",
+          canonicalDisplayName: "A",
+        },
+        {
+          keyKind: "domain",
+          canonicalEntityId: "c2",
+          canonicalDisplayName: "B",
+        },
       ],
       nameCandidates: [],
     });
@@ -156,7 +186,11 @@ describe("decideMatch", () => {
       rules,
       exactCanonicalEntityId: null,
       claimMatches: [
-        { keyKind: "name", canonicalEntityId: "c1", canonicalDisplayName: "Acme" },
+        {
+          keyKind: "name",
+          canonicalEntityId: "c1",
+          canonicalDisplayName: "Acme",
+        },
       ],
       nameCandidates: [],
     });

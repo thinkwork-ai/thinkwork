@@ -94,7 +94,10 @@ export async function canonicalEntity(
     .limit(1);
   if (!row) return null;
   const mappings = await loadMappings(ctx, [row.id]);
-  return toGraphqlCanonicalEntity(row as CanonicalRow, mappings.get(row.id) ?? []);
+  return toGraphqlCanonicalEntity(
+    row as CanonicalRow,
+    mappings.get(row.id) ?? [],
+  );
 }
 
 async function loadMappings(

@@ -153,9 +153,7 @@ export async function openOrCoalesceResolutionCase(
         candidates: input.candidates,
         conflicting_claims: input.conflictingClaims,
         display_hint: input.displayHint,
-        ...(input.impactSummary
-          ? { impact_summary: input.impactSummary }
-          : {}),
+        ...(input.impactSummary ? { impact_summary: input.impactSummary } : {}),
         updated_at: new Date(),
       })
       .where(eq(entityResolutionCases.id, existing.id));
@@ -338,9 +336,7 @@ export interface ApplyResolutionDecisionResult {
   canonicalEntityId: string | null;
 }
 
-function pendingKeysFromCase(
-  impactSummary: unknown,
-): ResolutionCaseKeyInput[] {
+function pendingKeysFromCase(impactSummary: unknown): ResolutionCaseKeyInput[] {
   const summary = impactSummary as Record<string, unknown> | null;
   const raw = summary?.pendingKeys;
   if (!Array.isArray(raw)) return [];

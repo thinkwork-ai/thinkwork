@@ -1600,7 +1600,11 @@ export async function upsertCanonicalEntityPage(
         },
         txc,
       );
-      if (legacy && !(legacy as WikiPageRow & { canonical_entity_id?: string | null }).canonical_entity_id) {
+      if (
+        legacy &&
+        !(legacy as WikiPageRow & { canonical_entity_id?: string | null })
+          .canonical_entity_id
+      ) {
         existing = legacy;
       }
     }
@@ -1647,7 +1651,11 @@ export async function upsertCanonicalEntityPage(
         // The old slug lives on as an alias — rename never breaks lookups.
         await tx
           .insert(wikiPageAliases)
-          .values({ page_id: page.id, alias: existing.slug, source: "compiler" })
+          .values({
+            page_id: page.id,
+            alias: existing.slug,
+            source: "compiler",
+          })
           .onConflictDoNothing();
       }
     } else {
