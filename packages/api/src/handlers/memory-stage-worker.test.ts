@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const repoMocks = vi.hoisted(() => ({
   getProcessorConfig: vi.fn(),
   getSourceConfig: vi.fn(),
+  listEnabledSourceConfigs: vi.fn(),
 }));
 const stageMocks = vi.hoisted(() => ({
   runAcquire: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("../lib/memory-sources/repository.js", async (importOriginal) => {
     ...actual,
     getProcessorConfig: repoMocks.getProcessorConfig,
     getSourceConfig: repoMocks.getSourceConfig,
+    listEnabledSourceConfigs: repoMocks.listEnabledSourceConfigs,
   };
 });
 
@@ -214,17 +216,20 @@ describe("memory-stage-worker", () => {
     sfnSend.mockResolvedValue({});
   });
 
-  it("rejects a personal/user-scoped processor and resumes with failed (R11/AE7)", async () => {
+  it("rejects a personal/user-scoped processor on the shared-only graph stage (R11/AE7)", async () => {
     repoMocks.getProcessorConfig.mockResolvedValue(
       activeProcessor({ mode: "personal", target_scope: "user" }),
     );
     const { state, tokenOps } = makeTokenOps(pendingRow());
 
-    const { result, resume } = await runMemoryStageWorker(baseEvent(), {
-      db: fakeDb(),
-      sfnClient: sfn,
-      tokenOps,
-    });
+    const { result, resume } = await runMemoryStageWorker(
+      baseEvent({ stage: "graph" }),
+      {
+        db: fakeDb(bindingSelects({ stage: "graph" })),
+        sfnClient: sfn,
+        tokenOps,
+      },
+    );
 
     expect(result.status).toBe("failed");
     expect(result.error).toMatch(/shared|scope/i);
@@ -238,7 +243,7 @@ describe("memory-stage-worker", () => {
     expect((state.row?.result as { status?: string })?.status).toBe("failed");
   });
 
-  it("fails visibly on a stage U1 does not implement", async () => {
+  it("wiki runs as a shared-only stub for shared processors (U3)", async () => {
     repoMocks.getProcessorConfig.mockResolvedValue(activeProcessor());
     repoMocks.getSourceConfig.mockResolvedValue({
       source: {
@@ -260,21 +265,119 @@ describe("memory-stage-worker", () => {
       },
     );
 
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain('stage "wiki" is not implemented in U1');
+    // assertTargetInTenant's tenant target check passes (target_id ===
+    // tenant_id), then the U4-deferred stub records a visible no-op.
+    expect(result.status).toBe("succeeded");
+    expect(result.output?.note).toContain("U4");
   });
 
-  it("requires an explicit sourceConfigId in U1", async () => {
+  it("wiki hard-rejects a user_* target bank (AE7)", async () => {
+    repoMocks.getProcessorConfig.mockResolvedValue(
+      activeProcessor({ mode: "personal", target_scope: "user" }),
+    );
+    const { tokenOps } = makeTokenOps(pendingRow());
+
+    const { result } = await runMemoryStageWorker(
+      baseEvent({ stage: "wiki" }),
+      {
+        db: fakeDb(bindingSelects({ stage: "wiki" })),
+        sfnClient: sfn,
+        tokenOps,
+      },
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatch(/shared/i);
+  });
+
+  it("omitted sourceConfigId runs the processor's enabled sources; zero sources is a visible no-op (U3)", async () => {
     repoMocks.getProcessorConfig.mockResolvedValue(activeProcessor());
+    repoMocks.listEnabledSourceConfigs.mockResolvedValue([]);
+    const { tokenOps } = makeTokenOps(pendingRow());
+    stageMocks.runAcquire.mockImplementation(
+      (
+        await vi.importActual<typeof import("../lib/memory-sources/stages.js")>(
+          "../lib/memory-sources/stages.js",
+        )
+      ).runAcquire,
+    );
+
+    const { result } = await runMemoryStageWorker(
+      baseEvent({ sourceConfigId: null }),
+      {
+        db: fakeDb(bindingSelects({ sourceConfigId: undefined })),
+        sfnClient: sfn,
+        tokenOps,
+      },
+    );
+
+    expect(repoMocks.listEnabledSourceConfigs).toHaveBeenCalledWith(
+      expect.anything(),
+      { tenantId: TENANT_ID, processorConfigId: PROC_ID },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(result.counts?.noop).toBe(1);
+  });
+
+  it("an approved-plan override narrows the source set by INTERSECTION (U3)", async () => {
+    repoMocks.getProcessorConfig.mockResolvedValue(activeProcessor());
+    repoMocks.listEnabledSourceConfigs.mockResolvedValue([
+      { id: SRC_ID, source_family: "twenty", enabled: true, boundary: {} },
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        source_family: "twenty",
+        enabled: true,
+        boundary: {},
+      },
+    ]);
+    const { tokenOps } = makeTokenOps(pendingRow());
+    stageMocks.runAcquire.mockImplementation(async (ctx) => ({
+      status: "succeeded",
+      stage: "acquire",
+      counts: { sources: (ctx as { sources: unknown[] }).sources.length },
+    }));
+
+    const { result } = await runMemoryStageWorker(
+      baseEvent({
+        sourceConfigId: null,
+        // "not-configured" is outside the processor's sources — it selects
+        // nothing extra; only SRC_ID survives the intersection.
+        options: { override: { sourceConfigIds: [SRC_ID, "not-configured"] } },
+      }),
+      {
+        db: fakeDb(bindingSelects({ sourceConfigId: undefined })),
+        sfnClient: sfn,
+        tokenOps,
+      },
+    );
+
+    expect(result.status).toBe("succeeded");
+    expect(result.counts?.sources).toBe(1);
+  });
+
+  it("rejects a personal processor bound to a shared-only source family (U3)", async () => {
+    repoMocks.getProcessorConfig.mockResolvedValue(
+      activeProcessor({ mode: "personal", target_scope: "user" }),
+    );
+    repoMocks.listEnabledSourceConfigs.mockResolvedValue([
+      { id: SRC_ID, source_family: "twenty", enabled: true, boundary: {} },
+    ]);
     const { tokenOps } = makeTokenOps(pendingRow());
 
     const { result } = await runMemoryStageWorker(
       baseEvent({ sourceConfigId: null }),
-      { db: fakeDb(), sfnClient: sfn, tokenOps },
+      {
+        db: fakeDb([
+          ...bindingSelects({ sourceConfigId: undefined }),
+          [{ id: "user-1" }], // assertTargetInTenant: user belongs to tenant
+        ]),
+        sfnClient: sfn,
+        tokenOps,
+      },
     );
 
     expect(result.status).toBe("failed");
-    expect(result.error).toContain("sourceConfigId");
+    expect(result.error).toMatch(/shared-only source famil/);
   });
 
   it("a crashed stage still resumes the token as a failed result — never parks forever", async () => {
@@ -480,9 +583,10 @@ describe("memory-stage-worker", () => {
       tokenOps,
     });
 
-    // Reached the stage pipeline (which enforces tenant ownership itself).
+    // Reached the stage pipeline (which enforces tenant ownership itself:
+    // the fake db has no user/member rows, so target validation rejects).
     expect(repoMocks.getProcessorConfig).toHaveBeenCalled();
-    expect(result.error).toMatch(/shared|scope/i);
+    expect(result.error).toMatch(/does not belong/i);
   });
 
   it("wrong-tenant run fails the binding without stage execution", async () => {

@@ -13,6 +13,8 @@ import {
   memorySourceCheckpoints,
   memorySourceConfigs,
   spaces,
+  tenantMembers,
+  users,
 } from "@thinkwork/database-pg/schema";
 
 import type {
@@ -104,11 +106,51 @@ export function assertSharedScope(
 }
 
 /**
+ * Mode/scope coherence (THINK-193 U3): a personal processor targets exactly
+ * one User Bank (mode personal + target_scope user); a shared processor
+ * targets a Space/Tenant bank. Any other combination is a mis-seeded row
+ * and is rejected before any stage work.
+ */
+export function assertProcessorModeShape(
+  processor: Pick<MemoryProcessorConfig, "id" | "mode" | "target_scope">,
+): void {
+  if (processor.mode === "personal") {
+    if (processor.target_scope !== "user") {
+      throw new MemoryScopeError(
+        `processor ${processor.id} has mode 'personal' but targets scope '${processor.target_scope}' — personal processing writes only the User Bank`,
+      );
+    }
+    return;
+  }
+  assertSharedScope(processor);
+}
+
+/**
+ * Stage-level scope gate (THINK-193 U3): graph and wiki publication are
+ * SHARED-ONLY pipeline stages — they hard-reject `user_*` targets so a
+ * personal run can never publish shared graph/Wiki state (R9/AE7), on top
+ * of the personal blueprint structurally omitting these steps.
+ */
+export function assertStageAllowedForScope(
+  processor: Pick<MemoryProcessorConfig, "id" | "mode" | "target_scope">,
+  stage: string,
+): void {
+  assertProcessorModeShape(processor);
+  if (stage === "graph" || stage === "wiki") {
+    if (processor.mode !== "shared") {
+      throw new MemoryScopeError(
+        `stage '${stage}' publishes shared graph/Wiki state — processor ${processor.id} (mode '${processor.mode}') targeting bank '${processor.target_scope}_*' is rejected`,
+      );
+    }
+  }
+}
+
+/**
  * Verify the processor's target actually belongs to its tenant before any
  * bank write (R11): a `tenant` target must be the processor's own tenant id,
- * and a `space` target must be a space row owned by that tenant. Without
- * this, a mis-seeded target_id would concatenate into ANOTHER tenant's
- * `tenant_<uuid>`/`space_<uuid>` bank.
+ * a `space` target must be a space row owned by that tenant, and a `user`
+ * target must be a user of that tenant. Without this, a mis-seeded
+ * target_id would concatenate into ANOTHER tenant's bank id.
  */
 export async function assertTargetInTenant(
   db: DbHandle,
@@ -143,9 +185,62 @@ export async function assertTargetInTenant(
     }
     return;
   }
+  if (processor.target_scope === "user") {
+    // The user must belong to this tenant — via users.tenant_id (native
+    // users) or a tenant_members row (federated/invited users).
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.id, processor.target_id),
+          eq(users.tenant_id, processor.tenant_id),
+        ),
+      )
+      .limit(1);
+    if (user) return;
+    const [member] = await db
+      .select({ id: tenantMembers.id })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, processor.tenant_id),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.principal_id, processor.target_id),
+        ),
+      )
+      .limit(1);
+    if (member) return;
+    throw new MemoryScopeError(
+      `processor ${processor.id} targets user ${processor.target_id}, who does not belong to tenant ${processor.tenant_id}`,
+    );
+  }
   throw new MemoryScopeError(
-    `processor ${processor.id} targets scope '${processor.target_scope}' — shared ingestion may only target 'space' or 'tenant' banks`,
+    `processor ${processor.id} targets scope '${processor.target_scope}' — ingestion may only target 'user', 'space', or 'tenant' banks`,
   );
+}
+
+/**
+ * Every ENABLED source config under a processor, ordered stably by creation.
+ * U3 memory_stage steps omit sourceConfigId and run the processor's full
+ * configured source set; an approved-plan override may only NARROW this
+ * list by intersection.
+ */
+export async function listEnabledSourceConfigs(
+  db: DbHandle,
+  args: { tenantId: string; processorConfigId: string },
+): Promise<MemorySourceConfig[]> {
+  return await db
+    .select()
+    .from(memorySourceConfigs)
+    .where(
+      and(
+        eq(memorySourceConfigs.tenant_id, args.tenantId),
+        eq(memorySourceConfigs.processor_config_id, args.processorConfigId),
+        eq(memorySourceConfigs.enabled, true),
+      ),
+    )
+    .orderBy(memorySourceConfigs.created_at, memorySourceConfigs.id);
 }
 
 /** Hindsight bank id for the processor's target, e.g. `tenant_<uuid>`. */

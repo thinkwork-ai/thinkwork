@@ -12,7 +12,11 @@ import type { S3Client } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
 import { memoryEvidenceItems } from "@thinkwork/database-pg/schema";
-import type { MemoryStageWorkerResult } from "@thinkwork/agent-loops-core";
+import {
+  sanitizeApprovalPlanOverride,
+  type ApprovalPlanOverride,
+  type MemoryStageWorkerResult,
+} from "@thinkwork/agent-loops-core";
 import { getMemoryServices } from "../memory/index.js";
 import { runBrainDreamState } from "../brain/dream/runner.js";
 import {
@@ -95,12 +99,49 @@ export interface StageLease {
 export interface StageContext {
   db: Database;
   event: MemoryStageWorkerEventShape;
-  processor: MemoryProcessorConfig & { target_scope: "space" | "tenant" };
+  /** U3: personal processors (target_scope 'user') run the pipeline too;
+   * stages that write shared projections re-assert shared scope below. */
+  processor: MemoryProcessorConfig;
   sources: MemorySourceConfig[];
   /** Injected by the harness; absent in tests/back-compat callers. */
   lease?: StageLease;
   /** Injected S3 client for snapshot IO; defaults to the lazy module client. */
   s3?: S3Client;
+}
+
+/**
+ * Approved-plan override carried in options.override (THINK-193 U3). The
+ * worker already applied sourceConfigIds narrowing by intersection; stages
+ * consume the numeric caps through the existing narrow-only effectiveLimit.
+ * Malformed values are ignored — narrowing is opt-in, widening impossible.
+ */
+export function overrideFrom(
+  options: Record<string, unknown> | null | undefined,
+): ApprovalPlanOverride | null {
+  const raw = options?.override;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  try {
+    return sanitizeApprovalPlanOverride(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Defensive shared-scope narrowing for stages whose write path is scoped to
+ * space/tenant banks in U3 (Twenty evidence, shared claims). The worker's
+ * family policy already prevents shared-only sources on personal
+ * processors; this converts an impossible state into a visible failure
+ * instead of a mis-typed bank id.
+ */
+function requireSharedProcessor(
+  ctx: StageContext,
+): (MemoryProcessorConfig & { target_scope: "space" | "tenant" }) | null {
+  const scope = ctx.processor.target_scope;
+  if (scope !== "space" && scope !== "tenant") return null;
+  return ctx.processor as MemoryProcessorConfig & {
+    target_scope: "space" | "tenant";
+  };
 }
 
 export function failed(stage: string, error: string): MemoryStageWorkerResult {
@@ -215,9 +256,29 @@ export async function runAcquire(
 async function runAcquireInner(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
-  const { db, event, processor } = ctx;
+  const { db, event } = ctx;
   const counts = { changed: 0, seen: 0, pages: 0 };
   const perSource: Record<string, unknown> = {};
+
+  // Zero configured/selected sources is a VISIBLE no-op, not a failure —
+  // the normal state for a personal processor before U6 adds personal
+  // source families, and for an override that deselected every source.
+  if (ctx.sources.length === 0) {
+    return {
+      status: "succeeded",
+      stage: event.stage,
+      counts: { ...counts, noop: 1 },
+      output: { note: "no enabled sources selected for this run" },
+    };
+  }
+  // U3: every implemented source family (Twenty) writes shared evidence.
+  const processor = requireSharedProcessor(ctx);
+  if (!processor) {
+    return failed(
+      event.stage,
+      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — the configured source families write shared banks only`,
+    );
+  }
 
   for (const source of ctx.sources) {
     if (source.source_family !== "twenty") {
@@ -280,6 +341,9 @@ async function runAcquireInner(
     const boundary = (source.boundary ?? {}) as Record<string, unknown>;
     const budget = (processor.budget ?? {}) as Record<string, unknown>;
     const options = event.options ?? {};
+    // Approved-plan override (U3): joins the narrow-only minimum below —
+    // a reviewer can only shrink the run, never exceed saved boundaries.
+    const override = overrideFrom(options);
     // Erase write-fence captured with the source row at stage start
     // (round-3 P1-2): every page commit CASes on it in-transaction.
     const eraseFence = {
@@ -296,7 +360,12 @@ async function runAcquireInner(
       200,
     );
     const maxRecords = effectiveLimit(
-      [boundary.maxRecords, budget.maxRecords, options.maxRecords],
+      [
+        boundary.maxRecords,
+        budget.maxRecords,
+        options.maxRecords,
+        override?.maxRecords,
+      ],
       DEFAULT_MAX_RECORDS,
       1,
       2000,
@@ -770,6 +839,15 @@ async function runProjectInner(
   const backlog = await changedEvidence(ctx);
   const items = backlog.slice(0, evidenceBatchLimit(ctx, "projectBatch"));
   const counts = { changed: 0, noop: 0, failed: 0 };
+  const shared = requireSharedProcessor(ctx);
+  if (items.length > 0 && !shared) {
+    // Unreachable via the worker (shared-only families cannot bind personal
+    // processors), but never silently mint claims under a user scope.
+    return failed(
+      event.stage,
+      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — Twenty claim projection writes shared scopes only`,
+    );
+  }
   const fenceSource = ctx.sources[0];
   const eraseFence = fenceSource
     ? {
@@ -811,8 +889,8 @@ async function runProjectInner(
     const claims = extractCompanyClaims({
       snapshot,
       sourceItemId: item.source_item_id,
-      targetScope: ctx.processor.target_scope,
-      targetId: ctx.processor.target_id,
+      targetScope: shared!.target_scope,
+      targetId: shared!.target_id,
     });
     const editionEffectiveFrom =
       typeof snapshot.updatedAt === "string" &&
@@ -821,8 +899,8 @@ async function runProjectInner(
         : null;
     const claimResult = await upsertClaimsForEvidence(db, {
       tenantId: item.tenant_id,
-      targetScope: ctx.processor.target_scope,
-      targetId: ctx.processor.target_id,
+      targetScope: shared!.target_scope,
+      targetId: shared!.target_id,
       sourceConfigId: item.source_config_id,
       evidenceItemId: item.id,
       subjectKey: `twenty:company:${item.source_item_id}`,
@@ -901,6 +979,13 @@ async function runRetainInner(
   const backlog = await changedEvidence(ctx);
   const items = backlog.slice(0, evidenceBatchLimit(ctx, "retainBatch"));
   const counts = { changed: 0, noop: 0 };
+  const shared = requireSharedProcessor(ctx);
+  if (items.length > 0 && !shared) {
+    return failed(
+      event.stage,
+      `processor ${processor.id} targets '${processor.target_scope}' — Twenty projection retain writes shared banks only`,
+    );
+  }
   const targetBankId = resolveTargetBankId(processor);
   const documents: string[] = [];
 
@@ -936,8 +1021,8 @@ async function runRetainInner(
     const subjectKey = `twenty:company:${item.source_item_id}`;
     const activeClaims = await listActiveClaimsForSubject(db, {
       tenantId: processor.tenant_id,
-      targetScope: processor.target_scope,
-      targetId: processor.target_id,
+      targetScope: shared!.target_scope,
+      targetId: shared!.target_id,
       subjectKey,
     });
     const content =
@@ -961,8 +1046,8 @@ async function runRetainInner(
     // that already contains this projection.
     await adapter.upsertMarkdownMemoryDocument({
       tenantId: processor.tenant_id,
-      ownerType: processor.target_scope,
-      ownerId: processor.target_id,
+      ownerType: shared!.target_scope,
+      ownerId: shared!.target_id,
       path: `memory-sources/twenty/${projectionKey.replace(":", "/")}.md`,
       documentId,
       context: "external_source_projection",
@@ -992,8 +1077,8 @@ async function runRetainInner(
             }
             await adapter.deleteDocument({
               tenantId: processor.tenant_id,
-              ownerType: processor.target_scope,
-              ownerId: processor.target_id,
+              ownerType: shared!.target_scope,
+              ownerId: shared!.target_id,
               documentId,
             });
           } catch (compensationErr) {
@@ -1124,4 +1209,72 @@ export async function runCompound(
       dreamStatus: bank.status,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// U3 stage stubs: extract/resolve pass through (claim extraction currently
+// happens inside project; deterministic identity resolution lands in U4);
+// graph/wiki are SHARED-ONLY stubs that hard-reject user_* targets now and
+// gain their real implementations in U4.
+// ---------------------------------------------------------------------------
+
+export async function runExtract(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
+  return {
+    status: "succeeded",
+    stage: ctx.event.stage,
+    counts: { noop: 1 },
+    output: {
+      note: "extract is a pass-through in U3 — claim extraction runs inside the project stage",
+    },
+  };
+}
+
+export async function runResolve(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
+  return {
+    status: "succeeded",
+    stage: ctx.event.stage,
+    counts: { noop: 1 },
+    output: {
+      note: "resolve is a pass-through in U3 — canonical identity resolution lands in U4",
+    },
+  };
+}
+
+/** Graph/wiki stubs share one guard: `user_*` banks are hard-rejected. */
+function runSharedOnlyStub(
+  ctx: StageContext,
+  what: string,
+): MemoryStageWorkerResult {
+  const shared = requireSharedProcessor(ctx);
+  if (!shared || ctx.processor.mode !== "shared") {
+    return failed(
+      ctx.event.stage,
+      `stage '${ctx.event.stage}' rejects bank '${resolveTargetBankId(ctx.processor)}' — ${what} publishes shared knowledge and never reads or writes user_* banks (AE7)`,
+    );
+  }
+  return {
+    status: "succeeded",
+    stage: ctx.event.stage,
+    counts: { noop: 1 },
+    output: {
+      targetBankId: resolveTargetBankId(shared),
+      note: `${what} materialization lands in U4 — this run recorded a deferred no-op`,
+    },
+  };
+}
+
+export async function runGraph(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
+  return runSharedOnlyStub(ctx, "targeted graph ingest");
+}
+
+export async function runWiki(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
+  return runSharedOnlyStub(ctx, "canonical Wiki compile");
 }
