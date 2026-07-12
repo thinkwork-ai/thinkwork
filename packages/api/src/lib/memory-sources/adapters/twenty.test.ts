@@ -446,3 +446,48 @@ describe("acquireCompaniesPage", () => {
     expect(page.items[0]!.targetScope).toBe("space");
   });
 });
+
+describe("acquireCompaniesPage pagination token", () => {
+  const record = (id: string, updatedAt: string) => ({
+    id,
+    name: `Co ${id}`,
+    updatedAt,
+  });
+
+  it("passes startingAfter through and returns the provider pageToken", async () => {
+    const listPage = vi.fn().mockResolvedValue({
+      records: [record("a", "2026-01-01T00:00:00.000Z")],
+      pageInfo: { hasNextPage: true, endCursor: "tok-2" },
+      payload: {},
+    });
+    const client = { listPage } as never;
+
+    const page = await acquireCompaniesPage(client, {
+      cursor: null,
+      pageSize: 1,
+      targetScope: "tenant",
+      targetId: "t",
+      startingAfter: "tok-1",
+    });
+
+    expect(listPage.mock.calls[0]?.[1]?.startingAfter).toBe("tok-1");
+    // With a page token, the gte filter is dropped so the token wins.
+    expect(listPage.mock.calls[0]?.[1]?.filter).toBeUndefined();
+    expect(page.pageToken).toBe("tok-2");
+  });
+
+  it("returns a null pageToken when the provider reports no next page", async () => {
+    const listPage = vi.fn().mockResolvedValue({
+      records: [record("a", "2026-01-01T00:00:00.000Z")],
+      pageInfo: { hasNextPage: false, endCursor: "tok-2" },
+      payload: {},
+    });
+    const page = await acquireCompaniesPage({ listPage } as never, {
+      cursor: null,
+      pageSize: 1,
+      targetScope: "tenant",
+      targetId: "t",
+    });
+    expect(page.pageToken).toBeNull();
+  });
+});

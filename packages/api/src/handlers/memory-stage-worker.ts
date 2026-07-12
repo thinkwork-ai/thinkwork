@@ -32,7 +32,10 @@ import { getMemoryServices } from "../lib/memory/index.js";
 import { runBrainDreamState } from "../lib/brain/dream/runner.js";
 import {
   assertSharedScope,
+  assertTargetInTenant,
+  CheckpointConflictError,
   ensureCheckpoint,
+  getCheckpoint,
   getProcessorConfig,
   getSourceConfig,
   MemoryScopeError,
@@ -58,31 +61,15 @@ import {
   type TwentyCompaniesCursor,
 } from "../lib/memory-sources/adapters/twenty.js";
 
-// ---------------------------------------------------------------------------
-// Protocol mirrors — the dispatch side owns these shapes
-// (packages/lambda/workflow-step-dispatch.ts MemoryStageWorkerInvokePayload /
-// MemoryStageWorkerResult). packages/lambda cannot be imported from
-// packages/api, so keep the mirrors byte-compatible.
-// ---------------------------------------------------------------------------
+// Frozen dispatch<->worker protocol — shared with workflow-step-dispatch via
+// @thinkwork/agent-loops-core so the shapes cannot drift.
+import type {
+  MemoryStageWorkerInvokePayload,
+  MemoryStageWorkerResult,
+} from "@thinkwork/agent-loops-core";
 
-export interface MemoryStageWorkerEvent {
-  workflowRunId: string;
-  tenantId: string;
-  stepId: string;
-  iteration: number;
-  stage: string;
-  processorConfigId: string;
-  sourceConfigId: string | null;
-  options: Record<string, unknown> | null;
-}
-
-export interface MemoryStageWorkerResult {
-  status: "succeeded" | "failed";
-  stage: string;
-  counts?: Record<string, number>;
-  error?: string;
-  output?: Record<string, unknown>;
-}
+export type MemoryStageWorkerEvent = MemoryStageWorkerInvokePayload;
+export type { MemoryStageWorkerResult };
 
 const _DEFAULT_SFN_CLIENT = new SFNClient({});
 const CONSUMED_ERROR_NAMES = new Set(["TaskDoesNotExist", "TaskTimedOut"]);
@@ -153,7 +140,9 @@ async function runAcquire(ctx: StageContext): Promise<MemoryStageWorkerResult> {
       partitionKey: "companies",
     });
     let cursor = cursorFromCheckpoint(checkpoint.cursor);
+    let pageToken: string | null = null;
     let fetched = 0;
+    let casRetries = 0;
 
     while (fetched < maxRecords) {
       const page = await acquireCompaniesPage(readiness.client, {
@@ -161,32 +150,79 @@ async function runAcquire(ctx: StageContext): Promise<MemoryStageWorkerResult> {
         pageSize: Math.min(pageSize, maxRecords - fetched),
         targetScope: processor.target_scope,
         targetId: processor.target_id,
+        startingAfter: pageToken,
       });
       counts.pages += 1;
       fetched += page.rawCount;
+      pageToken = page.pageToken ?? null;
 
-      if (page.items.length === 0) break;
+      if (page.items.length === 0) {
+        // A full raw page whose kept set is empty means every record is
+        // covered by the cursor (an equal-updatedAt cohort). With a provider
+        // page token we advance through it; without one we must fail
+        // VISIBLY — silently breaking would permanently skip the cohort.
+        const fullPage = page.rawCount >= Math.min(pageSize, maxRecords);
+        if (fullPage && pageToken) continue;
+        if (fullPage && !pageToken) {
+          return failed(
+            event.stage,
+            "acquisition cannot advance past an equal-updatedAt cohort: the Twenty server exposed no page cursor — raise pageSize above the cohort size or upgrade Twenty",
+          );
+        }
+        break;
+      }
 
-      // High-water cursor: last kept item's (updatedAt, id). Persisted even on
-      // the final page so the next run resumes incrementally.
-      const last = page.items[page.items.length - 1]!;
-      const highWater: TwentyCompaniesCursor = {
-        lastUpdatedAt: last.sourceVersion,
-        lastId: last.sourceItemId,
-      };
+      // High-water cursor: last kept item's (updatedAt, id) — but only from
+      // items with a real timestamp version. A hash-fallback sourceVersion
+      // must never become lastUpdatedAt (it would be compared against ISO
+      // timestamps); such items are re-seen next run and deduped instead.
+      const lastTimestamped = [...page.items]
+        .reverse()
+        .find((item) => item.sourceTimestamp != null);
+      const highWater: TwentyCompaniesCursor = lastTimestamped
+        ? {
+            lastUpdatedAt: lastTimestamped.sourceVersion,
+            lastId: lastTimestamped.sourceItemId,
+          }
+        : (cursor ?? { lastUpdatedAt: null, lastId: null });
 
-      const recorded = await recordAcquiredPage(db, {
-        tenantId: processor.tenant_id,
-        sourceConfigId: source.id,
-        workflowRunId: event.workflowRunId,
-        partitionKey: "companies",
-        expectedCheckpointVersion: checkpoint.version,
-        nextCursor: highWater as unknown as Record<string, unknown>,
-        items: page.items,
-      });
-      counts.changed += recorded.changed.length;
-      counts.seen += recorded.seen;
-      checkpoint = recorded.checkpoint;
+      try {
+        const recorded = await recordAcquiredPage(db, {
+          tenantId: processor.tenant_id,
+          sourceConfigId: source.id,
+          workflowRunId: event.workflowRunId,
+          partitionKey: "companies",
+          expectedCheckpointVersion: checkpoint.version,
+          nextCursor: highWater as unknown as Record<string, unknown>,
+          items: page.items,
+        });
+        counts.changed += recorded.changed.length;
+        counts.seen += recorded.seen;
+        checkpoint = recorded.checkpoint;
+        casRetries = 0;
+      } catch (err) {
+        if (err instanceof CheckpointConflictError && casRetries < 3) {
+          // A concurrent worker (duplicate Event delivery or a parallel run
+          // on the same source) advanced the checkpoint first. Their commit
+          // is durable and evidence upserts dedupe, so re-read the surviving
+          // cursor and continue instead of failing a run whose work is done.
+          casRetries += 1;
+          checkpoint =
+            (await getCheckpoint(db, {
+              sourceConfigId: source.id,
+              partitionKey: "companies",
+            })) ??
+            (await ensureCheckpoint(db, {
+              tenantId: processor.tenant_id,
+              sourceConfigId: source.id,
+              partitionKey: "companies",
+            }));
+          cursor = cursorFromCheckpoint(checkpoint.cursor);
+          pageToken = null;
+          continue;
+        }
+        throw err;
+      }
       cursor = page.nextCursor ?? highWater;
 
       if (page.nextCursor === null) break;
@@ -213,7 +249,6 @@ async function changedEvidence(ctx: StageContext): Promise<EvidenceRow[]> {
     rows.push(
       ...(await listEvidenceForProjection(ctx.db, {
         sourceConfigId: source.id,
-        workflowRunId: ctx.event.workflowRunId,
       })),
     );
   }
@@ -279,7 +314,19 @@ async function runRetain(ctx: StageContext): Promise<MemoryStageWorkerResult> {
 
   for (const item of items) {
     const snapshot = item.normalized_snapshot as Record<string, unknown> | null;
-    if (!snapshot) continue;
+    if (!snapshot) {
+      counts.noop += 1;
+      await recordRunItem(db, {
+        tenantId: item.tenant_id,
+        workflowRunId: event.workflowRunId,
+        sourceConfigId: item.source_config_id,
+        sourceItemId: item.source_item_id,
+        stage: "retain",
+        result: "failed",
+        detail: { reason: "evidence item has no normalized snapshot" },
+      });
+      continue;
+    }
     const dossier = buildCompanyDossier(snapshot);
     const projectionKey = projectionKeyForCompany(item.source_item_id);
     const documentId = hindsightDocumentIdFor(
@@ -449,6 +496,9 @@ async function executeStage(
   }
   try {
     assertSharedScope(processor);
+    // R11: the target must actually belong to this tenant — never derive a
+    // bank id from an unverified target_id.
+    await assertTargetInTenant(db, processor);
   } catch (err) {
     if (err instanceof MemoryScopeError) {
       return failed(event.stage, err.message);
@@ -545,6 +595,27 @@ async function resumeToken(
   } catch (err) {
     const name = (err as { name?: string })?.name ?? "";
     if (CONSUMED_ERROR_NAMES.has(name)) return "already_resolved";
+    // Consumed-but-unsent window: the token row is already flipped to
+    // consumed, so a retry would find no pending row and the run would sit
+    // parked until the ASL heartbeat timeout. Revert to pending before
+    // rethrowing so a retry (or manual re-invoke) can resume it.
+    await db
+      .update(workflowTaskTokens)
+      .set({ status: "pending" })
+      .where(
+        and(
+          eq(workflowTaskTokens.workflow_run_id, event.workflowRunId),
+          eq(workflowTaskTokens.step_id, event.stepId),
+          eq(workflowTaskTokens.iteration, event.iteration),
+          eq(workflowTaskTokens.purpose, "memory_stage"),
+          eq(workflowTaskTokens.status, "consumed"),
+        ),
+      )
+      .catch((revertErr) => {
+        console.error(
+          `[memory-stage-worker] failed to revert consumed token for run=${event.workflowRunId}: ${(revertErr as Error)?.message}`,
+        );
+      });
     throw err;
   }
   return "resumed";

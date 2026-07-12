@@ -335,17 +335,25 @@ type DossierSection = { heading: string; lines: string[] };
  * then trimming people/opportunities lists, with explicit "…truncated"
  * markers.
  */
+/** Inline-scalar guard for dossier interpolation: CRM text must not inject
+ * markdown structure (headings/bullets) via embedded newlines. */
+function inlineText(value: string | null): string | null {
+  return value === null ? null : value.replace(/\s*\r?\n\s*/g, " ").trim();
+}
+
 export function buildCompanyDossier(snapshot: Record<string, unknown>): {
   markdown: string;
   title: string;
 } {
   const title =
-    stringOrNull(snapshot.name) ?? stringOrNull(snapshot.id) ?? "Company";
+    inlineText(stringOrNull(snapshot.name)) ??
+    inlineText(stringOrNull(snapshot.id)) ??
+    "Company";
 
   const overviewLines: string[] = [];
-  const domain = stringOrNull(snapshot.domainName);
+  const domain = inlineText(stringOrNull(snapshot.domainName));
   if (domain) overviewLines.push(`- Domain: ${domain}`);
-  const address = formatAddress(snapshot.address);
+  const address = inlineText(formatAddress(snapshot.address));
   if (address) overviewLines.push(`- Address: ${address}`);
   if (typeof snapshot.employees === "number") {
     overviewLines.push(
@@ -378,9 +386,9 @@ export function buildCompanyDossier(snapshot: Record<string, unknown>): {
     if (people.length > 0) {
       const lines = people.slice(0, bounds.people).map((person) => {
         const parts = [
-          stringOrNull(person.name),
-          stringOrNull(person.jobTitle),
-          stringOrNull(person.email),
+          inlineText(stringOrNull(person.name)),
+          inlineText(stringOrNull(person.jobTitle)),
+          inlineText(stringOrNull(person.email)),
         ].filter((part): part is string => part !== null);
         return `- ${parts.join(" — ") || String(person.id ?? "unknown")}`;
       });
@@ -390,11 +398,11 @@ export function buildCompanyDossier(snapshot: Record<string, unknown>): {
     if (opportunities.length > 0) {
       const lines = opportunities.slice(0, bounds.opps).map((opp) => {
         const parts = [
-          stringOrNull(opp.name) ?? String(opp.id ?? "unknown"),
-          stringOrNull(opp.stage),
+          inlineText(stringOrNull(opp.name)) ?? String(opp.id ?? "unknown"),
+          inlineText(stringOrNull(opp.stage)),
           formatCurrency(opp.amount),
-          stringOrNull(opp.closeDate)
-            ? `closes ${stringOrNull(opp.closeDate)}`
+          inlineText(stringOrNull(opp.closeDate))
+            ? `closes ${inlineText(stringOrNull(opp.closeDate))}`
             : null,
         ].filter((part): part is string => part !== null);
         return `- ${parts.join(" — ")}`;
@@ -405,7 +413,8 @@ export function buildCompanyDossier(snapshot: Record<string, unknown>): {
     if (notes.length > 0) {
       const lines: string[] = [];
       for (const note of notes.slice(0, bounds.notes)) {
-        const noteTitle = stringOrNull(note.title) ?? String(note.id ?? "Note");
+        const noteTitle =
+          inlineText(stringOrNull(note.title)) ?? String(note.id ?? "Note");
         lines.push(`- **${noteTitle}**`);
         const body = stringOrNull(note.body);
         if (body) {
@@ -525,15 +534,24 @@ export async function acquireCompaniesPage(
     targetScope: SharedTargetScope;
     targetId: string;
     recipeVersion?: string;
+    /**
+     * Opaque Twenty pageInfo.endCursor from the PREVIOUS page of this run.
+     * Threading it is what lets acquisition advance through a cohort of
+     * records sharing one updatedAt (bulk imports) — the gte filter alone
+     * would return the same first page forever.
+     */
+    startingAfter?: string | null;
   },
 ): Promise<AcquiredPage<TwentyCompaniesCursor>> {
-  const { records } = await client.listPage("companies", {
+  const { records, pageInfo } = await client.listPage("companies", {
     limit: args.pageSize,
     depth: 1,
     orderBy: "updatedAt[AscNullsFirst]",
-    filter: args.cursor?.lastUpdatedAt
-      ? `updatedAt[gte]:${args.cursor.lastUpdatedAt}`
-      : undefined,
+    startingAfter: args.startingAfter ?? undefined,
+    filter:
+      !args.startingAfter && args.cursor?.lastUpdatedAt
+        ? `updatedAt[gte]:${args.cursor.lastUpdatedAt}`
+        : undefined,
   });
   const rawCount = records.length;
 
@@ -584,7 +602,13 @@ export async function acquireCompaniesPage(
           }
         : (args.cursor ?? null);
 
-  return { items, nextCursor, rawCount };
+  return {
+    items,
+    nextCursor,
+    rawCount,
+    pageToken:
+      pageInfo?.hasNextPage && pageInfo.endCursor ? pageInfo.endCursor : null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -610,6 +634,8 @@ export async function checkTwentyReadiness(
       tenantId: args.tenantId,
       userId: args.userId,
       logPrefix: "[memory-sources:twenty]",
+      unauthorizedMessage:
+        "the processor owner has no connected Twenty CRM account — connect Twenty before running memory ingestion",
     });
     if (!context) {
       return {

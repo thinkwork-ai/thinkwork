@@ -114,30 +114,11 @@ export type WorkflowStepDispatchEvent =
       result: MemoryStageWorkerResult;
     };
 
-/**
- * The JSON the memory-stage worker sends back via SendTaskSuccess
- * (external-memory-compounding U1). The record phase turns this into step
- * evidence: succeeded advances the run, failed fails it.
- */
-export interface MemoryStageWorkerResult {
-  status: "succeeded" | "failed";
-  stage: string;
-  counts?: Record<string, number>;
-  error?: string;
-  output?: Record<string, unknown>;
-}
-
-/** Async Event-invoke payload handed to the memory-stage worker Lambda. */
-export interface MemoryStageWorkerInvokePayload {
-  workflowRunId: string;
-  tenantId: string;
-  stepId: string;
-  iteration: number;
-  stage: string;
-  processorConfigId: string;
-  sourceConfigId: string | null;
-  options: Record<string, unknown> | null;
-}
+import type {
+  MemoryStageWorkerInvokePayload,
+  MemoryStageWorkerResult,
+} from "@thinkwork/agent-loops-core";
+export type { MemoryStageWorkerInvokePayload, MemoryStageWorkerResult };
 
 // ---------------------------------------------------------------------------
 // Loaders (ThinkWork-terms errors, never ASL / Step Functions vocabulary).

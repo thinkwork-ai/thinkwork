@@ -60,6 +60,12 @@ export interface AcquiredPage<TCursor> {
   nextCursor: TCursor | null;
   /** Raw items fetched before boundary filtering — for budget accounting. */
   rawCount: number;
+  /**
+   * Provider-opaque continuation token for the NEXT page within this run
+   * (null when the provider reports no further pages or exposes none).
+   * Distinct from `nextCursor`, which is the durable cross-run checkpoint.
+   */
+  pageToken?: string | null;
 }
 
 /** Per-result counts a stage reports (e.g. { changed: 3, seen: 12 }). */

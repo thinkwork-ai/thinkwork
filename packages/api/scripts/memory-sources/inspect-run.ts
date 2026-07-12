@@ -59,7 +59,7 @@ async function main() {
     ).map((e) => ({
       type: e.event_type,
       at: e.occurred_at ?? e.created_at,
-      summary: e.summary,
+      summary: e.payload_summary,
     }));
     out.tokens = (
       await db

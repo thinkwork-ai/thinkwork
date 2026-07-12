@@ -203,6 +203,13 @@ export async function resolveTwentyContext(
     tenantId: string;
     userId: string;
     logPrefix?: string;
+    /**
+     * 403 message when the user has no active Twenty connection. Defaults
+     * to the Client Engagement wording; callers on other surfaces (e.g.
+     * memory ingestion) pass their own so the error points at the right
+     * feature.
+     */
+    unauthorizedMessage?: string;
   },
 ): Promise<ResolvedTwentyContext | null> {
   const [mcpServer] = await db
@@ -252,7 +259,8 @@ export async function resolveTwentyContext(
   });
   if (!token) {
     throw new HttpError(
-      "Connect your Twenty CRM account before opening Client Engagement",
+      args.unauthorizedMessage ??
+        "Connect your Twenty CRM account before opening Client Engagement",
       403,
     );
   }

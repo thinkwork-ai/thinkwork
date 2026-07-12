@@ -12,6 +12,7 @@ import {
   memoryProcessorConfigs,
   memorySourceCheckpoints,
   memorySourceConfigs,
+  spaces,
 } from "@thinkwork/database-pg/schema";
 
 import type {
@@ -100,6 +101,51 @@ export function assertSharedScope(
       `processor ${processor.id} targets scope '${processor.target_scope}' — shared ingestion may only target 'space' or 'tenant' banks`,
     );
   }
+}
+
+/**
+ * Verify the processor's target actually belongs to its tenant before any
+ * bank write (R11): a `tenant` target must be the processor's own tenant id,
+ * and a `space` target must be a space row owned by that tenant. Without
+ * this, a mis-seeded target_id would concatenate into ANOTHER tenant's
+ * `tenant_<uuid>`/`space_<uuid>` bank.
+ */
+export async function assertTargetInTenant(
+  db: DbHandle,
+  processor: Pick<
+    MemoryProcessorConfig,
+    "id" | "tenant_id" | "target_scope" | "target_id"
+  >,
+): Promise<void> {
+  if (processor.target_scope === "tenant") {
+    if (processor.target_id !== processor.tenant_id) {
+      throw new MemoryScopeError(
+        `processor ${processor.id} targets tenant ${processor.target_id} but belongs to tenant ${processor.tenant_id}`,
+      );
+    }
+    return;
+  }
+  if (processor.target_scope === "space") {
+    const [space] = await db
+      .select({ id: spaces.id })
+      .from(spaces)
+      .where(
+        and(
+          eq(spaces.id, processor.target_id),
+          eq(spaces.tenant_id, processor.tenant_id),
+        ),
+      )
+      .limit(1);
+    if (!space) {
+      throw new MemoryScopeError(
+        `processor ${processor.id} targets space ${processor.target_id}, which does not belong to tenant ${processor.tenant_id}`,
+      );
+    }
+    return;
+  }
+  throw new MemoryScopeError(
+    `processor ${processor.id} targets scope '${processor.target_scope}' — shared ingestion may only target 'space' or 'tenant' banks`,
+  );
 }
 
 /** Hindsight bank id for the processor's target, e.g. `tenant_<uuid>`. */

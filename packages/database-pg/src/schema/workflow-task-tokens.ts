@@ -61,7 +61,7 @@ export const workflowTaskTokens = pgTable(
     ),
     index("workflow_task_tokens_tenant_idx").on(table.tenant_id),
     check(
-      "workflow_task_tokens_purpose_check",
+      "workflow_task_tokens_purpose_check_v2",
       sql`${table.purpose} IN ('agent_step', 'approval', 'memory_stage')`,
     ),
     check(

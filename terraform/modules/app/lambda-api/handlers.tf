@@ -1056,6 +1056,21 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
 # retain-cost path (Bedrock tokens charged in adapter.retainConversation)
 # is NOT idempotent — retries multiply LLM cost. Per
 # project_async_retry_idempotency_lessons.
+# memory-stage-worker (THINK-193 U1): Event-invoked by workflow-step-dispatch
+# AFTER the memory_stage task token is stored. Lambda async retries are
+# disabled like its memory siblings — the worker's stages are idempotent, but
+# an automatic re-execution would race the original's token CAS and turn a
+# completed stage into a spurious failure. A worker that dies without
+# resuming the token is bounded by the state machine's HeartbeatSeconds
+# (3600s): the parked step times out and the run fails visibly, and a
+# re-triggered run self-heals from the durable checkpoint/evidence ledger.
+resource "aws_lambda_function_event_invoke_config" "memory_stage_worker" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["memory-stage-worker"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
 resource "aws_lambda_function_event_invoke_config" "memory_retain" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["memory-retain"].function_name

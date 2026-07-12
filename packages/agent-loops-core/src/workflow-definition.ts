@@ -110,6 +110,32 @@ export interface MemoryStageWorkflowStep {
   options?: Record<string, unknown>;
 }
 
+/**
+ * Frozen dispatch<->worker protocol for memory_stage steps (THINK-193 U1).
+ * workflow-step-dispatch (packages/lambda) Event-invokes the worker with the
+ * payload; the worker (packages/api memory-stage-worker) resumes the parked
+ * task token via SendTaskSuccess carrying the result JSON. Both sides import
+ * these from here so the shapes cannot drift.
+ */
+export interface MemoryStageWorkerInvokePayload {
+  workflowRunId: string;
+  tenantId: string;
+  stepId: string;
+  iteration: number;
+  stage: string;
+  processorConfigId: string;
+  sourceConfigId: string | null;
+  options: Record<string, unknown> | null;
+}
+
+export interface MemoryStageWorkerResult {
+  status: "succeeded" | "failed";
+  stage: string;
+  counts?: Record<string, number>;
+  error?: string;
+  output?: Record<string, unknown>;
+}
+
 export const HTTP_STEP_METHODS = [
   "GET",
   "POST",
