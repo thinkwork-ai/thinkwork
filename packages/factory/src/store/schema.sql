@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS attempts (
   -- state column. (Partial indexes can't reference an IN list via a plain
   -- WHERE on state in older SQLite grammars; a generated column is cleanest.)
   active INTEGER GENERATED ALWAYS AS (
-    CASE WHEN state IN ('Succeeded', 'Failed', 'TimedOut', 'Stalled', 'CanceledByReconciliation')
+    CASE WHEN state IN ('Succeeded', 'Failed', 'TimedOut', 'Stalled', 'QuotaCooldown', 'CanceledByReconciliation')
       THEN 0 ELSE 1 END
   ) VIRTUAL
 );

@@ -17,6 +17,7 @@ export const TERMINAL_ATTEMPT_STATES = [
   "Failed",
   "TimedOut",
   "Stalled",
+  "QuotaCooldown",
   "CanceledByReconciliation",
 ] as const;
 
@@ -82,6 +83,21 @@ export interface FactoryStore {
    * Terminal states also stamp ended_at.
    */
   transitionAttempt(attemptId: number, state: string, detail?: string): void;
+  /**
+   * Record runtime execution facts (pid, log path, …) learned after the
+   * attempt row was created. Only provided fields are updated. Throws if the
+   * attempt does not exist.
+   */
+  updateAttemptExec(
+    attemptId: number,
+    fields: {
+      pid?: number;
+      logPath?: string;
+      worktreePath?: string;
+      branch?: string;
+      host?: string;
+    },
+  ): void;
   getAttempt(attemptId: number): AttemptRow | undefined;
   getActiveAttempt(issueId: string, phase: string): AttemptRow | undefined;
   close(): void;
@@ -126,6 +142,16 @@ export function openStore(
 
   const transitionStmt = db.prepare(`
     UPDATE attempts SET state = @state, detail = COALESCE(@detail, detail), ended_at = @ended_at
+    WHERE id = @id
+  `);
+
+  const updateAttemptExecStmt = db.prepare(`
+    UPDATE attempts SET
+      pid = COALESCE(@pid, pid),
+      log_path = COALESCE(@log_path, log_path),
+      worktree_path = COALESCE(@worktree_path, worktree_path),
+      branch = COALESCE(@branch, branch),
+      host = COALESCE(@host, host)
     WHERE id = @id
   `);
 
@@ -181,6 +207,20 @@ export function openStore(
         state,
         detail: detail ?? null,
         ended_at: isTerminal ? now() : null,
+      });
+      if (result.changes === 0) {
+        throw new Error(`attempt ${attemptId} does not exist`);
+      }
+    },
+
+    updateAttemptExec(attemptId, fields) {
+      const result = updateAttemptExecStmt.run({
+        id: attemptId,
+        pid: fields.pid ?? null,
+        log_path: fields.logPath ?? null,
+        worktree_path: fields.worktreePath ?? null,
+        branch: fields.branch ?? null,
+        host: fields.host ?? null,
       });
       if (result.changes === 0) {
         throw new Error(`attempt ${attemptId} does not exist`);
