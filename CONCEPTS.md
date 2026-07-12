@@ -451,6 +451,26 @@ The policy for retroactively correcting historical cost events: backfilled/repri
 
 Per-tenant cost events written by background Bedrock consumers (wiki compile, conformance judge, KG extraction, model converse, dreaming), tagged with a source category naming the consumer rather than attributed to a thread or turn. Lets dashboards split conversation spend from background/system spend while keeping tenant totals reconcilable with AWS billing.
 
+### Suspense Entry
+
+An explicit ledger row representing Bedrock dollars visible on the AWS bill but attributed to no tenant: the daily residual of Cost Explorer's Bedrock total minus recorded cost events, posted with an aging clock and excluded from enforcement. Makes unattributed ("dark") spend a visible, workable balance instead of a discovery during manual backfills; the invariant is bill total = attributed spend + suspense.
+
+### Attribution Key
+
+A unique identifier generated before a Bedrock call and stamped into the call's request metadata alongside tenant/agent/user/thread/turn identity, then recorded on the corresponding cost event. Because Bedrock writes request metadata verbatim into invocation logs, reconciliation becomes an exact-key join rather than probabilistic matching by timestamp proximity.
+
+### Pricing Lot
+
+One versioned import of external pricing data (source commit, fetch time, per-field provenance) recorded when the model catalog ingests a pricing feed. Cost events are stamped with the lot that priced them, so an upstream price correction can identify exactly which recorded dollars are affected and reprice them automatically as a Graced Backfill.
+
+### Budget Reservation
+
+The authorize-and-settle enforcement pattern: an estimated cost hold is written atomically against a budget before dispatch, settles to actual cost at finalize, and is voided on failure or expiry. Holds are visible to budget sums the instant they exist, so concurrent requests cannot jointly exceed a cap by more than one outstanding grant — replacing read-then-act checks that race.
+
+### Degradation Ladder
+
+The opt-in, staged alternative to pause-only budget enforcement: at 75% spent, new turns route to a cheaper model from the agent profile's fallback list; at 90%, scheduled/wakeup work is curtailed while interactive chat continues; at 100%, work pauses. Transitions use hysteresis to prevent flapping, degraded turns are stamped as such, and every state change is operator-visible with an in-thread notice.
+
 ## Channels
 
 ### ChannelPort
@@ -468,3 +488,21 @@ The two channel→Space routing modes (named after Matrix bridge conventions). P
 ### Step-Up Approval
 
 A channel-delivered HITL approval whose risk tier (spend, publishing, external communication) exceeds what a channel card tap may authorize — a tap authenticates only a platform user id, not a ThinkWork principal. The card instead deep-links into an authenticated ThinkWork session where the approval settles; low-tier answers settle in-channel via single-use idempotent tokens.
+
+## Search
+
+### Search Ladder
+
+The three-rung Cmd+K contract (THINK-263): find (every keystroke, Postgres FTS federated rails, never an LLM call), ask (explicit escalation into a streamed, cited synthesis run as an ephemeral agent turn, metered as first-class spend), and research (explicit background agent errand whose cited answer arrives as a thread reply or notification). Each rung carries its own latency and cost budget; escalation between rungs is always deliberate, never automatic.
+
+### Search Broker
+
+The single fan-out `search` operation behind every rung: concurrent dispatch to the thread, wiki, memory, and knowledge-graph legs with source-tagged results and per-leg timeouts, exposed identically as a GraphQL query and a Pi agent tool. Legs are provider contracts added behind the broker without touching clients; every leg enforces caller scope (tenant-union wiki/KG, thread-permission-filtered memory).
+
+### Entity Dossier
+
+The marquee search result for "pull everything we know about X": when a query matches a grounded KG entity alias, the top result is a live card aggregating the entity's wiki page, contributing memories, linked threads, and artifacts via provenance joins at query time. Permission-filtered like every leg — content from threads the viewer cannot open is hidden, not existence-flagged.
+
+### Citation-or-Silence
+
+The rendering contract for synthesized search answers: every claim must carry a citation that resolves server-side to a live thread or wiki page; claims that cannot resolve collapse behind an "unverified" disclosure instead of rendering as fact. Makes answer trust a testable contract (an eval can verify every rendered claim resolves) rather than best effort.
