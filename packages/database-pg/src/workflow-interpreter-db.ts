@@ -388,7 +388,7 @@ export async function storeTaskToken(
     workflowRunId: string;
     stepId: string;
     iteration: number;
-    purpose: "agent_step" | "approval";
+    purpose: "agent_step" | "approval" | "memory_stage";
     token: string;
     now?: Date;
   },
@@ -430,7 +430,7 @@ export async function consumeTaskToken(
     workflowRunId: string;
     stepId: string;
     iteration: number;
-    purpose: "agent_step" | "approval";
+    purpose: "agent_step" | "approval" | "memory_stage";
     now?: Date;
   },
 ): Promise<{ token: string } | null> {

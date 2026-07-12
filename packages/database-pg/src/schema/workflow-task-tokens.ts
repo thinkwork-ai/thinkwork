@@ -19,7 +19,11 @@ import {
 import { tenants } from "./core";
 import { workflowRuns } from "./workflow-runs";
 
-export const WORKFLOW_TASK_TOKEN_PURPOSES = ["agent_step", "approval"] as const;
+export const WORKFLOW_TASK_TOKEN_PURPOSES = [
+  "agent_step",
+  "approval",
+  "memory_stage",
+] as const;
 export const WORKFLOW_TASK_TOKEN_STATUSES = [
   "pending",
   "consumed",
@@ -58,7 +62,7 @@ export const workflowTaskTokens = pgTable(
     index("workflow_task_tokens_tenant_idx").on(table.tenant_id),
     check(
       "workflow_task_tokens_purpose_check",
-      sql`${table.purpose} IN ('agent_step', 'approval')`,
+      sql`${table.purpose} IN ('agent_step', 'approval', 'memory_stage')`,
     ),
     check(
       "workflow_task_tokens_status_check",
