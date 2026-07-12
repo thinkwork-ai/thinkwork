@@ -16,6 +16,14 @@
  * polls.
  */
 
+import {
+  ACTIVE_STATES,
+  BLOCKER_LABELS,
+  LANE_LABELS,
+  LFG_LABEL,
+  VERIFICATION_STATES,
+  type LaneLabel,
+} from "../domain/statuses.js";
 import type { Logger } from "../logger.js";
 import type {
   LinearCommentSnapshot,
@@ -23,45 +31,23 @@ import type {
   LinearIssueSnapshot,
 } from "./client.js";
 import {
-  isLedgerComment,
+  findLedgerComment,
   parseLedgerComment,
   renderLedgerComment,
   type ParsedLedger,
 } from "./ledger.js";
+import { isMarkerComment } from "./markers.js";
 
-export const LANE_LABELS = ["Claude", "Codex"] as const;
-export type LaneLabel = (typeof LANE_LABELS)[number];
-
-export const LFG_LABEL = "LFG";
-
-/** Blocker labels that stop automation (routing contract). */
-export const BLOCKER_LABELS = [
-  "Needs User",
-  "Needs Credentials",
-  "Unsafe Ambiguity",
-  "CI Failed",
-  "Blocked: Auth",
-] as const;
-
-/** Workflow states the dispatcher routes for lane-labeled issues. */
-export const ACTIVE_STATES = [
-  "Todo",
-  "Brainstorming",
-  "Requirements Review",
-  "Planning",
-  "Debug",
-  "Plan Review",
-  "Ready to Work",
-  "Ready To Work",
-  "In Progress",
-  // Done is routed too: the engine decides compound (LFG + not yet
-  // compounded) or noop — excluding it here made the contract's compound
-  // row unreachable (fixed in the U5 wiring slice).
-  "Done",
-] as const;
-
-/** Verification-family states — enrolled regardless of lane label. */
-export const VERIFICATION_STATES = ["Verification", "Review"] as const;
+// Canonical vocabulary lives in src/domain/statuses.ts — re-exported here
+// for callers that reach the poller first.
+export {
+  ACTIVE_STATES,
+  BLOCKER_LABELS,
+  LANE_LABELS,
+  LFG_LABEL,
+  VERIFICATION_STATES,
+};
+export type { LaneLabel };
 
 export const LANE_CONFLICT_MARKER_PREFIX = "factory-lane-conflict:";
 
@@ -121,9 +107,9 @@ function toCandidate(
   comments: LinearCommentSnapshot[],
 ): PollCandidate {
   const lanes = LANE_LABELS.filter((l) => issue.labels.includes(l));
-  const ledgerComment = comments.find((c) =>
-    isLedgerComment(issue.identifier, c.body),
-  );
+  // Newest matching comment wins: a daemon-authored ledger is always
+  // authoritative over an older comment that happens to parse as one.
+  const ledgerComment = findLedgerComment(issue.identifier, comments);
   return {
     issue,
     lane: lanes.length === 1 ? lanes[0] : null,
@@ -162,7 +148,7 @@ async function remediateLaneConflict(
   }
 
   const marker = laneConflictMarker(issue.identifier);
-  if (!comments.some((c) => c.body.includes(marker))) {
+  if (!comments.some((c) => isMarkerComment(c.body, marker))) {
     const body = [
       marker,
       "",

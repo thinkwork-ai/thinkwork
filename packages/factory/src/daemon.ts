@@ -10,7 +10,7 @@
  */
 
 import type { Logger } from "./logger.js";
-import type { LinearGateway } from "./linear/client.js";
+import type { CommentTrust, LinearGateway } from "./linear/client.js";
 import {
   pollTick,
   PollAbortedError,
@@ -19,6 +19,7 @@ import {
 import {
   applyPreflightBlock,
   evaluatePreflight,
+  hasPreflightOverride,
 } from "./linear/preflight.js";
 import type { FactoryStore, AttemptRow } from "./store/db.js";
 import { TERMINAL_ATTEMPT_STATES } from "./store/db.js";
@@ -55,7 +56,20 @@ export interface DaemonDeps {
     action: EngineAction,
     candidate: PollCandidate,
   ) => Promise<unknown>;
+  /**
+   * Author allowlist used to validate the preflight-override marker comment
+   * (must be daemon/operator-authored). Optional: without it the marker is
+   * accepted from any author.
+   */
+  trust?: CommentTrust;
 }
+
+/**
+ * Bound for `git worktree list` in the duplicate-worker scan. The daemon
+ * loop awaits each tick to completion — an unbounded hung git call would
+ * freeze the whole daemon.
+ */
+export const WORKTREE_LIST_TIMEOUT_MS = 10_000;
 
 /** Any-phase active attempt for an issue (partial index allows ≤1 per phase). */
 function getAnyActiveAttempt(
@@ -114,14 +128,15 @@ export async function buildStoreView(
 
   // Duplicate-worker guard: auto-<slug>-* worktrees the store cannot account
   // for mean some other dispatcher (or a crashed one) owns a worker.
+  // Bounded: on timeout the transport reports a non-zero/null exit and the
+  // scan is skipped for this tick (same as any other git failure) instead of
+  // hanging the daemon loop.
   const slug = issue.identifier.toLowerCase();
-  const worktrees = await deps.transport.exec("git", [
-    "-C",
-    deps.repoPath,
-    "worktree",
-    "list",
-    "--porcelain",
-  ]);
+  const worktrees = await deps.transport.exec(
+    "git",
+    ["-C", deps.repoPath, "worktree", "list", "--porcelain"],
+    { timeoutMs: WORKTREE_LIST_TIMEOUT_MS },
+  );
   if (worktrees.code === 0) {
     for (const line of worktrees.stdout.split("\n")) {
       if (!line.startsWith("worktree ")) continue;
@@ -174,20 +189,37 @@ export async function runTick(
     try {
       const preflight = evaluatePreflight(candidate.issue);
       if (preflight.blocked) {
-        const wrote = await applyPreflightBlock(
-          deps.gateway,
-          candidate.issue,
-          candidate.comments,
-          preflight,
-        );
-        deps.log.info("preflight blocked", {
-          issue: id,
-          label: preflight.label,
-          reason: preflight.reason,
-          wrote,
-        });
-        decisions.push({ issue: id, kind: "block" });
-        continue;
+        if (
+          hasPreflightOverride(
+            candidate.issue,
+            candidate.comments,
+            preflight,
+            deps.trust,
+          )
+        ) {
+          // Operator override: the daemon blocked this once (marker comment
+          // exists) and someone removed the blocker label — never re-block,
+          // route normally.
+          deps.log.info(
+            "preflight override — marker present and blocker label removed; routing normally",
+            { issue: id, label: preflight.label },
+          );
+        } else {
+          const wrote = await applyPreflightBlock(
+            deps.gateway,
+            candidate.issue,
+            candidate.comments,
+            preflight,
+          );
+          deps.log.info("preflight blocked", {
+            issue: id,
+            label: preflight.label,
+            reason: preflight.reason,
+            wrote,
+          });
+          decisions.push({ issue: id, kind: "block" });
+          continue;
+        }
       }
 
       const view = await buildStoreView(deps, candidate);

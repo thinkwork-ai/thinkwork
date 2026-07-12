@@ -11,7 +11,12 @@
  * Linear BEFORE launching the worker.
  */
 
-import type { LinearCommentSnapshot } from "../linear/client.js";
+import {
+  isTrustedComment,
+  type CommentTrust,
+  type LinearCommentSnapshot,
+} from "../linear/client.js";
+import { isMarkerComment } from "../linear/markers.js";
 import { PHASE_HANDOFF, type Phase } from "./engine.js";
 
 // ---------------------------------------------------------------------------
@@ -23,17 +28,28 @@ export function handoffMarker(issueId: string, phaseStatus: string): string {
 }
 
 /**
- * Newest comment carrying this issue+phase's handoff marker. Comments are
- * assumed chronological (Linear returns ascending) — the LAST match wins.
+ * Newest comment carrying this issue+phase's handoff marker as its FIRST
+ * LINE (a comment merely quoting the marker mid-body is never a baton).
+ * Comments are assumed chronological (Linear returns ascending) — the LAST
+ * match wins.
+ *
+ * When `trust` is provided, only daemon/trusted-author batons are accepted:
+ * baton text is embedded VERBATIM into a `--dangerously-skip-permissions`
+ * worker prompt, so an untrusted baton must never be injected — callers fall
+ * back to baton synthesis instead. Comments without an author id are
+ * untrusted (fail-safe).
  */
 export function findNewestBaton(
   issueId: string,
   phaseStatus: string,
   comments: LinearCommentSnapshot[],
+  trust?: CommentTrust,
 ): LinearCommentSnapshot | null {
   const marker = handoffMarker(issueId, phaseStatus);
   for (let i = comments.length - 1; i >= 0; i--) {
-    if (comments[i].body.includes(marker)) return comments[i];
+    if (!isMarkerComment(comments[i].body, marker)) continue;
+    if (trust !== undefined && !isTrustedComment(comments[i], trust)) continue;
+    return comments[i];
   }
   return null;
 }
@@ -358,6 +374,12 @@ export interface AssemblePromptInput {
   progressDoc?: string;
   /** Ready to Work repair pass (Verification Failed). */
   repair?: boolean;
+  /**
+   * Author allowlist for baton discovery. When set, an existing baton is
+   * used only if authored by the daemon or a trusted user; otherwise a
+   * baton is synthesized (untrusted text never reaches the worker prompt).
+   */
+  trust?: CommentTrust;
 }
 
 export interface AssembledPrompt {
@@ -386,7 +408,12 @@ function fillTemplate(template: string, issueId: string, title: string): string 
  */
 export function assemblePrompt(input: AssemblePromptInput): AssembledPrompt {
   const readStatus = PHASE_HANDOFF[input.phase].reads;
-  const existing = findNewestBaton(input.issueId, readStatus, input.comments);
+  const existing = findNewestBaton(
+    input.issueId,
+    readStatus,
+    input.comments,
+    input.trust,
+  );
   const baton =
     existing?.body ??
     synthesizeBaton({

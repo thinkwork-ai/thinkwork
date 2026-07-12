@@ -16,7 +16,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import type { LinearCommentSnapshot } from "../linear/client.js";
+import {
+  isTrustedComment,
+  type CommentTrust,
+  type LinearCommentSnapshot,
+} from "../linear/client.js";
+import { isMarkerComment } from "../linear/markers.js";
 import type { Phase } from "./engine.js";
 import { handoffMarker } from "./prompts.js";
 
@@ -182,6 +187,13 @@ export interface EvidenceInput {
   /** Attempt branch to check on GitHub (with `github`). */
   branch?: string;
   github?: GithubGateway;
+  /**
+   * Author allowlist for baton-posted evidence. When set, only batons from
+   * the daemon or trusted authors count — any Linear commenter could
+   * otherwise falsely complete a phase. Status-moved and PR-merged evidence
+   * are NOT gated (they are not forgeable via comments).
+   */
+  trust?: CommentTrust;
 }
 
 /**
@@ -229,7 +241,11 @@ export async function detectPhaseEvidence(
     : input.comments;
   for (const status of spec.batonStatuses) {
     const marker = handoffMarker(id, status);
-    const match = newComments.find((c) => c.body.includes(marker));
+    const match = newComments.find(
+      (c) =>
+        isMarkerComment(c.body, marker) &&
+        (input.trust === undefined || isTrustedComment(c, input.trust)),
+    );
     if (match) {
       return {
         complete: true,

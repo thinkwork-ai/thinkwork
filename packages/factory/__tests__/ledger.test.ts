@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_LEDGER,
+  findLedgerComment,
+  isLedgerComment,
   ledgerMarker,
   parseLedgerComment,
   renderLedgerComment,
@@ -22,6 +24,49 @@ const fullLedger: Ledger = {
 describe("ledgerMarker", () => {
   it("builds the automation-ledger marker for an issue", () => {
     expect(ledgerMarker(ID)).toBe("automation-ledger:THINK-123");
+  });
+});
+
+describe("isLedgerComment — exact first-line marker (spoof hardening)", () => {
+  it("matches a real ledger comment (marker is the first line)", () => {
+    expect(isLedgerComment(ID, renderLedgerComment(ID, fullLedger))).toBe(true);
+    expect(isLedgerComment(ID, `automation-ledger:${ID}\n\nprose`)).toBe(true);
+  });
+
+  it("does NOT match a comment merely quoting the marker mid-body", () => {
+    const quoting = [
+      "Progress update:",
+      `I updated the automation-ledger:${ID} comment above with new state.`,
+    ].join("\n");
+    expect(isLedgerComment(ID, quoting)).toBe(false);
+  });
+
+  it("does NOT match a longer identifier sharing this issue's prefix", () => {
+    expect(
+      isLedgerComment("THINK-12", `automation-ledger:THINK-123\n\nother issue`),
+    ).toBe(false);
+  });
+});
+
+describe("findLedgerComment — newest matching comment wins", () => {
+  it("prefers the newest ledger comment over an older one", () => {
+    const older = {
+      id: "c-old",
+      body: renderLedgerComment(ID, { ...DEFAULT_LEDGER, compounded: true }),
+    };
+    const newer = {
+      id: "c-new",
+      body: renderLedgerComment(ID, { ...DEFAULT_LEDGER, phase: "implement" }),
+    };
+    const found = findLedgerComment(ID, [older, newer]);
+    expect(found?.id).toBe("c-new");
+  });
+
+  it("ignores mid-body quotes entirely", () => {
+    const found = findLedgerComment(ID, [
+      { id: "c-1", body: `see automation-ledger:${ID} for state` },
+    ]);
+    expect(found).toBeNull();
   });
 });
 

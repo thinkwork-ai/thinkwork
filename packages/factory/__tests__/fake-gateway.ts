@@ -48,6 +48,8 @@ export function makeIssue(
 export class FakeGateway implements LinearGateway {
   issues: FakeIssue[];
   writes: WriteLogEntry[] = [];
+  /** Author id stamped on comments this gateway creates (the daemon). */
+  viewer = "viewer-daemon";
   /** When set, the matching read throws once (then auto-clears). */
   failNextListIssues = false;
   /** Issue id whose next listComments call throws (auto-clears). */
@@ -81,9 +83,17 @@ export class FakeGateway implements LinearGateway {
     return this.byId(issueId).comments.map((c) => ({ ...c }));
   }
 
+  async viewerId(): Promise<string> {
+    return this.viewer;
+  }
+
   async createComment(issueId: string, body: string): Promise<void> {
     this.writes.push({ op: "createComment", args: [issueId, body] });
-    this.byId(issueId).comments.push({ id: `c-${nextCommentId++}`, body });
+    this.byId(issueId).comments.push({
+      id: `c-${nextCommentId++}`,
+      body,
+      authorId: this.viewer,
+    });
   }
 
   async updateComment(commentId: string, body: string): Promise<void> {

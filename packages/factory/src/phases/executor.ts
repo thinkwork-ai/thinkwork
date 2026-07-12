@@ -21,13 +21,14 @@ import { fileURLToPath } from "node:url";
 
 import type { FactoryConfig, HostConfig } from "../config.js";
 import type { Logger } from "../logger.js";
-import type { LinearGateway } from "../linear/client.js";
+import type { CommentTrust, LinearGateway } from "../linear/client.js";
 import {
-  isLedgerComment,
+  findLedgerComment,
   parseLedgerComment,
   renderLedgerComment,
   type Ledger,
 } from "../linear/ledger.js";
+import { isMarkerComment } from "../linear/markers.js";
 import type { PollCandidate } from "../linear/poller.js";
 import type { FactoryStore } from "../store/db.js";
 import {
@@ -37,7 +38,11 @@ import {
 } from "../workers/attempts.js";
 import type { ProviderRunner, ResultOptions } from "../workers/runner.js";
 import type { EngineAction, RunnerKind } from "./engine.js";
-import { detectPhaseEvidence, type PhaseEvidence } from "./evidence.js";
+import {
+  detectPhaseEvidence,
+  type GithubGateway,
+  type PhaseEvidence,
+} from "./evidence.js";
 import { assemblePrompt } from "./prompts.js";
 
 // ---------------------------------------------------------------------------
@@ -143,6 +148,14 @@ export interface ExecutorDeps {
   log: Logger;
   /** Passed through to ProviderRunner.result (tests shrink the timeout). */
   resultOptions?: ResultOptions;
+  /**
+   * GitHub gateway for the merged-PR evidence fallback. Without it, a worker
+   * that merged its PR but died before posting the baton is classified
+   * Failed and its phase relaunched over already-merged work.
+   */
+  github?: GithubGateway;
+  /** Author allowlist for batons / baton evidence (security P1). */
+  trust?: CommentTrust;
 }
 
 export interface ExecuteResult {
@@ -248,7 +261,7 @@ async function executeBlock(
   }
 
   const marker = blockMarker(issue.identifier);
-  if (!comments.some((c) => c.body.includes(marker))) {
+  if (!comments.some((c) => isMarkerComment(c.body, marker))) {
     const body = [
       marker,
       "",
@@ -348,9 +361,16 @@ async function executeLaunch(
       comments: candidate.comments,
       progressDoc,
       repair: action.repair,
+      trust: deps.trust,
     });
   } catch (e) {
     return failBeforeSpawn(`prompt assembly failed: ${String(e)}`);
+  }
+  if (assembled.batonToPost !== null) {
+    deps.log.info(
+      "no trusted baton found for this phase — synthesized one from the Progress document",
+      { issue: id, phase: action.phase },
+    );
   }
 
   const statusAtLaunch = issue.state;
@@ -389,6 +409,10 @@ async function executeLaunch(
   let spawned = false;
   let evidence: PhaseEvidence | null = null;
   let freshCommentsForRecording = candidate.comments;
+  // Launch-time worker ledger write, kicked off when the attempt reaches
+  // Running (pid known) and awaited after driveAttempt returns — the ledger
+  // must be able to answer "is anyone working this" while the worker runs.
+  let workerLedgerWrite: Promise<void> | null = null;
 
   const final = await driveAttempt({
     machine: deps.machine,
@@ -425,7 +449,32 @@ async function executeLaunch(
       attemptNumber: plan.attemptNumber,
     },
     onTransition: (state) => {
-      if (state === "Running") spawned = true;
+      if (state === "Running") {
+        spawned = true;
+        // Legibility: record WHO is working this in the rolling ledger. The
+        // pid was persisted by recordLaunch just before this transition.
+        const pid = deps.store.getAttempt(plan.attemptId)?.pid ?? null;
+        const running: Ledger = {
+          ...candidate.ledger.ledger,
+          phase: action.phase,
+          lane: candidate.lane ?? candidate.ledger.ledger.lane,
+          worker: {
+            id: pid !== null ? String(pid) : `attempt-${plan.attemptId}`,
+            host: deps.host.name,
+          },
+          attempt: plan.attemptNumber,
+          blocker: null,
+        };
+        workerLedgerWrite = writeLedgerIfChanged(deps, candidate, running)
+          .then(() => undefined)
+          .catch((e: unknown) => {
+            deps.log.warn("launch-time worker ledger write failed", {
+              issue: id,
+              attemptId: plan.attemptId,
+              error: String(e),
+            });
+          });
+      }
       deps.log.info("attempt transition", {
         issue: id,
         phase: action.phase,
@@ -434,14 +483,15 @@ async function executeLaunch(
       });
     },
     resultOptions: deps.resultOptions,
+    // WIRING CONTRACT (batch A): bound the result wait by the phase SLA so a
+    // 120-minute implement phase is not cut off by the runner's default.
+    wallClockSlaMinutes: phaseConfig.wallClockSlaMinutes,
     checkEvidence: async () => {
       const issues = await deps.gateway.listTeamIssues(deps.teamKey);
       const fresh = issues.find((i) => i.id === issue.id);
       const freshComments = await deps.gateway.listComments(issue.id);
       freshCommentsForRecording = freshComments;
-      const freshLedgerComment = freshComments.find((c) =>
-        isLedgerComment(id, c.body),
-      );
+      const freshLedgerComment = findLedgerComment(id, freshComments);
       const freshLedger = parseLedgerComment(id, freshLedgerComment?.body);
       evidence = await detectPhaseEvidence({
         phase: action.phase,
@@ -452,10 +502,17 @@ async function executeLaunch(
         commentIdsAtLaunch,
         ledgerCompounded: freshLedger.ledger.compounded,
         branch: plan.branch,
+        github: deps.github,
+        trust: deps.trust,
       });
       return evidence.complete;
     },
   });
+
+  // Settle the in-flight launch ledger write before recording outcomes.
+  // (Cast for the same closure-write reason as `evidence` below.)
+  const pendingWorkerLedgerWrite = workerLedgerWrite as Promise<void> | null;
+  if (pendingWorkerLedgerWrite !== null) await pendingWorkerLedgerWrite;
 
   // ---- 6. Record what the daemon observed (ledger + issue row). -----------
   // (Widen through a cast: TS's flow analysis can't see the closure write
@@ -464,8 +521,9 @@ async function executeLaunch(
   if (final === "Succeeded" && observed !== null && observed.complete) {
     const completed: Extract<PhaseEvidence, { complete: true }> = observed;
     try {
-      const freshLedgerComment = freshCommentsForRecording.find((c) =>
-        isLedgerComment(id, c.body),
+      const freshLedgerComment = findLedgerComment(
+        id,
+        freshCommentsForRecording,
       );
       const freshParsed = parseLedgerComment(id, freshLedgerComment?.body);
       const next: Ledger = {
@@ -480,7 +538,7 @@ async function executeLaunch(
       };
       if (!ledgersEqual(freshParsed.ledger, next)) {
         const rendered = renderLedgerComment(id, next, freshParsed.prose);
-        if (freshLedgerComment !== undefined) {
+        if (freshLedgerComment !== null) {
           await deps.gateway.updateComment(freshLedgerComment.id, rendered);
         } else {
           await deps.gateway.createComment(issue.id, rendered);
@@ -517,12 +575,54 @@ async function executeLaunch(
         error: String(e),
       });
     }
-  } else if (spawned && final === "Failed") {
-    deps.log.warn("worker exited without durable evidence", {
+  } else if (
+    final === "Failed" ||
+    final === "TimedOut" ||
+    final === "Stalled"
+  ) {
+    // Legibility: the captured failure detail must be Linear-visible in the
+    // rolling ledger, not just a local log line.
+    const detail = deps.store.getAttempt(plan.attemptId)?.detail ?? null;
+    deps.log.warn("worker ended without durable evidence", {
       issue: id,
       phase: action.phase,
       attemptId: plan.attemptId,
+      spawned,
+      final,
+      detail,
     });
+    try {
+      // Re-read comments: checkEvidence may never have run (e.g. TimedOut),
+      // leaving freshCommentsForRecording at the stale launch snapshot.
+      let freshComments = freshCommentsForRecording;
+      try {
+        freshComments = await deps.gateway.listComments(issue.id);
+      } catch {
+        // Fall back to the freshest snapshot we already hold.
+      }
+      const freshLedgerComment = findLedgerComment(id, freshComments);
+      const freshParsed = parseLedgerComment(id, freshLedgerComment?.body);
+      const failureLine =
+        `Attempt ${plan.attemptNumber} (${action.phase}) ${final}` +
+        (detail !== null && detail !== "" ? `: ${detail}` : "");
+      const next: Ledger = { ...freshParsed.ledger, worker: null };
+      const prose =
+        freshParsed.prose === ""
+          ? failureLine.slice(0, 1000)
+          : `${freshParsed.prose}\n\n${failureLine.slice(0, 1000)}`;
+      const rendered = renderLedgerComment(id, next, prose);
+      if (freshLedgerComment !== null) {
+        await deps.gateway.updateComment(freshLedgerComment.id, rendered);
+      } else {
+        await deps.gateway.createComment(issue.id, rendered);
+      }
+    } catch (e) {
+      deps.log.warn("failure ledger write failed", {
+        issue: id,
+        attemptId: plan.attemptId,
+        error: String(e),
+      });
+    }
   }
 
   return {

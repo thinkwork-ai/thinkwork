@@ -28,6 +28,7 @@ import type {
   HostTransport,
   SpawnDetachedRequest,
 } from "../src/workers/transport.js";
+import { preflightMarker } from "../src/linear/preflight.js";
 import { FakeGateway, makeIssue } from "./fake-gateway.js";
 
 let stateDir: string;
@@ -167,6 +168,56 @@ describe("runTick — end-to-end with the real executor", () => {
   });
 });
 
+describe("runTick — preflight operator override", () => {
+  it("marker comment present + blocker label absent → routes normally, never re-blocks", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-30",
+      state: "Planning",
+      labels: ["Claude"], // operator removed "Needs Credentials"
+      description: "Rotate the OAuth client secrets for the Slack app",
+      comments: [
+        {
+          id: "c-pf",
+          body: `${preflightMarker("THINK-30")}\n\nblocked on an earlier tick`,
+        },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const executed: string[] = [];
+    const deps = makeDeps(gateway, async (_a, c) => {
+      executed.push(c.issue.identifier);
+    });
+
+    const tick = await runTick(deps);
+
+    // The engine decided (launch), not the preflight block path.
+    expect(tick.decisions).toEqual([{ issue: "THINK-30", kind: "launch" }]);
+    expect(executed).toEqual(["THINK-30"]);
+    expect(issue.labels).not.toContain("Needs Credentials");
+    // No second preflight comment.
+    expect(
+      issue.comments.filter((c) =>
+        c.body.startsWith(preflightMarker("THINK-30")),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("still blocks on the first encounter (no marker yet)", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-31",
+      state: "Planning",
+      labels: ["Claude"],
+      description: "Rotate the OAuth client secrets for the Slack app",
+    });
+    const gateway = new FakeGateway([issue]);
+    const deps = makeDeps(gateway, async () => {});
+
+    const tick = await runTick(deps);
+    expect(tick.decisions).toEqual([{ issue: "THINK-31", kind: "block" }]);
+    expect(issue.labels).toContain("Needs Credentials");
+  });
+});
+
 describe("buildStoreView — duplicate-worker guard", () => {
   it("flags dead-pid active attempts and unknown worktrees as external signals", async () => {
     const issue = makeIssue({
@@ -230,6 +281,68 @@ describe("buildStoreView — duplicate-worker guard", () => {
       "unknown-worktree:/wt/auto-think-12-verify-a9",
     ]);
   });
+
+  it("bounds `git worktree list` with a timeout and skips the scan on timeout", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-40",
+      state: "In Progress",
+      labels: ["Claude"],
+    });
+    const gateway = new FakeGateway([issue]);
+
+    class HangingGitTransport extends FakeTransport {
+      lastGitOpts: { timeoutMs?: number } | undefined;
+      async exec(
+        command: string,
+        args: string[],
+        opts?: { timeoutMs?: number },
+      ): Promise<ExecResult> {
+        if (command === "git" && args.includes("worktree")) {
+          this.lastGitOpts = opts;
+          if (opts?.timeoutMs === undefined) {
+            // Unbounded call would hang the daemon forever.
+            await new Promise(() => {});
+          }
+          // Simulate the transport-level timeout kill: code null.
+          return { code: null, stdout: "", stderr: "" };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      }
+    }
+    const transport = new HangingGitTransport();
+
+    const candidate: PollCandidate = {
+      issue,
+      lane: "Claude",
+      hasLfg: false,
+      isVerification: false,
+      blockerLabels: [],
+      ledger: {
+        ledger: {
+          phase: "implement",
+          lane: "Claude",
+          worker: null,
+          attempt: 1,
+          blocker: null,
+          compounded: false,
+        },
+        prose: "",
+        synthesized: true,
+        warnings: [],
+      },
+      ledgerCommentId: null,
+      comments: [],
+    };
+
+    const view = await buildStoreView(
+      { gateway, store, transport, repoPath: "/repo" },
+      candidate,
+    );
+
+    expect(transport.lastGitOpts?.timeoutMs).toBeGreaterThan(0);
+    // Timed-out scan is skipped, not fatal: no external signals fabricated.
+    expect(view.externalWorkerSignals).toEqual([]);
+  }, 5_000);
 
   it("reports a live-pid attempt as active", async () => {
     const issue = makeIssue({

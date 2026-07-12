@@ -20,8 +20,9 @@ import {
   type DaemonDeps,
 } from "./daemon.js";
 import { formatDoctorReport, runDoctor } from "./doctor.js";
-import { createLinearGateway } from "./linear/client.js";
+import { createLinearGateway, type CommentTrust } from "./linear/client.js";
 import { createLogger } from "./logger.js";
+import { createGhCliGateway } from "./phases/evidence.js";
 import {
   defaultBootstrapScriptPath,
   executeAction,
@@ -78,6 +79,29 @@ program
     const gateway = createLinearGateway(config.linear.apiKey);
     const transport = new LocalTransport();
 
+    // Trust allowlist: the daemon's own viewer id is implicitly trusted;
+    // operators extend it via config linear.trustedUserIds. Resolution
+    // failure is fail-safe (nothing is auto-trusted) — batons then always
+    // synthesize rather than reuse comment text.
+    let daemonViewerId: string | null = null;
+    try {
+      daemonViewerId = await gateway.viewerId();
+    } catch (e) {
+      log.warn(
+        "could not resolve the Linear viewer id — daemon-authored comments will not be auto-trusted",
+        { error: String(e) },
+      );
+    }
+    const trust: CommentTrust = {
+      daemonViewerId,
+      trustedUserIds: config.linear.trustedUserIds ?? [],
+    };
+
+    // GitHub gateway for the merged-PR evidence fallback (a worker that
+    // merged its PR but died before posting the baton must not be relaunched
+    // over already-merged work).
+    const github = createGhCliGateway({ repoDir: host.repoPath });
+
     const claudeRunner =
       host.claudeBin !== undefined
         ? new ClaudeRunner({
@@ -104,6 +128,8 @@ program
       bootstrapScript: defaultBootstrapScriptPath(),
       runnerFor: (kind) => (kind === "claude" ? claudeRunner : null),
       log: log.child("executor"),
+      github,
+      trust,
     };
 
     const daemonDeps: DaemonDeps = {
@@ -115,6 +141,7 @@ program
       log: log.child("loop"),
       execute: (action, candidate) =>
         executeAction(action, candidate, executorDeps),
+      trust,
     };
 
     const controller = createDaemonController();

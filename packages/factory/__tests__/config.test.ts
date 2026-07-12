@@ -98,6 +98,20 @@ describe("loadConfig", () => {
     expect(cfg.pollIntervalSeconds).toBe(5);
   });
 
+  it("parses linear.trustedUserIds when present, absent otherwise", () => {
+    writeConfig({
+      ...minimalConfig,
+      linear: {
+        ...minimalConfig.linear,
+        trustedUserIds: ["u-eric", "u-worker"],
+      },
+    });
+    expect(loadConfig().linear.trustedUserIds).toEqual(["u-eric", "u-worker"]);
+
+    writeConfig(minimalConfig);
+    expect(loadConfig().linear.trustedUserIds).toBeUndefined();
+  });
+
   it("throws ConfigError listing missing required keys", () => {
     writeConfig({ slack: {}, hosts: [] });
     let err: unknown;

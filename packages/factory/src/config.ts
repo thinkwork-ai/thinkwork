@@ -17,6 +17,12 @@ import { join } from "node:path";
 export interface LinearConfig {
   apiKey: string;
   teamKey: string;
+  /**
+   * Linear user ids whose comments (batons, override markers) automation may
+   * trust, in addition to the daemon's own viewer id. Comments from anyone
+   * else never steer a worker prompt or count as phase evidence.
+   */
+  trustedUserIds?: string[];
 }
 
 export interface SlackConfig {
@@ -276,10 +282,15 @@ export function loadConfig(): FactoryConfig {
       ? raw.pollIntervalSeconds
       : DEFAULT_POLL_INTERVAL_SECONDS;
 
+  const trustedUserIds = Array.isArray(linearRaw.trustedUserIds)
+    ? (linearRaw.trustedUserIds as unknown[]).map(String)
+    : undefined;
+
   return {
     linear: {
       apiKey: linearRaw.apiKey as string,
       teamKey: linearRaw.teamKey as string,
+      ...(trustedUserIds !== undefined ? { trustedUserIds } : {}),
     },
     slack,
     hosts,

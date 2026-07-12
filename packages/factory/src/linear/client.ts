@@ -25,6 +25,38 @@ export interface LinearIssueSnapshot {
 export interface LinearCommentSnapshot {
   id: string;
   body: string;
+  /**
+   * Author id: the workspace user id, or the bot actor id for
+   * integration-authored comments. `null`/absent when the SDK exposes
+   * neither — such comments are treated as UNTRUSTED for baton/evidence
+   * purposes (fail-safe).
+   */
+  authorId?: string | null;
+}
+
+/**
+ * Trust allowlist for comment-derived signals (batons, baton evidence).
+ * Mirrors the Slack operator-allowlist doctrine applied to Linear: comments
+ * are world-writable, so anything that steers a privileged worker or
+ * advances a phase must come from the daemon itself or an operator.
+ */
+export interface CommentTrust {
+  /** The daemon's own Linear viewer id (implicitly trusted). */
+  daemonViewerId: string | null;
+  /** Operator-configured trusted commenter ids (config `linear.trustedUserIds`). */
+  trustedUserIds: readonly string[];
+}
+
+/** True when the comment's author is the daemon or an allowlisted user. */
+export function isTrustedComment(
+  comment: LinearCommentSnapshot,
+  trust: CommentTrust,
+): boolean {
+  const author = comment.authorId ?? null;
+  if (author === null) return false; // no author id → untrusted (fail-safe)
+  if (trust.daemonViewerId !== null && author === trust.daemonViewerId)
+    return true;
+  return trust.trustedUserIds.includes(author);
 }
 
 export interface LinearGateway {
@@ -36,6 +68,8 @@ export interface LinearGateway {
   addLabel(issueId: string, labelName: string): Promise<void>;
   removeLabel(issueId: string, labelName: string): Promise<void>;
   setState(issueId: string, stateName: string): Promise<void>;
+  /** The authenticated (daemon) user's Linear id, cached after first fetch. */
+  viewerId(): Promise<string>;
   /** True when the issue has at least one child issue (KTD-12 guard). */
   hasChildIssues(issueId: string): Promise<boolean>;
   /**
@@ -72,6 +106,7 @@ async function drain<T>(first: PageOf<T>): Promise<T[]> {
 
 export function createLinearGateway(apiKey: string): LinearGateway {
   const client = new LinearClient({ apiKey });
+  let cachedViewerId: string | null = null;
 
   async function teamByKey(teamKey: string) {
     const teams = await client.teams({ filter: { key: { eq: teamKey } } });
@@ -136,9 +171,17 @@ export function createLinearGateway(apiKey: string): LinearGateway {
         (await issue.comments()) as unknown as PageOf<{
           id: string;
           body: string;
+          /** Workspace-user author id (SDK Comment.userId getter). */
+          userId?: string | null;
+          /** Bot author (SDK Comment.botActor property). */
+          botActor?: { id?: string | null } | null;
         }>,
       );
-      return comments.map((c) => ({ id: c.id, body: c.body }));
+      return comments.map((c) => ({
+        id: c.id,
+        body: c.body,
+        authorId: c.userId ?? c.botActor?.id ?? null,
+      }));
     },
 
     async createComment(issueId, body) {
@@ -224,6 +267,14 @@ export function createLinearGateway(apiKey: string): LinearGateway {
           `workflow state "${stateName}" not found on team ${team.key}`,
         );
       await client.updateIssue(issueId, { stateId: match.id });
+    },
+
+    async viewerId() {
+      if (cachedViewerId === null) {
+        const viewer = await client.viewer;
+        cachedViewerId = viewer.id;
+      }
+      return cachedViewerId;
     },
   };
 }

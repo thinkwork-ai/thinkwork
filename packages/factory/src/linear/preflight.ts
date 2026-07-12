@@ -13,11 +13,14 @@
  * marker.
  */
 
-import type {
-  LinearCommentSnapshot,
-  LinearGateway,
-  LinearIssueSnapshot,
+import {
+  isTrustedComment,
+  type CommentTrust,
+  type LinearCommentSnapshot,
+  type LinearGateway,
+  type LinearIssueSnapshot,
 } from "./client.js";
+import { isMarkerComment } from "./markers.js";
 
 export const PREFLIGHT_MARKER_PREFIX = "factory-preflight:";
 
@@ -82,6 +85,34 @@ export function evaluatePreflight(
 }
 
 /**
+ * Operator override (dead-end fix): the block comment tells the operator
+ * they may remove the blocker label to resume automation, but the issue TEXT
+ * still matches the preflight patterns forever — without this check the
+ * daemon would re-add the label every tick. "A preflight marker comment
+ * already exists AND the blocker label is currently absent" therefore means
+ * an operator deliberately removed the label: route normally.
+ *
+ * When trust info is available the marker comment must come from the daemon
+ * or a trusted user, so an outside commenter cannot pre-empt the block by
+ * posting a fake marker before the daemon ever applied it.
+ */
+export function hasPreflightOverride(
+  issue: LinearIssueSnapshot,
+  comments: LinearCommentSnapshot[],
+  decision: PreflightDecision,
+  trust?: CommentTrust,
+): boolean {
+  if (!decision.blocked || decision.label === null) return false;
+  if (issue.labels.includes(decision.label)) return false;
+  const marker = preflightMarker(issue.identifier);
+  return comments.some(
+    (c) =>
+      isMarkerComment(c.body, marker) &&
+      (trust === undefined || isTrustedComment(c, trust)),
+  );
+}
+
+/**
  * Apply a blocked decision: blocker label + one marked comment. Idempotent —
  * repeated polls see the marker/label already present and write nothing.
  * Returns true when anything was written this call.
@@ -101,7 +132,9 @@ export async function applyPreflightBlock(
   }
 
   const marker = preflightMarker(issue.identifier);
-  const alreadyCommented = comments.some((c) => c.body.includes(marker));
+  const alreadyCommented = comments.some((c) =>
+    isMarkerComment(c.body, marker),
+  );
   if (!alreadyCommented) {
     const body = [
       marker,

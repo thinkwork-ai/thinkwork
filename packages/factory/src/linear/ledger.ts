@@ -15,6 +15,10 @@
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
+import { BLOCKER_LABELS, LANE_LABELS } from "../domain/statuses.js";
+import type { LinearCommentSnapshot } from "./client.js";
+import { isMarkerComment } from "./markers.js";
+
 export const LEDGER_MARKER_PREFIX = "automation-ledger:";
 
 /** Known pipeline phases. Unknown values are preserved but flagged. */
@@ -28,17 +32,8 @@ export const KNOWN_PHASES = [
   "done",
 ] as const;
 
-/** Known lanes. `unassigned` is the synthesized default. */
-export const KNOWN_LANES = ["Claude", "Codex", "unassigned"] as const;
-
-/** Known blocker labels (routing contract); `null` means unblocked. */
-export const KNOWN_BLOCKERS = [
-  "Needs User",
-  "Needs Credentials",
-  "Unsafe Ambiguity",
-  "CI Failed",
-  "Blocked: Auth",
-] as const;
+/** Known lanes (canonical lane labels). `unassigned` is the synthesized default. */
+export const KNOWN_LANES = [...LANE_LABELS, "unassigned"] as const;
 
 export interface LedgerWorker {
   /** Worker id (pid or thread id, lane-specific). */
@@ -79,12 +74,31 @@ export function ledgerMarker(issueIdentifier: string): string {
   return `${LEDGER_MARKER_PREFIX}${issueIdentifier}`;
 }
 
-/** True when a comment body is this issue's ledger comment. */
+/**
+ * True when a comment body IS this issue's ledger comment: the marker must
+ * be the first line (a comment merely quoting the marker mid-body must never
+ * become THE ledger — hijack hardening).
+ */
 export function isLedgerComment(
   issueIdentifier: string,
   body: string,
 ): boolean {
-  return body.includes(ledgerMarker(issueIdentifier));
+  return isMarkerComment(body, ledgerMarker(issueIdentifier));
+}
+
+/**
+ * The authoritative ledger comment: the NEWEST matching comment (comments
+ * are chronological, Linear returns ascending). A daemon-authored ledger
+ * always wins over any older comment that happens to parse as one.
+ */
+export function findLedgerComment(
+  issueIdentifier: string,
+  comments: readonly LinearCommentSnapshot[],
+): LinearCommentSnapshot | null {
+  for (let i = comments.length - 1; i >= 0; i--) {
+    if (isLedgerComment(issueIdentifier, comments[i].body)) return comments[i];
+  }
+  return null;
 }
 
 const FENCE_OPEN = "```yaml";
@@ -180,7 +194,7 @@ function coerceLedger(
     out.blocker = null;
   } else if (typeof raw.blocker === "string") {
     out.blocker = raw.blocker;
-    if (!(KNOWN_BLOCKERS as readonly string[]).includes(raw.blocker))
+    if (!(BLOCKER_LABELS as readonly string[]).includes(raw.blocker))
       warnings.push(`unknown blocker: ${raw.blocker}`);
   } else {
     warnings.push(

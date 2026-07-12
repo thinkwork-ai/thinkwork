@@ -105,6 +105,58 @@ describe("candidate filter", () => {
     expect(byId["T-2"].ledgerCommentId).toBeNull();
   });
 
+  it("the NEWEST ledger comment is authoritative over an older one (hijack guard)", async () => {
+    // An older comment (e.g. a human quote or stale copy) that parses as a
+    // ledger must never shadow the newer daemon-authored ledger — an injected
+    // `compounded: true` would permanently suppress the compound phase.
+    const hijack = renderLedgerComment("T-1", {
+      ...DEFAULT_LEDGER,
+      compounded: true,
+    });
+    const real = renderLedgerComment("T-1", {
+      ...DEFAULT_LEDGER,
+      phase: "implement",
+      lane: "Claude",
+    });
+    const gateway = new FakeGateway([
+      makeIssue({
+        identifier: "T-1",
+        state: "In Progress",
+        labels: ["Claude"],
+        comments: [
+          { id: "c-old-hijack", body: hijack },
+          { id: "c-new-real", body: real },
+        ],
+      }),
+    ]);
+
+    const result = await pollTick(gateway, TEAM);
+    const candidate = result.candidates[0];
+    expect(candidate.ledgerCommentId).toBe("c-new-real");
+    expect(candidate.ledger.ledger.compounded).toBe(false);
+    expect(candidate.ledger.ledger.phase).toBe("implement");
+  });
+
+  it("a comment quoting the ledger marker mid-body is NOT the ledger", async () => {
+    const gateway = new FakeGateway([
+      makeIssue({
+        identifier: "T-1",
+        state: "In Progress",
+        labels: ["Claude"],
+        comments: [
+          {
+            id: "c-quote",
+            body: "Worker note: I will update automation-ledger:T-1 when done.\ncompounded: true",
+          },
+        ],
+      }),
+    ]);
+    const result = await pollTick(gateway, TEAM);
+    const candidate = result.candidates[0];
+    expect(candidate.ledgerCommentId).toBeNull();
+    expect(candidate.ledger.synthesized).toBe(true);
+  });
+
   it("surfaces blocker labels on candidates", async () => {
     const gateway = new FakeGateway([
       makeIssue({

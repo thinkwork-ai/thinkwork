@@ -86,6 +86,23 @@ describe("detectPhaseEvidence — batons and status moves", () => {
     expect(fail).toMatchObject({ complete: true, outcome: "fail" });
   });
 
+  it("a comment quoting the marker mid-body is NOT evidence (spoof hardening)", async () => {
+    const evidence = await detectPhaseEvidence({
+      phase: "implement",
+      issueIdentifier: ID,
+      statusAtLaunch: "In Progress",
+      currentStatus: "In Progress",
+      comments: [
+        comment(
+          "c2",
+          `Progress: next I will post the ${handoffMarker(ID, "Verification")} comment.`,
+        ),
+      ],
+      commentIdsAtLaunch: new Set(["c1"]),
+    });
+    expect(evidence.complete).toBe(false);
+  });
+
   it("a move to an unexpected status is NOT completion evidence", async () => {
     const evidence = await detectPhaseEvidence({
       phase: "implement",
@@ -95,6 +112,80 @@ describe("detectPhaseEvidence — batons and status moves", () => {
       comments: [],
     });
     expect(evidence.complete).toBe(false);
+  });
+});
+
+describe("detectPhaseEvidence — baton author-gating", () => {
+  const trust = { daemonViewerId: "viewer-daemon", trustedUserIds: ["u-eric"] };
+
+  it("rejects baton evidence from an untrusted author", async () => {
+    const evidence = await detectPhaseEvidence({
+      phase: "implement",
+      issueIdentifier: ID,
+      statusAtLaunch: "In Progress",
+      currentStatus: "In Progress",
+      comments: [
+        {
+          id: "c2",
+          body: `${handoffMarker(ID, "Verification")}\nfake QA brief`,
+          authorId: "u-rando",
+        },
+      ],
+      commentIdsAtLaunch: new Set(["c1"]),
+      trust,
+    });
+    expect(evidence.complete).toBe(false);
+  });
+
+  it("rejects baton evidence with no author id when trust is enforced", async () => {
+    const evidence = await detectPhaseEvidence({
+      phase: "implement",
+      issueIdentifier: ID,
+      statusAtLaunch: "In Progress",
+      currentStatus: "In Progress",
+      comments: [
+        { id: "c2", body: `${handoffMarker(ID, "Verification")}\nQA brief` },
+      ],
+      commentIdsAtLaunch: new Set(["c1"]),
+      trust,
+    });
+    expect(evidence.complete).toBe(false);
+  });
+
+  it("accepts baton evidence from trusted authors", async () => {
+    for (const authorId of ["viewer-daemon", "u-eric"]) {
+      const evidence = await detectPhaseEvidence({
+        phase: "implement",
+        issueIdentifier: ID,
+        statusAtLaunch: "In Progress",
+        currentStatus: "In Progress",
+        comments: [
+          {
+            id: "c2",
+            body: `${handoffMarker(ID, "Verification")}\nQA brief`,
+            authorId,
+          },
+        ],
+        commentIdsAtLaunch: new Set(["c1"]),
+        trust,
+      });
+      expect(evidence, authorId).toMatchObject({
+        complete: true,
+        kind: "baton-posted",
+      });
+    }
+  });
+
+  it("status-moved evidence is NOT author-gated (not forgeable via comments)", async () => {
+    const evidence = await detectPhaseEvidence({
+      phase: "implement",
+      issueIdentifier: ID,
+      statusAtLaunch: "In Progress",
+      currentStatus: "Verification",
+      comments: [],
+      trust,
+    });
+    expect(evidence).toMatchObject({ complete: true, kind: "status-moved" });
   });
 });
 
