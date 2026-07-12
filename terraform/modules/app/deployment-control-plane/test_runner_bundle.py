@@ -94,6 +94,68 @@ def write_drizzle_files(source_dir: Path, names: list[str]) -> None:
         (migrations / name).write_text(f"-- {name}\n", encoding="utf-8")
 
 
+def test_customer_update_requires_explicit_agentcore_pi_source_image() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="agentcorePiSourceImageUri"):
+        runner.resolve_agentcore_pi_source_image_uri(
+            {
+                "action": "update",
+                "operation": {"kind": "foundation", "action": "update"},
+            }
+        )
+
+
+def test_customer_update_rejects_non_customer_agentcore_pi_source_image() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="customer-owned ECR"):
+        runner.resolve_agentcore_pi_source_image_uri(
+            {
+                "action": "update",
+                "awsAccountId": "637423202447",
+                "awsRegion": "us-east-1",
+                "agentcorePiSourceImageUri": (
+                    "ghcr.io/thinkwork-ai/thinkwork-agentcore@sha256:abc"
+                ),
+            }
+        )
+
+
+def test_customer_update_accepts_customer_ecr_agentcore_pi_source_image() -> None:
+    runner = load_runner()
+    image = (
+        "637423202447.dkr.ecr.us-east-1.amazonaws.com/"
+        "thinkwork-tei-e2e-agentcore:pinned@sha256:abc"
+    )
+
+    assert runner.resolve_agentcore_pi_source_image_uri(
+        {
+            "action": "update",
+            "awsAccountId": "637423202447",
+            "awsRegion": "us-east-1",
+            "agentcorePiSourceImageUri": image,
+        }
+    ) == image
+
+
+def test_bootstrap_can_fall_back_to_release_agentcore_pi_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(
+        runner,
+        "release_runtime_image",
+        lambda name: "ghcr.io/thinkwork-ai/thinkwork-agentcore@sha256:abc"
+        if name == "agentcore-pi-amd64"
+        else "",
+    )
+
+    assert runner.resolve_agentcore_pi_source_image_uri({"action": "deploy"}) == (
+        "ghcr.io/thinkwork-ai/thinkwork-agentcore@sha256:abc"
+    )
+
+
 def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

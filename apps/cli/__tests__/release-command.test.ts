@@ -7,6 +7,7 @@ import {
   controllerExecutionName,
   fetchRecentReleases,
   parsePriorControllerInput,
+  recoverPriorControllerInput,
   resolveReleaseManifest,
 } from "../src/commands/release/helpers.js";
 
@@ -188,7 +189,7 @@ const PRIOR = {
   evidenceBucket: "thinkwork-tei-e2e-637423202447-deploy-evidence",
   releaseVersion: "v0.1.0-canary.172",
   agentcorePiSourceImageUri:
-    "ghcr.io/thinkwork-ai/thinkwork-agentcore:pinned@sha256:abc",
+    "637423202447.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned@sha256:abc",
   features: { baseInstall: { twenty: true }, optionalApps: [] },
   terraform: { stateRecovery: { mode: "state", recoverByTags: false } },
 };
@@ -223,6 +224,39 @@ describe("parsePriorControllerInput", () => {
     expect(() =>
       parsePriorControllerInput({ ...PRIOR, evidenceBucket: "" }),
     ).toThrow(/evidenceBucket/);
+  });
+});
+
+describe("recoverPriorControllerInput", () => {
+  it("recovers the customer-ECR Pi pin from an older successful input", () => {
+    const recovered = recoverPriorControllerInput([
+      {
+        ...PRIOR,
+        releaseVersion: "v0.1.0-canary.350",
+        agentcorePiSourceImageUri: undefined,
+        features: { latest: true },
+      },
+      PRIOR,
+    ]);
+
+    expect(recovered.releaseVersion).toBe("v0.1.0-canary.350");
+    expect(recovered.features).toEqual({ latest: true });
+    expect(recovered.agentcorePiSourceImageUri).toBe(
+      PRIOR.agentcorePiSourceImageUri,
+    );
+  });
+
+  it("does not recover a registry pin owned by another AWS account", () => {
+    const recovered = recoverPriorControllerInput([
+      { ...PRIOR, agentcorePiSourceImageUri: undefined },
+      {
+        ...PRIOR,
+        agentcorePiSourceImageUri:
+          "024350822488.dkr.ecr.us-east-1.amazonaws.com/thinkwork-mcpherson-agentcore:pinned@sha256:abc",
+      },
+    ]);
+
+    expect(recovered.agentcorePiSourceImageUri).toBeUndefined();
   });
 });
 
@@ -319,6 +353,28 @@ describe("buildControllerUpdateInput", () => {
         customerDomainLegacyRetired: false,
       },
     });
+  });
+
+  it("fails closed when a full update has no customer-ECR Pi pin", () => {
+    const prior = parsePriorControllerInput({
+      ...PRIOR,
+      agentcorePiSourceImageUri: undefined,
+    });
+
+    expect(() => buildControllerUpdateInput({ prior, release })).toThrow(
+      /customer-ECR AgentCore Pi image pin/i,
+    );
+  });
+
+  it("allows a web-only update without a Pi pin", () => {
+    const prior = parsePriorControllerInput({
+      ...PRIOR,
+      agentcorePiSourceImageUri: undefined,
+    });
+
+    expect(
+      buildControllerUpdateInput({ prior, release, webOnly: true }),
+    ).not.toHaveProperty("agentcorePiSourceImageUri");
   });
 
   it("generates a session id when none is supplied", () => {

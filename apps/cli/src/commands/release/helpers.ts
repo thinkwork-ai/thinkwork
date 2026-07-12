@@ -206,6 +206,57 @@ export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
   };
 }
 
+function isCustomerEcrPiImage(
+  prior: PriorControllerInput,
+  imageUri: string | undefined,
+): imageUri is string {
+  if (!imageUri) return false;
+  const registry = `${prior.awsAccountId}.dkr.ecr.${prior.awsRegion}.amazonaws.com/`;
+  return imageUri.startsWith(registry);
+}
+
+/**
+ * Keep the newest successful controller input as the configuration baseline,
+ * but recover its customer-owned Pi image pin from an older success when a
+ * malformed manual dispatch omitted it.
+ */
+export function recoverPriorControllerInput(
+  successfulInputsNewestFirst: unknown[],
+): PriorControllerInput {
+  if (!successfulInputsNewestFirst.length) {
+    throw new Error("No successful controller deployment input was provided.");
+  }
+
+  const latest = parsePriorControllerInput(successfulInputsNewestFirst[0]);
+  if (isCustomerEcrPiImage(latest, latest.agentcorePiSourceImageUri)) {
+    return latest;
+  }
+
+  for (const raw of successfulInputsNewestFirst.slice(1)) {
+    let candidate: PriorControllerInput;
+    try {
+      candidate = parsePriorControllerInput(raw);
+    } catch {
+      continue;
+    }
+    const sameEnvironment =
+      candidate.environmentName === latest.environmentName &&
+      candidate.awsAccountId === latest.awsAccountId &&
+      candidate.awsRegion === latest.awsRegion;
+    if (
+      sameEnvironment &&
+      isCustomerEcrPiImage(latest, candidate.agentcorePiSourceImageUri)
+    ) {
+      return {
+        ...latest,
+        agentcorePiSourceImageUri: candidate.agentcorePiSourceImageUri,
+      };
+    }
+  }
+
+  return latest;
+}
+
 /**
  * Build the controller-v1 update input for a release, carrying forward the
  * non-derivable environment facts from the previous execution.
@@ -217,6 +268,16 @@ export function buildControllerUpdateInput(options: {
   webOnly?: boolean;
 }): Record<string, unknown> {
   const { prior, release } = options;
+  if (
+    !options.webOnly &&
+    !isCustomerEcrPiImage(prior, prior.agentcorePiSourceImageUri)
+  ) {
+    throw new Error(
+      "A full customer release update requires a customer-ECR AgentCore Pi image pin. " +
+        "No valid agentcorePiSourceImageUri was found in the successful deployment history; " +
+        "mirror the approved Pi image into this customer account and bootstrap the pin before retrying.",
+    );
+  }
   const sessionId = options.sessionId ?? randomUUID();
   const action = options.webOnly ? "web" : "update";
   const operationKind = options.webOnly ? "web" : "foundation";

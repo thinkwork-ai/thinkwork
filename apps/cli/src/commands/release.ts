@@ -26,7 +26,7 @@ import {
   buildControllerUpdateInput,
   controllerExecutionName,
   fetchRecentReleases,
-  parsePriorControllerInput,
+  recoverPriorControllerInput,
   resolveReleaseManifest,
   type PriorControllerInput,
   type ReleaseSummary,
@@ -261,7 +261,7 @@ function resolvePriorInputOrExit(
         "--status-filter",
         "SUCCEEDED",
         "--max-results",
-        "1",
+        "20",
         "--query",
         "executions",
         "--output",
@@ -281,17 +281,20 @@ function resolvePriorInputOrExit(
     process.exit(1);
   }
   try {
-    const raw = aws([
-      "stepfunctions",
-      "describe-execution",
-      "--execution-arn",
-      executions[0].executionArn,
-      "--query",
-      "input",
-      "--output",
-      "text",
-    ]);
-    return parsePriorControllerInput(JSON.parse(raw));
+    const successfulInputs = executions.map(({ executionArn }) => {
+      const raw = aws([
+        "stepfunctions",
+        "describe-execution",
+        "--execution-arn",
+        executionArn,
+        "--query",
+        "input",
+        "--output",
+        "text",
+      ]);
+      return JSON.parse(raw);
+    });
+    return recoverPriorControllerInput(successfulInputs);
   } catch (err) {
     printError(
       `Could not read the previous controller execution input: ${(err as Error).message}`,
