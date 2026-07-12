@@ -91,6 +91,30 @@ export const sharedPluginTermAllowlist = [
       "shared platform GraphQL read API coverage for the n8n plugin app; native app runtime and manifest source remain package-owned under plugins/n8n.",
   },
   {
+    path: "packages/api/src/lib/memory-sources/adapters/twenty.ts",
+    reason:
+      "platform memory-source adapter (THINK-193): normalizes Twenty CRM records into the source-agnostic evidence/dossier contract consumed by the memory-stage worker; the adapter seam is platform-owned like the other source families, while plugin runtime and manifest source remain under plugins/twenty.",
+  },
+  {
+    path: "packages/api/src/lib/memory-sources/adapters/twenty.test.ts",
+    reason: "unit tests for the platform Twenty memory-source adapter above.",
+  },
+  {
+    path: "packages/api/scripts/memory-sources/seed-twenty-processor.ts",
+    reason:
+      "operator/dev seeding script for the THINK-193 U1 Twenty proving-slice processor; thin seam over the platform memory-sources substrate pending the U3 product surfaces.",
+  },
+  {
+    path: "packages/api/src/lib/twenty/rest-client.ts",
+    reason:
+      "shared platform Twenty REST client (context/token resolution + paginated listing) consumed by both the Client Engagement handler and the external memory-source adapter; plugin runtime and manifest source remain package-owned under plugins/twenty.",
+  },
+  {
+    path: "packages/api/src/lib/twenty/rest-client.test.ts",
+    reason:
+      "unit tests for the shared platform Twenty REST client above.",
+  },
+  {
     path: "packages/api/src/handlers/twenty-client-engagement.ts",
     reason:
       "shared platform REST app data API for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
