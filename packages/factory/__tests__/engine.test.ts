@@ -349,6 +349,35 @@ describe("Done / compound guard", () => {
     );
     expect(action.kind).toBe("noop");
   });
+
+  // A Done issue is terminal: stale in-flight blockers must NOT produce a
+  // `block` (that would thread + escalate, then un-enroll closes it → a
+  // per-tick open/@mention/close loop on old Done issues).
+  it("Done + stale blocker label (Needs User / CI Failed) → noop, NOT block", () => {
+    for (const blocker of ["Needs User", "CI Failed", "Blocked: Auth"]) {
+      const action = decideAction(
+        makeCandidate({ state: "Done", labels: ["Claude", blocker] }),
+        emptyView(),
+      );
+      expect(action.kind, `Done + ${blocker}`).toBe("noop");
+    }
+  });
+
+  it("Done + BOTH lane labels → noop, NOT a lane-conflict block", () => {
+    const action = decideAction(
+      makeCandidate({ state: "Done", labels: ["Claude", "Codex"] }),
+      emptyView(),
+    );
+    expect(action.kind).toBe("noop");
+  });
+
+  it("Done + child issues → noop, NOT a KTD-12 block", () => {
+    const action = decideAction(
+      makeCandidate({ state: "Done", labels: ["Claude"] }),
+      emptyView({ hasChildIssues: true }),
+    );
+    expect(action.kind).toBe("noop");
+  });
 });
 
 // ---------------------------------------------------------------------------
