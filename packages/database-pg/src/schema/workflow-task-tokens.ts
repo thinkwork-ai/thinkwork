@@ -9,6 +9,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -24,8 +25,16 @@ export const WORKFLOW_TASK_TOKEN_PURPOSES = [
   "approval",
   "memory_stage",
 ] as const;
+/**
+ * Lifecycle: pending -> executing (durable pre-execution claim, F1) ->
+ * consumed (result persisted, F9). `executing` rows with a stale locked_at
+ * may be re-claimed so a crashed worker's retry or continuation can proceed
+ * (F7 lease). Consumed/executing rows are monotonic — storeTaskToken never
+ * resurrects them.
+ */
 export const WORKFLOW_TASK_TOKEN_STATUSES = [
   "pending",
+  "executing",
   "consumed",
   "expired",
 ] as const;
@@ -48,6 +57,14 @@ export const workflowTaskTokens = pgTable(
     token: text("token").notNull(),
     status: text("status").notNull().default("pending"),
     consumed_at: timestamp("consumed_at", { withTimezone: true }),
+    /** Set when a worker claims the token (status executing); a claim with a
+     * stale locked_at (> lease window) may be taken over. */
+    locked_at: timestamp("locked_at", { withTimezone: true }),
+    /** Identity of the claiming worker (aws request id or random id). */
+    locked_by: text("locked_by"),
+    /** Persisted completion result — enables safe redrive when
+     * SendTaskSuccess failed after the token was consumed (F9). */
+    result: jsonb("result"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -65,8 +82,8 @@ export const workflowTaskTokens = pgTable(
       sql`${table.purpose} IN ('agent_step', 'approval', 'memory_stage')`,
     ),
     check(
-      "workflow_task_tokens_status_check",
-      sql`${table.status} IN ('pending', 'consumed', 'expired')`,
+      "workflow_task_tokens_status_check_v2",
+      sql`${table.status} IN ('pending', 'executing', 'consumed', 'expired')`,
     ),
   ],
 );

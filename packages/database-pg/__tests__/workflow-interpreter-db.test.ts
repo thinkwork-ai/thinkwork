@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  claimTaskTokenExecution,
   consumeTaskToken,
   createInterpreterWorkflowRun,
   ensureInterpreterBinding,
   markInterpreterRunStarted,
+  persistTaskTokenResult,
   recordInterpreterRollover,
   recordWorkflowStepEvent,
+  renewTaskTokenLease,
   storeTaskToken,
   updateInterpreterRunFromExecution,
 } from "../src/workflow-interpreter-db";
@@ -234,6 +237,139 @@ describe("task tokens", () => {
     updateRows.mockReturnValueOnce([]);
     const second = await consumeTaskToken(fakeDb(), key);
     expect(second).toBeNull();
+  });
+
+  it("storeTaskToken is monotonic: the conflict update only fires for pending/expired rows (F1)", async () => {
+    await storeTaskToken(fakeDb(), {
+      tenantId: "tenant-1",
+      workflowRunId: "run-1",
+      stepId: "work",
+      iteration: 1,
+      purpose: "memory_stage",
+      token: "tok-2",
+    });
+    const options = conflictOptions.mock.calls[0]?.[0] as {
+      set?: Record<string, unknown>;
+      setWhere?: unknown;
+    };
+    // The upsert must clear claim/result state for a legit re-park…
+    expect(options.set).toMatchObject({
+      token: "tok-2",
+      status: "pending",
+      consumed_at: null,
+      locked_at: null,
+      locked_by: null,
+      result: null,
+    });
+    // …but ONLY when the existing row is pending/expired — a consumed or
+    // executing row is never resurrected by a duplicate/late dispatch.
+    expect(options.setWhere).toBeDefined();
+    // Drizzle SQL objects are circular (column -> table -> column); read the
+    // literal text chunks instead of serializing the whole object.
+    const chunks =
+      (options.setWhere as { queryChunks?: unknown[] })?.queryChunks ?? [];
+    const setWhereSql = chunks
+      .map((chunk) => {
+        const value = (chunk as { value?: unknown })?.value;
+        return Array.isArray(value) ? value.join("") : "";
+      })
+      .join(" ");
+    expect(setWhereSql).toContain("pending");
+    expect(setWhereSql).toContain("expired");
+    expect(setWhereSql).not.toContain("consumed");
+    expect(setWhereSql).not.toContain("executing");
+  });
+
+  const claimKey = {
+    workflowRunId: "run-1",
+    stepId: "work",
+    iteration: 1,
+    purpose: "memory_stage" as const,
+    lockedBy: "worker-a",
+  };
+
+  it("claimTaskTokenExecution wins the CAS and returns the token", async () => {
+    updateRows.mockReturnValueOnce([{ token: "tok-1" }]);
+    const claim = await claimTaskTokenExecution(fakeDb(), claimKey);
+    expect(claim).toEqual({ token: "tok-1" });
+    expect(updateValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "executing",
+        locked_by: "worker-a",
+        locked_at: expect.any(Date),
+      }),
+    );
+  });
+
+  it("claimTaskTokenExecution returns the redrive shape for consumed rows with a persisted result (F9)", async () => {
+    updateRows.mockReturnValueOnce([]);
+    selectRows.mockReturnValueOnce([
+      {
+        status: "consumed",
+        token: "tok-1",
+        result: { status: "succeeded", stage: "acquire" },
+      },
+    ]);
+    const claim = await claimTaskTokenExecution(fakeDb(), claimKey);
+    expect(claim).toEqual({
+      redrive: {
+        token: "tok-1",
+        result: { status: "succeeded", stage: "acquire" },
+      },
+    });
+  });
+
+  it("claimTaskTokenExecution returns null (zero side effects) when nothing is claimable", async () => {
+    updateRows.mockReturnValueOnce([]);
+    // Consumed without a persisted result: not redrivable either.
+    selectRows.mockReturnValueOnce([
+      { status: "consumed", token: "tok-1", result: null },
+    ]);
+    expect(await claimTaskTokenExecution(fakeDb(), claimKey)).toBeNull();
+
+    updateRows.mockReturnValueOnce([]);
+    selectRows.mockReturnValueOnce([]);
+    expect(await claimTaskTokenExecution(fakeDb(), claimKey)).toBeNull();
+  });
+
+  it("persistTaskTokenResult flips executing -> consumed with the durable result", async () => {
+    updateRows.mockReturnValueOnce([{ token: "tok-1" }]);
+    const persisted = await persistTaskTokenResult(fakeDb(), {
+      workflowRunId: "run-1",
+      stepId: "work",
+      iteration: 1,
+      purpose: "memory_stage",
+      result: { status: "failed", stage: "acquire", error: "boom" },
+    });
+    expect(persisted).toEqual({ token: "tok-1" });
+    expect(updateValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "consumed",
+        result: { status: "failed", stage: "acquire", error: "boom" },
+        consumed_at: expect.any(Date),
+      }),
+    );
+
+    updateRows.mockReturnValueOnce([]);
+    const lost = await persistTaskTokenResult(fakeDb(), {
+      workflowRunId: "run-1",
+      stepId: "work",
+      iteration: 1,
+      purpose: "memory_stage",
+      result: {},
+    });
+    expect(lost).toBeNull();
+  });
+
+  it("renewTaskTokenLease bumps locked_at only for the current holder", async () => {
+    updateRows.mockReturnValueOnce([{ id: "row-1" }]);
+    expect(await renewTaskTokenLease(fakeDb(), claimKey)).toBe(true);
+    expect(updateValues).toHaveBeenCalledWith(
+      expect.objectContaining({ locked_at: expect.any(Date) }),
+    );
+
+    updateRows.mockReturnValueOnce([]);
+    expect(await renewTaskTokenLease(fakeDb(), claimKey)).toBe(false);
   });
 });
 

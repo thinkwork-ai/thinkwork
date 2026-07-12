@@ -2,19 +2,29 @@
  * memory-stage-worker — async executor for `memory_stage` workflow steps
  * (external memory compounding, THINK-193 U1).
  *
- * Harness only: payload validation, the durable execution claim on the
- * task-token row, stage dispatch (implementations live in
- * lib/memory-sources/stages.ts), result persistence, and task-token resume.
- * Stage failures resume with status "failed" — the run fails visibly; the
- * machine never parks forever behind a crashed worker (bounded by the ASL
- * heartbeat timeout).
+ * Harness only: payload validation, the durable pre-execution claim on the
+ * task-token row (Codex F1 — no stage side effects until a pending token is
+ * proven and claimed), run/definition binding validation, stage dispatch
+ * (implementations live in lib/memory-sources/stages.ts), persist-then-send
+ * completion (Codex F9 — the result is durable before SendTaskSuccess so a
+ * transient send failure is redrivable), and task-token resume. Stage
+ * failures resume with status "failed" — the run fails visibly; the machine
+ * never parks forever behind a crashed worker (bounded by the ASL heartbeat
+ * timeout).
  */
 
+import { randomUUID } from "node:crypto";
 import { SendTaskSuccessCommand, SFNClient } from "@aws-sdk/client-sfn";
-import { consumeTaskToken, getDb } from "@thinkwork/database-pg";
-import { workflowTaskTokens } from "@thinkwork/database-pg/schema";
-import { and, eq } from "drizzle-orm";
+import {
+  claimTaskTokenExecution,
+  getDb,
+  persistTaskTokenResult,
+  renewTaskTokenLease,
+} from "@thinkwork/database-pg";
+import { workflowRuns, workflowVersions } from "@thinkwork/database-pg/schema";
+import { eq } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
+import { readWorkflowDefinition } from "@thinkwork/agent-loops-core";
 import {
   assertSharedScope,
   assertTargetInTenant,
@@ -46,7 +56,111 @@ export type MemoryStageWorkerEvent = MemoryStageWorkerInvokePayload;
 export type { MemoryStageWorkerResult };
 
 const _DEFAULT_SFN_CLIENT = new SFNClient({});
+
+/** Event-invoke this same worker with the identical payload (F7
+ * continuation). The shared api role may invoke every api Lambda,
+ * including this one. */
+async function defaultSelfInvoke(event: MemoryStageWorkerEvent): Promise<void> {
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
+  const stage = process.env.STAGE;
+  const fnName =
+    process.env.MEMORY_STAGE_WORKER_FUNCTION_NAME ??
+    (stage ? `thinkwork-${stage}-api-memory-stage-worker` : undefined);
+  if (!fnName) {
+    throw new Error(
+      "continuation self-invoke unavailable: MEMORY_STAGE_WORKER_FUNCTION_NAME / STAGE are unset",
+    );
+  }
+  await new LambdaClient({}).send(
+    new InvokeCommand({
+      FunctionName: fnName,
+      InvocationType: "Event",
+      Payload: new TextEncoder().encode(JSON.stringify(event)),
+    }),
+  );
+}
 const CONSUMED_ERROR_NAMES = new Set(["TaskDoesNotExist", "TaskTimedOut"]);
+
+/** Lease handle passed to stages so long-running/continuation work can keep
+ * its execution claim fresh (Codex F7). */
+export interface MemoryStageLease {
+  lockedBy: string;
+  renew(): Promise<boolean>;
+}
+
+/** Injectable token operations — defaults are the real durable-claim
+ * functions from @thinkwork/database-pg; tests supply in-memory versions. */
+export interface MemoryStageTokenOps {
+  claim: typeof claimTaskTokenExecution;
+  persist: typeof persistTaskTokenResult;
+  renewLease: typeof renewTaskTokenLease;
+}
+
+const DEFAULT_TOKEN_OPS: MemoryStageTokenOps = {
+  claim: claimTaskTokenExecution,
+  persist: persistTaskTokenResult,
+  renewLease: renewTaskTokenLease,
+};
+
+// ---------------------------------------------------------------------------
+// Binding validation (Codex F1): the claimed token only proves a park exists
+// for (run, step, iteration). Before executing, the payload must also match
+// what the workflow definition actually says this step is — a forged/stale
+// direct invocation must not run an arbitrary stage or processor.
+// ---------------------------------------------------------------------------
+
+async function validateMemoryStageBinding(
+  db: Database,
+  event: MemoryStageWorkerEvent,
+): Promise<string | null> {
+  const [run] = await db
+    .select({
+      tenant_id: workflowRuns.tenant_id,
+      workflow_version_id: workflowRuns.workflow_version_id,
+    })
+    .from(workflowRuns)
+    .where(eq(workflowRuns.id, event.workflowRunId))
+    .limit(1);
+  if (!run) return `workflow run ${event.workflowRunId} not found`;
+  if (run.tenant_id !== event.tenantId) {
+    return "workflow run belongs to another tenant — refusing cross-tenant execution";
+  }
+  if (!run.workflow_version_id) {
+    return "workflow run has no published workflow version — cannot validate the memory_stage step";
+  }
+  const [version] = await db
+    .select({ definition_snapshot: workflowVersions.definition_snapshot })
+    .from(workflowVersions)
+    .where(eq(workflowVersions.id, run.workflow_version_id))
+    .limit(1);
+  const definition = version
+    ? readWorkflowDefinition(version.definition_snapshot)
+    : null;
+  if (!definition) {
+    return `workflow version ${run.workflow_version_id} does not hold a valid workflow definition`;
+  }
+  const step = definition.steps.find((s) => s.id === event.stepId);
+  if (!step || step.kind !== "memory_stage") {
+    return `step ${event.stepId} is not a memory_stage step in this workflow definition`;
+  }
+  if (step.stage !== event.stage) {
+    return `stage mismatch: definition binds step ${event.stepId} to stage "${step.stage}", payload says "${event.stage}"`;
+  }
+  // The definition may hold a {{ }} template that dispatch resolved at park
+  // time — we cannot recompute the resolution here, so skip the equality
+  // check; tenant ownership of the concrete processor row is still enforced
+  // by executeStage (getProcessorConfig + tenant check) before any side
+  // effects.
+  if (
+    !step.processorConfigId.includes("{{") &&
+    step.processorConfigId !== event.processorConfigId
+  ) {
+    return `processorConfigId mismatch: definition binds step ${event.stepId} to ${step.processorConfigId}`;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -55,6 +169,7 @@ const CONSUMED_ERROR_NAMES = new Set(["TaskDoesNotExist", "TaskTimedOut"]);
 async function executeStage(
   db: Database,
   event: MemoryStageWorkerEvent,
+  lease: MemoryStageLease,
 ): Promise<MemoryStageWorkerResult> {
   const processor = await getProcessorConfig(db, {
     tenantId: event.tenantId,
@@ -107,12 +222,15 @@ async function executeStage(
     );
   }
 
-  const ctx: StageContext = {
+  // TODO(stages agent): type `lease` on StageContext — passed as an optional
+  // extra property until stages.ts (owned by a parallel agent) declares it.
+  const ctx = {
     db,
     event,
     processor: processor as StageContext["processor"],
     sources,
-  };
+    lease,
+  } as StageContext;
 
   switch (event.stage) {
     case "acquire":
@@ -131,77 +249,38 @@ async function executeStage(
   }
 }
 
-async function resumeToken(
-  db: Database,
+async function sendTaskSuccess(
   sfn: SFNClient,
-  event: MemoryStageWorkerEvent,
-  result: MemoryStageWorkerResult,
-): Promise<"resumed" | "already_resolved" | "no_token"> {
-  const [pending] = await db
-    .select({
-      step_id: workflowTaskTokens.step_id,
-      iteration: workflowTaskTokens.iteration,
-    })
-    .from(workflowTaskTokens)
-    .where(
-      and(
-        eq(workflowTaskTokens.workflow_run_id, event.workflowRunId),
-        eq(workflowTaskTokens.step_id, event.stepId),
-        eq(workflowTaskTokens.iteration, event.iteration),
-        eq(workflowTaskTokens.purpose, "memory_stage"),
-        eq(workflowTaskTokens.status, "pending"),
-      ),
-    )
-    .limit(1);
-  if (!pending) return "no_token";
-
-  const consumed = await consumeTaskToken(db, {
-    workflowRunId: event.workflowRunId,
-    stepId: event.stepId,
-    iteration: event.iteration,
-    purpose: "memory_stage",
-  });
-  if (!consumed) return "already_resolved";
-
+  token: string,
+  result: unknown,
+): Promise<"sent" | "already_resolved" | "send_failed"> {
   try {
     await sfn.send(
       new SendTaskSuccessCommand({
-        taskToken: consumed.token,
+        taskToken: token,
         output: JSON.stringify(result),
       }),
     );
+    return "sent";
   } catch (err) {
     const name = (err as { name?: string })?.name ?? "";
     if (CONSUMED_ERROR_NAMES.has(name)) return "already_resolved";
-    // Consumed-but-unsent window: the token row is already flipped to
-    // consumed, so a retry would find no pending row and the run would sit
-    // parked until the ASL heartbeat timeout. Revert to pending before
-    // rethrowing so a retry (or manual re-invoke) can resume it.
-    await db
-      .update(workflowTaskTokens)
-      .set({ status: "pending" })
-      .where(
-        and(
-          eq(workflowTaskTokens.workflow_run_id, event.workflowRunId),
-          eq(workflowTaskTokens.step_id, event.stepId),
-          eq(workflowTaskTokens.iteration, event.iteration),
-          eq(workflowTaskTokens.purpose, "memory_stage"),
-          eq(workflowTaskTokens.status, "consumed"),
-        ),
-      )
-      .catch((revertErr) => {
-        console.error(
-          `[memory-stage-worker] failed to revert consumed token for run=${event.workflowRunId}: ${(revertErr as Error)?.message}`,
-        );
-      });
-    throw err;
+    console.error(
+      `[memory-stage-worker] SendTaskSuccess failed (${name}): ${(err as Error)?.message}`,
+    );
+    return "send_failed";
   }
-  return "resumed";
 }
 
 export interface MemoryStageWorkerOptions {
   db?: Database;
   sfnClient?: SFNClient;
+  tokenOps?: Partial<MemoryStageTokenOps>;
+  /** Claim identity; defaults to the Lambda request id (handler) or a
+   * random id. */
+  lockedBy?: string;
+  /** Test seam for the F7 continuation self-invoke. */
+  selfInvoke?: (event: MemoryStageWorkerEvent) => Promise<void>;
 }
 
 export async function runMemoryStageWorker(
@@ -210,6 +289,11 @@ export async function runMemoryStageWorker(
 ): Promise<{ result: MemoryStageWorkerResult; resume: string }> {
   const db = options.db ?? getDb();
   const sfn = options.sfnClient ?? _DEFAULT_SFN_CLIENT;
+  const tokenOps: MemoryStageTokenOps = {
+    ...DEFAULT_TOKEN_OPS,
+    ...options.tokenOps,
+  };
+  const lockedBy = options.lockedBy ?? `memory-stage-worker:${randomUUID()}`;
 
   for (const field of [
     "workflowRunId",
@@ -223,21 +307,140 @@ export async function runMemoryStageWorker(
     }
   }
 
-  let result: MemoryStageWorkerResult;
-  try {
-    result = await executeStage(db, event);
-  } catch (err) {
-    // Never leave the machine parked: unexpected errors resume as a visible
-    // stage failure. Checkpoints are transactional, so a crashed acquire left
-    // no partial advance behind.
-    const message = (err as Error)?.message ?? String(err);
-    console.error(
-      `[memory-stage-worker] stage=${event.stage} run=${event.workflowRunId} crashed: ${message}`,
+  const tokenKey = {
+    workflowRunId: event.workflowRunId,
+    stepId: event.stepId,
+    iteration: event.iteration,
+    purpose: "memory_stage" as const,
+  };
+
+  // Pre-execution durable claim (Codex F1): prove a matching parked token
+  // exists and win it BEFORE touching sources or banks. A duplicate Event
+  // delivery or a direct invocation finds nothing claimable and performs
+  // zero side effects. A stale `executing` claim (> lease window) is
+  // re-claimable so a crashed worker's retry can proceed (Codex F7).
+  const claim = await tokenOps.claim(db, { ...tokenKey, lockedBy });
+  if (!claim) {
+    console.warn(
+      `[memory-stage-worker] stage=${event.stage} run=${event.workflowRunId} step=${event.stepId} iter=${event.iteration}: no claimable task token — duplicate or direct invocation, refusing to execute`,
     );
-    result = failed(event.stage, message.slice(0, 500));
+    return {
+      result: failed(
+        event.stage,
+        "no claimable task token for this step — duplicate or direct invocation refused",
+      ),
+      resume: "no_claim",
+    };
+  }
+  if ("redrive" in claim) {
+    // Codex F9: a prior invocation persisted the completion result but its
+    // SendTaskSuccess failed transiently. Re-send the durable result without
+    // re-executing anything.
+    const outcome = await sendTaskSuccess(
+      sfn,
+      claim.redrive.token,
+      claim.redrive.result,
+    );
+    const resume =
+      outcome === "sent"
+        ? "redriven"
+        : outcome === "already_resolved"
+          ? "already_resolved"
+          : "persisted_unsent";
+    console.log(
+      `[memory-stage-worker] stage=${event.stage} run=${event.workflowRunId} redrive of persisted result: ${resume}`,
+    );
+    return {
+      result: claim.redrive.result as MemoryStageWorkerResult,
+      resume,
+    };
   }
 
-  const resume = await resumeToken(db, sfn, event, result);
+  let result: MemoryStageWorkerResult;
+  // Binding validation (Codex F1): the payload must match what the run's
+  // workflow definition says this step is. On mismatch, fail visibly with
+  // zero stage side effects.
+  let bindingError: string | null;
+  try {
+    bindingError = await validateMemoryStageBinding(db, event);
+  } catch (err) {
+    bindingError = `binding validation crashed: ${(err as Error)?.message ?? String(err)}`;
+  }
+  if (bindingError) {
+    console.error(
+      `[memory-stage-worker] stage=${event.stage} run=${event.workflowRunId} binding mismatch: ${bindingError}`,
+    );
+    result = failed(event.stage, bindingError.slice(0, 500));
+  } else {
+    const lease: MemoryStageLease = {
+      lockedBy,
+      renew: () => tokenOps.renewLease(db, { ...tokenKey, lockedBy }),
+    };
+    try {
+      result = await executeStage(db, event, lease);
+    } catch (err) {
+      // Never leave the machine parked: unexpected errors resume as a visible
+      // stage failure. Checkpoints are transactional, so a crashed acquire
+      // left no partial advance behind.
+      const message = (err as Error)?.message ?? String(err);
+      console.error(
+        `[memory-stage-worker] stage=${event.stage} run=${event.workflowRunId} crashed: ${message}`,
+      );
+      result = failed(event.stage, message.slice(0, 500));
+    }
+  }
+
+  // Continuation (Codex F7): a bounded stage that stopped with work left
+  // re-invokes this same Lambda with the identical payload instead of
+  // resuming the state machine. The lease stays held (renewed), the token
+  // stays `executing`, and the staleness-based work lists resume where the
+  // batch stopped. Only genuinely-succeeded-with-remaining results continue.
+  if (
+    result.status === "succeeded" &&
+    (result.output as Record<string, unknown> | undefined)?.continuation ===
+      true
+  ) {
+    const renewed = await tokenOps.renewLease(db, { ...tokenKey, lockedBy });
+    if (renewed) {
+      try {
+        await (options.selfInvoke ?? defaultSelfInvoke)(event);
+        console.log(
+          `[memory-stage-worker] stage=${event.stage} run=${event.workflowRunId} continuing (remaining=${(result.output as Record<string, unknown>).remaining ?? "?"})`,
+        );
+        return { result, resume: "continuation" };
+      } catch (err) {
+        console.error(
+          `[memory-stage-worker] continuation self-invoke failed — resuming with partial progress: ${(err as Error)?.message}`,
+        );
+        // Fall through: resume the machine with the partial (still
+        // successful, idempotently resumable) result rather than parking.
+      }
+    }
+    // Lease lost: another invocation took over; it owns the continuation.
+    if (!renewed) return { result, resume: "continuation_superseded" };
+  }
+
+  // Persist-then-send (Codex F9): the completion result becomes durable
+  // (executing -> consumed) BEFORE SendTaskSuccess. If the send fails
+  // transiently, the token stays consumed with its result attached — a retry
+  // or manual re-invoke takes the redrive path above and re-sends. The old
+  // revert-to-pending on send failure is gone: it could re-run side effects.
+  const persisted = await tokenOps.persist(db, { ...tokenKey, result });
+  let resume: string;
+  if (!persisted) {
+    // Claim was taken over (stale-lease re-claim) or resolved elsewhere; the
+    // winner owns the resume.
+    resume = "claim_lost";
+  } else {
+    const outcome = await sendTaskSuccess(sfn, persisted.token, result);
+    resume =
+      outcome === "sent"
+        ? "resumed"
+        : outcome === "already_resolved"
+          ? "already_resolved"
+          : "persisted_unsent";
+  }
+
   console.log(
     `[memory-stage-worker] stage=${event.stage} run=${event.workflowRunId} status=${result.status} resume=${resume} counts=${JSON.stringify(result.counts ?? {})}`,
   );
@@ -246,6 +449,11 @@ export async function runMemoryStageWorker(
 
 export async function handler(
   event: MemoryStageWorkerEvent,
+  context?: { awsRequestId?: string },
 ): Promise<{ result: MemoryStageWorkerResult; resume: string }> {
-  return runMemoryStageWorker(event);
+  return runMemoryStageWorker(event, {
+    lockedBy: context?.awsRequestId
+      ? `lambda:${context.awsRequestId}`
+      : undefined,
+  });
 }
