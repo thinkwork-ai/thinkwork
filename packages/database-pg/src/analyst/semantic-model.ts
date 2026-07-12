@@ -74,6 +74,12 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
 export const ANALYST_DENYLISTED_COLUMNS: Readonly<
   Record<string, readonly string[]>
 > = {
+  // Raw normalized source content (emails, note bodies) — plan boundary is
+  // encrypted S3 snapshot refs/hashes only; content never analyst-readable.
+  memory_evidence_items: ["normalized_snapshot"],
+  // Full normalized claim value can embed note/email bodies from source
+  // records — same content boundary as evidence snapshots.
+  memory_claims: ["value"],
   routines: ["credential_refs"], // connector credential references
   skill_catalog: ["signature_payload"], // skill signing material
   skill_runs: ["completion_hmac_secret"], // per-run HMAC secret

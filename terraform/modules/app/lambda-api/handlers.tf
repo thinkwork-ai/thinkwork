@@ -341,6 +341,12 @@ locals {
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
       OKF_EFS_ROOT           = var.okf_efs_mount_path
     }
+    # THINK-193 U1 (Codex F6): normalized evidence snapshots live in the
+    # encrypted brain-artifacts bucket under evidence-snapshots/ — Postgres
+    # keeps only the s3:// ref + hash. 30-day lifecycle expiration below.
+    "memory-stage-worker" = {
+      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
+    }
     "oauth-authorize"     = local.slack_handler_env
     "oauth-callback"      = local.slack_handler_env
     "slack-events"        = local.slack_handler_env
@@ -2452,6 +2458,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_artifacts" {
     noncurrent_version_transition {
       noncurrent_days = 90
       storage_class   = "STANDARD_IA"
+    }
+  }
+
+  # THINK-193 U1 (Codex F6): normalized evidence snapshots are short-lived
+  # working copies — the durable record is the evidence row (hash + ref) and
+  # the Hindsight projection. Expire content after 30 days; the app mirrors
+  # this via memory_evidence_items.snapshot_expires_at.
+  rule {
+    id     = "expire-evidence-snapshots"
+    status = "Enabled"
+
+    filter {
+      prefix = "evidence-snapshots/"
+    }
+
+    expiration {
+      days = 30
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
     }
   }
 
