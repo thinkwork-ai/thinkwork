@@ -242,6 +242,7 @@ describe("WorkflowRunDetail", () => {
       runId: "run-1",
       approve: true,
       note: null,
+      override: null,
     });
   });
 

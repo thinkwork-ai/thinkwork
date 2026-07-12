@@ -62,6 +62,12 @@ function stepSubtitle(step: Record<string, unknown>): string | undefined {
     }
     case "emit_event":
       return stringField(step, "eventType") ?? undefined;
+    case "memory_stage": {
+      // THINK-193 U3: managed memory pipeline node — the stage name is the
+      // load-bearing detail; the processor binding renders in the inspector.
+      const stage = stringField(step, "stage");
+      return stage ? `Memory stage · ${stage}` : "Memory stage";
+    }
     case "deliver": {
       const recipients = Array.isArray(step.recipients)
         ? step.recipients.filter(
