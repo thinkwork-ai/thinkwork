@@ -58,6 +58,21 @@ correctness/security win was fixed in the review commits.
   reading the OLD skill could clobber the fence. Mitigated for now by the newest-wins + first-line
   marker fix (daemon ledger always wins). The docs are retired in U11.
 
+## Poll cost (found during first live wiring, 2026-07-12) — U6
+
+- `listTeamIssues` drains the ENTIRE team, then N+1s `issue.state` + `issue.labels()`
+  per issue (~2 extra round trips each). On the real ThinkWork team (~245 issues) a full
+  unscoped poll takes 60s+ — unusable at the 30s cadence. Two fixes owed in U6:
+  1. Server-side filter the issues query by lane-label + active-state (and Verification) so
+     only candidate issues are returned, not the whole board.
+  2. Include `state` + `labels` inline in that query (a raw GraphQL selection) to kill the
+     N+1 — one request per page instead of ~2N.
+  Also: only Done issues the daemon actually ENROLLED (present in its store) should be polled
+  for compounding, rather than every historical Done issue — the compound cutoff (synthesized-
+  ledger guard) already prevents mass-dispatch, but the daemon still pays to fetch them.
+- The tracer / `--issue` scope sidesteps this by fetching named issues directly
+  (`getIssuesByIdentifier`), so a scoped run is ~100ms. Unscoped production runs need the above.
+
 ## Testing gaps carried forward
 - HostUnreachable transitions (U6/U10 scope) — no tests yet (expected).
 - Concurrent-daemon / racing-begin() against the unique-active index — add when multi-host lands (U10).
