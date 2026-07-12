@@ -25,6 +25,7 @@ import type { FactoryStore, AttemptRow } from "./store/db.js";
 import { TERMINAL_ATTEMPT_STATES } from "./store/db.js";
 import type { HostTransport } from "./workers/transport.js";
 import { decideAction, type EngineAction, type StoreView } from "./phases/engine.js";
+import type { SlackSync } from "./slack/sync.js";
 
 export interface DaemonController {
   readonly stopping: boolean;
@@ -68,6 +69,30 @@ export interface DaemonDeps {
    * logged) without any Linear write. Undefined = process the whole queue.
    */
   onlyIssues?: ReadonlySet<string>;
+  /**
+   * Slack surface (U8). Purely additive: when omitted the daemon runs exactly
+   * as before (Linear-only). When present, each processed candidate is
+   * mirrored to its Slack thread AFTER the real Linear/store work — a Slack
+   * failure is caught here and never blocks phase progress.
+   */
+  slack?: SlackSync;
+}
+
+/** Mirror one processed candidate to Slack; swallow + log any failure. */
+async function syncSlack(
+  deps: DaemonDeps,
+  candidate: PollCandidate,
+  action: EngineAction,
+): Promise<void> {
+  if (deps.slack === undefined) return;
+  try {
+    await deps.slack.syncCandidate(candidate, action);
+  } catch (e) {
+    deps.log.warn("slack sync failed — continuing (Slack is never load-bearing)", {
+      issue: candidate.issue.identifier,
+      error: String(e),
+    });
+  }
 }
 
 /**
@@ -241,6 +266,13 @@ export async function runTick(
             reason: preflight.reason,
             wrote,
           });
+          // Mirror the preflight block to Slack (thread + escalation) so the
+          // operator sees a credential/ambiguity block the same as any other.
+          await syncSlack(deps, candidate, {
+            kind: "block",
+            label: preflight.label ?? "Needs User",
+            reason: preflight.reason ?? "preflight block",
+          });
           decisions.push({ issue: id, kind: "block" });
           continue;
         }
@@ -262,6 +294,8 @@ export async function runTick(
         externalWorkerSignals: view.externalWorkerSignals,
       });
       await deps.execute(action, candidate);
+      // Slack mirror runs AFTER the real work, isolated from it.
+      await syncSlack(deps, candidate, action);
       decisions.push({ issue: id, kind: action.kind });
     } catch (e) {
       // One issue's failure never takes down the tick for the others.

@@ -13,7 +13,13 @@ import { join } from "node:path";
 
 import { Command } from "commander";
 
-import { ConfigError, getStateDir, loadConfig } from "./config.js";
+import {
+  ConfigError,
+  getStateDir,
+  isSlackEnabled,
+  loadConfig,
+  slackConfigWarnings,
+} from "./config.js";
 import {
   createDaemonController,
   runDaemon,
@@ -22,6 +28,9 @@ import {
 import { formatDoctorReport, runDoctor } from "./doctor.js";
 import { createLinearGateway, type CommentTrust } from "./linear/client.js";
 import { createLogger } from "./logger.js";
+import { createSlackGateway, type SlackGateway } from "./slack/client.js";
+import { createSlackSync, type SlackSync } from "./slack/sync.js";
+import { buildStatusView, formatStatusView } from "./slack/status.js";
 import { createGhCliGateway } from "./phases/evidence.js";
 import {
   defaultBootstrapScriptPath,
@@ -141,6 +150,46 @@ program
         ? new Set(opts.issue.map((s) => s.trim()).filter((s) => s !== ""))
         : undefined;
 
+    // Slack surface (U8) — purely additive. Only constructed when a bot token
+    // is configured; otherwise the daemon runs Linear-only exactly as before.
+    let slackGateway: SlackGateway | null = null;
+    let slackSync: SlackSync | undefined;
+    if (isSlackEnabled(config.slack)) {
+      for (const w of slackConfigWarnings(config.slack)) {
+        log.warn(w);
+      }
+      try {
+        slackGateway = await createSlackGateway({
+          botToken: config.slack.botToken as string,
+          appToken: config.slack.appToken as string,
+          channelId: config.slack.channelId as string,
+        });
+        slackSync = createSlackSync({
+          slack: slackGateway,
+          store,
+          gateway,
+          channelId: config.slack.channelId as string,
+          operatorUserIds: config.slack.operatorUserIds ?? [],
+          log: log.child("slack"),
+          trust,
+        });
+        slackGateway.onMessage((message) => slackSync!.handleInbound(message));
+        await slackGateway.start();
+        log.info("slack surface online", {
+          channel: config.slack.channelId,
+          operators: (config.slack.operatorUserIds ?? []).length,
+        });
+      } catch (e) {
+        // A Slack bring-up failure must NOT take the daemon down — it is
+        // additive. Log and continue Linear-only.
+        log.error("slack surface failed to start — continuing Linear-only", {
+          error: String(e),
+        });
+        slackGateway = null;
+        slackSync = undefined;
+      }
+    }
+
     const daemonDeps: DaemonDeps = {
       gateway,
       store,
@@ -152,6 +201,7 @@ program
         executeAction(action, candidate, executorDeps),
       trust,
       onlyIssues,
+      slack: slackSync,
     };
 
     const controller = createDaemonController();
@@ -182,6 +232,11 @@ program
         controller,
       });
     } finally {
+      if (slackGateway !== null) {
+        await slackGateway.stop().catch((e: unknown) =>
+          log.warn("slack surface stop failed", { error: String(e) }),
+        );
+      }
       store.close();
     }
     log.info("factoryd stopped");
@@ -200,9 +255,14 @@ program
 
 program
   .command("status")
-  .description("Show daemon and issue pipeline status (not yet implemented)")
+  .description("Show the daemon/pipeline status (R18) from the operational store")
   .action(() => {
-    console.log("factoryd status: not yet implemented");
+    const store = openStore(getStateDir());
+    try {
+      console.log(formatStatusView(buildStatusView(store)));
+    } finally {
+      store.close();
+    }
   });
 
 program

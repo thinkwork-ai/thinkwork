@@ -178,3 +178,51 @@ describe("attempts", () => {
     }
   });
 });
+
+describe("slack_threads (U8)", () => {
+  const input = {
+    issueId: "iss_s1",
+    identifier: "THINK-800",
+    channelId: "C123",
+    threadTs: "1700.000100",
+  };
+
+  it("upsert is idempotent — one thread per issue, existing row wins", () => {
+    const first = store.upsertSlackThread(input);
+    expect(first.thread_ts).toBe("1700.000100");
+    expect(first.identifier).toBe("THINK-800");
+    // A second call with a DIFFERENT ts must NOT overwrite (reuse the thread).
+    const second = store.upsertSlackThread({
+      ...input,
+      threadTs: "9999.999999",
+    });
+    expect(second.thread_ts).toBe("1700.000100");
+  });
+
+  it("reverse lookup by (channel, thread_ts) resolves the issue", () => {
+    store.upsertSlackThread(input);
+    const row = store.getSlackThreadByThreadTs("C123", "1700.000100");
+    expect(row?.issue_id).toBe("iss_s1");
+    expect(store.getSlackThreadByThreadTs("C123", "nope")).toBeUndefined();
+  });
+
+  it("idempotency markers round-trip and require an existing row", () => {
+    store.upsertSlackThread(input);
+    store.setSlackThreadMarker("iss_s1", "last_relayed_ts", "1700.000200");
+    store.setSlackThreadMarker("iss_s1", "last_escalated_key", "q-1");
+    store.setSlackThreadMarker("iss_s1", "last_milestone_key", "launch:implement");
+    const row = store.getSlackThreadByIssue("iss_s1");
+    expect(row!.last_relayed_ts).toBe("1700.000200");
+    expect(row!.last_escalated_key).toBe("q-1");
+    expect(row!.last_milestone_key).toBe("launch:implement");
+    expect(() =>
+      store.setSlackThreadMarker("nope", "last_relayed_ts", "x"),
+    ).toThrow(/does not exist/);
+  });
+
+  it("listSlackThreads returns every mapping", () => {
+    store.upsertSlackThread(input);
+    store.upsertSlackThread({ ...input, issueId: "iss_s2", identifier: "THINK-801" });
+    expect(store.listSlackThreads()).toHaveLength(2);
+  });
+});

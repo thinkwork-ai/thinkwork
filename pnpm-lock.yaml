@@ -1190,6 +1190,12 @@ importers:
       '@linear/sdk':
         specifier: ^88.1.0
         version: 88.1.0(graphql@16.13.2)
+      '@slack/socket-mode':
+        specifier: ^2.0.6
+        version: 2.0.7
+      '@slack/web-api':
+        specifier: ^7.11.0
+        version: 7.19.0
       better-sqlite3:
         specifier: ^12.2.0
         version: 12.11.1

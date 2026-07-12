@@ -89,3 +89,33 @@ CREATE TABLE IF NOT EXISTS hosts (
   state         TEXT NOT NULL,
   last_probe_at TEXT
 );
+
+-- One Slack thread per enrolled issue (U8). issue_id is the primary key so a
+-- thread is opened idempotently and reused across daemon restarts; the
+-- (channel_id, thread_ts) index powers the inbound-relay reverse lookup
+-- (given the thread an operator replied in, find the issue). Like every other
+-- table here this carries the issue id and is rebuildable from a Linear +
+-- Slack scan.
+--
+-- Idempotency high-water marks:
+--   last_relayed_ts     — newest inbound message ts already processed by the
+--                         relay; a re-delivered event with ts <= this is a
+--                         no-op (Slack redelivers on missed acks).
+--   last_escalated_key  — id of the newest question comment already mirrored
+--                         to Slack as an @mention escalation (outbound dedupe).
+--   last_milestone_key  — phase/status of the newest milestone already posted
+--                         (outbound dedupe; milestones carry no @mention).
+CREATE TABLE IF NOT EXISTS slack_threads (
+  issue_id           TEXT PRIMARY KEY,
+  identifier         TEXT NOT NULL,
+  channel_id         TEXT NOT NULL,
+  thread_ts          TEXT NOT NULL,
+  last_relayed_ts    TEXT,
+  last_escalated_key TEXT,
+  last_milestone_key TEXT,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_slack_threads_thread
+  ON slack_threads (channel_id, thread_ts);

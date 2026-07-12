@@ -14,11 +14,14 @@ import {
   ConfigError,
   getConfigPath,
   getStateDir,
+  isSlackEnabled,
   loadConfig,
+  slackConfigWarnings,
   type FactoryConfig,
 } from "./config.js";
 import { openStore } from "./store/db.js";
 import { defaultBootstrapScriptPath } from "./phases/executor.js";
+import { createSlackGateway } from "./slack/client.js";
 
 export interface DoctorCheck {
   name: string;
@@ -145,6 +148,51 @@ export async function runDoctor(): Promise<{
       } catch {
         add("worker-bootstrap", false, `present but not executable: ${script}`);
       }
+    }
+  }
+
+  // 7. Slack surface — ONLY when configured (Slack is optional/additive).
+  if (config !== null && isSlackEnabled(config.slack)) {
+    const { botToken, appToken, channelId, operatorUserIds } = config.slack;
+    // App token presence (Socket Mode inbound relay can't run without it).
+    add(
+      "slack-app-token",
+      typeof appToken === "string" && appToken.trim() !== "",
+      appToken ? "app token present (Socket Mode)" : "missing (no inbound relay)",
+    );
+    // Operator allowlist non-empty (else the relay trusts no one).
+    const warnings = slackConfigWarnings(config.slack);
+    add(
+      "slack-operators",
+      operatorUserIds !== undefined && operatorUserIds.length > 0,
+      operatorUserIds && operatorUserIds.length > 0
+        ? `${operatorUserIds.length} operator id(s) allowlisted`
+        : warnings[0] ?? "slack.operatorUserIds is empty",
+    );
+    try {
+      const slack = await createSlackGateway({
+        botToken: botToken as string,
+        appToken: appToken as string,
+        channelId: channelId as string,
+      });
+      // Bot token auth (auth.test).
+      try {
+        const auth = await slack.authTest();
+        add("slack-auth", true, `bot user ${auth.userId} (team ${auth.team})`);
+      } catch (e) {
+        add("slack-auth", false, `auth.test failed: ${String(e)}`);
+      }
+      // Channel reachable (conversations.info).
+      const reachable = await slack.channelReachable(channelId as string);
+      add(
+        "slack-channel",
+        reachable,
+        reachable
+          ? `channel ${channelId} reachable`
+          : `channel ${channelId} not reachable (invite the bot / check the id)`,
+      );
+    } catch (e) {
+      add("slack-auth", false, `could not build Slack client: ${String(e)}`);
     }
   }
 

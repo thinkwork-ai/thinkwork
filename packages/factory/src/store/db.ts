@@ -85,10 +85,47 @@ export interface InsertAttemptInput {
   detail?: string;
 }
 
+export interface SlackThreadRow {
+  issue_id: string;
+  identifier: string;
+  channel_id: string;
+  thread_ts: string;
+  last_relayed_ts: string | null;
+  last_escalated_key: string | null;
+  last_milestone_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FactoryStore {
   readonly db: Database.Database;
   upsertIssue(input: UpsertIssueInput): void;
   getIssue(issueId: string): IssueRow | undefined;
+  /**
+   * Idempotent thread mapping (U8): record the Slack thread opened for an
+   * issue. A second call for the same issue is a no-op (the existing row is
+   * returned unchanged) so restarts reuse one thread per issue.
+   */
+  upsertSlackThread(input: {
+    issueId: string;
+    identifier: string;
+    channelId: string;
+    threadTs: string;
+  }): SlackThreadRow;
+  getSlackThreadByIssue(issueId: string): SlackThreadRow | undefined;
+  /** Reverse lookup for inbound relay: the issue whose thread this reply is in. */
+  getSlackThreadByThreadTs(
+    channelId: string,
+    threadTs: string,
+  ): SlackThreadRow | undefined;
+  /** Update one of the outbound/inbound idempotency high-water marks. */
+  setSlackThreadMarker(
+    issueId: string,
+    field: "last_relayed_ts" | "last_escalated_key" | "last_milestone_key",
+    value: string,
+  ): void;
+  /** Every mapped thread, for the R18 status view. */
+  listSlackThreads(): SlackThreadRow[];
   insertAttempt(input: InsertAttemptInput): number;
   /**
    * Move an attempt to a new state. Throws if the attempt does not exist.
@@ -242,6 +279,21 @@ export function openStore(
     "SELECT * FROM attempts WHERE issue_id = ? AND phase = ? AND active = 1",
   );
 
+  const insertSlackThreadStmt = db.prepare(`
+    INSERT INTO slack_threads (issue_id, identifier, channel_id, thread_ts, created_at, updated_at)
+    VALUES (@issue_id, @identifier, @channel_id, @thread_ts, @now, @now)
+    ON CONFLICT (issue_id) DO NOTHING
+  `);
+  const getSlackThreadByIssueStmt = db.prepare(
+    "SELECT * FROM slack_threads WHERE issue_id = ?",
+  );
+  const getSlackThreadByThreadTsStmt = db.prepare(
+    "SELECT * FROM slack_threads WHERE channel_id = ? AND thread_ts = ?",
+  );
+  const listSlackThreadsStmt = db.prepare(
+    "SELECT * FROM slack_threads ORDER BY created_at ASC",
+  );
+
   return {
     db,
 
@@ -314,6 +366,46 @@ export function openStore(
 
     getActiveAttempt(issueId, phase) {
       return getActiveAttemptStmt.get(issueId, phase) as AttemptRow | undefined;
+    },
+
+    upsertSlackThread(input) {
+      insertSlackThreadStmt.run({
+        issue_id: input.issueId,
+        identifier: input.identifier,
+        channel_id: input.channelId,
+        thread_ts: input.threadTs,
+        now: now(),
+      });
+      // Always return the authoritative row (existing one wins on conflict).
+      return getSlackThreadByIssueStmt.get(input.issueId) as SlackThreadRow;
+    },
+
+    getSlackThreadByIssue(issueId) {
+      return getSlackThreadByIssueStmt.get(issueId) as
+        | SlackThreadRow
+        | undefined;
+    },
+
+    getSlackThreadByThreadTs(channelId, threadTs) {
+      return getSlackThreadByThreadTsStmt.get(channelId, threadTs) as
+        | SlackThreadRow
+        | undefined;
+    },
+
+    setSlackThreadMarker(issueId, field, value) {
+      // Field name is a fixed union, never user input — safe to interpolate.
+      const result = db
+        .prepare(
+          `UPDATE slack_threads SET ${field} = @value, updated_at = @now WHERE issue_id = @issue_id`,
+        )
+        .run({ value, now: now(), issue_id: issueId });
+      if (result.changes === 0) {
+        throw new Error(`slack thread for issue ${issueId} does not exist`);
+      }
+    },
+
+    listSlackThreads() {
+      return listSlackThreadsStmt.all() as SlackThreadRow[];
     },
 
     close() {

@@ -7,7 +7,9 @@ import {
   ConfigError,
   getStateDir,
   getConfigPath,
+  isSlackEnabled,
   loadConfig,
+  slackConfigWarnings,
   DEFAULT_POLL_INTERVAL_SECONDS,
   DEFAULT_PHASES,
 } from "../src/config.js";
@@ -145,6 +147,59 @@ describe("loadConfig", () => {
   it("throws ConfigError on an empty file", () => {
     writeConfig("");
     expect(() => loadConfig()).toThrow(ConfigError);
+  });
+
+  it("leaves the daemon Linear-only when slack is absent (isSlackEnabled false)", () => {
+    writeConfig(minimalConfig);
+    const cfg = loadConfig();
+    expect(cfg.slack).toEqual({});
+    expect(isSlackEnabled(cfg.slack)).toBe(false);
+    expect(slackConfigWarnings(cfg.slack)).toEqual([]);
+  });
+
+  it("accepts a fully-configured Slack block", () => {
+    writeConfig({
+      ...minimalConfig,
+      slack: {
+        botToken: "xoxb-1",
+        appToken: "xapp-1",
+        channelId: "C1",
+        operatorUserIds: ["UOP"],
+      },
+    });
+    const cfg = loadConfig();
+    expect(isSlackEnabled(cfg.slack)).toBe(true);
+    expect(cfg.slack.channelId).toBe("C1");
+    expect(slackConfigWarnings(cfg.slack)).toEqual([]);
+  });
+
+  it("throws ConfigError when Slack is enabled but appToken/channelId are missing", () => {
+    writeConfig({
+      ...minimalConfig,
+      slack: { botToken: "xoxb-1" },
+    });
+    let err: unknown;
+    try {
+      loadConfig();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ConfigError);
+    const ce = err as ConfigError;
+    expect(ce.missing).toContain("slack.appToken");
+    expect(ce.missing).toContain("slack.channelId");
+  });
+
+  it("warns (but does not throw) when Slack is enabled with an empty operator allowlist", () => {
+    writeConfig({
+      ...minimalConfig,
+      slack: { botToken: "xoxb-1", appToken: "xapp-1", channelId: "C1" },
+    });
+    const cfg = loadConfig();
+    expect(isSlackEnabled(cfg.slack)).toBe(true);
+    const warnings = slackConfigWarnings(cfg.slack);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/operatorUserIds is empty/);
   });
 
   it("flags invalid host entries (missing repoPath / bad kind)", () => {

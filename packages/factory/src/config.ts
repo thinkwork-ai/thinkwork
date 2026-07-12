@@ -33,6 +33,34 @@ export interface SlackConfig {
   webhookUrl?: string;
 }
 
+/**
+ * Slack is ENABLED when a bot token is present. A `{}` slack config leaves the
+ * daemon Linear-only — Slack is purely additive and never required.
+ */
+export function isSlackEnabled(slack: SlackConfig): boolean {
+  return typeof slack.botToken === "string" && slack.botToken.trim() !== "";
+}
+
+/**
+ * Non-fatal Slack config advisories. An enabled Slack with an EMPTY operator
+ * allowlist would trust no one — the inbound relay injects nothing, so every
+ * answer is acknowledged and dropped. Surfaced by the cli/doctor, not thrown.
+ */
+export function slackConfigWarnings(slack: SlackConfig): string[] {
+  const warnings: string[] = [];
+  if (
+    isSlackEnabled(slack) &&
+    (slack.operatorUserIds === undefined || slack.operatorUserIds.length === 0)
+  ) {
+    warnings.push(
+      "slack.operatorUserIds is empty — the inbound relay will trust no one; " +
+        "every in-thread answer is acknowledged but never injected. Add the " +
+        "operator's Slack user id(s) to enable the answer round-trip.",
+    );
+  }
+  return warnings;
+}
+
 export type HostKind = "local" | "ssh";
 
 export interface HostConfig {
@@ -291,6 +319,23 @@ export function loadConfig(): FactoryConfig {
     slack.operatorUserIds = slackRaw.operatorUserIds.map(String);
   if (isNonEmptyString(slackRaw.webhookUrl))
     slack.webhookUrl = slackRaw.webhookUrl;
+
+  // Slack is optional, but a HALF-configured Slack is a startup error: a bot
+  // token with no app token can't open a Socket Mode connection (no inbound
+  // relay), and with no channel id has nowhere to post. Fail loudly rather
+  // than run a daemon whose Slack surface is silently dead.
+  if (isSlackEnabled(slack)) {
+    const slackMissing: string[] = [];
+    if (!isNonEmptyString(slack.appToken)) slackMissing.push("slack.appToken");
+    if (!isNonEmptyString(slack.channelId))
+      slackMissing.push("slack.channelId");
+    if (slackMissing.length > 0) {
+      throw new ConfigError(
+        "Slack is enabled (slack.botToken set) but incompletely configured",
+        slackMissing,
+      );
+    }
+  }
 
   const pollIntervalSeconds =
     typeof raw.pollIntervalSeconds === "number" && raw.pollIntervalSeconds > 0
