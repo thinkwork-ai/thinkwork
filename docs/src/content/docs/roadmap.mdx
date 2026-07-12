@@ -92,23 +92,24 @@ Browser/computer-use automation (Nova Act or similar) running inside a managed r
 
 **Not in v1 because:** It requires hardened browser isolation, profile/credential handling, per-tenant runtime policy, and production evaluation against real web workflows.
 
-### Slack integration
+### Slack extended surfaces and distribution
 
-Slack ingress (events, slash commands, message actions) is currently disabled while the Spaces-based ingestion path is being designed. Inbound Slack endpoints return 200 OK and drop events without routing — a follow-up brainstorm will define how Slack messages flow into Spaces and the tenant platform agent.
+Conversational Slack presence is shipped: `@ThinkWork` mentions and bot DMs run turns as the explicitly linked ThinkWork user, with final responses delivered back to the originating thread (see [Slack Workspace App](/integrations/slack/)). Slash commands, message shortcuts, interactive components, and Slack Marketplace distribution are not in v1.
 
-**Not in v1 because:** The previous Computer-routed Slack dispatch was retired in PR #1666. The replacement design is open.
+**Not in v1 because:** The tracer-bullet scope is mentions/DMs with exactly-once delivery. Extended surfaces and commercial distribution follow customer demand — Microsoft Teams presence is the current channel priority.
 
 ## What's next (active development)
 
 These are the highest-priority items being actively worked on:
 
-1. **Spaces ingestion** — Email, Slack, and webhook ingress flowing into per-Space rendered workspaces
-2. **Integration platform expansion** — Linear is the current proof; future integration ordering is still being planned
-3. **Cost tracking** — Aggregated cost reports by tenant, Space, Agent, and time period
-4. **Places module** — Location intelligence as an optional Terraform module
-5. **AutoResearch** — Step Functions-based iterative research loop
-6. **End-user web client** — White-label React app for end users
-7. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
+1. **Microsoft Teams presence** — customer-facing Teams mention/DM/thread loop on the same ThinkWork seam as Slack
+2. **Spaces ingestion** — Email and webhook ingress flowing into per-Space rendered workspaces
+3. **Integration platform expansion** — Linear is the current proof; future integration ordering is still being planned
+4. **Cost tracking** — Aggregated cost reports by tenant, Space, Agent, and time period
+5. **Places module** — Location intelligence as an optional Terraform module
+6. **AutoResearch** — Step Functions-based iterative research loop
+7. **End-user web client** — White-label React app for end users
+8. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
 
 ## Contributing
 

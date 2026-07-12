@@ -26,13 +26,9 @@ export interface SlackThreadContextMessage {
   files?: SlackFileRef[];
 }
 
-export type SlackChannelType = "channel" | "group" | "im" | "mpim" | "slash";
+export type SlackChannelType = "channel" | "group" | "im" | "mpim";
 
-export type SlackTriggerSurface =
-  | "app_mention"
-  | "message_im"
-  | "slash_command"
-  | "message_action";
+export type SlackTriggerSurface = "app_mention" | "message_im";
 
 export interface SlackTaskEnvelope {
   slackTeamId: string;
@@ -41,18 +37,15 @@ export interface SlackTaskEnvelope {
   channelId: string;
   channelType: SlackChannelType;
   rootThreadTs: string | null;
-  responseUrl: string | null;
   triggerSurface: SlackTriggerSurface;
   sourceMessage: SlackSourceMessage | null;
   threadContext: SlackThreadContextMessage[];
   fileRefs: SlackFileRef[];
-  placeholderTs: string | null;
-  modalViewId: string | null;
 }
 
 export interface SlackThreadTurnInput {
   source: "slack";
-  channelType: "app_mention" | "im" | "slash" | "message_action";
+  channelType: "app_mention" | "im";
   slackTeamId: string;
   slackUserId: string;
   channelId: string;
@@ -62,9 +55,6 @@ export interface SlackThreadTurnInput {
   sourceMessage: SlackSourceMessage;
   threadContext: SlackThreadContextMessage[];
   fileRefs: SlackFileRef[];
-  responseUrl: string | null;
-  placeholderTs: string | null;
-  modalViewId: string | null;
   actorType: "user";
   actorId: string;
   triggerSurface: SlackTriggerSurface;
@@ -196,13 +186,10 @@ export function buildSlackThreadTurnInput(input: {
     channelId,
     channelType: inferConversationChannelType(input.event, triggerSurface),
     rootThreadTs,
-    responseUrl: null,
     triggerSurface,
     sourceMessage,
     threadContext,
     fileRefs,
-    placeholderTs: null,
-    modalViewId: null,
   });
   return {
     source: "slack",
@@ -216,9 +203,6 @@ export function buildSlackThreadTurnInput(input: {
     sourceMessage,
     threadContext: slack.threadContext,
     fileRefs,
-    responseUrl: null,
-    placeholderTs: null,
-    modalViewId: null,
     actorType: "user",
     actorId: requiredSlackString(input.actorId),
     triggerSurface,
@@ -240,140 +224,6 @@ export function mergeSlackFileRefs(
   return Array.from(byId.values());
 }
 
-export function buildSlackSlashCommandInput(input: {
-  slackTeamId: string;
-  slackUserId: string;
-  slackWorkspaceRowId?: string | null;
-  channelId: string;
-  text: string;
-  responseUrl: string;
-  triggerId: string;
-  actorId: string;
-}): SlackThreadTurnInput {
-  const eventId = `slash:${requiredSlackString(input.triggerId)}`;
-  const slackTeamId = requiredSlackString(input.slackTeamId);
-  const slackUserId = requiredSlackString(input.slackUserId);
-  const channelId = requiredSlackString(input.channelId);
-  const sourceMessage = {
-    text: input.text.trim(),
-    ts: eventId,
-    user: slackUserId,
-    channel: channelId,
-    team: slackTeamId,
-    permalink: null,
-    files: [],
-  };
-  const slack = buildSlackTaskEnvelope({
-    slackTeamId,
-    slackUserId,
-    slackWorkspaceRowId: input.slackWorkspaceRowId ?? null,
-    channelId,
-    channelType: "slash",
-    rootThreadTs: null,
-    responseUrl: requiredSlackString(input.responseUrl),
-    triggerSurface: "slash_command",
-    sourceMessage,
-    threadContext: [],
-    fileRefs: [],
-    placeholderTs: null,
-    modalViewId: null,
-  });
-  return {
-    source: "slack",
-    channelType: "slash",
-    slackTeamId,
-    slackUserId,
-    channelId,
-    threadTs: eventId,
-    messageTs: eventId,
-    eventId,
-    sourceMessage,
-    threadContext: [],
-    fileRefs: [],
-    responseUrl: requiredSlackString(input.responseUrl),
-    placeholderTs: null,
-    modalViewId: null,
-    actorType: "user",
-    actorId: requiredSlackString(input.actorId),
-    triggerSurface: "slash_command",
-    rootThreadTs: null,
-    slackWorkspaceRowId: input.slackWorkspaceRowId ?? null,
-    slack,
-  };
-}
-
-export function buildSlackMessageActionInput(input: {
-  slackTeamId: string;
-  slackUserId: string;
-  slackWorkspaceRowId?: string | null;
-  channelId: string;
-  triggerId: string;
-  responseUrl?: string | null;
-  modalViewId: string;
-  message: SlackMessageLike;
-  actorId: string;
-  permalink?: string | null;
-}): SlackThreadTurnInput {
-  const eventId = `message_action:${requiredSlackString(input.triggerId)}`;
-  const messageTs = requiredSlackString(input.message.ts);
-  const slackTeamId = requiredSlackString(input.slackTeamId);
-  const slackUserId = requiredSlackString(input.slackUserId);
-  const channelId = requiredSlackString(input.channelId);
-  const sourceUser = optionalSlackString(input.message.user) || slackUserId;
-  const fileRefs = slackFileRefs(input.message.files);
-  const rootThreadTs = optionalSlackString(input.message.thread_ts);
-  const responseUrl =
-    typeof input.responseUrl === "string" && input.responseUrl.trim()
-      ? input.responseUrl.trim()
-      : null;
-  const sourceMessage = {
-    text: slackEventText(input.message),
-    ts: messageTs,
-    user: sourceUser,
-    channel: channelId,
-    team: slackTeamId,
-    permalink: input.permalink || null,
-    files: fileRefs,
-  };
-  const slack = buildSlackTaskEnvelope({
-    slackTeamId,
-    slackUserId,
-    slackWorkspaceRowId: input.slackWorkspaceRowId ?? null,
-    channelId,
-    channelType: inferConversationChannelType(input.message, "message_action"),
-    rootThreadTs,
-    responseUrl,
-    triggerSurface: "message_action",
-    sourceMessage,
-    threadContext: [],
-    fileRefs,
-    placeholderTs: null,
-    modalViewId: requiredSlackString(input.modalViewId),
-  });
-  return {
-    source: "slack",
-    channelType: "message_action",
-    slackTeamId,
-    slackUserId,
-    channelId,
-    threadTs: slackThreadTs(input.message),
-    messageTs,
-    eventId,
-    sourceMessage,
-    threadContext: [],
-    fileRefs,
-    responseUrl,
-    placeholderTs: null,
-    modalViewId: requiredSlackString(input.modalViewId),
-    actorType: "user",
-    actorId: requiredSlackString(input.actorId),
-    triggerSurface: "message_action",
-    rootThreadTs,
-    slackWorkspaceRowId: input.slackWorkspaceRowId ?? null,
-    slack,
-  };
-}
-
 export function buildSlackTaskEnvelope(
   input: SlackTaskEnvelope,
 ): SlackTaskEnvelope {
@@ -384,11 +234,8 @@ export function buildSlackTaskEnvelope(
     slackWorkspaceRowId: optionalSlackString(input.slackWorkspaceRowId),
     channelId: requiredSlackString(input.channelId),
     rootThreadTs: optionalSlackString(input.rootThreadTs),
-    responseUrl: optionalSlackString(input.responseUrl),
     threadContext: summarizeSlackThreadContext(input.threadContext ?? []),
     fileRefs: input.fileRefs ?? [],
-    placeholderTs: optionalSlackString(input.placeholderTs),
-    modalViewId: optionalSlackString(input.modalViewId),
   };
 }
 
@@ -407,7 +254,6 @@ function inferConversationChannelType(
   message: SlackMessageLike,
   triggerSurface: SlackTriggerSurface,
 ): SlackChannelType {
-  if (triggerSurface === "slash_command") return "slash";
   const value = optionalSlackString(message.channel_type);
   if (
     value === "channel" ||

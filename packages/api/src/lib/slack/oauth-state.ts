@@ -3,23 +3,24 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const SLACK_INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Minimum bot scopes for the shipped Slack surfaces: mention/DM events,
+ * bounded thread-context reads (conversations.replies), attachment file
+ * reads, and chat.postMessage acknowledgements/link prompts/final replies.
+ * Every scope here maps to a Web API call or event subscription the code
+ * actually makes; scopes for removed or forbidden behaviors (slash
+ * commands, customized attribution, email-based matching, unused metadata
+ * reads) are intentionally absent (THINK-84 U3). Existing installs retain
+ * previously granted scopes until the workspace is reinstalled.
+ */
 export const SLACK_BOT_SCOPES = [
   "app_mentions:read",
   "channels:history",
-  "channels:read",
   "chat:write",
-  "chat:write.customize",
-  "commands",
   "files:read",
   "groups:history",
-  "groups:read",
   "im:history",
-  "im:read",
-  "im:write",
   "mpim:history",
-  "mpim:read",
-  "users:read",
-  "users:read.email",
 ] as const;
 
 export interface SlackInstallStatePayload {
