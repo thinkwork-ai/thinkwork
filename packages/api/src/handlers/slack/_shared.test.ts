@@ -137,7 +137,41 @@ describe("verifySlackSignature", () => {
     });
 
     expect(result).toMatchObject({ ok: false, status: 401 });
-    expect(result).toHaveProperty("message", "Slack timestamp is too old");
+    expect(result).toHaveProperty(
+      "message",
+      "Slack request timestamp is outside the replay window",
+    );
+  });
+
+  it("rejects a correctly signed fractional timestamp as invalid", async () => {
+    const rawBody = Buffer.from("{}");
+    const timestamp = `${NOW_SECONDS}.5`;
+    const signature = computeSlackSignature(SIGNING_SECRET, timestamp, rawBody);
+
+    const result = await verifySlackSignature({
+      headers: {
+        "x-slack-request-timestamp": timestamp,
+        "x-slack-signature": signature,
+      },
+      rawBody,
+      signingSecret: SIGNING_SECRET,
+      nowMs: () => NOW_MS,
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 401 });
+    expect(result).toHaveProperty("message", "Slack timestamp is invalid");
+  });
+
+  it("rejects missing signature headers with the established message", async () => {
+    const result = await verifySlackSignature({
+      headers: {},
+      rawBody: Buffer.from("{}"),
+      signingSecret: SIGNING_SECRET,
+      nowMs: () => NOW_MS,
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 401 });
+    expect(result).toHaveProperty("message", "Slack signature is required");
   });
 
   it("rejects a same-length signature that differs in one byte", async () => {

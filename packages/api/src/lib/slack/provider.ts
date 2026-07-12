@@ -38,10 +38,19 @@ export interface SlackSignatureVerificationInput {
   nowMs?: () => number;
 }
 
+const REPLAY_WINDOW_SECONDS = 5 * 60;
+
 /**
- * Verify the Slack `v0` request signature and 5-minute replay window through
- * the pinned provider primitive, mapped onto ThinkWork's existing
- * allow/401 result contract.
+ * Verify a Slack webhook request against ThinkWork's established security
+ * contract (merged U1 behavior), delegating the cryptographic HMAC check to
+ * the pinned provider primitive.
+ *
+ * Timestamp semantics stay ThinkWork-owned because the package is laxer
+ * than U1: it accepts any finite timestamp (including a correctly signed
+ * fractional one, e.g. "1783822946.5") and uses different public error
+ * messages. Presence, integer-ness, and the 5-minute replay window are
+ * therefore enforced here with U1's exact 401 messages before the package
+ * verifies the signature bytes.
  */
 export async function verifySlackWebhookSignature({
   headers,
@@ -49,10 +58,32 @@ export async function verifySlackWebhookSignature({
   signingSecret,
   nowMs = Date.now,
 }: SlackSignatureVerificationInput): Promise<SlackSignatureVerificationResult> {
+  const timestamp = findHeader(headers, "x-slack-request-timestamp");
+  const signature = findHeader(headers, "x-slack-signature");
+  if (!timestamp || !signature) {
+    return { ok: false, status: 401, message: "Slack signature is required" };
+  }
+
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isInteger(timestampSeconds)) {
+    return { ok: false, status: 401, message: "Slack timestamp is invalid" };
+  }
+
+  const now = nowMs();
+  const nowSeconds = Math.floor(now / 1000);
+  if (Math.abs(nowSeconds - timestampSeconds) > REPLAY_WINDOW_SECONDS) {
+    return {
+      ok: false,
+      status: 401,
+      message: "Slack request timestamp is outside the replay window",
+    };
+  }
+
   try {
     await verifySlackSignature(rawBody.toString("utf8"), headers, {
       signingSecret,
-      now: nowMs,
+      maxSkewSeconds: REPLAY_WINDOW_SECONDS,
+      now: () => now,
     });
     return { ok: true };
   } catch (error) {

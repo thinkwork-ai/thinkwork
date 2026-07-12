@@ -99,7 +99,27 @@ describe("verifySlackWebhookSignature", () => {
     expect(result).toEqual({
       ok: false,
       status: 401,
-      message: "Slack timestamp is too old",
+      message: "Slack request timestamp is outside the replay window",
+    });
+  });
+
+  it("rejects a correctly signed fractional timestamp with the U1 message", async () => {
+    const rawBody = Buffer.from("{}");
+    const fractionalTimestamp = `${NOW_SECONDS}.5`;
+
+    const result = await verifySlackWebhookSignature({
+      // Signature is valid for the fractional timestamp; the timestamp
+      // contract itself must reject it before HMAC verification.
+      headers: signedHeaders(rawBody, fractionalTimestamp),
+      rawBody,
+      signingSecret: SIGNING_SECRET,
+      nowMs: () => NOW_MS,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 401,
+      message: "Slack timestamp is invalid",
     });
   });
 
@@ -113,7 +133,11 @@ describe("verifySlackWebhookSignature", () => {
         signingSecret: SIGNING_SECRET,
         nowMs: () => NOW_MS,
       }),
-    ).resolves.toMatchObject({ ok: false, status: 401 });
+    ).resolves.toEqual({
+      ok: false,
+      status: 401,
+      message: "Slack signature is required",
+    });
 
     await expect(
       verifySlackWebhookSignature({
