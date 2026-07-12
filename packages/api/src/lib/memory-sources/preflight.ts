@@ -18,6 +18,7 @@ import type { MemoryStageWorkerResult } from "@thinkwork/agent-loops-core";
 import { getActiveGrant, grantInactiveReason } from "./policy.js";
 import { getCheckpoint } from "./repository.js";
 import { BOUNDARY_SCHEMAS } from "./policy.js";
+import { getMemorySourceAdapter } from "./adapters/registry.js";
 import type { StageContext } from "./stages.js";
 
 /** Cap on focus candidates so the plan stays a bounded step output. */
@@ -73,11 +74,13 @@ export async function runPreflight(
       grantStatus = grantInactiveReason(grant) ?? "active";
     }
 
+    // Per-family checkpoint partition + focus labels via the adapter
+    // registry (U5 dispatch seam); an unregistered family falls back to a
+    // family-named partition (no checkpoint will exist — shows never synced).
+    const adapter = getMemorySourceAdapter(source.source_family);
     const checkpoint = await getCheckpoint(db, {
       sourceConfigId: source.id,
-      // U3 sources are Twenty; its single partition is "companies". Other
-      // families register their partitions with their adapters (U5-U7).
-      partitionKey: "companies",
+      partitionKey: adapter?.partitionKey ?? source.source_family,
     });
 
     const recent = await db
@@ -93,10 +96,11 @@ export async function runPreflight(
     for (const row of recent) {
       if (focus.size >= MAX_FOCUS_KEYS) break;
       const key = `${source.source_family}:${row.source_item_id}`;
-      const label =
-        typeof (row.snapshot as Record<string, unknown> | null)?.name ===
-        "string"
-          ? String((row.snapshot as Record<string, unknown>).name)
+      const snapshot = row.snapshot as Record<string, unknown> | null;
+      const label = adapter
+        ? adapter.focusLabelFor(snapshot, row.source_item_id)
+        : typeof snapshot?.name === "string"
+          ? String(snapshot.name)
           : row.source_item_id;
       if (!focus.has(key)) focus.set(key, label);
     }

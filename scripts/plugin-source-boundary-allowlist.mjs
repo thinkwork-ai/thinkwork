@@ -100,6 +100,11 @@ export const sharedPluginTermAllowlist = [
     reason: "unit tests for the platform Twenty memory-source adapter above.",
   },
   {
+    path: "packages/api/src/lib/memory-sources/adapters/twenty-adapter.ts",
+    reason:
+      "platform MemorySourceAdapter registration for Twenty (THINK-193 U5): the family-dispatch seam wrapper over the platform-owned twenty.ts adapter; plugin runtime and manifest source remain under plugins/twenty.",
+  },
+  {
     path: "packages/api/scripts/memory-sources/seed-twenty-processor.ts",
     reason:
       "operator/dev seeding script for the THINK-193 U1 Twenty proving-slice processor; thin seam over the platform memory-sources substrate pending the U3 product surfaces.",

@@ -54,6 +54,9 @@ export const SINGLE_VALUED_PREDICATES = [
   "customer.employees",
   "customer.annual_recurring_revenue",
   "customer.address",
+  // U5 web-page predicates: one current title/snapshot per page subject.
+  "customer.web_page_title",
+  "customer.web_snapshot",
 ] as const;
 
 const SINGLE_VALUED = new Set<string>(SINGLE_VALUED_PREDICATES);
@@ -218,6 +221,98 @@ export function extractCompanyClaims(input: {
       setIfPresent(value, "title", stringOrNull(note.title));
       setIfPresent(value, "body", stringOrNull(note.body));
       push("customer.note", value, relationEffectiveFrom(note));
+    }
+  }
+
+  return claims;
+}
+
+// ---------------------------------------------------------------------------
+// extractWebPageClaims (pure, U5)
+// ---------------------------------------------------------------------------
+
+/** Web-page extraction recipe version stamped on claims. */
+const WEB_EXTRACTION_VERSION = "u5.1";
+/** Bounded excerpt kept in the customer.web_snapshot claim value. */
+const WEB_SNAPSHOT_EXCERPT_CHARS = 1500;
+const WEB_TITLE_CHARS = 300;
+
+/** Flatten + bound hostile page text for a claim value: newlines collapse
+ * (no markdown structure survives), HTML comments cannot terminate the
+ * projection's provenance comments, and the length is capped. */
+function boundedInlineText(value: string, max: number): string {
+  return value
+    .replace(/\s*\r?\n\s*/g, " ")
+    .replace(/<!--|-->/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+    .trim();
+}
+
+/**
+ * PURE: reduce a normalized web-page snapshot (adapters/firecrawl.ts
+ * normalizeWebPage: {requestedUrl, finalUrl, title?, markdown}) into
+ * provider-neutral claims. Page content is HOSTILE input: every value is
+ * inline-flattened and bounded so scraped text cannot inject markdown
+ * structure or break provenance comments in the claim projection.
+ *
+ * `customer.domain` is emitted from the FINAL (post-redirect) URL's host —
+ * the AE1 canonical-identity hook: the entity-identity graph's `domain`
+ * normalizer resolves it to the same canonical customer a CRM domainName
+ * resolves to.
+ */
+export function extractWebPageClaims(input: {
+  snapshot: Record<string, unknown>;
+  /** Normalized requested URL — the evidence source_item_id. */
+  sourceItemId: string;
+  targetScope: SharedTargetScope;
+  targetId: string;
+  extractionVersion?: string;
+}): ClaimUpsert[] {
+  const { snapshot } = input;
+  const subjectKey = `web:page:${input.sourceItemId}`;
+  const extractionVersion = input.extractionVersion ?? WEB_EXTRACTION_VERSION;
+  const claims: ClaimUpsert[] = [];
+
+  const push = (
+    ontologyPredicate: string,
+    value: Record<string, unknown>,
+  ): void => {
+    if (Object.keys(value).length === 0) return;
+    claims.push({
+      subjectKey,
+      subjectEntityType: "customer",
+      ontologyPredicate,
+      value,
+      valueHash: computeContentHash(value),
+      // Web pages carry no trustworthy edition timestamp; interval closing
+      // falls back to the durable transition time.
+      effectiveFrom: null,
+      extractionVersion,
+    });
+  };
+
+  const finalUrl = stringOrNull(snapshot.finalUrl) ?? input.sourceItemId;
+  let host: string | null = null;
+  try {
+    host = new URL(finalUrl).hostname || null;
+  } catch {
+    host = null;
+  }
+  if (host) push("customer.domain", { url: host });
+
+  const title = stringOrNull(snapshot.title);
+  if (title) {
+    const text = boundedInlineText(title, WEB_TITLE_CHARS);
+    if (text) push("customer.web_page_title", { text });
+  }
+
+  const markdown = stringOrNull(snapshot.markdown);
+  if (markdown) {
+    const excerpt = boundedInlineText(markdown, WEB_SNAPSHOT_EXCERPT_CHARS);
+    if (excerpt) {
+      push("customer.web_snapshot", { url: finalUrl, excerpt });
     }
   }
 
@@ -777,6 +872,14 @@ const OVERVIEW_RENDERERS: Array<{
       const formatted = formatAddressValue(v);
       return `Address: ${formatted || inlineText(JSON.stringify(v))}`;
     },
+  },
+  {
+    predicate: "customer.web_page_title",
+    render: (v) => `Title: ${text(v.text)}`,
+  },
+  {
+    predicate: "customer.web_snapshot",
+    render: (v) => `Snapshot (${text(v.url)}): ${text(v.excerpt)}`,
   },
 ];
 

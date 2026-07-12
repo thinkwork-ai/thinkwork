@@ -22,13 +22,7 @@ import {
 } from "@thinkwork/agent-loops-core";
 import { getMemoryServices } from "../memory/index.js";
 import { runBrainDreamState } from "../brain/dream/runner.js";
-import {
-  advanceCheckpoint,
-  ensureCheckpoint,
-  getCheckpoint,
-  resolveTargetBankId,
-} from "./repository.js";
-import { CheckpointConflictError } from "./repository.js";
+import { resolveTargetBankId } from "./repository.js";
 import {
   listEvidenceForProjection,
   recordAcquiredPage,
@@ -57,7 +51,6 @@ import type {
 } from "./types.js";
 import {
   buildClaimProjection,
-  extractCompanyClaims,
   listActiveClaimsForSubject,
   upsertClaimsForEvidence,
 } from "./claims.js";
@@ -69,15 +62,34 @@ import {
 } from "./policy.js";
 import { getCompileJob, type WikiCompileJobRow } from "../wiki/repository.js";
 import { invokeWikiCompile } from "../wiki/enqueue.js";
+import { hindsightDocumentIdFor } from "./adapters/twenty.js";
 import {
-  acquireCompaniesPage,
-  buildCompanyDossier,
-  checkTwentyReadiness,
-  hindsightDocumentIdFor,
-  projectionKeyForCompany,
-  reconcileCompaniesPage,
-  type TwentyCompaniesCursor,
-} from "./adapters/twenty.js";
+  getMemorySourceAdapter,
+  type MemorySourceAdapter,
+} from "./adapters/registry.js";
+import {
+  boundedInt,
+  effectiveLimit,
+  isNoProgress,
+  pageFingerprint,
+  type PageProgressState,
+} from "./acquire-helpers.js";
+import {
+  backscanTokenFrom,
+  cursorFromCheckpoint,
+} from "./adapters/twenty-adapter.js";
+
+// Re-exports for existing importers/tests (helpers moved in the U5 seam
+// extraction; twenty cursor helpers now live with the twenty adapter).
+export {
+  boundedInt,
+  effectiveLimit,
+  isNoProgress,
+  pageFingerprint,
+  type PageProgressState,
+  backscanTokenFrom,
+  cursorFromCheckpoint,
+};
 
 export interface MemoryStageWorkerEventShape {
   workflowRunId: string;
@@ -193,89 +205,29 @@ export function failed(stage: string, error: string): MemoryStageWorkerResult {
   return { status: "failed", stage, error };
 }
 
-export function boundedInt(
-  value: unknown,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(n)));
-}
-
-const DEFAULT_PAGE_SIZE = 50;
-const DEFAULT_MAX_RECORDS = 200;
-
-/**
- * Narrow-only effective limit (Codex F2): the minimum over every PRESENT
- * numeric value (saved source boundary, processor budget, requested run
- * options), falling back to `fallback` when none is present, clamped to
- * [min, max]. Run options can therefore only NARROW the persisted
- * boundary/budget — never widen them.
- */
-export function effectiveLimit(
-  values: Array<unknown>,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const present = values
-    .map((value) => (typeof value === "number" ? value : Number(value)))
-    .filter((n, i) => values[i] != null && Number.isFinite(n));
-  const chosen = present.length > 0 ? Math.min(...present) : fallback;
-  return Math.max(min, Math.min(max, Math.floor(chosen)));
-}
-
 // ---------------------------------------------------------------------------
-// Paging no-progress guard (Codex F5)
+// Per-family adapter resolution (THINK-193 U5 dispatch seam)
 // ---------------------------------------------------------------------------
 
-export interface PageProgressState {
-  token: string | null;
-  fingerprint: string;
-}
-
-/** Deterministic fingerprint of a page's returned record ids. */
-export function pageFingerprint(ids: string[]): string {
-  return ids.join("|");
-}
-
-/**
- * True when the provider made no progress between two consecutive pages:
- * it returned the same continuation token again, or the identical
- * non-empty id set. Callers must stop with a VISIBLE failure — silently
- * looping would spin the budget without ever completing.
- */
-export function isNoProgress(
-  prev: PageProgressState | null,
-  next: PageProgressState,
-): boolean {
-  if (!prev) return false;
-  if (next.token !== null && next.token === prev.token) return true;
-  if (next.fingerprint !== "" && next.fingerprint === prev.fingerprint) {
-    return true;
+/** Adapter for a source config, or a visible stage failure when the family
+ * has no registered adapter (fail closed — never guess a family's shape). */
+function adapterForSource(
+  stage: string,
+  source: MemorySourceConfig,
+):
+  | { ok: true; adapter: MemorySourceAdapter }
+  | { ok: false; result: MemoryStageWorkerResult } {
+  const adapter = getMemorySourceAdapter(source.source_family);
+  if (!adapter) {
+    return {
+      ok: false,
+      result: failed(
+        stage,
+        `source family "${source.source_family}" has no registered memory-source adapter (implemented: twenty, firecrawl)`,
+      ),
+    };
   }
-  return false;
-}
-
-export function cursorFromCheckpoint(
-  cursor: Record<string, unknown> | null | undefined,
-): TwentyCompaniesCursor | null {
-  const lastUpdatedAt = cursor?.lastUpdatedAt;
-  const lastId = cursor?.lastId;
-  if (typeof lastUpdatedAt !== "string" || typeof lastId !== "string") {
-    return null;
-  }
-  return { lastUpdatedAt, lastId };
-}
-
-/** Opaque backscan sweep position stored inside the checkpoint cursor. */
-export function backscanTokenFrom(
-  cursor: Record<string, unknown> | null | undefined,
-): string | null {
-  const token = cursor?.backscanToken;
-  return typeof token === "string" && token ? token : null;
+  return { ok: true, adapter };
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +268,8 @@ async function runAcquireInner(
       output: { note: "no enabled sources selected for this run" },
     };
   }
-  // U3: every implemented source family (Twenty) writes shared evidence.
+  // U3/U5: every implemented source family (twenty, firecrawl) writes
+  // shared evidence; personal families arrive with the Gmail tracer (U6).
   const processor = requireSharedProcessor(ctx);
   if (!processor) {
     return failed(
@@ -325,17 +278,16 @@ async function runAcquireInner(
     );
   }
 
+  // Mixed-family processors work: each source dispatches to its own
+  // family adapter within one acquire stage.
   for (const source of ctx.sources) {
-    if (source.source_family !== "twenty") {
+    const resolved = adapterForSource(event.stage, source);
+    if (!resolved.ok) return resolved.result;
+    const adapter = resolved.adapter;
+    if (adapter.requiresOwnerUser && !processor.created_by_user_id) {
       return failed(
         event.stage,
-        `source family "${source.source_family}" is not implemented in U1 (only twenty)`,
-      );
-    }
-    if (!processor.created_by_user_id) {
-      return failed(
-        event.stage,
-        "processor has no owning user to mint a Twenty token with — set created_by_user_id",
+        `processor has no owning user to mint a ${source.source_family} token with — set created_by_user_id`,
       );
     }
 
@@ -344,6 +296,7 @@ async function runAcquireInner(
     // Revocation/expiry blocks acquisition immediately and visibly.
     let grantId: string;
     let grantVersion: number;
+    let grantBoundary: Record<string, unknown>;
     try {
       const grant = await requireActiveGrant(db, {
         tenantId: processor.tenant_id,
@@ -351,8 +304,9 @@ async function runAcquireInner(
         sourceFamily: source.source_family,
         sourceBindingKey: source.source_binding_key,
       });
+      grantBoundary = (grant.boundary ?? {}) as Record<string, unknown>;
       assertBoundaryWithin(
-        (grant.boundary ?? {}) as Record<string, unknown>,
+        grantBoundary,
         (source.boundary ?? {}) as Record<string, unknown>,
         { sourceFamily: source.source_family },
       );
@@ -365,7 +319,7 @@ async function runAcquireInner(
       throw err;
     }
 
-    const readiness = await checkTwentyReadiness(db, {
+    const readiness = await adapter.checkReadiness(db, {
       tenantId: processor.tenant_id,
       userId: processor.created_by_user_id,
       // Codex F3: resolve exactly the persisted tenant-owned binding —
@@ -376,302 +330,58 @@ async function runAcquireInner(
       // blocked_not_ready semantics: visible failure, checkpoint untouched.
       return failed(
         event.stage,
-        `Twenty source not ready: ${readiness.reason}`,
+        `${source.source_family === "twenty" ? "Twenty" : source.source_family} source not ready: ${readiness.reason}`,
       );
     }
 
-    // Codex F2: run options may only NARROW the saved source boundary and
-    // the processor budget — the effective limit is the minimum of all
-    // present values.
+    // Codex F2/U3: run options and the approved-plan override may only
+    // NARROW the saved source boundary and the processor budget — the
+    // adapter computes effective limits as the minimum of present values.
     const boundary = (source.boundary ?? {}) as Record<string, unknown>;
     const budget = (processor.budget ?? {}) as Record<string, unknown>;
     const options = event.options ?? {};
-    // Approved-plan override (U3): joins the narrow-only minimum below —
-    // a reviewer can only shrink the run, never exceed saved boundaries.
     const override = overrideFrom(options);
     // Erase write-fence captured with the source row at stage start
     // (round-3 P1-2): every page commit CASes on it in-transaction.
     const eraseFence = {
       expectedEraseGeneration: source.erase_generation ?? 0,
     };
-    // Binary object capability (policy agent contract): the saved source
-    // boundary's already-validated `objects` selection — omitted means the
-    // adapter's companies-only (depth-0) default.
-    const approvedObjects = boundary.objects as readonly string[] | undefined;
-    const pageSize = effectiveLimit(
-      [boundary.pageSize, budget.pageSize, options.pageSize],
-      DEFAULT_PAGE_SIZE,
-      1,
-      200,
-    );
-    const maxRecords = effectiveLimit(
-      [
-        boundary.maxRecords,
-        budget.maxRecords,
-        options.maxRecords,
-        override?.maxRecords,
-      ],
-      DEFAULT_MAX_RECORDS,
-      1,
-      2000,
-    );
 
-    let checkpoint = await ensureCheckpoint(db, {
-      tenantId: processor.tenant_id,
-      sourceConfigId: source.id,
-      partitionKey: "companies",
-    });
-    let cursor = cursorFromCheckpoint(checkpoint.cursor);
-    let pageToken: string | null = null;
-    let fetched = 0;
-    let casRetries = 0;
-    let progress: PageProgressState | null = null;
-
-    while (fetched < maxRecords) {
-      // Codex U2 #2: the grant is re-checked before EVERY provider page
-      // read — a revoke/expiry/re-issue after page 1 prevents page 2, and
-      // the unread page's checkpoint never advances.
-      try {
-        await revalidateGrant(db, {
-          tenantId: processor.tenant_id,
-          grantId,
-          expectedGrantVersion: grantVersion,
-        });
-      } catch (err) {
-        if (err instanceof MemoryAuthorizationError) {
-          return failed(event.stage, err.message);
-        }
-        throw err;
-      }
-      const page = await acquireCompaniesPage(readiness.client, {
-        cursor,
-        pageSize: Math.min(pageSize, maxRecords - fetched),
-        targetScope: processor.target_scope,
-        targetId: processor.target_id,
-        startingAfter: pageToken,
-        objects: approvedObjects,
+    let outcome;
+    try {
+      outcome = await adapter.runAcquire({
+        db,
+        client: readiness.client,
+        processor,
+        source,
+        workflowRunId: event.workflowRunId,
+        boundary,
+        budget,
+        options,
+        override,
+        grantBoundary,
+        // Codex U2 #2: the adapter must call this before EVERY provider
+        // page read — a revoke/expiry/re-issue after page 1 prevents page
+        // 2, and the unread page's checkpoint never advances.
+        revalidateGrant: () =>
+          revalidateGrant(db, {
+            tenantId: processor.tenant_id,
+            grantId,
+            expectedGrantVersion: grantVersion,
+          }),
+        eraseFence,
+        counts,
       });
-      counts.pages += 1;
-      fetched += page.rawCount;
-      pageToken = page.pageToken ?? null;
-
-      // No-progress guard (Codex F5): a repeated provider token or an
-      // identical consecutive id set means paging is stuck — stop VISIBLY
-      // instead of spinning the budget or advancing a bogus cursor.
-      const observedProgress: PageProgressState = {
-        token: pageToken,
-        fingerprint: pageFingerprint(
-          page.items.map((item) => item.sourceItemId),
-        ),
-      };
-      if (isNoProgress(progress, observedProgress)) {
-        return failed(
-          event.stage,
-          `acquisition made no progress on source ${source.id}: Twenty returned a repeated page token or an identical record set twice in a row — aborting the incremental pass`,
-        );
+    } catch (err) {
+      if (err instanceof MemoryAuthorizationError) {
+        return failed(event.stage, err.message);
       }
-      progress = observedProgress;
-
-      if (page.items.length === 0) {
-        // A full raw page whose kept set is empty means every record is
-        // covered by the cursor (an equal-updatedAt cohort). With a provider
-        // page token we advance through it; without one we must fail
-        // VISIBLY — silently breaking would permanently skip the cohort.
-        const fullPage = page.rawCount >= Math.min(pageSize, maxRecords);
-        if (fullPage && pageToken) continue;
-        if (fullPage && !pageToken) {
-          return failed(
-            event.stage,
-            "acquisition cannot advance past an equal-updatedAt cohort: the Twenty server exposed no page cursor — raise pageSize above the cohort size or upgrade Twenty",
-          );
-        }
-        break;
-      }
-
-      // High-water cursor: last kept item's (updatedAt, id) — from the
-      // ORDERING timestamp only (Codex F4: sourceVersion now embeds a
-      // content-hash edition suffix and must never become lastUpdatedAt).
-      // Items without a timestamp are re-seen next run and deduped instead.
-      const lastTimestamped = [...page.items]
-        .reverse()
-        .find((item) => item.sourceTimestamp != null);
-      const observed: { lastUpdatedAt: string; lastId: string } | null =
-        lastTimestamped
-          ? {
-              lastUpdatedAt: lastTimestamped.sourceTimestamp!.toISOString(),
-              lastId: lastTimestamped.sourceItemId,
-            }
-          : null;
-      // Monotonic guard (Codex F5): never regress the high-water mark.
-      // A filtered response containing older records means provider
-      // ordering/filtering is best-effort — log and rely on the backscan.
-      // Compare parsed instants (not strings): mixed timestamp precision
-      // ("…00Z" vs "…00.000Z") breaks lexical ordering.
-      let highWater: TwentyCompaniesCursor;
-      if (
-        observed &&
-        (!cursor?.lastUpdatedAt ||
-          Date.parse(observed.lastUpdatedAt) >=
-            Date.parse(cursor.lastUpdatedAt))
-      ) {
-        highWater = observed;
-      } else {
-        if (observed) {
-          console.warn(
-            `[memory-sources:twenty] filtered page for source ${source.id} contained records older than cursor ${cursor?.lastUpdatedAt} — keeping the cursor and relying on backscan reconciliation`,
-          );
-        }
-        highWater = cursor ?? { lastUpdatedAt: null, lastId: null };
-      }
-
-      try {
-        const recorded = await recordAcquiredPage(db, {
-          tenantId: processor.tenant_id,
-          sourceConfigId: source.id,
-          workflowRunId: event.workflowRunId,
-          partitionKey: "companies",
-          expectedCheckpointVersion: checkpoint.version,
-          nextCursor: {
-            ...highWater,
-            // Preserve the round-robin backscan position across incremental
-            // checkpoint advances.
-            backscanToken: backscanTokenFrom(checkpoint.cursor),
-          } as unknown as Record<string, unknown>,
-          items: page.items,
-          eraseFence,
-        });
-        counts.changed += recorded.changed.length;
-        counts.seen += recorded.seen;
-        checkpoint = recorded.checkpoint;
-        casRetries = 0;
-      } catch (err) {
-        if (err instanceof CheckpointConflictError && casRetries < 3) {
-          // A concurrent worker (duplicate Event delivery or a parallel run
-          // on the same source) advanced the checkpoint first. Their commit
-          // is durable and evidence upserts dedupe, so re-read the surviving
-          // cursor and continue instead of failing a run whose work is done.
-          casRetries += 1;
-          checkpoint =
-            (await getCheckpoint(db, {
-              sourceConfigId: source.id,
-              partitionKey: "companies",
-            })) ??
-            (await ensureCheckpoint(db, {
-              tenantId: processor.tenant_id,
-              sourceConfigId: source.id,
-              partitionKey: "companies",
-            }));
-          cursor = cursorFromCheckpoint(checkpoint.cursor);
-          pageToken = null;
-          progress = null;
-          continue;
-        }
-        throw err;
-      }
-      cursor = page.nextCursor ?? highWater;
-
-      if (page.nextCursor === null) break;
+      throw err;
     }
-
-    // Bounded relation reconciliation / backscan (Codex F4/F5): the
-    // incremental gte-filtered pass never re-sees a company whose people/
-    // opportunities/notes changed without touching the parent updatedAt.
-    // Sweep unfiltered pages with the REMAINING record budget, recording
-    // evidence WITHOUT advancing the incremental checkpoint (content-
-    // sensitive editions make unchanged records cheap dedupe no-ops). The
-    // sweep position round-robins across runs via cursor.backscanToken.
-    let backscanToken = backscanTokenFrom(checkpoint.cursor);
-    let backscanPages = 0;
-    let backscanProgress: PageProgressState | null = null;
-    while (fetched < maxRecords) {
-      try {
-        await revalidateGrant(db, {
-          tenantId: processor.tenant_id,
-          grantId,
-          expectedGrantVersion: grantVersion,
-        });
-      } catch (err) {
-        if (err instanceof MemoryAuthorizationError) {
-          return failed(event.stage, err.message);
-        }
-        throw err;
-      }
-      const page = await reconcileCompaniesPage(readiness.client, {
-        startingAfter: backscanToken,
-        pageSize: Math.min(pageSize, maxRecords - fetched),
-        targetScope: processor.target_scope,
-        targetId: processor.target_id,
-        objects: approvedObjects,
-      });
-      counts.pages += 1;
-      fetched += page.rawCount;
-      backscanPages += 1;
-
-      const observedProgress: PageProgressState = {
-        token: page.pageToken ?? null,
-        fingerprint: pageFingerprint(
-          page.items.map((item) => item.sourceItemId),
-        ),
-      };
-      if (isNoProgress(backscanProgress, observedProgress)) {
-        return failed(
-          event.stage,
-          `backscan made no progress on source ${source.id}: Twenty returned a repeated page token or an identical record set twice in a row — aborting the reconciliation sweep`,
-        );
-      }
-      backscanProgress = observedProgress;
-
-      if (page.items.length > 0) {
-        const recorded = await recordAcquiredPage(db, {
-          tenantId: processor.tenant_id,
-          sourceConfigId: source.id,
-          workflowRunId: event.workflowRunId,
-          partitionKey: "companies",
-          expectedCheckpointVersion: checkpoint.version,
-          nextCursor: checkpoint.cursor ?? {},
-          items: page.items,
-          skipCheckpointAdvance: true,
-          eraseFence,
-        });
-        counts.changed += recorded.changed.length;
-        counts.seen += recorded.seen;
-      }
-
-      backscanToken = page.pageToken ?? null;
-      // Token exhausted: the sweep finished (or the provider exposes no
-      // paging) — a null token restarts the round-robin next run.
-      if (!backscanToken) break;
+    if (!outcome.ok) {
+      return failed(event.stage, outcome.error);
     }
-
-    if (backscanPages > 0) {
-      // Persist the sweep position with the same version CAS the
-      // incremental pass uses. A lost CAS is benign: evidence is already
-      // recorded and the sweep resumes from the surviving cursor next run.
-      const advanced = await advanceCheckpoint(db, {
-        sourceConfigId: source.id,
-        partitionKey: "companies",
-        expectedVersion: checkpoint.version,
-        cursor: {
-          ...((checkpoint.cursor ?? {}) as Record<string, unknown>),
-          backscanToken,
-        },
-      });
-      if (advanced) {
-        checkpoint = advanced;
-      } else {
-        console.warn(
-          `[memory-sources:twenty] backscan checkpoint CAS lost for source ${source.id} — sweep position not persisted this run`,
-        );
-      }
-    }
-
-    perSource[source.id] = {
-      family: source.source_family,
-      fetched,
-      checkpointVersion: checkpoint.version,
-      backscanPages,
-      backscanToken,
-    };
+    perSource[source.id] = outcome.summary;
   }
 
   return {
@@ -890,29 +600,62 @@ async function runProjectInner(
     // processors), but never silently mint claims under a user scope.
     return failed(
       event.stage,
-      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — Twenty claim projection writes shared scopes only`,
+      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — external-source claim projection writes shared scopes only`,
     );
   }
-  const fenceSource = ctx.sources[0];
-  const eraseFence = fenceSource
-    ? {
-        tenantId: ctx.processor.tenant_id,
-        sourceConfigId: fenceSource.id,
-        expectedEraseGeneration: fenceSource.erase_generation ?? 0,
-      }
-    : undefined;
+  const sourceById = new Map(ctx.sources.map((source) => [source.id, source]));
+  const fenceFor = (sourceConfigId: string) => {
+    const source = sourceById.get(sourceConfigId);
+    return source
+      ? {
+          tenantId: ctx.processor.tenant_id,
+          sourceConfigId: source.id,
+          expectedEraseGeneration: source.erase_generation ?? 0,
+        }
+      : undefined;
+  };
 
   // F6: migrate any inline snapshots in this batch to S3 before projecting.
-  await offloadSnapshots(db, ctx.s3, {
-    items,
-    ttlDays: snapshotTtlDaysFor(ctx),
-    eraseFence,
-  });
+  // Fences are per-source: mixed-family batches offload per source group.
+  for (const source of ctx.sources) {
+    const sourceItems = items.filter(
+      (item) => item.source_config_id === source.id,
+    );
+    if (sourceItems.length === 0) continue;
+    await offloadSnapshots(db, ctx.s3, {
+      items: sourceItems,
+      ttlDays: snapshotTtlDaysFor(ctx),
+      eraseFence: fenceFor(source.id),
+    });
+  }
 
   let processed = 0;
   for (const item of items) {
     if (leaseExhausted(ctx)) break;
     processed += 1;
+    const source = sourceById.get(item.source_config_id);
+    const resolved = source
+      ? adapterForSource(event.stage, source)
+      : ({ ok: false } as const);
+    if (!source || !resolved.ok) {
+      counts.failed += 1;
+      await recordRunItem(db, {
+        tenantId: item.tenant_id,
+        workflowRunId: event.workflowRunId,
+        sourceConfigId: item.source_config_id,
+        sourceItemId: item.source_item_id,
+        stage: "project",
+        result: "failed",
+        detail: {
+          reason: source
+            ? `source family "${source.source_family}" has no registered adapter`
+            : "evidence item's source config is not part of this run",
+        },
+      });
+      continue;
+    }
+    const adapter = resolved.adapter;
+    const eraseFence = fenceFor(item.source_config_id);
     const snapshot = await loadSnapshot(ctx, item);
     if (!snapshot) {
       counts.failed += 1;
@@ -927,28 +670,24 @@ async function runProjectInner(
       });
       continue;
     }
-    const dossier = buildCompanyDossier(snapshot);
-    const projectionKey = projectionKeyForCompany(item.source_item_id);
+    const dossier = adapter.buildProjection(snapshot, item.source_item_id);
+    const projectionKey = adapter.projectionKeyFor(item.source_item_id);
     // U2: extract durable ontology-shaped claims and attach support edges to
     // this evidence item. Idempotent per (fingerprint, evidence) pair.
-    const claims = extractCompanyClaims({
+    const claims = adapter.extractClaims({
       snapshot,
       sourceItemId: item.source_item_id,
       targetScope: shared!.target_scope,
       targetId: shared!.target_id,
     });
-    const editionEffectiveFrom =
-      typeof snapshot.updatedAt === "string" &&
-      !Number.isNaN(new Date(snapshot.updatedAt).getTime())
-        ? new Date(snapshot.updatedAt)
-        : null;
+    const editionEffectiveFrom = adapter.editionEffectiveFrom(snapshot);
     const claimResult = await upsertClaimsForEvidence(db, {
       tenantId: item.tenant_id,
       targetScope: shared!.target_scope,
       targetId: shared!.target_id,
       sourceConfigId: item.source_config_id,
       evidenceItemId: item.id,
-      subjectKey: `twenty:company:${item.source_item_id}`,
+      subjectKey: adapter.subjectKeyFor(item.source_item_id),
       effectiveFrom: editionEffectiveFrom,
       claims,
       // In-transaction erase fence CAS (round-3 P1-2).
@@ -1012,14 +751,17 @@ async function runRetainInner(
       `memory engine "${config.engine}" has no document upsert — Hindsight required`,
     );
   }
-  const fenceSource = ctx.sources[0];
-  const eraseFence = fenceSource
-    ? {
-        tenantId: processor.tenant_id,
-        sourceConfigId: fenceSource.id,
-        expectedEraseGeneration: fenceSource.erase_generation ?? 0,
-      }
-    : undefined;
+  const sourceById = new Map(ctx.sources.map((source) => [source.id, source]));
+  const fenceFor = (sourceConfigId: string) => {
+    const source = sourceById.get(sourceConfigId);
+    return source
+      ? {
+          tenantId: processor.tenant_id,
+          sourceConfigId: source.id,
+          expectedEraseGeneration: source.erase_generation ?? 0,
+        }
+      : undefined;
+  };
 
   const backlog = await changedEvidence(ctx);
   const items = backlog.slice(0, evidenceBatchLimit(ctx, "retainBatch"));
@@ -1028,7 +770,7 @@ async function runRetainInner(
   if (items.length > 0 && !shared) {
     return failed(
       event.stage,
-      `processor ${processor.id} targets '${processor.target_scope}' — Twenty projection retain writes shared banks only`,
+      `processor ${processor.id} targets '${processor.target_scope}' — external-source projection retain writes shared banks only`,
     );
   }
   const targetBankId = resolveTargetBankId(processor);
@@ -1038,6 +780,29 @@ async function runRetainInner(
   for (const item of items) {
     if (leaseExhausted(ctx)) break;
     processed += 1;
+    const source = sourceById.get(item.source_config_id);
+    const resolved = source
+      ? adapterForSource(event.stage, source)
+      : ({ ok: false } as const);
+    if (!source || !resolved.ok) {
+      counts.noop += 1;
+      await recordRunItem(db, {
+        tenantId: item.tenant_id,
+        workflowRunId: event.workflowRunId,
+        sourceConfigId: item.source_config_id,
+        sourceItemId: item.source_item_id,
+        stage: "retain",
+        result: "failed",
+        detail: {
+          reason: source
+            ? `source family "${source.source_family}" has no registered adapter`
+            : "evidence item's source config is not part of this run",
+        },
+      });
+      continue;
+    }
+    const sourceAdapter = resolved.adapter;
+    const eraseFence = fenceFor(item.source_config_id);
     const snapshot = await loadSnapshot(ctx, item);
     if (!snapshot) {
       counts.noop += 1;
@@ -1052,8 +817,11 @@ async function runRetainInner(
       });
       continue;
     }
-    const dossier = buildCompanyDossier(snapshot);
-    const projectionKey = projectionKeyForCompany(item.source_item_id);
+    const dossier = sourceAdapter.buildProjection(
+      snapshot,
+      item.source_item_id,
+    );
+    const projectionKey = sourceAdapter.projectionKeyFor(item.source_item_id);
     const documentId = hindsightDocumentIdFor(
       item.source_config_id,
       projectionKey,
@@ -1063,7 +831,7 @@ async function runRetainInner(
     // claims (with embedded claim ids for provenance) when the subject has
     // any; the raw dossier remains the defensive fallback for evidence
     // acquired before claim extraction existed.
-    const subjectKey = `twenty:company:${item.source_item_id}`;
+    const subjectKey = sourceAdapter.subjectKeyFor(item.source_item_id);
     const activeClaims = await listActiveClaimsForSubject(db, {
       tenantId: processor.tenant_id,
       targetScope: shared!.target_scope,
@@ -1093,13 +861,13 @@ async function runRetainInner(
       tenantId: processor.tenant_id,
       ownerType: shared!.target_scope,
       ownerId: shared!.target_id,
-      path: `memory-sources/twenty/${projectionKey.replace(":", "/")}.md`,
+      path: `memory-sources/${sourceAdapter.pathSegment}/${projectionKey.replace(":", "/")}.md`,
       documentId,
       context: "external_source_projection",
       content,
       async: false,
       metadata: {
-        source: "twenty",
+        source: sourceAdapter.pathSegment,
         sourceConfigId: item.source_config_id,
         projectionKey,
         contentHash: item.content_hash,
@@ -1201,6 +969,20 @@ export async function runCompound(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
   const { db, event, processor } = ctx;
+  // Zero enabled sources: nothing was acquired/retained, so there is
+  // nothing to consolidate — settle as a VISIBLE no-op. Recording a run
+  // item here would violate the memory_run_items FK (there is no real
+  // source_config_id to reference); the no-op is carried in stage output.
+  if (ctx.sources.length === 0) {
+    return {
+      status: "succeeded",
+      stage: event.stage,
+      counts: { noop: 1 },
+      output: {
+        note: "no enabled sources selected for this run — nothing to consolidate",
+      },
+    };
+  }
   const { adapter, config } = getMemoryServices();
   if (config.engine !== "hindsight" || !adapter.consolidateBankById) {
     return failed(
@@ -1233,7 +1015,8 @@ export async function runCompound(
   await recordRunItem(db, {
     tenantId: processor.tenant_id,
     workflowRunId: event.workflowRunId,
-    sourceConfigId: ctx.sources[0]?.id ?? processor.id,
+    // Zero-source runs returned above; sources[0] is a real FK target here.
+    sourceConfigId: ctx.sources[0]!.id,
     sourceItemId: bankId,
     stage: "compound",
     result: "changed",
@@ -1308,6 +1091,34 @@ export async function runResolve(
 // structured response. The shared api role already grants
 // lambda:InvokeFunction on the ingest function (iam-grouped.tf).
 // ---------------------------------------------------------------------------
+
+/**
+ * Record a graph/wiki run item against the processor's first source config.
+ * With ZERO sources there is no valid memory_run_items FK target — skip the
+ * ledger row (the stage result output still carries the detail) instead of
+ * writing a row that violates memory_run_items_source_config_id_fkey.
+ */
+async function recordBankRunItem(
+  ctx: StageContext,
+  args: {
+    stage: "graph" | "wiki";
+    sourceItemId: string;
+    result: "changed" | "noop";
+    detail: Record<string, unknown>;
+  },
+): Promise<void> {
+  const sourceConfigId = ctx.sources[0]?.id;
+  if (!sourceConfigId) return;
+  await recordRunItem(ctx.db, {
+    tenantId: ctx.processor.tenant_id,
+    workflowRunId: ctx.event.workflowRunId,
+    sourceConfigId,
+    sourceItemId: args.sourceItemId,
+    stage: args.stage,
+    result: args.result,
+    detail: args.detail,
+  });
+}
 
 /** Shared-only guard for graph/wiki: `user_*` banks are hard-rejected. */
 function requireSharedGraphWikiProcessor(
@@ -1444,12 +1255,9 @@ export async function runGraph(
       ingestStatus: "stale_noop",
       wikiCompileEnqueue: null,
     };
-    await recordRunItem(db, {
-      tenantId: processor.tenant_id,
-      workflowRunId: event.workflowRunId,
-      sourceConfigId: ctx.sources[0]?.id ?? processor.id,
-      sourceItemId: targetBankId,
+    await recordBankRunItem(ctx, {
       stage: "graph",
+      sourceItemId: targetBankId,
       result: "noop",
       detail,
     });
@@ -1522,12 +1330,9 @@ export async function runGraph(
       .slice(0, 50),
     wikiCompileEnqueue: enqueue ?? null,
   };
-  await recordRunItem(db, {
-    tenantId: processor.tenant_id,
-    workflowRunId: event.workflowRunId,
-    sourceConfigId: ctx.sources[0]?.id ?? processor.id,
-    sourceItemId: targetBankId,
+  await recordBankRunItem(ctx, {
     stage: "graph",
+    sourceItemId: targetBankId,
     result: counts.merged > 0 || counts.gated > 0 ? "changed" : "noop",
     detail,
   });
@@ -1601,12 +1406,9 @@ export async function runWiki(
       // skip — there is no compile to settle. Visible no-op, not a failure.
       const status =
         typeof enqueue?.status === "string" ? enqueue.status : null;
-      await recordRunItem(db, {
-        tenantId: processor.tenant_id,
-        workflowRunId: event.workflowRunId,
-        sourceConfigId: ctx.sources[0]?.id ?? processor.id,
-        sourceItemId: targetBankId,
+      await recordBankRunItem(ctx, {
         stage: "wiki",
+        sourceItemId: targetBankId,
         result: "noop",
         detail: { reason: status ?? "graph stage recorded no compile job" },
       });
@@ -1649,12 +1451,9 @@ export async function runWiki(
     if (job.status === "succeeded") {
       // Idempotent settle: recordRunItem no-ops on a duplicate settle of the
       // same job within this run.
-      await recordRunItem(db, {
-        tenantId: processor.tenant_id,
-        workflowRunId: event.workflowRunId,
-        sourceConfigId: ctx.sources[0]?.id ?? processor.id,
-        sourceItemId: jobId,
+      await recordBankRunItem(ctx, {
         stage: "wiki",
+        sourceItemId: jobId,
         result: "changed",
         detail: { jobId, jobStatus: job.status, attempt: job.attempt },
       });

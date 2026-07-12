@@ -32,6 +32,8 @@ interface PreflightPlanSource {
   effectiveMaxRecords: number | null;
   checkpointAdvancedAt: string | null;
   recentEvidenceCount: number;
+  /** URL envelope for web (firecrawl) sources — exact URLs + domain rules. */
+  boundaryUrls: string[];
 }
 
 interface PreflightPlan {
@@ -73,6 +75,12 @@ export function preflightPlanFromEvidence(
             typeof source.recentEvidenceCount === "number"
               ? source.recentEvidenceCount
               : 0,
+          boundaryUrls: (() => {
+            const urls = jsonRecord(source.boundary).urls;
+            return Array.isArray(urls)
+              ? urls.filter((url): url is string => typeof url === "string")
+              : [];
+          })(),
         }))
         .filter((source) => source.sourceConfigId),
       focus: Array.isArray(plan.focus)
@@ -256,6 +264,18 @@ export function WorkflowPlanReview({
                         : " · never synced"}
                       {` · ${source.recentEvidenceCount} recent items`}
                     </p>
+                    {source.boundaryUrls.length > 0 ? (
+                      <ul className="mt-1 space-y-0.5">
+                        {source.boundaryUrls.map((url) => (
+                          <li
+                            key={url}
+                            className="truncate font-mono text-[11px] text-muted-foreground"
+                          >
+                            {url}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 </li>
               );

@@ -164,6 +164,52 @@ describe("runPreflight", () => {
     });
   });
 
+  it("a firecrawl source plans with page-title focus labels and its URL boundary (U5)", async () => {
+    const ctx = ctxWith(
+      [
+        [grantRow()], // getActiveGrant
+        [{ cursor: { nextIndex: 1 }, version: 2, last_advanced_at: null }],
+        [
+          {
+            source_item_id: "https://example.com/pricing",
+            snapshot: {
+              title: "Acme Pricing",
+              finalUrl: "https://example.com/pricing",
+            },
+          },
+          { source_item_id: "https://example.com/about", snapshot: null },
+        ],
+      ],
+      {
+        sources: [
+          {
+            id: "src-web",
+            source_family: "firecrawl",
+            source_binding_key: "web-extract",
+            enabled: true,
+            boundary: { urls: ["https://example.com/pricing"], maxPages: 3 },
+          },
+        ] as never,
+      },
+    );
+    const result = await runPreflight(ctx);
+    expect(result.status).toBe("succeeded");
+    const plan = result.output?.plan as unknown as PreflightPlan;
+    expect(plan.sources[0]).toMatchObject({
+      sourceFamily: "firecrawl",
+      grantStatus: "active",
+      boundary: { urls: ["https://example.com/pricing"], maxPages: 3 },
+    });
+    // Focus labels come from the family adapter: page title, else the URL.
+    expect(plan.focus).toEqual([
+      { key: "firecrawl:https://example.com/pricing", label: "Acme Pricing" },
+      {
+        key: "firecrawl:https://example.com/about",
+        label: "https://example.com/about",
+      },
+    ]);
+  });
+
   it("a revoked grant is reported by status", async () => {
     const ctx = ctxWith([[grantRow({ status: "revoked" })], [], []], {
       sources: [

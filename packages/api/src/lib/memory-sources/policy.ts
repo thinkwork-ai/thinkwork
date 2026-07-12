@@ -71,9 +71,147 @@ export type BoundaryDimension =
       kind: "allowlist";
       default: readonly string[];
       domain: readonly string[];
-    };
+    }
+  /**
+   * URL envelope over an OPEN value domain (U5). Values on BOTH sides are
+   * strings, each either an exact https URL (no credentials; normalized
+   * host + path, fragment dropped, query preserved) or a bounded domain
+   * rule `domain:<host>` covering that exact host with every path — never
+   * subdomains (`domain:example.com` does NOT cover `www.example.com`).
+   * Envelope semantics: every requested value must sit inside some grant
+   * value — an exact URL inside an equal exact URL or inside a granted
+   * domain rule for its host; a requested domain rule only inside an
+   * EQUAL granted domain rule. The default is [] — nothing readable.
+   * Malformed values fail closed on either side.
+   */
+  | { kind: "urlSet"; default: readonly string[] };
 
 export type BoundarySchema = Record<string, BoundaryDimension>;
+
+// ---------------------------------------------------------------------------
+// urlSet value parsing (U5)
+// ---------------------------------------------------------------------------
+
+/** A parsed urlSet entry: one exact page or one bounded host rule. */
+export type UrlSetEntry =
+  | { kind: "url"; url: string }
+  | { kind: "domain"; host: string };
+
+const DOMAIN_RULE_PREFIX = "domain:";
+/** Hostname: lowercase labels, at least one dot, no wildcards/ports/paths. */
+const HOST_RULE_RE =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+/**
+ * PURE: canonicalize an exact URL for envelope comparison and evidence
+ * identity. https-only, credential-free; the fragment is dropped, the host
+ * is lowercased (URL does this), the default port is elided, trailing
+ * slashes collapse ("/a/" === "/a", "" === "/"), and the query string is
+ * PRESERVED (distinct queries are distinct pages). Throws on anything
+ * unparsable — callers fail closed.
+ */
+export function normalizeExactUrl(raw: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`'${raw}' is not a valid URL`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`'${raw}' must use https`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(`'${raw}' must not contain credentials`);
+  }
+  const path = parsed.pathname.replace(/\/+$/, "") || "/";
+  return `https://${parsed.host}${path}${parsed.search}`;
+}
+
+/**
+ * PURE: parse one urlSet value into an exact-URL or domain-rule entry.
+ * Throws (fail closed) on malformed values — wildcards, non-https URLs,
+ * credentials, hosts with paths/ports, single-label hosts.
+ */
+export function parseUrlSetEntry(value: string): UrlSetEntry {
+  if (value.startsWith(DOMAIN_RULE_PREFIX)) {
+    const host = value.slice(DOMAIN_RULE_PREFIX.length);
+    if (!HOST_RULE_RE.test(host)) {
+      throw new Error(
+        `'${value}' is not a valid domain rule — expected domain:<lowercase-host> with no wildcards, ports, or paths`,
+      );
+    }
+    return { kind: "domain", host };
+  }
+  return { kind: "url", url: normalizeExactUrl(value) };
+}
+
+/**
+ * PURE: is one requested urlSet entry inside the granted entries?
+ * exact-in-exact is normalized equality; exact-in-domain is exact host
+ * equality (no subdomain widening); domain-in-domain is host equality
+ * (there is no "broader" rule shape in V1).
+ */
+function urlEntryWithin(
+  requested: UrlSetEntry,
+  granted: readonly UrlSetEntry[],
+): boolean {
+  for (const grant of granted) {
+    if (requested.kind === "url") {
+      if (grant.kind === "url" && grant.url === requested.url) return true;
+      if (
+        grant.kind === "domain" &&
+        new URL(requested.url).hostname === grant.host
+      ) {
+        return true;
+      }
+    } else if (grant.kind === "domain" && grant.host === requested.host) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * PURE: is an already-fetched URL (e.g. a post-redirect FINAL url) inside a
+ * urlSet envelope? Malformed inputs and malformed envelope values are
+ * treated as NOT allowed (fail closed) rather than throwing — this runs on
+ * provider-controlled data mid-acquisition.
+ */
+export function isUrlWithinUrlSet(
+  url: string,
+  values: readonly string[],
+): boolean {
+  let requested: UrlSetEntry;
+  try {
+    requested = { kind: "url", url: normalizeExactUrl(url) };
+  } catch {
+    return false;
+  }
+  const granted: UrlSetEntry[] = [];
+  for (const value of values) {
+    try {
+      granted.push(parseUrlSetEntry(value));
+    } catch {
+      // Skip malformed grant values: they grant nothing.
+    }
+  }
+  return urlEntryWithin(requested, granted);
+}
+
+/**
+ * PURE: the concrete fetchable URL list from a urlSet boundary value —
+ * exact URLs only, normalized, deduped, sorted. Domain rules select
+ * NOTHING here (V1): they only widen what exact config URLs a grant
+ * allows; the adapter never crawls a domain. Malformed values throw.
+ */
+export function resolveExactUrls(values: readonly string[]): string[] {
+  const urls = new Set<string>();
+  for (const value of values) {
+    const entry = parseUrlSetEntry(value);
+    if (entry.kind === "url") urls.add(entry.url);
+  }
+  return [...urls].sort();
+}
 
 /**
  * Defaults track the runtime fallbacks in stages.ts / snapshots.ts
@@ -102,6 +240,16 @@ export const BOUNDARY_SCHEMAS: Record<string, BoundarySchema> = {
       default: ["companies"],
       domain: ["companies", "relations"],
     },
+  },
+  // U5: Firecrawl web enrichment. `urls` is the readable envelope (default
+  // [] = nothing readable); `maxPages` caps scrapes per run. Defaults/caps
+  // track the adapter's runtime constants (adapters/firecrawl.ts).
+  firecrawl: {
+    urls: { kind: "urlSet", default: [] },
+    maxPages: { kind: "cap", default: 5, min: 1, max: 50 },
+    projectBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },
   },
 };
 
@@ -148,6 +296,28 @@ function assertBoundarySideValid(
       }
       continue;
     }
+    if (dimension.kind === "urlSet") {
+      if (!Array.isArray(value)) {
+        throw new MemoryAuthorizationError(
+          `${side} boundary key '${key}' (${JSON.stringify(value)}) must be an array of exact https URLs or domain:<host> rules`,
+        );
+      }
+      for (const item of value) {
+        if (typeof item !== "string") {
+          throw new MemoryAuthorizationError(
+            `${side} boundary key '${key}' includes ${JSON.stringify(item)}, which is not a string URL/domain rule`,
+          );
+        }
+        try {
+          parseUrlSetEntry(item);
+        } catch (err) {
+          throw new MemoryAuthorizationError(
+            `${side} boundary key '${key}' includes ${JSON.stringify(item)}: ${(err as Error).message}`,
+          );
+        }
+      }
+      continue;
+    }
     if (!Array.isArray(value)) {
       throw new MemoryAuthorizationError(
         `${side} boundary key '${key}' (${JSON.stringify(value)}) must be an array of governed values (${dimension.domain.join(", ")})`,
@@ -179,6 +349,27 @@ export function assertGrantBoundaryValid(
     schemaFor(sourceFamily),
     sourceFamily,
     "grant",
+  );
+}
+
+/**
+ * PURE: validate a SOURCE-CONFIG boundary against its family schema (the
+ * source-config side of assertGrantBoundaryValid) — used by the
+ * setMemorySourceConfig mutation so operators get an immediate error for
+ * typo'd keys or malformed values before a config row is stored. Whether
+ * the config also fits inside the grant envelope is checked separately
+ * (assertBoundaryWithin) when a grant exists.
+ */
+export function assertSourceConfigBoundaryValid(
+  configBoundary: Record<string, unknown>,
+  options: { sourceFamily: string },
+): void {
+  const sourceFamily = options?.sourceFamily;
+  assertBoundarySideValid(
+    configBoundary,
+    schemaFor(sourceFamily),
+    sourceFamily,
+    "source-config",
   );
 }
 
@@ -221,6 +412,22 @@ export function assertBoundaryWithin(
         throw new MemoryAuthorizationError(
           `source-config boundary key '${key}' (${JSON.stringify(requested)}) exceeds the grant envelope cap ${JSON.stringify(allowance)}`,
         );
+      }
+      continue;
+    }
+    if (dimension.kind === "urlSet") {
+      // Side validation above proved parseability on both sides; only the
+      // envelope relation is left. An empty/omitted grant value allows
+      // exactly nothing.
+      const grantedEntries = (allowance as readonly string[]).map(
+        parseUrlSetEntry,
+      );
+      for (const item of requested as readonly string[]) {
+        if (!urlEntryWithin(parseUrlSetEntry(item), grantedEntries)) {
+          throw new MemoryAuthorizationError(
+            `source-config boundary key '${key}' includes ${JSON.stringify(item)}, which is outside the granted URL envelope`,
+          );
+        }
       }
       continue;
     }
