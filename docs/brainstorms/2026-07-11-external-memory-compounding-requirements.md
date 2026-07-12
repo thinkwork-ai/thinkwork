@@ -45,6 +45,7 @@ stewardship, or indiscriminate copying of source systems into Hindsight.
 ## Key Flows
 
 - F1. **Scheduled personal memory processing**
+
   - **Trigger:** The user's saved schedule fires.
   - **Actors:** A1, A2, A6.
   - **Steps:** Preflight ranks focus areas from bounded activity signals; saved source opt-ins and
@@ -56,6 +57,7 @@ stewardship, or indiscriminate copying of source systems into Hindsight.
   - **Covered by:** R1-R3, R4, R6, R8-R10, R19.
 
 - F2. **Manual interactive personal run**
+
   - **Trigger:** The user selects Run now.
   - **Actors:** A1, A2, A6.
   - **Steps:** The same preflight produces a proposed plan; the workflow pauses for HITL review; the
@@ -66,6 +68,7 @@ stewardship, or indiscriminate copying of source systems into Hindsight.
   - **Covered by:** R4, R5, R8-R10.
 
 - F3. **Operator-managed shared compounding**
+
   - **Trigger:** A configured Space or company workflow runs manually or on schedule.
   - **Actors:** A3, A5, A6.
   - **Steps:** The workflow reads only explicitly shared sources; processes evidence into the selected
@@ -76,6 +79,7 @@ stewardship, or indiscriminate copying of source systems into Hindsight.
   - **Covered by:** R1-R3, R7-R8, R11-R16, R19.
 
 - F4. **Entity resolution**
+
   - **Trigger:** New evidence refers to an entity not already linked through an exact source mapping or
     strong, non-conflicting identity key.
   - **Actors:** A3, A2, A5.

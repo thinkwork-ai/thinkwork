@@ -1001,7 +1001,11 @@ describe("memory_stage step", () => {
       (r) => r.evidence_type === "step_output",
     ) as {
       summary?: {
-        output?: { stage?: string; counts?: { extracted?: number }; batchId?: string };
+        output?: {
+          stage?: string;
+          counts?: { extracted?: number };
+          batchId?: string;
+        };
       };
     };
     expect(output?.summary?.output?.stage).toBe("extract");

@@ -9,7 +9,7 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
   return {
     getDb: handle,
     getHindsightDb: handle,
-    resolveHindsightDb: <T,>(primary: T) => primary,
+    resolveHindsightDb: <T>(primary: T) => primary,
     hindsightSql: actual.hindsightSql,
   };
 });

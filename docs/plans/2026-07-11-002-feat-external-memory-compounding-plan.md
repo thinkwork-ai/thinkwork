@@ -113,24 +113,24 @@ The identifiers below preserve the origin without reinterpretation.
 
 ## Key Technical Decisions
 
-| Decision | Choice | Rationale |
-| --- | --- | --- |
-| Durable truth | Keep `workflow_runs` as execution truth and add a separate Memory Source ledger for durable source/version/derivation state | Run evidence expires; retraction and replay outlive an execution. |
-| Managed definition | Add a platform-owned `personal-memory-v1` workflow blueprint and thin per-user/per-scope processor configurations | Product upgrades publish one blueprint version without hand-editing hundreds of user definitions. |
-| Long work | Add a native asynchronous `memory_stage` workflow step that parks on a task token and delegates bounded jobs | Avoid opaque agent prompts and synchronous Lambda timeout coupling while preserving node-level execution. |
-| Manual review | Add a restricted trigger predicate to approval steps; `manual` waits, `schedule` records a skipped approval | One definition serves both modes and the skip is visible. |
-| Source cadence | Pull from saved checkpoints during a workflow; treat Twenty webhooks only as dirty signals | Schedules, retries, and replay remain understandable in one system. |
-| Raw evidence | Store secrets nowhere; keep durable metadata/hash/refs in Postgres and encrypted raw/normalized snapshots in S3 for 30 days by default (tenant configurable 7-90) | Enough for immediate replay/debug without indefinite mailbox/document duplication. Source refs and derivation lineage remain while claims exist. |
-| Stable Hindsight identity | One replaceable Hindsight document per durable projection, with `document_id=external:<sourceConfigId>:<projectionKey>` | Updates are idempotent and re-extraction does not append duplicate facts. |
-| Retraction | Add `deleteDocument` to the memory adapter only after a pinned 0.8.4 contract test; otherwise use one schema-guarded Hindsight repository seam, never scattered SQL | Makes vendor coupling explicit and testable. |
-| Canonical registry | Add a separate identity domain for entity instances; keep ontology definitions as the rules/type system | “Customer” is a definition; “Acme” is an instance. The UI may colocate them without conflating persistence. |
-| Private identity | Personal evidence may use an existing exact mapping but cannot create tenant mappings or shared resolution cases from private content | Prevents a personal email from becoming a tenant-visible identity side channel. |
-| Shared identity | Shared evidence must resolve deterministically before retain; ambiguous items defer individually to the operator queue | Enforces R15 at the shared-bank boundary. |
-| Wiki identity | Add `canonical_entity_id` to graph entities and Wiki Entity pages, with tenant-scoped uniqueness and redirects for merges | Slug becomes presentation/routing, not identity. |
-| Firecrawl | Reuse `web_extract` for scheduled, allowlisted URL snapshots and hash-based change detection; do not depend on opaque monitor automation | Matches the requested inspectability and the existing single-page product contract. |
-| Email V1 | Ship Gmail behind a provider-neutral mailbox adapter; keep Microsoft Graph as a named parity follow-up after the Gmail privacy/lifecycle tracer passes | Proves the Email family and personal/shared boundary once before doubling provider-specific delta behavior. |
-| Documents | Keep the original in S3/Bedrock KB; parse text directly and use Bedrock Data Automation for PDF/multimodal projection input | Preserves page/multimodal fidelity while giving the extractor a stable, cited representation. |
-| Compile completion | Memory workflow stages wait on the dream ledger, targeted graph ingest, and affected canonical Wiki compile | “Workflow succeeded” means downstream state settled, not merely enqueued. |
+| Decision                  | Choice                                                                                                                                                              | Rationale                                                                                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Durable truth             | Keep `workflow_runs` as execution truth and add a separate Memory Source ledger for durable source/version/derivation state                                         | Run evidence expires; retraction and replay outlive an execution.                                                                                |
+| Managed definition        | Add a platform-owned `personal-memory-v1` workflow blueprint and thin per-user/per-scope processor configurations                                                   | Product upgrades publish one blueprint version without hand-editing hundreds of user definitions.                                                |
+| Long work                 | Add a native asynchronous `memory_stage` workflow step that parks on a task token and delegates bounded jobs                                                        | Avoid opaque agent prompts and synchronous Lambda timeout coupling while preserving node-level execution.                                        |
+| Manual review             | Add a restricted trigger predicate to approval steps; `manual` waits, `schedule` records a skipped approval                                                         | One definition serves both modes and the skip is visible.                                                                                        |
+| Source cadence            | Pull from saved checkpoints during a workflow; treat Twenty webhooks only as dirty signals                                                                          | Schedules, retries, and replay remain understandable in one system.                                                                              |
+| Raw evidence              | Store secrets nowhere; keep durable metadata/hash/refs in Postgres and encrypted raw/normalized snapshots in S3 for 30 days by default (tenant configurable 7-90)   | Enough for immediate replay/debug without indefinite mailbox/document duplication. Source refs and derivation lineage remain while claims exist. |
+| Stable Hindsight identity | One replaceable Hindsight document per durable projection, with `document_id=external:<sourceConfigId>:<projectionKey>`                                             | Updates are idempotent and re-extraction does not append duplicate facts.                                                                        |
+| Retraction                | Add `deleteDocument` to the memory adapter only after a pinned 0.8.4 contract test; otherwise use one schema-guarded Hindsight repository seam, never scattered SQL | Makes vendor coupling explicit and testable.                                                                                                     |
+| Canonical registry        | Add a separate identity domain for entity instances; keep ontology definitions as the rules/type system                                                             | “Customer” is a definition; “Acme” is an instance. The UI may colocate them without conflating persistence.                                      |
+| Private identity          | Personal evidence may use an existing exact mapping but cannot create tenant mappings or shared resolution cases from private content                               | Prevents a personal email from becoming a tenant-visible identity side channel.                                                                  |
+| Shared identity           | Shared evidence must resolve deterministically before retain; ambiguous items defer individually to the operator queue                                              | Enforces R15 at the shared-bank boundary.                                                                                                        |
+| Wiki identity             | Add `canonical_entity_id` to graph entities and Wiki Entity pages, with tenant-scoped uniqueness and redirects for merges                                           | Slug becomes presentation/routing, not identity.                                                                                                 |
+| Firecrawl                 | Reuse `web_extract` for scheduled, allowlisted URL snapshots and hash-based change detection; do not depend on opaque monitor automation                            | Matches the requested inspectability and the existing single-page product contract.                                                              |
+| Email V1                  | Ship Gmail behind a provider-neutral mailbox adapter; keep Microsoft Graph as a named parity follow-up after the Gmail privacy/lifecycle tracer passes              | Proves the Email family and personal/shared boundary once before doubling provider-specific delta behavior.                                      |
+| Documents                 | Keep the original in S3/Bedrock KB; parse text directly and use Bedrock Data Automation for PDF/multimodal projection input                                         | Preserves page/multimodal fidelity while giving the extractor a stable, cited representation.                                                    |
+| Compile completion        | Memory workflow stages wait on the dream ledger, targeted graph ingest, and affected canonical Wiki compile                                                         | “Workflow succeeded” means downstream state settled, not merely enqueued.                                                                        |
 
 ## Data Model
 
@@ -564,15 +564,15 @@ flowchart TB
 
 ## Acceptance Matrix
 
-| Origin example | Primary proof |
-| --- | --- |
-| AE1 | U4 identity integration plus U1/U5/U6/U7 fixtures and U8 golden set produce one canonical Entity/page with cross-source citations. |
-| AE2 | U3 browser/integration test shows editable preflight, approval pause, approved-plan version, and downstream evidence. |
-| AE3 | U6 provider tests and deployed schedule prove an unapproved Gmail label is excluded and reported. |
-| AE4 | U3/U6 privacy tests prove private ambiguous email remains in User Bank, creates no shared mapping/page, and exposes no content to the operator queue. |
-| AE5 | U4 Link/Merge repair browser test shows affected evidence, memory, graph, and Wiki preview and resumes deferred items after decision. |
-| AE6 | U2/U4/U7 lifecycle integration proves current KB passage, superseded Hindsight claim removal, corroboration survival, and refreshed Wiki citation. |
-| AE7 | U2/U3/U4 authorization integration proves shared workflows reject `user_*` inputs and enumerate every write from explicit shared sources. |
+| Origin example | Primary proof                                                                                                                                         |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AE1            | U4 identity integration plus U1/U5/U6/U7 fixtures and U8 golden set produce one canonical Entity/page with cross-source citations.                    |
+| AE2            | U3 browser/integration test shows editable preflight, approval pause, approved-plan version, and downstream evidence.                                 |
+| AE3            | U6 provider tests and deployed schedule prove an unapproved Gmail label is excluded and reported.                                                     |
+| AE4            | U3/U6 privacy tests prove private ambiguous email remains in User Bank, creates no shared mapping/page, and exposes no content to the operator queue. |
+| AE5            | U4 Link/Merge repair browser test shows affected evidence, memory, graph, and Wiki preview and resumes deferred items after decision.                 |
+| AE6            | U2/U4/U7 lifecycle integration proves current KB passage, superseded Hindsight claim removal, corroboration survival, and refreshed Wiki citation.    |
+| AE7            | U2/U3/U4 authorization integration proves shared workflows reject `user_*` inputs and enumerate every write from explicit shared sources.             |
 
 ## Verification Strategy
 
@@ -599,21 +599,21 @@ Recovery is forward-only: pause a source/workflow, inspect the durable ledger, c
 
 ## Risks and Mitigations
 
-| Risk | Mitigation |
-| --- | --- |
-| Sensitive personal mail leaks into shared memory | Scope check at config, run, adapter, retain, and graph boundaries; personal credentials rejected by shared workflows; no User Bank enumeration. |
-| A connection owner is mistaken for shared authorization | Persist versioned source grants separately from credential ownership; shared runs require a current grant and revocation stops acquisition immediately. |
-| “Magic” preflight changes scope | Preflight ranks only saved source-config IDs/boundaries; approval overrides can narrow, never expand. |
-| Duplicate customer pages | Canonical-ID uniqueness, exact mapping precedence, operator queue, merge redirects, and dirty-ID materialization. |
-| Provider cursor expiry/gaps | Source-specific bounded full reconciliation with explicit execution evidence and checkpoint CAS. |
-| Hindsight delete semantics drift | Pinned contract test and one schema-guarded fallback seam; retraction flag stays off until proven. |
-| Long imports time out | Task-token asynchronous stage jobs, bounded pages, resumable cursors, and schedule concurrency controls. |
-| Document update leaves stale claims | Manifest editions, stable projection IDs, derivation graph, source-aware retraction, and affected-only compile. |
-| Retraction partially succeeds across databases | Idempotent pending→verified→retracted saga, durable retry state, per-step evidence, and no claim/page deactivation until support state is committed. |
-| Wiki reports success before materialization | Workflow waits on dream/graph/wiki terminal ledgers; dead graph enqueue gets an integration regression test. |
-| Evidence store becomes a shadow mailbox/CRM | 30-day encrypted snapshot lifecycle, durable metadata only, source remains authoritative, no whole-corpus ingestion. |
-| Source adapter compromises workflow worker | Native adapter allowlist, outbound host allowlists, tenant credential resolution, bounded payloads, and no arbitrary HTTP from config. |
-| External content prompt-injects the processor | Treat source text as untrusted data, use schema-constrained extraction, separate policy from content, and prohibit tool/scope decisions from extraction output. |
+| Risk                                                    | Mitigation                                                                                                                                                      |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sensitive personal mail leaks into shared memory        | Scope check at config, run, adapter, retain, and graph boundaries; personal credentials rejected by shared workflows; no User Bank enumeration.                 |
+| A connection owner is mistaken for shared authorization | Persist versioned source grants separately from credential ownership; shared runs require a current grant and revocation stops acquisition immediately.         |
+| “Magic” preflight changes scope                         | Preflight ranks only saved source-config IDs/boundaries; approval overrides can narrow, never expand.                                                           |
+| Duplicate customer pages                                | Canonical-ID uniqueness, exact mapping precedence, operator queue, merge redirects, and dirty-ID materialization.                                               |
+| Provider cursor expiry/gaps                             | Source-specific bounded full reconciliation with explicit execution evidence and checkpoint CAS.                                                                |
+| Hindsight delete semantics drift                        | Pinned contract test and one schema-guarded fallback seam; retraction flag stays off until proven.                                                              |
+| Long imports time out                                   | Task-token asynchronous stage jobs, bounded pages, resumable cursors, and schedule concurrency controls.                                                        |
+| Document update leaves stale claims                     | Manifest editions, stable projection IDs, derivation graph, source-aware retraction, and affected-only compile.                                                 |
+| Retraction partially succeeds across databases          | Idempotent pending→verified→retracted saga, durable retry state, per-step evidence, and no claim/page deactivation until support state is committed.            |
+| Wiki reports success before materialization             | Workflow waits on dream/graph/wiki terminal ledgers; dead graph enqueue gets an integration regression test.                                                    |
+| Evidence store becomes a shadow mailbox/CRM             | 30-day encrypted snapshot lifecycle, durable metadata only, source remains authoritative, no whole-corpus ingestion.                                            |
+| Source adapter compromises workflow worker              | Native adapter allowlist, outbound host allowlists, tenant credential resolution, bounded payloads, and no arbitrary HTTP from config.                          |
+| External content prompt-injects the processor           | Treat source text as untrusted data, use schema-constrained extraction, separate policy from content, and prohibit tool/scope decisions from extraction output. |
 
 ## Documentation Deliverables
 

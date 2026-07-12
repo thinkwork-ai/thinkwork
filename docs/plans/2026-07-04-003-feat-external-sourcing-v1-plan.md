@@ -223,21 +223,21 @@ Run state machine: `queued → running → retained | no_results | failed`; `ret
 
 Unit index:
 
-| U-ID | Title | Key files | Depends on |
-|---|---|---|---|
-| U1 | New-entity event emission | `packages/api/src/lib/knowledge-graph/repository.ts`, `packages/api/src/handlers/knowledge-graph-observations-ingest.ts` | — |
-| U2 | research_runs ledger + enqueue + sweep | `packages/database-pg/src/schema/`, `packages/api/src/lib/research/` | U1 |
-| U3 | Budgets, coalescing, deferral | `packages/api/src/lib/research/`, `packages/api/src/lib/sandbox-quota.ts` patterns | U2 |
-| U4 | Zero-credential fetch layer | `packages/api/src/lib/research/sources/` | — |
-| U5 | Research routine + run worker | `packages/lambda/`, routine repo | U2, U4 |
-| U6 | Retention with lot tags | `packages/api/src/lib/memory/hindsight-retain-params.ts` | U5 |
-| U7 | Lot threading into KG evidence | `packages/api/src/lib/knowledge-graph/observations-source.ts` | U6 |
-| U8 | Wiki citation channel + coverage | `packages/api/src/lib/wiki/`, `packages/database-pg/src/schema/wiki.ts` | U7 |
-| U9 | GraphQL + UI + CLI operator surface | `packages/api/src/graphql/`, `apps/web/`, `apps/cli/` | U2 (status), U8 (display) |
-| U10 | Lot recall | `packages/api/src/lib/knowledge-graph/repository.ts`, wiki enqueue | U7, U8 |
-| U11 | Spike Arm A: integrations.sh accuracy verdict | `docs/solutions/` | — |
-| U12 | Live seam-swap + deployed E2E gate | terraform, dev stage | U1–U10 |
-| U13 | Spike Arm B: Executor hands-on verdict | `docs/solutions/` | — |
+| U-ID | Title                                         | Key files                                                                                                                | Depends on                |
+| ---- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| U1   | New-entity event emission                     | `packages/api/src/lib/knowledge-graph/repository.ts`, `packages/api/src/handlers/knowledge-graph-observations-ingest.ts` | —                         |
+| U2   | research_runs ledger + enqueue + sweep        | `packages/database-pg/src/schema/`, `packages/api/src/lib/research/`                                                     | U1                        |
+| U3   | Budgets, coalescing, deferral                 | `packages/api/src/lib/research/`, `packages/api/src/lib/sandbox-quota.ts` patterns                                       | U2                        |
+| U4   | Zero-credential fetch layer                   | `packages/api/src/lib/research/sources/`                                                                                 | —                         |
+| U5   | Research routine + run worker                 | `packages/lambda/`, routine repo                                                                                         | U2, U4                    |
+| U6   | Retention with lot tags                       | `packages/api/src/lib/memory/hindsight-retain-params.ts`                                                                 | U5                        |
+| U7   | Lot threading into KG evidence                | `packages/api/src/lib/knowledge-graph/observations-source.ts`                                                            | U6                        |
+| U8   | Wiki citation channel + coverage              | `packages/api/src/lib/wiki/`, `packages/database-pg/src/schema/wiki.ts`                                                  | U7                        |
+| U9   | GraphQL + UI + CLI operator surface           | `packages/api/src/graphql/`, `apps/web/`, `apps/cli/`                                                                    | U2 (status), U8 (display) |
+| U10  | Lot recall                                    | `packages/api/src/lib/knowledge-graph/repository.ts`, wiki enqueue                                                       | U7, U8                    |
+| U11  | Spike Arm A: integrations.sh accuracy verdict | `docs/solutions/`                                                                                                        | —                         |
+| U12  | Live seam-swap + deployed E2E gate            | terraform, dev stage                                                                                                     | U1–U10                    |
+| U13  | Spike Arm B: Executor hands-on verdict        | `docs/solutions/`                                                                                                        | —                         |
 
 ### U1. New-entity event emission from the KG merge path
 
@@ -375,15 +375,15 @@ Unit index:
 
 ## Verification Contract
 
-| Gate | Command / evidence | Applies to |
-|---|---|---|
-| Types + lint + tests + format | `pnpm -r --if-present typecheck && pnpm -r --if-present lint && pnpm -r --if-present test && pnpm format:check` | every PR |
-| Package suites (full, not just new tests) | `pnpm --filter @thinkwork/api test`, `pnpm --filter @thinkwork/database-pg test` | U1–U10 |
-| Migration gate | `pnpm --filter @thinkwork/database-pg db:generate`; migration precheck CI vs dev; hand-rolled SQL (if any) applied via psql before drift gate | U2, U8 |
-| Codegen | `pnpm schema:build` + `pnpm --filter @thinkwork/{api,web,cli,mobile} codegen` after GraphQL changes | U8, U9 |
-| Lambda wiring | new handlers present in both `scripts/build-lambdas.sh` and `handlers.tf`; deployed `get-function-configuration` shows expected env | U2, U5, U12 |
-| Deployed E2E | dev-stage demo scene: real thread mention → cited Entity-page fact → live recall (plain-node smoke + pixels; never a bare lambda invoke) | U12 |
-| Spike criteria | pre-declared pass criteria in each verdict doc, graded | U11, U13 |
+| Gate                                      | Command / evidence                                                                                                                            | Applies to  |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Types + lint + tests + format             | `pnpm -r --if-present typecheck && pnpm -r --if-present lint && pnpm -r --if-present test && pnpm format:check`                               | every PR    |
+| Package suites (full, not just new tests) | `pnpm --filter @thinkwork/api test`, `pnpm --filter @thinkwork/database-pg test`                                                              | U1–U10      |
+| Migration gate                            | `pnpm --filter @thinkwork/database-pg db:generate`; migration precheck CI vs dev; hand-rolled SQL (if any) applied via psql before drift gate | U2, U8      |
+| Codegen                                   | `pnpm schema:build` + `pnpm --filter @thinkwork/{api,web,cli,mobile} codegen` after GraphQL changes                                           | U8, U9      |
+| Lambda wiring                             | new handlers present in both `scripts/build-lambdas.sh` and `handlers.tf`; deployed `get-function-configuration` shows expected env           | U2, U5, U12 |
+| Deployed E2E                              | dev-stage demo scene: real thread mention → cited Entity-page fact → live recall (plain-node smoke + pixels; never a bare lambda invoke)      | U12         |
+| Spike criteria                            | pre-declared pass criteria in each verdict doc, graded                                                                                        | U11, U13    |
 
 ## Definition of Done
 

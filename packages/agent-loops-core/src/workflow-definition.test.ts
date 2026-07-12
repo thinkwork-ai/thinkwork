@@ -361,9 +361,7 @@ describe("validateWorkflowDefinition — full step taxonomy (THINK-214)", () => 
   it("rejects a memory_stage step missing its stage", () => {
     const result = validateWorkflowDefinition({
       version: 1,
-      steps: [
-        { id: "m1", kind: "memory_stage", processorConfigId: "cfg-1" },
-      ],
+      steps: [{ id: "m1", kind: "memory_stage", processorConfigId: "cfg-1" }],
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors[0]?.field).toBe("steps[0].stage");
