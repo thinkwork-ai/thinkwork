@@ -1187,12 +1187,18 @@ importers:
 
   packages/factory:
     dependencies:
+      '@linear/sdk':
+        specifier: ^88.1.0
+        version: 88.1.0(graphql@16.13.2)
       better-sqlite3:
         specifier: ^12.2.0
         version: 12.11.1
       commander:
         specifier: ^14.0.0
         version: 14.0.3
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13
@@ -5494,6 +5500,10 @@ packages:
 
   '@lezer/yaml@1.0.4':
     resolution: {integrity: sha512-2lrrHqxalACEbxIbsjhqGpSW8kWpUKuY6RHgnSAFZa6qK62wvnPxA8hGOwOoDbwHcOFs5M4o27mjGu+P7TvBmw==}
+
+  '@linear/sdk@88.1.0':
+    resolution: {integrity: sha512-l0U5O2hFcNFYbjH+YQXJyO14obFX5mb6jdSjWstAkoDaIwy6oBnkd4P9uPy/4PnUDfSf5bPWSI9STCxo5STFxw==}
+    engines: {node: '>=18.x'}
 
   '@malept/cross-spawn-promise@2.0.0':
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
@@ -21607,6 +21617,12 @@ snapshots:
       '@lezer/common': 1.5.2
       '@lezer/highlight': 1.2.3
       '@lezer/lr': 1.4.8
+
+  '@linear/sdk@88.1.0(graphql@16.13.2)':
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.13.2)
+    transitivePeerDependencies:
+      - graphql
 
   '@malept/cross-spawn-promise@2.0.0':
     dependencies:
