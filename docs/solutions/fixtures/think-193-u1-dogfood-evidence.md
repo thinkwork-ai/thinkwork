@@ -70,6 +70,7 @@ IDs: tenant `0015953e-…da63`, processor `0eb1c5c1`, source `44a5684b`, workflo
 probe company `6bb03870` ("Acme Probe (THINK-193 U1)"), bank `tenant_0015953e-…da63`.
 
 ### Pre-fix pilot-data backfill (deterministic repair, independently verified)
+
 1. Active edges to non-active evidence retracted (3); duplicate identical active claims superseded
    keeping earliest (2); duplicate supports repointed to keepers via insert-or-activate (2).
 2. Temporal closure: superseded single-valued rows closed at successor `effective_from`
@@ -79,21 +80,24 @@ probe company `6bb03870` ("Acme Probe (THINK-193 U1)"), bank `tenant_0015953e-�
    zero-support active claims, unclosed superseded single-valued).
 
 ### Change run c9b55ec8 (probe employees 91→103, updatedAt 14:10:09.437Z)
+
 - acquire: 1 changed / 4 seen (content-sensitive editions; recipe change caused no spurious re-registration)
 - project: claims=3, **claimsCreated=1** (employees only — name/address REUSED active claims;
   duplication bug dead in production), claimsSwept=0, claimsSupported=3
 - Temporal ledger: `77 [01:55:56→10:42:41] superseded · 91 [10:42:41→14:10:09] superseded ·
-  103 [14:10:09→) active` — every ended interval closed
+103 [14:10:09→) active` — every ended interval closed
 - Recall: "Acme Probe (THINK-193 U1) is a company with 103 employees."
 - Verifier: all five invariants 0.
 
 ### Revocation (fail-closed, per-page revalidation deployed)
+
 All grants revoked (status=revoked, grant_version bumped) → run 3fc194d1 FAILED at acquire with
 persisted result: "the memory-source authorization … is revoked — re-grant access before ingestion
 runs"; no provider page read; checkpoint version/cursor unchanged. Re-grant (5df3e168, boundary
 `{maxRecords:200, objects:["companies","relations"]}`) restored acquisition.
 
 ### Retraction saga round-trip (attempt bdbb5f4c, derivation c4dbec96)
+
 - Enqueued 14:13:22Z; **scheduled drainer** (no manual invoke) processed it: status `retracted`,
   attempt_count=1 (provider delete FIRST, then atomic internal finalize).
 - Hindsight document GET → 404; derivation lifecycle `retracted`; zero active claims for the subject.
@@ -102,6 +106,7 @@ runs"; no provider page read; checkpoint version/cursor unchanged. Re-grant (5df
 - Idempotent replay: re-enqueue for the already-retracted derivation returns null (no-op, no new attempt).
 
 ### Source erase (durable aggregate, one operator initiation)
+
 - `beginSourceErase` (atomic: pin + disable + erase_generation bump + marker) + `runSourceErase`:
   4 children retracted inline via Hindsight deletes; destructive S3 cleanup DEFERRED to the drainer
   ("dedicated-role destructive S3 work"); aggregate `pending`.
@@ -113,9 +118,62 @@ runs"; no provider page read; checkpoint version/cursor unchanged. Re-grant (5df
 - DB: evidence_not_deleted=0, payload_residue=0, checkpoints=0, active_claims=0, active_derivations=0.
 
 ### Notes
+
 - One-time evidence re-registration from the extraction-recipe change (depth+objects recorded) was
   expected; in practice the content hash stayed stable for unchanged rows (4 seen), so no churn.
 - U4 design probe: `<!-- claim:id -->` markers do NOT survive into Hindsight-synthesized
   observations; `world` units carry `document_id` — claim-support propagation joins out-of-band
   (unit → document → derivation → evidence → claim edges).
 - Dev DB credential rotation is pending (exposed in local process args during a drift check).
+
+## U3–U7 dogfood evidence summary (recorded at U8, 2026-07-12)
+
+Per-unit AE proofs from the deployed dev stack as each unit merged; consolidated
+here so U8's acceptance run has one evidence trail.
+
+### U3 — managed memory workflows
+
+- **10-step shared run**: the operator-owned shared Memory Workflow executed all
+  ten blueprint steps through the workflow interpreter (preflight → acquire →
+  extract → project → resolve → retain → compound → graph → wiki → finalize)
+  against the Twenty source, with per-stage `memory_run_items` rows and all
+  memory-stage task tokens consumed.
+- **Personal run green**: a personal Memory Automation run (user-scope
+  processor, agent_private workflow, editable preflight on manual runs)
+  completed end-to-end writing only the owner's User Bank — no shared mapping,
+  page, or operator-queue exposure from personal content.
+
+### U4 — canonical identity
+
+- **Canonical backfill (estate migration)**: `scripts/backfill-canonical-entities.ts`
+  ran against dev with exact/strong-only rules: **3,181 canonical entities**
+  created/linked; re-run confirmed **idempotent** (0 new). Unresolved/duplicate
+  candidates reported, not auto-merged (the 137 blank-summary legacy pages were
+  left untouched by design).
+
+### U5 — Firecrawl web source
+
+- **AE1 cross-source join (McPherson Oil)**: a Firecrawl-acquired page for the
+  McPherson Oil website emitted `customer.domain` from the post-redirect host,
+  and the identity graph joined it to the SAME canonical customer as the Twenty
+  CRM record — one canonical entity, one tenant Entity page, citations from both
+  sources.
+
+### U6 / U7 — Gmail + Bedrock KB
+
+- Provider adapters, privacy boundaries (label exclusion, private-content
+  non-exposure), and the KB edition manifest merged with green unit/provider
+  suites (see PRs #3632, #3631). Deployed dogfood specifics are pending below.
+
+<!-- TODO(eric): U6/U7/U8 deployed dogfood specifics — fill in after the U8 deploy:
+  - U6 Gmail dogfood: run id(s), approved-label boundary proof (unapproved label
+    excluded + reported), personal-scope retain evidence, AE3/AE4 citations.
+  - U7 KB dogfood: policy PDF replacement run (new exact retrieval preserved,
+    superseded support retracted, wiki citation refreshed), delete/RETAIN proof.
+  - U8 acceptance: readiness-script output per gate, golden-set PASS run
+    (external-memory golden set, tenant + entity), one manual personal run, one
+    scheduled personal run, one operator shared run, all four source families,
+    one canonical Acme (or McPherson Oil) page, a resolved queue case, and a
+    policy-edition retraction. Also record the erase → re-onboard proof
+    (erase-reonboarding integration test against dev, or a live re-enable).
+-->

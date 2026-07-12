@@ -3,7 +3,7 @@ title: Operating Compiled Memory Pages
 description: Turn page compilation on, compile an agent's memories, bulk-import from journal data, fix bad rankings, and keep an eye on cost.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 This is the hands-on guide for people running compiled Memory pages on a live environment — turning compilation on, triggering compiles, bulk-importing data, investigating bad results, and monitoring cost.
 
@@ -262,6 +262,50 @@ LIMIT 30;
 ```
 
 In practice, a full compile of an agent with a few hundred memories runs $0.50 to $1.00 end-to-end. Ongoing cost per turn (one compile per 5-minute bucket) is a few cents. If you see numbers an order of magnitude higher than that, the planner prompt is probably running away — check the job metrics for a `cap_hit` flag.
+
+## Operating external memory sources (THINK-193 rollout)
+
+External memory sources (Twenty CRM, Firecrawl web, Gmail, Bedrock KB documents — see the [concept overview](/concepts/knowledge/compounding-memory/#external-memory-sources-think-193)) roll out per tenant through **independent gates**, in this order:
+
+1. **Source ledger (shadow)** — a source config plus a current grant per family; acquisition/normalization runs and reports without retaining.
+2. **Personal manual** — users run their Personal Memory Automation by hand, with an editable preflight plan.
+3. **Personal schedule** — the same workflow on a per-workflow `scheduled_jobs` binding.
+4. **Shared workflow** — one Space, then the Tenant processor, reading only granted shared sources.
+5. **Canonical graph/wiki writes** — tenant Entity pages keyed by canonical entity ID.
+
+### The readiness script is the gate
+
+Before enabling each stage, run the per-tenant readiness report against the deployed DB:
+
+```bash
+DATABASE_URL=… pnpm -C packages/api exec tsx \
+  scripts/external-memory-readiness.ts --tenant <tenant-uuid>   # add --json for machines
+```
+
+It reports, per tenant: source ledger state per family (configs, active grants, checkpoint age, evidence lag and lifecycle mix), personal manual/schedule enablement counts, shared processor and wiki enablement, canonical identity health (open resolution cases vs the 200-case/30-day budgets, duplicate canonical candidates, duplicate-canonical-page ids), retraction/erase health (due and dead-lettered attempts, erase marker states), and the S3 snapshot expiration horizon. Each gate prints `OK` or `ATTENTION` with reasons. Checkpoint age and graph-to-wiki lag are deliberately runbook checks here rather than CloudWatch alarms — no deployed metric carries them.
+
+Cross-source quality is scored separately by the golden set (entity precision, duplicate-page rate, claim faithfulness, provenance completeness, retraction correctness):
+
+```bash
+DATABASE_URL=… HINDSIGHT_ENDPOINT=… pnpm -C packages/api exec tsx \
+  scripts/run-external-memory-golden-set.ts --tenant <tenant-uuid> --entity Acme
+```
+
+### Kill switches and rollback
+
+- Per source: `memory_source_configs.enabled` (and each family's grant can be revoked — revocation stops acquisition immediately).
+- Per tenant: `tenants.wiki_compile_enabled` (canonical wiki writes).
+- Stage-global: the `WIKI_SOURCE` Lambda env var (graph vs legacy planner).
+
+Rollback disables new writes but **preserves ledgers** for diagnosis and retraction. Recovery is forward-only: pause the source/workflow, inspect the durable ledgers (`memory_run_items`, `memory_evidence_items`, `memory_retraction_attempts`), correct the adapter/rule, replay the affected run items, and recompile dirty canonical IDs. Never delete ledgers or reset Hindsight wholesale to recover one source.
+
+### Erase epochs
+
+"Delete this source's data" is a durable, self-finalizing aggregate driven by the `memory-retraction-drainer` (rate 5 minutes): every derivation's Hindsight document is deleted through the retraction saga, every S3 snapshot version under the source prefix is destroyed, and then ALL of the source's evidence rows are **hard-deleted** — the erase marker row and run items remain the audit trail. Because nothing tombstones the evidence unique slot, re-enabling the source later re-acquires identical content cleanly and mints fresh active claims (the erase epoch rule in `upsertClaimsForEvidence`). Dead-lettered attempts surface on the readiness report and the drainer alarms; requeue them with `retryMemoryRetractionAttempt`.
+
+### Alarms
+
+`terraform/modules/app/lambda-api/memory-alarms.tf` (log-metric filters over existing lines; alarm actions unwired by default) covers: drainer per-attempt errors, sustained drainer dead-letters, memory-stage-worker `status=failed` completions, worker/drainer Lambda crashes, and wiki-compile DLQ depth. Workflow-interpreter execution failures alarm from the Step Functions `ExecutionsFailed`/`ExecutionsTimedOut` metrics (`terraform/modules/app/workflow-interpreter-stepfunctions/alarms.tf`).
 
 ## Related pages
 

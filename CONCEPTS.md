@@ -207,6 +207,30 @@ The recall unit for externally-sourced knowledge: every research run stamps its 
 
 The force-graph exploration state entered by clicking a node: the node's 2-degree neighborhood stays at full opacity with node and relationship labels while everything else dims in place — global layout positions never move. Oversized neighborhoods degrade silently to 1 degree with a truncation indicator; clicking a lit neighbor traverses focus, clicking empty canvas returns to the overview.
 
+### Memory Source Family
+
+One of the four V1 external-source integrations feeding compounding memory (THINK-193): `twenty` (CRM), `firecrawl` (web), `email` (Gmail behind a provider-neutral adapter), `bedrock_kb` (knowledge-base documents). Each family binds under a processor via a source config (boundary + enable flag + erase generation) and requires a separately persisted, versioned source grant (`memory_source_authorizations`) — credential ownership is never authorization. Families enable and fail independently; one adapter's outage never requires disabling the others.
+
+### Processor Mode
+
+The two-mode split of memory processors: `personal` (one per user, target scope `user`, writes only that user's private bank, provisioned lazily by `ensurePersonalMemoryAutomation`) and `shared` (operator-owned, one per Space/Tenant target, reads only explicitly granted shared sources, rejects `user_*` inputs). Both drive the same code-owned workflow blueprint through the workflow interpreter.
+
+### Claims / Evidence / Derivations
+
+The three-ledger provenance spine of external memory. **Evidence** (`memory_evidence_items`) is one acquired item edition — source id + content-sensitive version in a unique slot, bounded snapshot, lifecycle. **Claims** (`memory_claims`) are ontology-shaped facts (subject key, predicate, value + hash, effective interval, status active/superseded/retracted) supported by claim-evidence edges; single-valued predicates supersede, zero-support claims sweep closed. **Derivations** (`memory_derivations`) record evidence → Hindsight-document lineage so retraction can find and delete exactly what a source projected.
+
+### Erase Epoch
+
+The post-erase state of a memory source (`memory_source_configs.erase_generation` > 0). A source erase is a durable self-finalizing aggregate: saga-retract every derivation's provider document, delete S3 snapshot versions, then hard-DELETE all the source's evidence rows outright (edges and derivations go with them; the erase marker and run items remain the audit trail). Hard deletion is what makes re-onboarding work: no tombstone occupies the evidence unique slot, and `upsertClaimsForEvidence` mints a NEW claim edition when an exact-fingerprint match is non-active with zero remaining evidence edges on an erased source — while ordinary older-edition reprocessing (whose retracted edges survive as rows) still never resurrects a dead value.
+
+### Canonical Identity
+
+The tenant-level entity resolution layer (`identity.*` schema): canonical entities with normalized names, exact source mappings that always win, natural-key identity claims (name/domain/email hashes), and the Resolution Queue (`entity_resolution_cases`, budgeted at 200 open cases / 30-day expiry) for ambiguous matches. Canonical entity ID — not slug or title — is the authoritative key for tenant wiki Entity pages (partial unique: one live page per canonical id). Cross-source convergence (CRM + web + email + document naming the same customer) is scored by the external-memory golden set.
+
+### External-Memory Rollout Gates
+
+The independent enablement ladder for external memory, verified per tenant by `packages/api/scripts/external-memory-readiness.ts` (JSON + table): source ledger shadow mode → personal manual → personal schedule → one Space workflow → tenant workflow → canonical graph/wiki writes. Kill switches: per-source `enabled`, per-tenant `tenants.wiki_compile_enabled`, stage-global `WIKI_SOURCE`. Rollback disables new writes but preserves ledgers for diagnosis and retraction; recovery is forward-only (pause, inspect, correct, replay, recompile).
+
 ## Living Artifacts
 
 ### Living Canvas
