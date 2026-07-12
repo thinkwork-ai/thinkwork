@@ -46,17 +46,19 @@ import {
   type McpServer,
 } from "@/lib/mcp-api";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
+import { SettingsConnections } from "@/components/settings/SettingsConnections";
 
-const MCP_SERVERS_ROUTE = "/settings/mcp-servers";
-const PLUGIN_MCPS_ROUTE = "/settings/mcp-servers/plugins";
-const DATASOURCE_MCPS_ROUTE = "/settings/mcp-servers/data-sources";
+const CONNECTIONS_ROUTE = "/settings/mcp-servers";
+const MCP_SERVERS_ROUTE = "/settings/mcp-servers/servers";
 
-type McpServersTab = "servers" | "plugins" | "data-sources";
+type ConnectionsTab = "connections" | "servers";
 
-function tabForPath(pathname: string): McpServersTab {
-  if (pathname.startsWith(PLUGIN_MCPS_ROUTE)) return "plugins";
-  if (pathname.startsWith(DATASOURCE_MCPS_ROUTE)) return "data-sources";
-  return "servers";
+function tabForPath(pathname: string): ConnectionsTab {
+  // The merged MCP list lives at /servers; the retired /plugins and
+  // /data-sources paths redirect there at the route level. The section index
+  // is the Connections tab (per-user integrations).
+  if (pathname.startsWith(MCP_SERVERS_ROUTE)) return "servers";
+  return "connections";
 }
 
 // Content-fit column: shrink to the widest cell instead of sharing leftover
@@ -161,8 +163,8 @@ export function SettingsMcpServers() {
     [tenantSlug, load],
   );
 
-  const columns = useMemo<ColumnDef<McpServer>[]>(
-    () => [
+  const makeColumns = useCallback(
+    (kind: "servers" | "data-sources"): ColumnDef<McpServer>[] => [
       {
         accessorKey: "name",
         header: "Name",
@@ -183,7 +185,7 @@ export function SettingsMcpServers() {
       },
       // Datasource MCPs: no URL column — Source / Instance / Database render
       // as separate content-fit columns instead.
-      ...(activeTab === "data-sources"
+      ...(kind === "data-sources"
         ? ([
             {
               id: "source",
@@ -302,77 +304,72 @@ export function SettingsMcpServers() {
         },
       },
     ],
-    [activeTab, pending, toggle],
+    [pending, toggle],
+  );
+  const serverColumns = useMemo(() => makeColumns("servers"), [makeColumns]);
+  const dataSourceColumns = useMemo(
+    () => makeColumns("data-sources"),
+    [makeColumns],
   );
 
   usePageHeaderActions({
-    title: "MCP Servers",
-    breadcrumbs: [{ label: "MCP Servers" }],
+    title: "Connections",
+    breadcrumbs: [{ label: "Connections" }],
     tabs: [
+      { to: CONNECTIONS_ROUTE, label: "Connections" },
       { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
-      { to: PLUGIN_MCPS_ROUTE, label: "Plugin MCPs" },
-      { to: DATASOURCE_MCPS_ROUTE, label: "Datasource MCPs" },
     ],
-    action: (
-      <div className="flex items-center gap-1">
-        <TooltipIconButton
-          label="Register data source — give the analyst a Postgres database to query with a read-only, brokered credential."
-          aria-label="Register data source"
-          onClick={() => setRegisterOpen(true)}
-        >
-          <Database className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          label="New MCP Server — register an MCP server for the tenant."
-          aria-label="New MCP Server"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="size-4" />
-        </TooltipIconButton>
-      </div>
-    ),
+    action:
+      activeTab === "servers" ? (
+        <div className="flex items-center gap-1">
+          <TooltipIconButton
+            label="Register data source — give the analyst a Postgres database to query with a read-only, brokered credential."
+            aria-label="Register data source"
+            onClick={() => setRegisterOpen(true)}
+          >
+            <Database className="size-4" />
+          </TooltipIconButton>
+          <TooltipIconButton
+            label="New MCP Server — register an MCP server for the tenant."
+            aria-label="New MCP Server"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="size-4" />
+          </TooltipIconButton>
+        </div>
+      ) : undefined,
     actionKey: `mcp-servers:${activeTab}`,
   });
 
-  const paneByTab: Record<
-    McpServersTab,
-    {
-      title: string;
-      description: string;
-      servers: McpServer[];
-      emptyText: string;
-    }
-  > = {
-    servers: {
-      title: "MCP Servers",
-      description:
-        "The tenant MCP server registry — register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer.",
-      servers: individualServers,
-      emptyText: "No individual MCP servers configured.",
-    },
-    plugins: {
-      title: "Plugin MCPs",
-      description:
-        "MCP servers installed and managed by plugins. Enable or disable them from the plugin's settings.",
-      servers: pluginServers,
-      emptyText: "No MCP servers installed by plugins.",
-    },
-    "data-sources": {
-      title: "Datasource MCPs",
-      description:
-        "Analyst data sources — databases the agent can query through the read-only broker. Each source shows its cluster and database.",
-      servers: dataSourceServers,
-      emptyText: "No data sources registered.",
-    },
-  };
-  const pane = paneByTab[activeTab];
+  if (activeTab === "connections") {
+    return (
+      <SettingsTablePane
+        embedded
+        title="Connections"
+        description="Your personal integrations — connect the accounts your agent works with on your behalf. Credentials are stored per user; other members connect their own."
+        loading={false}
+      >
+        <SettingsConnections />
+      </SettingsTablePane>
+    );
+  }
+
+  const openServer = (serverId: string) =>
+    navigate({
+      to: "/settings/mcp-servers/$serverId",
+      params: { serverId },
+    });
+  const allEmpty =
+    individualServers.length === 0 &&
+    pluginServers.length === 0 &&
+    dataSourceServers.length === 0;
 
   return (
     <>
       <SettingsTablePane
         embedded
-        title={pane.title}
-        description={pane.description}
+        title="MCP Servers"
+        description="The tenant MCP server registry — registered servers, plugin-installed servers, and analyst data sources. Register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
         loading={!servers && !error}
         toolbar={
           error ? (
@@ -387,19 +384,55 @@ export function SettingsMcpServers() {
           )
         }
       >
-        <McpServerSection
-          columns={columns}
-          servers={pane.servers}
-          search={search}
-          fitContent={activeTab === "data-sources"}
-          emptyText={pane.emptyText}
-          onOpen={(serverId) =>
-            navigate({
-              to: "/settings/mcp-servers/$serverId",
-              params: { serverId },
-            })
-          }
-        />
+        <div className="space-y-8">
+          {/* One surface, grouped sections: tenant-registered servers first,
+              then plugin-managed servers, then analyst data sources. Empty
+              groups collapse; a single empty state renders when nothing is
+              configured at all. */}
+          {allEmpty ? (
+            <McpServerSection
+              columns={serverColumns}
+              servers={individualServers}
+              search={search}
+              emptyText="No MCP servers configured."
+              onOpen={openServer}
+            />
+          ) : (
+            <>
+              {individualServers.length > 0 ? (
+                <McpServerSection
+                  title="Tenant servers"
+                  columns={serverColumns}
+                  servers={individualServers}
+                  search={search}
+                  emptyText="No individual MCP servers configured."
+                  onOpen={openServer}
+                />
+              ) : null}
+              {pluginServers.length > 0 ? (
+                <McpServerSection
+                  title="Plugin MCPs"
+                  columns={serverColumns}
+                  servers={pluginServers}
+                  search={search}
+                  emptyText="No MCP servers installed by plugins."
+                  onOpen={openServer}
+                />
+              ) : null}
+              {dataSourceServers.length > 0 ? (
+                <McpServerSection
+                  title="Datasource MCPs"
+                  columns={dataSourceColumns}
+                  servers={dataSourceServers}
+                  search={search}
+                  fitContent
+                  emptyText="No data sources registered."
+                  onOpen={openServer}
+                />
+              ) : null}
+            </>
+          )}
+        </div>
       </SettingsTablePane>
       <NewMcpServerDialog
         open={addOpen}
