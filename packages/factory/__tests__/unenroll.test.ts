@@ -226,17 +226,19 @@ describe("runUnenrollPass — abandoned", () => {
     assertFullyUnenrolled(issue, attemptId);
   });
 
-  it("un-enrolls a deleted (gone) issue", async () => {
+  it("NEVER un-enrolls or kills on an unverifiable absence (issue not returned by the fetch — indistinguishable from a throttle)", async () => {
+    // Safety: getIssuesByIdentifier silently omits an issue it could not fetch
+    // (throttle/429/network), which looks identical to a deletion. The pass must
+    // DEFER on absence, never kill a possibly-still-active worker.
     const issue = makeIssue({
       identifier: "THINK-103",
       state: "In Progress",
       labels: ["Claude"],
     });
-    // Gateway has NO issues → getIssuesByIdentifier returns nothing (deleted).
+    // Gateway returns NOTHING for the id (deleted OR throttled — same shape).
     const gateway = new FakeGateway([]);
     const transport = new FakeTransport();
     transport.pids.add(4242);
-    // The issues table must know the identifier so the pass can look it up.
     store.upsertIssue({
       issueId: issue.id,
       identifier: issue.identifier,
@@ -246,13 +248,42 @@ describe("runUnenrollPass — abandoned", () => {
     });
     const attemptId = enroll(issue);
 
-    const result = await runUnenrollPass(
-      { store, gateway, transport, log },
-      [],
-    );
+    const result = await runUnenrollPass({ store, gateway, transport, log }, []);
 
-    expect(result.outcomes).toEqual([{ issue: "THINK-103", verdict: "gone" }]);
-    assertFullyUnenrolled(issue, attemptId);
+    // Deferred: no verdict, thread + attempt + worker all left intact.
+    expect(result.outcomes).toEqual([]);
+    expect(store.getSlackThreadByIssue(issue.id)).toBeDefined();
+    expect(store.getAttempt(attemptId)!.state).not.toBe("CanceledByReconciliation");
+    expect(transport.killed).toEqual([]);
+  });
+
+  it("does NOT un-enroll when getIssuesByIdentifier throws (whole batch defers)", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-104",
+      state: "In Progress",
+      labels: ["Claude"],
+    });
+    const gateway = new FakeGateway([issue]);
+    gateway.getIssuesByIdentifier = async () => {
+      throw new Error("429 rate limited");
+    };
+    const transport = new FakeTransport();
+    transport.pids.add(4243);
+    store.upsertIssue({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      lane: "Claude",
+      phase: "implement",
+      state: "In Progress",
+    });
+    const attemptId = enroll(issue);
+
+    const result = await runUnenrollPass({ store, gateway, transport, log }, []);
+
+    expect(result.outcomes).toEqual([]);
+    expect(store.getSlackThreadByIssue(issue.id)).toBeDefined();
+    expect(store.getAttempt(attemptId)!.state).not.toBe("CanceledByReconciliation");
+    expect(transport.killed).toEqual([]);
   });
 });
 

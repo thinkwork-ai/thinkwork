@@ -213,11 +213,15 @@ export async function runUnenrollPass(
       }
       continue;
     }
-    // Not a candidate this tick. Without an identifier we cannot verify it
-    // against Linear — clean the orphaned store rows (gone).
+    // Not a candidate this tick, and no identifier to verify it against Linear
+    // (an orphaned attempt/lease with no thread or issues row). We must NOT
+    // kill/clean on an unverifiable entry — the U7 reconciler owns orphaned
+    // store state. Defer.
     if (meta.identifier === null) {
-      await windDown(deps, id, id, "gone");
-      outcomes.push({ issue: id, verdict: "gone" });
+      deps.log.info(
+        "un-enroll: enrolled entry has no identifier to verify — deferring to the reconciler",
+        { issueId: id },
+      );
       continue;
     }
     missIds.push(id);
@@ -243,9 +247,15 @@ export async function runUnenrollPass(
       const identifier = missIdentifiers[i];
       const snapshot = byIdentifier.get(identifier);
       if (snapshot === undefined) {
-        // Genuinely gone (deleted) — clean the store rows; the post is a no-op.
-        await windDown(deps, id, identifier, "gone");
-        outcomes.push({ issue: identifier, verdict: "gone" });
+        // Requested but NOT returned. This is indistinguishable from a transient
+        // per-issue fetch failure (throttle/429/network — getIssuesByIdentifier
+        // silently omits an issue it could not fetch), so we must NOT treat it
+        // as deleted and kill the worker. Only a POSITIVELY-confirmed
+        // out-of-queue state un-enrolls; an unverifiable absence defers.
+        deps.log.info(
+          "un-enroll: enrolled issue not returned by the verification fetch — deferring (unverifiable, never kill on absence)",
+          { issue: identifier },
+        );
         continue;
       }
       if (stillValidCandidate(snapshot)) {
