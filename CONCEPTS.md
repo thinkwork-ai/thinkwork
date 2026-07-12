@@ -421,6 +421,10 @@ The three-grade contract classifying every push type by interrupt weight: Code (
 
 ## Delivery Loop
 
+### Factory Daemon
+
+The single dispatch authority for the autonomous delivery loop: a deterministic, launchd-managed process (Mac mini) that polls Linear for lane-labeled issues, launches disposable per-phase workers (`claude -p` or `codex exec`) in isolated worktrees on registered worker hosts, and recovers stalled or dead attempts from Linear-held state. It replaces the earlier two-lane dispatcher pair (Claude `/loop` session + cloud Codex scheduled task). The daemon schedules and reconciles; workers write all business state to Linear.
+
 ### Handoff Baton
 
 The structured note that transfers an issue between phases of the delivery loop. A baton states the phase goal, what the previous phase completed, where to start, the inputs, and open risks — enough for a fresh worker with no prior context to continue the work. Each phase ends by posting the baton for the next phase; an issue entering a phase without one gets a baton synthesized by the dispatcher.
