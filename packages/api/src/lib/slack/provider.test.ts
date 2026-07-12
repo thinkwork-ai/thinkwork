@@ -340,6 +340,7 @@ describe("postSlackThreadMessage", () => {
       channel: "C123",
       text: "ThinkWork is working on it…",
       threadTs: "1710000001.000000",
+      clientMessageId: "11111111-1111-4111-8111-111111111111",
       fetchFn: fetchFn as unknown as typeof fetch,
     });
 
@@ -353,6 +354,9 @@ describe("postSlackThreadMessage", () => {
     const body = new URLSearchParams(init.body);
     expect(body.get("channel")).toBe("C123");
     expect(body.get("thread_ts")).toBe("1710000001.000000");
+    expect(body.get("client_msg_id")).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
   });
 
   it("normalizes ok:false responses into a failed post result", async () => {
@@ -404,6 +408,30 @@ describe("postSlackThreadMessage", () => {
         fetchFn: transport as unknown as typeof fetch,
       }),
     ).rejects.toThrow("socket hang up");
+  });
+
+  it("aborts a Slack post that exceeds its transport deadline", async () => {
+    const neverResolving = vi.fn(
+      async (_url: URL | RequestInfo, init?: RequestInit) =>
+        await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          );
+        }),
+    );
+
+    await expect(
+      postSlackThreadMessage({
+        token: "t",
+        channel: "C",
+        text: "x",
+        timeoutMs: 5,
+        fetchFn: neverResolving as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow();
+    expect(neverResolving.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
   });
 });
 

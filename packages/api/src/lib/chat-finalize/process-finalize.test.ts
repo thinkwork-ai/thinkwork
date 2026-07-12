@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   appendThreadTurnEvent: vi.fn(),
   sendTurnCompletedPush: vi.fn(),
   sendThreadReplyEmail: vi.fn(),
+  sendThreadReplySlack: vi.fn(),
+  retryThreadReplySlackForTurn: vi.fn(),
   refreshCustomerOnboardingGoalFolderSafely: vi.fn(),
   recordGuardrailBlock: vi.fn(),
   promoteNextDeferredWakeup: vi.fn(),
@@ -105,6 +107,11 @@ vi.mock("../push-notifications.js", () => ({
 
 vi.mock("../email/thread-reply.js", () => ({
   sendThreadReplyEmail: mocks.sendThreadReplyEmail,
+}));
+
+vi.mock("../slack/thread-reply.js", () => ({
+  sendThreadReplySlack: mocks.sendThreadReplySlack,
+  retryThreadReplySlackForTurn: mocks.retryThreadReplySlackForTurn,
 }));
 
 vi.mock("../spaces/customer-onboarding-goal-md.js", () => ({
@@ -203,6 +210,16 @@ beforeEach(() => {
   mocks.appendThreadTurnEvent.mockResolvedValue({ id: 1, seq: 0 });
   mocks.sendTurnCompletedPush.mockResolvedValue(undefined);
   mocks.sendThreadReplyEmail.mockResolvedValue(undefined);
+  mocks.sendThreadReplySlack.mockResolvedValue({
+    delivered: false,
+    retryable: false,
+    reason: "not_slack_origin",
+  });
+  mocks.retryThreadReplySlackForTurn.mockResolvedValue({
+    delivered: false,
+    retryable: false,
+    reason: "assistant_message_missing",
+  });
   mocks.refreshCustomerOnboardingGoalFolderSafely.mockResolvedValue(undefined);
   mocks.recordGuardrailBlock.mockResolvedValue(undefined);
   mocks.promoteNextDeferredWakeup.mockResolvedValue(null);
@@ -609,6 +626,7 @@ describe("processFinalize reconcile seam", () => {
       [],
       undefined,
       {
+        sourceTurnId: TURN_ID,
         skillDraft: {
           id: "draft-1",
           slug: "codex-e2e",
@@ -927,7 +945,7 @@ describe("processFinalize reconcile seam", () => {
       "Still finalize the turn.",
       [],
       undefined,
-      undefined,
+      { sourceTurnId: TURN_ID },
     );
     expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
       expect.anything(),
@@ -2262,7 +2280,7 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
       "Here is the review.",
       expect.any(Array),
       [persistedPart],
-      undefined,
+      { sourceTurnId: TURN_ID },
     );
   });
 
@@ -2296,7 +2314,7 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
       "Here is the Dispatch app.",
       expect.any(Array),
       [persistedPart],
-      undefined,
+      { sourceTurnId: TURN_ID },
     );
   });
 
@@ -2335,8 +2353,178 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
           }),
         }),
       ],
-      undefined,
+      { sourceTurnId: TURN_ID },
     );
+  });
+});
+
+describe("processFinalize Slack reply delivery", () => {
+  const payload = {
+    thread_turn_id: TURN_ID,
+    tenant_id: TENANT_ID,
+    agent_id: AGENT_ID,
+    thread_id: THREAD_ID,
+    duration_ms: 25,
+    status: "completed" as const,
+    response: { content: "Final Slack answer" },
+  };
+
+  it("delivers only after the ordinary assistant message is persisted and notified", async () => {
+    mocks.sendThreadReplySlack.mockResolvedValueOnce({
+      delivered: true,
+      assistantMessageId: "msg-1",
+      providerMessageTs: "1710000002.000000",
+    });
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "Final Slack answer",
+      [],
+      undefined,
+      { sourceTurnId: TURN_ID },
+    );
+    expect(mocks.sendThreadReplySlack).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      assistantMessageId: "msg-1",
+    });
+    expect(mocks.notifyNewMessage.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.sendThreadReplySlack.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("keeps finalization successful when Slack records a retryable failure", async () => {
+    mocks.sendThreadReplySlack.mockResolvedValueOnce({
+      delivered: false,
+      retryable: true,
+      reason: "provider_rejected",
+      error: "ratelimited",
+    });
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+    expect(
+      mocks.updateSets.some(
+        (value) =>
+          value &&
+          typeof value === "object" &&
+          "finalized_at" in (value as Record<string, unknown>),
+      ),
+    ).toBe(true);
+  });
+
+  it("delivers the persisted generic error for a Slack-originated failed turn", async () => {
+    mocks.sendThreadReplySlack.mockResolvedValueOnce({
+      delivered: true,
+      assistantMessageId: "msg-1",
+      providerMessageTs: "1710000002.000000",
+    });
+
+    await expect(
+      processFinalize({
+        ...payload,
+        status: "failed",
+        error_message: "runtime unavailable",
+      }),
+    ).resolves.toMatchObject({ finalized: true, messageId: "msg-1" });
+
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "I'm sorry, I encountered an error processing your request. Please try again.",
+      undefined,
+      undefined,
+      { sourceTurnId: TURN_ID },
+    );
+    expect(mocks.notifyNewMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ messageId: "msg-1", role: "assistant" }),
+    );
+    expect(mocks.sendThreadReplySlack).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      assistantMessageId: "msg-1",
+    });
+  });
+
+  it("records a failed-turn Slack dispatch without failing finalization", async () => {
+    mocks.sendThreadReplySlack.mockResolvedValueOnce({
+      delivered: false,
+      retryable: true,
+      reason: "transport_error",
+      error: "timeout",
+    });
+
+    await expect(
+      processFinalize({
+        ...payload,
+        status: "failed",
+        error_message: "runtime unavailable",
+      }),
+    ).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+  });
+
+  it("retries persisted Slack delivery on finalize redelivery without reinserting", async () => {
+    mocks.updateReturning = [[]];
+    mocks.retryThreadReplySlackForTurn.mockResolvedValueOnce({
+      delivered: true,
+      assistantMessageId: "msg-1",
+      providerMessageTs: "1710000002.000000",
+    });
+
+    await expect(processFinalize(payload)).resolves.toEqual({
+      finalized: false,
+      messageId: null,
+    });
+    expect(mocks.retryThreadReplySlackForTurn).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      threadTurnId: TURN_ID,
+    });
+    expect(mocks.insertAssistantMessage).not.toHaveBeenCalled();
+    expect(mocks.sendThreadReplySlack).not.toHaveBeenCalled();
+  });
+
+  it("keeps finalize idempotent while a redelivery attempt remains failed", async () => {
+    mocks.updateReturning = [[]];
+    mocks.retryThreadReplySlackForTurn.mockResolvedValueOnce({
+      delivered: false,
+      retryable: true,
+      reason: "provider_rejected",
+      error: "ratelimited",
+    });
+
+    await expect(processFinalize(payload)).resolves.toEqual({
+      finalized: false,
+      messageId: null,
+    });
+    expect(mocks.insertAssistantMessage).not.toHaveBeenCalled();
+  });
+
+  it("persists a permanent Slack failure without retrying the whole agent callback", async () => {
+    mocks.sendThreadReplySlack.mockResolvedValueOnce({
+      delivered: false,
+      retryable: true,
+      reason: "provider_rejected",
+      error: "channel_not_found",
+    });
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
   });
 });
 
@@ -2379,6 +2567,11 @@ describe("processFinalize deferred-wakeup promotion", () => {
     ).resolves.toMatchObject({ finalized: false });
 
     expect(mocks.promoteNextDeferredWakeup).not.toHaveBeenCalled();
+    expect(mocks.retryThreadReplySlackForTurn).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      threadTurnId: TURN_ID,
+    });
   });
 
   it("a promotion failure does not fail the finalize", async () => {
