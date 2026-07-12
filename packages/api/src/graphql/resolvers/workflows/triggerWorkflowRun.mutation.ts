@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import {
   createInterpreterWorkflowRun,
   ensureInterpreterBinding,
+  ensureMemoryBlueprintVersion,
   markInterpreterRunStarted,
 } from "@thinkwork/database-pg";
 import {
@@ -39,6 +40,7 @@ type WorkflowRow = {
   tenant_id: string;
   name?: string | null;
   visibility: string;
+  owner_user_id?: string | null;
   owner_agent_id?: string | null;
   lifecycle_status: string;
   current_version_id?: string | null;
@@ -63,9 +65,24 @@ export async function triggerWorkflowRun(
   }
 
   await assertCanReadWorkflowTenant(ctx, workflow.tenant_id);
+  const callerUserId = await resolveCallerUserId(ctx);
   assertWorkflowCallableByActor(workflow, {
     agentId: args.input.agentId ?? ctx.auth.agentId ?? null,
+    userId: callerUserId,
   });
+
+  // THINK-193 U3: blueprint-managed memory workflows lazily adopt the
+  // current code-owned blueprint before the run pins its version.
+  const ensured = await ensureMemoryBlueprintVersion(db, {
+    tenantId: workflow.tenant_id,
+    workflowId: workflow.id,
+  });
+  if (ensured.managed && ensured.versionId) {
+    workflow.current_version_id = ensured.versionId;
+    if (workflow.readiness_state === "unknown") {
+      workflow.readiness_state = "ready";
+    }
+  }
 
   if (args.input.idempotencyKey) {
     const existing = await loadWorkflowRunByIdempotencyKey({
@@ -294,14 +311,24 @@ async function tryStartInterpreterRun(input: {
 
 function assertWorkflowCallableByActor(
   workflow: WorkflowRow,
-  caller: { agentId: string | null },
+  caller: { agentId: string | null; userId: string | null },
 ): void {
   if (workflow.visibility === "tenant_shared") return;
   if (workflow.owner_agent_id && workflow.owner_agent_id === caller.agentId) {
     return;
   }
+  // THINK-193 U3: user-owned private workflows (personal memory automations)
+  // are callable by their OWNER only — user A can never trigger user B's
+  // personal automation, tenant membership notwithstanding.
+  if (
+    workflow.owner_user_id &&
+    caller.userId &&
+    workflow.owner_user_id === caller.userId
+  ) {
+    return;
+  }
   throw new Error(
-    `workflow invocation denied: private_to_other_agent (workflowId=${workflow.id})`,
+    `workflow invocation denied: private_to_other_${workflow.owner_user_id ? "user" : "agent"} (workflowId=${workflow.id})`,
   );
 }
 

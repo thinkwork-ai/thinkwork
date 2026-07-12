@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockRows, mockAssertCanReadWorkflowTenant, mockLambdaSend } =
-  vi.hoisted(() => ({
-    mockRows: vi.fn(),
-    mockAssertCanReadWorkflowTenant: vi.fn(),
-    mockLambdaSend: vi.fn(),
-  }));
+const {
+  mockRows,
+  mockAssertCanReadWorkflowTenant,
+  mockLambdaSend,
+  mockOverrideInputToProtocol,
+  mockAssertOverrideNarrows,
+} = vi.hoisted(() => ({
+  mockRows: vi.fn(),
+  mockAssertCanReadWorkflowTenant: vi.fn(),
+  mockLambdaSend: vi.fn(),
+  mockOverrideInputToProtocol: vi.fn((): unknown => null),
+  mockAssertOverrideNarrows: vi.fn(),
+}));
 
 vi.mock("../../utils.js", () => ({
   db: {
@@ -38,6 +45,11 @@ vi.mock("./types.js", () => ({
   assertCanReadWorkflowTenant: mockAssertCanReadWorkflowTenant,
 }));
 
+vi.mock("./approval-override.js", () => ({
+  overrideInputToProtocol: mockOverrideInputToProtocol,
+  assertOverrideNarrowsSavedConfig: mockAssertOverrideNarrows,
+}));
+
 vi.mock("@aws-sdk/client-lambda", () => ({
   LambdaClient: vi.fn(() => ({ send: mockLambdaSend })),
   InvokeCommand: vi.fn((input) => ({ input })),
@@ -49,6 +61,9 @@ beforeEach(async () => {
   mockRows.mockReset();
   mockAssertCanReadWorkflowTenant.mockReset();
   mockLambdaSend.mockReset();
+  mockOverrideInputToProtocol.mockReset();
+  mockOverrideInputToProtocol.mockReturnValue(null);
+  mockAssertOverrideNarrows.mockReset();
   process.env.STAGE = "dev";
   vi.resetModules();
   resolver = await import("./resolveWorkflowApproval.mutation.js");
@@ -92,6 +107,7 @@ describe("resolveWorkflowApproval", () => {
       workflowRunId: "run-1",
       approved: true,
       note: "looks good",
+      override: null,
     });
     expect(result).toMatchObject({ id: "run-1", status: "running" });
   });
@@ -146,5 +162,90 @@ describe("resolveWorkflowApproval", () => {
         ctx,
       ),
     ).rejects.toThrow(/workflow-resume Lambda error: boom/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: approved-plan override is validated server-side (narrow-only)
+// BEFORE the resume Lambda is invoked, and rides the resume payload.
+// ---------------------------------------------------------------------------
+
+describe("resolveWorkflowApproval — plan override (U3)", () => {
+  const waitingRun = () => ({
+    id: "run-1",
+    tenant_id: "tenant-1",
+    workflow_id: "wf-mem",
+    status: "waiting_for_human",
+  });
+
+  it("validates and forwards the override on approve", async () => {
+    const override = { sourceConfigIds: ["src-1"], maxRecords: 25 };
+    mockOverrideInputToProtocol.mockReturnValue(override);
+    mockRows.mockReturnValueOnce([waitingRun()]);
+    mockLambdaSend.mockResolvedValue({ Payload: undefined });
+    mockRows.mockReturnValueOnce([waitingRun()]); // post-invoke re-read
+
+    await resolver.resolveWorkflowApproval(
+      null,
+      {
+        runId: "run-1",
+        approve: true,
+        override: { sourceConfigIds: ["src-1"], maxRecords: 25 },
+      },
+      ctx,
+    );
+
+    expect(mockAssertOverrideNarrows).toHaveBeenCalledWith(expect.anything(), {
+      tenantId: "tenant-1",
+      workflowId: "wf-mem",
+      override,
+    });
+    const payload = JSON.parse(
+      new TextDecoder().decode(
+        mockLambdaSend.mock.calls[0][0].input.Payload as Uint8Array,
+      ),
+    );
+    expect(payload.override).toEqual(override);
+  });
+
+  it("a widening override errors BEFORE any Lambda invoke", async () => {
+    mockOverrideInputToProtocol.mockReturnValue({ maxRecords: 999999 });
+    mockAssertOverrideNarrows.mockRejectedValue(
+      new Error("maxRecords 999999 exceeds the saved boundary cap"),
+    );
+    mockRows.mockReturnValueOnce([waitingRun()]);
+
+    await expect(
+      resolver.resolveWorkflowApproval(
+        null,
+        { runId: "run-1", approve: true, override: { maxRecords: 999999 } },
+        ctx,
+      ),
+    ).rejects.toThrow(/exceeds the saved boundary cap/);
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+
+  it("deny ignores any override entirely", async () => {
+    mockRows.mockReturnValueOnce([waitingRun()]);
+    mockLambdaSend.mockResolvedValue({ Payload: undefined });
+    mockRows.mockReturnValueOnce([waitingRun()]);
+
+    await resolver.resolveWorkflowApproval(
+      null,
+      {
+        runId: "run-1",
+        approve: false,
+        override: { sourceConfigIds: ["src-1"] },
+      },
+      ctx,
+    );
+    expect(mockOverrideInputToProtocol).not.toHaveBeenCalled();
+    expect(mockAssertOverrideNarrows).not.toHaveBeenCalled();
+    const payload = JSON.parse(
+      new TextDecoder().decode(
+        mockLambdaSend.mock.calls[0][0].input.Payload as Uint8Array,
+      ),
+    );
+    expect(payload.override).toBeNull();
   });
 });

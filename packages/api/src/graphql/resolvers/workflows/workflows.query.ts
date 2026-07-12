@@ -2,8 +2,10 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import { workflows as workflowsTable } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
   clampWorkflowQueryLimit,
+  isWorkflowHiddenFromCaller,
   normalizeWorkflowEnum,
   resolveReadableTenantId,
 } from "./types.js";
@@ -43,5 +45,10 @@ export async function workflows(
     .orderBy(desc(workflowsTable.updated_at))
     .limit(clampWorkflowQueryLimit(args.limit));
 
-  return rows.map(snakeToCamel);
+  // THINK-193 U3: hide OTHER users' personal (user-owned agent_private)
+  // workflows — they are owner-only surfaces, not tenant inventory.
+  const callerUserId = await resolveCallerUserId(ctx);
+  return rows
+    .filter((row) => !isWorkflowHiddenFromCaller(row, callerUserId))
+    .map(snakeToCamel);
 }

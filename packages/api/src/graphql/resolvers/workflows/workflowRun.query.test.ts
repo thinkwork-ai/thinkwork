@@ -6,6 +6,7 @@ const mockOrderBy = vi.fn();
 const mockLimit = vi.fn();
 const mockRequireTenantMember = vi.fn();
 const mockResolveCallerTenantId = vi.fn();
+const mockResolveCallerUserId = vi.fn();
 
 vi.mock("../../utils.js", () => ({
   db: {
@@ -72,6 +73,7 @@ vi.mock("../core/authz.js", () => ({
 
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: mockResolveCallerTenantId,
+  resolveCallerUserId: mockResolveCallerUserId,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -95,6 +97,8 @@ beforeEach(async () => {
   vi.resetModules();
 
   mockResolveCallerTenantId.mockResolvedValue(null);
+  mockResolveCallerUserId.mockReset();
+  mockResolveCallerUserId.mockResolvedValue("user-caller");
   mockLimit.mockImplementation(() => Promise.resolve(mockRows()));
   mockOrderBy.mockReturnValue({ limit: mockLimit });
   mockWhere.mockReturnValue({
@@ -125,6 +129,10 @@ describe("workflow run queries", () => {
         capability_snapshot: { cancel: true },
         readiness_snapshot: { state: "ready" },
       },
+    ]);
+    // U3 visibility check loads the parent workflow.
+    mockRows.mockReturnValueOnce([
+      { visibility: "tenant_shared", owner_user_id: null },
     ]);
 
     const result = await workflowRunQuery.workflowRun(null, { id: "run-1" }, {
@@ -159,6 +167,7 @@ describe("workflow run queries", () => {
       },
     ]);
     mockResolveCallerTenantId.mockResolvedValue("tenant-a");
+    mockRows.mockReturnValueOnce([]); // workflow row for the visibility check
 
     await workflowRunQuery.workflowRun(null, { id: "run-1" }, {
       auth: { tenantId: null },
@@ -250,5 +259,68 @@ describe("workflow run queries", () => {
       },
     ]);
     expect(mockLimit).toHaveBeenCalledWith(1_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: runs of another user's personal automation read as absent.
+// ---------------------------------------------------------------------------
+
+describe("workflow run visibility (U3)", () => {
+  it("returns null for a run whose workflow is another user's personal automation", async () => {
+    mockRows
+      .mockReturnValueOnce([
+        {
+          id: "run-p",
+          tenant_id: "tenant-a",
+          workflow_id: "wf-personal",
+          status: "waiting_for_human",
+        },
+      ])
+      .mockReturnValueOnce([
+        { visibility: "agent_private", owner_user_id: "user-someone-else" },
+      ]);
+
+    const result = await workflowRunQuery.workflowRun(null, { id: "run-p" }, {
+      auth: { tenantId: "tenant-a" },
+    } as any);
+    expect(result).toBeNull();
+  });
+
+  it("returns the run for its owner", async () => {
+    mockRows
+      .mockReturnValueOnce([
+        {
+          id: "run-p",
+          tenant_id: "tenant-a",
+          workflow_id: "wf-personal",
+          status: "waiting_for_human",
+        },
+      ])
+      .mockReturnValueOnce([
+        { visibility: "agent_private", owner_user_id: "user-caller" },
+      ]);
+
+    const result = await workflowRunQuery.workflowRun(null, { id: "run-p" }, {
+      auth: { tenantId: "tenant-a" },
+    } as any);
+    expect(result).toMatchObject({ id: "run-p" });
+  });
+
+  it("returns [] when listing runs of another user's personal workflow", async () => {
+    mockRows.mockReturnValueOnce([
+      {
+        tenant_id: "tenant-a",
+        visibility: "agent_private",
+        owner_user_id: "user-someone-else",
+      },
+    ]);
+
+    const result = await workflowRunsQuery.workflowRuns(
+      null,
+      { workflowId: "wf-personal" },
+      { auth: { tenantId: "tenant-a" } } as any,
+    );
+    expect(result).toEqual([]);
   });
 });

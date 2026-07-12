@@ -17,6 +17,7 @@ import {
   type DefinitionValidationError,
   type WorkflowDefinition,
 } from "@thinkwork/agent-loops-core";
+import { findMemoryProcessorForWorkflow } from "@thinkwork/database-pg";
 import {
   webhooks as webhooksTable,
   workflowVersions,
@@ -124,6 +125,36 @@ export async function saveWorkflow(
     }
     tenantId = existing.tenant_id;
     await requireTenantAdmin(ctx, tenantId, db);
+
+    // THINK-193 U3: blueprint-managed memory workflows are platform-owned.
+    // Personal automations are edited only through their owner-only
+    // mutations (setPersonalMemoryAutomationSchedule etc.); shared memory
+    // workflows accept operator metadata/trigger edits here but their
+    // DEFINITION always comes from the code-owned blueprint.
+    const memoryProcessor = await findMemoryProcessorForWorkflow(db, {
+      tenantId,
+      workflowId,
+    });
+    if (memoryProcessor?.mode === "personal") {
+      throw new GraphQLError(
+        "This is a platform-managed personal memory automation — configure it from the Automations page, not the workflow editor",
+        { extensions: { code: "FORBIDDEN" } },
+      );
+    }
+    if (memoryProcessor && definition) {
+      return {
+        workflow: null,
+        errors: [
+          {
+            stepId: null,
+            field: "definition",
+            reason:
+              "memory workflow definitions are platform-managed by blueprint — edit sources, schedule, and grants instead",
+          },
+        ],
+        webhookToken: null,
+      };
+    }
 
     const patch: Record<string, unknown> = { updated_at: new Date() };
     if (input.name != null) patch.name = input.name.trim();

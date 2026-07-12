@@ -10,6 +10,7 @@ const {
   mockCreateRun,
   mockMarkStarted,
   mockSfnSend,
+  mockEnsureBlueprint,
 } = vi.hoisted(() => ({
   mockRows: vi.fn(),
   mockAssertCanReadWorkflowTenant: vi.fn(),
@@ -20,6 +21,11 @@ const {
   mockCreateRun: vi.fn(),
   mockMarkStarted: vi.fn(),
   mockSfnSend: vi.fn(),
+  mockEnsureBlueprint: vi.fn(async () => ({
+    managed: false,
+    published: false,
+    versionId: null,
+  })),
 }));
 
 vi.mock("@aws-sdk/client-sfn", () => ({
@@ -31,6 +37,7 @@ vi.mock("@thinkwork/database-pg", () => ({
   createInterpreterWorkflowRun: mockCreateRun,
   ensureInterpreterBinding: mockEnsureBinding,
   markInterpreterRunStarted: mockMarkStarted,
+  ensureMemoryBlueprintVersion: mockEnsureBlueprint,
 }));
 
 vi.mock("../../../lib/workflows/interpreter-state-machine.js", () => ({
@@ -196,7 +203,10 @@ describe("triggerWorkflowRun", () => {
 
   it("prefers a ready interpreter binding and returns the started run", async () => {
     mockResolveArn.mockResolvedValue("arn:sm:interp");
-    mockEnsureBinding.mockResolvedValue({ id: "binding-interp", created: true });
+    mockEnsureBinding.mockResolvedValue({
+      id: "binding-interp",
+      created: true,
+    });
     mockCreateRun.mockResolvedValue({
       run: { id: "run-interp", status: "queued" },
       created: true,
@@ -384,3 +394,58 @@ function workflowRow(
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: user ownership of personal (user-owned agent_private)
+// workflows — user A cannot trigger user B's personal automation.
+// ---------------------------------------------------------------------------
+
+describe("triggerWorkflowRun — personal workflow ownership (U3)", () => {
+  // apikey callers resolve userId = principalId without a db round-trip.
+  const userCtx = (userId: string) =>
+    ({
+      auth: {
+        authType: "apikey",
+        tenantId: "tenant-1",
+        agentId: null,
+        principalId: userId,
+      },
+    }) as never;
+
+  const personalWorkflow = () =>
+    workflowRow({
+      visibility: "agent_private",
+      owner_agent_id: null,
+      owner_user_id: "user-owner",
+    });
+
+  it("denies a NON-owner user before any run starts", async () => {
+    mockRows.mockReturnValueOnce([personalWorkflow()]);
+
+    await expect(
+      resolver.triggerWorkflowRun(
+        null,
+        { input: { workflowId: "workflow-1" } },
+        userCtx("user-intruder"),
+      ),
+    ).rejects.toThrow(/private_to_other_user/);
+    expect(mockCreateRun).not.toHaveBeenCalled();
+    expect(mockTriggerRoutineRun).not.toHaveBeenCalled();
+    expect(mockCreateWorkflowRunLedger).not.toHaveBeenCalled();
+  });
+
+  it("allows the OWNER through the ownership gate", async () => {
+    mockRows
+      .mockReturnValueOnce([personalWorkflow()])
+      // idempotency short-circuit: pretend the run already exists so the
+      // test stops right after the ownership gate.
+      .mockReturnValueOnce([{ id: "run-9", tenant_id: "tenant-1" }]);
+
+    const result = await resolver.triggerWorkflowRun(
+      null,
+      { input: { workflowId: "workflow-1", idempotencyKey: "k-1" } },
+      userCtx("user-owner"),
+    );
+    expect(result).toMatchObject({ id: "run-9" });
+  });
+});
