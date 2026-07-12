@@ -10,6 +10,7 @@ import type {
   MemoryProvider,
   ModelProvider,
   OkfWikiNavigatorProvider,
+  SearchProvider,
   WorkspaceProvider,
 } from "@thinkwork/pi-runtime-core";
 
@@ -32,6 +33,7 @@ export interface ProviderBundle {
   knowledgeGraph?: KnowledgeGraphProvider;
   okfWiki?: OkfWikiNavigatorProvider;
   canvas?: CanvasProvider;
+  search?: SearchProvider;
 }
 
 /**

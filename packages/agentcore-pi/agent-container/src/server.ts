@@ -54,6 +54,7 @@ import {
   createDocumentComposerExtension,
   createFetchWorkspaceSourceExtension,
   createKnowledgeGraphExtension,
+  createSearchExtension,
   createSkillsExtension,
   createMemoryExtension,
   createOkfWikiNavigatorExtension,
@@ -179,6 +180,7 @@ import {
 import { createApiCanvasProvider } from "./runtime/providers/canvas-provider.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
+import { createApiSearchProvider } from "./runtime/providers/search-provider.js";
 import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
 import {
   AuroraSessionStore,
@@ -1775,6 +1777,63 @@ export async function buildInvocationResources(
         hasApiUrl: Boolean(kgApiUrl),
         hasApiSecret: Boolean(kgApiSecret),
         hasTurnReference: Boolean(kgThreadTurnId || kgThreadId),
+      });
+    }
+  }
+
+  // ThinkWork Search (THINK-263 U8) — the unified fan-out broker as one
+  // agent tool, reaching the API's GraphQL `search` query over the callback
+  // fetch (no HTTP egress). Fixes the wrong-source problem: one `search`
+  // call fans out across threads/wiki/entities instead of the model guessing
+  // between recall/search_wiki/graph tools. Gated on `search_tool_enabled`
+  // (ships inert until tool policy opts a turn in); skipped in eval mode
+  // (user-less). Identity is turn-bound — the provider snapshots the
+  // thread-turn reference and the API derives BOTH tenant and the invoking
+  // user server-side, so the broker runs with that user's scope.
+  if (
+    args.payload.eval_mode !== true &&
+    args.payload.search_tool_enabled === true
+  ) {
+    const searchApiUrl = asString(args.payload.thinkwork_api_url);
+    const searchApiSecret = asString(args.payload.thinkwork_api_secret);
+    const searchThreadTurnId = asString(args.payload.thread_turn_id);
+    const searchThreadId = args.identity.threadId;
+    if (
+      searchApiUrl &&
+      searchApiSecret &&
+      (searchThreadTurnId || searchThreadId)
+    ) {
+      addExtension(
+        createSearchExtension({
+          onError: (error, { phase }) =>
+            logStructured({
+              level: "warn",
+              event: "search_tool_failed",
+              phase,
+              tenantId: args.identity.tenantId,
+              threadId: args.identity.threadId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+        }),
+        {
+          search: createApiSearchProvider({
+            apiUrl: searchApiUrl,
+            apiSecret: searchApiSecret,
+            tenantId: args.identity.tenantId,
+            threadTurnId: searchThreadTurnId || undefined,
+            threadId: searchThreadId || undefined,
+          }),
+        },
+      );
+    } else {
+      logStructured({
+        level: "warn",
+        event: "search_tool_skipped_missing_wiring",
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+        hasApiUrl: Boolean(searchApiUrl),
+        hasApiSecret: Boolean(searchApiSecret),
+        hasTurnReference: Boolean(searchThreadTurnId || searchThreadId),
       });
     }
   }

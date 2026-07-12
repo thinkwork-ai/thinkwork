@@ -3647,6 +3647,114 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(evalMode.extensionToolNames).not.toContain("knowledge_graph_search");
   });
 
+  it("registers the search tool as an extension tool when search_tool_enabled is on (THINK-263 U8)", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        search_tool_enabled: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    // Folded into the allowlist (extension tools are silently gated
+    // otherwise) but NOT a plain AgentTool.
+    expect(bundle.extensionToolNames).toContain("search");
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("search");
+  });
+
+  it("does not register search when the flag is off or in eval mode (THINK-263 U8)", async () => {
+    const baseArgs = {
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed" as const,
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      mcpJsonConfig: { directTools: [] },
+    };
+
+    const flagOff = await buildInvocationResources({
+      ...baseArgs,
+      payload: {
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpRegistry: new McpToolRegistry(),
+    });
+    expect(flagOff.extensionToolNames).not.toContain("search");
+
+    const evalMode = await buildInvocationResources({
+      ...baseArgs,
+      payload: {
+        eval_mode: true,
+        search_tool_enabled: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
+      },
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpRegistry: new McpToolRegistry(),
+    });
+    expect(evalMode.extensionToolNames).not.toContain("search");
+  });
+
   it("registers OKF wiki navigator extension tools when policy and runtime mount gates are on", async () => {
     const okfRoot = await createOkfFixtureRoot();
     const bundle = await buildInvocationResources({
