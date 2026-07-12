@@ -387,6 +387,10 @@ export const wikiSectionSources = wiki.table(
       .notNull(),
     source_kind: text("source_kind").notNull(), // 'memory_unit' | 'artifact' | 'journal_idea'
     source_ref: text("source_ref").notNull(), // normalized memory record id / external ref
+    // THINK-263 U2/R14 — thread backpointers stamped at compile time from the
+    // cited memory records' provenance, so a wiki citation can name the
+    // threads behind it without a read-time Hindsight join.
+    source_thread_ids: text("source_thread_ids").array(),
     first_seen_at: timestamp("first_seen_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

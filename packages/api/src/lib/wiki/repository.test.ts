@@ -20,6 +20,7 @@ import {
   normalizeSectionHeading,
   ownerScopeWhere,
   parseCompileDedupeBucket,
+  recordSectionSources,
   renderBodyMarkdown,
   wikiReadScopeWhere,
   type WikiCompileJobRow,
@@ -282,6 +283,60 @@ describe("graph compile dedupe key", () => {
     expect(parseCompileDedupeBucket(plannerKey)).toBe(
       Math.floor(1_700_000_000 / 300),
     );
+  });
+});
+
+describe("recordSectionSources — thread backpointers (THINK-263 U2)", () => {
+  function captureInsert() {
+    const captured: {
+      values?: Array<Record<string, unknown>>;
+      conflict?: Record<string, unknown>;
+    } = {};
+    const chain: any = {
+      values: (vals: Array<Record<string, unknown>>) => {
+        captured.values = vals;
+        return chain;
+      },
+      onConflictDoUpdate: (cfg: Record<string, unknown>) => {
+        captured.conflict = cfg;
+        return Promise.resolve();
+      },
+    };
+    return { captured, db: { insert: () => chain } };
+  }
+
+  it("writes source_thread_ids when the source carries threadIds", async () => {
+    const { captured, db } = captureInsert();
+    await recordSectionSources(
+      "section-1",
+      [
+        { kind: "memory_unit", ref: "unit-1", threadIds: ["thread-a"] },
+        { kind: "memory_unit", ref: "unit-2" },
+      ],
+      db as never,
+    );
+    expect(captured.values).toEqual([
+      expect.objectContaining({
+        source_ref: "unit-1",
+        source_thread_ids: ["thread-a"],
+      }),
+      expect.objectContaining({
+        source_ref: "unit-2",
+        source_thread_ids: null,
+      }),
+    ]);
+    // Conflict path stamps pre-existing rows without clearing prior values.
+    expect(captured.conflict).toBeDefined();
+  });
+
+  it("empty threadIds arrays persist as null, never []", async () => {
+    const { captured, db } = captureInsert();
+    await recordSectionSources(
+      "section-1",
+      [{ kind: "memory_unit", ref: "unit-3", threadIds: [] }],
+      db as never,
+    );
+    expect(captured.values?.[0]).toMatchObject({ source_thread_ids: null });
   });
 });
 
