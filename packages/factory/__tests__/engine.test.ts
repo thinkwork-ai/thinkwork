@@ -46,7 +46,7 @@ function makeCandidate(
   }> = {},
 ): EngineCandidate {
   const labels = partial.labels ?? ["Claude"];
-  const state = partial.state ?? "Todo";
+  const state = partial.state ?? "Brainstorming";
   const lanes = (["Claude", "Codex"] as const).filter((l) =>
     labels.includes(l),
   );
@@ -104,8 +104,6 @@ describe("phase table — exhaustive routing-contract coverage", () => {
     lfg: boolean,
   ): EngineAction["kind"] {
     switch (status) {
-      case "Todo":
-        return "advance";
       case "Brainstorming":
       case "Planning":
       case "Debug":
@@ -147,7 +145,6 @@ describe("phase table — exhaustive routing-contract coverage", () => {
 
   it("covers all routing-contract statuses", () => {
     for (const status of [
-      "Todo",
       "Brainstorming",
       "Requirements Review",
       "Planning",
@@ -164,6 +161,19 @@ describe("phase table — exhaustive routing-contract coverage", () => {
     }
   });
 
+  it("Todo is BELOW the enrollment floor — not routed at all", () => {
+    // Enrollment floor is Brainstorming. A lane-labeled Todo issue is ideation
+    // the operator still owns; the daemon must never touch it (no advance, no
+    // launch). It is excluded from the routing vocabulary and, if one ever
+    // reached the engine, falls through to a noop.
+    expect(ROUTING_STATUSES).not.toContain("Todo");
+    const action = decideAction(
+      makeCandidate({ state: "Todo", labels: ["Claude", "LFG"] }),
+      emptyView(),
+    );
+    expect(action.kind).toBe("noop");
+  });
+
   it("ROUTING_STATUSES is exactly the poller vocabulary: ACTIVE_STATES ∪ VERIFICATION_STATES", () => {
     // Single-source guarantee: the engine routes exactly what the enrollment
     // filter enrolls — no independently maintained third list.
@@ -173,11 +183,6 @@ describe("phase table — exhaustive routing-contract coverage", () => {
     expect(ROUTING_STATUSES.length).toBe(
       ACTIVE_STATES.length + VERIFICATION_STATES.length,
     );
-  });
-
-  it("Todo advances to Brainstorming (dispatcher move, no worker)", () => {
-    const action = decideAction(makeCandidate({ state: "Todo" }), emptyView());
-    expect(action).toMatchObject({ kind: "advance", toStatus: "Brainstorming" });
   });
 
   it("review gates advance to the contract statuses under LFG", () => {
@@ -685,10 +690,12 @@ describe("worker exit without evidence (engine + U4 machine)", () => {
 // ---------------------------------------------------------------------------
 
 describe("AE1 skeleton — one issue walks label → Done → compound on the Claude lane", () => {
-  it("produces the exact action sequence advance → 5 launches → noop", async () => {
+  it("produces the exact action sequence 5 launches → noop", async () => {
     const ID = "T-9";
     const TITLE = "Paper cut: tooltip clipped";
-    let state = "Todo";
+    // Enrollment floor: the operator has moved the issue into Brainstorming
+    // (the "start the factory" gesture). The daemon takes over from there.
+    let state = "Brainstorming";
     const labels = ["Claude", "LFG"];
     const comments: LinearCommentSnapshot[] = [];
     let compounded = false;
@@ -780,7 +787,6 @@ describe("AE1 skeleton — one issue walks label → Done → compound on the Cl
     }
 
     expect(sequence).toEqual([
-      "advance",
       "launch:brainstorm",
       "launch:plan",
       "launch:implement",

@@ -626,8 +626,8 @@ describe("executeAction — advance", () => {
   it("moves status and writes the ledger once; re-execution writes nothing", async () => {
     const issue = makeIssue({
       identifier: "THINK-5",
-      state: "Todo",
-      labels: ["Claude"],
+      state: "Requirements Review",
+      labels: ["Claude", "LFG"],
     });
     const h = makeHarness(issue);
     const candidate = await candidateFor(h.gateway, "THINK-5");
@@ -635,7 +635,7 @@ describe("executeAction — advance", () => {
       activeAttempt: null,
       hasChildIssues: false,
     });
-    expect(action).toMatchObject({ kind: "advance", toStatus: "Brainstorming" });
+    expect(action).toMatchObject({ kind: "advance", toStatus: "Planning" });
 
     await executeAction(action, candidate, h.deps);
     expect(h.gateway.writesOf("setState")).toHaveLength(1);
@@ -644,7 +644,7 @@ describe("executeAction — advance", () => {
     );
     expect(ledgerWrites).toHaveLength(1);
 
-    // Re-poll (state already Brainstorming, ledger current) and re-execute
+    // Re-poll (state already Planning, ledger current) and re-execute
     // the same action: fully idempotent, zero writes.
     const writesBefore = h.gateway.writes.length;
     const candidate2 = await candidateFor(h.gateway, "THINK-5");

@@ -132,8 +132,8 @@ describe("syncCandidate", () => {
   it("opens the thread for advance and block actions", async () => {
     const advanceIssue = makeIssue({
       identifier: "THINK-7",
-      state: "Todo",
-      labels: ["Claude"],
+      state: "Requirements Review",
+      labels: ["Claude", "LFG"],
     });
     const blockIssue = makeIssue({
       identifier: "THINK-8",
