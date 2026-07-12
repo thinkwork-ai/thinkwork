@@ -1,0 +1,202 @@
+/**
+ * Operational sqlite store for the factory daemon.
+ *
+ * The DB lives at `<stateDir>/factory.db`. Schema (src/store/schema.sql) is
+ * applied idempotently on every open. The store is a rebuildable cache: every
+ * table carries the Linear issue id, so a fresh Linear scan can repopulate it.
+ */
+
+import Database from "better-sqlite3";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** Attempt states considered terminal — mirror of the CASE list in schema.sql. */
+export const TERMINAL_ATTEMPT_STATES = [
+  "Succeeded",
+  "Failed",
+  "TimedOut",
+  "Stalled",
+  "CanceledByReconciliation",
+] as const;
+
+export interface IssueRow {
+  issue_id: string;
+  identifier: string;
+  lane: string;
+  phase: string;
+  state: string;
+  compounded: number;
+  slack_thread_ts: string | null;
+  updated_at: string;
+}
+
+export interface AttemptRow {
+  id: number;
+  issue_id: string;
+  phase: string;
+  attempt_number: number;
+  state: string;
+  host: string | null;
+  worktree_path: string | null;
+  branch: string | null;
+  pid: number | null;
+  log_path: string | null;
+  started_at: string;
+  ended_at: string | null;
+  detail: string | null;
+  active: number;
+}
+
+export interface UpsertIssueInput {
+  issueId: string;
+  identifier: string;
+  lane: string;
+  phase: string;
+  state: string;
+  compounded?: number;
+  slackThreadTs?: string;
+}
+
+export interface InsertAttemptInput {
+  issueId: string;
+  phase: string;
+  attemptNumber: number;
+  /** Initial state; defaults to "Running". */
+  state?: string;
+  host?: string;
+  worktreePath?: string;
+  branch?: string;
+  pid?: number;
+  logPath?: string;
+  detail?: string;
+}
+
+export interface FactoryStore {
+  readonly db: Database.Database;
+  upsertIssue(input: UpsertIssueInput): void;
+  getIssue(issueId: string): IssueRow | undefined;
+  insertAttempt(input: InsertAttemptInput): number;
+  /**
+   * Move an attempt to a new state. Throws if the attempt does not exist.
+   * Terminal states also stamp ended_at.
+   */
+  transitionAttempt(attemptId: number, state: string, detail?: string): void;
+  getAttempt(attemptId: number): AttemptRow | undefined;
+  getActiveAttempt(issueId: string, phase: string): AttemptRow | undefined;
+  close(): void;
+}
+
+function schemaSql(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return readFileSync(join(here, "schema.sql"), "utf-8");
+}
+
+export function openStore(
+  stateDir: string,
+  clock: () => Date = () => new Date(),
+): FactoryStore {
+  mkdirSync(stateDir, { recursive: true });
+  const db = new Database(join(stateDir, "factory.db"));
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.exec(schemaSql());
+
+  const now = () => clock().toISOString();
+
+  const upsertIssueStmt = db.prepare(`
+    INSERT INTO issues (issue_id, identifier, lane, phase, state, compounded, slack_thread_ts, updated_at)
+    VALUES (@issue_id, @identifier, @lane, @phase, @state, @compounded, @slack_thread_ts, @updated_at)
+    ON CONFLICT (issue_id) DO UPDATE SET
+      identifier = excluded.identifier,
+      lane = excluded.lane,
+      phase = excluded.phase,
+      state = excluded.state,
+      compounded = excluded.compounded,
+      slack_thread_ts = COALESCE(excluded.slack_thread_ts, issues.slack_thread_ts),
+      updated_at = excluded.updated_at
+  `);
+
+  const getIssueStmt = db.prepare("SELECT * FROM issues WHERE issue_id = ?");
+
+  const insertAttemptStmt = db.prepare(`
+    INSERT INTO attempts (issue_id, phase, attempt_number, state, host, worktree_path, branch, pid, log_path, started_at, detail)
+    VALUES (@issue_id, @phase, @attempt_number, @state, @host, @worktree_path, @branch, @pid, @log_path, @started_at, @detail)
+  `);
+
+  const transitionStmt = db.prepare(`
+    UPDATE attempts SET state = @state, detail = COALESCE(@detail, detail), ended_at = @ended_at
+    WHERE id = @id
+  `);
+
+  const getAttemptStmt = db.prepare("SELECT * FROM attempts WHERE id = ?");
+
+  const getActiveAttemptStmt = db.prepare(
+    "SELECT * FROM attempts WHERE issue_id = ? AND phase = ? AND active = 1",
+  );
+
+  return {
+    db,
+
+    upsertIssue(input) {
+      upsertIssueStmt.run({
+        issue_id: input.issueId,
+        identifier: input.identifier,
+        lane: input.lane,
+        phase: input.phase,
+        state: input.state,
+        compounded: input.compounded ?? 0,
+        slack_thread_ts: input.slackThreadTs ?? null,
+        updated_at: now(),
+      });
+    },
+
+    getIssue(issueId) {
+      return getIssueStmt.get(issueId) as IssueRow | undefined;
+    },
+
+    insertAttempt(input) {
+      const result = insertAttemptStmt.run({
+        issue_id: input.issueId,
+        phase: input.phase,
+        attempt_number: input.attemptNumber,
+        state: input.state ?? "Running",
+        host: input.host ?? null,
+        worktree_path: input.worktreePath ?? null,
+        branch: input.branch ?? null,
+        pid: input.pid ?? null,
+        log_path: input.logPath ?? null,
+        started_at: now(),
+        detail: input.detail ?? null,
+      });
+      return Number(result.lastInsertRowid);
+    },
+
+    transitionAttempt(attemptId, state, detail) {
+      const isTerminal = (
+        TERMINAL_ATTEMPT_STATES as readonly string[]
+      ).includes(state);
+      const result = transitionStmt.run({
+        id: attemptId,
+        state,
+        detail: detail ?? null,
+        ended_at: isTerminal ? now() : null,
+      });
+      if (result.changes === 0) {
+        throw new Error(`attempt ${attemptId} does not exist`);
+      }
+    },
+
+    getAttempt(attemptId) {
+      return getAttemptStmt.get(attemptId) as AttemptRow | undefined;
+    },
+
+    getActiveAttempt(issueId, phase) {
+      return getActiveAttemptStmt.get(issueId, phase) as AttemptRow | undefined;
+    },
+
+    close() {
+      db.close();
+    },
+  };
+}
