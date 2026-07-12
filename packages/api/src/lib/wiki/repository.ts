@@ -229,7 +229,12 @@ export interface WikiSectionInput {
   body_md: string | null | undefined;
   position: number;
   /** Source references for provenance; recorded per section on upsert. */
-  sources?: Array<{ kind: WikiSectionSourceKind; ref: string }>;
+  sources?: Array<{
+    kind: WikiSectionSourceKind;
+    ref: string;
+    /** THINK-263 U2 — source-thread backpointers from the cited record. */
+    threadIds?: string[] | null;
+  }>;
   /**
    * Provenance reconciliation (U4): source kinds this writer OWNS for the
    * section. Existing rows of these kinds that are absent from `sources`
@@ -1784,7 +1789,11 @@ export async function upsertSections(
     if (section.sources && section.sources.length > 0) {
       await recordSectionSources(
         sectionId,
-        section.sources.map((s) => ({ kind: s.kind, ref: s.ref })),
+        section.sources.map((s) => ({
+          kind: s.kind,
+          ref: s.ref,
+          threadIds: s.threadIds ?? null,
+        })),
         db,
       );
     }
@@ -2225,7 +2234,11 @@ export async function listPromotionCandidates(
  */
 export async function recordSectionSources(
   sectionId: string,
-  sources: Array<{ kind: WikiSectionSourceKind; ref: string }>,
+  sources: Array<{
+    kind: WikiSectionSourceKind;
+    ref: string;
+    threadIds?: string[] | null;
+  }>,
   db: DbClient = defaultDb,
 ): Promise<void> {
   if (sources.length === 0) return;
@@ -2236,9 +2249,23 @@ export async function recordSectionSources(
         section_id: sectionId,
         source_kind: s.kind,
         source_ref: s.ref,
+        source_thread_ids:
+          s.threadIds && s.threadIds.length > 0 ? s.threadIds : null,
       })),
     )
-    .onConflictDoNothing();
+    // Recompiles re-cite the same refs; stamp thread backpointers onto
+    // pre-existing rows when the new write carries them (THINK-263 U2),
+    // preserving first_seen_at and never clearing an existing stamp.
+    .onConflictDoUpdate({
+      target: [
+        wikiSectionSources.section_id,
+        wikiSectionSources.source_kind,
+        wikiSectionSources.source_ref,
+      ],
+      set: {
+        source_thread_ids: sql`COALESCE(EXCLUDED.source_thread_ids, ${wikiSectionSources.source_thread_ids})`,
+      },
+    });
 }
 
 // ---------------------------------------------------------------------------

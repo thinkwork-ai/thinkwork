@@ -75,6 +75,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     wakeupRequestId: "wakeup-1",
   }));
   const materializeSlackFiles = vi.fn(async () => []);
+  const persistAckTs = vi.fn(async () => {});
   const slackApi = {
     fetchThreadMessages: vi.fn(async () => [
       { user: "U123", botId: null, ts: "1710000000.000000", text: "Earlier" },
@@ -92,6 +93,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     resolveSlackThread,
     dispatchDefaultAgent,
     materializeSlackFiles,
+    persistAckTs,
     slackApi,
     metrics,
     ...overrides,
@@ -154,6 +156,40 @@ describe("Slack events handler", () => {
       messageId: "message-1",
       wakeupRequestId: "wakeup-1",
     });
+  });
+
+  it("stamps the ack ts onto the triggering message after a successful ack post", async () => {
+    const deps = makeDeps();
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    await dispatch(makeArgs(appMentionPayload()));
+
+    expect(deps.slackApi.postMessage).toHaveBeenCalledTimes(1);
+    expect(deps.persistAckTs).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      messageId: "message-1",
+      ackTs: "1710000002.000000",
+    });
+  });
+
+  it("does not stamp and does not throw when the ack post fails", async () => {
+    const deps = makeDeps({
+      slackApi: {
+        fetchThreadMessages: vi.fn(async () => []),
+        postMessage: vi.fn(async () => ({
+          ok: false,
+          error: "channel_not_found",
+        })),
+        sendLinkPrompt: vi.fn(async () => {}),
+      },
+    });
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    const result = await dispatch(makeArgs(appMentionPayload()));
+
+    expect(result.statusCode).toBe(200);
+    expect(deps.slackApi.postMessage).toHaveBeenCalledTimes(1);
+    expect(deps.persistAckTs).not.toHaveBeenCalled();
   });
 
   it("accepts a linked direct message without requiring a bot mention", async () => {

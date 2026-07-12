@@ -3,6 +3,7 @@ import {
   retryThreadReplySlackForTurn,
   sendThreadReplySlack,
   type SlackThreadReplyStore,
+  type SlackTurnArtifact,
 } from "./thread-reply.js";
 
 const TENANT_ID = "11111111-1111-4111-8111-111111111111";
@@ -10,6 +11,9 @@ const THREAD_ID = "22222222-2222-4222-8222-222222222222";
 const ASSISTANT_MESSAGE_ID = "33333333-3333-4333-8333-333333333333";
 const TURN_ID = "44444444-4444-4444-8444-444444444444";
 const CLAIM_ID = "55555555-5555-4555-8555-555555555555";
+const REQUESTER_USER_ID = "66666666-6666-4666-8666-666666666666";
+const ARTIFACT_ID = "77777777-7777-4777-8777-777777777777";
+const ARTIFACT_CREATOR_ID = "88888888-8888-4888-8888-888888888888";
 
 class FakeStore implements SlackThreadReplyStore {
   context: Awaited<ReturnType<SlackThreadReplyStore["loadContext"]>> = {
@@ -17,7 +21,9 @@ class FakeStore implements SlackThreadReplyStore {
     body: "Final answer",
     assistantMetadata: { sourceTurnId: TURN_ID },
     triggeringUserMetadata: slackUserMetadata(),
+    requesterUserId: REQUESTER_USER_ID,
   };
+  turnArtifacts: SlackTurnArtifact[] = [];
   target: Awaited<ReturnType<SlackThreadReplyStore["loadTarget"]>> = {
     status: "ready",
     botTokenSecretPath: "thinkwork/tenants/t/slack/workspaces/T123/bot-token",
@@ -62,11 +68,19 @@ class FakeStore implements SlackThreadReplyStore {
   async findAssistantMessageForTurn() {
     return this.findForTurn;
   }
+
+  async loadTurnArtifacts() {
+    return this.turnArtifacts;
+  }
 }
 
 let store: FakeStore;
 let getBotToken: ReturnType<typeof vi.fn>;
 let postMessage: ReturnType<typeof vi.fn>;
+let updateMessage: ReturnType<typeof vi.fn>;
+let getShare: ReturnType<typeof vi.fn>;
+let signToken: ReturnType<typeof vi.fn>;
+let shareBase: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   store = new FakeStore();
@@ -74,6 +88,12 @@ beforeEach(() => {
   postMessage = vi
     .fn()
     .mockResolvedValue({ ok: true, ts: "1710000002.000000" });
+  updateMessage = vi
+    .fn()
+    .mockResolvedValue({ ok: true, ts: "1710000001.000000" });
+  getShare = vi.fn().mockResolvedValue({ shareId: "share-1", created: true });
+  signToken = vi.fn().mockReturnValue("signed-token");
+  shareBase = vi.fn().mockReturnValue("https://api.test");
 });
 
 describe("sendThreadReplySlack", () => {
@@ -83,6 +103,69 @@ describe("sendThreadReplySlack", () => {
       assistantMessageId: ASSISTANT_MESSAGE_ID,
       providerMessageTs: "1710000002.000000",
     });
+  });
+
+  it("updates the acknowledgement message in place when an ack ts is present", async () => {
+    if (!store.context) throw new Error("missing context");
+    store.context.triggeringUserMetadata = slackUserMetadata(
+      null,
+      "message_im",
+      "1710000001.000000",
+    );
+
+    await expect(send()).resolves.toEqual({
+      delivered: true,
+      assistantMessageId: ASSISTANT_MESSAGE_ID,
+      providerMessageTs: "1710000001.000000",
+    });
+    expect(updateMessage).toHaveBeenCalledWith({
+      token: "xoxb-token",
+      channel: "C123",
+      ts: "1710000001.000000",
+      text: "Final answer",
+    });
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(store.delivered).toHaveLength(1);
+    expect(store.delivered[0]).toMatchObject({
+      providerMessageTs: "1710000001.000000",
+    });
+  });
+
+  it("falls back to a fresh post when the ack update reports not found", async () => {
+    if (!store.context) throw new Error("missing context");
+    store.context.triggeringUserMetadata = slackUserMetadata(
+      null,
+      "message_im",
+      "1710000001.000000",
+    );
+    updateMessage.mockResolvedValueOnce({
+      ok: false,
+      error: "message_not_found",
+    });
+
+    await expect(send()).resolves.toEqual({
+      delivered: true,
+      assistantMessageId: ASSISTANT_MESSAGE_ID,
+      providerMessageTs: "1710000002.000000",
+    });
+    expect(updateMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith({
+      token: "xoxb-token",
+      channel: "C123",
+      text: "Final answer",
+      threadTs: "1710000001.000000",
+      clientMessageId: ASSISTANT_MESSAGE_ID,
+    });
+    expect(store.delivered).toHaveLength(1);
+    expect(store.delivered[0]).toMatchObject({
+      providerMessageTs: "1710000002.000000",
+    });
+  });
+
+  it("posts a new message when no ack ts is present", async () => {
+    await expect(send()).resolves.toMatchObject({ delivered: true });
+    expect(updateMessage).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledTimes(1);
   });
 
   it("mints a claim id with the default randomUUID (no ERR_INVALID_THIS)", async () => {
@@ -179,6 +262,7 @@ describe("sendThreadReplySlack", () => {
       body: "   ",
       assistantMetadata: { sourceTurnId: TURN_ID },
       triggeringUserMetadata: slackUserMetadata(),
+      requesterUserId: REQUESTER_USER_ID,
     };
     await expect(send()).resolves.toMatchObject({
       retryable: false,
@@ -310,6 +394,98 @@ describe("sendThreadReplySlack", () => {
     });
     expect(store.claimed).toBe(0);
   });
+
+  it("converts the markdown body to Slack mrkdwn before posting", async () => {
+    if (!store.context) throw new Error("missing context");
+    store.context.body = "## Update\n- ship **bold** now";
+
+    await expect(send()).resolves.toMatchObject({ delivered: true });
+    const text = postMessage.mock.calls[0]?.[0]?.text as string;
+    expect(text).toContain("*Update*");
+    expect(text).toContain("• ship *bold* now");
+    expect(text).not.toContain("##");
+    expect(text).not.toContain("**");
+  });
+
+  it("appends a public share link when the turn produced an artifact", async () => {
+    store.turnArtifacts = [
+      {
+        id: ARTIFACT_ID,
+        title: "Q3 Pipeline Report",
+        createdByUserId: ARTIFACT_CREATOR_ID,
+      },
+    ];
+
+    await expect(send()).resolves.toMatchObject({ delivered: true });
+    const text = postMessage.mock.calls[0]?.[0]?.text as string;
+    expect(text).toBe(
+      "Final answer\n\n📄 <https://api.test/share/signed-token|Q3 Pipeline Report>",
+    );
+    expect(getShare).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        artifactId: ARTIFACT_ID,
+        createdBy: ARTIFACT_CREATOR_ID,
+        source: "lambda",
+      }),
+    );
+    expect(signToken).toHaveBeenCalledWith("share-1");
+  });
+
+  it("falls back to the requester as the share creator when the artifact has none", async () => {
+    store.turnArtifacts = [
+      { id: ARTIFACT_ID, title: "Untitled", createdByUserId: null },
+    ];
+
+    await expect(send()).resolves.toMatchObject({ delivered: true });
+    expect(getShare).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ createdBy: REQUESTER_USER_ID }),
+    );
+  });
+
+  it("posts only the formatted body when the turn produced no artifacts", async () => {
+    store.turnArtifacts = [];
+
+    await expect(send()).resolves.toMatchObject({ delivered: true });
+    const text = postMessage.mock.calls[0]?.[0]?.text as string;
+    expect(text).toBe("Final answer");
+    expect(text).not.toContain("📄");
+    expect(getShare).not.toHaveBeenCalled();
+  });
+
+  it("still delivers when the share mint throws (best-effort links)", async () => {
+    store.turnArtifacts = [
+      {
+        id: ARTIFACT_ID,
+        title: "Broken Share",
+        createdByUserId: ARTIFACT_CREATOR_ID,
+      },
+    ];
+    getShare.mockRejectedValueOnce(new Error("share mint failed"));
+
+    await expect(send()).resolves.toMatchObject({ delivered: true });
+    const text = postMessage.mock.calls[0]?.[0]?.text as string;
+    expect(text).toBe("Final answer");
+    expect(text).not.toContain("📄");
+  });
+
+  it("skips link appending when the share base is unresolved", async () => {
+    store.turnArtifacts = [
+      {
+        id: ARTIFACT_ID,
+        title: "No Base",
+        createdByUserId: ARTIFACT_CREATOR_ID,
+      },
+    ];
+    shareBase.mockReturnValue(null);
+
+    await expect(send()).resolves.toMatchObject({ delivered: true });
+    const text = postMessage.mock.calls[0]?.[0]?.text as string;
+    expect(text).toBe("Final answer");
+    expect(getShare).not.toHaveBeenCalled();
+  });
 });
 
 describe("retryThreadReplySlackForTurn", () => {
@@ -376,14 +552,19 @@ function deps() {
     store,
     getBotToken,
     postMessage,
+    updateMessage,
     now: () => new Date("2026-07-12T05:00:00.000Z"),
     randomUUID: () => CLAIM_ID,
+    getShare,
+    signToken,
+    shareBase,
   };
 }
 
 function slackUserMetadata(
   rootThreadTs: string | null = null,
   triggerSurface = "message_im",
+  ackTs: string | null = null,
 ) {
   return {
     source: "slack",
@@ -392,6 +573,7 @@ function slackUserMetadata(
       channelId: "C123",
       rootThreadTs,
       triggerSurface,
+      ...(ackTs ? { ackTs } : {}),
       sourceMessage: { ts: "1710000001.000000" },
     },
   };

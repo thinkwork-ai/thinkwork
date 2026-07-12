@@ -840,6 +840,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
         sources: sectionSources.map((r) => ({
           kind: "memory_unit" as const,
           ref: r.id,
+          threadIds: r.threadId ? [r.threadId] : null,
         })),
       });
     }
@@ -922,6 +923,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
         sources: sectionSources.map((r) => ({
           kind: "memory_unit" as const,
           ref: r.id,
+          threadIds: r.threadId ? [r.threadId] : null,
         })),
       };
     });
@@ -1005,6 +1007,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
         sources: sectionSources.map((r) => ({
           kind: "memory_unit" as const,
           ref: r.id,
+          threadIds: r.threadId ? [r.threadId] : null,
         })),
       };
     });
@@ -1544,6 +1547,7 @@ async function applyAggregationPlan(args: ApplyAggregationArgs): Promise<void> {
           sources: sectionSources.map((r) => ({
             kind: "memory_unit" as const,
             ref: r.id,
+            threadIds: r.threadId ? [r.threadId] : null,
           })),
         };
       }),
@@ -1784,6 +1788,7 @@ async function applyAggregationPlan(args: ApplyAggregationArgs): Promise<void> {
           sources: sectionSources.map((r) => ({
             kind: "memory_unit" as const,
             ref: r.id,
+            threadIds: r.threadId ? [r.threadId] : null,
           })),
         };
       }),
@@ -2151,6 +2156,7 @@ async function maybeMergeIntoExistingPage(args: {
         sources: sectionSources.map((r) => ({
           kind: "memory_unit" as const,
           ref: r.id,
+          threadIds: r.threadId ? [r.threadId] : null,
         })),
       };
     }),

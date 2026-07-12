@@ -17,6 +17,7 @@ import {
 import {
   callSlackApi,
   fetchSlackThreadReplies,
+  updateSlackMessage,
   SlackApiError,
 } from "@chat-adapter/slack/api";
 import {
@@ -305,6 +306,43 @@ export async function postSlackThreadMessage(
       };
     }
     return { ok: true, ts: optionalString(posted.ts) ?? undefined };
+  } catch (error) {
+    const apiFailure = asSlackApiFailure(error);
+    if (apiFailure) return apiFailure;
+    throw error;
+  }
+}
+
+/**
+ * Update a previously posted message in place (`chat.update`). Mirrors
+ * postSlackThreadMessage's normalization exactly: Slack-level `ok: false`
+ * responses surface as `{ ok: false, error }` (the SDK's assertSlackOk throw
+ * flows through the shared asSlackApiFailure path), while HTTP and transport
+ * failures throw.
+ */
+export async function updateSlackThreadMessage(
+  input: SlackApiCallInput & {
+    channel: string;
+    ts: string;
+    text: string;
+  },
+): Promise<SlackPostMessageResult> {
+  const request = input.fetchFn ?? fetch;
+  const timeoutSignal = AbortSignal.timeout(input.timeoutMs ?? 10_000);
+  const fetchWithDeadline: typeof fetch = (url, init) =>
+    request(url, {
+      ...init,
+      signal: init?.signal ?? timeoutSignal,
+    });
+  try {
+    const updated = await updateSlackMessage({
+      channel: input.channel,
+      ts: input.ts,
+      text: input.text,
+      token: input.token,
+      fetch: fetchWithDeadline,
+    });
+    return { ok: true, ts: optionalString(updated.id) ?? undefined };
   } catch (error) {
     const apiFailure = asSlackApiFailure(error);
     if (apiFailure) return apiFailure;

@@ -1170,12 +1170,33 @@ export class HindsightAdapter implements MemoryAdapter {
           : undefined,
       trace: detail?.trace ?? null,
     });
+    // THINK-263 U1 — the unit's own write-time stamp is authoritative for
+    // provenance; the request owner's threadId is only a fallback. Conversation
+    // units also carry the thread id as `document_id` (retainConversation sets
+    // document_id = threadId), which covers pre-stamp history.
+    const unitMeta: Record<string, unknown> =
+      unit.metadata && typeof unit.metadata === "object"
+        ? (unit.metadata as Record<string, unknown>)
+        : {};
+    const stampedThreadId =
+      stringField(unitMeta.threadId) ??
+      stringField(unitMeta.thread_id) ??
+      (unit.context === "thinkwork_thread"
+        ? stringField(unit.document_id)
+        : null);
+    const stampedThreadTurnId =
+      stringField(unitMeta.threadTurnId) ??
+      stringField(unitMeta.thread_turn_id) ??
+      null;
     return {
       id: String(unit.id || `hindsight-${bankId}-${createdAt}`),
       tenantId: owner.tenantId,
       ownerType: owner.ownerType,
       ownerId: owner.ownerId,
-      threadId: owner.threadId,
+      threadId: stampedThreadId ?? owner.threadId,
+      ...(stampedThreadTurnId
+        ? { provenance: { turnIds: [stampedThreadTurnId] } }
+        : {}),
       kind: "unit",
       sourceType: inferSourceType(unit),
       strategy: factTypeToStrategy(factType),
@@ -1583,6 +1604,7 @@ function redactHindsightMetadata(value: unknown): Record<string, unknown> {
     "spaceId",
     "agentId",
     "threadId",
+    "threadTurnId",
     "source",
     "path",
     "date",

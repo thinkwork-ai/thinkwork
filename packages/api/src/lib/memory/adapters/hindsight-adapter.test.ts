@@ -11,7 +11,7 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
     // status quo). hindsightSql renders the real `hindsight.` chunk.
     getDb: handle,
     getHindsightDb: handle,
-    resolveHindsightDb: <T,>(primary: T) => primary,
+    resolveHindsightDb: <T>(primary: T) => primary,
     hindsightSql: actual.hindsightSql,
   };
 });
@@ -72,6 +72,65 @@ describe("HindsightAdapter legacy user bank reads", () => {
       include: { entities: null },
     });
     expect(body).not.toHaveProperty("max_results");
+  });
+
+  // THINK-263 U1 — write-time stamps are authoritative for provenance.
+  it("maps stamped threadId/threadTurnId from unit metadata into the record", async () => {
+    executeMock.mockResolvedValueOnce({ rows: [] });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        memory_units: [
+          {
+            id: "memory-stamped",
+            text: "stamped memory",
+            created_at: "2026-07-12T10:00:00.000Z",
+            metadata: {
+              threadId: "thread-abc",
+              threadTurnId: "turn-xyz",
+            },
+          },
+          {
+            id: "memory-legacy-doc",
+            text: "pre-stamp conversation unit",
+            created_at: "2026-05-01T10:00:00.000Z",
+            context: "thinkwork_thread",
+            document_id: "thread-from-doc",
+          },
+          {
+            id: "memory-unstamped",
+            text: "no provenance anywhere",
+            created_at: "2026-05-01T10:00:00.000Z",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const adapter = new HindsightAdapter({
+      endpoint: "https://hindsight.example",
+    });
+    const result = await adapter.recall({
+      tenantId: TENANT_ID,
+      ownerType: "user",
+      ownerId: USER_ID,
+      query: "anything",
+      limit: 3,
+    });
+
+    const stamped = result.find((r) => r.record.id === "memory-stamped");
+    expect(stamped?.record.threadId).toBe("thread-abc");
+    expect(stamped?.record.provenance).toEqual({ turnIds: ["turn-xyz"] });
+
+    // Pre-stamp conversation units recover the thread id from document_id
+    // (retainConversation has always set document_id = threadId).
+    const legacy = result.find((r) => r.record.id === "memory-legacy-doc");
+    expect(legacy?.record.threadId).toBe("thread-from-doc");
+    expect(legacy?.record.provenance).toBeUndefined();
+
+    // Nothing stamped and no conversation document: no threadId invented.
+    const unstamped = result.find((r) => r.record.id === "memory-unstamped");
+    expect(unstamped?.record.threadId).toBeUndefined();
   });
 
   it("only fans recall out to legacy banks when explicitly requested", async () => {

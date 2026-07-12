@@ -5,6 +5,7 @@ import {
   fetchSlackThreadContext,
   postSlackThreadMessage,
   publishSlackHomeView,
+  updateSlackThreadMessage,
   verifySlackWebhookSignature,
 } from "./provider.js";
 
@@ -432,6 +433,76 @@ describe("postSlackThreadMessage", () => {
       }),
     ).rejects.toThrow();
     expect(neverResolving.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
+});
+
+describe("updateSlackThreadMessage", () => {
+  it("updates the message in place and returns the message ts", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ ok: true, ts: "1710000001.000000", channel: "C123" }),
+    );
+
+    const result = await updateSlackThreadMessage({
+      token: "xoxb-token",
+      channel: "C123",
+      ts: "1710000001.000000",
+      text: "Final answer",
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({ ok: true, ts: "1710000001.000000" });
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [
+      URL,
+      { headers: Record<string, string>; body: string },
+    ];
+    expect(String(url)).toBe("https://slack.com/api/chat.update");
+    expect(init.headers.authorization).toBe("Bearer xoxb-token");
+    const body = new URLSearchParams(init.body);
+    expect(body.get("channel")).toBe("C123");
+    expect(body.get("ts")).toBe("1710000001.000000");
+    expect(body.get("text")).toBe("Final answer");
+  });
+
+  it("normalizes ok:false responses into a failed update result", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ ok: false, error: "message_not_found" }),
+    );
+
+    await expect(
+      updateSlackThreadMessage({
+        token: "xoxb-token",
+        channel: "C123",
+        ts: "1710000001.000000",
+        text: "Final answer",
+        fetchFn: fetchFn as unknown as typeof fetch,
+      }),
+    ).resolves.toEqual({ ok: false, error: "message_not_found" });
+  });
+
+  it("throws on HTTP failures and transport errors", async () => {
+    const httpFailure = vi.fn(async () => jsonResponse({ ok: false }, 500));
+    await expect(
+      updateSlackThreadMessage({
+        token: "t",
+        channel: "C",
+        ts: "1710000001.000000",
+        text: "x",
+        fetchFn: httpFailure as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("HTTP 500");
+
+    const transport = vi.fn(async () => {
+      throw new Error("socket hang up");
+    });
+    await expect(
+      updateSlackThreadMessage({
+        token: "t",
+        channel: "C",
+        ts: "1710000001.000000",
+        text: "x",
+        fetchFn: transport as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("socket hang up");
   });
 });
 

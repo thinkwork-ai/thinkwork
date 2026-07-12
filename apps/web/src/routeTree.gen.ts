@@ -74,6 +74,7 @@ import { Route as AuthedSettingsMemoryWikiRouteImport } from "./routes/_authed/s
 import { Route as AuthedSettingsMemoryOntologyRouteImport } from "./routes/_authed/settings.memory.ontology";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
 import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
+import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
 import { Route as AuthedSettingsMcpServersPluginsRouteImport } from "./routes/_authed/settings.mcp-servers.plugins";
 import { Route as AuthedSettingsMcpServersDataSourcesRouteImport } from "./routes/_authed/settings.mcp-servers.data-sources";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
@@ -478,6 +479,12 @@ const AuthedSettingsMemoryKnowledgeBasesRoute =
     path: "/knowledge-bases",
     getParentRoute: () => AuthedSettingsMemoryRoute,
   } as any);
+const AuthedSettingsMcpServersServersRoute =
+  AuthedSettingsMcpServersServersRouteImport.update({
+    id: "/mcp-servers/servers",
+    path: "/mcp-servers/servers",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsMcpServersPluginsRoute =
   AuthedSettingsMcpServersPluginsRouteImport.update({
     id: "/mcp-servers/plugins",
@@ -781,6 +788,7 @@ export interface FileRoutesByFullPath {
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
   "/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
+  "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
@@ -884,6 +892,7 @@ export interface FileRoutesByTo {
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
   "/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
+  "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
@@ -994,6 +1003,7 @@ export interface FileRoutesById {
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/_authed/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
   "/_authed/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
+  "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
@@ -1103,6 +1113,7 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/data-sources"
     | "/settings/mcp-servers/plugins"
+    | "/settings/mcp-servers/servers"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
@@ -1206,6 +1217,7 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/data-sources"
     | "/settings/mcp-servers/plugins"
+    | "/settings/mcp-servers/servers"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
@@ -1315,6 +1327,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/mcp-servers/$serverId"
     | "/_authed/settings/mcp-servers/data-sources"
     | "/_authed/settings/mcp-servers/plugins"
+    | "/_authed/settings/mcp-servers/servers"
     | "/_authed/settings/memory/knowledge-bases"
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/ontology"
@@ -1839,6 +1852,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsMemoryKnowledgeBasesRouteImport;
       parentRoute: typeof AuthedSettingsMemoryRoute;
     };
+    "/_authed/settings/mcp-servers/servers": {
+      id: "/_authed/settings/mcp-servers/servers";
+      path: "/mcp-servers/servers";
+      fullPath: "/settings/mcp-servers/servers";
+      preLoaderRoute: typeof AuthedSettingsMcpServersServersRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/mcp-servers/plugins": {
       id: "/_authed/settings/mcp-servers/plugins";
       path: "/mcp-servers/plugins";
@@ -2357,6 +2377,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
   AuthedSettingsMcpServersDataSourcesRoute: typeof AuthedSettingsMcpServersDataSourcesRoute;
   AuthedSettingsMcpServersPluginsRoute: typeof AuthedSettingsMcpServersPluginsRoute;
+  AuthedSettingsMcpServersServersRoute: typeof AuthedSettingsMcpServersServersRoute;
   AuthedSettingsPluginsPluginKeyRoute: typeof AuthedSettingsPluginsPluginKeyRoute;
   AuthedSettingsPluginsDataIntegrationsRoute: typeof AuthedSettingsPluginsDataIntegrationsRoute;
   AuthedSettingsPluginsN8nRoute: typeof AuthedSettingsPluginsN8nRouteWithChildren;
@@ -2425,6 +2446,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsMcpServersDataSourcesRoute:
     AuthedSettingsMcpServersDataSourcesRoute,
   AuthedSettingsMcpServersPluginsRoute: AuthedSettingsMcpServersPluginsRoute,
+  AuthedSettingsMcpServersServersRoute: AuthedSettingsMcpServersServersRoute,
   AuthedSettingsPluginsPluginKeyRoute: AuthedSettingsPluginsPluginKeyRoute,
   AuthedSettingsPluginsDataIntegrationsRoute:
     AuthedSettingsPluginsDataIntegrationsRoute,

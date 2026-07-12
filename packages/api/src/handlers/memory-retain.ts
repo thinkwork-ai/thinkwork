@@ -369,12 +369,23 @@ async function processClaimedRetainAttempt(
             threadId: eventThreadId,
             messages: merged,
           });
+      // THINK-263 U1 — stamp thread provenance at write time, mirroring the
+      // high-confidence-fact path, so recall hits can deep-link to their
+      // source thread without read-time guessing. The turn id rides the
+      // attempt ledger row (the handler stamped it at upsert).
+      const provenanceStampedMetadata = {
+        ...(eventMetadata || {}),
+        threadId: eventThreadId,
+        ...(attempt.thread_turn_id
+          ? { threadTurnId: attempt.thread_turn_id }
+          : {}),
+      };
       const conversationPromise = adapter.retainConversation({
         ...owner,
         threadId: eventThreadId,
         messages: merged,
         hindsight: buildThreadRetainOptions(merged),
-        metadata: eventMetadata,
+        metadata: provenanceStampedMetadata,
       });
 
       const [highConfidenceFactResult, conversationResult] =
@@ -407,9 +418,7 @@ async function processClaimedRetainAttempt(
       let spaceDualWrite: "retained" | "failed" | undefined;
       const dualWriteSpaceId = attempt.space_id;
       if (dualWriteSpaceId && !evalTraffic) {
-        if (
-          await spaceConversationSharingEnabled(tenantId, dualWriteSpaceId)
-        ) {
+        if (await spaceConversationSharingEnabled(tenantId, dualWriteSpaceId)) {
           try {
             await adapter.retainConversation({
               tenantId,
@@ -421,7 +430,7 @@ async function processClaimedRetainAttempt(
                 spaceId: dualWriteSpaceId,
                 messages: merged,
               }),
-              metadata: eventMetadata,
+              metadata: provenanceStampedMetadata,
             });
             spaceDualWrite = "retained";
           } catch (err) {
