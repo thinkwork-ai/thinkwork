@@ -950,6 +950,157 @@ describe("upsertClaimsForEvidence erase fence", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Claim revival (THINK-193 P1 retract → re-ingest, subsuming the U8
+// erase-epoch case). A RETRACTED exact-fingerprint match that the source
+// re-asserts with live evidence must come back as a NEW active edition —
+// keeping its retracted edge ROWS must not pin it dead forever. SUPERSEDED
+// matches stay dead (anti-resurrection).
+// ---------------------------------------------------------------------------
+
+describe("upsertClaimsForEvidence revival of retracted claims (P1)", () => {
+  const snapshot = {
+    id: "co-1",
+    name: "Acme",
+    address: { addressCity: "Springfield" },
+    updatedAt: T1,
+  };
+
+  function seedSource(store: FakeMemoryStore, eraseGeneration: number) {
+    store.sourceConfigs.push({
+      id: SOURCE_CONFIG_ID,
+      tenant_id: TENANT_ID,
+      enabled: true,
+      erase_generation: eraseGeneration,
+    });
+  }
+
+  /** Ordinary retraction saga: the edition's edges flip to 'retracted' (the
+   * ROWS survive) and the orphaned claims flip to 'retracted'. */
+  async function retractEdition(
+    db: Database,
+    store: FakeMemoryStore,
+    evidenceItemId: string,
+  ) {
+    retractSupportEdges(store, evidenceItemId);
+    const { deactivateOrphanedClaims } = await import("./claims.js");
+    await deactivateOrphanedClaims(db, {
+      tenantId: TENANT_ID,
+      sourceConfigId: SOURCE_CONFIG_ID,
+      evidenceItemId,
+    });
+  }
+
+  it("retract → re-ingest identical content revives the fact as ONE new active claim edition", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 0); // never erased: ordinary retraction only
+    await applyEdition(db, store, { evidenceItemId: "ev-1", snapshot });
+    await retractEdition(db, store, "ev-1");
+    const deadIds = store.claims.map((c) => c.id);
+    expect(store.claims.every((c) => c.status === "retracted")).toBe(true);
+    // The retracted edge ROWS survive — that is exactly what used to pin the
+    // claim dead forever.
+    expect(store.claimEdges).toHaveLength(2);
+
+    const result = await applyEdition(db, store, {
+      evidenceItemId: "ev-2",
+      snapshot,
+    });
+
+    expect(result.created).toBe(2);
+    expect(result.unsupportedRetracted).toBe(0);
+    for (const predicate of ["customer.name", "customer.address"]) {
+      const rows = claimsFor(store, predicate);
+      // Dead history row is GONE — replaced by the fresh active edition.
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.status).toBe("active");
+      expect(rows[0]!.effective_to).toBeNull();
+      expect(deadIds).not.toContain(rows[0]!.id);
+      // …supported by an ACTIVE edge from the NEW evidence item.
+      const edges = store.claimEdges.filter((e) => e.claim_id === rows[0]!.id);
+      expect(edges).toHaveLength(1);
+      expect(edges[0]).toMatchObject({
+        evidence_item_id: "ev-2",
+        status: "active",
+      });
+    }
+    // The dead rows' retracted edges died with them.
+    expect(store.claimEdges).toHaveLength(2);
+    expect(store.claimEdges.every((e) => e.status === "active")).toBe(true);
+  });
+
+  it("corroboration survives revival: an ACTIVE edge from a different evidence item is repointed onto the new claim", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 0);
+    await applyEdition(db, store, { evidenceItemId: "ev-1", snapshot });
+    const name = claimsFor(store, "customer.name")[0]!;
+    // A DIFFERENT, still-active evidence item also supports the name claim.
+    store.claimEdges.push({
+      id: 9101,
+      tenant_id: TENANT_ID,
+      claim_id: name.id,
+      evidence_item_id: "ev-other",
+      source_config_id: SOURCE_CONFIG_ID,
+      status: "active",
+      created_at: new Date(T1),
+      retracted_at: null,
+    });
+    // Force the claim dead anyway (e.g. an operator retraction of the fact)
+    // so the revival path has corroboration to preserve.
+    retractSupportEdges(store, "ev-1");
+    for (const claim of store.claims) {
+      claim.status = "retracted";
+      claim.effective_to = new Date(T2);
+    }
+
+    await applyEdition(db, store, { evidenceItemId: "ev-2", snapshot });
+
+    const revived = claimsFor(store, "customer.name")[0]!;
+    expect(revived.status).toBe("active");
+    expect(revived.id).not.toBe(name.id);
+    const edges = store.claimEdges
+      .filter((e) => e.claim_id === revived.id)
+      .sort((a, b) =>
+        String(a.evidence_item_id).localeCompare(String(b.evidence_item_id)),
+      );
+    expect(edges).toHaveLength(2);
+    expect(edges.map((e) => e.evidence_item_id)).toEqual(["ev-2", "ev-other"]);
+    expect(edges.every((e) => e.status === "active")).toBe(true);
+    // No orphaned edges left pointing at the deleted claim.
+    expect(store.claimEdges.some((e) => e.claim_id === name.id)).toBe(false);
+  });
+
+  it("anti-resurrection intact: a SUPERSEDED exact match is never revived — the current value keeps winning", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 1); // even with an erase in the source's past
+    await applyEdition(db, store, {
+      evidenceItemId: "ev-1",
+      snapshot: { id: "co-1", employees: 77, updatedAt: T1 },
+    });
+    await applyEdition(db, store, {
+      evidenceItemId: "ev-2",
+      snapshot: { id: "co-1", employees: 91, updatedAt: T2 },
+      supersedes: "ev-1",
+    });
+    const superseded = claimsFor(store, "customer.employees")[0]!;
+    expect(superseded.status).toBe("superseded");
+
+    // Replay the OLD edition: exact fingerprint match on the superseded row.
+    const result = await applyEdition(db, store, {
+      evidenceItemId: "ev-old-replay",
+      snapshot: { id: "co-1", employees: 77, updatedAt: T1 },
+    });
+
+    expect(result.created).toBe(0);
+    const rows = claimsFor(store, "customer.employees");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.id).toBe(superseded.id); // same row, not re-minted
+    expect(rows[0]!.status).toBe("superseded");
+    expect(rows[1]!.status).toBe("active"); // 91 still wins
+    expect((rows[1]!.value as { count: number }).count).toBe(91);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Erase-epoch re-onboarding (THINK-193 U8 P1): after a source erase the
 // cleanup hard-deletes evidence rows, so the dead claims' evidence edges
 // are gone (cascade). Re-acquiring IDENTICAL provider content must mint
@@ -1011,12 +1162,12 @@ describe("upsertClaimsForEvidence erase-epoch re-onboarding (U8)", () => {
     expect(activeEdges.every((e) => e.evidence_item_id === "ev-2")).toBe(true);
   });
 
-  it("anti-resurrection preserved: a retracted row with surviving edge rows is reused status-unchanged even at erase_generation > 0", async () => {
+  it("retracted rows with surviving edge rows are ALSO revived at erase_generation > 0 (unified revival)", async () => {
     const { db, store } = makeFakeMemoryDb();
     seedSource(store, 1); // source has an erase in its past
     await applyEdition(db, store, { evidenceItemId: "ev-1", snapshot });
-    // Ordinary retraction: edges flip to 'retracted' but the ROWS survive
-    // (only the erase purge cascade removes them).
+    // Ordinary retraction: edges flip to 'retracted' but the ROWS survive.
+    // Pre-fix this pinned the claim retracted forever (the P1 bug).
     retractSupportEdges(store, "ev-1");
     for (const claim of store.claims) {
       claim.status = "retracted";
@@ -1029,18 +1180,22 @@ describe("upsertClaimsForEvidence erase-epoch re-onboarding (U8)", () => {
       snapshot,
     });
 
-    expect(result.created).toBe(0);
-    expect(store.claims.map((c) => c.id).sort()).toEqual(priorIds);
+    expect(result.created).toBe(2);
     for (const predicate of ["customer.name", "customer.address"]) {
-      expect(claimsFor(store, predicate)[0]!.status).toBe("retracted");
+      const rows = claimsFor(store, predicate);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.status).toBe("active");
+      expect(priorIds).not.toContain(rows[0]!.id);
     }
   });
 
-  it("zero-edge retracted rows are NOT re-minted when the source never erased (generation 0)", async () => {
+  it("zero-edge SUPERSEDED rows are NOT re-minted when the source never erased (generation 0)", async () => {
     const { db, store } = makeFakeMemoryDb();
     seedSource(store, 0);
     await applyEdition(db, store, { evidenceItemId: "ev-1", snapshot });
-    for (const claim of store.claims) claim.status = "retracted";
+    // Not a retraction: a newer value legitimately won, and (hypothetically)
+    // the edges are gone without an erase epoch. Nothing may be resurrected.
+    for (const claim of store.claims) claim.status = "superseded";
     store.claimEdges.length = 0;
     const priorIds = [...store.claims.map((c) => c.id)].sort();
 
@@ -1052,7 +1207,7 @@ describe("upsertClaimsForEvidence erase-epoch re-onboarding (U8)", () => {
     expect(result.created).toBe(0);
     expect(store.claims.map((c) => c.id).sort()).toEqual(priorIds);
     expect(
-      store.claims.every((c) => (c.status as string) === "retracted"),
+      store.claims.every((c) => (c.status as string) === "superseded"),
     ).toBe(true);
   });
 });
