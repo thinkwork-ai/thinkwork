@@ -5,8 +5,6 @@ import { json } from "../../lib/response.js";
 import {
   buildSlackThreadTurnInput,
   slackEventText,
-  slackFileRefs,
-  slackThreadTs,
   summarizeSlackThreadContext,
   type SlackThreadContextMessage,
 } from "../../lib/slack/envelope.js";
@@ -14,6 +12,13 @@ import {
   materializeSlackFilesAsThreadAttachments,
   type MaterializedSlackAttachment,
 } from "../../lib/slack/file-attachments.js";
+import {
+  classifySlackWebhook,
+  fetchSlackThreadContext,
+  postSlackThreadMessage,
+  publishSlackHomeView,
+  type SlackWebhookClassification,
+} from "../../lib/slack/provider.js";
 import {
   resolveOrCreateSlackThread,
   type SlackThreadMappingResult,
@@ -23,17 +28,14 @@ import {
   type LinkedSlackUser,
 } from "../../lib/slack/user-link-store.js";
 import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
-import { createSlackHandler, type SlackHandlerArgs } from "./_shared.js";
+import {
+  createSlackHandler,
+  type SlackHandlerArgs,
+  type SlackHandlerDeps,
+} from "./_shared.js";
 
 type DbClient = typeof db;
 type DispatchDefaultAgent = typeof dispatchDefaultAgentTurn;
-
-interface SlackEventCallback {
-  type?: unknown;
-  team_id?: unknown;
-  event_id?: unknown;
-  event?: SlackEventBody;
-}
 
 interface SlackEventBody {
   type?: unknown;
@@ -97,16 +99,48 @@ export interface SlackEventsDeps {
   >;
 }
 
+/**
+ * The handler classifies the same request body in extractTeamId,
+ * preDispatch, and dispatch. classifySlackWebhook is deterministic, so a
+ * single-entry memo keyed on the exact body/headers references avoids
+ * re-parsing the payload three times per invocation.
+ */
+let lastClassification: {
+  rawBodyText: string;
+  headers: Record<string, string> | undefined;
+  classification: SlackWebhookClassification;
+} | null = null;
+
+function classifyEventsBody(args: {
+  rawBodyText: string;
+  headers?: Record<string, string>;
+}): SlackWebhookClassification {
+  if (
+    lastClassification &&
+    lastClassification.rawBodyText === args.rawBodyText &&
+    lastClassification.headers === args.headers
+  ) {
+    return lastClassification.classification;
+  }
+  const classification = classifySlackWebhook(args);
+  lastClassification = {
+    rawBodyText: args.rawBodyText,
+    headers: args.headers,
+    classification,
+  };
+  return classification;
+}
+
 export async function handleUrlVerification(args: {
   rawBodyText: string;
+  headers?: Record<string, string>;
 }): Promise<APIGatewayProxyStructuredResultV2 | null> {
-  const body = parseJsonObject(args.rawBodyText);
-  if (body?.type !== "url_verification") return null;
-  const challenge = typeof body.challenge === "string" ? body.challenge : "";
+  const classification = classifyEventsBody(args);
+  if (classification.kind !== "url_verification") return null;
   return {
     statusCode: 200,
     headers: { "Content-Type": "text/plain" },
-    body: challenge,
+    body: classification.challenge,
   };
 }
 
@@ -126,27 +160,26 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
   return async function dispatchSlackEvent(
     args: SlackHandlerArgs,
   ): Promise<APIGatewayProxyStructuredResultV2> {
-    const body = parseJsonObject(args.rawBodyText) as SlackEventCallback | null;
-    if (!body || body.type !== "event_callback") {
+    const classification = classifyEventsBody({
+      rawBodyText: args.rawBodyText,
+      headers: args.headers,
+    });
+    if (classification.kind !== "event") {
       return json({ ok: true, ignored: true });
     }
 
-    const event = body.event;
-    if (!event || typeof event !== "object") {
-      return json({ ok: true, ignored: true, reason: "missing_event" });
-    }
-
+    const event = classification.event as SlackEventBody;
     const channelType = classifySlackEvent(event, args.workspace.botUserId);
     if (!channelType) {
       return json({ ok: true, ignored: true, reason: "unsupported_event" });
     }
 
-    const eventId = requiredString(body.event_id);
+    const eventId = requiredString(classification.eventId);
     const slackTeamId = requiredString(
-      body.team_id ?? event.team ?? args.workspace.slackTeamId,
+      classification.teamId ?? args.workspace.slackTeamId,
     );
     const slackUserId = requiredString(event.user);
-    const channelId = requiredString(event.channel);
+    const channelId = requiredString(classification.replyTo.channelId);
     const link = await loadLinkedUser({
       tenantId: args.workspace.tenantId,
       slackTeamId,
@@ -162,7 +195,9 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
       return json({ ok: true, ignored: true, reason: "slack_user_unlinked" });
     }
 
-    const threadTs = slackThreadTs(event);
+    // Provider continuation coordinates, already copied into plain
+    // ThinkWork-owned data by the provider boundary.
+    const threadTs = requiredString(classification.replyTo.threadTs);
     const threadContext = await safeFetchThreadContext(slackApi, {
       token: args.botToken,
       channel: channelId,
@@ -245,13 +280,23 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
   };
 }
 
-function extractTeamId(rawBodyText: string): string | null {
-  const body = parseJsonObject(rawBodyText);
-  const event =
-    body?.event && typeof body.event === "object"
-      ? (body.event as Record<string, unknown>)
-      : {};
-  return optionalString(body?.team_id) ?? optionalString(event.team);
+/**
+ * Form-encoded payloads (slash commands, interactions, bare forms) have
+ * never been valid ingress for the events handler; treat them like the
+ * previous JSON-only parser did (no team id -> 400) instead of resolving a
+ * workspace.
+ */
+function extractTeamId(
+  classification: SlackWebhookClassification,
+): string | null {
+  if (classification.kind === "event") return classification.teamId;
+  if (
+    classification.kind === "unsupported" &&
+    classification.encoding === "json"
+  ) {
+    return classification.teamId;
+  }
+  return null;
 }
 
 function classifySlackEvent(
@@ -335,41 +380,31 @@ async function safePostAcknowledgement(
 
 const defaultSlackApi: SlackApi = {
   async postMessage(input) {
-    return slackApiCall(input.token, "chat.postMessage", {
+    return postSlackThreadMessage({
+      token: input.token,
       channel: input.channel,
       text: input.text,
-      thread_ts: input.threadTs || undefined,
+      threadTs: input.threadTs,
     });
   },
   async fetchThreadMessages(input) {
-    const result = await slackApiFormCall<{
-      ok: boolean;
-      messages?: Array<Record<string, unknown>>;
-      error?: string;
-    }>(input.token, "conversations.replies", {
+    return fetchSlackThreadContext({
+      token: input.token,
       channel: input.channel,
-      ts: input.threadTs,
+      threadTs: input.threadTs,
       limit: 50,
     });
-    if (!result.ok) {
-      throw new Error(result.error || "conversations.replies failed");
-    }
-    return (result.messages ?? []).map((message) => ({
-      user: optionalString(message.user),
-      botId: optionalString(message.bot_id),
-      ts: requiredString(message.ts),
-      text: optionalString(message.text) ?? "",
-      files: slackFileRefs(message.files),
-    }));
   },
   async sendLinkPrompt(input) {
     const url = buildSlackLinkUrl(input.workspaceTeamId);
-    await slackApiCall(input.token, "chat.postMessage", {
+    await postSlackThreadMessage({
+      token: input.token,
       channel: input.channelId,
       text: `Connect your Slack identity to ThinkWork before asking ThinkWork to act: ${url}`,
     });
-    await slackApiCall(input.token, "views.publish", {
-      user_id: input.slackUserId,
+    await publishSlackHomeView({
+      token: input.token,
+      userId: input.slackUserId,
       view: {
         type: "home",
         blocks: [
@@ -396,48 +431,6 @@ const defaultSlackApi: SlackApi = {
   },
 };
 
-async function slackApiCall<T = { ok: boolean; ts?: string; error?: string }>(
-  token: string,
-  method: string,
-  body: Record<string, unknown>,
-): Promise<T> {
-  const response = await fetch(`https://slack.com/api/${method}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json; charset=utf-8",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`Slack Web API ${method} failed with ${response.status}`);
-  }
-  return (await response.json()) as T;
-}
-
-async function slackApiFormCall<T = { ok: boolean; error?: string }>(
-  token: string,
-  method: string,
-  body: Record<string, unknown>,
-): Promise<T> {
-  const form = new URLSearchParams();
-  for (const [key, value] of Object.entries(body)) {
-    if (value !== undefined && value !== null) form.set(key, String(value));
-  }
-  const response = await fetch(`https://slack.com/api/${method}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: form,
-  });
-  if (!response.ok) {
-    throw new Error(`Slack Web API ${method} failed with ${response.status}`);
-  }
-  return (await response.json()) as T;
-}
-
 function buildSlackLinkUrl(slackTeamId: string): string {
   const base =
     process.env.THINKWORK_APP_URL ||
@@ -448,17 +441,6 @@ function buildSlackLinkUrl(slackTeamId: string): string {
   url.searchParams.set("integration", "slack");
   url.searchParams.set("slackTeamId", slackTeamId);
   return url.toString();
-}
-
-function parseJsonObject(rawBodyText: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(rawBodyText);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function requiredString(value: unknown): string {
@@ -475,10 +457,21 @@ function errorClass(error: unknown): string {
   return error instanceof Error ? error.name : "UnknownError";
 }
 
-export const handler = createSlackHandler({
-  name: "events",
-  dispatchRetries: true,
-  extractTeamId: ({ rawBodyText }) => extractTeamId(rawBodyText),
-  preDispatch: handleUrlVerification,
-  dispatch: createSlackEventsDispatcher(),
-});
+export function createSlackEventsHandler(
+  deps: SlackEventsDeps = {},
+  handlerDeps: SlackHandlerDeps = {},
+) {
+  return createSlackHandler(
+    {
+      name: "events",
+      dispatchRetries: true,
+      extractTeamId: ({ rawBodyText, headers }) =>
+        extractTeamId(classifyEventsBody({ rawBodyText, headers })),
+      preDispatch: handleUrlVerification,
+      dispatch: createSlackEventsDispatcher(deps),
+    },
+    handlerDeps,
+  );
+}
+
+export const handler = createSlackEventsHandler();

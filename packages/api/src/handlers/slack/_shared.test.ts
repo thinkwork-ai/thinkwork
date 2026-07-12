@@ -103,12 +103,12 @@ function makeMetrics() {
 }
 
 describe("verifySlackSignature", () => {
-  it("accepts a valid v0 signature with a fresh timestamp", () => {
+  it("accepts a valid v0 signature with a fresh timestamp", async () => {
     const rawBody = Buffer.from(JSON.stringify({ team_id: "T123" }));
     const timestamp = String(NOW_SECONDS);
     const signature = computeSlackSignature(SIGNING_SECRET, timestamp, rawBody);
 
-    expect(
+    await expect(
       verifySlackSignature({
         headers: {
           "x-slack-request-timestamp": timestamp,
@@ -118,15 +118,15 @@ describe("verifySlackSignature", () => {
         signingSecret: SIGNING_SECRET,
         nowMs: () => NOW_MS,
       }),
-    ).toEqual({ ok: true });
+    ).resolves.toEqual({ ok: true });
   });
 
-  it("rejects a timestamp outside the five-minute replay window", () => {
+  it("rejects a timestamp outside the five-minute replay window", async () => {
     const rawBody = Buffer.from("{}");
     const timestamp = String(NOW_SECONDS - 6 * 60);
     const signature = computeSlackSignature(SIGNING_SECRET, timestamp, rawBody);
 
-    const result = verifySlackSignature({
+    const result = await verifySlackSignature({
       headers: {
         "x-slack-request-timestamp": timestamp,
         "x-slack-signature": signature,
@@ -137,22 +137,18 @@ describe("verifySlackSignature", () => {
     });
 
     expect(result).toMatchObject({ ok: false, status: 401 });
-    expect(result).toHaveProperty(
-      "message",
-      "Slack request timestamp is outside the replay window",
-    );
+    expect(result).toHaveProperty("message", "Slack timestamp is too old");
   });
 
-  it("uses timingSafeEqual for same-length signature comparisons", () => {
+  it("rejects a same-length signature that differs in one byte", async () => {
     const rawBody = Buffer.from("{}");
     const timestamp = String(NOW_SECONDS);
     const signature = computeSlackSignature(SIGNING_SECRET, timestamp, rawBody);
     const wrongLastByte = `${signature.slice(0, -1)}${
       signature.endsWith("0") ? "1" : "0"
     }`;
-    const timingSafeEqualFn = vi.fn(() => false);
 
-    const result = verifySlackSignature({
+    const result = await verifySlackSignature({
       headers: {
         "x-slack-request-timestamp": timestamp,
         "x-slack-signature": wrongLastByte,
@@ -160,11 +156,10 @@ describe("verifySlackSignature", () => {
       rawBody,
       signingSecret: SIGNING_SECRET,
       nowMs: () => NOW_MS,
-      timingSafeEqualFn,
     });
 
     expect(result).toMatchObject({ ok: false, status: 401 });
-    expect(timingSafeEqualFn).toHaveBeenCalledTimes(1);
+    expect(result).toHaveProperty("message", "Slack signature is invalid");
   });
 });
 

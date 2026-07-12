@@ -421,12 +421,12 @@ function inferConversationChannelType(
   return "channel";
 }
 
-function requiredSlackString(value: unknown): string {
+export function requiredSlackString(value: unknown): string {
   const stringValue = optionalSlackString(value);
   if (!stringValue) throw new Error("Slack event is missing a required field");
   return stringValue;
 }
 
-function optionalSlackString(value: unknown): string | null {
+export function optionalSlackString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }

@@ -2,11 +2,16 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { slackWorkspaces } from "@thinkwork/database-pg/schema";
 import { db } from "../../lib/db.js";
 import { error, json } from "../../lib/response.js";
+import {
+  verifySlackWebhookSignature,
+  type SlackSignatureVerificationInput,
+  type SlackSignatureVerificationResult,
+} from "../../lib/slack/provider.js";
 import {
   getSlackAppCredentials,
   getSlackBotToken,
@@ -14,7 +19,6 @@ import {
 import { slackMetrics, type SlackMetrics } from "../../lib/slack/metrics.js";
 
 const SLACK_SIGNATURE_VERSION = "v0";
-const REPLAY_WINDOW_SECONDS = 5 * 60;
 
 export interface SlackWorkspaceContext {
   id: string;
@@ -59,23 +63,18 @@ export interface SlackHandlerConfig {
   allowedMethods?: string[];
 }
 
-export interface SlackSignatureVerificationInput {
-  headers: Record<string, string>;
-  rawBody: Buffer;
-  signingSecret: string;
-  nowMs?: () => number;
-  timingSafeEqualFn?: typeof timingSafeEqual;
-}
-
-export type SlackSignatureVerificationResult =
-  | { ok: true }
-  | { ok: false; status: 401; message: string };
+export type {
+  SlackSignatureVerificationInput,
+  SlackSignatureVerificationResult,
+} from "../../lib/slack/provider.js";
 
 export interface SlackHandlerDeps {
   getRawBody?: typeof getRawBody;
   verifySignature?: (
     input: SlackSignatureVerificationInput,
-  ) => SlackSignatureVerificationResult;
+  ) =>
+    | SlackSignatureVerificationResult
+    | Promise<SlackSignatureVerificationResult>;
   lookupWorkspace?: (
     slackTeamId: string,
   ) => Promise<SlackWorkspaceContext | null>;
@@ -114,7 +113,7 @@ export function createSlackHandler(
       const rawBody = readRawBody(event);
       const rawBodyText = rawBody.toString("utf8");
       const signingSecret = await loadSigningSecret();
-      const signatureResult = verifySignature({
+      const signatureResult = await verifySignature({
         headers,
         rawBody,
         signingSecret,
@@ -198,53 +197,11 @@ export function computeSlackSignature(
     .digest("hex")}`;
 }
 
-export function verifySlackSignature({
-  headers,
-  rawBody,
-  signingSecret,
-  nowMs = Date.now,
-  timingSafeEqualFn = timingSafeEqual,
-}: SlackSignatureVerificationInput): SlackSignatureVerificationResult {
-  const timestamp = headers["x-slack-request-timestamp"] ?? "";
-  const signature = headers["x-slack-signature"] ?? "";
-  if (!timestamp || !signature) {
-    return { ok: false, status: 401, message: "Slack signature is required" };
-  }
-  if (!signature.startsWith(`${SLACK_SIGNATURE_VERSION}=`)) {
-    return { ok: false, status: 401, message: "Slack signature is invalid" };
-  }
-
-  const timestampSeconds = Number(timestamp);
-  if (!Number.isInteger(timestampSeconds)) {
-    return { ok: false, status: 401, message: "Slack timestamp is invalid" };
-  }
-
-  const nowSeconds = Math.floor(nowMs() / 1000);
-  if (Math.abs(nowSeconds - timestampSeconds) > REPLAY_WINDOW_SECONDS) {
-    return {
-      ok: false,
-      status: 401,
-      message: "Slack request timestamp is outside the replay window",
-    };
-  }
-
-  const expected = computeSlackSignature(signingSecret, timestamp, rawBody);
-  if (!constantTimeEqual(signature, expected, timingSafeEqualFn)) {
-    return { ok: false, status: 401, message: "Slack signature is invalid" };
-  }
-  return { ok: true };
-}
-
-function constantTimeEqual(
-  actual: string,
-  expected: string,
-  timingSafeEqualFn: typeof timingSafeEqual,
-): boolean {
-  const actualBuffer = Buffer.from(actual, "utf8");
-  const expectedBuffer = Buffer.from(expected, "utf8");
-  if (actualBuffer.length !== expectedBuffer.length) return false;
-  return timingSafeEqualFn(actualBuffer, expectedBuffer);
-}
+/**
+ * Slack `v0` signature verification, delegated to the pinned
+ * `@chat-adapter/slack/webhook` primitive via the provider boundary.
+ */
+export const verifySlackSignature = verifySlackWebhookSignature;
 
 async function defaultLookupWorkspace(
   slackTeamId: string,
