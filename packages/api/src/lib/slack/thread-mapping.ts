@@ -4,6 +4,7 @@ import {
   slackThreads,
   spaces,
   tenants,
+  threadParticipants,
   threads,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../db.js";
@@ -12,20 +13,29 @@ import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-fold
 
 export interface SlackThreadMappingResult {
   threadId: string;
+  spaceId: string;
   messageId: string;
   wasCreated: boolean;
+  messageCreated: boolean;
 }
 
 export interface SlackThreadMappingStore {
   withTransaction<T>(
     fn: (store: SlackThreadMappingStore) => Promise<T>,
   ): Promise<T>;
-  findThread(input: SlackThreadKey): Promise<{ threadId: string } | null>;
-  createThread(input: SlackThreadCreateInput): Promise<{ threadId: string }>;
+  findThread(
+    input: SlackThreadKey,
+  ): Promise<{ threadId: string; spaceId: string } | null>;
+  createThread(
+    input: SlackThreadCreateInput,
+  ): Promise<{ threadId: string; spaceId: string }>;
   createMapping(input: SlackThreadCreateMappingInput): Promise<void>;
-  createMessage(
-    input: SlackThreadCreateMessageInput,
-  ): Promise<{ messageId: string }>;
+  createMessage(input: SlackThreadCreateMessageInput): Promise<{
+    messageId: string;
+    threadId: string;
+    spaceId: string;
+    wasCreated: boolean;
+  }>;
 }
 
 export interface SlackThreadKey {
@@ -37,27 +47,28 @@ export interface SlackThreadKey {
 
 interface SlackThreadCreateInput {
   tenantId: string;
-  computerId: string;
   actorId: string;
   title: string;
 }
 
 interface SlackThreadCreateMappingInput extends SlackThreadKey {
   threadId: string;
+  spaceId: string;
 }
 
 interface SlackThreadCreateMessageInput {
   tenantId: string;
   threadId: string;
+  spaceId: string;
   actorId: string;
   content: string;
   envelope: SlackThreadTurnInput["slack"];
+  sourceEventId: string;
 }
 
 export async function resolveOrCreateSlackThread(
   input: {
     tenantId: string;
-    computerId: string;
     actorId: string;
     envelope: SlackThreadTurnInput;
   },
@@ -70,16 +81,24 @@ export async function resolveOrCreateSlackThread(
     const message = await tx.createMessage({
       tenantId: input.tenantId,
       threadId: thread.threadId,
+      spaceId: thread.spaceId,
       actorId: input.actorId,
       content: input.envelope.slack.sourceMessage?.text ?? "",
       envelope: input.envelope.slack,
+      sourceEventId: slackSourceEventId(input.envelope.eventId),
     });
     return {
-      threadId: thread.threadId,
+      threadId: message.threadId,
+      spaceId: message.spaceId,
       messageId: message.messageId,
       wasCreated: !existing,
+      messageCreated: message.wasCreated,
     };
   });
+}
+
+export function slackSourceEventId(eventId: string): string {
+  return `slack:${eventId}`;
 }
 
 function slackThreadKey(
@@ -102,7 +121,6 @@ function slackThreadMappingRoot(envelope: SlackThreadTurnInput): string | null {
 async function createMappedThread(
   input: {
     tenantId: string;
-    computerId: string;
     actorId: string;
     envelope: SlackThreadTurnInput;
   },
@@ -111,11 +129,14 @@ async function createMappedThread(
 ) {
   const thread = await store.createThread({
     tenantId: input.tenantId,
-    computerId: input.computerId,
     actorId: input.actorId,
     title: slackThreadTitle(input.envelope),
   });
-  await store.createMapping({ ...key, threadId: thread.threadId });
+  await store.createMapping({
+    ...key,
+    threadId: thread.threadId,
+    spaceId: thread.spaceId,
+  });
   return thread;
 }
 
@@ -146,8 +167,12 @@ function createDrizzleSlackThreadMappingStore(
           ? isNull(slackThreads.root_thread_ts)
           : eq(slackThreads.root_thread_ts, input.rootThreadTs);
       const [row] = await dbClient
-        .select({ threadId: slackThreads.thread_id })
+        .select({
+          threadId: slackThreads.thread_id,
+          spaceId: threads.space_id,
+        })
         .from(slackThreads)
+        .innerJoin(threads, eq(threads.id, slackThreads.thread_id))
         .where(
           and(
             eq(slackThreads.tenant_id, input.tenantId),
@@ -204,7 +229,6 @@ function createDrizzleSlackThreadMappingStore(
         .insert(threads)
         .values({
           tenant_id: input.tenantId,
-          computer_id: input.computerId,
           space_id: space.id,
           user_id: input.actorId,
           number: tenant.nextNumber,
@@ -225,7 +249,16 @@ function createDrizzleSlackThreadMappingStore(
         })
         .returning({ threadId: threads.id });
       if (!thread) throw new Error("Slack thread insert failed");
-      return thread;
+      await dbClient.insert(threadParticipants).values({
+        tenant_id: input.tenantId,
+        thread_id: thread.threadId,
+        space_id: space.id,
+        participant_type: "user",
+        user_id: input.actorId,
+        role: "requester",
+        source: "thread_creator",
+      });
+      return { ...thread, spaceId: space.id };
     },
     async createMapping(input) {
       await dbClient.insert(slackThreads).values({
@@ -246,11 +279,39 @@ function createDrizzleSlackThreadMappingStore(
           content: input.content,
           sender_type: "user",
           sender_id: input.actorId,
+          source_event_id: input.sourceEventId,
           metadata: { source: "slack", slack: input.envelope },
         })
+        .onConflictDoNothing({
+          target: [messages.tenant_id, messages.source_event_id],
+          targetWhere: sql`${messages.source_event_id} IS NOT NULL`,
+        })
         .returning({ messageId: messages.id });
-      if (!message) throw new Error("Slack thread message insert failed");
-      return message;
+      if (message) {
+        return {
+          messageId: message.messageId,
+          threadId: input.threadId,
+          spaceId: input.spaceId,
+          wasCreated: true,
+        };
+      }
+      const [existing] = await dbClient
+        .select({
+          messageId: messages.id,
+          threadId: messages.thread_id,
+          spaceId: threads.space_id,
+        })
+        .from(messages)
+        .innerJoin(threads, eq(threads.id, messages.thread_id))
+        .where(
+          and(
+            eq(messages.tenant_id, input.tenantId),
+            eq(messages.source_event_id, input.sourceEventId),
+          ),
+        )
+        .limit(1);
+      if (!existing) throw new Error("Slack source event dedupe lookup failed");
+      return { ...existing, wasCreated: false };
     },
   };
 }

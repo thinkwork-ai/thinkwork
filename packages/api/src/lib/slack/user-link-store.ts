@@ -19,6 +19,44 @@ export interface SlackUserLinkInput extends SlackUserIdentity {
 
 type DbClient = typeof db;
 
+export interface LinkedSlackUser {
+  userId: string;
+  slackUserName: string | null;
+  slackUserEmail: string | null;
+}
+
+export async function loadLinkedSlackUser(
+  input: {
+    tenantId: string;
+    slackTeamId: string;
+    slackUserId: string;
+  },
+  dbClient: DbClient = db,
+): Promise<LinkedSlackUser | null> {
+  const [row] = await dbClient
+    .select({
+      user_id: slackUserLinks.user_id,
+      slack_user_name: slackUserLinks.slack_user_name,
+      slack_user_email: slackUserLinks.slack_user_email,
+    })
+    .from(slackUserLinks)
+    .where(
+      and(
+        eq(slackUserLinks.tenant_id, input.tenantId),
+        eq(slackUserLinks.slack_team_id, input.slackTeamId),
+        eq(slackUserLinks.slack_user_id, input.slackUserId),
+        eq(slackUserLinks.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+  return {
+    userId: row.user_id,
+    slackUserName: row.slack_user_name ?? null,
+    slackUserEmail: row.slack_user_email ?? null,
+  };
+}
+
 export async function upsertSlackUserLink(
   input: SlackUserLinkInput,
   dbClient: DbClient = db,

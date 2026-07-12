@@ -47,6 +47,9 @@ export const messages = pgTable(
     parts: jsonb("parts"),
     sender_type: text("sender_type"),
     sender_id: uuid("sender_id"),
+    // Provider-prefixed id for atomic external-delivery deduplication
+    // (for example, `slack:Ev123`). NULL for ordinary first-party messages.
+    source_event_id: text("source_event_id"),
     tool_calls: jsonb("tool_calls"),
     tool_results: jsonb("tool_results"),
     metadata: jsonb("metadata"),
@@ -61,6 +64,9 @@ export const messages = pgTable(
       table.tenant_id,
       table.created_at,
     ),
+    uniqueIndex("uq_messages_tenant_source_event_id")
+      .on(table.tenant_id, table.source_event_id)
+      .where(sql`${table.source_event_id} IS NOT NULL`),
   ],
 );
 

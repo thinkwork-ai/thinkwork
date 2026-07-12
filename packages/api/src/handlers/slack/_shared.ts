@@ -38,6 +38,11 @@ export interface SlackHandlerArgs {
 
 export interface SlackHandlerConfig {
   name: string;
+  /**
+   * Deliver signed Slack retries to the handler so its durable provider-event
+   * idempotency boundary decides whether work already exists.
+   */
+  dispatchRetries?: boolean;
   extractTeamId(args: {
     event: APIGatewayProxyEventV2;
     headers: Record<string, string>;
@@ -119,7 +124,7 @@ export function createSlackHandler(
         return error(signatureResult.message, signatureResult.status);
       }
 
-      if (headers["x-slack-retry-num"]) {
+      if (headers["x-slack-retry-num"] && !config.dispatchRetries) {
         console.log(
           `[slack:${config.name}] retry short-circuit retry=${headers["x-slack-retry-num"]} reason=${headers["x-slack-retry-reason"] ?? "unknown"}`,
         );

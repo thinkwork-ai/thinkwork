@@ -6,27 +6,41 @@ import {
 } from "./thread-mapping.js";
 
 function makeStore() {
-  const mappings = new Map<string, string>();
+  const mappings = new Map<string, { threadId: string; spaceId: string }>();
+  const sourceEvents = new Map<
+    string,
+    { messageId: string; threadId: string; spaceId: string }
+  >();
   let threadSeq = 0;
   let messageSeq = 0;
   const createMapping = vi.fn(async (input: any) => {
-    mappings.set(key(input), input.threadId);
+    mappings.set(key(input), {
+      threadId: input.threadId,
+      spaceId: input.spaceId,
+    });
   });
   const createThread = vi.fn(async () => {
     threadSeq += 1;
-    return { threadId: `thread-${threadSeq}` };
+    return { threadId: `thread-${threadSeq}`, spaceId: "space-1" };
   });
-  const createMessage = vi.fn(async () => {
+  const createMessage = vi.fn(async (input: any) => {
+    const duplicate = sourceEvents.get(input.sourceEventId);
+    if (duplicate) return { ...duplicate, wasCreated: false };
     messageSeq += 1;
-    return { messageId: `message-${messageSeq}` };
+    const message = {
+      messageId: `message-${messageSeq}`,
+      threadId: input.threadId,
+      spaceId: input.spaceId,
+    };
+    sourceEvents.set(input.sourceEventId, message);
+    return { ...message, wasCreated: true };
   });
   const store: SlackThreadMappingStore = {
     async withTransaction(fn) {
       return fn(store);
     },
     async findThread(input) {
-      const threadId = mappings.get(key(input));
-      return threadId ? { threadId } : null;
+      return mappings.get(key(input)) ?? null;
     },
     createThread,
     createMapping,
@@ -78,7 +92,6 @@ describe("Slack thread mapping", () => {
     const result = await resolveOrCreateSlackThread(
       {
         tenantId: "tenant-1",
-        computerId: "computer-1",
         actorId: "user-1",
         envelope: appMentionEnvelope(),
       },
@@ -87,8 +100,10 @@ describe("Slack thread mapping", () => {
 
     expect(result).toEqual({
       threadId: "thread-1",
+      spaceId: "space-1",
       messageId: "message-1",
       wasCreated: true,
+      messageCreated: true,
     });
     expect(deps.createMapping).toHaveBeenCalledWith({
       tenantId: "tenant-1",
@@ -96,7 +111,11 @@ describe("Slack thread mapping", () => {
       channelId: "C123",
       rootThreadTs: "1710000000.000000",
       threadId: "thread-1",
+      spaceId: "space-1",
     });
+    expect(deps.createMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceEventId: "slack:Ev123" }),
+    );
   });
 
   it("reuses the existing ThinkWork thread for the same Slack triple", async () => {
@@ -104,7 +123,6 @@ describe("Slack thread mapping", () => {
     await resolveOrCreateSlackThread(
       {
         tenantId: "tenant-1",
-        computerId: "computer-1",
         actorId: "user-1",
         envelope: appMentionEnvelope(),
       },
@@ -114,9 +132,24 @@ describe("Slack thread mapping", () => {
     const second = await resolveOrCreateSlackThread(
       {
         tenantId: "tenant-1",
-        computerId: "computer-1",
         actorId: "user-1",
-        envelope: appMentionEnvelope({ text: "again" }),
+        envelope: buildSlackThreadTurnInput({
+          channelType: "app_mention",
+          slackTeamId: "T123",
+          slackUserId: "U123",
+          channelId: "C123",
+          eventId: "Ev124",
+          actorId: "user-1",
+          event: {
+            type: "app_mention",
+            user: "U123",
+            channel: "C123",
+            channel_type: "channel",
+            text: "again",
+            ts: "1710000002.000000",
+            thread_ts: "1710000000.000000",
+          },
+        }),
       },
       deps.store,
     );
@@ -125,6 +158,7 @@ describe("Slack thread mapping", () => {
       threadId: "thread-1",
       messageId: "message-2",
       wasCreated: false,
+      messageCreated: true,
     });
     expect(deps.createThread).toHaveBeenCalledTimes(1);
     expect(deps.createMessage).toHaveBeenCalledTimes(2);
@@ -136,7 +170,6 @@ describe("Slack thread mapping", () => {
     await resolveOrCreateSlackThread(
       {
         tenantId: "tenant-1",
-        computerId: "computer-1",
         actorId: "user-1",
         envelope: buildSlackThreadTurnInput({
           channelType: "im",
@@ -160,7 +193,6 @@ describe("Slack thread mapping", () => {
     const second = await resolveOrCreateSlackThread(
       {
         tenantId: "tenant-1",
-        computerId: "computer-1",
         actorId: "user-1",
         envelope: buildSlackThreadTurnInput({
           channelType: "im",
@@ -186,5 +218,32 @@ describe("Slack thread mapping", () => {
     expect(deps.createMapping).toHaveBeenCalledWith(
       expect.objectContaining({ channelId: "D123", rootThreadTs: null }),
     );
+  });
+
+  it("reuses the original message when the provider source event is redelivered", async () => {
+    const deps = makeStore();
+
+    const first = await resolveOrCreateSlackThread(
+      {
+        tenantId: "tenant-1",
+        actorId: "user-1",
+        envelope: appMentionEnvelope(),
+      },
+      deps.store,
+    );
+    const duplicate = await resolveOrCreateSlackThread(
+      {
+        tenantId: "tenant-1",
+        actorId: "user-1",
+        envelope: appMentionEnvelope(),
+      },
+      deps.store,
+    );
+
+    expect(duplicate).toMatchObject({
+      threadId: first.threadId,
+      messageId: first.messageId,
+      messageCreated: false,
+    });
   });
 });

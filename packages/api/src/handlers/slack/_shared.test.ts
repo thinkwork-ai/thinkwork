@@ -229,6 +229,40 @@ describe("createSlackHandler", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it("can pass signed retry deliveries through for source-event deduplication", async () => {
+    const dispatch = vi.fn(async () => ({
+      statusCode: 200,
+      body: JSON.stringify({ ok: true }),
+    }));
+    const handler = createSlackHandler(
+      {
+        name: "events",
+        dispatchRetries: true,
+        extractTeamId: ({ rawBodyText }) =>
+          (JSON.parse(rawBodyText) as { team_id?: string }).team_id ?? null,
+        dispatch,
+      },
+      {
+        loadSigningSecret: async () => SIGNING_SECRET,
+        lookupWorkspace: async () => WORKSPACE,
+        loadBotToken: async () => "xoxb-token",
+        nowMs: () => NOW_MS,
+      },
+    );
+
+    const response = await handler(
+      makeEvent(JSON.stringify({ team_id: "T123", event_id: "Ev1" }), {
+        headers: {
+          "x-slack-retry-num": "1",
+          "x-slack-retry-reason": "http_timeout",
+        },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
   it("allows signed requests to respond before workspace lookup", async () => {
     const preDispatch = vi.fn(async () => ({
       statusCode: 200,
