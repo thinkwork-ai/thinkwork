@@ -16429,6 +16429,38 @@ export type SettingsMergeCanonicalEntitiesMutation = {
   };
 };
 
+export type SettingsMySlackLinksQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsMySlackLinksQuery = {
+  __typename?: "Query";
+  mySlackLinks: Array<{
+    __typename?: "SlackUserLink";
+    id: string;
+    slackTeamId: string;
+    slackTeamName?: string | null;
+    slackUserId: string;
+    slackUserName?: string | null;
+    slackUserEmail?: string | null;
+    status: string;
+    linkedAt: any;
+  }>;
+};
+
+export type SettingsUnlinkSlackIdentityMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsUnlinkSlackIdentityMutation = {
+  __typename?: "Mutation";
+  unlinkSlackIdentity: {
+    __typename?: "SlackUserLink";
+    id: string;
+    status: string;
+  };
+};
+
 export type TenantSkillCatalogQueryVariables = Exact<{
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
 }>;
@@ -34271,6 +34303,122 @@ export const SettingsMergeCanonicalEntitiesDocument = {
 } as unknown as DocumentNode<
   SettingsMergeCanonicalEntitiesMutation,
   SettingsMergeCanonicalEntitiesMutationVariables
+>;
+export const SettingsMySlackLinksDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsMySlackLinks" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "mySlackLinks" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slackTeamId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "slackTeamName" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "slackUserId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "slackUserName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "slackUserEmail" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "linkedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsMySlackLinksQuery,
+  SettingsMySlackLinksQueryVariables
+>;
+export const SettingsUnlinkSlackIdentityDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUnlinkSlackIdentity" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "unlinkSlackIdentity" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUnlinkSlackIdentityMutation,
+  SettingsUnlinkSlackIdentityMutationVariables
 >;
 export const TenantSkillCatalogDocument = {
   kind: "Document",
