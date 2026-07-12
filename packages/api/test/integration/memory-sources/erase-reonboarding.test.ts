@@ -546,10 +546,16 @@ describe.skipIf(!DATABASE_URL)(
       expect(deadEdges).toHaveLength(1);
       expect(deadEdges[0]!.status).toBe("retracted");
 
-      // ---- Source re-asserts the SAME content in a new edition ----------
-      const secondAcquire = await acquireIdentical();
-      expect(secondAcquire.changed).toHaveLength(1);
-      const secondEvidenceId = secondAcquire.changed[0]!.id;
+      // ---- Source re-asserts the SAME content ---------------------------
+      // Re-acquiring identical content mints NO new evidence row: the
+      // (source, item, version) edition already exists and is still active,
+      // so it dedupes to 'seen'. That is exactly the production shape of this
+      // bug — the surviving evidence edition is simply re-projected (on dev,
+      // after the derivation was retracted). Re-project the SAME evidence.
+      const replay = await acquireIdentical();
+      expect(replay.changed).toHaveLength(0);
+      expect(replay.seen).toBe(1);
+      const secondEvidenceId = firstEvidenceId;
       const secondUpsert = await projectIdentical(secondEvidenceId);
 
       // Revival: a NEW active claim edition replaces the dead row.
