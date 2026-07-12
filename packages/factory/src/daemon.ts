@@ -35,6 +35,7 @@ import { devLockHeldByOther } from "./sweep/locks.js";
 import { runSweep, type SweepResult } from "./sweep/classifier.js";
 import type { FiredNag } from "./sweep/nags.js";
 import type { SlackSync } from "./slack/sync.js";
+import { runUnenrollPass } from "./reconcile/unenroll.js";
 import { writeHeartbeat } from "./heartbeat.js";
 
 /** Trailing terminal states that count as a "kill" for the attempt ceiling. */
@@ -162,6 +163,39 @@ async function runSweepIsolated(
       error: String(e),
     });
     return null;
+  }
+}
+
+/**
+ * Un-enrollment pass, isolated so a failure never crashes the tick (same
+ * contract as the Slack sync / sweep). Runs AFTER the decide/execute pass: the
+ * pass only touches enrolled issues that are NOT in this tick's candidate set
+ * (abandoned/gone) plus terminally-completed candidates — disjoint from the
+ * issues decide/execute launched/advanced, so order is safe either way; after
+ * is chosen so an issue completed THIS tick closes its thread the same tick.
+ * SKIPPED under a scoped (`onlyIssues`) run, where "not in the candidate set"
+ * means "out of scope", not "left the queue".
+ */
+async function runUnenrollIsolated(
+  deps: DaemonDeps,
+  candidates: readonly PollCandidate[],
+): Promise<void> {
+  if (deps.onlyIssues !== undefined) return;
+  try {
+    await runUnenrollPass(
+      {
+        store: deps.store,
+        gateway: deps.gateway,
+        transport: deps.transport,
+        log: deps.log,
+        slack: deps.slack,
+      },
+      candidates,
+    );
+  } catch (e) {
+    deps.log.error("un-enroll pass failed — continuing tick", {
+      error: String(e),
+    });
   }
 }
 
@@ -437,6 +471,12 @@ export async function runTick(
       });
     }
   }
+
+  // Un-enrollment pass (enrollment lifecycle): after the decide/execute pass,
+  // wind down enrolled issues that left the active work queue (moved to
+  // Backlog/Canceled, lost their lane label, deleted) or finished (Done with
+  // nothing left to compound). Isolated so a failure never crashes the tick.
+  await runUnenrollIsolated(deps, candidates);
 
   return { decisions, stopped: false };
 }

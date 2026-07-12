@@ -31,6 +31,7 @@ import {
 } from "./status.js";
 import {
   openThreadForIssue,
+  postClosingSummary,
   postEscalation,
   postMilestone,
   type ThreadDeps,
@@ -65,9 +66,58 @@ function newestQuestion(
 
 const NEEDS_USER = "Needs User";
 
+/**
+ * Review-gate statuses whose `wait` (without LFG) is a genuine HUMAN-wait — an
+ * operator must act, so the wait warrants a thread. Every OTHER `wait`
+ * (KTD-10 running attempt, duplicate-worker guard, quota cooldown, dev-lock) is
+ * an internal/transient wait with no operator ask and MUST NOT enroll a thread.
+ * Mirrors the sweep's REVIEW_GATE_STATES human-wait classification.
+ */
+const REVIEW_GATE_STATES = new Set([
+  "Requirements Review",
+  "Plan Review",
+  "Verification",
+  "Review",
+]);
+
+/**
+ * An issue should be ENROLLED (get a Slack thread) only when the daemon
+ * actually works it — i.e. the decided action warrants operator visibility.
+ * `launch`/`advance`/`block` always do; a `wait` does only when it is a
+ * human-wait review gate (or a `Needs User` question); a `noop` never does
+ * (Done+compounded, pre-factory Done via the compound cutoff, not-routable).
+ * Net effect: a Done issue the daemon only ever noops never gets a thread.
+ */
+function actionWarrantsThread(
+  candidate: PollCandidate,
+  action: EngineAction,
+): boolean {
+  // A live `Needs User` question always warrants a thread (the escalation).
+  if (candidate.blockerLabels.includes(NEEDS_USER)) return true;
+  switch (action.kind) {
+    case "launch":
+    case "advance":
+    case "block":
+      return true;
+    case "wait":
+      return (
+        REVIEW_GATE_STATES.has(candidate.issue.state) && !candidate.hasLfg
+      );
+    case "noop":
+      return false;
+  }
+}
+
 export interface SlackSync {
   syncCandidate(candidate: PollCandidate, action: EngineAction): Promise<void>;
   handleInbound(message: SlackInboundMessage): Promise<void>;
+  /**
+   * Post a terminal closing note into an issue's thread and nothing else — the
+   * store-side un-enrollment (deleting the thread row + winding down workers)
+   * is the daemon's job. No-op when the issue has no mapped thread. Best-effort:
+   * the caller isolates any Slack failure from the store cleanup.
+   */
+  closeThread(issueId: string, text: string): Promise<void>;
 }
 
 export interface SlackSyncDeps {
@@ -161,6 +211,9 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
 
   return {
     async syncCandidate(candidate, action) {
+      // Enroll (open/track a thread) ONLY when the daemon actually works this
+      // issue — a bare `noop` gets no thread, no post.
+      if (!actionWarrantsThread(candidate, action)) return;
       const ref = await ensureThread(candidate);
       // A live `Needs User` blocker takes priority: escalate the question.
       if (candidate.blockerLabels.includes(NEEDS_USER)) {
@@ -168,6 +221,16 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
         return;
       }
       await maybeMilestone(candidate, action, ref);
+    },
+
+    async closeThread(issueId, text) {
+      const row = deps.store.getSlackThreadByIssue(issueId);
+      if (row === undefined) return; // no thread mapped — nothing to close
+      await postClosingSummary(
+        { channel: row.channel_id, threadTs: row.thread_ts },
+        text,
+        threadDeps,
+      );
     },
 
     async handleInbound(message) {

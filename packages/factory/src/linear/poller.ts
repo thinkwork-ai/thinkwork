@@ -91,7 +91,14 @@ export class PollAbortedError extends Error {
   }
 }
 
-function matchesFilter(issue: LinearIssueSnapshot): boolean {
+/**
+ * True when an issue is a dispatch candidate under the routing contract:
+ * a Verification-family issue (any lane), or a lane-labeled issue in an active
+ * workflow state. Exported so the un-enroll pass can ask "is this enrolled
+ * issue STILL a valid candidate?" using the exact enrollment predicate (a
+ * transient poll miss on a still-valid candidate must never un-enroll it).
+ */
+export function matchesFilter(issue: LinearIssueSnapshot): boolean {
   const isVerification = (VERIFICATION_STATES as readonly string[]).includes(
     issue.state,
   );
