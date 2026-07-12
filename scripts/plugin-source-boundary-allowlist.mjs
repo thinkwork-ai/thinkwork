@@ -111,8 +111,7 @@ export const sharedPluginTermAllowlist = [
   },
   {
     path: "packages/api/src/lib/twenty/rest-client.test.ts",
-    reason:
-      "unit tests for the shared platform Twenty REST client above.",
+    reason: "unit tests for the shared platform Twenty REST client above.",
   },
   {
     path: "packages/api/src/handlers/twenty-client-engagement.ts",
