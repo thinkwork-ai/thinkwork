@@ -4,13 +4,21 @@ type: feat
 date: 2026-07-04
 topic: external-sourcing-v1
 artifact_contract: ce-unified-plan/v1
-artifact_readiness: implementation-ready
+artifact_readiness: superseded
 product_contract_source: ce-brainstorm
 execution: code
 deepened: 2026-07-04
+superseded_by: docs/brainstorms/2026-07-11-external-memory-compounding-requirements.md
 ---
 
 # External Sourcing v1 - Plan
+
+> **Superseded on 2026-07-11.** Do not implement this plan. Its
+> zero-credential public-research-first product contract and custom run path
+> have been replaced by
+> `docs/brainstorms/2026-07-11-external-memory-compounding-requirements.md`,
+> which defines governed CRM, Firecrawl, email, and Knowledge Base ingestion
+> through personal Automations and operator-managed Workflows.
 
 ## Goal Capsule
 
