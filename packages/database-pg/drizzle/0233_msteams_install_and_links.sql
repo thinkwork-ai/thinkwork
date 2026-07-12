@@ -1,11 +1,17 @@
 -- Purpose: add Microsoft Teams application persistence for tenant installs, user links, and Teams conversation mapping.
 -- Plan: THINK-84 (U6 install path; msteams_threads is created now so one migration covers the domain for U7)
 -- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0233_msteams_install_and_links.sql
+-- After applying, RE-APPLY 0227_analyst_reader_role.sql and 0230_analyst_rls.sql:
+-- their regenerated grant/RLS sections cover the msteams tables, and databases
+-- that ran them before these tables existed have no analyst grants/policies
+-- for them (0230's msteams policy markers gate this in the drift reporter;
+-- 0227's grants are not marker-checkable).
 -- creates: public.msteams_tenant_installs
 -- creates: public.msteams_user_links
 -- creates: public.msteams_threads
 -- creates: public.uq_msteams_tenant_installs_entra_tenant
 -- creates: public.uq_msteams_tenant_installs_tenant_entra_tenant
+-- creates: public.uq_msteams_tenant_installs_tenant_active
 -- creates: public.idx_msteams_tenant_installs_tenant_status
 -- creates: public.uq_msteams_user_links_entra_tenant_aad_object
 -- creates: public.idx_msteams_user_links_tenant_user
@@ -63,6 +69,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_entra_tenant
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_tenant_entra_tenant
   ON public.msteams_tenant_installs (tenant_id, entra_tenant_id);
+
+-- A ThinkWork tenant has at most one ACTIVE Entra binding; concurrent
+-- consent callbacks cannot race two bindings live.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_tenant_active
+  ON public.msteams_tenant_installs (tenant_id)
+  WHERE status = 'active';
 
 CREATE INDEX IF NOT EXISTS idx_msteams_tenant_installs_tenant_status
   ON public.msteams_tenant_installs (tenant_id, status);

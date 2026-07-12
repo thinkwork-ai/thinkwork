@@ -51,6 +51,7 @@ function signedState(): string {
 function deps(overrides: Record<string, unknown> = {}) {
   return {
     getCredentials: vi.fn().mockResolvedValue(CREDENTIALS),
+    verifyConsent: vi.fn().mockResolvedValue({ granted: true }),
     getInstallStatus: vi.fn().mockResolvedValue([]),
     upsertInstall: vi.fn().mockResolvedValue({}),
     activateInstall: vi.fn().mockResolvedValue({}),
@@ -90,6 +91,49 @@ describe("msteams install-complete handler", () => {
       entraTenantId: "entra-1",
       consentStatus: "granted",
     });
+    expect(d.verifyConsent).toHaveBeenCalledWith({
+      entraTenantId: "entra-1",
+      appId: "app-1",
+      clientSecret: CREDENTIALS.clientSecret,
+    });
+  });
+
+  it("returns 403 and mutates nothing when Microsoft does not confirm consent", async () => {
+    const d = deps({
+      verifyConsent: vi
+        .fn()
+        .mockResolvedValue({ granted: false, reason: "invalid_client" }),
+    });
+    const state = signedState();
+    const response = await handleMsteamsInstallComplete(
+      event(
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+      ),
+      d
+    );
+
+    expect(response.statusCode).toBe(403);
+    expect(d.upsertInstall).not.toHaveBeenCalled();
+    expect(d.activateInstall).not.toHaveBeenCalled();
+    expect(d.markConsentStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when activation matches no pending or uninstalled row", async () => {
+    // activateTenantInstall returns null for revoked (or otherwise
+    // ineligible) rows — callback replay never reactivates a revoked install.
+    const d = deps({ activateInstall: vi.fn().mockResolvedValue(null) });
+    const state = signedState();
+    const response = await handleMsteamsInstallComplete(
+      event(
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+      ),
+      d
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(JSON.parse(response.body ?? "{}").error).toMatch(
+      /not pending activation/
+    );
   });
 
   it("treats a replayed callback for the same Entra tenant as an idempotent no-op", async () => {
@@ -113,6 +157,7 @@ describe("msteams install-complete handler", () => {
     });
     expect(d.upsertInstall).not.toHaveBeenCalled();
     expect(d.activateInstall).not.toHaveBeenCalled();
+    expect(d.verifyConsent).not.toHaveBeenCalled();
   });
 
   it("fails closed with 409 when a stolen state is redeemed from a different Entra tenant", async () => {
@@ -229,6 +274,30 @@ describe("msteams install-complete handler", () => {
       consentStatus: "admin_required",
     });
     expect(d.activateInstall).not.toHaveBeenCalled();
+    expect(d.verifyConsent).not.toHaveBeenCalled();
+  });
+
+  it("never mutates on a forged error callback when the install is already active", async () => {
+    const d = deps({
+      getInstallStatus: vi
+        .fn()
+        .mockResolvedValue([{ entra_tenant_id: "entra-1", status: "active" }]),
+    });
+    const state = signedState();
+    const response = await handleMsteamsInstallComplete(
+      event(
+        `error=access_denied&tenant=entra-1&state=${encodeURIComponent(state)}`
+      ),
+      d
+    );
+
+    // Still 200 and diagnosable, but the working binding is untouched.
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body ?? "{}").consent).toBe("admin_required");
+    expect(d.upsertInstall).not.toHaveBeenCalled();
+    expect(d.markConsentStatus).not.toHaveBeenCalled();
+    expect(d.activateInstall).not.toHaveBeenCalled();
+    expect(d.verifyConsent).not.toHaveBeenCalled();
   });
 
   it("reports declined consent without persisting when Microsoft omits the tenant", async () => {
@@ -242,6 +311,7 @@ describe("msteams install-complete handler", () => {
     expect(JSON.parse(response.body ?? "{}").consent).toBe("admin_required");
     expect(d.upsertInstall).not.toHaveBeenCalled();
     expect(d.markConsentStatus).not.toHaveBeenCalled();
+    expect(d.verifyConsent).not.toHaveBeenCalled();
   });
 
   it("keeps the declined-consent response diagnosable when the Entra tenant is bound elsewhere", async () => {

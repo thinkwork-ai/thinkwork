@@ -14,7 +14,7 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const migration0233 = readFileSync(
   join(HERE, "..", "drizzle", "0233_msteams_install_and_links.sql"),
-  "utf-8",
+  "utf-8"
 );
 
 describe("Microsoft Teams app schema", () => {
@@ -63,38 +63,41 @@ describe("Microsoft Teams app schema", () => {
 
   it("enforces the Teams uniqueness and restrict-delete invariants in SQL", () => {
     expect(migration0233).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_entra_tenant\s+ON public\.msteams_tenant_installs \(entra_tenant_id\)/,
+      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_entra_tenant\s+ON public\.msteams_tenant_installs \(entra_tenant_id\)/
     );
     expect(migration0233).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_tenant_entra_tenant\s+ON public\.msteams_tenant_installs \(tenant_id, entra_tenant_id\)/,
+      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_tenant_entra_tenant\s+ON public\.msteams_tenant_installs \(tenant_id, entra_tenant_id\)/
     );
     expect(migration0233).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_user_links_entra_tenant_aad_object\s+ON public\.msteams_user_links \(entra_tenant_id, aad_object_id\)/,
+      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_tenant_installs_tenant_active\s+ON public\.msteams_tenant_installs \(tenant_id\)\s+WHERE status = 'active'/
     );
     expect(migration0233).toMatch(
-      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_threads_entra_tenant_conversation\s+ON public\.msteams_threads \(entra_tenant_id, conversation_id\)/,
+      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_user_links_entra_tenant_aad_object\s+ON public\.msteams_user_links \(entra_tenant_id, aad_object_id\)/
     );
     expect(migration0233).toMatch(
-      /REFERENCES public\.msteams_tenant_installs\(entra_tenant_id\)\s+ON DELETE RESTRICT/,
+      /CREATE UNIQUE INDEX IF NOT EXISTS uq_msteams_threads_entra_tenant_conversation\s+ON public\.msteams_threads \(entra_tenant_id, conversation_id\)/
+    );
+    expect(migration0233).toMatch(
+      /REFERENCES public\.msteams_tenant_installs\(entra_tenant_id\)\s+ON DELETE RESTRICT/
     );
   });
 
   it("enforces the status vocabularies in SQL checks", () => {
     expect(migration0233).toMatch(
-      /CHECK \(status IN \('pending','active','uninstalled','revoked'\)\)/,
+      /CHECK \(status IN \('pending','active','uninstalled','revoked'\)\)/
     );
     expect(migration0233).toMatch(
-      /CHECK \(consent_status IN \('pending','granted','admin_required','revoked'\)\)/,
+      /CHECK \(consent_status IN \('pending','granted','admin_required','revoked'\)\)/
     );
     expect(migration0233).toMatch(
-      /CHECK \(status IN \('active','unlinked','orphaned','suspended'\)\)/,
+      /CHECK \(status IN \('active','unlinked','orphaned','suspended'\)\)/
     );
   });
 
   it("declares a drift-reporter marker for every created object", () => {
     const created = [
       ...migration0233.matchAll(
-        /CREATE (?:TABLE|(?:UNIQUE )?INDEX) IF NOT EXISTS (?:public\.)?([a-z0-9_]+)/g,
+        /CREATE (?:TABLE|(?:UNIQUE )?INDEX) IF NOT EXISTS (?:public\.)?([a-z0-9_]+)/g
       ),
     ].map((m) => m[1]);
     expect(created.length).toBeGreaterThan(0);
@@ -108,7 +111,7 @@ describe("Microsoft Teams app schema", () => {
     for (const name of constraints) {
       expect(name.length).toBeLessThanOrEqual(63);
       expect(migration0233).toMatch(
-        new RegExp(`-- creates-constraint: public\\.[a-z0-9_]+\\.${name}\\b`),
+        new RegExp(`-- creates-constraint: public\\.[a-z0-9_]+\\.${name}\\b`)
       );
     }
   });

@@ -1,3 +1,5 @@
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   MsteamsTenantConflictError,
@@ -5,9 +7,15 @@ import {
   findActiveTenantInstall,
   getTenantInstallStatus,
   markConsent,
+  reopenRevokedInstall,
   revokeTenantInstall,
   upsertTenantInstall,
 } from "./tenant-store.js";
+
+const dialect = new PgDialect();
+function renderWhere(condition: unknown): { sql: string; params: unknown[] } {
+  return dialect.sqlToQuery(condition as SQL);
+}
 
 function fakeDb(options: {
   selectRows?: Array<Record<string, unknown>>;
@@ -16,10 +24,12 @@ function fakeDb(options: {
 }) {
   const insertValues = vi.fn();
   const updateSet = vi.fn();
+  const updateWhere = vi.fn();
   const selectRows = options.selectRows ?? [];
   return {
     insertValues,
     updateSet,
+    updateWhere,
     db: {
       select: () => ({
         from: () => {
@@ -48,9 +58,12 @@ function fakeDb(options: {
         set: (value: Record<string, unknown>) => {
           updateSet(value);
           return {
-            where: () => ({
-              returning: () => Promise.resolve(options.updateReturning ?? []),
-            }),
+            where: (condition: unknown) => {
+              updateWhere(condition);
+              return {
+                returning: () => Promise.resolve(options.updateReturning ?? []),
+              };
+            },
           };
         },
       }),
@@ -147,8 +160,8 @@ describe("Microsoft Teams tenant install store", () => {
     ).rejects.toBeInstanceOf(MsteamsTenantConflictError);
   });
 
-  it("activates an install with consent status and installed_at", async () => {
-    const { db, updateSet } = fakeDb({
+  it("activates a pending install with consent status and installed_at", async () => {
+    const { db, updateSet, updateWhere } = fakeDb({
       updateReturning: [
         { id: "install-1", status: "active", consent_status: "granted" },
       ],
@@ -168,10 +181,71 @@ describe("Microsoft Teams tenant install store", () => {
     );
     expect((updateSet.mock.calls[0]?.[0] as any).installed_at).toBeDefined();
     expect(row).toMatchObject({ id: "install-1", status: "active" });
+
+    // The status transition is guarded in SQL: only pending or uninstalled
+    // rows may activate — revoked and active rows never match.
+    const where = renderWhere(updateWhere.mock.calls[0]?.[0]);
+    expect(where.sql).toContain("IN ('pending', 'uninstalled')");
+    expect(where.params).toContain("entra-1");
+  });
+
+  it("activates an uninstalled install (customer reinstall path)", async () => {
+    const { db, updateWhere } = fakeDb({
+      updateReturning: [
+        {
+          id: "install-1",
+          status: "active",
+          consent_status: "granted",
+          uninstalled_at: null,
+        },
+      ],
+    });
+
+    const row = await activateTenantInstall(
+      { entraTenantId: "entra-1", consentStatus: "granted" },
+      db as any
+    );
+
+    expect(row).toMatchObject({ status: "active", uninstalled_at: null });
+    expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).toContain(
+      "IN ('pending', 'uninstalled')"
+    );
+  });
+
+  it("returns null for a revoked install: the guarded update matches nothing", async () => {
+    // A revoked row is excluded by the IN ('pending','uninstalled') guard,
+    // so the UPDATE returns no row and the row stays revoked.
+    const { db, updateWhere } = fakeDb({ updateReturning: [] });
+
+    await expect(
+      activateTenantInstall(
+        { entraTenantId: "entra-revoked", consentStatus: "granted" },
+        db as any
+      )
+    ).resolves.toBeNull();
+
+    const where = renderWhere(updateWhere.mock.calls[0]?.[0]);
+    expect(where.sql).toContain("IN ('pending', 'uninstalled')");
+    expect(where.sql).not.toContain("'revoked'");
+  });
+
+  it("returns null for an already-active install: replay cannot re-stamp it", async () => {
+    const { db, updateWhere } = fakeDb({ updateReturning: [] });
+
+    await expect(
+      activateTenantInstall(
+        { entraTenantId: "entra-active", consentStatus: "granted" },
+        db as any
+      )
+    ).resolves.toBeNull();
+
+    expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).not.toContain(
+      "'active'"
+    );
   });
 
   it("marks consent status without touching install status", async () => {
-    const { db, updateSet } = fakeDb({
+    const { db, updateSet, updateWhere } = fakeDb({
       updateReturning: [{ id: "install-1", consent_status: "admin_required" }],
     });
 
@@ -185,6 +259,61 @@ describe("Microsoft Teams tenant install store", () => {
     );
     expect((updateSet.mock.calls[0]?.[0] as any).status).toBeUndefined();
     expect(row).toMatchObject({ consent_status: "admin_required" });
+
+    // ACTIVE installs are excluded in SQL: a forged consent-error callback
+    // can never downgrade the consent surface of a working binding.
+    expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).toContain(
+      "<> 'active'"
+    );
+  });
+
+  it("no-ops on active installs when marking consent", async () => {
+    // The only row for this Entra tenant is active, so the <> 'active'
+    // guard excludes it and the update returns nothing.
+    const { db, updateWhere } = fakeDb({ updateReturning: [] });
+
+    await expect(
+      markConsent(
+        { entraTenantId: "entra-active", consentStatus: "admin_required" },
+        db as any
+      )
+    ).resolves.toBeNull();
+
+    expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).toContain(
+      "<> 'active'"
+    );
+  });
+
+  it("reopens a revoked install to pending via the operator path", async () => {
+    const { db, updateSet, updateWhere } = fakeDb({
+      updateReturning: [
+        { id: "install-1", status: "pending", consent_status: "pending" },
+      ],
+    });
+
+    const row = await reopenRevokedInstall({ tenantId: "tenant-1" }, db as any);
+
+    expect(updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "pending",
+        consent_status: "pending",
+        uninstalled_at: null,
+      })
+    );
+    expect(row).toMatchObject({ id: "install-1", status: "pending" });
+
+    // Only rows currently revoked for THIS tenant are reopened.
+    const where = renderWhere(updateWhere.mock.calls[0]?.[0]);
+    expect(where.params).toContain("tenant-1");
+    expect(where.params).toContain("revoked");
+  });
+
+  it("returns null from reopenRevokedInstall when nothing is revoked", async () => {
+    const { db } = fakeDb({ updateReturning: [] });
+
+    await expect(
+      reopenRevokedInstall({ tenantId: "tenant-1" }, db as any)
+    ).resolves.toBeNull();
   });
 
   it("revokes an install and stamps uninstalled_at", async () => {

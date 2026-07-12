@@ -5,6 +5,7 @@ import {
   MSTEAMS_LINK_TOKEN_TTL_MS,
   createMsteamsAccountLinkToken,
 } from "../../lib/msteams/install-state.js";
+import { MsteamsLinkConflictError } from "../../lib/msteams/user-link-store.js";
 import { handleMsteamsAccountLinkComplete } from "./account-link-complete.js";
 
 const CREDENTIALS = { appId: "bot-app-1", clientSecret: "teams-client-secret" };
@@ -236,6 +237,22 @@ describe("msteams account-link-complete handler", () => {
     );
     expect(response.statusCode).toBe(409);
     expect(d.upsertLink).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when the Teams identity is actively linked to a different user", async () => {
+    const d = deps({
+      upsertLink: vi
+        .fn()
+        .mockRejectedValue(new MsteamsLinkConflictError("aad-1")),
+    });
+    const response = await handleMsteamsAccountLinkComplete(
+      event({ token: linkToken() }),
+      d
+    );
+    expect(response.statusCode).toBe(409);
+    expect(JSON.parse(response.body ?? "{}").error).toMatch(
+      /already linked to a different ThinkWork user/
+    );
   });
 
   it("rejects linking the bot identity with 403", async () => {

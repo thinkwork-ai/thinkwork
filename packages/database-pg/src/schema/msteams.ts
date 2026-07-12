@@ -60,6 +60,11 @@ export const msteamsTenantInstalls = pgTable(
       table.tenant_id,
       table.entra_tenant_id,
     ),
+    // A ThinkWork tenant has at most one ACTIVE Entra binding; concurrent
+    // consent callbacks cannot race two bindings live.
+    uniqueIndex("uq_msteams_tenant_installs_tenant_active")
+      .on(table.tenant_id)
+      .where(sql`${table.status} = 'active'`),
     index("idx_msteams_tenant_installs_tenant_status").on(
       table.tenant_id,
       table.status,

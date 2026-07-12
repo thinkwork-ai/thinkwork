@@ -103,6 +103,15 @@ export async function upsertTenantInstall(
   return row;
 }
 
+/**
+ * Activate a PENDING or UNINSTALLED install. This is the single-use gate for
+ * the admin-consent callback: an already-active row is untouched (no-op for
+ * the caller) and a REVOKED install can never be reactivated by callback
+ * replay — reopening a revoked install requires the operator-authenticated
+ * install-start path (reopenRevokedInstall). Customer uninstall→reinstall
+ * with freshly verified consent needs no operator action. Returns null when
+ * no eligible row matched.
+ */
 export async function activateTenantInstall(
   input: {
     entraTenantId: string;
@@ -119,11 +128,21 @@ export async function activateTenantInstall(
       uninstalled_at: null,
       updated_at: sql`now()`,
     })
-    .where(eq(msteamsTenantInstalls.entra_tenant_id, input.entraTenantId))
+    .where(
+      and(
+        eq(msteamsTenantInstalls.entra_tenant_id, input.entraTenantId),
+        sql`${msteamsTenantInstalls.status} IN ('pending', 'uninstalled')`
+      )
+    )
     .returning();
   return row ?? null;
 }
 
+/**
+ * Stamp a consent status on a NON-ACTIVE install. Active installs are never
+ * downgraded here — a forged or replayed consent-error callback must not
+ * corrupt the health surface of a working binding.
+ */
 export async function markConsent(
   input: {
     entraTenantId: string;
@@ -137,7 +156,39 @@ export async function markConsent(
       consent_status: input.consentStatus,
       updated_at: sql`now()`,
     })
-    .where(eq(msteamsTenantInstalls.entra_tenant_id, input.entraTenantId))
+    .where(
+      and(
+        eq(msteamsTenantInstalls.entra_tenant_id, input.entraTenantId),
+        sql`${msteamsTenantInstalls.status} <> 'active'`
+      )
+    )
+    .returning();
+  return row ?? null;
+}
+
+/**
+ * Operator re-enable path: move a revoked install back to pending so a fresh
+ * verified admin-consent callback can activate it. Only reachable through the
+ * operator-authenticated install-start handler.
+ */
+export async function reopenRevokedInstall(
+  input: { tenantId: string },
+  dbClient: DbClient = db
+) {
+  const [row] = await dbClient
+    .update(msteamsTenantInstalls)
+    .set({
+      status: "pending",
+      consent_status: "pending",
+      uninstalled_at: null,
+      updated_at: sql`now()`,
+    })
+    .where(
+      and(
+        eq(msteamsTenantInstalls.tenant_id, input.tenantId),
+        eq(msteamsTenantInstalls.status, "revoked")
+      )
+    )
     .returning();
   return row ?? null;
 }

@@ -7,11 +7,12 @@
  * Secrets Manager — transport-only, never logged and never returned.
  */
 
+import { randomBytes } from "node:crypto";
 import {
-  GetSecretValueCommand,
-  SecretsManagerClient,
-} from "@aws-sdk/client-secrets-manager";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+  loadAppCredentialsSecret,
+  resetAppCredentialsSecretCacheForTests,
+} from "../app-credentials-secret.js";
+import { createSignedPayload, verifySignedPayload } from "../signed-payload.js";
 
 export const MSTEAMS_INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
 export const MSTEAMS_LINK_TOKEN_TTL_MS = 15 * 60 * 1000;
@@ -49,8 +50,7 @@ export function createMsteamsInstallState({
     nonce,
     expiresAt: nowMs() + MSTEAMS_INSTALL_STATE_TTL_MS,
   };
-  const encoded = base64UrlEncode(JSON.stringify(payload));
-  return `${encoded}.${sign(encoded, signingKey)}`;
+  return createSignedPayload(payload, signingKey);
 }
 
 export function verifyMsteamsInstallState(
@@ -58,29 +58,12 @@ export function verifyMsteamsInstallState(
   signingKey: string,
   nowMs: () => number = Date.now
 ): MsteamsInstallStatePayload {
-  const [encoded, actualSignature, extra] = state.split(".");
-  if (!encoded || !actualSignature || extra !== undefined) {
-    throw new Error("Teams install state is malformed");
-  }
-
-  const expectedSignature = sign(encoded, signingKey);
-  if (!constantTimeEqual(actualSignature, expectedSignature)) {
-    throw new Error("Teams install state signature is invalid");
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(base64UrlDecode(encoded));
-  } catch {
-    throw new Error("Teams install state payload is invalid");
-  }
-  if (!isMsteamsInstallStatePayload(parsed)) {
-    throw new Error("Teams install state payload is incomplete");
-  }
-  if (parsed.expiresAt < nowMs()) {
-    throw new Error("Teams install state has expired");
-  }
-  return parsed;
+  return verifySignedPayload(state, signingKey, {
+    validate: isMsteamsInstallStatePayload,
+    errorPrefix: "Teams install state",
+    expiresAt: (payload) => payload.expiresAt,
+    nowMs,
+  });
 }
 
 export interface MsteamsAccountLinkTokenPayload {
@@ -115,8 +98,7 @@ export function createMsteamsAccountLinkToken({
     nonce,
     expiresAt: nowMs() + MSTEAMS_LINK_TOKEN_TTL_MS,
   };
-  const encoded = base64UrlEncode(JSON.stringify(payload));
-  return `${encoded}.${sign(encoded, signingKey)}`;
+  return createSignedPayload(payload, signingKey);
 }
 
 export interface VerifyMsteamsAccountLinkTokenOptions {
@@ -138,29 +120,12 @@ export function verifyMsteamsAccountLinkToken(
   signingKey: string,
   options: VerifyMsteamsAccountLinkTokenOptions = {}
 ): MsteamsAccountLinkTokenPayload {
-  const [encoded, actualSignature, extra] = token.split(".");
-  if (!encoded || !actualSignature || extra !== undefined) {
-    throw new Error("Teams account-link token is malformed");
-  }
-
-  const expectedSignature = sign(encoded, signingKey);
-  if (!constantTimeEqual(actualSignature, expectedSignature)) {
-    throw new Error("Teams account-link token signature is invalid");
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(base64UrlDecode(encoded));
-  } catch {
-    throw new Error("Teams account-link token payload is invalid");
-  }
-  if (!isMsteamsAccountLinkTokenPayload(parsed)) {
-    throw new Error("Teams account-link token payload is incomplete");
-  }
-  const nowMs = options.nowMs ?? Date.now;
-  if (parsed.expiresAt < nowMs()) {
-    throw new Error("Teams account-link token has expired");
-  }
+  const parsed = verifySignedPayload(token, signingKey, {
+    validate: isMsteamsAccountLinkTokenPayload,
+    errorPrefix: "Teams account-link token",
+    expiresAt: (payload) => payload.expiresAt,
+    nowMs: options.nowMs,
+  });
   if (
     options.expectedEntraTenantId !== undefined &&
     parsed.entraTenantId !== options.expectedEntraTenantId
@@ -180,68 +145,97 @@ export function verifyMsteamsAccountLinkToken(
   return parsed;
 }
 
-let appCredentialsCache: MsteamsAppCredentials | null = null;
-
-let smClient: SecretsManagerClient | null = null;
-function getClient(): SecretsManagerClient {
-  if (!smClient) {
-    smClient = new SecretsManagerClient({
-      region: process.env.AWS_REGION || "us-east-1",
-    });
-  }
-  return smClient;
-}
-
 /**
  * Loads the Teams app credentials from Secrets Manager. The client_secret
  * is the HMAC signing key for install state and account-link tokens —
  * transport-only material: never log it and never include it in responses.
  */
 export async function getMsteamsAppCredentials(): Promise<MsteamsAppCredentials> {
-  if (appCredentialsCache) return appCredentialsCache;
-
-  const secretArn = msteamsAppCredentialsSecretId();
-
-  const res = await getClient().send(
-    new GetSecretValueCommand({ SecretId: secretArn })
-  );
-  if (!res.SecretString) {
-    throw new Error(
-      `Secrets Manager returned empty SecretString for ${secretArn} - populate it with Teams app credentials.`
-    );
-  }
-
-  let parsed: {
-    app_id?: string;
-    client_secret?: string;
-  };
-  try {
-    parsed = JSON.parse(res.SecretString);
-  } catch {
-    throw new Error(
-      `Secrets Manager value for ${secretArn} is not valid JSON. Expected {"app_id":"...","client_secret":"..."}.`
-    );
-  }
-
-  const appId = parsed.app_id || "";
-  const clientSecret = parsed.client_secret || "";
-  if (!appId || !clientSecret) {
-    throw new Error(
-      `Teams app credentials incomplete at ${secretArn}. Secret must contain non-empty app_id and client_secret.`
-    );
-  }
-
-  appCredentialsCache = { appId, clientSecret };
-  console.log(
-    `[msteams-install-state] Loaded Teams app credentials from ${secretArn}`
-  );
-  return appCredentialsCache;
+  return loadAppCredentialsSecret({
+    secretId: msteamsAppCredentialsSecretId(),
+    label: "Teams",
+    logTag: "msteams-install-state",
+    requiredFields: ["app_id", "client_secret"],
+    map: (fields) => ({
+      appId: fields.app_id,
+      clientSecret: fields.client_secret,
+    }),
+  });
 }
 
 /** Test-only: clear the module-level credential cache. */
 export function resetMsteamsAppCredentialsCacheForTests(): void {
-  appCredentialsCache = null;
-  smClient = null;
+  resetAppCredentialsSecretCacheForTests();
+}
+
+export type MsteamsConsentVerification =
+  | { granted: true }
+  | { granted: false; reason: string };
+
+/**
+ * Verify with Microsoft that admin consent was actually granted for the
+ * ThinkWork application in the reported Entra tenant. The consent-callback
+ * query parameters (admin_consent, tenant) are attacker-forgeable — anyone
+ * holding the consent URL can fabricate them — so activation must be gated
+ * on a real client-credentials token grant against that tenant: it succeeds
+ * only when the application has been consented there.
+ *
+ * The acquired token is discarded; only the grant outcome matters.
+ */
+export async function verifyMsteamsAdminConsent(input: {
+  entraTenantId: string;
+  appId: string;
+  clientSecret: string;
+  fetchFn?: typeof fetch;
+}): Promise<MsteamsConsentVerification> {
+  const doFetch = input.fetchFn ?? fetch;
+  if (!/^[0-9a-zA-Z.-]+$/.test(input.entraTenantId)) {
+    return { granted: false, reason: "invalid_tenant_id" };
+  }
+  const url = `https://login.microsoftonline.com/${encodeURIComponent(
+    input.entraTenantId
+  )}/oauth2/v2.0/token`;
+  let response: Response;
+  try {
+    response = await doFetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: input.appId,
+        client_secret: input.clientSecret,
+        scope: "https://graph.microsoft.com/.default",
+      }).toString(),
+    });
+  } catch {
+    return { granted: false, reason: "token_endpoint_unreachable" };
+  }
+
+  if (response.ok) {
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      return { granted: false, reason: "malformed_token_response" };
+    }
+    const accessToken = (body as { access_token?: unknown }).access_token;
+    return typeof accessToken === "string" && accessToken.length > 0
+      ? { granted: true }
+      : { granted: false, reason: "malformed_token_response" };
+  }
+
+  // AADSTS65001 (consent required) / AADSTS700016 (app not found in tenant)
+  // and friends all arrive as OAuth error bodies; surface only the error
+  // code, never the description (it can echo attacker-controlled input).
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    return {
+      granted: false,
+      reason: typeof body.error === "string" ? body.error : "consent_denied",
+    };
+  } catch {
+    return { granted: false, reason: `http_${response.status}` };
+  }
 }
 
 function msteamsAppCredentialsSecretId(): string {
@@ -250,27 +244,6 @@ function msteamsAppCredentialsSecretId(): string {
 
   const stage = process.env.STAGE?.trim() || "dev";
   return `thinkwork/${stage}/msteams/app`;
-}
-
-function sign(encodedPayload: string, signingKey: string): string {
-  return createHmac("sha256", signingKey)
-    .update(encodedPayload)
-    .digest("base64url");
-}
-
-function base64UrlEncode(value: string): string {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function base64UrlDecode(value: string): string {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function constantTimeEqual(actual: string, expected: string): boolean {
-  const actualBuffer = Buffer.from(actual, "utf8");
-  const expectedBuffer = Buffer.from(expected, "utf8");
-  if (actualBuffer.length !== expectedBuffer.length) return false;
-  return timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 function isMsteamsInstallStatePayload(

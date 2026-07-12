@@ -35,6 +35,7 @@ import {
 } from "../../lib/msteams/install-state.js";
 import { findActiveTenantInstall } from "../../lib/msteams/tenant-store.js";
 import {
+  MsteamsLinkConflictError,
   findActiveUserLink,
   unlinkUser,
   upsertUserLink,
@@ -152,12 +153,24 @@ export async function handleMsteamsAccountLinkComplete(
   }
 
   const upsertLink = deps.upsertLink ?? upsertUserLink;
-  await upsertLink({
-    tenantId: payload.tenantId,
-    entraTenantId: payload.entraTenantId,
-    aadObjectId: payload.aadObjectId,
-    userId: caller.id,
-  });
+  try {
+    await upsertLink({
+      tenantId: payload.tenantId,
+      entraTenantId: payload.entraTenantId,
+      aadObjectId: payload.aadObjectId,
+      userId: caller.id,
+    });
+  } catch (err) {
+    if (err instanceof MsteamsLinkConflictError) {
+      // First-wins: a replayed link token cannot steal an active link from
+      // the user who already redeemed it.
+      return error(
+        "This Microsoft Teams identity is already linked to a different ThinkWork user. The linked user must unlink first.",
+        409,
+      );
+    }
+    throw err;
+  }
 
   return json({ linked: true, userId: caller.id });
 }

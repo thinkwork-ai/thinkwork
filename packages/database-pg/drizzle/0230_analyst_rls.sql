@@ -62,6 +62,15 @@
 -- creates-policy: public.agent_operation_leases.analyst_tenant_isolation
 -- creates-policy: public.eval_results.analyst_tenant_isolation
 -- creates-policy: public.plugin_components.analyst_tenant_isolation
+--
+-- THINK-84 U6: the msteams tables landed after this file was first applied,
+-- so their policies are declared explicitly — the drift gate must force a
+-- re-apply on databases that ran 0230 before the msteams tables existed.
+-- (0227's grants for the same tables are not marker-checkable; re-apply
+-- 0227 alongside 0233 and this file — see the 0233 header.)
+-- creates-policy: public.msteams_tenant_installs.analyst_tenant_isolation
+-- creates-policy: public.msteams_user_links.analyst_tenant_isolation
+-- creates-policy: public.msteams_threads.analyst_tenant_isolation
 
 \set ON_ERROR_STOP on
 

@@ -33,6 +33,7 @@ import {
   verifyMsteamsInstallState,
   type MsteamsAppCredentials,
 } from "../../lib/msteams/install-state.js";
+import { reopenRevokedInstall } from "../../lib/msteams/tenant-store.js";
 
 const { users, tenantMembers } = schema;
 
@@ -43,6 +44,7 @@ export interface MsteamsInstallStartDeps {
   getCredentials?: () => Promise<MsteamsAppCredentials>;
   resolveUserIdByEmail?: (email: string) => Promise<string | null>;
   isTenantAdmin?: (tenantId: string, userId: string) => Promise<boolean>;
+  reopenRevoked?: typeof reopenRevokedInstall;
   redirectUri?: string;
   nowMs?: () => number;
 }
@@ -121,7 +123,12 @@ export async function handleMsteamsInstallStart(
 
   // No install row is written here: the Entra tenant id is unknown until
   // Microsoft redirects back, and the signed state itself carries the
-  // pending install. install-complete creates the real binding.
+  // pending install. install-complete creates the real binding. The one
+  // exception: a REVOKED install is reopened to pending here, because this
+  // operator-authenticated entry point is the deliberate re-enable path —
+  // callback replay alone can never reactivate a revoked binding.
+  const reopenRevoked = deps.reopenRevoked ?? reopenRevokedInstall;
+  await reopenRevoked({ tenantId });
 
   return json({
     state,

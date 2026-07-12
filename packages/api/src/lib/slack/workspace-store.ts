@@ -5,6 +5,10 @@ import {
   SecretsManagerClient,
   UpdateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
+import {
+  loadAppCredentialsSecret,
+  resetAppCredentialsSecretCacheForTests,
+} from "../app-credentials-secret.js";
 
 export interface SlackAppCredentials {
   signingSecret: string;
@@ -12,7 +16,6 @@ export interface SlackAppCredentials {
   clientSecret: string;
 }
 
-let appCredentialsCache: SlackAppCredentials | null = null;
 const botTokenCache = new Map<string, string>();
 
 let smClient: SecretsManagerClient | null = null;
@@ -27,52 +30,23 @@ function getClient(): SecretsManagerClient {
 
 export function slackBotTokenSecretPath(
   tenantId: string,
-  slackTeamId: string,
+  slackTeamId: string
 ): string {
   return `thinkwork/tenants/${tenantId}/slack/workspaces/${slackTeamId}/bot-token`;
 }
 
 export async function getSlackAppCredentials(): Promise<SlackAppCredentials> {
-  if (appCredentialsCache) return appCredentialsCache;
-
-  const secretArn = slackAppCredentialsSecretId();
-
-  const res = await getClient().send(
-    new GetSecretValueCommand({ SecretId: secretArn }),
-  );
-  if (!res.SecretString) {
-    throw new Error(
-      `Secrets Manager returned empty SecretString for ${secretArn} - populate it with Slack app credentials.`,
-    );
-  }
-
-  let parsed: {
-    signing_secret?: string;
-    client_id?: string;
-    client_secret?: string;
-  };
-  try {
-    parsed = JSON.parse(res.SecretString);
-  } catch {
-    throw new Error(
-      `Secrets Manager value for ${secretArn} is not valid JSON. Expected {"signing_secret":"...","client_id":"...","client_secret":"..."}.`,
-    );
-  }
-
-  const signingSecret = parsed.signing_secret || "";
-  const clientId = parsed.client_id || "";
-  const clientSecret = parsed.client_secret || "";
-  if (!signingSecret || !clientId || !clientSecret) {
-    throw new Error(
-      `Slack app credentials incomplete at ${secretArn}. Secret must contain non-empty signing_secret, client_id, and client_secret.`,
-    );
-  }
-
-  appCredentialsCache = { signingSecret, clientId, clientSecret };
-  console.log(
-    `[slack-workspace-store] Loaded Slack app credentials from ${secretArn}`,
-  );
-  return appCredentialsCache;
+  return loadAppCredentialsSecret({
+    secretId: slackAppCredentialsSecretId(),
+    label: "Slack",
+    logTag: "slack-workspace-store",
+    requiredFields: ["signing_secret", "client_id", "client_secret"],
+    map: (fields) => ({
+      signingSecret: fields.signing_secret,
+      clientId: fields.client_id,
+      clientSecret: fields.client_secret,
+    }),
+  });
 }
 
 function slackAppCredentialsSecretId(): string {
@@ -91,18 +65,18 @@ export async function getSlackBotToken(secretPath: string): Promise<string> {
   }
 
   const res = await getClient().send(
-    new GetSecretValueCommand({ SecretId: secretPath }),
+    new GetSecretValueCommand({ SecretId: secretPath })
   );
   if (!res.SecretString) {
     throw new Error(
-      `Secrets Manager returned empty SecretString for ${secretPath} - reinstall or repair the Slack workspace.`,
+      `Secrets Manager returned empty SecretString for ${secretPath} - reinstall or repair the Slack workspace.`
     );
   }
 
   const token = parseBotTokenSecret(res.SecretString);
   if (!token) {
     throw new Error(
-      `Slack bot token secret at ${secretPath} is missing bot_token.`,
+      `Slack bot token secret at ${secretPath} is missing bot_token.`
     );
   }
 
@@ -112,7 +86,7 @@ export async function getSlackBotToken(secretPath: string): Promise<string> {
 
 export async function putSlackBotToken(
   secretPath: string,
-  botToken: string,
+  botToken: string
 ): Promise<string> {
   if (!secretPath) throw new Error("Slack bot token secret path is required.");
   if (!botToken.trim()) throw new Error("Slack bot token is required.");
@@ -124,7 +98,7 @@ export async function putSlackBotToken(
       new CreateSecretCommand({
         Name: secretPath,
         SecretString: secretString,
-      }),
+      })
     );
     botTokenCache.set(secretPath, botToken);
     return created.ARN || secretPath;
@@ -134,7 +108,7 @@ export async function putSlackBotToken(
       new UpdateSecretCommand({
         SecretId: secretPath,
         SecretString: secretString,
-      }),
+      })
     );
     botTokenCache.set(secretPath, botToken);
     return secretPath;
@@ -148,7 +122,7 @@ export async function deleteSlackBotToken(secretPath: string): Promise<void> {
     new DeleteSecretCommand({
       SecretId: secretPath,
       RecoveryWindowInDays: 7,
-    }),
+    })
   );
 }
 
@@ -164,7 +138,7 @@ function parseBotTokenSecret(secretString: string): string {
 }
 
 export function __resetSlackWorkspaceStoreCacheForTest(): void {
-  appCredentialsCache = null;
+  resetAppCredentialsSecretCacheForTests();
   botTokenCache.clear();
   smClient = null;
 }

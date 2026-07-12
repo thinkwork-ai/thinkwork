@@ -8,6 +8,7 @@ import {
   getMsteamsAppCredentials,
   resetMsteamsAppCredentialsCacheForTests,
   verifyMsteamsAccountLinkToken,
+  verifyMsteamsAdminConsent,
   verifyMsteamsInstallState,
 } from "./install-state.js";
 
@@ -205,6 +206,127 @@ describe("msteams account-link token", () => {
     expect(() => verifyMsteamsAccountLinkToken("a.b.c", SIGNING_KEY)).toThrow(
       /malformed/
     );
+  });
+});
+
+describe("verifyMsteamsAdminConsent", () => {
+  const input = {
+    entraTenantId: "entra-tenant-1",
+    appId: "app-1",
+    clientSecret: "super-secret-value",
+  };
+
+  it("grants when the client-credentials probe returns an access token", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ access_token: "tok" }), { status: 200 })
+      );
+
+    const result = await verifyMsteamsAdminConsent({ ...input, fetchFn });
+
+    expect(result).toEqual({ granted: true });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://login.microsoftonline.com/entra-tenant-1/oauth2/v2.0/token"
+    );
+    expect(String(init.body)).toContain("grant_type=client_credentials");
+  });
+
+  it("does not grant on a 200 response without a usable access_token", async () => {
+    const missingToken = await verifyMsteamsAdminConsent({
+      ...input,
+      fetchFn: vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ token_type: "Bearer" }), {
+          status: 200,
+        })
+      ),
+    });
+    expect(missingToken).toEqual({
+      granted: false,
+      reason: "malformed_token_response",
+    });
+
+    const notJson = await verifyMsteamsAdminConsent({
+      ...input,
+      fetchFn: vi
+        .fn()
+        .mockResolvedValue(new Response("not-json", { status: 200 })),
+    });
+    expect(notJson).toEqual({
+      granted: false,
+      reason: "malformed_token_response",
+    });
+  });
+
+  it("surfaces the OAuth error code from an error body", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "invalid_client" }), {
+        status: 400,
+      })
+    );
+
+    await expect(
+      verifyMsteamsAdminConsent({ ...input, fetchFn })
+    ).resolves.toEqual({ granted: false, reason: "invalid_client" });
+  });
+
+  it("reports token_endpoint_unreachable when the fetch fails", async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+
+    await expect(
+      verifyMsteamsAdminConsent({ ...input, fetchFn })
+    ).resolves.toEqual({
+      granted: false,
+      reason: "token_endpoint_unreachable",
+    });
+  });
+
+  it("rejects a tenant id with an invalid charset without calling fetch", async () => {
+    const fetchFn = vi.fn();
+
+    await expect(
+      verifyMsteamsAdminConsent({
+        ...input,
+        entraTenantId: "evil/../tenant",
+        fetchFn,
+      })
+    ).resolves.toEqual({ granted: false, reason: "invalid_tenant_id" });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("never includes the client_secret in the verification result", async () => {
+    const outcomes = await Promise.all([
+      verifyMsteamsAdminConsent({
+        ...input,
+        fetchFn: vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ access_token: "tok" }), {
+            status: 200,
+          })
+        ),
+      }),
+      verifyMsteamsAdminConsent({
+        ...input,
+        fetchFn: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: "invalid_client",
+              error_description: input.clientSecret,
+            }),
+            { status: 401 }
+          )
+        ),
+      }),
+      verifyMsteamsAdminConsent({
+        ...input,
+        fetchFn: vi.fn().mockRejectedValue(new Error(input.clientSecret)),
+      }),
+    ]);
+
+    for (const outcome of outcomes) {
+      expect(JSON.stringify(outcome)).not.toContain(input.clientSecret);
+    }
   });
 });
 

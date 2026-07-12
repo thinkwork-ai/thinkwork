@@ -1,5 +1,6 @@
 import { getConfig } from "@thinkwork/runtime-config";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { createSignedPayload, verifySignedPayload } from "../signed-payload.js";
 
 export const SLACK_INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -55,38 +56,20 @@ export function createSlackInstallState({
     expiresAt: nowMs() + SLACK_INSTALL_STATE_TTL_MS,
     returnUrl,
   };
-  const encoded = base64UrlEncode(JSON.stringify(payload));
-  return `${encoded}.${sign(encoded, clientSecret)}`;
+  return createSignedPayload(payload, clientSecret);
 }
 
 export function verifySlackInstallState(
   state: string,
   clientSecret: string,
-  nowMs: () => number = Date.now,
+  nowMs: () => number = Date.now
 ): SlackInstallStatePayload {
-  const [encoded, actualSignature, extra] = state.split(".");
-  if (!encoded || !actualSignature || extra !== undefined) {
-    throw new Error("Slack install state is malformed");
-  }
-
-  const expectedSignature = sign(encoded, clientSecret);
-  if (!constantTimeEqual(actualSignature, expectedSignature)) {
-    throw new Error("Slack install state signature is invalid");
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(base64UrlDecode(encoded));
-  } catch {
-    throw new Error("Slack install state payload is invalid");
-  }
-  if (!isSlackInstallStatePayload(parsed)) {
-    throw new Error("Slack install state payload is incomplete");
-  }
-  if (parsed.expiresAt < nowMs()) {
-    throw new Error("Slack install state has expired");
-  }
-  return parsed;
+  return verifySignedPayload(state, clientSecret, {
+    validate: isSlackInstallStatePayload,
+    errorPrefix: "Slack install state",
+    expiresAt: (payload) => payload.expiresAt,
+    nowMs,
+  });
 }
 
 export function buildSlackAuthorizeUrl(input: {
@@ -109,14 +92,14 @@ export function slackOAuthRedirectUri(): string {
   const apiUrl = getConfig("THINKWORK_API_URL")?.replace(/\/+$/, "");
   if (!apiUrl) {
     throw new Error(
-      "THINKWORK_API_URL or SLACK_OAUTH_REDIRECT_URI is required to start Slack install.",
+      "THINKWORK_API_URL or SLACK_OAUTH_REDIRECT_URI is required to start Slack install."
     );
   }
   return `${apiUrl}/slack/oauth/install`;
 }
 
 export function sanitizeSlackInstallReturnUrl(
-  value: string | null | undefined,
+  value: string | null | undefined
 ): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
@@ -133,35 +116,14 @@ export function sanitizeSlackInstallReturnUrl(
     !(parsed.protocol === "http:" && isLocalhost)
   ) {
     throw new Error(
-      "returnUrl must use https, except localhost development URLs",
+      "returnUrl must use https, except localhost development URLs"
     );
   }
   return parsed.toString();
 }
 
-function sign(encodedPayload: string, clientSecret: string): string {
-  return createHmac("sha256", clientSecret)
-    .update(encodedPayload)
-    .digest("base64url");
-}
-
-function base64UrlEncode(value: string): string {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function base64UrlDecode(value: string): string {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function constantTimeEqual(actual: string, expected: string): boolean {
-  const actualBuffer = Buffer.from(actual, "utf8");
-  const expectedBuffer = Buffer.from(expected, "utf8");
-  if (actualBuffer.length !== expectedBuffer.length) return false;
-  return timingSafeEqual(actualBuffer, expectedBuffer);
-}
-
 function isSlackInstallStatePayload(
-  value: unknown,
+  value: unknown
 ): value is SlackInstallStatePayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Partial<SlackInstallStatePayload>;

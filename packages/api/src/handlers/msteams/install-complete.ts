@@ -25,6 +25,7 @@ import type {
 import { error, json } from "../../lib/response.js";
 import {
   getMsteamsAppCredentials,
+  verifyMsteamsAdminConsent,
   verifyMsteamsInstallState,
   type MsteamsAppCredentials,
   type MsteamsInstallStatePayload,
@@ -39,6 +40,7 @@ import {
 
 export interface MsteamsInstallCompleteDeps {
   getCredentials?: () => Promise<MsteamsAppCredentials>;
+  verifyConsent?: typeof verifyMsteamsAdminConsent;
   getInstallStatus?: typeof getTenantInstallStatus;
   upsertInstall?: typeof upsertTenantInstall;
   activateInstall?: typeof activateTenantInstall;
@@ -83,13 +85,19 @@ export async function handleMsteamsInstallComplete(
   const markConsentStatus = deps.markConsentStatus ?? markConsent;
   const upsertInstall = deps.upsertInstall ?? upsertTenantInstall;
 
+  const getInstallStatus = deps.getInstallStatus ?? getTenantInstallStatus;
+  const rows = await getInstallStatus({ tenantId: state.tenantId });
+  const activeRow = rows.find((row) => row.status === "active");
+
   const consentError = params.get("error");
   if (consentError) {
     // Consent was declined or requires escalation. When Microsoft reports
     // the Entra tenant, persist a pending install stamped admin_required so
     // the health surface is diagnosable; without it there is nothing to
-    // bind, so only report. Never echo error_description verbatim into logs.
-    const reportedEntraTenantId = params.get("tenant");
+    // bind, so only report. A tenant with an ACTIVE binding is never touched
+    // here — a forged error callback must not corrupt a working install.
+    // Never echo error_description verbatim into logs.
+    const reportedEntraTenantId = activeRow ? null : params.get("tenant");
     if (reportedEntraTenantId) {
       try {
         await upsertInstall({
@@ -124,9 +132,6 @@ export async function handleMsteamsInstallComplete(
 
   // Single-use gate: only a still-pending install for this ThinkWork tenant
   // may activate. An already-active binding short-circuits.
-  const getInstallStatus = deps.getInstallStatus ?? getTenantInstallStatus;
-  const rows = await getInstallStatus({ tenantId: state.tenantId });
-  const activeRow = rows.find((row) => row.status === "active");
   if (activeRow) {
     if (activeRow.entra_tenant_id === entraTenantId) {
       // Replayed callback for the same Entra tenant: idempotent no-op.
@@ -136,6 +141,26 @@ export async function handleMsteamsInstallComplete(
     return error(
       "Microsoft Teams is already installed for this ThinkWork tenant from a different Entra tenant",
       409,
+    );
+  }
+
+  // The admin_consent/tenant query params are attacker-forgeable. Gate
+  // activation on a real client-credentials grant against the reported
+  // Entra tenant — it only succeeds when the application has actually been
+  // consented there.
+  const verifyConsent = deps.verifyConsent ?? verifyMsteamsAdminConsent;
+  const consent = await verifyConsent({
+    entraTenantId,
+    appId: credentials.appId,
+    clientSecret: credentials.clientSecret,
+  });
+  if (!consent.granted) {
+    console.warn(
+      `[msteams:install-complete] consent verification failed tenant=${state.tenantId} reason=${consent.reason}`,
+    );
+    return error(
+      "Microsoft did not confirm admin consent for this Entra tenant. Re-run the install after consent is granted.",
+      403,
     );
   }
 
@@ -157,7 +182,19 @@ export async function handleMsteamsInstallComplete(
   }
 
   const activateInstall = deps.activateInstall ?? activateTenantInstall;
-  await activateInstall({ entraTenantId, consentStatus: "granted" });
+  const activated = await activateInstall({
+    entraTenantId,
+    consentStatus: "granted",
+  });
+  if (!activated) {
+    // The row exists but is not pending: revoked/uninstalled installs are
+    // never reactivated by callback replay. Reopening requires the
+    // operator-authenticated install-start path.
+    return error(
+      "This Microsoft Teams install is not pending activation. If it was revoked, restart the install from ThinkWork admin.",
+      409,
+    );
+  }
 
   return json({ installed: true, entraTenantId });
 }

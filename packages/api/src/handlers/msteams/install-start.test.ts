@@ -54,6 +54,7 @@ function deps(overrides: Record<string, unknown> = {}) {
     getCredentials: vi.fn().mockResolvedValue(CREDENTIALS),
     resolveUserIdByEmail: vi.fn().mockResolvedValue("user-1"),
     isTenantAdmin: vi.fn().mockResolvedValue(true),
+    reopenRevoked: vi.fn().mockResolvedValue(null),
     redirectUri: "https://api.example.com/msteams/install/complete",
     nowMs: () => 1_000,
     ...overrides,
@@ -93,6 +94,10 @@ describe("msteams install-start handler", () => {
     expect(url.searchParams.get("redirect_uri")).toBe(
       "https://api.example.com/msteams/install/complete"
     );
+
+    // The only persistence side effect: a revoked install is deliberately
+    // reopened to pending on this operator-authenticated path.
+    expect(d.reopenRevoked).toHaveBeenCalledWith({ tenantId: "tenant-1" });
   });
 
   it("rejects unauthenticated callers with 401", async () => {
@@ -102,6 +107,7 @@ describe("msteams install-start handler", () => {
       d
     );
     expect(response.statusCode).toBe(401);
+    expect(d.reopenRevoked).not.toHaveBeenCalled();
   });
 
   it("rejects non-Cognito (service) callers with 401", async () => {
@@ -115,6 +121,7 @@ describe("msteams install-start handler", () => {
       d
     );
     expect(response.statusCode).toBe(401);
+    expect(d.reopenRevoked).not.toHaveBeenCalled();
   });
 
   it("rejects non-admin callers with 403 and does not persist", async () => {
@@ -124,6 +131,7 @@ describe("msteams install-start handler", () => {
       d
     );
     expect(response.statusCode).toBe(403);
+    expect(d.reopenRevoked).not.toHaveBeenCalled();
   });
 
   it("rejects a caller with no ThinkWork user with 403", async () => {
@@ -133,6 +141,7 @@ describe("msteams install-start handler", () => {
       d
     );
     expect(response.statusCode).toBe(403);
+    expect(d.reopenRevoked).not.toHaveBeenCalled();
   });
 
   it("requires tenantId", async () => {
