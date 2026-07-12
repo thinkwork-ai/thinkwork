@@ -758,6 +758,51 @@ BEGIN
   ELSE
     missing := missing || 'managed_applications'::text;
   END IF;
+  IF to_regclass('public.memory_claim_evidence') IS NOT NULL THEN
+    ALTER TABLE public.memory_claim_evidence ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_claim_evidence;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_claim_evidence
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_claim_evidence'::text;
+  END IF;
+  IF to_regclass('public.memory_claims') IS NOT NULL THEN
+    ALTER TABLE public.memory_claims ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_claims;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_claims
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_claims'::text;
+  END IF;
+  IF to_regclass('public.memory_derivations') IS NOT NULL THEN
+    ALTER TABLE public.memory_derivations ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_derivations;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_derivations
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_derivations'::text;
+  END IF;
+  IF to_regclass('public.memory_evidence_items') IS NOT NULL THEN
+    ALTER TABLE public.memory_evidence_items ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_evidence_items;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_evidence_items
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_evidence_items'::text;
+  END IF;
+  IF to_regclass('public.memory_processor_configs') IS NOT NULL THEN
+    ALTER TABLE public.memory_processor_configs ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_processor_configs;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_processor_configs
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_processor_configs'::text;
+  END IF;
   IF to_regclass('public.memory_retain_attempts') IS NOT NULL THEN
     ALTER TABLE public.memory_retain_attempts ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_retain_attempts;
@@ -766,6 +811,51 @@ BEGIN
       USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
   ELSE
     missing := missing || 'memory_retain_attempts'::text;
+  END IF;
+  IF to_regclass('public.memory_retraction_attempts') IS NOT NULL THEN
+    ALTER TABLE public.memory_retraction_attempts ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_retraction_attempts;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_retraction_attempts
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_retraction_attempts'::text;
+  END IF;
+  IF to_regclass('public.memory_run_items') IS NOT NULL THEN
+    ALTER TABLE public.memory_run_items ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_run_items;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_run_items
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_run_items'::text;
+  END IF;
+  IF to_regclass('public.memory_source_authorizations') IS NOT NULL THEN
+    ALTER TABLE public.memory_source_authorizations ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_source_authorizations;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_source_authorizations
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_source_authorizations'::text;
+  END IF;
+  IF to_regclass('public.memory_source_checkpoints') IS NOT NULL THEN
+    ALTER TABLE public.memory_source_checkpoints ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_source_checkpoints;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_source_checkpoints
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_source_checkpoints'::text;
+  END IF;
+  IF to_regclass('public.memory_source_configs') IS NOT NULL THEN
+    ALTER TABLE public.memory_source_configs ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_source_configs;
+    CREATE POLICY analyst_tenant_isolation ON public.memory_source_configs
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'memory_source_configs'::text;
   END IF;
   IF to_regclass('public.message_artifacts') IS NOT NULL THEN
     ALTER TABLE public.message_artifacts ENABLE ROW LEVEL SECURITY;

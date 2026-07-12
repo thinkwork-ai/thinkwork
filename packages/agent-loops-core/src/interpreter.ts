@@ -47,6 +47,10 @@ export type NextStepDirective =
       type: "approval_step";
       step: Extract<WorkflowStep, { kind: "approval" }>;
     }
+  | {
+      type: "memory_stage_step";
+      step: Extract<WorkflowStep, { kind: "memory_stage" }>;
+    }
   | { type: "unsupported_step"; step: WorkflowStep }
   | { type: "iteration_end" };
 
@@ -55,7 +59,9 @@ export type NextStepDirective =
  * so wait resolution is deterministic in tests.
  *
  * routine/http/emit_event run synchronously in the step-dispatch Lambda
- * (execute_step); approval parks on a task token (approval_step). `tool`
+ * (execute_step); approval parks on a task token (approval_step), and
+ * memory_stage parks on a task token while the memory-stage worker runs
+ * asynchronously (memory_stage_step). `tool`
  * validates but has no headless runner yet, so it returns unsupported_step
  * and the run fails cleanly in ThinkWork terms instead of misrouting.
  */
@@ -84,6 +90,8 @@ export function planNextStep(
       return { type: "execute_step", step };
     case "approval":
       return { type: "approval_step", step };
+    case "memory_stage":
+      return { type: "memory_stage_step", step };
     case "tool":
       return { type: "unsupported_step", step };
     default: {

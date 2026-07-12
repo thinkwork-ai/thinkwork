@@ -1,0 +1,123 @@
+{
+  "endpoint": "http://localhost:8888",
+  "bankId": "probe_lifecycle_1783817986647",
+  "documentId": "external:probe-source-config:company:probe-co-1",
+  "pgSchema": "u1_lifecycle_probe",
+  "observations": [
+    {
+      "step": "retain_v1",
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "step": "state_after_v1",
+      "detail": {
+        "documents": 1,
+        "units": 1
+      }
+    },
+    {
+      "step": "recall_v1",
+      "detail": {
+        "status": 200,
+        "texts": [
+          "Probe Co is headquartered in Reno with $5M ARR and CEO Dana Probe | Involving: Dana Probe (CEO)"
+        ]
+      }
+    },
+    {
+      "step": "retain_v2_replace",
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "step": "state_after_v2",
+      "detail": {
+        "documents": 1,
+        "units": 2,
+        "unitTexts": [
+          "Probe Co is headquartered in Austin with $9M ARR and CEO Dan",
+          "Probe Co is headquartered in Austin with $9M ARR and CEO Dan"
+        ]
+      }
+    },
+    {
+      "step": "recall_after_replace_old_value",
+      "detail": {
+        "status": 200,
+        "texts": [
+          "Probe Co is headquartered in Austin with $9M ARR and CEO Dana Probe | Involving: Dana Probe (CEO)"
+        ]
+      }
+    },
+    {
+      "step": "recall_after_replace_new_value",
+      "detail": {
+        "status": 200,
+        "texts": [
+          "Probe Co is headquartered in Austin with $9M ARR and CEO Dana Probe | Involving: Dana Probe (CEO)"
+        ]
+      }
+    },
+    {
+      "step": "consolidate",
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "step": "http_delete_probe",
+      "detail": {
+        "method": "DELETE",
+        "path": "/v1/default/banks/probe_lifecycle_1783817986647/documents/external%3Aprobe-source-config%3Acompany%3Aprobe-co-1",
+        "status": 200
+      }
+    },
+    {
+      "step": "http_delete_probe",
+      "detail": {
+        "method": "DELETE",
+        "path": "/v1/default/banks/probe_lifecycle_1783817986647/memories/external:probe-source-config:company:probe-co-1",
+        "status": 405
+      }
+    },
+    {
+      "step": "sql_delete",
+      "detail": {
+        "priorDocumentIds": [],
+        "unitsDeleted": 0,
+        "orphanDocumentsDeleted": 0
+      }
+    },
+    {
+      "step": "recall_after_delete",
+      "detail": {
+        "status": 200,
+        "texts": []
+      }
+    },
+    {
+      "step": "residue",
+      "detail": {
+        "table": "documents",
+        "count": 0
+      }
+    },
+    {
+      "step": "residue",
+      "detail": {
+        "table": "memory_units",
+        "count": 0
+      }
+    },
+    {
+      "step": "residue",
+      "detail": {
+        "table": "memory_links",
+        "count": 0
+      }
+    }
+  ]
+}

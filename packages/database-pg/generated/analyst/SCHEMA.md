@@ -92,7 +92,17 @@ Conventions:
 - [managed_application_deployment_events](#managed-application-deployment-events)
 - [managed_application_deployment_jobs](#managed-application-deployment-jobs)
 - [managed_applications](#managed-applications)
+- [memory_claim_evidence](#memory-claim-evidence)
+- [memory_claims](#memory-claims)
+- [memory_derivations](#memory-derivations)
+- [memory_evidence_items](#memory-evidence-items)
+- [memory_processor_configs](#memory-processor-configs)
 - [memory_retain_attempts](#memory-retain-attempts)
+- [memory_retraction_attempts](#memory-retraction-attempts)
+- [memory_run_items](#memory-run-items)
+- [memory_source_authorizations](#memory-source-authorizations)
+- [memory_source_checkpoints](#memory-source-checkpoints)
+- [memory_source_configs](#memory-source-configs)
 - [message_artifacts](#message-artifacts)
 - [message_mentions](#message-mentions)
 - [messages](#messages)
@@ -2129,6 +2139,156 @@ Join hints:
 
 - `managed_applications.tenant_id` → `tenants.id`
 
+## memory_claim_evidence
+
+| column | type | flags |
+| --- | --- | --- |
+| id | bigserial | PK, not null |
+| tenant_id | uuid | not null |
+| claim_id | uuid | not null |
+| evidence_item_id | uuid | not null |
+| source_config_id | uuid | not null |
+| status | text | not null |
+| created_at | timestamp with time zone | not null |
+| retracted_at | timestamp with time zone |  |
+
+Enum values:
+
+- `status`: `active`, `retracted`
+
+Join hints:
+
+- `memory_claim_evidence.claim_id` → `memory_claims.id`
+- `memory_claim_evidence.evidence_item_id` → `memory_evidence_items.id`
+- `memory_claim_evidence.source_config_id` → `memory_source_configs.id`
+- `memory_claim_evidence.tenant_id` → `tenants.id`
+
+## memory_claims
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| target_scope | text | not null |
+| target_id | uuid | not null |
+| canonical_subject_id | uuid |  |
+| subject_key | text | not null |
+| subject_entity_type | text | not null |
+| ontology_predicate | text | not null |
+| value_hash | text | not null |
+| effective_from | timestamp with time zone |  |
+| effective_to | timestamp with time zone |  |
+| status | text | not null |
+| conflict_state | text | not null |
+| extraction_version | text | not null |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `target_scope`: `space`, `tenant`
+- `status`: `active`, `superseded`, `retracted`
+- `conflict_state`: `none`, `conflicted`
+
+Join hints:
+
+- `memory_claims.tenant_id` → `tenants.id`
+
+Not granted (do not query): `value`.
+
+## memory_derivations
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| source_config_id | uuid | not null |
+| evidence_item_id | uuid | not null |
+| projection_key | text | not null |
+| target_bank_id | text | not null |
+| hindsight_document_id | text | not null |
+| current_version | text | not null |
+| lifecycle | text | not null |
+| retracted_at | timestamp with time zone |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `lifecycle`: `active`, `superseded`, `retracted`
+
+Join hints:
+
+- `memory_derivations.evidence_item_id` → `memory_evidence_items.id`
+- `memory_derivations.source_config_id` → `memory_source_configs.id`
+- `memory_derivations.tenant_id` → `tenants.id`
+
+## memory_evidence_items
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| source_config_id | uuid | not null |
+| source_item_id | text | not null |
+| source_version | text | not null |
+| source_timestamp | timestamp with time zone |  |
+| content_hash | text | not null |
+| acquisition_run_id | uuid |  |
+| target_scope | text | not null |
+| target_id | uuid | not null |
+| lifecycle | text | not null |
+| sensitivity | text |  |
+| snapshot_ref | text |  |
+| snapshot_expires_at | timestamp with time zone |  |
+| extraction_recipe | jsonb | not null |
+| last_error | text |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `target_scope`: `space`, `tenant`
+- `lifecycle`: `active`, `superseded`, `deleted`, `deferred`, `failed`
+
+Join hints:
+
+- `memory_evidence_items.acquisition_run_id` → `workflow_runs.id`
+- `memory_evidence_items.source_config_id` → `memory_source_configs.id`
+- `memory_evidence_items.tenant_id` → `tenants.id`
+
+Not granted (do not query): `normalized_snapshot`.
+
+## memory_processor_configs
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| mode | text | not null |
+| target_scope | text | not null |
+| target_id | uuid | not null |
+| workflow_id | uuid |  |
+| enabled | boolean | not null |
+| status | text | not null |
+| budget | jsonb | not null |
+| config_version | integer | not null |
+| created_by_user_id | uuid |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `mode`: `personal`, `shared`
+- `target_scope`: `user`, `space`, `tenant`
+- `status`: `active`, `disabled`
+
+Join hints:
+
+- `memory_processor_configs.created_by_user_id` → `users.id`
+- `memory_processor_configs.tenant_id` → `tenants.id`
+- `memory_processor_configs.workflow_id` → `workflows.id`
+
 ## memory_retain_attempts
 
 | column | type | flags |
@@ -2170,6 +2330,146 @@ Join hints:
 - `memory_retain_attempts.thread_id` → `threads.id`
 - `memory_retain_attempts.thread_turn_id` → `thread_turns.id`
 - `memory_retain_attempts.user_id` → `users.id`
+
+## memory_retraction_attempts
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| scope | text | not null |
+| derivation_id | uuid |  |
+| source_config_id | uuid | not null |
+| provider | text | not null |
+| provider_document_id | text | not null |
+| target_bank_id | text | not null |
+| status | text | not null |
+| attempt_count | integer | not null |
+| max_attempts | integer | not null |
+| next_retry_at | timestamp with time zone |  |
+| locked_at | timestamp with time zone |  |
+| locked_by | text |  |
+| lock_generation | integer | not null |
+| erase_generation | integer | not null |
+| cleanup_phase | text |  |
+| cleanup_cursor | text |  |
+| reconsolidation_note | text |  |
+| error_class | text |  |
+| error_message | text |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+| completed_at | timestamp with time zone |  |
+
+Enum values:
+
+- `scope`: `derivation`, `source`, `erase`
+- `status`: `queued`, `running`, `supports_updated`, `provider_deleted`, `reconsolidated`, `retracted`, `failed`, `dead_lettered`
+- `cleanup_phase`: `snapshots_deleted`, `evidence_purged`
+
+Join hints:
+
+- `memory_retraction_attempts.derivation_id` → `memory_derivations.id`
+- `memory_retraction_attempts.source_config_id` → `memory_source_configs.id`
+- `memory_retraction_attempts.tenant_id` → `tenants.id`
+
+## memory_run_items
+
+| column | type | flags |
+| --- | --- | --- |
+| id | bigserial | PK, not null |
+| tenant_id | uuid | not null |
+| workflow_run_id | uuid | not null |
+| source_config_id | uuid | not null |
+| source_item_id | text | not null |
+| stage | text | not null |
+| result | text | not null |
+| detail | jsonb | not null |
+| created_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `stage`: `acquire`, `extract`, `project`, `resolve`, `retain`, `compound`, `graph`, `wiki`, `preflight`
+- `result`: `seen`, `changed`, `retracted`, `deferred`, `failed`, `noop`
+
+Join hints:
+
+- `memory_run_items.source_config_id` → `memory_source_configs.id`
+- `memory_run_items.tenant_id` → `tenants.id`
+- `memory_run_items.workflow_run_id` → `workflow_runs.id`
+
+## memory_source_authorizations
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| processor_config_id | uuid | not null |
+| source_family | text | not null |
+| source_binding_key | text | not null |
+| boundary | jsonb | not null |
+| granted_by_user_id | uuid |  |
+| grant_version | integer | not null |
+| status | text | not null |
+| expires_at | timestamp with time zone |  |
+| revoked_at | timestamp with time zone |  |
+| sensitivity | jsonb | not null |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `source_family`: `twenty`, `firecrawl`, `email`, `bedrock_kb`
+- `status`: `active`, `revoked`, `expired`
+
+Join hints:
+
+- `memory_source_authorizations.granted_by_user_id` → `users.id`
+- `memory_source_authorizations.processor_config_id` → `memory_processor_configs.id`
+- `memory_source_authorizations.tenant_id` → `tenants.id`
+
+## memory_source_checkpoints
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| source_config_id | uuid | not null |
+| partition_key | text | not null |
+| cursor | jsonb | not null |
+| version | integer | not null |
+| last_advanced_at | timestamp with time zone |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `memory_source_checkpoints.source_config_id` → `memory_source_configs.id`
+- `memory_source_checkpoints.tenant_id` → `tenants.id`
+
+## memory_source_configs
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| processor_config_id | uuid | not null |
+| source_family | text | not null |
+| source_binding_key | text | not null |
+| enabled | boolean | not null |
+| boundary | jsonb | not null |
+| policy_version | integer | not null |
+| erase_generation | integer | not null |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `source_family`: `twenty`, `firecrawl`, `email`, `bedrock_kb`
+
+Join hints:
+
+- `memory_source_configs.processor_config_id` → `memory_processor_configs.id`
+- `memory_source_configs.tenant_id` → `tenants.id`
 
 ## message_artifacts
 

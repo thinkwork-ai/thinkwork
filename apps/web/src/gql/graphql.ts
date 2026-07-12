@@ -3318,9 +3318,59 @@ export type MarkThreadsReadResult = {
   updated: Scalars['Int']['output'];
 };
 
+/**
+ * Durable ontology-shaped claim. supportCount is the number of ACTIVE
+ * evidence support edges (memory_claim_evidence status = 'active').
+ */
+export type MemoryClaim = {
+  __typename?: 'MemoryClaim';
+  conflictState: Scalars['String']['output'];
+  effectiveFrom?: Maybe<Scalars['AWSDateTime']['output']>;
+  effectiveTo?: Maybe<Scalars['AWSDateTime']['output']>;
+  extractionVersion: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  ontologyPredicate: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  subjectEntityType: Scalars['String']['output'];
+  subjectKey: Scalars['String']['output'];
+  supportCount: Scalars['Int']['output'];
+  value?: Maybe<Scalars['AWSJSON']['output']>;
+  valueHash: Scalars['String']['output'];
+};
+
 export type MemoryContent = {
   __typename?: 'MemoryContent';
   text?: Maybe<Scalars['String']['output']>;
+};
+
+/** Evidence → Hindsight projection lineage row. */
+export type MemoryDerivation = {
+  __typename?: 'MemoryDerivation';
+  currentVersion: Scalars['String']['output'];
+  hindsightDocumentId: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  lifecycle: Scalars['String']['output'];
+  projectionKey: Scalars['String']['output'];
+  retractedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  sourceConfigId: Scalars['ID']['output'];
+  targetBankId: Scalars['String']['output'];
+};
+
+/**
+ * Evidence-ledger row WITHOUT snapshot content. The normalized snapshot and
+ * S3 snapshot ref are redacted by design — operators inspect lineage and
+ * lifecycle here, not source payloads.
+ */
+export type MemoryEvidenceItemSummary = {
+  __typename?: 'MemoryEvidenceItemSummary';
+  acquisitionRunId?: Maybe<Scalars['ID']['output']>;
+  contentHash: Scalars['String']['output'];
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  lifecycle: Scalars['String']['output'];
+  sourceConfigId: Scalars['ID']['output'];
+  sourceItemId: Scalars['String']['output'];
+  sourceVersion: Scalars['String']['output'];
 };
 
 export type MemoryGraph = {
@@ -3351,6 +3401,25 @@ export type MemoryGraphNode = {
   latestThreadId?: Maybe<Scalars['String']['output']>;
   strategy?: Maybe<Scalars['String']['output']>;
   type: Scalars['String']['output'];
+};
+
+/**
+ * External Memory Compounding (THINK-193 U2). Operator-only inspection and
+ * control surface for external memory sources: processor configs, source
+ * bindings, authorization grants, the evidence ledger, ontology claims, and
+ * the retraction ledger. All queries and mutations below require tenant admin.
+ */
+export type MemoryProcessorConfig = {
+  __typename?: 'MemoryProcessorConfig';
+  budget?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdByUserId?: Maybe<Scalars['ID']['output']>;
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  mode: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  targetId: Scalars['ID']['output'];
+  targetScope: Scalars['String']['output'];
 };
 
 export type MemoryRecord = {
@@ -3430,11 +3499,106 @@ export type MemoryRetainAttempt = {
   userId?: Maybe<Scalars['ID']['output']>;
 };
 
+/**
+ * Idempotent multi-system retraction ledger row — one per provider document
+ * being retracted or erased.
+ */
+export type MemoryRetractionAttempt = {
+  __typename?: 'MemoryRetractionAttempt';
+  attemptCount: Scalars['Int']['output'];
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  eraseGeneration: Scalars['Int']['output'];
+  errorClass?: Maybe<Scalars['String']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  /**
+   * When the current worker's lease is presumed dead (locked_at + the stale
+   * window); null when unclaimed.
+   */
+  leaseExpiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lockGeneration: Scalars['Int']['output'];
+  lockedBy?: Maybe<Scalars['String']['output']>;
+  maxAttempts: Scalars['Int']['output'];
+  nextRetryAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  providerDocumentId: Scalars['String']['output'];
+  reconsolidationNote?: Maybe<Scalars['String']['output']>;
+  scope: Scalars['String']['output'];
+  sourceConfigId: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  targetBankId: Scalars['String']['output'];
+};
+
 export type MemorySearchResult = {
   __typename?: 'MemorySearchResult';
   records: Array<MemoryRecord>;
   totalCount: Scalars['Int']['output'];
 };
+
+/**
+ * Explicit source-access grant — the MAXIMUM readable envelope for a binding.
+ * At most one active grant exists per (processorConfig, sourceFamily,
+ * sourceBindingKey); granting again supersedes the previous grant.
+ */
+export type MemorySourceAuthorization = {
+  __typename?: 'MemorySourceAuthorization';
+  boundary?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  expiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  grantVersion: Scalars['Int']['output'];
+  grantedByUserId?: Maybe<Scalars['ID']['output']>;
+  id: Scalars['ID']['output'];
+  processorConfigId: Scalars['ID']['output'];
+  revokedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  sourceBindingKey: Scalars['String']['output'];
+  sourceFamily: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+};
+
+export type MemorySourceConfig = {
+  __typename?: 'MemorySourceConfig';
+  boundary?: Maybe<Scalars['AWSJSON']['output']>;
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  processorConfigId: Scalars['ID']['output'];
+  sourceBindingKey: Scalars['String']['output'];
+  sourceFamily: Scalars['String']['output'];
+};
+
+export type MemorySourceEraseResult = {
+  __typename?: 'MemorySourceEraseResult';
+  attemptsDeadLettered: Scalars['Int']['output'];
+  attemptsPending: Scalars['Int']['output'];
+  attemptsRetracted: Scalars['Int']['output'];
+  attemptsTotal: Scalars['Int']['output'];
+  checkpointsDeleted: Scalars['Boolean']['output'];
+  evidenceRowsCleared: Scalars['Int']['output'];
+  evidenceRowsDeleted: Scalars['Int']['output'];
+  processedThisCall: Scalars['Int']['output'];
+  snapshotObjectsDeleted: Scalars['Int']['output'];
+  /**
+   * Object VERSIONS + delete markers removed from the versioned
+   * brain-artifacts bucket (S1: erase completeness proof).
+   */
+  snapshotVersionsDeleted: Scalars['Int']['output'];
+  status: MemorySourceEraseStatus;
+};
+
+/**
+ * Durable status of a source-level erase aggregate: 'completed' only after all
+ * derivations are retracted via the saga, S3 evidence snapshots are deleted,
+ * snapshot payloads cleared / non-derived evidence rows removed, and
+ * checkpoints purged. 'pending' = retractions still in flight; the scheduled
+ * memory-retraction-drainer self-finalizes the erase (child retries AND the
+ * cleanup phase) — no further operator action is required. 'failed' =
+ * dead-lettered children need operator attention.
+ */
+export enum MemorySourceEraseStatus {
+  Completed = 'completed',
+  Failed = 'failed',
+  Pending = 'pending'
+}
 
 export enum MemoryStrategy {
   Episodes = 'EPISODES',
@@ -3837,9 +4001,24 @@ export type Mutation = {
   duplicateEvalProfile: EvalProfile;
   enableWorkflow: WorkflowBinding;
   enableWorkflowTemplate: WorkflowTemplateBinding;
+  /**
+   * Disable a source config and run the durable erase aggregate: enqueue erase
+   * attempts for its derivations, drain a bounded batch inline, and — only when
+   * every derivation is retracted — delete S3 evidence snapshots, clear
+   * snapshot payloads, remove non-derived evidence rows, and purge checkpoints.
+   * Partial progress surfaces as status 'pending' and self-finalizes via the
+   * scheduled drainer (no second mutation needed); dead-lettered children
+   * surface as status 'failed'.
+   */
+  eraseMemorySource: MemorySourceEraseResult;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
   grantCapability: CapabilityMutationResult;
+  /**
+   * Insert an active grant for a source binding, superseding (revoking) any
+   * existing active grant for the same binding — one active grant per binding.
+   */
+  grantMemorySourceAuthorization: MemorySourceAuthorization;
   handleJsonRenderAction: Message;
   importPiExtensionFromGitHub: PiExtension;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
@@ -3964,12 +4143,24 @@ export type Mutation = {
   resolveWorkflowApproval: WorkflowRun;
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
+  /**
+   * Enqueue a retraction for one derivation's Hindsight document and process
+   * it inline once (RequestResponse semantics — errors surface to the caller).
+   */
+  retractMemoryDerivation: MemoryRetractionAttempt;
   retryAgentDispatch: Message;
   retryKnowledgeBase: KnowledgeBase;
+  /**
+   * Operator DLQ retry: reset a dead_lettered (or failed) retraction attempt —
+   * saga child or erase marker — to a due queued state with a fresh attempt
+   * budget, fenced against stale workers.
+   */
+  retryMemoryRetractionAttempt: MemoryRetractionAttempt;
   /** Re-drive one failed component (failed → pending) and re-run its handler (tenant admin). */
   retryPluginComponent: PluginInstall;
   reviewGoal: ReviewGoalPayload;
   revokeArtifactShareLink: Scalars['Boolean']['output'];
+  revokeMemorySourceAuthorization: Scalars['Boolean']['output'];
   /**
    * ThinkWork-operator-only: revoke an issued premium plugin install key before
    * redemption.
@@ -4651,6 +4842,12 @@ export type MutationEnableWorkflowTemplateArgs = {
 };
 
 
+export type MutationEraseMemorySourceArgs = {
+  sourceConfigId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type MutationEscalateThreadArgs = {
   input: EscalateThreadInput;
 };
@@ -4663,6 +4860,16 @@ export type MutationFlagThreadForEvalArgs = {
 
 export type MutationGrantCapabilityArgs = {
   input: GrantCapabilityInput;
+};
+
+
+export type MutationGrantMemorySourceAuthorizationArgs = {
+  boundary?: InputMaybe<Scalars['AWSJSON']['input']>;
+  expiresAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  processorConfigId: Scalars['ID']['input'];
+  sourceBindingKey: Scalars['String']['input'];
+  sourceFamily: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -5099,6 +5306,12 @@ export type MutationResumeAgentWorkspaceRunArgs = {
 };
 
 
+export type MutationRetractMemoryDerivationArgs = {
+  derivationId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type MutationRetryAgentDispatchArgs = {
   messageId: Scalars['ID']['input'];
 };
@@ -5106,6 +5319,12 @@ export type MutationRetryAgentDispatchArgs = {
 
 export type MutationRetryKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationRetryMemoryRetractionAttemptArgs = {
+  attemptId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -5121,6 +5340,12 @@ export type MutationReviewGoalArgs = {
 
 export type MutationRevokeArtifactShareLinkArgs = {
   shareId: Scalars['ID']['input'];
+};
+
+
+export type MutationRevokeMemorySourceAuthorizationArgs = {
+  authorizationId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -6531,11 +6756,17 @@ export type Query = {
   managedApplicationHealthCheck: ManagedApplicationHealthCheck;
   managedApplications: Array<ManagedApplication>;
   me?: Maybe<User>;
+  memoryClaims: Array<MemoryClaim>;
+  memoryEvidenceItems: Array<MemoryEvidenceItemSummary>;
   memoryGraph: MemoryGraph;
+  memoryProcessorConfigs: Array<MemoryProcessorConfig>;
   memoryRecords: Array<MemoryRecord>;
   memoryRecordsByIds: Array<MemoryRecord>;
   memoryRetainAttempts: Array<MemoryRetainAttempt>;
+  memoryRetractionAttempts: Array<MemoryRetractionAttempt>;
   memorySearch: MemorySearchResult;
+  memorySourceAuthorizations: Array<MemorySourceAuthorization>;
+  memorySourceConfigs: Array<MemorySourceConfig>;
   memorySystemConfig: MemorySystemConfig;
   messages: MessageConnection;
   mobileMemoryCaptures: Array<MobileMemoryCapture>;
@@ -7240,11 +7471,32 @@ export type QueryManagedApplicationHealthCheckArgs = {
 };
 
 
+export type QueryMemoryClaimsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  subjectKey?: InputMaybe<Scalars['String']['input']>;
+  targetId: Scalars['ID']['input'];
+  targetScope: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMemoryEvidenceItemsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  sourceConfigId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type QueryMemoryGraphArgs = {
   allTenantBanks?: InputMaybe<Scalars['Boolean']['input']>;
   assistantId?: InputMaybe<Scalars['ID']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMemoryProcessorConfigsArgs = {
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -7275,6 +7527,13 @@ export type QueryMemoryRetainAttemptsArgs = {
 };
 
 
+export type QueryMemoryRetractionAttemptsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  sourceConfigId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type QueryMemorySearchArgs = {
   assistantId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -7282,6 +7541,18 @@ export type QueryMemorySearchArgs = {
   strategy?: InputMaybe<MemoryStrategy>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMemorySourceAuthorizationsArgs = {
+  processorConfigId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMemorySourceConfigsArgs = {
+  processorConfigId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 

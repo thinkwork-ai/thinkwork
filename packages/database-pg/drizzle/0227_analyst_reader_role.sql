@@ -565,10 +565,62 @@ BEGIN
   ELSE
     missing := missing || 'managed_applications'::text;
   END IF;
+  IF to_regclass('public.memory_claim_evidence') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_claim_evidence TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_claim_evidence'::text;
+  END IF;
+  IF to_regclass('public.memory_claims') IS NOT NULL THEN
+    REVOKE ALL PRIVILEGES ON public.memory_claims FROM analyst_reader;
+    GRANT SELECT (canonical_subject_id, conflict_state, created_at, effective_from, effective_to, extraction_version, id, ontology_predicate, status, subject_entity_type, subject_key, target_id, target_scope, tenant_id, updated_at, value_hash) ON public.memory_claims TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_claims'::text;
+  END IF;
+  IF to_regclass('public.memory_derivations') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_derivations TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_derivations'::text;
+  END IF;
+  IF to_regclass('public.memory_evidence_items') IS NOT NULL THEN
+    REVOKE ALL PRIVILEGES ON public.memory_evidence_items FROM analyst_reader;
+    GRANT SELECT (acquisition_run_id, content_hash, created_at, extraction_recipe, id, last_error, lifecycle, sensitivity, snapshot_expires_at, snapshot_ref, source_config_id, source_item_id, source_timestamp, source_version, target_id, target_scope, tenant_id, updated_at) ON public.memory_evidence_items TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_evidence_items'::text;
+  END IF;
+  IF to_regclass('public.memory_processor_configs') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_processor_configs TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_processor_configs'::text;
+  END IF;
   IF to_regclass('public.memory_retain_attempts') IS NOT NULL THEN
     GRANT SELECT ON public.memory_retain_attempts TO analyst_reader;
   ELSE
     missing := missing || 'memory_retain_attempts'::text;
+  END IF;
+  IF to_regclass('public.memory_retraction_attempts') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_retraction_attempts TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_retraction_attempts'::text;
+  END IF;
+  IF to_regclass('public.memory_run_items') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_run_items TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_run_items'::text;
+  END IF;
+  IF to_regclass('public.memory_source_authorizations') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_source_authorizations TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_source_authorizations'::text;
+  END IF;
+  IF to_regclass('public.memory_source_checkpoints') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_source_checkpoints TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_source_checkpoints'::text;
+  END IF;
+  IF to_regclass('public.memory_source_configs') IS NOT NULL THEN
+    GRANT SELECT ON public.memory_source_configs TO analyst_reader;
+  ELSE
+    missing := missing || 'memory_source_configs'::text;
   END IF;
   IF to_regclass('public.message_artifacts') IS NOT NULL THEN
     GRANT SELECT ON public.message_artifacts TO analyst_reader;

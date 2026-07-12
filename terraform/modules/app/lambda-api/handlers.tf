@@ -341,6 +341,18 @@ locals {
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
       OKF_EFS_ROOT           = var.okf_efs_mount_path
     }
+    # THINK-193 U1 (Codex F6): normalized evidence snapshots live in the
+    # encrypted brain-artifacts bucket under evidence-snapshots/ — Postgres
+    # keeps only the s3:// ref + hash. 30-day lifecycle expiration below.
+    "memory-stage-worker" = {
+      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
+    }
+    # THINK-193 U2 (Codex S1/S2): the retraction drainer performs the
+    # versioned evidence-snapshot deletion for source erases under its
+    # DEDICATED role (below) — the only place bulk destructive S3 runs.
+    "memory-retraction-drainer" = {
+      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
+    }
     "oauth-authorize"     = local.slack_handler_env
     "oauth-callback"      = local.slack_handler_env
     "slack-events"        = local.slack_handler_env
@@ -643,6 +655,14 @@ resource "aws_lambda_function" "handler" {
     "memory",
     "memory-retain",
     "brain-dream-state",
+    "memory-stage-worker",
+    # THINK-193 U2 (Codex P1 #3): scheduled retry drainer for the retraction
+    # saga ledger. Claims due/stale memory_retraction_attempts rows with the
+    # locked_by + lock_generation fence, processes each via the saga, sweeps
+    # exhausted rows to dead_lettered, and emits structured-log metrics.
+    # rate(5 minutes) EventBridge Scheduler + MaxRetryAttempts=0 (dedicated
+    # resources below) — the next tick IS the retry.
+    "memory-retraction-drainer",
     "wiki-compile",
     "knowledge-graph-observations-ingest",
     "ontology-scan",
@@ -825,9 +845,13 @@ resource "aws_lambda_function" "handler" {
   ]), toset(local.optional_integration_handler_names)) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
-  role          = aws_iam_role.lambda.arn
-  handler       = "index.handler"
-  runtime       = local.runtime
+  # S2 (THINK-193 U2): memory-retraction-drainer runs under a DEDICATED role
+  # so its destructive evidence-snapshot S3 capability (version enumeration +
+  # bulk version deletion) never leaks into the 90+ handlers on the shared
+  # role. Everything else keeps the shared role.
+  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : aws_iam_role.lambda.arn
+  handler = "index.handler"
+  runtime = local.runtime
   # Parameters and Secrets extension: container-local cache for the SSM
   # runtime-config document + Secrets Manager reads (runtime-config.tf).
   layers = local.api_handler_layers
@@ -853,7 +877,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -1055,11 +1079,152 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
 # retain-cost path (Bedrock tokens charged in adapter.retainConversation)
 # is NOT idempotent — retries multiply LLM cost. Per
 # project_async_retry_idempotency_lessons.
+# memory-stage-worker (THINK-193 U1): Event-invoked by workflow-step-dispatch
+# AFTER the memory_stage task token is stored. Lambda async retries are
+# disabled like its memory siblings — the worker's stages are idempotent, but
+# an automatic re-execution would race the original's token CAS and turn a
+# completed stage into a spurious failure. A worker that dies without
+# resuming the token is bounded by the state machine's HeartbeatSeconds
+# (3600s): the parked step times out and the run fails visibly, and a
+# re-triggered run self-heals from the durable checkpoint/evidence ledger.
+resource "aws_lambda_function_event_invoke_config" "memory_stage_worker" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["memory-stage-worker"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
 resource "aws_lambda_function_event_invoke_config" "memory_retain" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["memory-retain"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
+}
+
+# ---------------------------------------------------------------------------
+# THINK-193 U2 (Codex S2): dedicated IAM role for memory-retraction-drainer.
+#
+# The drainer is the ONLY principal allowed to enumerate and bulk-delete
+# evidence-snapshot object VERSIONS (S1: the brain-artifacts bucket is
+# versioned; erase completeness requires deleting every noncurrent version
+# and delete marker under the source prefix). Granting that on the shared
+# api-lambda role would let every unrelated handler destroy any tenant's
+# evidence — hence the sibling-role pattern (same as
+# compliance-anchor-watchdog). The role otherwise carries only what the
+# drainer actually uses: logs (managed basic policy), Secrets Manager +
+# SSM runtime-config reads, and conditional KMS for the encrypted bucket.
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_role" "memory_retraction_drainer" {
+  name = "thinkwork-${var.stage}-memory-retraction-drainer-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "memory_retraction_drainer_basic" {
+  role       = aws_iam_role.memory_retraction_drainer.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "memory_retraction_drainer" {
+  name = "memory-retraction-drainer"
+  role = aws_iam_role.memory_retraction_drainer.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        # Versioned evidence-snapshot destruction, evidence-snapshots/ only.
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:DeleteObject",
+            "s3:DeleteObjectVersion",
+          ]
+          Resource = "${aws_s3_bucket.brain_artifacts.arn}/evidence-snapshots/*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:ListBucket",
+            "s3:ListBucketVersions",
+          ]
+          Resource = aws_s3_bucket.brain_artifacts.arn
+          Condition = {
+            StringLike = {
+              "s3:prefix" = "evidence-snapshots/*"
+            }
+          }
+        },
+        # Runtime-config document + platform secrets (DATABASE_URL rides the
+        # env during the R8 transition window; the loader prefetches the
+        # api-auth/appsync secrets at cold start).
+        {
+          Effect   = "Allow"
+          Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+          Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/*"
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["secretsmanager:GetSecretValue"]
+          Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"
+        },
+      ],
+      var.brain_artifacts_kms_key_arn != "" ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "kms:Decrypt",
+            "kms:GenerateDataKey",
+          ]
+          Resource = var.brain_artifacts_kms_key_arn
+        },
+      ] : [],
+    )
+  })
+}
+
+# memory-retraction-drainer (THINK-193 U2, Codex P1 #3): the retraction
+# saga's product-owned retry path. Lambda async retries are disabled — every
+# transition on memory_retraction_attempts is a fenced CAS, so a duplicate
+# invocation is harmless but pointless; the rate(5 minutes) schedule below
+# is the retry. Attempts exceeding max_attempts are swept to dead_lettered
+# by the drainer itself instead of retrying forever.
+resource "aws_lambda_function_event_invoke_config" "memory_retraction_drainer" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["memory-retraction-drainer"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
+resource "aws_scheduler_schedule" "memory_retraction_drainer" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-memory-retraction-drainer"
+  group_name          = "default"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["memory-retraction-drainer"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ limit = 25 })
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
 }
 
 # Product-owned retry path for memory-retain. Lambda async retries remain
@@ -2436,6 +2601,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_artifacts" {
     noncurrent_version_transition {
       noncurrent_days = 90
       storage_class   = "STANDARD_IA"
+    }
+  }
+
+  # THINK-193 U1 (Codex F6): normalized evidence snapshots are short-lived
+  # working copies — the durable record is the evidence row (hash + ref) and
+  # the Hindsight projection. Expire content after 30 days; the app mirrors
+  # this via memory_evidence_items.snapshot_expires_at.
+  rule {
+    id     = "expire-evidence-snapshots"
+    status = "Enabled"
+
+    filter {
+      prefix = "evidence-snapshots/"
+    }
+
+    expiration {
+      days = 30
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
     }
   }
 
