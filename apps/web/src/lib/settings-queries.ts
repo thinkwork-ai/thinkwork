@@ -2554,3 +2554,31 @@ export const SettingsMergeCanonicalEntitiesMutation = graphql(`
     }
   }
 `);
+
+// ─── Connections (per-user integrations surface) ──────────────────────────
+// Slack per-user identity links render alongside the OAuth connections on the
+// Connections tab — the same GraphQL surface mobile's Credential Locker uses.
+
+export const SettingsMySlackLinksQuery = graphql(`
+  query SettingsMySlackLinks($tenantId: ID!) {
+    mySlackLinks(tenantId: $tenantId) {
+      id
+      slackTeamId
+      slackTeamName
+      slackUserId
+      slackUserName
+      slackUserEmail
+      status
+      linkedAt
+    }
+  }
+`);
+
+export const SettingsUnlinkSlackIdentityMutation = graphql(`
+  mutation SettingsUnlinkSlackIdentity($id: ID!) {
+    unlinkSlackIdentity(id: $id) {
+      id
+      status
+    }
+  }
+`);

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setHeader: vi.fn(),
-  pathname: "/settings/mcp-servers",
+  pathname: "/settings/mcp-servers/servers",
   provisionAnalyst: vi.fn(),
   registerDataSource: vi.fn(),
   registerInternal: vi.fn(),
@@ -130,6 +130,14 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
   };
 });
 
+// The Connections tab has its own suite (SettingsConnections.test.tsx); stub
+// it here so this file stays focused on the MCP server list.
+vi.mock("@/components/settings/SettingsConnections", () => ({
+  SettingsConnections: () => (
+    <div data-testid="connections-pane">connections pane</div>
+  ),
+}));
+
 vi.mock("@/lib/mcp-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/mcp-api")>();
   return {
@@ -179,7 +187,7 @@ function clickHeaderAction(name: "Register data source" | "New MCP Server") {
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setHeader.mockReset();
-  mocks.pathname = "/settings/mcp-servers";
+  mocks.pathname = "/settings/mcp-servers/servers";
   mocks.provisionAnalyst.mockReset();
   mocks.registerDataSource.mockReset();
   mocks.registerInternal.mockReset();
@@ -286,36 +294,25 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    // The MCP Servers tab shows only manual, non-plugin, non-datasource rows.
+    // The merged MCP Servers tab shows the tenant rows AND the plugin rows,
+    // grouped under section headings.
     expect(await screen.findByText("Manual CRM")).toBeTruthy();
-    expect(screen.queryByText("Twenty CRM")).toBeNull();
-    expect(screen.queryByText("LastMile Tasks")).toBeNull();
-    expect(screen.queryByText("From plugins")).toBeNull();
-    // The manual duplicate of a plugin URL stays filtered out.
-    expect(screen.queryByText("LastMile CRM")).toBeNull();
+    expect(screen.getByText("Tenant servers")).toBeTruthy();
+    expect(screen.getByText("Plugin MCPs")).toBeTruthy();
+    expect(screen.getByText("Twenty CRM")).toBeTruthy();
+    expect(screen.getByText("LastMile Tasks")).toBeTruthy();
+    // The manual duplicate of a plugin URL stays filtered out of the tenant
+    // group, so LastMile CRM appears exactly once (in the plugin group).
+    expect(screen.getAllByText("LastMile CRM")).toHaveLength(1);
+    expect(screen.getAllByText("plugin")).toHaveLength(4);
     expect(screen.queryByText("Rows per page")).toBeNull();
     expect(screen.queryByText(/Page\s+1\s+of/i)).toBeNull();
     // The inline Remove/System column is gone — removal lives in the detail view.
     expect(screen.queryByText("System")).toBeNull();
     expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
 
-    // Header carries the three-tab strip.
-    const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
-    expect(headerConfig?.title).toBe("MCP Servers");
-    expect(headerConfig?.tabs).toEqual([
-      { to: "/settings/mcp-servers", label: "MCP Servers" },
-      { to: "/settings/mcp-servers/plugins", label: "Plugin MCPs" },
-      { to: "/settings/mcp-servers/data-sources", label: "Datasource MCPs" },
-    ]);
-
-    // The Plugin MCPs tab shows the plugin-installed servers, sorted.
-    cleanup();
-    mocks.pathname = "/settings/mcp-servers/plugins";
-    render(<SettingsMcpServers />);
-    expect(await screen.findByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getAllByText("LastMile CRM")).toHaveLength(1);
-    expect(screen.getAllByText("plugin")).toHaveLength(4);
-    expect(screen.queryByText("Manual CRM")).toBeNull();
+    // The tenant group renders before the plugin group; plugin rows sort.
+    expect(textAppearsBefore("Manual CRM", "LastMile CRM")).toBe(true);
     expect(textAppearsBefore("LastMile CRM", "LastMile Tasks")).toBe(true);
     expect(textAppearsBefore("LastMile Tasks", "n8n workflow management")).toBe(
       true,
@@ -325,6 +322,104 @@ describe("SettingsMcpServers", () => {
     );
     expect(screen.getByText("not connected")).toBeTruthy();
     expect(screen.getByText("connected")).toBeTruthy();
+
+    // Header carries the two-tab strip (Connections + merged MCP Servers).
+    const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
+    expect(headerConfig?.title).toBe("Connections");
+    expect(headerConfig?.tabs).toEqual([
+      { to: "/settings/mcp-servers", label: "Connections" },
+      { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
+    ]);
+  });
+
+  it("renders the Connections pane on the section index without server actions", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.pathname = "/settings/mcp-servers";
+
+    render(<SettingsMcpServers />);
+
+    expect(await screen.findByTestId("connections-pane")).toBeTruthy();
+    // No server table, no search box on the Connections tab.
+    expect(screen.queryByPlaceholderText("Search servers…")).toBeNull();
+    const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
+    expect(headerConfig?.title).toBe("Connections");
+    // The Register/New-server header actions belong to the MCP Servers tab.
+    expect(headerConfig?.action).toBeUndefined();
+  });
+
+  it("filters all groups through the shared search box", async () => {
+    mocks.listMcpServers.mockResolvedValue({
+      servers: [
+        {
+          id: "manual",
+          name: "Manual CRM",
+          slug: "manual-crm",
+          url: "https://manual.example/mcp",
+          enabled: true,
+          authType: "none",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+        },
+        {
+          id: "twenty",
+          name: "Twenty CRM",
+          slug: "twenty-crm",
+          url: "https://crm.thinkwork.ai/mcp",
+          enabled: true,
+          authType: "oauth",
+          status: "approved",
+          managementSource: "plugin",
+          managedApplicationKey: null,
+        },
+      ],
+    });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    render(<SettingsMcpServers />);
+    expect(await screen.findByText("Manual CRM")).toBeTruthy();
+    expect(screen.getByText("Twenty CRM")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("Search servers…"), {
+      target: { value: "twenty" },
+    });
+    expect(screen.queryByText("Manual CRM")).toBeNull();
+    expect(screen.getByText("Twenty CRM")).toBeTruthy();
+  });
+
+  it("toggles a server's enabled switch from the merged list", async () => {
+    mocks.listMcpServers.mockResolvedValue({
+      servers: [
+        {
+          id: "manual",
+          name: "Manual CRM",
+          slug: "manual-crm",
+          url: "https://manual.example/mcp",
+          enabled: true,
+          authType: "none",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+        },
+      ],
+    });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.setMcpServerEnabled.mockResolvedValue({});
+
+    render(<SettingsMcpServers />);
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle Manual CRM",
+    });
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(mocks.setMcpServerEnabled).toHaveBeenCalledWith(
+        "thinkwork",
+        "manual",
+        false,
+      ),
+    );
   });
 
   it("lists analyst connectors on the Datasource MCPs tab with cluster · database", async () => {
@@ -373,21 +468,15 @@ describe("SettingsMcpServers", () => {
     });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
 
-    // Datasource rows are excluded from the MCP Servers tab...
+    // Datasource rows are excluded from the tenant group and listed with
+    // Source / Instance / Database columns in the Datasource MCPs group.
     render(<SettingsMcpServers />);
     expect(await screen.findByText("Manual CRM")).toBeTruthy();
-    expect(screen.queryByText("Analytics Demo")).toBeNull();
-    expect(screen.queryByText("Postgres (dev)")).toBeNull();
-
-    // ...and listed with Source / Instance / Database columns (no URL) on
-    // the Datasource MCPs tab.
-    cleanup();
-    mocks.pathname = "/settings/mcp-servers/data-sources";
-    render(<SettingsMcpServers />);
-    expect(await screen.findByText("Analytics Demo")).toBeTruthy();
+    expect(screen.getByText("Datasource MCPs")).toBeTruthy();
+    expect(screen.getByText("Analytics Demo")).toBeTruthy();
     expect(screen.getByText("Postgres (dev)")).toBeTruthy();
-    expect(screen.queryByText("Manual CRM")).toBeNull();
-    expect(screen.queryByText("URL")).toBeNull();
+    // The tenant group renders before the datasource group.
+    expect(textAppearsBefore("Manual CRM", "Analytics Demo")).toBe(true);
     expect(screen.getByText("Instance")).toBeTruthy();
     expect(screen.getByText("Database")).toBeTruthy();
     expect(screen.getByText("thinkwork-dev-db")).toBeTruthy();
@@ -895,6 +984,6 @@ function textAppearsBefore(left: string, right: string): boolean {
   const rightElement = screen.getByText(right);
   return Boolean(
     leftElement.compareDocumentPosition(rightElement) &
-    Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_FOLLOWING,
   );
 }

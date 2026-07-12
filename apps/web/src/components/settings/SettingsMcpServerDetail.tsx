@@ -254,7 +254,7 @@ export function SettingsMcpServerDetail() {
   usePageHeaderActions({
     title: server?.name ?? "MCP Server",
     breadcrumbs: [
-      { label: "MCP Servers", href: "/settings/mcp-servers" },
+      { label: "MCP Servers", href: "/settings/mcp-servers/servers" },
       { label: server?.name ?? "MCP Server" },
     ],
   });
@@ -281,7 +281,7 @@ export function SettingsMcpServerDetail() {
     setPending(true);
     try {
       await deleteMcpServer(tenantSlug, server.id);
-      navigate({ to: "/settings/mcp-servers" });
+      navigate({ to: "/settings/mcp-servers/servers" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to remove");
       setPending(false);

@@ -1867,7 +1867,7 @@ export function SettingsCapabilities({
               <p className="px-1 py-6 text-sm text-muted-foreground">
                 No MCP servers are registered for this tenant.{" "}
                 <Link
-                  to="/settings/mcp-servers"
+                  to="/settings/mcp-servers/servers"
                   className="text-foreground underline underline-offset-2"
                   data-testid="add-mcp-empty-registry-link"
                 >
