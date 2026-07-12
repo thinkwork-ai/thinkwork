@@ -35,6 +35,7 @@ import { devLockHeldByOther } from "./sweep/locks.js";
 import { runSweep, type SweepResult } from "./sweep/classifier.js";
 import type { FiredNag } from "./sweep/nags.js";
 import type { SlackSync } from "./slack/sync.js";
+import { writeHeartbeat } from "./heartbeat.js";
 
 /** Trailing terminal states that count as a "kill" for the attempt ceiling. */
 const KILL_TERMINALS = new Set(["Stalled", "TimedOut", "Failed"]);
@@ -103,6 +104,21 @@ export interface DaemonDeps {
    * enqueue to the store outbox for U8 to flush.
    */
   deliverNag?: (nag: FiredNag) => Promise<void>;
+
+  // ---- U7 reboot/crash survival wiring (all optional) ---------------------
+  /**
+   * Heartbeat file the daemon stamps once per poll cycle (U7, KTD-6). The
+   * INDEPENDENT watchdog reads this file's age to detect daemon silence. Absent
+   * → no heartbeat is written (tests that don't exercise reboot survival).
+   */
+  heartbeatPath?: string;
+  /**
+   * Reconciliation pass (U7, F4/AE6). Run once at boot BEFORE the first tick
+   * and then every `reconcileEveryTicks` ticks (see RunDaemonOptions). Repairs
+   * orphaned attempts, adopts externally-merged PRs, and rebuilds a deleted
+   * store. Absent → no reconciliation (backward compatible with U5/U6).
+   */
+  reconcile?: () => Promise<unknown>;
 }
 
 /** Default per-phase silence budget when the daemon is not given a config lookup. */
@@ -417,6 +433,27 @@ export interface RunDaemonOptions {
   controller?: DaemonController;
   /** Injectable for tests. */
   sleepGranularityMs?: number;
+  /**
+   * Run `deps.reconcile` every N ticks (in addition to the boot pass). 0 or
+   * undefined disables the PERIODIC pass; the boot pass still runs whenever
+   * `deps.reconcile` is present.
+   */
+  reconcileEveryTicks?: number;
+}
+
+/** Run a reconciliation pass, isolated so a failure never crashes the loop. */
+async function runReconcileIsolated(
+  deps: DaemonDeps,
+  phase: "boot" | "periodic",
+): Promise<void> {
+  if (deps.reconcile === undefined) return;
+  try {
+    await deps.reconcile();
+  } catch (e) {
+    deps.log.error(`${phase} reconcile failed — continuing`, {
+      error: String(e),
+    });
+  }
 }
 
 /**
@@ -432,7 +469,25 @@ export async function runDaemon(
   const controller = options.controller ?? createDaemonController();
   const granularity = options.sleepGranularityMs ?? 200;
 
+  // Boot reconciliation (U7, F4): repair partial state left by a crash/reboot
+  // BEFORE the first tick, so decide() sees a consistent world (an orphaned
+  // attempt is expired here → the first tick relaunches it; a merged PR is
+  // adopted here → the first tick advances instead of relaunching).
+  await runReconcileIsolated(deps, "boot");
+
+  let tickCount = 0;
   for (;;) {
+    // Stamp the heartbeat at the START of each cycle so the independent
+    // watchdog sees the daemon is alive and iterating; a wedged tick then stops
+    // updating it and the watchdog fires.
+    if (deps.heartbeatPath !== undefined) {
+      try {
+        writeHeartbeat(deps.heartbeatPath, new Date());
+      } catch (e) {
+        deps.log.warn("heartbeat write failed", { error: String(e) });
+      }
+    }
+
     try {
       const tick = await runTick(deps, () => controller.stopping);
       deps.log.info("tick complete", {
@@ -447,6 +502,16 @@ export async function runDaemon(
       } else {
         deps.log.error("tick failed", { error: String(e) });
       }
+    }
+
+    tickCount += 1;
+    // Periodic reconciliation (U7): routinely re-repair drift while running.
+    if (
+      options.reconcileEveryTicks !== undefined &&
+      options.reconcileEveryTicks > 0 &&
+      tickCount % options.reconcileEveryTicks === 0
+    ) {
+      await runReconcileIsolated(deps, "periodic");
     }
 
     if (options.once === true || controller.stopping) return;
