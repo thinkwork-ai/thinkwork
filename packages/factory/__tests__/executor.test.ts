@@ -256,6 +256,39 @@ describe("executeAction — launch", () => {
     expect(store.getIssue(issue.id)).toBeDefined();
   });
 
+  it("a consumesEscalationOverride launch supersedes the block marker (one-shot override)", async () => {
+    // The override is one-shot: launching via override must consume the
+    // factory-block marker so a further failure re-escalates instead of looping.
+    const issue = makeIssue({
+      identifier: "THINK-1",
+      state: "Ready to Work",
+      labels: ["Claude", "LFG"], // Needs User removed by the operator
+    });
+    issue.comments.push({
+      id: "c-block",
+      body: `${blockMarker("THINK-1")}\n\nAutomation blocked this issue (Needs User).`,
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Verification" });
+    const candidate = await candidateFor(h.gateway, "THINK-1");
+    const action = {
+      ...(decideAction(candidate, {
+        activeAttempt: null,
+        hasChildIssues: false,
+      }) as Extract<EngineAction, { kind: "launch" }>),
+      consumesEscalationOverride: true,
+    };
+    expect(action.kind).toBe("launch");
+
+    await executeAction(action, candidate, h.deps);
+
+    // The block marker comment was superseded so it no longer matches — the
+    // next tick sees no active override and a further failure re-escalates.
+    const superseded = issue.comments.find((c) => c.id === "c-block");
+    expect(superseded).toBeDefined();
+    expect(superseded!.body.startsWith(blockMarker("THINK-1"))).toBe(false);
+    expect(superseded!.body).toContain("factory-block-cleared:THINK-1");
+  });
+
   it("evidence check reads only THIS issue (getIssuesByIdentifier), never drains the whole team", async () => {
     // Regression: checkEvidence used listTeamIssues (whole-board N+1) to find
     // one issue's fresh status, which stalled the single-dispatch tick for

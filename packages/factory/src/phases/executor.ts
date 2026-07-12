@@ -320,6 +320,32 @@ async function executeLaunch(
     return { kind: "launch", wrote: false, detail: "no-phase-config" };
   }
 
+  // Consume a one-shot escalation override: this launch is only allowed because
+  // an operator cleared a ceiling/quota escalation, so supersede the
+  // `factory-block:` marker. If this attempt fails too, the next tick sees no
+  // active marker → re-escalates (re-adds Needs User + a fresh marker) instead
+  // of relaunching forever. Best-effort: a failed supersede must not abort the
+  // launch (the store attempt is the source of truth for the kill count).
+  if (action.consumesEscalationOverride === true) {
+    const marker = blockMarker(id);
+    const blockComment = candidate.comments.find((c) =>
+      isMarkerComment(c.body, marker),
+    );
+    if (blockComment !== undefined) {
+      try {
+        await deps.gateway.updateComment(
+          blockComment.id,
+          `factory-block-cleared:${id}\n\n_Operator cleared this escalation; a fresh attempt was launched. This override is consumed — a further failure re-escalates._\n\n${blockComment.body}`,
+        );
+      } catch (e) {
+        deps.log.warn(
+          "failed to supersede escalation-override marker — continuing launch",
+          { issue: id, error: String(e) },
+        );
+      }
+    }
+  }
+
   // ---- 0. Dev-deployment mutex (KTD-11): Verification drives the shared dev
   // stack, so it must hold the single dev-deployment lock for the duration of
   // the run. decideAction already deferred a launch when the lock was held by

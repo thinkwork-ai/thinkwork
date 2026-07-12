@@ -445,7 +445,29 @@ describe("ceiling/quota escalation is resumable (operator override)", () => {
       }),
       emptyView({ consecutiveKillsByPhase: { implement: ATTEMPT_CEILING } }),
     );
+    // The override launch is ONE-SHOT: it must flag the executor to consume the
+    // block marker so a further failure re-escalates instead of looping.
+    expect(action).toMatchObject({
+      kind: "launch",
+      phase: "implement",
+      consumesEscalationOverride: true,
+    });
+  });
+
+  it("a normal launch (below ceiling, no quota) does NOT consume an override", () => {
+    const action = decideAction(
+      makeCandidate({
+        identifier: "T-9",
+        state: "Ready to Work",
+        labels: ["Claude", "LFG"],
+      }),
+      emptyView(),
+    );
     expect(action).toMatchObject({ kind: "launch", phase: "implement" });
+    expect(
+      (action as { consumesEscalationOverride?: boolean })
+        .consumesEscalationOverride,
+    ).toBeUndefined();
   });
 
   it("quota expired, no override → escalates to Needs User", () => {
@@ -471,7 +493,11 @@ describe("ceiling/quota escalation is resumable (operator override)", () => {
       }),
       emptyView({ quota: { kind: "expired" } }),
     );
-    expect(action).toMatchObject({ kind: "launch", phase: "implement" });
+    expect(action).toMatchObject({
+      kind: "launch",
+      phase: "implement",
+      consumesEscalationOverride: true,
+    });
   });
 
   it("override marker for a DIFFERENT issue does not enable the override", () => {

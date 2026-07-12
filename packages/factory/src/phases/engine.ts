@@ -86,6 +86,13 @@ export type EngineAction =
       /** True for a Ready to Work repair pass (`Verification Failed`). */
       repair: boolean;
       promptInputs: LaunchPromptInputs;
+      /**
+       * This launch is proceeding only because an operator override cleared a
+       * ceiling/quota escalation. The executor must consume (supersede) the
+       * `factory-block:` marker so the override is ONE-SHOT: if this attempt
+       * also fails, the next tick re-escalates instead of relaunching forever.
+       */
+      consumesEscalationOverride?: boolean;
     }
   | { kind: "advance"; toStatus: string; evidence: string }
   /** Review gates without LFG etc. — zero-SLA waiting; nags arrive in U6/U8. */
@@ -348,7 +355,8 @@ export function decideAction(
       } — waiting out the rate-limit window before retry (R14/AE8)`,
     };
   }
-  if (view.quota?.kind === "expired" && !hasEscalationOverride(candidate)) {
+  const quotaExpired = view.quota?.kind === "expired";
+  if (quotaExpired && !hasEscalationOverride(candidate)) {
     return {
       kind: "block",
       label: "Needs User",
@@ -380,7 +388,8 @@ export function decideAction(
   // escalates instead of launching a third attempt.
   if (action.kind === "launch") {
     const kills = view.consecutiveKillsByPhase?.[action.phase] ?? 0;
-    if (kills >= ATTEMPT_CEILING && !hasEscalationOverride(candidate)) {
+    const atCeiling = kills >= ATTEMPT_CEILING;
+    if (atCeiling && !hasEscalationOverride(candidate)) {
       return {
         kind: "block",
         label: "Needs User",
@@ -388,6 +397,13 @@ export function decideAction(
           kills + 1
         }th attempt (R15/AE5)`,
       };
+    }
+    // This launch is only allowed because the operator cleared an escalation
+    // (ceiling reached, or quota window expired). Mark it so the executor
+    // consumes the block marker — the override is one-shot, so if this attempt
+    // fails too the next tick re-escalates rather than relaunching forever.
+    if (atCeiling || quotaExpired) {
+      return { ...action, consumesEscalationOverride: true };
     }
   }
   return action;
