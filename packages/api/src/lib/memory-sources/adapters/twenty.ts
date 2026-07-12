@@ -488,6 +488,24 @@ export function hindsightDocumentIdFor(
 }
 
 // ---------------------------------------------------------------------------
+// Evidence editions
+// ---------------------------------------------------------------------------
+
+/**
+ * Content-sensitive evidence edition (Codex F4). The parent `updatedAt`
+ * alone misses relation-only changes (people/opportunities/notes mutate
+ * independently of the company row), so the edition embeds a content-hash
+ * suffix. Checkpoint ORDERING must keep using the parent timestamp only —
+ * never parse this value as a cursor position.
+ */
+export function evidenceVersionFor(
+  updatedAt: string | null,
+  contentHash: string,
+): string {
+  return `${updatedAt ?? "na"}#${contentHash.slice(0, 12)}`;
+}
+
+// ---------------------------------------------------------------------------
 // Acquisition
 // ---------------------------------------------------------------------------
 
@@ -543,15 +561,17 @@ export async function acquireCompaniesPage(
     startingAfter?: string | null;
   },
 ): Promise<AcquiredPage<TwentyCompaniesCursor>> {
+  // The original query shape (filter + orderBy) is preserved on EVERY page
+  // of a run, including page-token continuations (Codex F5) — dropping the
+  // filter mid-walk would silently widen the result set.
   const { records, pageInfo } = await client.listPage("companies", {
     limit: args.pageSize,
     depth: 1,
     orderBy: "updatedAt[AscNullsFirst]",
     startingAfter: args.startingAfter ?? undefined,
-    filter:
-      !args.startingAfter && args.cursor?.lastUpdatedAt
-        ? `updatedAt[gte]:${args.cursor.lastUpdatedAt}`
-        : undefined,
+    filter: args.cursor?.lastUpdatedAt
+      ? `updatedAt[gte]:${args.cursor.lastUpdatedAt}`
+      : undefined,
   });
   const rawCount = records.length;
 
@@ -567,28 +587,9 @@ export async function acquireCompaniesPage(
     maxRecords !== undefined && kept.length > maxRecords;
   if (trimmedByBoundary) kept = kept.slice(0, maxRecords);
 
-  const items: EvidenceUpsert[] = kept.map((record) => {
-    const normalizedSnapshot = normalizeCompany(record);
-    const contentHash = computeContentHash(normalizedSnapshot);
-    const updatedAt = stringOrNull(record.updatedAt);
-    const parsed = updatedAt ? new Date(updatedAt) : null;
-    return {
-      sourceItemId: String(record.id ?? ""),
-      sourceVersion: updatedAt ?? contentHash.slice(0, 16),
-      sourceTimestamp:
-        parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
-      contentHash,
-      normalizedSnapshot,
-      extractionRecipe: {
-        source: "twenty",
-        kind: "company_dossier",
-        recipeVersion: args.recipeVersion ?? "u1.1",
-        depth: 1,
-      },
-      targetScope: args.targetScope,
-      targetId: args.targetId,
-    };
-  });
+  const items: EvidenceUpsert[] = kept.map((record) =>
+    toEvidenceUpsert(record, args),
+  );
 
   const last = kept[kept.length - 1];
   const shortPage = rawCount < args.pageSize;
@@ -611,6 +612,70 @@ export async function acquireCompaniesPage(
   };
 }
 
+/** Shared record → EvidenceUpsert mapping for both acquisition passes. */
+function toEvidenceUpsert(
+  record: Record<string, unknown>,
+  args: {
+    targetScope: SharedTargetScope;
+    targetId: string;
+    recipeVersion?: string;
+  },
+): EvidenceUpsert {
+  const normalizedSnapshot = normalizeCompany(record);
+  const contentHash = computeContentHash(normalizedSnapshot);
+  const updatedAt = stringOrNull(record.updatedAt);
+  const parsed = updatedAt ? new Date(updatedAt) : null;
+  return {
+    sourceItemId: String(record.id ?? ""),
+    sourceVersion: evidenceVersionFor(updatedAt, contentHash),
+    sourceTimestamp: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
+    contentHash,
+    normalizedSnapshot,
+    extractionRecipe: {
+      source: "twenty",
+      kind: "company_dossier",
+      recipeVersion: args.recipeVersion ?? "u1.1",
+      depth: 1,
+    },
+    targetScope: args.targetScope,
+    targetId: args.targetId,
+  };
+}
+
+/**
+ * Bounded reconciliation page (Codex F4/F5): an UNFILTERED, ordering-
+ * tolerant walk over all companies using only the provider's opaque page
+ * tokens (from page one when `startingAfter` is null). It catches records
+ * whose relations changed without touching the parent `updatedAt` — the
+ * incremental gte-filtered pass never re-sees those. Items carry the same
+ * content-sensitive edition versions, so re-recording unchanged records is
+ * a cheap evidence-dedupe no-op. `nextCursor` is always null: this pass
+ * must never advance the incremental checkpoint.
+ */
+export async function reconcileCompaniesPage(
+  client: TwentyRestClient,
+  args: {
+    startingAfter: string | null;
+    pageSize: number;
+    targetScope: SharedTargetScope;
+    targetId: string;
+    recipeVersion?: string;
+  },
+): Promise<AcquiredPage<TwentyCompaniesCursor>> {
+  const { records, pageInfo } = await client.listPage("companies", {
+    limit: args.pageSize,
+    depth: 1,
+    startingAfter: args.startingAfter ?? undefined,
+  });
+  return {
+    items: records.map((record) => toEvidenceUpsert(record, args)),
+    nextCursor: null,
+    rawCount: records.length,
+    pageToken:
+      pageInfo?.hasNextPage && pageInfo.endCursor ? pageInfo.endCursor : null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Readiness
 // ---------------------------------------------------------------------------
@@ -627,21 +692,25 @@ export type TwentyReadiness =
  */
 export async function checkTwentyReadiness(
   db: Database,
-  args: { tenantId: string; userId: string },
+  args: { tenantId: string; userId: string; bindingKey?: string },
 ): Promise<TwentyReadiness> {
   try {
     const context = await resolveTwentyContext(db, {
       tenantId: args.tenantId,
       userId: args.userId,
+      ...(args.bindingKey ? { bindingKey: args.bindingKey } : {}),
       logPrefix: "[memory-sources:twenty]",
       unauthorizedMessage:
         "the processor owner has no connected Twenty CRM account — connect Twenty before running memory ingestion",
     });
     if (!context) {
+      // Fail closed (Codex F3): a persisted binding key that no longer
+      // resolves to an enabled+approved tenant MCP server blocks the run.
       return {
         ready: false,
-        reason:
-          "no approved Twenty managed application/MCP server for this tenant",
+        reason: args.bindingKey
+          ? `no enabled+approved Twenty MCP server matches binding key "${args.bindingKey}" for this tenant`
+          : "no approved Twenty managed application/MCP server for this tenant",
       };
     }
     return {

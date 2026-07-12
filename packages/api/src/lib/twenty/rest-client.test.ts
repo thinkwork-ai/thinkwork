@@ -4,10 +4,14 @@ vi.mock("../plugins/activation.js", () => ({
   createPluginDispatchAuthResolver: vi.fn(),
 }));
 
+import { createPluginDispatchAuthResolver } from "../plugins/activation.js";
 import {
   HttpError,
+  TWENTY_MCP_SLUG,
   TwentyRestClient,
+  matchesTwentyBinding,
   recordsFromPayload,
+  resolveTwentyContext,
 } from "./rest-client.js";
 
 const BASE_URL = "https://crm.example.com";
@@ -58,6 +62,124 @@ describe("recordsFromPayload", () => {
     ]);
     expect(recordsFromPayload(null, [])).toEqual([]);
     expect(recordsFromPayload("nope", [])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Binding resolution (Codex F3)
+// ---------------------------------------------------------------------------
+
+describe("matchesTwentyBinding", () => {
+  it("with a bindingKey, matches only the exact managed_application_key or slug", () => {
+    const server = {
+      slug: "twenty--crm-eu",
+      managed_application_key: "twenty-eu",
+    };
+    expect(matchesTwentyBinding(server, "twenty-eu")).toBe(true);
+    expect(matchesTwentyBinding(server, "twenty--crm-eu")).toBe(true);
+    expect(matchesTwentyBinding(server, "twenty")).toBe(false);
+    expect(matchesTwentyBinding(server, "other")).toBe(false);
+  });
+
+  it("without a bindingKey, falls back to the legacy Twenty defaults", () => {
+    expect(
+      matchesTwentyBinding({
+        slug: TWENTY_MCP_SLUG,
+        managed_application_key: null,
+      }),
+    ).toBe(true);
+    expect(
+      matchesTwentyBinding({ slug: "x", managed_application_key: "twenty" }),
+    ).toBe(true);
+    expect(
+      matchesTwentyBinding({ slug: "x", managed_application_key: "other" }),
+    ).toBe(false);
+  });
+});
+
+describe("resolveTwentyContext binding key", () => {
+  type ServerRow = {
+    url: string;
+    plugin_install_id: string;
+    slug: string | null;
+    managed_application_key: string | null;
+  };
+
+  function fakeDb(servers: ServerRow[], apps: unknown[] = []) {
+    let call = 0;
+    return {
+      select: () => ({
+        from: () => {
+          const rows = call++ === 0 ? servers : apps;
+          const chain = {
+            where: () => chain,
+            orderBy: () => chain,
+            limit: async () => rows,
+          };
+          return chain;
+        },
+      }),
+    } as never;
+  }
+
+  beforeEach(() => {
+    vi.mocked(createPluginDispatchAuthResolver).mockReturnValue({
+      resolveToken: vi.fn().mockResolvedValue("user-token"),
+    } as never);
+  });
+
+  it("resolves the server whose managed_application_key equals the binding key", async () => {
+    const db = fakeDb([
+      {
+        url: "https://crm-eu.example.com/mcp",
+        plugin_install_id: "pi-eu",
+        slug: "twenty--crm-eu",
+        managed_application_key: "twenty-eu",
+      },
+    ]);
+    const context = await resolveTwentyContext(db, {
+      tenantId: "t-1",
+      userId: "u-1",
+      bindingKey: "twenty-eu",
+    });
+    expect(context).not.toBeNull();
+    expect(context!.baseUrl).toBe("https://crm-eu.example.com");
+    expect(context!.mcpServer.pluginInstallId).toBe("pi-eu");
+    expect(context!.token).toBe("user-token");
+  });
+
+  it("fails closed (null) when the only server is bound under a DIFFERENT key", async () => {
+    const db = fakeDb([
+      {
+        url: "https://crm.example.com/mcp",
+        plugin_install_id: "pi-default",
+        slug: TWENTY_MCP_SLUG,
+        managed_application_key: "twenty",
+      },
+    ]);
+    const context = await resolveTwentyContext(db, {
+      tenantId: "t-1",
+      userId: "u-1",
+      bindingKey: "twenty-eu",
+    });
+    expect(context).toBeNull();
+  });
+
+  it("keeps the legacy default resolution when no binding key is given", async () => {
+    const db = fakeDb([
+      {
+        url: "https://crm.example.com/mcp",
+        plugin_install_id: "pi-default",
+        slug: TWENTY_MCP_SLUG,
+        managed_application_key: "twenty",
+      },
+    ]);
+    const context = await resolveTwentyContext(db, {
+      tenantId: "t-1",
+      userId: "u-1",
+    });
+    expect(context).not.toBeNull();
+    expect(context!.mcpServer.pluginInstallId).toBe("pi-default");
   });
 });
 

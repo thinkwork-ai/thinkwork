@@ -191,17 +191,45 @@ export type ResolvedTwentyContext = {
 };
 
 /**
+ * Pure binding-match rule (unit-testable): with a bindingKey, a tenant MCP
+ * server matches ONLY when its managed_application_key or slug equals that
+ * exact key; without one, the legacy Twenty defaults apply.
+ */
+export function matchesTwentyBinding(
+  server: { slug: string | null; managed_application_key: string | null },
+  bindingKey?: string,
+): boolean {
+  if (bindingKey) {
+    return (
+      server.managed_application_key === bindingKey ||
+      server.slug === bindingKey
+    );
+  }
+  return (
+    server.slug === TWENTY_MCP_SLUG ||
+    server.managed_application_key === "twenty"
+  );
+}
+
+/**
  * Resolve the tenant's Twenty deployment (base URL from the managed
  * application's desired_config or the approved MCP server URL) and the
  * caller's per-user bearer token. Returns null when the plugin is not
  * installed for the tenant; throws HttpError 403 when the plugin is
  * installed but the user has not connected their Twenty account.
+ *
+ * When `bindingKey` is provided (memory-source ingestion, Codex F3), only
+ * the tenant MCP server matching exactly that binding is considered —
+ * still required to be enabled and approved — and a missing/disabled/
+ * unapproved binding resolves to null (fail closed).
  */
 export async function resolveTwentyContext(
   db: Database,
   args: {
     tenantId: string;
     userId: string;
+    /** Exact tenant-owned binding to resolve (managed app key or slug). */
+    bindingKey?: string;
     logPrefix?: string;
     /**
      * 403 message when the user has no active Twenty connection. Defaults
@@ -212,10 +240,21 @@ export async function resolveTwentyContext(
     unauthorizedMessage?: string;
   },
 ): Promise<ResolvedTwentyContext | null> {
-  const [mcpServer] = await db
+  const bindingCondition = args.bindingKey
+    ? or(
+        eq(tenantMcpServers.managed_application_key, args.bindingKey),
+        eq(tenantMcpServers.slug, args.bindingKey),
+      )
+    : or(
+        eq(tenantMcpServers.slug, TWENTY_MCP_SLUG),
+        eq(tenantMcpServers.managed_application_key, "twenty"),
+      );
+  const candidates = await db
     .select({
       url: tenantMcpServers.url,
       plugin_install_id: tenantMcpServers.plugin_install_id,
+      slug: tenantMcpServers.slug,
+      managed_application_key: tenantMcpServers.managed_application_key,
     })
     .from(tenantMcpServers)
     .where(
@@ -223,13 +262,15 @@ export async function resolveTwentyContext(
         eq(tenantMcpServers.tenant_id, args.tenantId),
         eq(tenantMcpServers.enabled, true),
         eq(tenantMcpServers.status, "approved"),
-        or(
-          eq(tenantMcpServers.slug, TWENTY_MCP_SLUG),
-          eq(tenantMcpServers.managed_application_key, "twenty"),
-        ),
+        bindingCondition,
       ),
     )
-    .limit(1);
+    .limit(2);
+  // Defense in depth: re-verify the binding match in JS so a drifted SQL
+  // clause can never resolve a different tenant binding than configured.
+  const mcpServer = candidates.find((server) =>
+    matchesTwentyBinding(server, args.bindingKey),
+  );
 
   const [app] = await db
     .select({ desired_config: managedApplications.desired_config })
@@ -237,7 +278,7 @@ export async function resolveTwentyContext(
     .where(
       and(
         eq(managedApplications.tenant_id, args.tenantId),
-        eq(managedApplications.key, "twenty"),
+        eq(managedApplications.key, args.bindingKey ?? "twenty"),
       ),
     )
     .orderBy(desc(managedApplications.updated_at))

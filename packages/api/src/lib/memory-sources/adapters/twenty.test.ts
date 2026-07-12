@@ -4,9 +4,11 @@ import type { TwentyRestClient } from "../../twenty/rest-client.js";
 import {
   acquireCompaniesPage,
   buildCompanyDossier,
+  evidenceVersionFor,
   hindsightDocumentIdFor,
   normalizeCompany,
   projectionKeyForCompany,
+  reconcileCompaniesPage,
   type TwentyCompaniesCursor,
 } from "./twenty.js";
 
@@ -403,7 +405,9 @@ describe("acquireCompaniesPage", () => {
 
     const item = first.items[0]!;
     expect(item.sourceItemId).toBe("c9");
-    expect(item.sourceVersion).toBe("2026-06-01T00:00:00Z");
+    expect(item.sourceVersion).toBe(
+      evidenceVersionFor("2026-06-01T00:00:00Z", item.contentHash),
+    );
     expect(item.sourceTimestamp).toEqual(new Date("2026-06-01T00:00:00Z"));
     expect(item.contentHash).toMatch(/^[0-9a-f]{64}$/);
     expect(item.contentHash).toBe(second.items[0]!.contentHash);
@@ -418,7 +422,7 @@ describe("acquireCompaniesPage", () => {
     expect(item.normalizedSnapshot).toEqual(normalizeCompany(record));
   });
 
-  it("falls back to a content-hash-prefix sourceVersion when updatedAt is missing", async () => {
+  it("falls back to an 'na'-prefixed edition when updatedAt is missing", async () => {
     const { client } = stubClient([{ id: "c1", name: "Acme" }]);
     const page = await acquireCompaniesPage(client, {
       cursor: null,
@@ -427,7 +431,7 @@ describe("acquireCompaniesPage", () => {
       targetId: TENANT_ID,
     });
     const item = page.items[0]!;
-    expect(item.sourceVersion).toBe(item.contentHash.slice(0, 16));
+    expect(item.sourceVersion).toBe(`na#${item.contentHash.slice(0, 12)}`);
     expect(item.sourceTimestamp).toBeNull();
   });
 
@@ -444,6 +448,61 @@ describe("acquireCompaniesPage", () => {
     });
     expect(page.items[0]!.extractionRecipe.recipeVersion).toBe("u1.2");
     expect(page.items[0]!.targetScope).toBe("space");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evidenceVersionFor (F4: content-sensitive evidence editions)
+// ---------------------------------------------------------------------------
+
+describe("evidenceVersionFor", () => {
+  it("combines updatedAt with a content-hash suffix", () => {
+    const version = evidenceVersionFor(
+      "2026-06-01T00:00:00Z",
+      "abcdef0123456789abcdef",
+    );
+    expect(version).toBe("2026-06-01T00:00:00Z#abcdef012345");
+  });
+
+  it("uses 'na' when updatedAt is missing", () => {
+    expect(evidenceVersionFor(null, "abcdef0123456789")).toBe(
+      "na#abcdef012345",
+    );
+  });
+
+  it("yields distinct editions when a relation changes but the parent updatedAt does not", async () => {
+    const args = {
+      cursor: null,
+      pageSize: 10,
+      targetScope: "tenant" as const,
+      targetId: TENANT_ID,
+    };
+    const base = company({
+      people: [{ id: "p1", name: "Ada", jobTitle: "CTO" }],
+    });
+    const changedPerson = company({
+      people: [{ id: "p1", name: "Ada", jobTitle: "CEO" }],
+    });
+    // Same parent company updatedAt in both records.
+    expect(base.updatedAt).toBe(changedPerson.updatedAt);
+
+    const first = await acquireCompaniesPage(stubClient([base]).client, args);
+    const second = await acquireCompaniesPage(
+      stubClient([changedPerson]).client,
+      args,
+    );
+
+    // Edition (evidence version) differs even though updatedAt is unchanged…
+    expect(first.items[0]!.sourceVersion).not.toBe(
+      second.items[0]!.sourceVersion,
+    );
+    // …while checkpoint ordering still comes from the parent timestamp only.
+    expect(first.items[0]!.sourceTimestamp).toEqual(
+      new Date("2026-06-01T00:00:00Z"),
+    );
+    expect(second.items[0]!.sourceTimestamp).toEqual(
+      new Date("2026-06-01T00:00:00Z"),
+    );
   });
 });
 
@@ -471,9 +530,29 @@ describe("acquireCompaniesPage pagination token", () => {
     });
 
     expect(listPage.mock.calls[0]?.[1]?.startingAfter).toBe("tok-1");
-    // With a page token, the gte filter is dropped so the token wins.
+    // No cursor → no filter, regardless of the page token.
     expect(listPage.mock.calls[0]?.[1]?.filter).toBeUndefined();
     expect(page.pageToken).toBe("tok-2");
+  });
+
+  it("preserves the gte filter and orderBy on page-token continuations (F5)", async () => {
+    const listPage = vi.fn().mockResolvedValue({
+      records: [record("a", "2026-02-01T00:00:00.000Z")],
+      pageInfo: { hasNextPage: true, endCursor: "tok-2" },
+      payload: {},
+    });
+    await acquireCompaniesPage({ listPage } as never, {
+      cursor: { lastUpdatedAt: "2026-01-01T00:00:00Z", lastId: "z" },
+      pageSize: 1,
+      targetScope: "tenant",
+      targetId: "t",
+      startingAfter: "tok-1",
+    });
+    expect(listPage.mock.calls[0]?.[1]).toMatchObject({
+      startingAfter: "tok-1",
+      filter: "updatedAt[gte]:2026-01-01T00:00:00Z",
+      orderBy: "updatedAt[AscNullsFirst]",
+    });
   });
 
   it("returns a null pageToken when the provider reports no next page", async () => {
@@ -489,5 +568,68 @@ describe("acquireCompaniesPage pagination token", () => {
       targetId: "t",
     });
     expect(page.pageToken).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reconcileCompaniesPage (F4: bounded backscan)
+// ---------------------------------------------------------------------------
+
+describe("reconcileCompaniesPage", () => {
+  const record = (id: string, updatedAt: string) => ({
+    id,
+    name: `Co ${id}`,
+    updatedAt,
+  });
+
+  it("walks UNFILTERED pages using only provider page tokens", async () => {
+    const listPage = vi.fn().mockResolvedValue({
+      records: [record("a", "2026-01-01T00:00:00.000Z")],
+      pageInfo: { hasNextPage: true, endCursor: "bk-2" },
+      payload: {},
+    });
+    const page = await reconcileCompaniesPage({ listPage } as never, {
+      startingAfter: null,
+      pageSize: 10,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+    });
+    expect(listPage.mock.calls[0]?.[0]).toBe("companies");
+    const opts = listPage.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(opts.filter).toBeUndefined();
+    expect(opts.orderBy).toBeUndefined();
+    expect(opts.startingAfter).toBeUndefined();
+    expect(opts.limit).toBe(10);
+    expect(opts.depth).toBe(1);
+    expect(page.pageToken).toBe("bk-2");
+    // Never a checkpoint cursor: this pass must not advance the high-water.
+    expect(page.nextCursor).toBeNull();
+    expect(page.rawCount).toBe(1);
+  });
+
+  it("resumes from a stored token and returns AcquiredPage-shaped items with edition versions", async () => {
+    const listPage = vi.fn().mockResolvedValue({
+      records: [record("a", "2026-01-01T00:00:00.000Z")],
+      pageInfo: { hasNextPage: false },
+      payload: {},
+    });
+    const page = await reconcileCompaniesPage({ listPage } as never, {
+      startingAfter: "bk-7",
+      pageSize: 5,
+      targetScope: "tenant",
+      targetId: TENANT_ID,
+    });
+    expect(
+      (listPage.mock.calls[0]?.[1] as Record<string, unknown>).startingAfter,
+    ).toBe("bk-7");
+    expect(page.pageToken).toBeNull();
+    const item = page.items[0]!;
+    expect(item.sourceItemId).toBe("a");
+    expect(item.sourceVersion).toBe(
+      evidenceVersionFor("2026-01-01T00:00:00.000Z", item.contentHash),
+    );
+    expect(item.sourceTimestamp).toEqual(new Date("2026-01-01T00:00:00.000Z"));
+    expect(item.targetScope).toBe("tenant");
+    expect(item.targetId).toBe(TENANT_ID);
   });
 });
