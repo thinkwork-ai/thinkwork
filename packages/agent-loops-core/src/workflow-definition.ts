@@ -74,6 +74,42 @@ export interface ApprovalWorkflowStep {
   timeoutSeconds?: number;
 }
 
+/**
+ * Named stages of the memory pipeline a memory_stage step may run
+ * (external-memory-compounding U1). The worker Lambda owns stage semantics;
+ * the definition only names which stage this step triggers.
+ */
+export const MEMORY_STAGE_KINDS = [
+  "preflight",
+  "acquire",
+  "extract",
+  "project",
+  "resolve",
+  "retain",
+  "compound",
+  "graph",
+  "wiki",
+] as const;
+export type MemoryStageKind = (typeof MEMORY_STAGE_KINDS)[number];
+
+/**
+ * Memory-pipeline step (external-memory-compounding U1): parks the run on a
+ * task token while an asynchronous worker runs one stage of the memory
+ * pipeline, then records the worker's result as step evidence.
+ */
+export interface MemoryStageWorkflowStep {
+  id: string;
+  kind: "memory_stage";
+  /** Which memory-pipeline stage the worker runs. */
+  stage: MemoryStageKind;
+  /** Processor configuration (uuid, or a {{ }} template resolved at dispatch). */
+  processorConfigId: string;
+  /** Optional source configuration (uuid or {{ }} template). */
+  sourceConfigId?: string;
+  /** Stage-specific options passed through to the worker verbatim. */
+  options?: Record<string, unknown>;
+}
+
 export const HTTP_STEP_METHODS = [
   "GET",
   "POST",
@@ -130,7 +166,8 @@ export type WorkflowStep =
   | ApprovalWorkflowStep
   | HttpWorkflowStep
   | EmitEventWorkflowStep
-  | DeliverWorkflowStep;
+  | DeliverWorkflowStep
+  | MemoryStageWorkflowStep;
 
 export type WorkflowStepKind = WorkflowStep["kind"];
 
@@ -143,6 +180,7 @@ export const WORKFLOW_STEP_KINDS = [
   "http",
   "emit_event",
   "deliver",
+  "memory_stage",
 ] as const satisfies readonly WorkflowStepKind[];
 
 export interface ContinuationPolicy {
@@ -325,6 +363,8 @@ export function validateWorkflowDefinition(
       validateEmitEventStep(rawStep, id, index, errors);
     } else if (kind === "deliver") {
       validateDeliverStep(rawStep, id, index, errors, input);
+    } else if (kind === "memory_stage") {
+      validateMemoryStageStep(rawStep, id, index, errors);
     } else {
       errors.push({
         stepId: id,
@@ -565,6 +605,53 @@ function validateApprovalStep(
       stepId: id,
       field: `steps[${index}].timeoutSeconds`,
       reason: "timeoutSeconds must be a positive integer when present",
+    });
+  }
+}
+
+function validateMemoryStageStep(
+  rawStep: Record<string, unknown>,
+  id: string | null,
+  index: number,
+  errors: DefinitionValidationError[],
+): void {
+  if (
+    typeof rawStep.stage !== "string" ||
+    !MEMORY_STAGE_KINDS.includes(rawStep.stage as MemoryStageKind)
+  ) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].stage`,
+      reason: `memory_stage step stage must be one of ${MEMORY_STAGE_KINDS.join(", ")}`,
+    });
+  }
+  if (
+    typeof rawStep.processorConfigId !== "string" ||
+    !rawStep.processorConfigId.trim()
+  ) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].processorConfigId`,
+      reason:
+        "memory_stage step requires the processorConfigId of the memory processor to run",
+    });
+  }
+  if (
+    rawStep.sourceConfigId !== undefined &&
+    (typeof rawStep.sourceConfigId !== "string" ||
+      !rawStep.sourceConfigId.trim())
+  ) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].sourceConfigId`,
+      reason: "sourceConfigId must be a non-empty string when present",
+    });
+  }
+  if (rawStep.options !== undefined && !isRecord(rawStep.options)) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].options`,
+      reason: "options must be a JSON object when present",
     });
   }
 }

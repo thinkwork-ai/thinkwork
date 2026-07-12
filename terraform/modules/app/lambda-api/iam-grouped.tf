@@ -518,6 +518,11 @@ locals {
           # step RequestResponse-invokes its workflow-delivery mode to email
           # the maintained report to the operator-configured recipient list.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-artifact-deliver",
+          # memory-stage-worker (external-memory-compounding U1):
+          # workflow-step-dispatch's memory_stage step Event-invokes it after
+          # parking on the task token; the worker resumes the token via
+          # SendTaskSuccess when the pipeline stage ends.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-memory-stage-worker",
           # job-trigger self-target (plan 2026-07-03-004 U5, KTD-3): the
           # manual GraphQL trigger Event-invokes job-trigger with the
           # agent_loop_continue_dispatch event so routine actions never run

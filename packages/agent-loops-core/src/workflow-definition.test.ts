@@ -340,6 +340,67 @@ describe("validateWorkflowDefinition — full step taxonomy (THINK-214)", () => 
     expect(result).toMatchObject({ ok: true });
   });
 
+  // Memory pipeline step (external-memory-compounding U1)
+  it("accepts a well-formed memory_stage step", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        {
+          id: "extract-memories",
+          kind: "memory_stage",
+          stage: "extract",
+          processorConfigId: "8e7a2f4c-1234-4abc-9def-0123456789ab",
+          sourceConfigId: "{{ run.input.sourceConfigId }}",
+          options: { batchSize: 50 },
+        },
+      ],
+    });
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it("rejects a memory_stage step missing its stage", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        { id: "m1", kind: "memory_stage", processorConfigId: "cfg-1" },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0]?.field).toBe("steps[0].stage");
+  });
+
+  it("rejects a memory_stage step with an unknown stage", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [
+        {
+          id: "m1",
+          kind: "memory_stage",
+          stage: "teleport",
+          processorConfigId: "cfg-1",
+        },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        stepId: "m1",
+        field: "steps[0].stage",
+      });
+    }
+  });
+
+  it("rejects a memory_stage step missing processorConfigId", () => {
+    const result = validateWorkflowDefinition({
+      version: 1,
+      steps: [{ id: "m1", kind: "memory_stage", stage: "retain" }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.field).toBe("steps[0].processorConfigId");
+    }
+  });
+
   it("rejects an emit_event step with a malformed eventType", () => {
     const result = validateWorkflowDefinition({
       version: 1,

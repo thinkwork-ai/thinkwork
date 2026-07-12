@@ -17,11 +17,13 @@ import {
 } from "@thinkwork/agent-loops-core";
 
 import {
+  handleAwaitMemoryStage,
   handleDispatchAgent,
   handleExecuteStep,
   handleLoadNext,
   handleRecordAdvance,
   handleRecordApproval,
+  handleRecordMemoryStage,
   type StepExecutors,
 } from "../workflow-step-dispatch";
 
@@ -513,6 +515,7 @@ function makeExecutors(overrides: Partial<StepExecutors> = {}): StepExecutors {
       subject: "Report",
       shareUrl: "https://api.example.com/share/tok",
     }),
+    invokeMemoryStageWorker: async () => {},
     ...overrides,
   };
 }
@@ -839,6 +842,205 @@ describe("execute_step", () => {
       (r) => r.event_type === "workflow_step_finished",
     );
     expect(completions).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// memory_stage step (external-memory-compounding U1)
+// ---------------------------------------------------------------------------
+
+const MEMORY_STAGE_DEF: WorkflowDefinition = {
+  version: 1,
+  steps: [
+    {
+      id: "extract-memories",
+      kind: "memory_stage",
+      stage: "extract",
+      processorConfigId: "cfg-1",
+      sourceConfigId: "{{ run.input.sourceConfigId }}",
+      options: { batchSize: 5 },
+    },
+  ],
+};
+
+describe("memory_stage step", () => {
+  it("load_next records step_started (running) and parks on await_memory_stage", async () => {
+    fake.selectQueue.push([runRow()], [versionRow(MEMORY_STAGE_DEF)]);
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("await_memory_stage");
+    const started = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_started",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(started?.payload_summary).toMatchObject({
+      stepId: "extract-memories",
+      stepKind: "memory_stage",
+      status: "running",
+    });
+  });
+
+  it("await_memory_stage stores a memory_stage token then Event-invokes the worker with the resolved payload", async () => {
+    const calls: unknown[] = [];
+    fake.selectQueue.push(
+      [runRow({ input_summary: { agentId: "a1", sourceConfigId: "src-9" } })],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior step outputs (template context)
+    );
+    const result = await handleAwaitMemoryStage(
+      fake.db as never,
+      {
+        phase: "await_memory_stage",
+        cursor: cursor({ iteration: 2 }),
+        taskToken: "tok-mem-1",
+      },
+      NOW,
+      makeExecutors({
+        invokeMemoryStageWorker: async (payload) => {
+          calls.push(payload);
+        },
+      }),
+    );
+    expect(result).toEqual({ ok: true });
+    const token = fake.inserts.find((i) => i.purpose === "memory_stage");
+    expect(token?.token).toBe("tok-mem-1");
+    expect(token?.step_id).toBe("extract-memories");
+    expect(calls).toEqual([
+      {
+        workflowRunId: "run-1",
+        tenantId: "t1",
+        stepId: "extract-memories",
+        iteration: 2,
+        stage: "extract",
+        processorConfigId: "cfg-1",
+        sourceConfigId: "src-9",
+        options: { batchSize: 5 },
+      },
+    ]);
+  });
+
+  it("await_memory_stage records step_failed and throws when the worker invoke fails (never parks forever)", async () => {
+    fake.selectQueue.push(
+      [runRow({ input_summary: { agentId: "a1", sourceConfigId: "src-9" } })],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior step outputs
+    );
+    await expect(
+      handleAwaitMemoryStage(
+        fake.db as never,
+        {
+          phase: "await_memory_stage",
+          cursor: cursor(),
+          taskToken: "tok-mem-2",
+        },
+        NOW,
+        makeExecutors({
+          invokeMemoryStageWorker: async () => {
+            throw new Error("AccessDenied");
+          },
+        }),
+      ),
+    ).rejects.toThrow(/could not be started/);
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toMatch(/AccessDenied/);
+    expect(fake.updates.some((u) => u.status === "failed")).toBe(true);
+  });
+
+  it("await_memory_stage fails the step when its template references do not resolve", async () => {
+    fake.selectQueue.push(
+      [runRow()], // input_summary has no sourceConfigId
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior step outputs
+    );
+    await expect(
+      handleAwaitMemoryStage(
+        fake.db as never,
+        {
+          phase: "await_memory_stage",
+          cursor: cursor(),
+          taskToken: "tok-mem-3",
+        },
+        NOW,
+        makeExecutors(),
+      ),
+    ).rejects.toThrow(/did not resolve/);
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toContain(
+      "run.input.sourceConfigId",
+    );
+  });
+
+  it("record_memory_stage on succeeded records step output and advances (terminal_success on the last step)", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior policy decision (advance tail)
+    );
+    const result = await handleRecordMemoryStage(
+      fake.db as never,
+      {
+        phase: "record_memory_stage",
+        cursor: cursor(),
+        result: {
+          status: "succeeded",
+          stage: "extract",
+          counts: { extracted: 12 },
+          output: { batchId: "b-7" },
+        },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("terminal_success");
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as {
+      summary?: {
+        output?: { stage?: string; counts?: { extracted?: number }; batchId?: string };
+      };
+    };
+    expect(output?.summary?.output?.stage).toBe("extract");
+    expect(output?.summary?.output?.counts?.extracted).toBe(12);
+    expect(output?.summary?.output?.batchId).toBe("b-7");
+    const types = fake.inserts.map((r) => r.event_type);
+    expect(types).toContain("workflow_step_finished");
+    expect(types).not.toContain("workflow_step_failed");
+  });
+
+  it("record_memory_stage on failed records step_failed with the worker's error and fails the run", async () => {
+    fake.selectQueue.push(
+      [runRow()],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [], // no prior policy decision
+    );
+    const result = await handleRecordMemoryStage(
+      fake.db as never,
+      {
+        phase: "record_memory_stage",
+        cursor: cursor(),
+        result: {
+          status: "failed",
+          stage: "extract",
+          error: "processor config cfg-1 not found",
+        },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("terminal_failure");
+    const failed = fake.inserts.find(
+      (r) => r.event_type === "workflow_step_failed",
+    ) as { payload_summary?: { errorSummary?: string } };
+    expect(failed?.payload_summary?.errorSummary).toBe(
+      "processor config cfg-1 not found",
+    );
+    expect(fake.inserts.some((r) => r.evidence_type === "step_output")).toBe(
+      false,
+    );
   });
 });
 

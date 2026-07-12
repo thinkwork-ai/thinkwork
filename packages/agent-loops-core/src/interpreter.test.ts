@@ -74,6 +74,19 @@ describe("planNextStep", () => {
     });
   });
 
+  it("routes memory_stage to memory_stage_step", () => {
+    const step = {
+      id: "m",
+      kind: "memory_stage",
+      stage: "extract",
+      processorConfigId: "cfg-1",
+    } as const;
+    expect(planNextStep({ version: 1, steps: [step] }, cursor)).toEqual({
+      type: "memory_stage_step",
+      step,
+    });
+  });
+
   it("returns unsupported_step for tool (no headless runner yet), never a misrouted wait", () => {
     const step = { id: "t", kind: "tool", tool: "emit_document" } as const;
     expect(planNextStep({ version: 1, steps: [step] }, cursor)).toEqual({

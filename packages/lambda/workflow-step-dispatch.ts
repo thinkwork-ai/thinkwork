@@ -61,6 +61,7 @@ export type WorkflowDirective =
   | "wait_until"
   | "execute_step"
   | "await_approval"
+  | "await_memory_stage"
   | "continue"
   | "rollover"
   | "terminal_success"
@@ -101,7 +102,42 @@ export type WorkflowStepDispatchEvent =
       phase: "record_approval";
       cursor: InterpreterCursor;
       approval: { approved: boolean; note?: string | null };
+    }
+  | {
+      phase: "await_memory_stage";
+      cursor: InterpreterCursor;
+      taskToken: string;
+    }
+  | {
+      phase: "record_memory_stage";
+      cursor: InterpreterCursor;
+      result: MemoryStageWorkerResult;
     };
+
+/**
+ * The JSON the memory-stage worker sends back via SendTaskSuccess
+ * (external-memory-compounding U1). The record phase turns this into step
+ * evidence: succeeded advances the run, failed fails it.
+ */
+export interface MemoryStageWorkerResult {
+  status: "succeeded" | "failed";
+  stage: string;
+  counts?: Record<string, number>;
+  error?: string;
+  output?: Record<string, unknown>;
+}
+
+/** Async Event-invoke payload handed to the memory-stage worker Lambda. */
+export interface MemoryStageWorkerInvokePayload {
+  workflowRunId: string;
+  tenantId: string;
+  stepId: string;
+  iteration: number;
+  stage: string;
+  processorConfigId: string;
+  sourceConfigId: string | null;
+  options: Record<string, unknown> | null;
+}
 
 // ---------------------------------------------------------------------------
 // Loaders (ThinkWork-terms errors, never ASL / Step Functions vocabulary).
@@ -241,6 +277,26 @@ export async function handleLoadNext(
       now,
     });
     return { directive: "await_approval", cursor };
+  }
+
+  // Memory-stage step: the run stays running while the machine parks on the
+  // task token and the async worker executes the pipeline stage.
+  if (plan.type === "memory_stage_step") {
+    await recordWorkflowStepEvent(db, {
+      tenantId: cursor.tenantId,
+      workflowRunId: run.id,
+      eventType: "workflow_step_started",
+      summary: {
+        stepId: plan.step.id,
+        stepKind: "memory_stage",
+        iteration: cursor.iteration,
+        status: "running",
+        summary: `memory pipeline stage "${plan.step.stage}"`,
+      },
+      runStatus: "running",
+      now,
+    });
+    return { directive: "await_memory_stage", cursor };
   }
 
   // Step kinds that validate but are not yet executable (`tool` has no
@@ -602,6 +658,11 @@ export interface StepExecutors {
     shareUrl?: string | null;
     error?: string | null;
   }>;
+  /** External-memory-compounding U1: async Event invoke of the memory-stage
+   * worker; the worker resumes the parked task token when the stage ends. */
+  invokeMemoryStageWorker: (
+    payload: MemoryStageWorkerInvokePayload,
+  ) => Promise<void>;
 }
 
 export const defaultStepExecutors: StepExecutors = {
@@ -690,6 +751,31 @@ export const defaultStepExecutors: StepExecutors = {
     } catch {
       return { ok: false, error: "delivery returned malformed JSON" };
     }
+  },
+  invokeMemoryStageWorker: async (payload) => {
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
+    const lambda = new LambdaClient({});
+    const explicit = process.env.MEMORY_STAGE_WORKER_FUNCTION_NAME;
+    const stage = process.env.STAGE;
+    const fnName =
+      explicit ??
+      (stage ? `thinkwork-${stage}-api-memory-stage-worker` : undefined);
+    if (!fnName) {
+      throw new Error(
+        "memory_stage step cannot dispatch: MEMORY_STAGE_WORKER_FUNCTION_NAME / STAGE are unset",
+      );
+    }
+    // Async Event invoke — the worker resumes the task token itself, so this
+    // call only has to be accepted, never awaited to completion.
+    await lambda.send(
+      new InvokeCommand({
+        FunctionName: fnName,
+        InvocationType: "Event",
+        Payload: new TextEncoder().encode(JSON.stringify(payload)),
+      }),
+    );
   },
 };
 
@@ -1335,6 +1421,165 @@ export async function handleRecordApproval(
 }
 
 // ---------------------------------------------------------------------------
+// Phase 6: await_memory_stage (waitForTaskToken; parks) — external-memory-
+// compounding U1. Stores the token FIRST (so the worker's SendTaskSuccess
+// always finds it), then async-Event-invokes the memory-stage worker. An
+// invoke failure records a step-failed event and rethrows — the machine must
+// never park forever on a worker that was never started.
+// ---------------------------------------------------------------------------
+
+export async function handleAwaitMemoryStage(
+  db: WorkflowDb,
+  event: Extract<WorkflowStepDispatchEvent, { phase: "await_memory_stage" }>,
+  now: Date = new Date(),
+  executors: StepExecutors = defaultStepExecutors,
+): Promise<ParkResult> {
+  const { cursor, taskToken } = event;
+  const run = await loadRun(db, cursor);
+  const definition = await loadDefinition(db, run);
+  const step = definition.steps[cursor.stepPointer];
+  if (!step || step.kind !== "memory_stage") {
+    throw new Error(
+      `workflow run ${run.id} step pointer ${cursor.stepPointer} is not a memory_stage step — cannot dispatch`,
+    );
+  }
+
+  await storeTaskToken(db, {
+    tenantId: cursor.tenantId,
+    workflowRunId: run.id,
+    stepId: step.id,
+    iteration: cursor.iteration,
+    purpose: "memory_stage",
+    token: taskToken,
+    now,
+  });
+
+  const failStep = async (errorSummary: string): Promise<never> => {
+    await recordWorkflowStepEvent(db, {
+      tenantId: cursor.tenantId,
+      workflowRunId: run.id,
+      eventType: "workflow_step_failed",
+      summary: {
+        stepId: step.id,
+        stepKind: "memory_stage",
+        iteration: cursor.iteration,
+        status: "failed",
+        errorSummary,
+      },
+      runStatus: "failed",
+      now,
+    });
+    throw new Error(errorSummary);
+  };
+
+  // Resolve {{ }} templates in the step's config references the same way
+  // executable steps resolve their inputs at dispatch time.
+  const context = await buildTemplateContext(db, run);
+  const resolved = resolveStepTemplates(
+    {
+      processorConfigId: step.processorConfigId,
+      ...(step.sourceConfigId !== undefined
+        ? { sourceConfigId: step.sourceConfigId }
+        : {}),
+      ...(step.options !== undefined ? { options: step.options } : {}),
+    },
+    context,
+  );
+  if (!resolved.ok) {
+    return await failStep(
+      `memory_stage step references that did not resolve: ${resolved.missing.join(", ")}`,
+    );
+  }
+  const { processorConfigId, sourceConfigId, options } = resolved.value as {
+    processorConfigId: unknown;
+    sourceConfigId?: unknown;
+    options?: Record<string, unknown>;
+  };
+  if (typeof processorConfigId !== "string" || !processorConfigId.trim()) {
+    return await failStep(
+      "memory_stage step's processorConfigId did not resolve to a non-empty string",
+    );
+  }
+
+  try {
+    await executors.invokeMemoryStageWorker({
+      workflowRunId: run.id,
+      tenantId: cursor.tenantId,
+      stepId: step.id,
+      iteration: cursor.iteration,
+      stage: step.stage,
+      processorConfigId,
+      sourceConfigId:
+        typeof sourceConfigId === "string" && sourceConfigId
+          ? sourceConfigId
+          : null,
+      options: options ?? null,
+    });
+  } catch (error) {
+    return await failStep(
+      `memory stage worker could not be started: ${boundedMessage(error)}`,
+    );
+  }
+
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: record_memory_stage — the worker's SendTaskSuccess result lands
+// here. Succeeded records step output evidence (feeding
+// {{ steps.<id>.output.* }}) and advances; failed records a step-failed event
+// and fails the run through the shared advance tail.
+// ---------------------------------------------------------------------------
+
+export async function handleRecordMemoryStage(
+  db: WorkflowDb,
+  event: Extract<WorkflowStepDispatchEvent, { phase: "record_memory_stage" }>,
+  now: Date = new Date(),
+): Promise<DirectiveResult> {
+  const { cursor, result } = event;
+  const run = await loadRun(db, cursor);
+  const definition = await loadDefinition(db, run);
+  const step = definition.steps[cursor.stepPointer];
+  if (!step || step.kind !== "memory_stage") {
+    throw new Error(
+      `workflow run ${run.id} step pointer ${cursor.stepPointer} is not a memory_stage step — cannot record its result`,
+    );
+  }
+
+  const succeeded = result?.status === "succeeded";
+  if (succeeded) {
+    await recordWorkflowStepOutput(db, {
+      tenantId: cursor.tenantId,
+      workflowId: run.workflow_id,
+      workflowRunId: run.id,
+      stepId: step.id,
+      stepKind: step.kind,
+      iteration: cursor.iteration,
+      output: {
+        stage: result.stage,
+        counts: result.counts ?? {},
+        ...(result.output ?? {}),
+      },
+      now,
+    });
+  }
+
+  return await advanceAfterStepOutcome(db, {
+    cursor,
+    run,
+    definition,
+    step,
+    turnStatus: succeeded ? "completed" : "failed",
+    evidence: null,
+    stepErrorSummary: succeeded
+      ? undefined
+      : (result?.error ??
+        `memory stage "${result?.stage ?? step.stage}" failed without an error summary`),
+    now,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Handler — the only place getDb() is called.
 // ---------------------------------------------------------------------------
 
@@ -1355,6 +1600,10 @@ export async function handler(
       return await handleAwaitApproval(db, event);
     case "record_approval":
       return await handleRecordApproval(db, event);
+    case "await_memory_stage":
+      return await handleAwaitMemoryStage(db, event);
+    case "record_memory_stage":
+      return await handleRecordMemoryStage(db, event);
     default: {
       const exhaustive: never = event;
       throw new Error(
