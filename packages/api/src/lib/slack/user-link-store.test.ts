@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { upsertSlackUserLink } from "./user-link-store.js";
+import { loadLinkedSlackUser, upsertSlackUserLink } from "./user-link-store.js";
 
 function fakeDb(
   workspaceRows: Array<Record<string, unknown>>,
@@ -31,6 +31,34 @@ function fakeDb(
 }
 
 describe("Slack user link store", () => {
+  it("loads only an active, tenant-scoped explicit Slack user link", async () => {
+    const { db } = fakeDb(
+      [
+        {
+          user_id: "user-1",
+          slack_user_name: "eric",
+          slack_user_email: "eric@example.com",
+        },
+      ],
+      [],
+    );
+
+    await expect(
+      loadLinkedSlackUser(
+        {
+          tenantId: "tenant-1",
+          slackTeamId: "T-1",
+          slackUserId: "U-1",
+        },
+        db as any,
+      ),
+    ).resolves.toEqual({
+      userId: "user-1",
+      slackUserName: "eric",
+      slackUserEmail: "eric@example.com",
+    });
+  });
+
   it("rejects links for a Slack workspace installed to another tenant", async () => {
     const { db } = fakeDb([{ tenant_id: "tenant-2", status: "active" }], []);
 

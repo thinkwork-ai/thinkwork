@@ -2234,6 +2234,7 @@ Join hints:
 | parts | jsonb |  |
 | sender_type | text |  |
 | sender_id | uuid |  |
+| source_event_id | text |  |
 | tool_calls | jsonb |  |
 | tool_results | jsonb |  |
 | metadata | jsonb |  |
