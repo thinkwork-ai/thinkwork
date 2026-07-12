@@ -60,6 +60,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
+import { canonicalEntities } from "./entity-identity";
 
 // ---------------------------------------------------------------------------
 // Schema handle
@@ -100,6 +101,15 @@ export const wikiPages = wiki.table(
     owner_id: uuid("owner_id").references(() => users.id),
     type: text("type").notNull(), // 'entity' | 'topic' | 'decision' — shape, not scope
     entity_subtype: text("entity_subtype"),
+    /**
+     * THINK-193 U4: tenant-scoped Entity pages materialize one canonical
+     * entity each; slug/title become presentation. Partial unique below
+     * enforces at most one live tenant Entity page per canonical id.
+     */
+    canonical_entity_id: uuid("canonical_entity_id").references(
+      () => canonicalEntities.id,
+      { onDelete: "set null" },
+    ),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     summary: text("summary"),
@@ -155,6 +165,13 @@ export const wikiPages = wiki.table(
     uniqueIndex("uq_pages_tenant_type_slug_tenant_scope")
       .on(table.tenant_id, table.type, table.slug)
       .where(sql`${table.owner_id} IS NULL`),
+    // Canonical-ID materialization key (U4): one tenant Entity page per
+    // canonical entity. Slug uniqueness above remains during transition.
+    uniqueIndex("uq_pages_tenant_canonical_entity")
+      .on(table.tenant_id, table.canonical_entity_id)
+      .where(
+        sql`${table.owner_id} IS NULL AND ${table.canonical_entity_id} IS NOT NULL AND ${table.type} = 'entity'`,
+      ),
     // Read-path access is always (tenant, owner) first.
     index("idx_pages_tenant_owner_type_status").on(
       table.tenant_id,

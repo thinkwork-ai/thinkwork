@@ -30,6 +30,7 @@ export * from "./scheduled-jobs";
 export * from "./thread-idle-learning";
 export * from "./memory-retain-attempts";
 export * from "./memory-sources";
+export * from "./entity-identity";
 export * from "./brain-dream-runs";
 export * from "./knowledge-bases";
 export * from "./knowledge-graph";

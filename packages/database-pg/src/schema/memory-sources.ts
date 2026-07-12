@@ -24,6 +24,7 @@ import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
 import { workflows } from "./workflows";
 import { workflowRuns } from "./workflow-runs";
+import { canonicalEntities } from "./entity-identity";
 
 export const MEMORY_SOURCE_FAMILIES = [
   "twenty",
@@ -531,8 +532,11 @@ export const memoryClaims = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     target_scope: text("target_scope").notNull(),
     target_id: uuid("target_id").notNull(),
-    /** U4 canonical-identity fill — no FK until the identity tables land. */
-    canonical_subject_id: uuid("canonical_subject_id"),
+    /** Canonical subject (THINK-193 U4) — filled when the subject resolves. */
+    canonical_subject_id: uuid("canonical_subject_id").references(
+      () => canonicalEntities.id,
+      { onDelete: "set null" },
+    ),
     /** Pre-canonical stable subject, e.g. 'twenty:company:<id>'. */
     subject_key: text("subject_key").notNull(),
     /** Ontology entity-type slug. */
