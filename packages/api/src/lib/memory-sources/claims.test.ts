@@ -14,6 +14,7 @@ vi.mock("drizzle-orm", async (importOriginal) => ({
 import {
   buildClaimProjection,
   extractCompanyClaims,
+  extractWebPageClaims,
   SINGLE_VALUED_PREDICATES,
   upsertClaimsForEvidence,
 } from "./claims.js";
@@ -267,6 +268,8 @@ describe("SINGLE_VALUED_PREDICATES", () => {
         "customer.domain",
         "customer.employees",
         "customer.name",
+        "customer.web_page_title",
+        "customer.web_snapshot",
       ].sort(),
     );
   });
@@ -939,5 +942,111 @@ describe("upsertClaimsForEvidence erase fence", () => {
     });
     expect(result.created).toBeGreaterThan(0);
     expect(store.claims.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractWebPageClaims (THINK-193 U5)
+// ---------------------------------------------------------------------------
+
+describe("extractWebPageClaims", () => {
+  const URL = "https://www.acme.com/pricing";
+  const base = {
+    sourceItemId: URL,
+    targetScope: "tenant" as const,
+    targetId: TENANT_ID,
+  };
+
+  it("emits title, snapshot excerpt, and the AE1 domain identity hook", () => {
+    const claims = extractWebPageClaims({
+      ...base,
+      snapshot: {
+        requestedUrl: URL,
+        finalUrl: "https://www.acme.com/pricing-2026",
+        title: "Acme Pricing",
+        markdown: "Plans start at $49/month.",
+      },
+    });
+    const byPredicate = Object.fromEntries(
+      claims.map((claim) => [claim.ontologyPredicate, claim]),
+    );
+    // customer.domain comes from the FINAL (post-redirect) url's host —
+    // the entity-identity 'domain' normalizer resolves it canonically.
+    expect(byPredicate["customer.domain"]!.value).toEqual({
+      url: "www.acme.com",
+    });
+    expect(byPredicate["customer.web_page_title"]!.value).toEqual({
+      text: "Acme Pricing",
+    });
+    expect(byPredicate["customer.web_snapshot"]!.value).toMatchObject({
+      url: "https://www.acme.com/pricing-2026",
+      excerpt: "Plans start at $49/month.",
+    });
+    for (const claim of claims) {
+      expect(claim.subjectKey).toBe(`web:page:${URL}`);
+      expect(claim.subjectEntityType).toBe("customer");
+      expect(claim.effectiveFrom).toBeNull();
+      expect(claim.valueHash).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it("hostile page text cannot inject structure or break provenance comments", () => {
+    const claims = extractWebPageClaims({
+      ...base,
+      snapshot: {
+        requestedUrl: URL,
+        finalUrl: URL,
+        title: "Evil\n# Injected Heading",
+        markdown: "line one --> escape comment\n## New section\n- bullet",
+      },
+    });
+    const title = claims.find(
+      (c) => c.ontologyPredicate === "customer.web_page_title",
+    )!.value.text as string;
+    const excerpt = claims.find(
+      (c) => c.ontologyPredicate === "customer.web_snapshot",
+    )!.value.excerpt as string;
+    expect(title).not.toMatch(/\n/);
+    expect(excerpt).not.toMatch(/\n/);
+    expect(excerpt).not.toContain("-->");
+    // …and the projection built from these claims stays a single document
+    // with no injected headings.
+    const { markdown } = buildClaimProjection(
+      claims.map((c, i) => ({
+        id: `claim-${i}`,
+        ontologyPredicate: c.ontologyPredicate,
+        value: c.value,
+        effectiveFrom: null,
+      })),
+      { title: "Acme", subjectKey: `web:page:${URL}` },
+    );
+    const headings = markdown
+      .split("\n")
+      .filter((line) => /^#{1,2} /.test(line));
+    expect(headings).toEqual(["# Acme", "## Overview"]);
+  });
+
+  it("bounds the excerpt and skips empty values", () => {
+    const claims = extractWebPageClaims({
+      ...base,
+      snapshot: {
+        requestedUrl: URL,
+        finalUrl: URL,
+        markdown: "x".repeat(10_000),
+      },
+    });
+    expect(
+      claims.some((c) => c.ontologyPredicate === "customer.web_page_title"),
+    ).toBe(false);
+    const excerpt = claims.find(
+      (c) => c.ontologyPredicate === "customer.web_snapshot",
+    )!.value.excerpt as string;
+    expect(excerpt.length).toBeLessThanOrEqual(1500);
+
+    const empty = extractWebPageClaims({
+      ...base,
+      snapshot: { requestedUrl: URL, finalUrl: "not-a-url", markdown: "" },
+    });
+    expect(empty).toEqual([]);
   });
 });
