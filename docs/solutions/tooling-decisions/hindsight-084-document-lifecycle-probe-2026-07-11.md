@@ -14,7 +14,7 @@ a U2 deliverable and production retraction stays disabled until it lands.
 
 1. **`update_mode=replace` fully supersedes prior extractions.** Retaining v2
    (HQ Austin, $9M ARR) under the same `document_id` left exactly one
-   `documents` row; recalling the *old* value ("Reno headquarters") returned
+   `documents` row; recalling the _old_ value ("Reno headquarters") returned
    only the new Austin fact. No stale v1 unit survived.
 2. **Replace duplicated the new units.** After the v2 replace, `memory_units`
    held 2 byte-identical Austin units for the one document. Not stale data,

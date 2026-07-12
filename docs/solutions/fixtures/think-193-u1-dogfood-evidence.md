@@ -8,15 +8,15 @@ canonical Workflow executions on the deployed dev stack (account
 
 ## Identifiers
 
-| Thing | Value |
-| --- | --- |
-| Tenant | `0015953e-aa13-4cab-8398-2e70f73dda63` (sleek-squirrel-230) |
-| Processor config | `0eb1c5c1-4acf-4bd1-b404-304b071d660e` (shared/tenant) |
-| Source config | `44a5684b-f236-4f87-8336-6373c2e926da` (twenty) |
-| Workflow | `c842fd57-41f1-456f-90c5-7ea6f5d4c40d` "Memory: Twenty proving slice (U1)" |
-| Target bank | `tenant_0015953e-aa13-4cab-8398-2e70f73dda63` |
-| Worker Lambda | `thinkwork-dev-api-memory-stage-worker` (deploy run 29175254162) |
-| Probe company (Twenty) | `6bb03870-cd00-44ba-b945-b11001e2ca68` "Acme Probe (THINK-193 U1)" |
+| Thing                  | Value                                                                      |
+| ---------------------- | -------------------------------------------------------------------------- |
+| Tenant                 | `0015953e-aa13-4cab-8398-2e70f73dda63` (sleek-squirrel-230)                |
+| Processor config       | `0eb1c5c1-4acf-4bd1-b404-304b071d660e` (shared/tenant)                     |
+| Source config          | `44a5684b-f236-4f87-8336-6373c2e926da` (twenty)                            |
+| Workflow               | `c842fd57-41f1-456f-90c5-7ea6f5d4c40d` "Memory: Twenty proving slice (U1)" |
+| Target bank            | `tenant_0015953e-aa13-4cab-8398-2e70f73dda63`                              |
+| Worker Lambda          | `thinkwork-dev-api-memory-stage-worker` (deploy run 29175254162)           |
+| Probe company (Twenty) | `6bb03870-cd00-44ba-b945-b11001e2ca68` "Acme Probe (THINK-193 U1)"         |
 
 ## Runs (workflow_runs; all `succeeded`, all four memory_stage tokens consumed per run)
 

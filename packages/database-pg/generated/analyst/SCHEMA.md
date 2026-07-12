@@ -196,19 +196,19 @@ Conventions:
 
 ## activity_log
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| actor_type | text | not null |
-| actor_id | uuid | not null |
-| action | text | not null |
-| entity_type | text |  |
-| entity_id | uuid |  |
-| changes | jsonb |  |
-| metadata | jsonb |  |
-| ip_address | text |  |
-| created_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| actor_type  | text                     | not null     |
+| actor_id    | uuid                     | not null     |
+| action      | text                     | not null     |
+| entity_type | text                     |              |
+| entity_id   | uuid                     |              |
+| changes     | jsonb                    |              |
+| metadata    | jsonb                    |              |
+| ip_address  | text                     |              |
+| created_at  | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -216,15 +216,15 @@ Join hints:
 
 ## agent_capabilities
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| agent_id | uuid | not null |
-| tenant_id | uuid | not null |
-| capability | text | not null |
-| config | jsonb |  |
-| enabled | boolean | not null |
-| created_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| id         | uuid                     | PK, not null |
+| agent_id   | uuid                     | not null     |
+| tenant_id  | uuid                     | not null     |
+| capability | text                     | not null     |
+| config     | jsonb                    |              |
+| enabled    | boolean                  | not null     |
+| created_at | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -233,15 +233,15 @@ Join hints:
 
 ## agent_knowledge_bases
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| agent_id | uuid | not null |
-| tenant_id | uuid | not null |
-| knowledge_base_id | uuid | not null |
-| enabled | boolean | not null |
-| search_config | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| agent_id          | uuid                     | not null     |
+| tenant_id         | uuid                     | not null     |
+| knowledge_base_id | uuid                     | not null     |
+| enabled           | boolean                  | not null     |
+| search_config     | jsonb                    |              |
+| created_at        | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -251,25 +251,25 @@ Join hints:
 
 ## agent_loop_iterations
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_loop_run_id | uuid | not null |
-| iteration_number | integer | not null |
-| status | text | not null |
-| goal_mode_action | text |  |
-| agent_wakeup_request_id | uuid |  |
-| thread_turn_id | uuid |  |
-| input_summary | jsonb |  |
-| output_summary | jsonb |  |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| error_code | text |  |
-| error_message | text |  |
-| total_cost_usd_cents | bigint |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| agent_loop_run_id       | uuid                     | not null     |
+| iteration_number        | integer                  | not null     |
+| status                  | text                     | not null     |
+| goal_mode_action        | text                     |              |
+| agent_wakeup_request_id | uuid                     |              |
+| thread_turn_id          | uuid                     |              |
+| input_summary           | jsonb                    |              |
+| output_summary          | jsonb                    |              |
+| started_at              | timestamp with time zone |              |
+| finished_at             | timestamp with time zone |              |
+| error_code              | text                     |              |
+| error_message           | text                     |              |
+| total_cost_usd_cents    | bigint                   |              |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -284,33 +284,33 @@ Join hints:
 
 ## agent_loop_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_loop_id | uuid | not null |
-| agent_loop_version_id | uuid |  |
-| status | text | not null |
-| trigger_family | text | not null |
-| trigger_source | text |  |
-| scheduled_job_id | uuid |  |
-| actor_type | text |  |
-| actor_id | uuid |  |
-| idempotency_key | text |  |
-| correlation_id | text |  |
-| current_iteration | integer | not null |
-| terminal_reason | text |  |
-| policy_snapshot | jsonb | not null |
-| input_summary | jsonb |  |
-| output_summary | jsonb |  |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| last_event_at | timestamp with time zone |  |
-| error_code | text |  |
-| error_message | text |  |
-| total_cost_usd_cents | bigint |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| agent_loop_id         | uuid                     | not null     |
+| agent_loop_version_id | uuid                     |              |
+| status                | text                     | not null     |
+| trigger_family        | text                     | not null     |
+| trigger_source        | text                     |              |
+| scheduled_job_id      | uuid                     |              |
+| actor_type            | text                     |              |
+| actor_id              | uuid                     |              |
+| idempotency_key       | text                     |              |
+| correlation_id        | text                     |              |
+| current_iteration     | integer                  | not null     |
+| terminal_reason       | text                     |              |
+| policy_snapshot       | jsonb                    | not null     |
+| input_summary         | jsonb                    |              |
+| output_summary        | jsonb                    |              |
+| started_at            | timestamp with time zone |              |
+| finished_at           | timestamp with time zone |              |
+| last_event_at         | timestamp with time zone |              |
+| error_code            | text                     |              |
+| error_message         | text                     |              |
+| total_cost_usd_cents  | bigint                   |              |
+| created_at            | timestamp with time zone | not null     |
+| updated_at            | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -325,21 +325,21 @@ Join hints:
 
 ## agent_loop_versions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_loop_id | uuid | not null |
-| version_number | integer | not null |
-| version_status | text | not null |
-| trigger_spec | jsonb | not null |
-| routine_actions_spec | jsonb |  |
-| target_spec | jsonb | not null |
-| source_metadata | jsonb | not null |
-| created_by_actor_type | text |  |
-| created_by_actor_id | uuid |  |
-| published_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| agent_loop_id         | uuid                     | not null     |
+| version_number        | integer                  | not null     |
+| version_status        | text                     | not null     |
+| trigger_spec          | jsonb                    | not null     |
+| routine_actions_spec  | jsonb                    |              |
+| target_spec           | jsonb                    | not null     |
+| source_metadata       | jsonb                    | not null     |
+| created_by_actor_type | text                     |              |
+| created_by_actor_id   | uuid                     |              |
+| published_at          | timestamp with time zone |              |
+| created_at            | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -352,28 +352,28 @@ Join hints:
 
 ## agent_loops
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| slug | text | not null |
-| description | text |  |
-| lifecycle_status | text | not null |
-| enabled | boolean | not null |
-| owner_user_id | uuid |  |
-| owner_agent_id | uuid |  |
-| run_as_user_id | uuid |  |
-| space_id | uuid |  |
-| primary_trigger_family | text | not null |
-| current_version_id | uuid |  |
-| current_version_number | integer |  |
-| last_run_id | uuid |  |
-| last_run_status | text |  |
-| last_run_at | timestamp with time zone |  |
-| last_run_summary | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| name                   | text                     | not null     |
+| slug                   | text                     | not null     |
+| description            | text                     |              |
+| lifecycle_status       | text                     | not null     |
+| enabled                | boolean                  | not null     |
+| owner_user_id          | uuid                     |              |
+| owner_agent_id         | uuid                     |              |
+| run_as_user_id         | uuid                     |              |
+| space_id               | uuid                     |              |
+| primary_trigger_family | text                     | not null     |
+| current_version_id     | uuid                     |              |
+| current_version_number | integer                  |              |
+| last_run_id            | uuid                     |              |
+| last_run_status        | text                     |              |
+| last_run_at            | timestamp with time zone |              |
+| last_run_summary       | jsonb                    | not null     |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -390,16 +390,16 @@ Join hints:
 
 ## agent_mcp_servers
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| agent_id | uuid | not null |
-| tenant_id | uuid | not null |
-| mcp_server_id | uuid | not null |
-| enabled | boolean | not null |
-| config | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| agent_id      | uuid                     | not null     |
+| tenant_id     | uuid                     | not null     |
+| mcp_server_id | uuid                     | not null     |
+| enabled       | boolean                  | not null     |
+| config        | jsonb                    |              |
+| created_at    | timestamp with time zone | not null     |
+| updated_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -409,16 +409,16 @@ Join hints:
 
 ## agent_operation_leases
 
-| column | type | flags |
-| --- | --- | --- |
-| agent_id | uuid | PK, not null |
-| lease_id | uuid | PK, not null |
-| lease_kind | text | not null |
-| owner_kind | text | not null |
-| owner_id | text |  |
-| acquired_at | timestamp with time zone | not null |
-| last_heartbeat_at | timestamp with time zone | not null |
-| expires_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| agent_id          | uuid                     | PK, not null |
+| lease_id          | uuid                     | PK, not null |
+| lease_kind        | text                     | not null     |
+| owner_kind        | text                     | not null     |
+| owner_id          | text                     |              |
+| acquired_at       | timestamp with time zone | not null     |
+| last_heartbeat_at | timestamp with time zone | not null     |
+| expires_at        | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -426,11 +426,11 @@ Join hints:
 
 ## agent_profile_space_assignments
 
-| column | type | flags |
-| --- | --- | --- |
-| profile_id | uuid | not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
+| column     | type                     | flags    |
+| ---------- | ------------------------ | -------- |
+| profile_id | uuid                     | not null |
+| tenant_id  | uuid                     | not null |
+| space_id   | uuid                     | not null |
 | created_at | timestamp with time zone | not null |
 
 Join hints:
@@ -441,24 +441,24 @@ Join hints:
 
 ## agent_profiles
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slug | text | not null |
-| name | text | not null |
-| description | text |  |
-| routing_guidance | text |  |
-| instructions | text | not null |
-| model_id | text | not null |
-| enabled | boolean | not null |
-| built_in_key | text |  |
-| source_space_id | uuid |  |
-| tool_policy | jsonb | not null |
-| skill_policy | jsonb | not null |
-| execution_controls | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| slug               | text                     | not null     |
+| name               | text                     | not null     |
+| description        | text                     |              |
+| routing_guidance   | text                     |              |
+| instructions       | text                     | not null     |
+| model_id           | text                     | not null     |
+| enabled            | boolean                  | not null     |
+| built_in_key       | text                     |              |
+| source_space_id    | uuid                     |              |
+| tool_policy        | jsonb                    | not null     |
+| skill_policy       | jsonb                    | not null     |
+| execution_controls | jsonb                    | not null     |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -467,18 +467,18 @@ Join hints:
 
 ## agent_skills
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| agent_id | uuid | not null |
-| tenant_id | uuid | not null |
-| skill_id | text | not null |
-| config | jsonb |  |
-| permissions | jsonb |  |
-| rate_limit_rpm | integer |  |
-| model_override | text |  |
-| enabled | boolean | not null |
-| created_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| agent_id       | uuid                     | not null     |
+| tenant_id      | uuid                     | not null     |
+| skill_id       | text                     | not null     |
+| config         | jsonb                    |              |
+| permissions    | jsonb                    |              |
+| rate_limit_rpm | integer                  |              |
+| model_override | text                     |              |
+| enabled        | boolean                  | not null     |
+| created_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -487,16 +487,16 @@ Join hints:
 
 ## agent_template_mcp_servers
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| template_id | uuid | not null |
-| tenant_id | uuid | not null |
-| mcp_server_id | uuid | not null |
-| enabled | boolean | not null |
-| config | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| template_id   | uuid                     | not null     |
+| tenant_id     | uuid                     | not null     |
+| mcp_server_id | uuid                     | not null     |
+| enabled       | boolean                  | not null     |
+| config        | jsonb                    |              |
+| created_at    | timestamp with time zone | not null     |
+| updated_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -505,33 +505,33 @@ Join hints:
 
 ## agent_templates
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid |  |
-| name | text | not null |
-| slug | text | not null |
-| description | text |  |
-| category | text |  |
-| icon | text |  |
-| source | text | not null |
-| runtime | text | not null |
-| template_kind | text | not null |
-| model | text |  |
-| guardrail_id | uuid |  |
-| blocked_tools | jsonb |  |
-| config | jsonb |  |
-| skills | jsonb |  |
-| knowledge_base_ids | jsonb |  |
-| sandbox | jsonb |  |
-| browser | jsonb |  |
-| web_search | jsonb |  |
-| web_extract | jsonb |  |
-| send_email | jsonb |  |
-| context_engine | jsonb |  |
-| is_published | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     |              |
+| name               | text                     | not null     |
+| slug               | text                     | not null     |
+| description        | text                     |              |
+| category           | text                     |              |
+| icon               | text                     |              |
+| source             | text                     | not null     |
+| runtime            | text                     | not null     |
+| template_kind      | text                     | not null     |
+| model              | text                     |              |
+| guardrail_id       | uuid                     |              |
+| blocked_tools      | jsonb                    |              |
+| config             | jsonb                    |              |
+| skills             | jsonb                    |              |
+| knowledge_base_ids | jsonb                    |              |
+| sandbox            | jsonb                    |              |
+| browser            | jsonb                    |              |
+| web_search         | jsonb                    |              |
+| web_extract        | jsonb                    |              |
+| send_email         | jsonb                    |              |
+| context_engine     | jsonb                    |              |
+| is_published       | boolean                  | not null     |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -544,21 +544,21 @@ Join hints:
 
 ## agent_versions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid | not null |
-| version_number | integer | not null |
-| label | text |  |
-| config_snapshot | jsonb |  |
-| workspace_snapshot | jsonb |  |
-| skills_snapshot | jsonb |  |
-| knowledge_bases_snapshot | jsonb |  |
-| guardrail_snapshot | jsonb |  |
-| created_by | uuid |  |
-| created_at | timestamp with time zone | not null |
-| is_active | boolean | not null |
+| column                   | type                     | flags        |
+| ------------------------ | ------------------------ | ------------ |
+| id                       | uuid                     | PK, not null |
+| tenant_id                | uuid                     | not null     |
+| agent_id                 | uuid                     | not null     |
+| version_number           | integer                  | not null     |
+| label                    | text                     |              |
+| config_snapshot          | jsonb                    |              |
+| workspace_snapshot       | jsonb                    |              |
+| skills_snapshot          | jsonb                    |              |
+| knowledge_bases_snapshot | jsonb                    |              |
+| guardrail_snapshot       | jsonb                    |              |
+| created_by               | uuid                     |              |
+| created_at               | timestamp with time zone | not null     |
+| is_active                | boolean                  | not null     |
 
 Join hints:
 
@@ -568,25 +568,25 @@ Join hints:
 
 ## agent_wakeup_requests
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid | not null |
-| source | text | not null |
-| trigger_detail | text |  |
-| reason | text |  |
-| payload | jsonb |  |
-| status | text | not null |
-| coalesced_count | integer | not null |
-| idempotency_key | text |  |
-| requested_by_actor_type | text |  |
-| requested_by_actor_id | text |  |
-| run_id | uuid |  |
-| requested_at | timestamp with time zone | not null |
-| claimed_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| agent_id                | uuid                     | not null     |
+| source                  | text                     | not null     |
+| trigger_detail          | text                     |              |
+| reason                  | text                     |              |
+| payload                 | jsonb                    |              |
+| status                  | text                     | not null     |
+| coalesced_count         | integer                  | not null     |
+| idempotency_key         | text                     |              |
+| requested_by_actor_type | text                     |              |
+| requested_by_actor_id   | text                     |              |
+| run_id                  | uuid                     |              |
+| requested_at            | timestamp with time zone | not null     |
+| claimed_at              | timestamp with time zone |              |
+| finished_at             | timestamp with time zone |              |
+| created_at              | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -595,27 +595,27 @@ Join hints:
 
 ## agent_workspace_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | bigserial | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| run_id | uuid |  |
-| event_type | text | not null |
-| idempotency_key | text | not null |
-| bucket | text | not null |
-| source_object_key | text | not null |
-| audit_object_key | text |  |
-| object_etag | text |  |
-| object_version_id | text |  |
-| sequencer | text | not null |
-| mirror_status | text | not null |
-| reason | text |  |
-| payload | jsonb |  |
-| actor_type | text |  |
-| actor_id | text |  |
-| parent_event_id | bigint |  |
-| created_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | bigserial                | PK, not null |
+| tenant_id         | uuid                     | not null     |
+| agent_id          | uuid                     |              |
+| run_id            | uuid                     |              |
+| event_type        | text                     | not null     |
+| idempotency_key   | text                     | not null     |
+| bucket            | text                     | not null     |
+| source_object_key | text                     | not null     |
+| audit_object_key  | text                     |              |
+| object_etag       | text                     |              |
+| object_version_id | text                     |              |
+| sequencer         | text                     | not null     |
+| mirror_status     | text                     | not null     |
+| reason            | text                     |              |
+| payload           | jsonb                    |              |
+| actor_type        | text                     |              |
+| actor_id          | text                     |              |
+| parent_event_id   | bigint                   |              |
+| created_at        | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -626,25 +626,25 @@ Join hints:
 
 ## agent_workspace_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid | not null |
-| target_path | text | not null |
-| status | text | not null |
-| source_object_key | text |  |
-| request_object_key | text |  |
-| current_wakeup_request_id | uuid |  |
-| current_thread_turn_id | uuid |  |
-| parent_run_id | uuid |  |
-| depth | integer | not null |
-| inbox_write_count | integer | not null |
-| wakeup_retry_count | integer | not null |
-| last_event_at | timestamp with time zone | not null |
-| completed_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                    | type                     | flags        |
+| ------------------------- | ------------------------ | ------------ |
+| id                        | uuid                     | PK, not null |
+| tenant_id                 | uuid                     | not null     |
+| agent_id                  | uuid                     | not null     |
+| target_path               | text                     | not null     |
+| status                    | text                     | not null     |
+| source_object_key         | text                     |              |
+| request_object_key        | text                     |              |
+| current_wakeup_request_id | uuid                     |              |
+| current_thread_turn_id    | uuid                     |              |
+| parent_run_id             | uuid                     |              |
+| depth                     | integer                  | not null     |
+| inbox_write_count         | integer                  | not null     |
+| wakeup_retry_count        | integer                  | not null     |
+| last_event_at             | timestamp with time zone | not null     |
+| completed_at              | timestamp with time zone |              |
+| created_at                | timestamp with time zone | not null     |
+| updated_at                | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -656,48 +656,48 @@ Join hints:
 
 ## agents
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| slug | text |  |
-| workspace_folder_name | text |  |
-| role | text |  |
-| type | text | not null |
-| source | text | not null |
-| runtime | text | not null |
-| status | text | not null |
-| system_prompt | text |  |
-| reports_to | uuid |  |
-| parent_agent_id | uuid |  |
-| human_pair_id | uuid |  |
-| adapter_type | text |  |
-| adapter_config | jsonb |  |
-| runtime_config | jsonb |  |
-| model | text |  |
-| guardrail_id | uuid |  |
-| blocked_tools | jsonb |  |
-| sandbox | jsonb |  |
-| browser | jsonb |  |
-| web_search | jsonb |  |
-| web_extract | jsonb |  |
-| send_email | jsonb |  |
-| context_engine | jsonb |  |
-| is_platform_default | boolean | not null |
-| capability_folder_dispatch | boolean | not null |
-| budget_monthly_cents | integer |  |
-| spent_monthly_cents | integer |  |
-| budget_paused | boolean | not null |
-| budget_paused_at | timestamp with time zone |  |
-| budget_paused_reason | text |  |
-| last_heartbeat_at | timestamp with time zone |  |
-| avatar_url | text |  |
-| template_id | uuid |  |
-| version | integer | not null |
-| agent_pinned_versions | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                     | type                     | flags        |
+| -------------------------- | ------------------------ | ------------ |
+| id                         | uuid                     | PK, not null |
+| tenant_id                  | uuid                     | not null     |
+| name                       | text                     | not null     |
+| slug                       | text                     |              |
+| workspace_folder_name      | text                     |              |
+| role                       | text                     |              |
+| type                       | text                     | not null     |
+| source                     | text                     | not null     |
+| runtime                    | text                     | not null     |
+| status                     | text                     | not null     |
+| system_prompt              | text                     |              |
+| reports_to                 | uuid                     |              |
+| parent_agent_id            | uuid                     |              |
+| human_pair_id              | uuid                     |              |
+| adapter_type               | text                     |              |
+| adapter_config             | jsonb                    |              |
+| runtime_config             | jsonb                    |              |
+| model                      | text                     |              |
+| guardrail_id               | uuid                     |              |
+| blocked_tools              | jsonb                    |              |
+| sandbox                    | jsonb                    |              |
+| browser                    | jsonb                    |              |
+| web_search                 | jsonb                    |              |
+| web_extract                | jsonb                    |              |
+| send_email                 | jsonb                    |              |
+| context_engine             | jsonb                    |              |
+| is_platform_default        | boolean                  | not null     |
+| capability_folder_dispatch | boolean                  | not null     |
+| budget_monthly_cents       | integer                  |              |
+| spent_monthly_cents        | integer                  |              |
+| budget_paused              | boolean                  | not null     |
+| budget_paused_at           | timestamp with time zone |              |
+| budget_paused_reason       | text                     |              |
+| last_heartbeat_at          | timestamp with time zone |              |
+| avatar_url                 | text                     |              |
+| template_id                | uuid                     |              |
+| version                    | integer                  | not null     |
+| agent_pinned_versions      | jsonb                    |              |
+| created_at                 | timestamp with time zone | not null     |
+| updated_at                 | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -710,25 +710,25 @@ Join hints:
 
 ## artifact_data_bindings
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| artifact_id | uuid | not null |
-| part_id | text | not null |
-| element_id | text | not null |
-| mcp_server_ref | text | not null |
-| server_name | text | not null |
-| tool_name | text | not null |
-| frozen_args | jsonb | not null |
-| result_shape_hash | text | not null |
-| auth_context | text | not null |
-| owner_user_id | uuid |  |
-| quality | text | not null |
-| last_fetched_at | timestamp with time zone |  |
-| last_good_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| tenant_id         | uuid                     | not null     |
+| artifact_id       | uuid                     | not null     |
+| part_id           | text                     | not null     |
+| element_id        | text                     | not null     |
+| mcp_server_ref    | text                     | not null     |
+| server_name       | text                     | not null     |
+| tool_name         | text                     | not null     |
+| frozen_args       | jsonb                    | not null     |
+| result_shape_hash | text                     | not null     |
+| auth_context      | text                     | not null     |
+| owner_user_id     | uuid                     |              |
+| quality           | text                     | not null     |
+| last_fetched_at   | timestamp with time zone |              |
+| last_good_at      | timestamp with time zone |              |
+| created_at        | timestamp with time zone | not null     |
+| updated_at        | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -743,15 +743,15 @@ Join hints:
 
 ## artifact_shares
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| artifact_id | uuid | not null |
-| created_by | uuid | not null |
-| created_at | timestamp with time zone | not null |
-| revoked_at | timestamp with time zone |  |
-| revoked_by | uuid |  |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| artifact_id | uuid                     | not null     |
+| created_by  | uuid                     | not null     |
+| created_at  | timestamp with time zone | not null     |
+| revoked_at  | timestamp with time zone |              |
+| revoked_by  | uuid                     |              |
 
 Join hints:
 
@@ -762,16 +762,16 @@ Join hints:
 
 ## artifact_versions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| artifact_id | uuid | not null |
-| version | integer | not null |
-| s3_key | text | not null |
-| content_hash | text | not null |
-| created_by | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column       | type                     | flags        |
+| ------------ | ------------------------ | ------------ |
+| id           | uuid                     | PK, not null |
+| tenant_id    | uuid                     | not null     |
+| artifact_id  | uuid                     | not null     |
+| version      | integer                  | not null     |
+| s3_key       | text                     | not null     |
+| content_hash | text                     | not null     |
+| created_by   | uuid                     |              |
+| created_at   | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -781,29 +781,29 @@ Join hints:
 
 ## artifacts
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| thread_id | uuid |  |
-| created_by_user_id | uuid |  |
-| space_id | uuid |  |
-| head_version | integer | not null |
-| head_write_seq | integer | not null |
-| title | text | not null |
-| type | text | not null |
-| status | text | not null |
-| content | text |  |
-| s3_key | text |  |
-| summary | text |  |
-| source_message_id | uuid |  |
-| metadata | jsonb |  |
-| favorited_at | timestamp with time zone |  |
-| last_refresh_at | timestamp with time zone |  |
-| refresh_failed_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| agent_id           | uuid                     |              |
+| thread_id          | uuid                     |              |
+| created_by_user_id | uuid                     |              |
+| space_id           | uuid                     |              |
+| head_version       | integer                  | not null     |
+| head_write_seq     | integer                  | not null     |
+| title              | text                     | not null     |
+| type               | text                     | not null     |
+| status             | text                     | not null     |
+| content            | text                     |              |
+| s3_key             | text                     |              |
+| summary            | text                     |              |
+| source_message_id  | uuid                     |              |
+| metadata           | jsonb                    |              |
+| favorited_at       | timestamp with time zone |              |
+| last_refresh_at    | timestamp with time zone |              |
+| refresh_failed_at  | timestamp with time zone |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -816,32 +816,32 @@ Join hints:
 
 ## billing_export_line_items
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| import_id | uuid | not null |
-| tenant_id | uuid |  |
-| provider | text | not null |
-| line_item_id | text | not null |
-| usage_account_id | text |  |
-| service_code | text | not null |
-| operation | text | not null |
-| line_item_type | text |  |
-| usage_start | timestamp with time zone | not null |
-| usage_end | timestamp with time zone | not null |
-| billing_period_start | timestamp with time zone | not null |
-| billing_period_end | timestamp with time zone | not null |
-| amount_usd | numeric(12, 6) | not null |
-| usage_amount | numeric(20, 6) |  |
-| currency | text | not null |
-| model | text | not null |
-| region | text |  |
-| resource_id | text |  |
-| attribution_level | text | not null |
-| attribution_key | text | not null |
-| source_uri | text | not null |
-| raw_row | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| import_id            | uuid                     | not null     |
+| tenant_id            | uuid                     |              |
+| provider             | text                     | not null     |
+| line_item_id         | text                     | not null     |
+| usage_account_id     | text                     |              |
+| service_code         | text                     | not null     |
+| operation            | text                     | not null     |
+| line_item_type       | text                     |              |
+| usage_start          | timestamp with time zone | not null     |
+| usage_end            | timestamp with time zone | not null     |
+| billing_period_start | timestamp with time zone | not null     |
+| billing_period_end   | timestamp with time zone | not null     |
+| amount_usd           | numeric(12, 6)           | not null     |
+| usage_amount         | numeric(20, 6)           |              |
+| currency             | text                     | not null     |
+| model                | text                     | not null     |
+| region               | text                     |              |
+| resource_id          | text                     |              |
+| attribution_level    | text                     | not null     |
+| attribution_key      | text                     | not null     |
+| source_uri           | text                     | not null     |
+| raw_row              | jsonb                    | not null     |
+| created_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -854,18 +854,18 @@ Join hints:
 
 ## brain_dream_actions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| run_id | uuid | not null |
-| ordinal | integer | not null |
-| action_type | text | not null |
-| status | text | not null |
-| target | jsonb |  |
-| reason | text |  |
-| applied_at | timestamp with time zone |  |
-| error_message | text |  |
-| created_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| run_id        | uuid                     | not null     |
+| ordinal       | integer                  | not null     |
+| action_type   | text                     | not null     |
+| status        | text                     | not null     |
+| target        | jsonb                    |              |
+| reason        | text                     |              |
+| applied_at    | timestamp with time zone |              |
+| error_message | text                     |              |
+| created_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -873,20 +873,20 @@ Join hints:
 
 ## brain_dream_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| bank_id | text | not null |
-| dedupe_key | text | not null |
-| status | text | not null |
-| planned_counts | jsonb |  |
-| applied_counts | jsonb |  |
-| error_message | text |  |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| tenant_id      | uuid                     | not null     |
+| bank_id        | text                     | not null     |
+| dedupe_key     | text                     | not null     |
+| status         | text                     | not null     |
+| planned_counts | jsonb                    |              |
+| applied_counts | jsonb                    |              |
+| error_message  | text                     |              |
+| started_at     | timestamp with time zone |              |
+| finished_at    | timestamp with time zone |              |
+| created_at     | timestamp with time zone | not null     |
+| updated_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -894,19 +894,19 @@ Join hints:
 
 ## budget_policies
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| user_id | uuid |  |
-| scope | text | not null |
-| period | text | not null |
-| limit_usd | numeric(12, 6) | not null |
-| action_on_exceed | text | not null |
-| enabled | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column           | type                     | flags        |
+| ---------------- | ------------------------ | ------------ |
+| id               | uuid                     | PK, not null |
+| tenant_id        | uuid                     | not null     |
+| agent_id         | uuid                     |              |
+| user_id          | uuid                     |              |
+| scope            | text                     | not null     |
+| period           | text                     | not null     |
+| limit_usd        | numeric(12, 6)           | not null     |
+| action_on_exceed | text                     | not null     |
+| enabled          | boolean                  | not null     |
+| created_at       | timestamp with time zone | not null     |
+| updated_at       | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -918,32 +918,32 @@ Join hints:
 
 Note: Platform-global capability reference data — not tenant-scoped. RLS is intentionally not enabled (THINK-234).
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| slug | text | not null |
-| type | text | not null |
-| source | text | not null |
-| implementation_ref | jsonb |  |
-| spec | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| slug               | text                     | not null     |
+| type               | text                     | not null     |
+| source             | text                     | not null     |
+| implementation_ref | jsonb                    |              |
+| spec               | jsonb                    |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 ## connections
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| user_id | uuid | not null |
-| provider_id | uuid | not null |
-| status | text | not null |
-| external_id | text |  |
-| metadata | jsonb |  |
-| connected_at | timestamp with time zone |  |
-| disconnected_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| tenant_id       | uuid                     | not null     |
+| user_id         | uuid                     | not null     |
+| provider_id     | uuid                     | not null     |
+| status          | text                     | not null     |
+| external_id     | text                     |              |
+| metadata        | jsonb                    |              |
+| connected_at    | timestamp with time zone |              |
+| disconnected_at | timestamp with time zone |              |
+| created_at      | timestamp with time zone | not null     |
+| updated_at      | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -953,39 +953,39 @@ Join hints:
 
 ## cost_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| user_id | uuid |  |
-| thread_id | uuid |  |
-| request_id | text | not null |
-| event_type | text | not null |
-| runtime_type | text |  |
-| amount_usd | numeric(12, 6) | not null |
-| model | text |  |
-| provider | text |  |
-| input_tokens | integer |  |
-| output_tokens | integer |  |
-| cached_read_tokens | integer |  |
-| cached_write_tokens | integer |  |
-| enforcement_exempt | boolean | not null |
-| duration_ms | integer |  |
-| trace_id | text |  |
-| trace_event_id | uuid |  |
-| reconciliation_state | text | not null |
-| reconciliation_source | text |  |
-| reconciliation_at | timestamp with time zone |  |
-| source_evidence_ref | jsonb |  |
-| billing_account_id | text |  |
-| billing_service_code | text |  |
-| billing_operation | text |  |
-| billing_period_start | timestamp with time zone |  |
-| billing_period_end | timestamp with time zone |  |
-| billing_attribution_level | text |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column                    | type                     | flags        |
+| ------------------------- | ------------------------ | ------------ |
+| id                        | uuid                     | PK, not null |
+| tenant_id                 | uuid                     | not null     |
+| agent_id                  | uuid                     |              |
+| user_id                   | uuid                     |              |
+| thread_id                 | uuid                     |              |
+| request_id                | text                     | not null     |
+| event_type                | text                     | not null     |
+| runtime_type              | text                     |              |
+| amount_usd                | numeric(12, 6)           | not null     |
+| model                     | text                     |              |
+| provider                  | text                     |              |
+| input_tokens              | integer                  |              |
+| output_tokens             | integer                  |              |
+| cached_read_tokens        | integer                  |              |
+| cached_write_tokens       | integer                  |              |
+| enforcement_exempt        | boolean                  | not null     |
+| duration_ms               | integer                  |              |
+| trace_id                  | text                     |              |
+| trace_event_id            | uuid                     |              |
+| reconciliation_state      | text                     | not null     |
+| reconciliation_source     | text                     |              |
+| reconciliation_at         | timestamp with time zone |              |
+| source_evidence_ref       | jsonb                    |              |
+| billing_account_id        | text                     |              |
+| billing_service_code      | text                     |              |
+| billing_operation         | text                     |              |
+| billing_period_start      | timestamp with time zone |              |
+| billing_period_end        | timestamp with time zone |              |
+| billing_attribution_level | text                     |              |
+| metadata                  | jsonb                    |              |
+| created_at                | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -999,37 +999,37 @@ Join hints:
 
 ## crm_work_links
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| provider | text | not null |
-| object_type | text | not null |
-| object_id | text | not null |
-| object_url | text |  |
-| workflow_key | text | not null |
-| outcome_key | text | not null |
-| space_id | uuid |  |
-| thread_id | uuid |  |
-| goal_id | uuid |  |
-| requester_user_id | uuid |  |
-| last_writeback_user_id | uuid |  |
-| plugin_install_id | uuid |  |
-| mcp_server_id | uuid |  |
-| state | text | not null |
-| status_handle_state | text | not null |
-| status_handle_url | text |  |
-| status_handle_action | text |  |
-| last_writeback_state | text | not null |
-| failure_code | text |  |
-| failure_message | text |  |
-| metadata | jsonb | not null |
-| started_at | timestamp with time zone | not null |
-| last_resumed_at | timestamp with time zone |  |
-| deactivated_at | timestamp with time zone |  |
-| archived_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| provider               | text                     | not null     |
+| object_type            | text                     | not null     |
+| object_id              | text                     | not null     |
+| object_url             | text                     |              |
+| workflow_key           | text                     | not null     |
+| outcome_key            | text                     | not null     |
+| space_id               | uuid                     |              |
+| thread_id              | uuid                     |              |
+| goal_id                | uuid                     |              |
+| requester_user_id      | uuid                     |              |
+| last_writeback_user_id | uuid                     |              |
+| plugin_install_id      | uuid                     |              |
+| mcp_server_id          | uuid                     |              |
+| state                  | text                     | not null     |
+| status_handle_state    | text                     | not null     |
+| status_handle_url      | text                     |              |
+| status_handle_action   | text                     |              |
+| last_writeback_state   | text                     | not null     |
+| failure_code           | text                     |              |
+| failure_message        | text                     |              |
+| metadata               | jsonb                    | not null     |
+| started_at             | timestamp with time zone | not null     |
+| last_resumed_at        | timestamp with time zone |              |
+| deactivated_at         | timestamp with time zone |              |
+| archived_at            | timestamp with time zone |              |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1053,24 +1053,24 @@ Join hints:
 
 ## document_conformance_reports
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| artifact_id | uuid | not null |
-| plate_slug | text | not null |
-| document_status | text | not null |
-| digest_revision | text | not null |
-| manifest_snapshot | jsonb | not null |
-| sections | jsonb | not null |
-| analyses | jsonb | not null |
-| judge_status | text | not null |
-| judge_attempts | integer | not null |
-| judge_model | text |  |
-| judge_findings | jsonb |  |
-| judge_completed_at | timestamp with time zone |  |
-| judge_error | text |  |
-| created_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| artifact_id        | uuid                     | not null     |
+| plate_slug         | text                     | not null     |
+| document_status    | text                     | not null     |
+| digest_revision    | text                     | not null     |
+| manifest_snapshot  | jsonb                    | not null     |
+| sections           | jsonb                    | not null     |
+| analyses           | jsonb                    | not null     |
+| judge_status       | text                     | not null     |
+| judge_attempts     | integer                  | not null     |
+| judge_model        | text                     |              |
+| judge_findings     | jsonb                    |              |
+| judge_completed_at | timestamp with time zone |              |
+| judge_error        | text                     |              |
+| created_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1083,16 +1083,16 @@ Join hints:
 
 ## document_plates
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slug | text | not null |
-| origin | text | not null |
-| config | jsonb | not null |
-| hidden | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| id         | uuid                     | PK, not null |
+| tenant_id  | uuid                     | not null     |
+| slug       | text                     | not null     |
+| origin     | text                     | not null     |
+| config     | jsonb                    | not null     |
+| hidden     | boolean                  | not null     |
+| created_at | timestamp with time zone | not null     |
+| updated_at | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1104,16 +1104,16 @@ Join hints:
 
 ## document_section_waivers
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| artifact_id | uuid | not null |
-| plate_slug | text | not null |
-| section_id | text | not null |
-| tier | text | not null |
-| reason | text | not null |
-| created_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| artifact_id | uuid                     | not null     |
+| plate_slug  | text                     | not null     |
+| section_id  | text                     | not null     |
+| tier        | text                     | not null     |
+| reason      | text                     | not null     |
+| created_at  | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1126,19 +1126,19 @@ Join hints:
 
 ## documents
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid |  |
-| name | text | not null |
-| content | text |  |
-| s3_key | text |  |
-| mime_type | text |  |
-| size_bytes | integer |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| id         | uuid                     | PK, not null |
+| tenant_id  | uuid                     | not null     |
+| thread_id  | uuid                     |              |
+| name       | text                     | not null     |
+| content    | text                     |              |
+| s3_key     | text                     |              |
+| mime_type  | text                     |              |
+| size_bytes | integer                  |              |
+| metadata   | jsonb                    |              |
+| created_at | timestamp with time zone | not null     |
+| updated_at | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1147,20 +1147,20 @@ Join hints:
 
 ## email_body_objects
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| conversation_id | uuid |  |
-| direction | text | not null |
-| content_hash | text | not null |
-| object_ref | text | not null |
-| retention_until | timestamp with time zone | not null |
-| redacted_at | timestamp with time zone |  |
-| redacted_by_user_id | uuid |  |
-| redaction_reason | text |  |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| conversation_id     | uuid                     |              |
+| direction           | text                     | not null     |
+| content_hash        | text                     | not null     |
+| object_ref          | text                     | not null     |
+| retention_until     | timestamp with time zone | not null     |
+| redacted_at         | timestamp with time zone |              |
+| redacted_by_user_id | uuid                     |              |
+| redaction_reason    | text                     |              |
+| metadata            | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1174,22 +1174,22 @@ Join hints:
 
 ## email_conversations
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid |  |
-| thread_id | uuid |  |
-| provider_install_id | uuid |  |
-| subject | text |  |
-| status | text | not null |
-| approved_at | timestamp with time zone |  |
-| approved_by_user_id | uuid |  |
-| last_message_at | timestamp with time zone |  |
-| participant_hash | text | not null |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| space_id            | uuid                     |              |
+| thread_id           | uuid                     |              |
+| provider_install_id | uuid                     |              |
+| subject             | text                     |              |
+| status              | text                     | not null     |
+| approved_at         | timestamp with time zone |              |
+| approved_by_user_id | uuid                     |              |
+| last_message_at     | timestamp with time zone |              |
+| participant_hash    | text                     | not null     |
+| metadata            | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1205,20 +1205,20 @@ Join hints:
 
 ## email_domains
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| provider_install_id | uuid | not null |
-| domain | text | not null |
-| ownership_type | text | not null |
-| status | text | not null |
-| sending_verified_at | timestamp with time zone |  |
-| inbound_verified_at | timestamp with time zone |  |
-| dns_records | jsonb | not null |
-| provider_metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| provider_install_id | uuid                     | not null     |
+| domain              | text                     | not null     |
+| ownership_type      | text                     | not null     |
+| status              | text                     | not null     |
+| sending_verified_at | timestamp with time zone |              |
+| inbound_verified_at | timestamp with time zone |              |
+| dns_records         | jsonb                    | not null     |
+| provider_metadata   | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1232,27 +1232,27 @@ Join hints:
 
 ## email_ledger_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| conversation_id | uuid |  |
-| space_id | uuid |  |
-| thread_id | uuid |  |
-| message_id | uuid |  |
-| inbox_item_id | uuid |  |
-| provider_install_id | uuid |  |
-| event_type | text | not null |
-| provider_message_id | text |  |
-| provider_event_id | text |  |
-| actor_user_id | uuid |  |
-| body_object_id | uuid |  |
-| subject | text |  |
-| from_email | text |  |
-| to_emails | jsonb | not null |
-| reason_code | text |  |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| conversation_id     | uuid                     |              |
+| space_id            | uuid                     |              |
+| thread_id           | uuid                     |              |
+| message_id          | uuid                     |              |
+| inbox_item_id       | uuid                     |              |
+| provider_install_id | uuid                     |              |
+| event_type          | text                     | not null     |
+| provider_message_id | text                     |              |
+| provider_event_id   | text                     |              |
+| actor_user_id       | uuid                     |              |
+| body_object_id      | uuid                     |              |
+| subject             | text                     |              |
+| from_email          | text                     |              |
+| to_emails           | jsonb                    | not null     |
+| reason_code         | text                     |              |
+| metadata            | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1272,18 +1272,18 @@ Join hints:
 
 ## email_provider_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| provider_install_id | uuid | not null |
-| ledger_event_id | uuid |  |
-| provider_event_id | text | not null |
-| provider_message_id | text |  |
-| event_type | text | not null |
-| occurred_at | timestamp with time zone |  |
-| payload_metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| provider_install_id | uuid                     | not null     |
+| ledger_event_id     | uuid                     |              |
+| provider_event_id   | text                     | not null     |
+| provider_message_id | text                     |              |
+| event_type          | text                     | not null     |
+| occurred_at         | timestamp with time zone |              |
+| payload_metadata    | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1297,20 +1297,20 @@ Join hints:
 
 ## email_readiness_checks
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| provider_install_id | uuid | not null |
-| domain_id | uuid |  |
-| check_key | text | not null |
-| status | text | not null |
-| last_checked_at | timestamp with time zone |  |
-| failure_code | text |  |
-| failure_message | text |  |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| provider_install_id | uuid                     | not null     |
+| domain_id           | uuid                     |              |
+| check_key           | text                     | not null     |
+| status              | text                     | not null     |
+| last_checked_at     | timestamp with time zone |              |
+| failure_code        | text                     |              |
+| failure_message     | text                     |              |
+| metadata            | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1325,17 +1325,17 @@ Join hints:
 
 ## email_ses_compatibility_mappings
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| provider_install_id | uuid | not null |
-| reply_token_id | uuid |  |
-| conversation_id | uuid |  |
-| ses_message_id | text |  |
-| legacy_thread_id | uuid |  |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| provider_install_id | uuid                     | not null     |
+| reply_token_id      | uuid                     |              |
+| conversation_id     | uuid                     |              |
+| ses_message_id      | text                     |              |
+| legacy_thread_id    | uuid                     |              |
+| metadata            | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1347,20 +1347,20 @@ Join hints:
 
 ## email_space_policies
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| provider_install_id | uuid |  |
-| enabled | boolean | not null |
-| registered_users_allowed | boolean | not null |
-| private_space_membership_required | boolean | not null |
-| outside_sender_default | text | not null |
-| first_send_review_required | boolean | not null |
-| policy | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                            | type                     | flags        |
+| --------------------------------- | ------------------------ | ------------ |
+| id                                | uuid                     | PK, not null |
+| tenant_id                         | uuid                     | not null     |
+| space_id                          | uuid                     | not null     |
+| provider_install_id               | uuid                     |              |
+| enabled                           | boolean                  | not null     |
+| registered_users_allowed          | boolean                  | not null     |
+| private_space_membership_required | boolean                  | not null     |
+| outside_sender_default            | text                     | not null     |
+| first_send_review_required        | boolean                  | not null     |
+| policy                            | jsonb                    | not null     |
+| created_at                        | timestamp with time zone | not null     |
+| updated_at                        | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1374,16 +1374,16 @@ Join hints:
 
 ## email_space_sender_allowlists
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| value_type | text | not null |
-| value | text | not null |
-| reason | text |  |
-| created_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| space_id           | uuid                     | not null     |
+| value_type         | text                     | not null     |
+| value              | text                     | not null     |
+| reason             | text                     |              |
+| created_by_user_id | uuid                     |              |
+| created_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1397,16 +1397,16 @@ Join hints:
 
 ## eval_case_overrides
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| run_id | uuid | not null |
-| test_case_id | uuid | not null |
-| override_status | text | not null |
-| overridden_by | text |  |
-| overridden_at | timestamp with time zone | not null |
-| override_reason | text | not null |
-| created_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| run_id          | uuid                     | not null     |
+| test_case_id    | uuid                     | not null     |
+| override_status | text                     | not null     |
+| overridden_by   | text                     |              |
+| overridden_at   | timestamp with time zone | not null     |
+| override_reason | text                     | not null     |
+| created_at      | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1415,18 +1415,18 @@ Join hints:
 
 ## eval_datasets
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slug | text | not null |
-| name | text |  |
-| kind | text | not null |
-| version | integer | not null |
-| manifest_sha | text |  |
-| archived_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column       | type                     | flags        |
+| ------------ | ------------------------ | ------------ |
+| id           | uuid                     | PK, not null |
+| tenant_id    | uuid                     | not null     |
+| slug         | text                     | not null     |
+| name         | text                     |              |
+| kind         | text                     | not null     |
+| version      | integer                  | not null     |
+| manifest_sha | text                     |              |
+| archived_at  | timestamp with time zone |              |
+| created_at   | timestamp with time zone | not null     |
+| updated_at   | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1434,18 +1434,18 @@ Join hints:
 
 ## eval_profiles
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| model | text | not null |
-| judge_model | text |  |
-| trials | integer | not null |
-| is_default | boolean | not null |
-| archived_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| name        | text                     | not null     |
+| model       | text                     | not null     |
+| judge_model | text                     |              |
+| trials      | integer                  | not null     |
+| is_default  | boolean                  | not null     |
+| archived_at | timestamp with time zone |              |
+| created_at  | timestamp with time zone | not null     |
+| updated_at  | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1453,14 +1453,14 @@ Join hints:
 
 ## eval_replay_tool_allowlist
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| server_name | text | not null |
-| tool_name | text | not null |
-| mode | text | not null |
-| created_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| server_name | text                     | not null     |
+| tool_name   | text                     | not null     |
+| mode        | text                     | not null     |
+| created_at  | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1468,34 +1468,34 @@ Join hints:
 
 ## eval_results
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| run_id | uuid | not null |
-| test_case_id | uuid |  |
-| status | text | not null |
-| trial_index | integer | not null |
-| execution_tier | text | not null |
-| score | numeric(5, 4) |  |
-| duration_ms | integer |  |
-| agent_input_tokens | integer |  |
-| agent_output_tokens | integer |  |
-| agent_cost_usd | numeric(12, 6) |  |
-| agent_session_id | text |  |
-| thread_turn_id | uuid |  |
-| input | text |  |
-| system_prompt | text |  |
-| expected | text |  |
-| actual_output | text |  |
-| evaluator_results | jsonb | not null |
-| assertions | jsonb | not null |
-| error_message | text |  |
-| error_cause | text |  |
-| override_status | text |  |
-| overridden_by | text |  |
-| overridden_at | timestamp with time zone |  |
-| override_reason | text |  |
-| created_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| run_id              | uuid                     | not null     |
+| test_case_id        | uuid                     |              |
+| status              | text                     | not null     |
+| trial_index         | integer                  | not null     |
+| execution_tier      | text                     | not null     |
+| score               | numeric(5, 4)            |              |
+| duration_ms         | integer                  |              |
+| agent_input_tokens  | integer                  |              |
+| agent_output_tokens | integer                  |              |
+| agent_cost_usd      | numeric(12, 6)           |              |
+| agent_session_id    | text                     |              |
+| thread_turn_id      | uuid                     |              |
+| input               | text                     |              |
+| system_prompt       | text                     |              |
+| expected            | text                     |              |
+| actual_output       | text                     |              |
+| evaluator_results   | jsonb                    | not null     |
+| assertions          | jsonb                    | not null     |
+| error_message       | text                     |              |
+| error_cause         | text                     |              |
+| override_status     | text                     |              |
+| overridden_by       | text                     |              |
+| overridden_at       | timestamp with time zone |              |
+| override_reason     | text                     |              |
+| created_at          | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1505,41 +1505,41 @@ Join hints:
 
 ## eval_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| computer_id | uuid |  |
-| scheduled_job_id | uuid |  |
-| status | text | not null |
-| execution_target | text | not null |
-| runtime_host | text | not null |
-| model | text |  |
-| categories | text[] | not null |
-| selected_test_case_ids | uuid[] | not null |
-| dataset_id | uuid |  |
-| dataset_version | integer |  |
-| pinned_case_ids | text[] |  |
-| profile_id | uuid |  |
-| profile_snapshot | jsonb |  |
-| pinned_trial_plan | jsonb |  |
-| expected_result_rows | integer |  |
-| total_tests | integer | not null |
-| passed | integer | not null |
-| failed | integer | not null |
-| errored | integer |  |
-| unstable | integer |  |
-| scoring_version | integer |  |
-| summary_scoring_version | integer |  |
-| pass_rate | numeric(5, 4) |  |
-| regression | boolean | not null |
-| cost_usd | numeric(12, 6) |  |
-| cost_partial | boolean |  |
-| error_message | text |  |
-| started_at | timestamp with time zone |  |
-| completed_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| agent_id                | uuid                     |              |
+| computer_id             | uuid                     |              |
+| scheduled_job_id        | uuid                     |              |
+| status                  | text                     | not null     |
+| execution_target        | text                     | not null     |
+| runtime_host            | text                     | not null     |
+| model                   | text                     |              |
+| categories              | text[]                   | not null     |
+| selected_test_case_ids  | uuid[]                   | not null     |
+| dataset_id              | uuid                     |              |
+| dataset_version         | integer                  |              |
+| pinned_case_ids         | text[]                   |              |
+| profile_id              | uuid                     |              |
+| profile_snapshot        | jsonb                    |              |
+| pinned_trial_plan       | jsonb                    |              |
+| expected_result_rows    | integer                  |              |
+| total_tests             | integer                  | not null     |
+| passed                  | integer                  | not null     |
+| failed                  | integer                  | not null     |
+| errored                 | integer                  |              |
+| unstable                | integer                  |              |
+| scoring_version         | integer                  |              |
+| summary_scoring_version | integer                  |              |
+| pass_rate               | numeric(5, 4)            |              |
+| regression              | boolean                  | not null     |
+| cost_usd                | numeric(12, 6)           |              |
+| cost_partial            | boolean                  |              |
+| error_message           | text                     |              |
+| started_at              | timestamp with time zone |              |
+| completed_at            | timestamp with time zone |              |
+| created_at              | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1551,12 +1551,12 @@ Join hints:
 
 ## eval_skill_gate
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | PK, not null |
-| threshold | numeric(5, 4) | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| tenant_id  | uuid                     | PK, not null |
+| threshold  | numeric(5, 4)            | not null     |
+| created_at | timestamp with time zone | not null     |
+| updated_at | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1564,25 +1564,25 @@ Join hints:
 
 ## eval_test_cases
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| category | text | not null |
-| query | text | not null |
-| system_prompt | text |  |
-| assertions | jsonb | not null |
-| agentcore_evaluator_ids | text[] | not null |
-| tags | text[] | not null |
-| enabled | boolean | not null |
-| quality_state | text | not null |
-| rewritten_from_id | text |  |
-| source | text | not null |
-| dataset_id | uuid |  |
-| dataset_case_id | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| name                    | text                     | not null     |
+| category                | text                     | not null     |
+| query                   | text                     | not null     |
+| system_prompt           | text                     |              |
+| assertions              | jsonb                    | not null     |
+| agentcore_evaluator_ids | text[]                   | not null     |
+| tags                    | text[]                   | not null     |
+| enabled                 | boolean                  | not null     |
+| quality_state           | text                     | not null     |
+| rewritten_from_id       | text                     |              |
+| source                  | text                     | not null     |
+| dataset_id              | uuid                     |              |
+| dataset_case_id         | text                     |              |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1591,12 +1591,12 @@ Join hints:
 
 ## folder_bundle_import_rate_limits
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | PK, not null |
-| utc_hour | timestamp with time zone | PK, not null |
-| import_count | integer | not null |
-| updated_at | timestamp with time zone | not null |
+| column       | type                     | flags        |
+| ------------ | ------------------------ | ------------ |
+| tenant_id    | uuid                     | PK, not null |
+| utc_hour     | timestamp with time zone | PK, not null |
+| import_count | integer                  | not null     |
+| updated_at   | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1604,17 +1604,17 @@ Join hints:
 
 ## github_app_installations
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| installation_id | integer | not null |
-| account_login | text | not null |
-| account_type | text | not null |
-| status | text | not null |
-| permissions | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| tenant_id       | uuid                     | not null     |
+| installation_id | integer                  | not null     |
+| account_login   | text                     | not null     |
+| account_type    | text                     | not null     |
+| status          | text                     | not null     |
+| permissions     | jsonb                    |              |
+| created_at      | timestamp with time zone | not null     |
+| updated_at      | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1622,17 +1622,17 @@ Join hints:
 
 ## github_webhook_deliveries
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| event_type | text | not null |
-| delivery_id | text |  |
-| payload | jsonb |  |
-| status | text | not null |
-| processed_at | timestamp with time zone |  |
-| error | text |  |
-| created_at | timestamp with time zone | not null |
+| column       | type                     | flags        |
+| ------------ | ------------------------ | ------------ |
+| id           | uuid                     | PK, not null |
+| tenant_id    | uuid                     | not null     |
+| event_type   | text                     | not null     |
+| delivery_id  | text                     |              |
+| payload      | jsonb                    |              |
+| status       | text                     | not null     |
+| processed_at | timestamp with time zone |              |
+| error        | text                     |              |
+| created_at   | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1640,32 +1640,32 @@ Join hints:
 
 ## goals
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| thread_id | uuid | not null |
-| template_key | text |  |
-| outcome | text | not null |
-| workspace_folder_name | text |  |
-| owner_type | text |  |
-| owner_id | text |  |
-| mode | text | not null |
-| status | text | not null |
-| progress_model | text | not null |
-| completion_rule | jsonb |  |
-| review_policy | jsonb |  |
-| folder_s3_prefix | text | not null |
-| reviewer_type | text |  |
-| reviewer_id | text |  |
-| started_at | timestamp with time zone | not null |
-| reviewed_at | timestamp with time zone |  |
-| completed_at | timestamp with time zone |  |
-| cancelled_at | timestamp with time zone |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| space_id              | uuid                     | not null     |
+| thread_id             | uuid                     | not null     |
+| template_key          | text                     |              |
+| outcome               | text                     | not null     |
+| workspace_folder_name | text                     |              |
+| owner_type            | text                     |              |
+| owner_id              | text                     |              |
+| mode                  | text                     | not null     |
+| status                | text                     | not null     |
+| progress_model        | text                     | not null     |
+| completion_rule       | jsonb                    |              |
+| review_policy         | jsonb                    |              |
+| folder_s3_prefix      | text                     | not null     |
+| reviewer_type         | text                     |              |
+| reviewer_id           | text                     |              |
+| started_at            | timestamp with time zone | not null     |
+| reviewed_at           | timestamp with time zone |              |
+| completed_at          | timestamp with time zone |              |
+| cancelled_at          | timestamp with time zone |              |
+| metadata              | jsonb                    |              |
+| created_at            | timestamp with time zone | not null     |
+| updated_at            | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1680,21 +1680,21 @@ Join hints:
 
 ## guardrail_blocks
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid | not null |
-| guardrail_id | uuid | not null |
-| thread_id | uuid |  |
-| message_id | uuid |  |
-| block_type | text | not null |
-| action | text | not null |
-| blocked_topics | text[] |  |
-| content_filters | jsonb |  |
-| raw_response | jsonb |  |
-| user_message | text |  |
-| created_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| tenant_id       | uuid                     | not null     |
+| agent_id        | uuid                     | not null     |
+| guardrail_id    | uuid                     | not null     |
+| thread_id       | uuid                     |              |
+| message_id      | uuid                     |              |
+| block_type      | text                     | not null     |
+| action          | text                     | not null     |
+| blocked_topics  | text[]                   |              |
+| content_filters | jsonb                    |              |
+| raw_response    | jsonb                    |              |
+| user_message    | text                     |              |
+| created_at      | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1704,19 +1704,19 @@ Join hints:
 
 ## guardrails
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| description | text |  |
-| bedrock_guardrail_id | text |  |
-| bedrock_version | text |  |
-| is_default | boolean | not null |
-| status | text | not null |
-| config | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| name                 | text                     | not null     |
+| description          | text                     |              |
+| bedrock_guardrail_id | text                     |              |
+| bedrock_version      | text                     |              |
+| is_default           | boolean                  | not null     |
+| status               | text                     | not null     |
+| config               | jsonb                    | not null     |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1724,15 +1724,15 @@ Join hints:
 
 ## inbox_item_comments
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| inbox_item_id | uuid | not null |
-| tenant_id | uuid | not null |
-| author_type | text |  |
-| author_id | uuid |  |
-| content | text | not null |
-| created_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| inbox_item_id | uuid                     | not null     |
+| tenant_id     | uuid                     | not null     |
+| author_type   | text                     |              |
+| author_id     | uuid                     |              |
+| content       | text                     | not null     |
+| created_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1741,14 +1741,14 @@ Join hints:
 
 ## inbox_item_links
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| inbox_item_id | uuid | not null |
-| tenant_id | uuid | not null |
-| linked_type | text |  |
-| linked_id | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| inbox_item_id | uuid                     | not null     |
+| tenant_id     | uuid                     | not null     |
+| linked_type   | text                     |              |
+| linked_id     | uuid                     |              |
+| created_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1757,27 +1757,27 @@ Join hints:
 
 ## inbox_items
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| requester_type | text |  |
-| requester_id | uuid |  |
-| recipient_id | uuid |  |
-| type | text | not null |
-| status | text | not null |
-| title | text |  |
-| description | text |  |
-| entity_type | text |  |
-| entity_id | uuid |  |
-| config | jsonb |  |
-| revision | integer | not null |
-| review_notes | text |  |
-| decided_by | uuid |  |
-| decided_at | timestamp with time zone |  |
-| expires_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| tenant_id      | uuid                     | not null     |
+| requester_type | text                     |              |
+| requester_id   | uuid                     |              |
+| recipient_id   | uuid                     |              |
+| type           | text                     | not null     |
+| status         | text                     | not null     |
+| title          | text                     |              |
+| description    | text                     |              |
+| entity_type    | text                     |              |
+| entity_id      | uuid                     |              |
+| config         | jsonb                    |              |
+| revision       | integer                  | not null     |
+| review_notes   | text                     |              |
+| decided_by     | uuid                     |              |
+| decided_at     | timestamp with time zone |              |
+| expires_at     | timestamp with time zone |              |
+| created_at     | timestamp with time zone | not null     |
+| updated_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1785,26 +1785,26 @@ Join hints:
 
 ## knowledge_bases
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| slug | text | not null |
-| description | text |  |
-| embedding_model | text | not null |
-| chunking_strategy | text | not null |
-| chunk_size_tokens | integer |  |
-| chunk_overlap_percent | integer |  |
-| status | text | not null |
-| aws_kb_id | text |  |
-| aws_data_source_id | text |  |
-| last_sync_at | timestamp with time zone |  |
-| last_sync_status | text |  |
-| document_count | integer |  |
-| error_message | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| name                  | text                     | not null     |
+| slug                  | text                     | not null     |
+| description           | text                     |              |
+| embedding_model       | text                     | not null     |
+| chunking_strategy     | text                     | not null     |
+| chunk_size_tokens     | integer                  |              |
+| chunk_overlap_percent | integer                  |              |
+| status                | text                     | not null     |
+| aws_kb_id             | text                     |              |
+| aws_data_source_id    | text                     |              |
+| last_sync_at          | timestamp with time zone |              |
+| last_sync_status      | text                     |              |
+| document_count        | integer                  |              |
+| error_message         | text                     |              |
+| created_at            | timestamp with time zone | not null     |
+| updated_at            | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -1812,31 +1812,31 @@ Join hints:
 
 ## knowledge_graph_entities
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid |  |
-| source_kind | text | not null |
-| source_ref | text | not null |
-| ingest_run_id | uuid | not null |
-| graph_node_id | text | not null |
-| label | text | not null |
-| normalized_label | text | not null |
-| type_label | text |  |
-| ontology_entity_type_id | uuid |  |
-| ontology_type_slug | text |  |
-| grounding_status | text | not null |
-| provenance_status | text | not null |
-| summary | text |  |
-| aliases | text[] | not null |
-| properties | jsonb | not null |
-| diagnostics | jsonb | not null |
-| relationship_count | integer | not null |
-| evidence_count | integer | not null |
-| last_seen_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| thread_id               | uuid                     |              |
+| source_kind             | text                     | not null     |
+| source_ref              | text                     | not null     |
+| ingest_run_id           | uuid                     | not null     |
+| graph_node_id           | text                     | not null     |
+| label                   | text                     | not null     |
+| normalized_label        | text                     | not null     |
+| type_label              | text                     |              |
+| ontology_entity_type_id | uuid                     |              |
+| ontology_type_slug      | text                     |              |
+| grounding_status        | text                     | not null     |
+| provenance_status       | text                     | not null     |
+| summary                 | text                     |              |
+| aliases                 | text[]                   | not null     |
+| properties              | jsonb                    | not null     |
+| diagnostics             | jsonb                    | not null     |
+| relationship_count      | integer                  | not null     |
+| evidence_count          | integer                  | not null     |
+| last_seen_at            | timestamp with time zone |              |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1853,28 +1853,28 @@ Join hints:
 
 ## knowledge_graph_evidence
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid |  |
-| source_kind | text | not null |
-| source_ref | text | not null |
-| ingest_run_id | uuid | not null |
-| entity_id | uuid |  |
-| relationship_id | uuid |  |
-| message_id | uuid |  |
-| message_role | text |  |
-| message_created_at | timestamp with time zone |  |
-| speaker_label | text |  |
-| snippet | text | not null |
-| char_start | integer |  |
-| char_end | integer |  |
-| evidence_source_kind | text | not null |
-| evidence_source_ref | text |  |
-| metadata | jsonb | not null |
-| observed_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| thread_id            | uuid                     |              |
+| source_kind          | text                     | not null     |
+| source_ref           | text                     | not null     |
+| ingest_run_id        | uuid                     | not null     |
+| entity_id            | uuid                     |              |
+| relationship_id      | uuid                     |              |
+| message_id           | uuid                     |              |
+| message_role         | text                     |              |
+| message_created_at   | timestamp with time zone |              |
+| speaker_label        | text                     |              |
+| snippet              | text                     | not null     |
+| char_start           | integer                  |              |
+| char_end             | integer                  |              |
+| evidence_source_kind | text                     | not null     |
+| evidence_source_ref  | text                     |              |
+| metadata             | jsonb                    | not null     |
+| observed_at          | timestamp with time zone |              |
+| created_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1892,33 +1892,33 @@ Join hints:
 
 ## knowledge_graph_ingest_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid |  |
-| source_kind | text | not null |
-| source_ref | text | not null |
-| source_label | text |  |
-| requested_by_user_id | uuid |  |
-| status | text | not null |
-| trigger | text | not null |
-| source_dataset_name | text | not null |
-| source_dataset_id | text |  |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| duration_ms | integer |  |
-| error | text |  |
-| entity_count | integer | not null |
-| relationship_count | integer | not null |
-| evidence_count | integer | not null |
-| diagnostic_count | integer | not null |
-| message_count | integer | not null |
-| input | jsonb | not null |
-| metrics | jsonb | not null |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| thread_id            | uuid                     |              |
+| source_kind          | text                     | not null     |
+| source_ref           | text                     | not null     |
+| source_label         | text                     |              |
+| requested_by_user_id | uuid                     |              |
+| status               | text                     | not null     |
+| trigger              | text                     | not null     |
+| source_dataset_name  | text                     | not null     |
+| source_dataset_id    | text                     |              |
+| started_at           | timestamp with time zone |              |
+| finished_at          | timestamp with time zone |              |
+| duration_ms          | integer                  |              |
+| error                | text                     |              |
+| entity_count         | integer                  | not null     |
+| relationship_count   | integer                  | not null     |
+| evidence_count       | integer                  | not null     |
+| diagnostic_count     | integer                  | not null     |
+| message_count        | integer                  | not null     |
+| input                | jsonb                    | not null     |
+| metrics              | jsonb                    | not null     |
+| metadata             | jsonb                    | not null     |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1934,13 +1934,13 @@ Join hints:
 
 ## knowledge_graph_observation_cursors
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | not null |
-| bank_id | text | not null |
-| last_record_updated_at | timestamp with time zone |  |
-| last_record_id | text |  |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags    |
+| ---------------------- | ------------------------ | -------- |
+| tenant_id              | uuid                     | not null |
+| bank_id                | text                     | not null |
+| last_record_updated_at | timestamp with time zone |          |
+| last_record_id         | text                     |          |
+| updated_at             | timestamp with time zone | not null |
 
 Join hints:
 
@@ -1948,29 +1948,29 @@ Join hints:
 
 ## knowledge_graph_relationships
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid |  |
-| source_kind | text | not null |
-| source_ref | text | not null |
-| ingest_run_id | uuid | not null |
-| graph_edge_id | text |  |
-| source_entity_id | uuid | not null |
-| target_entity_id | uuid | not null |
-| label | text | not null |
-| ontology_relationship_type_id | uuid |  |
-| ontology_type_slug | text |  |
-| grounding_status | text | not null |
-| provenance_status | text | not null |
-| confidence | numeric(5, 4) |  |
-| properties | jsonb | not null |
-| diagnostics | jsonb | not null |
-| evidence_count | integer | not null |
-| last_seen_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                        | type                     | flags        |
+| ----------------------------- | ------------------------ | ------------ |
+| id                            | uuid                     | PK, not null |
+| tenant_id                     | uuid                     | not null     |
+| thread_id                     | uuid                     |              |
+| source_kind                   | text                     | not null     |
+| source_ref                    | text                     | not null     |
+| ingest_run_id                 | uuid                     | not null     |
+| graph_edge_id                 | text                     |              |
+| source_entity_id              | uuid                     | not null     |
+| target_entity_id              | uuid                     | not null     |
+| label                         | text                     | not null     |
+| ontology_relationship_type_id | uuid                     |              |
+| ontology_type_slug            | text                     |              |
+| grounding_status              | text                     | not null     |
+| provenance_status             | text                     | not null     |
+| confidence                    | numeric(5, 4)            |              |
+| properties                    | jsonb                    | not null     |
+| diagnostics                   | jsonb                    | not null     |
+| evidence_count                | integer                  | not null     |
+| last_seen_at                  | timestamp with time zone |              |
+| created_at                    | timestamp with time zone | not null     |
+| updated_at                    | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -1989,22 +1989,22 @@ Join hints:
 
 ## linked_task_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| linked_task_id | uuid | not null |
-| space_id | uuid | not null |
-| thread_id | uuid | not null |
-| provider | text | not null |
-| event_type | text | not null |
-| external_event_id | text |  |
-| previous_status | text |  |
-| new_status | text |  |
-| message | text |  |
-| metadata | jsonb |  |
-| occurred_at | timestamp with time zone | not null |
-| created_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| tenant_id         | uuid                     | not null     |
+| linked_task_id    | uuid                     | not null     |
+| space_id          | uuid                     | not null     |
+| thread_id         | uuid                     | not null     |
+| provider          | text                     | not null     |
+| event_type        | text                     | not null     |
+| external_event_id | text                     |              |
+| previous_status   | text                     |              |
+| new_status        | text                     |              |
+| message           | text                     |              |
+| metadata          | jsonb                    |              |
+| occurred_at       | timestamp with time zone | not null     |
+| created_at        | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2022,28 +2022,28 @@ Join hints:
 
 ## linked_tasks
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| thread_id | uuid | not null |
-| checklist_item_id | uuid |  |
-| provider | text | not null |
-| external_task_id | text | not null |
-| external_task_url | text |  |
-| title | text | not null |
-| required | boolean | not null |
-| role_key | text |  |
-| assignee_display | text |  |
-| assignee_external_id | text |  |
-| status | text | not null |
-| blocked | boolean | not null |
-| sync_status | text | not null |
-| last_synced_at | timestamp with time zone |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| space_id             | uuid                     | not null     |
+| thread_id            | uuid                     | not null     |
+| checklist_item_id    | uuid                     |              |
+| provider             | text                     | not null     |
+| external_task_id     | text                     | not null     |
+| external_task_url    | text                     |              |
+| title                | text                     | not null     |
+| required             | boolean                  | not null     |
+| role_key             | text                     |              |
+| assignee_display     | text                     |              |
+| assignee_external_id | text                     |              |
+| status               | text                     | not null     |
+| blocked              | boolean                  | not null     |
+| sync_status          | text                     | not null     |
+| last_synced_at       | timestamp with time zone |              |
+| metadata             | jsonb                    |              |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2060,16 +2060,16 @@ Join hints:
 
 ## managed_application_deployment_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| job_id | uuid | not null |
-| event_type | text | not null |
-| message | text | not null |
-| payload | jsonb | not null |
-| idempotency_key | text |  |
-| created_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| tenant_id       | uuid                     | not null     |
+| job_id          | uuid                     | not null     |
+| event_type      | text                     | not null     |
+| message         | text                     | not null     |
+| payload         | jsonb                    | not null     |
+| idempotency_key | text                     |              |
+| created_at      | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2078,36 +2078,36 @@ Join hints:
 
 ## managed_application_deployment_jobs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| application_id | uuid |  |
-| app_key | text | not null |
-| operation | text | not null |
-| status | text | not null |
-| idempotency_key | text | not null |
-| requested_by_user_id | uuid |  |
-| release_version | text | not null |
-| manifest_digest | text | not null |
-| desired_config_version | text | not null |
-| state_machine_arn | text |  |
-| plan_execution_arn | text |  |
-| apply_execution_arn | text |  |
-| codebuild_build_arn | text |  |
-| plan_digest | text |  |
-| plan_summary | jsonb | not null |
-| data_impact | jsonb | not null |
-| evidence_bucket | text |  |
-| evidence_prefix | text |  |
-| approval_required | boolean | not null |
-| approved_by_user_id | uuid |  |
-| approved_at | timestamp with time zone |  |
-| rejected_by_user_id | uuid |  |
-| rejected_at | timestamp with time zone |  |
-| error_message | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| application_id         | uuid                     |              |
+| app_key                | text                     | not null     |
+| operation              | text                     | not null     |
+| status                 | text                     | not null     |
+| idempotency_key        | text                     | not null     |
+| requested_by_user_id   | uuid                     |              |
+| release_version        | text                     | not null     |
+| manifest_digest        | text                     | not null     |
+| desired_config_version | text                     | not null     |
+| state_machine_arn      | text                     |              |
+| plan_execution_arn     | text                     |              |
+| apply_execution_arn    | text                     |              |
+| codebuild_build_arn    | text                     |              |
+| plan_digest            | text                     |              |
+| plan_summary           | jsonb                    | not null     |
+| data_impact            | jsonb                    | not null     |
+| evidence_bucket        | text                     |              |
+| evidence_prefix        | text                     |              |
+| approval_required      | boolean                  | not null     |
+| approved_by_user_id    | uuid                     |              |
+| approved_at            | timestamp with time zone |              |
+| rejected_by_user_id    | uuid                     |              |
+| rejected_at            | timestamp with time zone |              |
+| error_message          | text                     |              |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2116,20 +2116,20 @@ Join hints:
 
 ## managed_applications
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| key | text | not null |
-| display_name | text | not null |
-| desired_status | text | not null |
-| current_status | text | not null |
-| desired_config | jsonb | not null |
-| selected_release_version | text |  |
-| selected_manifest_digest | text |  |
-| last_job_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                   | type                     | flags        |
+| ------------------------ | ------------------------ | ------------ |
+| id                       | uuid                     | PK, not null |
+| tenant_id                | uuid                     | not null     |
+| key                      | text                     | not null     |
+| display_name             | text                     | not null     |
+| desired_status           | text                     | not null     |
+| current_status           | text                     | not null     |
+| desired_config           | jsonb                    | not null     |
+| selected_release_version | text                     |              |
+| selected_manifest_digest | text                     |              |
+| last_job_id              | uuid                     |              |
+| created_at               | timestamp with time zone | not null     |
+| updated_at               | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2137,20 +2137,20 @@ Join hints:
 
 ## memory_derivations
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| source_config_id | uuid | not null |
-| evidence_item_id | uuid | not null |
-| projection_key | text | not null |
-| target_bank_id | text | not null |
-| hindsight_document_id | text | not null |
-| current_version | text | not null |
-| lifecycle | text | not null |
-| retracted_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| source_config_id      | uuid                     | not null     |
+| evidence_item_id      | uuid                     | not null     |
+| projection_key        | text                     | not null     |
+| target_bank_id        | text                     | not null     |
+| hindsight_document_id | text                     | not null     |
+| current_version       | text                     | not null     |
+| lifecycle             | text                     | not null     |
+| retracted_at          | timestamp with time zone |              |
+| created_at            | timestamp with time zone | not null     |
+| updated_at            | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2164,26 +2164,26 @@ Join hints:
 
 ## memory_evidence_items
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| source_config_id | uuid | not null |
-| source_item_id | text | not null |
-| source_version | text | not null |
-| source_timestamp | timestamp with time zone |  |
-| content_hash | text | not null |
-| acquisition_run_id | uuid |  |
-| target_scope | text | not null |
-| target_id | uuid | not null |
-| lifecycle | text | not null |
-| sensitivity | text |  |
-| snapshot_ref | text |  |
-| normalized_snapshot | jsonb |  |
-| extraction_recipe | jsonb | not null |
-| last_error | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| source_config_id    | uuid                     | not null     |
+| source_item_id      | text                     | not null     |
+| source_version      | text                     | not null     |
+| source_timestamp    | timestamp with time zone |              |
+| content_hash        | text                     | not null     |
+| acquisition_run_id  | uuid                     |              |
+| target_scope        | text                     | not null     |
+| target_id           | uuid                     | not null     |
+| lifecycle           | text                     | not null     |
+| sensitivity         | text                     |              |
+| snapshot_ref        | text                     |              |
+| normalized_snapshot | jsonb                    |              |
+| extraction_recipe   | jsonb                    | not null     |
+| last_error          | text                     |              |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2198,21 +2198,21 @@ Join hints:
 
 ## memory_processor_configs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| mode | text | not null |
-| target_scope | text | not null |
-| target_id | uuid | not null |
-| workflow_id | uuid |  |
-| enabled | boolean | not null |
-| status | text | not null |
-| budget | jsonb | not null |
-| config_version | integer | not null |
-| created_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| mode               | text                     | not null     |
+| target_scope       | text                     | not null     |
+| target_id          | uuid                     | not null     |
+| workflow_id        | uuid                     |              |
+| enabled            | boolean                  | not null     |
+| status             | text                     | not null     |
+| budget             | jsonb                    | not null     |
+| config_version     | integer                  | not null     |
+| created_by_user_id | uuid                     |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2228,33 +2228,33 @@ Join hints:
 
 ## memory_retain_attempts
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| user_id | uuid |  |
-| space_id | uuid |  |
-| thread_id | uuid | not null |
-| thread_turn_id | uuid |  |
-| source_event_key | text | not null |
-| source_event_type | text | not null |
-| provider | text | not null |
-| status | text | not null |
-| attempt_count | integer | not null |
-| max_attempts | integer | not null |
-| next_retry_at | timestamp with time zone |  |
-| locked_at | timestamp with time zone |  |
-| locked_by | text |  |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| backend_latency_ms | integer |  |
-| provider_document_id | text |  |
-| provider_result | jsonb |  |
-| error_class | text |  |
-| error_message | text |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| user_id              | uuid                     |              |
+| space_id             | uuid                     |              |
+| thread_id            | uuid                     | not null     |
+| thread_turn_id       | uuid                     |              |
+| source_event_key     | text                     | not null     |
+| source_event_type    | text                     | not null     |
+| provider             | text                     | not null     |
+| status               | text                     | not null     |
+| attempt_count        | integer                  | not null     |
+| max_attempts         | integer                  | not null     |
+| next_retry_at        | timestamp with time zone |              |
+| locked_at            | timestamp with time zone |              |
+| locked_by            | text                     |              |
+| started_at           | timestamp with time zone |              |
+| finished_at          | timestamp with time zone |              |
+| backend_latency_ms   | integer                  |              |
+| provider_document_id | text                     |              |
+| provider_result      | jsonb                    |              |
+| error_class          | text                     |              |
+| error_message        | text                     |              |
+| metadata             | jsonb                    |              |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2270,17 +2270,17 @@ Join hints:
 
 ## memory_run_items
 
-| column | type | flags |
-| --- | --- | --- |
-| id | bigserial | PK, not null |
-| tenant_id | uuid | not null |
-| workflow_run_id | uuid | not null |
-| source_config_id | uuid | not null |
-| source_item_id | text | not null |
-| stage | text | not null |
-| result | text | not null |
-| detail | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column           | type                     | flags        |
+| ---------------- | ------------------------ | ------------ |
+| id               | bigserial                | PK, not null |
+| tenant_id        | uuid                     | not null     |
+| workflow_run_id  | uuid                     | not null     |
+| source_config_id | uuid                     | not null     |
+| source_item_id   | text                     | not null     |
+| stage            | text                     | not null     |
+| result           | text                     | not null     |
+| detail           | jsonb                    | not null     |
+| created_at       | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2295,17 +2295,17 @@ Join hints:
 
 ## memory_source_checkpoints
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| source_config_id | uuid | not null |
-| partition_key | text | not null |
-| cursor | jsonb | not null |
-| version | integer | not null |
-| last_advanced_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column           | type                     | flags        |
+| ---------------- | ------------------------ | ------------ |
+| id               | uuid                     | PK, not null |
+| tenant_id        | uuid                     | not null     |
+| source_config_id | uuid                     | not null     |
+| partition_key    | text                     | not null     |
+| cursor           | jsonb                    | not null     |
+| version          | integer                  | not null     |
+| last_advanced_at | timestamp with time zone |              |
+| created_at       | timestamp with time zone | not null     |
+| updated_at       | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2314,18 +2314,18 @@ Join hints:
 
 ## memory_source_configs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| processor_config_id | uuid | not null |
-| source_family | text | not null |
-| source_binding_key | text | not null |
-| enabled | boolean | not null |
-| boundary | jsonb | not null |
-| policy_version | integer | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| processor_config_id | uuid                     | not null     |
+| source_family       | text                     | not null     |
+| source_binding_key  | text                     | not null     |
+| enabled             | boolean                  | not null     |
+| boundary            | jsonb                    | not null     |
+| policy_version      | integer                  | not null     |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2338,21 +2338,21 @@ Join hints:
 
 ## message_artifacts
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| message_id | uuid | not null |
-| thread_id | uuid | not null |
-| tenant_id | uuid | not null |
-| artifact_type | text | not null |
-| name | text |  |
-| content | text |  |
-| s3_key | text |  |
-| mime_type | text |  |
-| size_bytes | integer |  |
-| metadata | jsonb |  |
-| artifact_id | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| message_id    | uuid                     | not null     |
+| thread_id     | uuid                     | not null     |
+| tenant_id     | uuid                     | not null     |
+| artifact_type | text                     | not null     |
+| name          | text                     |              |
+| content       | text                     |              |
+| s3_key        | text                     |              |
+| mime_type     | text                     |              |
+| size_bytes    | integer                  |              |
+| metadata      | jsonb                    |              |
+| artifact_id   | uuid                     |              |
+| created_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2362,20 +2362,20 @@ Join hints:
 
 ## message_mentions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid | not null |
-| message_id | uuid | not null |
-| target_type | text | not null |
-| target_id | uuid | not null |
-| display_name | text | not null |
-| raw_text | text |  |
-| start_offset | integer |  |
-| end_offset | integer |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column       | type                     | flags        |
+| ------------ | ------------------------ | ------------ |
+| id           | uuid                     | PK, not null |
+| tenant_id    | uuid                     | not null     |
+| thread_id    | uuid                     | not null     |
+| message_id   | uuid                     | not null     |
+| target_type  | text                     | not null     |
+| target_id    | uuid                     | not null     |
+| display_name | text                     | not null     |
+| raw_text     | text                     |              |
+| start_offset | integer                  |              |
+| end_offset   | integer                  |              |
+| metadata     | jsonb                    |              |
+| created_at   | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2389,22 +2389,22 @@ Join hints:
 
 ## messages
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| thread_id | uuid | not null |
-| tenant_id | uuid | not null |
-| role | text | not null |
-| content | text |  |
-| parts | jsonb |  |
-| sender_type | text |  |
-| sender_id | uuid |  |
-| source_event_id | text |  |
-| tool_calls | jsonb |  |
-| tool_results | jsonb |  |
-| metadata | jsonb |  |
-| token_count | integer |  |
-| created_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| thread_id       | uuid                     | not null     |
+| tenant_id       | uuid                     | not null     |
+| role            | text                     | not null     |
+| content         | text                     |              |
+| parts           | jsonb                    |              |
+| sender_type     | text                     |              |
+| sender_id       | uuid                     |              |
+| source_event_id | text                     |              |
+| tool_calls      | jsonb                    |              |
+| tool_results    | jsonb                    |              |
+| metadata        | jsonb                    |              |
+| token_count     | integer                  |              |
+| created_at      | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2415,37 +2415,37 @@ Join hints:
 
 Note: Platform-global model reference data — not tenant-scoped. RLS is intentionally not enabled (THINK-234).
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| model_id | text | not null |
-| provider | text | not null |
-| display_name | text | not null |
-| input_cost_per_million | numeric(10, 4) |  |
-| output_cost_per_million | numeric(10, 4) |  |
-| context_window | integer |  |
-| max_output_tokens | integer |  |
-| supports_vision | boolean |  |
-| supports_tools | boolean |  |
-| is_available | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| model_id                | text                     | not null     |
+| provider                | text                     | not null     |
+| display_name            | text                     | not null     |
+| input_cost_per_million  | numeric(10, 4)           |              |
+| output_cost_per_million | numeric(10, 4)           |              |
+| context_window          | integer                  |              |
+| max_output_tokens       | integer                  |              |
+| supports_vision         | boolean                  |              |
+| supports_tools          | boolean                  |              |
+| is_available            | boolean                  | not null     |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 ## mutation_idempotency
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| invoker_user_id | uuid | not null |
-| mutation_name | text | not null |
-| idempotency_key | text | not null |
-| resolved_inputs_hash | text | not null |
-| status | text | not null |
-| result_json | jsonb |  |
-| failure_reason | text |  |
-| created_at | timestamp with time zone | not null |
-| completed_at | timestamp with time zone |  |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| invoker_user_id      | uuid                     | not null     |
+| mutation_name        | text                     | not null     |
+| idempotency_key      | text                     | not null     |
+| resolved_inputs_hash | text                     | not null     |
+| status               | text                     | not null     |
+| result_json          | jsonb                    |              |
+| failure_reason       | text                     |              |
+| created_at           | timestamp with time zone | not null     |
+| completed_at         | timestamp with time zone |              |
 
 Join hints:
 
@@ -2453,21 +2453,21 @@ Join hints:
 
 ## pending_user_questions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid | not null |
-| message_id | uuid | not null |
-| thread_turn_id | uuid | not null |
-| status | text | not null |
-| questions | jsonb | not null |
-| answers | jsonb |  |
-| answered_via | text |  |
-| answered_by | text |  |
-| answered_at | timestamp with time zone |  |
-| delegation_context | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| thread_id          | uuid                     | not null     |
+| message_id         | uuid                     | not null     |
+| thread_turn_id     | uuid                     | not null     |
+| status             | text                     | not null     |
+| questions          | jsonb                    | not null     |
+| answers            | jsonb                    |              |
+| answered_via       | text                     |              |
+| answered_by        | text                     |              |
+| answered_at        | timestamp with time zone |              |
+| delegation_context | jsonb                    |              |
+| created_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2483,18 +2483,18 @@ Join hints:
 
 ## pi_extension_assignments
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| version_id | uuid | not null |
-| target_type | text | not null |
-| agent_profile_id | uuid |  |
-| enabled | boolean | not null |
-| granted_permissions | jsonb | not null |
-| assigned_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| version_id          | uuid                     | not null     |
+| target_type         | text                     | not null     |
+| agent_profile_id    | uuid                     |              |
+| enabled             | boolean                  | not null     |
+| granted_permissions | jsonb                    | not null     |
+| assigned_by_user_id | uuid                     |              |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2509,18 +2509,18 @@ Join hints:
 
 ## pi_extension_sources
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| source_type | text | not null |
-| repository_url | text | not null |
-| repository_owner | text |  |
-| repository_name | text |  |
-| display_name | text |  |
-| created_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| source_type        | text                     | not null     |
+| repository_url     | text                     | not null     |
+| repository_owner   | text                     |              |
+| repository_name    | text                     |              |
+| display_name       | text                     |              |
+| created_by_user_id | uuid                     |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2533,34 +2533,34 @@ Join hints:
 
 ## pi_extension_versions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| source_id | uuid | not null |
-| display_name | text |  |
-| description | text |  |
-| source_ref | text | not null |
-| commit_sha | text |  |
-| manifest_hash | text |  |
-| artifact_hash | text |  |
-| artifact_uri | text |  |
-| runtime_target | text |  |
-| status | text | not null |
-| status_reason | text |  |
-| manifest | jsonb | not null |
-| tool_names | text[] | not null |
-| lifecycle_hooks | text[] | not null |
-| permission_classes | text[] | not null |
-| verification_report | jsonb | not null |
-| reviewed_by_user_id | uuid |  |
-| reviewed_at | timestamp with time zone |  |
-| approved_by_user_id | uuid |  |
-| approved_at | timestamp with time zone |  |
-| rejected_by_user_id | uuid |  |
-| rejected_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| source_id           | uuid                     | not null     |
+| display_name        | text                     |              |
+| description         | text                     |              |
+| source_ref          | text                     | not null     |
+| commit_sha          | text                     |              |
+| manifest_hash       | text                     |              |
+| artifact_hash       | text                     |              |
+| artifact_uri        | text                     |              |
+| runtime_target      | text                     |              |
+| status              | text                     | not null     |
+| status_reason       | text                     |              |
+| manifest            | jsonb                    | not null     |
+| tool_names          | text[]                   | not null     |
+| lifecycle_hooks     | text[]                   | not null     |
+| permission_classes  | text[]                   | not null     |
+| verification_report | jsonb                    | not null     |
+| reviewed_by_user_id | uuid                     |              |
+| reviewed_at         | timestamp with time zone |              |
+| approved_by_user_id | uuid                     |              |
+| approved_at         | timestamp with time zone |              |
+| rejected_by_user_id | uuid                     |              |
+| rejected_at         | timestamp with time zone |              |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2576,22 +2576,22 @@ Join hints:
 
 ## plugin_app_overlays
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| plugin_install_id | uuid | not null |
-| app_surface_key | text | not null |
-| app_key | text | not null |
-| provider | text | not null |
-| provider_record_type | text | not null |
-| provider_record_id | text | not null |
-| section_key | text | not null |
-| payload | jsonb | not null |
-| created_by_user_id | uuid |  |
-| updated_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| plugin_install_id    | uuid                     | not null     |
+| app_surface_key      | text                     | not null     |
+| app_key              | text                     | not null     |
+| provider             | text                     | not null     |
+| provider_record_type | text                     | not null     |
+| provider_record_id   | text                     | not null     |
+| section_key          | text                     | not null     |
+| payload              | jsonb                    | not null     |
+| created_by_user_id   | uuid                     |              |
+| updated_by_user_id   | uuid                     |              |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2602,17 +2602,17 @@ Join hints:
 
 ## plugin_components
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| plugin_install_id | uuid | not null |
-| component_key | text | not null |
-| component_type | text | not null |
-| state | text | not null |
-| handler_ref | jsonb | not null |
-| last_error | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| plugin_install_id | uuid                     | not null     |
+| component_key     | text                     | not null     |
+| component_type    | text                     | not null     |
+| state             | text                     | not null     |
+| handler_ref       | jsonb                    | not null     |
+| last_error        | text                     |              |
+| created_at        | timestamp with time zone | not null     |
+| updated_at        | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2625,20 +2625,20 @@ Join hints:
 
 ## plugin_entitlements
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| plugin_key | text | not null |
-| entitlement_product_key | text | not null |
-| status | text | not null |
-| source | text | not null |
-| granted_by_user_id | uuid |  |
-| granted_at | timestamp with time zone | not null |
-| revoked_at | timestamp with time zone |  |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| plugin_key              | text                     | not null     |
+| entitlement_product_key | text                     | not null     |
+| status                  | text                     | not null     |
+| source                  | text                     | not null     |
+| granted_by_user_id      | uuid                     |              |
+| granted_at              | timestamp with time zone | not null     |
+| revoked_at              | timestamp with time zone |              |
+| metadata                | jsonb                    | not null     |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2652,19 +2652,19 @@ Join hints:
 
 ## plugin_installs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| plugin_key | text | not null |
-| pinned_version | text | not null |
-| pinned_payload_sha256 | text | not null |
-| state | text | not null |
-| idempotency_key | text | not null |
-| last_transition_at | timestamp with time zone | not null |
-| last_error | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| plugin_key            | text                     | not null     |
+| pinned_version        | text                     | not null     |
+| pinned_payload_sha256 | text                     | not null     |
+| state                 | text                     | not null     |
+| idempotency_key       | text                     | not null     |
+| last_transition_at    | timestamp with time zone | not null     |
+| last_error            | text                     |              |
+| created_at            | timestamp with time zone | not null     |
+| updated_at            | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2676,18 +2676,18 @@ Join hints:
 
 ## plugin_uploads
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| uploaded_by | uuid |  |
-| uploaded_at | timestamp with time zone | not null |
-| bundle_sha256 | text | not null |
-| plugin_name | text | not null |
-| plugin_version | text |  |
-| status | text | not null |
-| s3_staging_prefix | text |  |
-| error_message | text |  |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| tenant_id         | uuid                     | not null     |
+| uploaded_by       | uuid                     |              |
+| uploaded_at       | timestamp with time zone | not null     |
+| bundle_sha256     | text                     | not null     |
+| plugin_name       | text                     | not null     |
+| plugin_version    | text                     |              |
+| status            | text                     | not null     |
+| s3_staging_prefix | text                     |              |
+| error_message     | text                     |              |
 
 Join hints:
 
@@ -2695,16 +2695,16 @@ Join hints:
 
 ## principal_permission_grants
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| principal_type | text | not null |
-| principal_id | uuid | not null |
-| permission_key | text | not null |
-| scope | jsonb |  |
-| granted_by | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| tenant_id      | uuid                     | not null     |
+| principal_type | text                     | not null     |
+| principal_id   | uuid                     | not null     |
+| permission_key | text                     | not null     |
+| scope          | jsonb                    |              |
+| granted_by     | uuid                     |              |
+| created_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2713,25 +2713,25 @@ Join hints:
 
 ## recipes
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| thread_id | uuid |  |
-| title | text | not null |
-| summary | text |  |
-| server | text | not null |
-| tool | text | not null |
-| params | jsonb | not null |
-| genui_type | text | not null |
-| templates | jsonb |  |
-| cached_result | jsonb |  |
-| last_refreshed | timestamp with time zone |  |
-| last_error | text |  |
-| source_message_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| tenant_id         | uuid                     | not null     |
+| agent_id          | uuid                     |              |
+| thread_id         | uuid                     |              |
+| title             | text                     | not null     |
+| summary           | text                     |              |
+| server            | text                     | not null     |
+| tool              | text                     | not null     |
+| params            | jsonb                    | not null     |
+| genui_type        | text                     | not null     |
+| templates         | jsonb                    |              |
+| cached_result     | jsonb                    |              |
+| last_refreshed    | timestamp with time zone |              |
+| last_error        | text                     |              |
+| source_message_id | uuid                     |              |
+| created_at        | timestamp with time zone | not null     |
+| updated_at        | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2742,16 +2742,16 @@ Join hints:
 
 ## release_update_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| job_id | uuid | not null |
-| event_type | text | not null |
-| message | text | not null |
-| payload | jsonb | not null |
-| idempotency_key | text |  |
-| created_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| tenant_id       | uuid                     | not null     |
+| job_id          | uuid                     | not null     |
+| event_type      | text                     | not null     |
+| message         | text                     | not null     |
+| payload         | jsonb                    | not null     |
+| idempotency_key | text                     |              |
+| created_at      | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2760,36 +2760,36 @@ Join hints:
 
 ## release_update_jobs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| status | text | not null |
-| idempotency_key | text | not null |
-| requested_by_user_id | uuid |  |
-| target_release_version | text | not null |
-| current_release_version | text |  |
-| manifest_url | text | not null |
-| manifest_sha256 | text | not null |
-| manifest_signed | boolean | not null |
-| manifest_trust_policy | text |  |
-| terraform_module_version | text |  |
-| preflight_summary | jsonb | not null |
-| preserved_config_summary | jsonb | not null |
-| remediation_summary | jsonb | not null |
-| state_machine_arn | text |  |
-| execution_arn | text |  |
-| codebuild_build_arn | text |  |
-| evidence_bucket | text |  |
-| evidence_prefix | text |  |
-| status_pointer_bucket | text |  |
-| status_pointer_key | text |  |
-| final_status | jsonb | not null |
-| failure_category | text |  |
-| failure_message | text |  |
-| recovery_action | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                   | type                     | flags        |
+| ------------------------ | ------------------------ | ------------ |
+| id                       | uuid                     | PK, not null |
+| tenant_id                | uuid                     | not null     |
+| status                   | text                     | not null     |
+| idempotency_key          | text                     | not null     |
+| requested_by_user_id     | uuid                     |              |
+| target_release_version   | text                     | not null     |
+| current_release_version  | text                     |              |
+| manifest_url             | text                     | not null     |
+| manifest_sha256          | text                     | not null     |
+| manifest_signed          | boolean                  | not null     |
+| manifest_trust_policy    | text                     |              |
+| terraform_module_version | text                     |              |
+| preflight_summary        | jsonb                    | not null     |
+| preserved_config_summary | jsonb                    | not null     |
+| remediation_summary      | jsonb                    | not null     |
+| state_machine_arn        | text                     |              |
+| execution_arn            | text                     |              |
+| codebuild_build_arn      | text                     |              |
+| evidence_bucket          | text                     |              |
+| evidence_prefix          | text                     |              |
+| status_pointer_bucket    | text                     |              |
+| status_pointer_key       | text                     |              |
+| final_status             | jsonb                    | not null     |
+| failure_category         | text                     |              |
+| failure_message          | text                     |              |
+| recovery_action          | text                     |              |
+| created_at               | timestamp with time zone | not null     |
+| updated_at               | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2797,21 +2797,21 @@ Join hints:
 
 ## resolved_capability_manifests
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| session_id | text | not null |
-| agent_id | uuid |  |
-| template_id | uuid |  |
-| user_id | uuid |  |
-| thread_id | uuid |  |
-| thread_turn_id | uuid |  |
-| space_id | uuid |  |
-| agent_profile_id | uuid |  |
-| config_fingerprint | text |  |
-| tenant_id | uuid | not null |
-| manifest_json | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| session_id         | text                     | not null     |
+| agent_id           | uuid                     |              |
+| template_id        | uuid                     |              |
+| user_id            | uuid                     |              |
+| thread_id          | uuid                     |              |
+| thread_turn_id     | uuid                     |              |
+| space_id           | uuid                     |              |
+| agent_profile_id   | uuid                     |              |
+| config_fingerprint | text                     |              |
+| tenant_id          | uuid                     | not null     |
+| manifest_json      | jsonb                    | not null     |
+| created_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2820,20 +2820,20 @@ Join hints:
 
 ## retry_queue
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid | not null |
-| thread_id | uuid |  |
-| attempt | integer | not null |
-| max_attempts | integer | not null |
-| status | text | not null |
-| scheduled_at | timestamp with time zone | not null |
-| last_error | text |  |
-| origin_turn_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| tenant_id      | uuid                     | not null     |
+| agent_id       | uuid                     | not null     |
+| thread_id      | uuid                     |              |
+| attempt        | integer                  | not null     |
+| max_attempts   | integer                  | not null     |
+| status         | text                     | not null     |
+| scheduled_at   | timestamp with time zone | not null     |
+| last_error     | text                     |              |
+| origin_turn_id | uuid                     |              |
+| created_at     | timestamp with time zone | not null     |
+| updated_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2843,22 +2843,22 @@ Join hints:
 
 ## routine_asl_versions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| routine_id | uuid | not null |
-| version_number | integer | not null |
-| state_machine_arn | text | not null |
-| version_arn | text | not null |
-| alias_was_pointing | text |  |
-| asl_json | jsonb | not null |
-| markdown_summary | text | not null |
-| step_manifest_json | jsonb | not null |
-| validation_warnings_json | jsonb |  |
-| published_by_actor_id | uuid |  |
-| published_by_actor_type | text |  |
-| created_at | timestamp with time zone | not null |
+| column                   | type                     | flags        |
+| ------------------------ | ------------------------ | ------------ |
+| id                       | uuid                     | PK, not null |
+| tenant_id                | uuid                     | not null     |
+| routine_id               | uuid                     | not null     |
+| version_number           | integer                  | not null     |
+| state_machine_arn        | text                     | not null     |
+| version_arn              | text                     | not null     |
+| alias_was_pointing       | text                     |              |
+| asl_json                 | jsonb                    | not null     |
+| markdown_summary         | text                     | not null     |
+| step_manifest_json       | jsonb                    | not null     |
+| validation_warnings_json | jsonb                    |              |
+| published_by_actor_id    | uuid                     |              |
+| published_by_actor_type  | text                     |              |
+| created_at               | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2867,18 +2867,18 @@ Join hints:
 
 ## routine_code_cache
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| routine_id | uuid | not null |
-| sha | text | not null |
-| s3_key | text | not null |
-| fixture_status | text | not null |
-| fixture_result_json | text |  |
-| fetched_at | timestamp with time zone | not null |
-| validated_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| routine_id          | uuid                     | not null     |
+| sha                 | text                     | not null     |
+| s3_key              | text                     | not null     |
+| fixture_status      | text                     | not null     |
+| fixture_result_json | text                     |              |
+| fetched_at          | timestamp with time zone | not null     |
+| validated_at        | timestamp with time zone |              |
+| created_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2891,30 +2891,30 @@ Join hints:
 
 ## routine_executions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| routine_id | uuid | not null |
-| state_machine_arn | text |  |
-| alias_arn | text |  |
-| version_arn | text |  |
-| routine_asl_version_id | uuid |  |
-| sfn_execution_arn | text |  |
-| trigger_id | uuid |  |
-| trigger_source | text | not null |
-| input_json | jsonb |  |
-| output_json | jsonb |  |
-| status | text | not null |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| error_code | text |  |
-| error_message | text |  |
-| total_llm_cost_usd_cents | bigint |  |
-| commit_sha | text |  |
-| validated_sha | text |  |
-| cache_served | boolean |  |
-| created_at | timestamp with time zone | not null |
+| column                   | type                     | flags        |
+| ------------------------ | ------------------------ | ------------ |
+| id                       | uuid                     | PK, not null |
+| tenant_id                | uuid                     | not null     |
+| routine_id               | uuid                     | not null     |
+| state_machine_arn        | text                     |              |
+| alias_arn                | text                     |              |
+| version_arn              | text                     |              |
+| routine_asl_version_id   | uuid                     |              |
+| sfn_execution_arn        | text                     |              |
+| trigger_id               | uuid                     |              |
+| trigger_source           | text                     | not null     |
+| input_json               | jsonb                    |              |
+| output_json              | jsonb                    |              |
+| status                   | text                     | not null     |
+| started_at               | timestamp with time zone |              |
+| finished_at              | timestamp with time zone |              |
+| error_code               | text                     |              |
+| error_message            | text                     |              |
+| total_llm_cost_usd_cents | bigint                   |              |
+| commit_sha               | text                     |              |
+| validated_sha            | text                     |              |
+| cache_served             | boolean                  |              |
+| created_at               | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2925,21 +2925,21 @@ Join hints:
 
 ## routine_repair_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| routine_id | uuid | not null |
-| execution_id | uuid |  |
-| event_type | text | not null |
-| thread_ref | text |  |
-| from_sha | text |  |
-| to_sha | text |  |
-| gate_result | text |  |
-| envelope_verdict | text |  |
-| budget_snapshot | integer |  |
-| detail_json | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column           | type                     | flags        |
+| ---------------- | ------------------------ | ------------ |
+| id               | uuid                     | PK, not null |
+| tenant_id        | uuid                     | not null     |
+| routine_id       | uuid                     | not null     |
+| execution_id     | uuid                     |              |
+| event_type       | text                     | not null     |
+| thread_ref       | text                     |              |
+| from_sha         | text                     |              |
+| to_sha           | text                     |              |
+| gate_result      | text                     |              |
+| envelope_verdict | text                     |              |
+| budget_snapshot  | integer                  |              |
+| detail_json      | jsonb                    |              |
+| created_at       | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -2953,26 +2953,26 @@ Join hints:
 
 ## routine_step_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | bigserial | PK, not null |
-| tenant_id | uuid | not null |
-| execution_id | uuid | not null |
-| node_id | text | not null |
-| recipe_type | text | not null |
-| status | text | not null |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| input_json | jsonb |  |
-| output_json | jsonb |  |
-| error_json | jsonb |  |
-| llm_cost_usd_cents | bigint |  |
-| retry_count | integer | not null |
-| stdout_s3_uri | text |  |
-| stderr_s3_uri | text |  |
-| stdout_preview | text |  |
-| truncated | boolean | not null |
-| created_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | bigserial                | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| execution_id       | uuid                     | not null     |
+| node_id            | text                     | not null     |
+| recipe_type        | text                     | not null     |
+| status             | text                     | not null     |
+| started_at         | timestamp with time zone |              |
+| finished_at        | timestamp with time zone |              |
+| input_json         | jsonb                    |              |
+| output_json        | jsonb                    |              |
+| error_json         | jsonb                    |              |
+| llm_cost_usd_cents | bigint                   |              |
+| retry_count        | integer                  | not null     |
+| stdout_s3_uri      | text                     |              |
+| stderr_s3_uri      | text                     |              |
+| stdout_preview     | text                     |              |
+| truncated          | boolean                  | not null     |
+| created_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -2981,33 +2981,33 @@ Join hints:
 
 ## routines
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| name | text | not null |
-| description | text |  |
-| type | text | not null |
-| status | text | not null |
-| schedule | text |  |
-| config | jsonb |  |
-| engine | text | not null |
-| state_machine_arn | text |  |
-| state_machine_alias_arn | text |  |
-| documentation_md | text |  |
-| current_version | integer |  |
-| visibility | text | not null |
-| owning_agent_id | uuid |  |
-| catalog_slug | text |  |
-| module_path | text |  |
-| fixture_paths | jsonb |  |
-| validated_sha | text |  |
-| disabled_reason | text |  |
-| last_run_at | timestamp with time zone |  |
-| next_run_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| agent_id                | uuid                     |              |
+| name                    | text                     | not null     |
+| description             | text                     |              |
+| type                    | text                     | not null     |
+| status                  | text                     | not null     |
+| schedule                | text                     |              |
+| config                  | jsonb                    |              |
+| engine                  | text                     | not null     |
+| state_machine_arn       | text                     |              |
+| state_machine_alias_arn | text                     |              |
+| documentation_md        | text                     |              |
+| current_version         | integer                  |              |
+| visibility              | text                     | not null     |
+| owning_agent_id         | uuid                     |              |
+| catalog_slug            | text                     |              |
+| module_path             | text                     |              |
+| fixture_paths           | jsonb                    |              |
+| validated_sha           | text                     |              |
+| disabled_reason         | text                     |              |
+| last_run_at             | timestamp with time zone |              |
+| next_run_at             | timestamp with time zone |              |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3024,13 +3024,13 @@ Not granted (do not query): `credential_refs`.
 
 ## sandbox_agent_hourly_counters
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | PK, not null |
-| agent_id | uuid | PK, not null |
-| utc_hour | timestamp with time zone | PK, not null |
-| invocations_count | integer | not null |
-| updated_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| tenant_id         | uuid                     | PK, not null |
+| agent_id          | uuid                     | PK, not null |
+| utc_hour          | timestamp with time zone | PK, not null |
+| invocations_count | integer                  | not null     |
+| updated_at        | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3039,32 +3039,32 @@ Join hints:
 
 ## sandbox_invocations
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| run_id | uuid |  |
-| agent_id | uuid |  |
-| user_id | uuid | not null |
-| template_id | text |  |
-| tool_call_id | text |  |
-| session_id | text |  |
-| environment_id | text | not null |
-| invocation_source | text |  |
-| started_at | timestamp with time zone | not null |
-| finished_at | timestamp with time zone |  |
-| duration_ms | integer |  |
-| exit_status | text |  |
-| stdout_bytes | bigint |  |
-| stderr_bytes | bigint |  |
-| stdout_truncated | boolean | not null |
-| stderr_truncated | boolean | not null |
-| peak_memory_mb | integer |  |
-| outbound_hosts | jsonb |  |
-| executed_code_hash | text |  |
-| failure_reason | text |  |
-| created_at | timestamp with time zone | not null |
-| delete_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| run_id             | uuid                     |              |
+| agent_id           | uuid                     |              |
+| user_id            | uuid                     | not null     |
+| template_id        | text                     |              |
+| tool_call_id       | text                     |              |
+| session_id         | text                     |              |
+| environment_id     | text                     | not null     |
+| invocation_source  | text                     |              |
+| started_at         | timestamp with time zone | not null     |
+| finished_at        | timestamp with time zone |              |
+| duration_ms        | integer                  |              |
+| exit_status        | text                     |              |
+| stdout_bytes       | bigint                   |              |
+| stderr_bytes       | bigint                   |              |
+| stdout_truncated   | boolean                  | not null     |
+| stderr_truncated   | boolean                  | not null     |
+| peak_memory_mb     | integer                  |              |
+| outbound_hosts     | jsonb                    |              |
+| executed_code_hash | text                     |              |
+| failure_reason     | text                     |              |
+| created_at         | timestamp with time zone | not null     |
+| delete_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3079,13 +3079,13 @@ Join hints:
 
 ## sandbox_tenant_daily_counters
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | PK, not null |
-| utc_date | date | PK, not null |
-| invocations_count | integer | not null |
-| wall_clock_seconds | integer | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| tenant_id          | uuid                     | PK, not null |
+| utc_date           | date                     | PK, not null |
+| invocations_count  | integer                  | not null     |
+| wall_clock_seconds | integer                  | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3093,35 +3093,35 @@ Join hints:
 
 ## scheduled_jobs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| trigger_type | text | not null |
-| agent_id | uuid |  |
-| space_id | uuid |  |
-| computer_id | uuid |  |
-| routine_id | uuid |  |
-| agent_loop_id | uuid |  |
-| workflow_id | uuid |  |
-| name | text | not null |
-| description | text |  |
-| prompt | text |  |
-| config | jsonb |  |
-| schedule_type | text |  |
-| schedule_expression | text |  |
-| timezone | text | not null |
-| enabled | boolean | not null |
-| budget_paused | boolean | not null |
-| budget_paused_at | timestamp with time zone |  |
-| budget_paused_reason | text |  |
-| eb_schedule_name | text |  |
-| last_run_at | timestamp with time zone |  |
-| next_run_at | timestamp with time zone |  |
-| created_by_type | text |  |
-| created_by_id | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| trigger_type         | text                     | not null     |
+| agent_id             | uuid                     |              |
+| space_id             | uuid                     |              |
+| computer_id          | uuid                     |              |
+| routine_id           | uuid                     |              |
+| agent_loop_id        | uuid                     |              |
+| workflow_id          | uuid                     |              |
+| name                 | text                     | not null     |
+| description          | text                     |              |
+| prompt               | text                     |              |
+| config               | jsonb                    |              |
+| schedule_type        | text                     |              |
+| schedule_expression  | text                     |              |
+| timezone             | text                     | not null     |
+| enabled              | boolean                  | not null     |
+| budget_paused        | boolean                  | not null     |
+| budget_paused_at     | timestamp with time zone |              |
+| budget_paused_reason | text                     |              |
+| eb_schedule_name     | text                     |              |
+| last_run_at          | timestamp with time zone |              |
+| next_run_at          | timestamp with time zone |              |
+| created_by_type      | text                     |              |
+| created_by_id        | text                     |              |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3132,28 +3132,28 @@ Join hints:
 
 ## skill_catalog
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slug | text | not null |
-| display_name | text |  |
-| description | text |  |
-| category | text |  |
-| icon | text |  |
-| tags | text[] |  |
-| content_sha | text | not null |
-| trust_report | jsonb |  |
-| trust_report_content_sha | text |  |
-| trust_report_pipeline_version | text |  |
-| trust_report_updated_at | timestamp with time zone |  |
-| signature_status | text |  |
-| signed_content_sha | text |  |
-| signed_payload_hash | text |  |
-| signed_at | timestamp with time zone |  |
-| signed_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                        | type                     | flags        |
+| ----------------------------- | ------------------------ | ------------ |
+| id                            | uuid                     | PK, not null |
+| tenant_id                     | uuid                     | not null     |
+| slug                          | text                     | not null     |
+| display_name                  | text                     |              |
+| description                   | text                     |              |
+| category                      | text                     |              |
+| icon                          | text                     |              |
+| tags                          | text[]                   |              |
+| content_sha                   | text                     | not null     |
+| trust_report                  | jsonb                    |              |
+| trust_report_content_sha      | text                     |              |
+| trust_report_pipeline_version | text                     |              |
+| trust_report_updated_at       | timestamp with time zone |              |
+| signature_status              | text                     |              |
+| signed_content_sha            | text                     |              |
+| signed_payload_hash           | text                     |              |
+| signed_at                     | timestamp with time zone |              |
+| signed_by_user_id             | uuid                     |              |
+| created_at                    | timestamp with time zone | not null     |
+| updated_at                    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3164,16 +3164,16 @@ Not granted (do not query): `signature_payload`.
 
 ## skill_draft_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| draft_id | uuid | not null |
-| actor_user_id | uuid |  |
-| event_type | text | not null |
-| message | text |  |
-| payload | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| tenant_id     | uuid                     | not null     |
+| draft_id      | uuid                     | not null     |
+| actor_user_id | uuid                     |              |
+| event_type    | text                     | not null     |
+| message       | text                     |              |
+| payload       | jsonb                    | not null     |
+| created_at    | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3187,31 +3187,31 @@ Join hints:
 
 ## skill_drafts
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| requested_by_user_id | uuid | not null |
-| source_thread_id | uuid |  |
-| source_message_id | uuid |  |
-| inbox_item_id | uuid |  |
-| slug | text | not null |
-| title | text | not null |
-| display_name | text |  |
-| summary | text |  |
-| source_kind | text | not null |
-| status | text | not null |
-| current_content_hash | text |  |
-| draft_s3_prefix | text | not null |
-| failure_message | text |  |
-| rejected_by_user_id | uuid |  |
-| rejected_at | timestamp with time zone |  |
-| published_catalog_slug | text |  |
-| published_content_hash | text |  |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-| submitted_at | timestamp with time zone |  |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| requested_by_user_id   | uuid                     | not null     |
+| source_thread_id       | uuid                     |              |
+| source_message_id      | uuid                     |              |
+| inbox_item_id          | uuid                     |              |
+| slug                   | text                     | not null     |
+| title                  | text                     | not null     |
+| display_name           | text                     |              |
+| summary                | text                     |              |
+| source_kind            | text                     | not null     |
+| status                 | text                     | not null     |
+| current_content_hash   | text                     |              |
+| draft_s3_prefix        | text                     | not null     |
+| failure_message        | text                     |              |
+| rejected_by_user_id    | uuid                     |              |
+| rejected_at            | timestamp with time zone |              |
+| published_catalog_slug | text                     |              |
+| published_content_hash | text                     |              |
+| metadata               | jsonb                    | not null     |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
+| submitted_at           | timestamp with time zone |              |
 
 Enum values:
 
@@ -3228,30 +3228,30 @@ Join hints:
 
 ## skill_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| invoker_user_id | uuid | not null |
-| skill_id | text | not null |
-| skill_version | integer | not null |
-| invocation_source | text | not null |
-| inputs | jsonb | not null |
-| resolved_inputs | jsonb | not null |
-| resolved_inputs_hash | text | not null |
-| triggered_by_run_id | uuid |  |
-| status | text | not null |
-| delivery_channels | jsonb | not null |
-| started_at | timestamp with time zone | not null |
-| finished_at | timestamp with time zone |  |
-| delivered_artifact_ref | jsonb |  |
-| delete_at | timestamp with time zone | not null |
-| feedback_signal | text |  |
-| feedback_note | text |  |
-| failure_reason | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| agent_id               | uuid                     |              |
+| invoker_user_id        | uuid                     | not null     |
+| skill_id               | text                     | not null     |
+| skill_version          | integer                  | not null     |
+| invocation_source      | text                     | not null     |
+| inputs                 | jsonb                    | not null     |
+| resolved_inputs        | jsonb                    | not null     |
+| resolved_inputs_hash   | text                     | not null     |
+| triggered_by_run_id    | uuid                     |              |
+| status                 | text                     | not null     |
+| delivery_channels      | jsonb                    | not null     |
+| started_at             | timestamp with time zone | not null     |
+| finished_at            | timestamp with time zone |              |
+| delivered_artifact_ref | jsonb                    |              |
+| delete_at              | timestamp with time zone | not null     |
+| feedback_signal        | text                     |              |
+| feedback_note          | text                     |              |
+| failure_reason         | text                     |              |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3262,16 +3262,16 @@ Not granted (do not query): `completion_hmac_secret`.
 
 ## slack_threads
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slack_team_id | text | not null |
-| channel_id | text | not null |
-| root_thread_ts | text |  |
-| thread_id | uuid | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| tenant_id      | uuid                     | not null     |
+| slack_team_id  | text                     | not null     |
+| channel_id     | text                     | not null     |
+| root_thread_ts | text                     |              |
+| thread_id      | uuid                     | not null     |
+| created_at     | timestamp with time zone | not null     |
+| updated_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3281,20 +3281,20 @@ Join hints:
 
 ## slack_user_links
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slack_team_id | text | not null |
-| slack_user_id | text | not null |
-| user_id | uuid | not null |
-| slack_user_name | text |  |
-| slack_user_email | text |  |
-| status | text | not null |
-| linked_at | timestamp with time zone | not null |
-| unlinked_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column           | type                     | flags        |
+| ---------------- | ------------------------ | ------------ |
+| id               | uuid                     | PK, not null |
+| tenant_id        | uuid                     | not null     |
+| slack_team_id    | text                     | not null     |
+| slack_user_id    | text                     | not null     |
+| user_id          | uuid                     | not null     |
+| slack_user_name  | text                     |              |
+| slack_user_email | text                     |              |
+| status           | text                     | not null     |
+| linked_at        | timestamp with time zone | not null     |
+| unlinked_at      | timestamp with time zone |              |
+| created_at       | timestamp with time zone | not null     |
+| updated_at       | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3308,21 +3308,21 @@ Join hints:
 
 ## space_checklist_items
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| template_id | uuid | not null |
-| key | text | not null |
-| title | text | not null |
-| description | text |  |
-| role_key | text |  |
-| required | boolean | not null |
-| sort_order | integer | not null |
-| external_task_template | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| space_id               | uuid                     | not null     |
+| template_id            | uuid                     | not null     |
+| key                    | text                     | not null     |
+| title                  | text                     | not null     |
+| description            | text                     |              |
+| role_key               | text                     |              |
+| required               | boolean                  | not null     |
+| sort_order             | integer                  | not null     |
+| external_task_template | jsonb                    |              |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3332,17 +3332,17 @@ Join hints:
 
 ## space_checklist_templates
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| key | text | not null |
-| name | text | not null |
-| description | text |  |
-| config | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| space_id    | uuid                     | not null     |
+| key         | text                     | not null     |
+| name        | text                     | not null     |
+| description | text                     |              |
+| config      | jsonb                    |              |
+| created_at  | timestamp with time zone | not null     |
+| updated_at  | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3351,18 +3351,18 @@ Join hints:
 
 ## space_integrations
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| provider | text | not null |
-| status | text | not null |
-| writeback_policy | text | not null |
-| config | jsonb |  |
-| webhook_config_ref | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| space_id           | uuid                     | not null     |
+| provider           | text                     | not null     |
+| status             | text                     | not null     |
+| writeback_policy   | text                     | not null     |
+| config             | jsonb                    |              |
+| webhook_config_ref | text                     |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3377,15 +3377,15 @@ Join hints:
 
 ## space_knowledge_bases
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| space_id | uuid | not null |
-| tenant_id | uuid | not null |
-| knowledge_base_id | uuid | not null |
-| enabled | boolean | not null |
-| search_config | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| space_id          | uuid                     | not null     |
+| tenant_id         | uuid                     | not null     |
+| knowledge_base_id | uuid                     | not null     |
+| enabled           | boolean                  | not null     |
+| search_config     | jsonb                    |              |
+| created_at        | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3395,16 +3395,16 @@ Join hints:
 
 ## space_mcp_servers
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| mcp_server_id | uuid | not null |
-| enabled | boolean | not null |
-| config | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| tenant_id     | uuid                     | not null     |
+| space_id      | uuid                     | not null     |
+| mcp_server_id | uuid                     | not null     |
+| enabled       | boolean                  | not null     |
+| config        | jsonb                    |              |
+| created_at    | timestamp with time zone | not null     |
+| updated_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3414,16 +3414,16 @@ Join hints:
 
 ## space_members
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| user_id | uuid | not null |
-| role | text | not null |
-| notification_preference | text | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| space_id                | uuid                     | not null     |
+| user_id                 | uuid                     | not null     |
+| role                    | text                     | not null     |
+| notification_preference | text                     | not null     |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3438,38 +3438,38 @@ Join hints:
 
 ## spaces
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slug | text | not null |
-| workspace_folder_name | text |  |
-| name | text | not null |
-| description | text |  |
-| prompt | text |  |
-| status | text | not null |
-| kind | text | not null |
-| access_mode | text | not null |
-| icon | text |  |
-| category | text |  |
-| template_key | text |  |
-| config | jsonb |  |
-| context_config | jsonb |  |
-| connected_data_config | jsonb |  |
-| tool_policy | jsonb |  |
-| mcp_policy | jsonb |  |
-| agent_availability_policy | jsonb |  |
-| trigger_config | jsonb |  |
-| email_triggers_enabled | boolean | not null |
-| email_trigger_status | text | not null |
-| model_override | text |  |
-| guardrail_id_override | uuid |  |
-| budget_monthly_cents_override | integer |  |
-| budget_paused_override | boolean |  |
-| sandbox_override | boolean |  |
-| render_diagnostics | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                        | type                     | flags        |
+| ----------------------------- | ------------------------ | ------------ |
+| id                            | uuid                     | PK, not null |
+| tenant_id                     | uuid                     | not null     |
+| slug                          | text                     | not null     |
+| workspace_folder_name         | text                     |              |
+| name                          | text                     | not null     |
+| description                   | text                     |              |
+| prompt                        | text                     |              |
+| status                        | text                     | not null     |
+| kind                          | text                     | not null     |
+| access_mode                   | text                     | not null     |
+| icon                          | text                     |              |
+| category                      | text                     |              |
+| template_key                  | text                     |              |
+| config                        | jsonb                    |              |
+| context_config                | jsonb                    |              |
+| connected_data_config         | jsonb                    |              |
+| tool_policy                   | jsonb                    |              |
+| mcp_policy                    | jsonb                    |              |
+| agent_availability_policy     | jsonb                    |              |
+| trigger_config                | jsonb                    |              |
+| email_triggers_enabled        | boolean                  | not null     |
+| email_trigger_status          | text                     | not null     |
+| model_override                | text                     |              |
+| guardrail_id_override         | uuid                     |              |
+| budget_monthly_cents_override | integer                  |              |
+| budget_paused_override        | boolean                  |              |
+| sandbox_override              | boolean                  |              |
+| render_diagnostics            | jsonb                    |              |
+| created_at                    | timestamp with time zone | not null     |
+| updated_at                    | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3485,13 +3485,13 @@ Join hints:
 
 ## stripe_customers
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | PK, not null |
-| stripe_customer_id | text | not null |
-| email | text | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| tenant_id          | uuid                     | PK, not null |
+| stripe_customer_id | text                     | not null     |
+| email              | text                     | not null     |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3499,17 +3499,17 @@ Join hints:
 
 ## stripe_subscriptions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| stripe_subscription_id | text | not null |
-| stripe_price_id | text | not null |
-| status | text | not null |
-| current_period_end | timestamp with time zone |  |
-| cancel_at_period_end | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| stripe_subscription_id | text                     | not null     |
+| stripe_price_id        | text                     | not null     |
+| status                 | text                     | not null     |
+| current_period_end     | timestamp with time zone |              |
+| cancel_at_period_end   | boolean                  | not null     |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3517,17 +3517,17 @@ Join hints:
 
 ## tenant_builtin_tools
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| tool_slug | text | not null |
-| provider | text |  |
-| enabled | boolean | not null |
-| config | jsonb |  |
-| last_tested_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| tenant_id      | uuid                     | not null     |
+| tool_slug      | text                     | not null     |
+| provider       | text                     |              |
+| enabled        | boolean                  | not null     |
+| config         | jsonb                    |              |
+| last_tested_at | timestamp with time zone |              |
+| created_at     | timestamp with time zone | not null     |
+| updated_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3537,21 +3537,21 @@ Not granted (do not query): `secret_ref`.
 
 ## tenant_context_provider_settings
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| provider_id | text | not null |
-| family | text | not null |
-| enabled | boolean | not null |
-| default_enabled | boolean | not null |
-| config | jsonb | not null |
-| last_tested_at | timestamp with time zone |  |
-| last_test_state | text |  |
-| last_test_latency_ms | integer |  |
-| last_test_error | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| provider_id          | text                     | not null     |
+| family               | text                     | not null     |
+| enabled              | boolean                  | not null     |
+| default_enabled      | boolean                  | not null     |
+| config               | jsonb                    | not null     |
+| last_tested_at       | timestamp with time zone |              |
+| last_test_state      | text                     |              |
+| last_test_latency_ms | integer                  |              |
+| last_test_error      | text                     |              |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3559,22 +3559,22 @@ Join hints:
 
 ## tenant_mcp_context_tools
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| mcp_server_id | uuid | not null |
-| tool_name | text | not null |
-| display_name | text |  |
-| declared_read_only | boolean | not null |
-| declared_search_safe | boolean | not null |
-| approved | boolean | not null |
-| default_enabled | boolean | not null |
-| approved_by | uuid |  |
-| approved_at | timestamp with time zone |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| mcp_server_id        | uuid                     | not null     |
+| tool_name            | text                     | not null     |
+| display_name         | text                     |              |
+| declared_read_only   | boolean                  | not null     |
+| declared_search_safe | boolean                  | not null     |
+| approved             | boolean                  | not null     |
+| default_enabled      | boolean                  | not null     |
+| approved_by          | uuid                     |              |
+| approved_at          | timestamp with time zone |              |
+| metadata             | jsonb                    |              |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3583,28 +3583,28 @@ Join hints:
 
 ## tenant_mcp_servers
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| slug | text | not null |
-| url | text | not null |
-| transport | text | not null |
-| auth_type | text | not null |
-| runtime_metadata | jsonb |  |
-| oauth_provider | text |  |
-| tools | jsonb |  |
-| enabled | boolean | not null |
-| management_source | text | not null |
-| managed_application_key | text |  |
-| plugin_install_id | uuid |  |
-| status | text | not null |
-| url_hash | text |  |
-| approved_by | uuid |  |
-| approved_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| name                    | text                     | not null     |
+| slug                    | text                     | not null     |
+| url                     | text                     | not null     |
+| transport               | text                     | not null     |
+| auth_type               | text                     | not null     |
+| runtime_metadata        | jsonb                    |              |
+| oauth_provider          | text                     |              |
+| tools                   | jsonb                    |              |
+| enabled                 | boolean                  | not null     |
+| management_source       | text                     | not null     |
+| managed_application_key | text                     |              |
+| plugin_install_id       | uuid                     |              |
+| status                  | text                     | not null     |
+| url_hash                | text                     |              |
+| approved_by             | uuid                     |              |
+| approved_at             | timestamp with time zone |              |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3615,16 +3615,16 @@ Not granted (do not query): `auth_config`.
 
 ## tenant_members
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| principal_type | text | not null |
-| principal_id | uuid | not null |
-| role | text | not null |
-| status | text | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column         | type                     | flags        |
+| -------------- | ------------------------ | ------------ |
+| id             | uuid                     | PK, not null |
+| tenant_id      | uuid                     | not null     |
+| principal_type | text                     | not null     |
+| principal_id   | uuid                     | not null     |
+| role           | text                     | not null     |
+| status         | text                     | not null     |
+| created_at     | timestamp with time zone | not null     |
+| updated_at     | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3632,22 +3632,22 @@ Join hints:
 
 ## tenant_model_catalog
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | PK, not null |
-| model_id | text | PK, not null |
-| display_name | text | not null |
-| enabled | boolean | not null |
-| pricing_status | text | not null |
-| pricing_source | text |  |
-| pricing_diagnostics | jsonb | not null |
-| last_priced_at | timestamp with time zone |  |
-| import_source | text | not null |
-| import_payload | jsonb | not null |
-| imported_by_user_id | uuid |  |
-| imported_at | timestamp with time zone | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| tenant_id           | uuid                     | PK, not null |
+| model_id            | text                     | PK, not null |
+| display_name        | text                     | not null     |
+| enabled             | boolean                  | not null     |
+| pricing_status      | text                     | not null     |
+| pricing_source      | text                     |              |
+| pricing_diagnostics | jsonb                    | not null     |
+| last_priced_at      | timestamp with time zone |              |
+| import_source       | text                     | not null     |
+| import_payload      | jsonb                    | not null     |
+| imported_by_user_id | uuid                     |              |
+| imported_at         | timestamp with time zone | not null     |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3661,16 +3661,16 @@ Join hints:
 
 ## tenant_policy_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| actor_user_id | uuid | not null |
-| event_type | text | not null |
-| before_value | text |  |
-| after_value | text |  |
-| source | text | not null |
-| created_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| tenant_id     | uuid                     | not null     |
+| actor_user_id | uuid                     | not null     |
+| event_type    | text                     | not null     |
+| before_value  | text                     |              |
+| after_value   | text                     |              |
+| source        | text                     | not null     |
+| created_at    | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3683,18 +3683,18 @@ Join hints:
 
 ## tenant_settings
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid |  |
-| default_model | text |  |
-| budget_monthly_cents | integer |  |
-| goal_default_token_budget | integer |  |
-| auto_close_thread_minutes | integer |  |
-| max_agents | integer |  |
-| features | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                    | type                     | flags        |
+| ------------------------- | ------------------------ | ------------ |
+| id                        | uuid                     | PK, not null |
+| tenant_id                 | uuid                     |              |
+| default_model             | text                     |              |
+| budget_monthly_cents      | integer                  |              |
+| goal_default_token_budget | integer                  |              |
+| auto_close_thread_minutes | integer                  |              |
+| max_agents                | integer                  |              |
+| features                  | jsonb                    |              |
+| created_at                | timestamp with time zone | not null     |
+| updated_at                | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3702,11 +3702,11 @@ Join hints:
 
 ## tenant_system_users
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| created_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| id         | uuid                     | PK, not null |
+| tenant_id  | uuid                     | not null     |
+| created_at | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3714,21 +3714,21 @@ Join hints:
 
 ## tenant_workflow_catalog
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| slug | text | not null |
-| display_name | text | not null |
-| description | text |  |
-| category | text |  |
-| icon | text |  |
-| default_config | jsonb | not null |
-| default_schedule | text |  |
-| status | text | not null |
-| enabled | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column           | type                     | flags        |
+| ---------------- | ------------------------ | ------------ |
+| id               | uuid                     | PK, not null |
+| tenant_id        | uuid                     | not null     |
+| slug             | text                     | not null     |
+| display_name     | text                     | not null     |
+| description      | text                     |              |
+| category         | text                     |              |
+| icon             | text                     |              |
+| default_config   | jsonb                    | not null     |
+| default_schedule | text                     |              |
+| status           | text                     | not null     |
+| enabled          | boolean                  | not null     |
+| created_at       | timestamp with time zone | not null     |
+| updated_at       | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3740,30 +3740,30 @@ Join hints:
 
 ## tenants
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| name | text | not null |
-| slug | text | not null |
-| plan | text | not null |
-| issue_prefix | text |  |
-| issue_counter | integer | not null |
-| channel_counters | jsonb | not null |
-| wiki_compile_enabled | boolean | not null |
-| sandbox_enabled | boolean | not null |
-| compliance_tier | text | not null |
-| sandbox_interpreter_public_id | text |  |
-| sandbox_interpreter_internal_id | text |  |
-| pending_owner_email | text |  |
-| first_admin_claim_required | boolean | not null |
-| first_admin_claimed_at | timestamp with time zone |  |
-| first_admin_claimed_user_id | uuid |  |
-| deactivated_at | timestamp with time zone |  |
-| deactivation_reason | text |  |
-| disabled_builtin_tools | jsonb | not null |
-| workspace_orchestration_enabled | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                          | type                     | flags        |
+| ------------------------------- | ------------------------ | ------------ |
+| id                              | uuid                     | PK, not null |
+| name                            | text                     | not null     |
+| slug                            | text                     | not null     |
+| plan                            | text                     | not null     |
+| issue_prefix                    | text                     |              |
+| issue_counter                   | integer                  | not null     |
+| channel_counters                | jsonb                    | not null     |
+| wiki_compile_enabled            | boolean                  | not null     |
+| sandbox_enabled                 | boolean                  | not null     |
+| compliance_tier                 | text                     | not null     |
+| sandbox_interpreter_public_id   | text                     |              |
+| sandbox_interpreter_internal_id | text                     |              |
+| pending_owner_email             | text                     |              |
+| first_admin_claim_required      | boolean                  | not null     |
+| first_admin_claimed_at          | timestamp with time zone |              |
+| first_admin_claimed_user_id     | uuid                     |              |
+| deactivated_at                  | timestamp with time zone |              |
+| deactivation_reason             | text                     |              |
+| disabled_builtin_tools          | jsonb                    | not null     |
+| workspace_orchestration_enabled | boolean                  | not null     |
+| created_at                      | timestamp with time zone | not null     |
+| updated_at                      | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3771,17 +3771,17 @@ Enum values:
 
 ## thread_attachments
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| thread_id | uuid | not null |
-| tenant_id | uuid | not null |
-| name | text |  |
-| s3_key | text |  |
-| mime_type | text |  |
-| size_bytes | integer |  |
-| uploaded_by | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| thread_id   | uuid                     | not null     |
+| tenant_id   | uuid                     | not null     |
+| name        | text                     |              |
+| s3_key      | text                     |              |
+| mime_type   | text                     |              |
+| size_bytes  | integer                  |              |
+| uploaded_by | uuid                     |              |
+| created_at  | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3790,13 +3790,13 @@ Join hints:
 
 ## thread_dependencies
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid | not null |
-| blocked_by_thread_id | uuid | not null |
-| created_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| thread_id            | uuid                     | not null     |
+| blocked_by_thread_id | uuid                     | not null     |
+| created_at           | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3806,27 +3806,27 @@ Join hints:
 
 ## thread_idle_learning_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid | not null |
-| computer_id | uuid |  |
-| requester_user_id | uuid |  |
-| scheduled_job_id | uuid |  |
-| activity_sequence | integer | not null |
-| scheduled_for | timestamp with time zone |  |
-| started_at | timestamp with time zone | not null |
-| finished_at | timestamp with time zone |  |
-| status | text | not null |
-| changed_files | jsonb |  |
-| candidate_summary | jsonb |  |
-| report_s3_key | text |  |
-| error | text |  |
-| budget | jsonb |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| tenant_id         | uuid                     | not null     |
+| thread_id         | uuid                     | not null     |
+| computer_id       | uuid                     |              |
+| requester_user_id | uuid                     |              |
+| scheduled_job_id  | uuid                     |              |
+| activity_sequence | integer                  | not null     |
+| scheduled_for     | timestamp with time zone |              |
+| started_at        | timestamp with time zone | not null     |
+| finished_at       | timestamp with time zone |              |
+| status            | text                     | not null     |
+| changed_files     | jsonb                    |              |
+| candidate_summary | jsonb                    |              |
+| report_s3_key     | text                     |              |
+| error             | text                     |              |
+| budget            | jsonb                    |              |
+| metadata          | jsonb                    |              |
+| created_at        | timestamp with time zone | not null     |
+| updated_at        | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3841,21 +3841,21 @@ Join hints:
 
 ## thread_idle_learning_state
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid | not null |
-| computer_id | uuid |  |
-| requester_user_id | uuid |  |
-| activity_sequence | integer | not null |
-| last_activity_at | timestamp with time zone | not null |
-| scheduled_for | timestamp with time zone |  |
-| scheduled_job_id | uuid |  |
-| status | text | not null |
-| last_run_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| tenant_id         | uuid                     | not null     |
+| thread_id         | uuid                     | not null     |
+| computer_id       | uuid                     |              |
+| requester_user_id | uuid                     |              |
+| activity_sequence | integer                  | not null     |
+| last_activity_at  | timestamp with time zone | not null     |
+| scheduled_for     | timestamp with time zone |              |
+| scheduled_job_id  | uuid                     |              |
+| status            | text                     | not null     |
+| last_run_id       | uuid                     |              |
+| created_at        | timestamp with time zone | not null     |
+| updated_at        | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3870,13 +3870,13 @@ Join hints:
 
 ## thread_label_assignments
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| thread_id | uuid | not null |
-| label_id | uuid | not null |
-| tenant_id | uuid | not null |
-| created_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| id         | uuid                     | PK, not null |
+| thread_id  | uuid                     | not null     |
+| label_id   | uuid                     | not null     |
+| tenant_id  | uuid                     | not null     |
+| created_at | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3886,14 +3886,14 @@ Join hints:
 
 ## thread_labels
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| color | text |  |
-| description | text |  |
-| created_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| name        | text                     | not null     |
+| color       | text                     |              |
+| description | text                     |              |
+| created_at  | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3901,23 +3901,23 @@ Join hints:
 
 ## thread_participants
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| thread_id | uuid | not null |
-| space_id | uuid |  |
-| participant_type | text | not null |
-| user_id | uuid |  |
-| agent_id | uuid |  |
-| role | text | not null |
-| source | text | not null |
-| notification_preference | text | not null |
-| last_read_at | timestamp with time zone |  |
-| pinned_at | timestamp with time zone |  |
-| pin_order | integer |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                  | type                     | flags        |
+| ----------------------- | ------------------------ | ------------ |
+| id                      | uuid                     | PK, not null |
+| tenant_id               | uuid                     | not null     |
+| thread_id               | uuid                     | not null     |
+| space_id                | uuid                     |              |
+| participant_type        | text                     | not null     |
+| user_id                 | uuid                     |              |
+| agent_id                | uuid                     |              |
+| role                    | text                     | not null     |
+| source                  | text                     | not null     |
+| notification_preference | text                     | not null     |
+| last_read_at            | timestamp with time zone |              |
+| pinned_at               | timestamp with time zone |              |
+| pin_order               | integer                  |              |
+| created_at              | timestamp with time zone | not null     |
+| updated_at              | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -3934,20 +3934,20 @@ Join hints:
 
 ## thread_turn_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | bigserial | PK, not null |
-| tenant_id | uuid | not null |
-| run_id | uuid | not null |
-| agent_id | uuid |  |
-| seq | integer | not null |
-| event_type | text | not null |
-| stream | text |  |
-| level | text |  |
-| color | text |  |
-| message | text |  |
-| payload | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| id         | bigserial                | PK, not null |
+| tenant_id  | uuid                     | not null     |
+| run_id     | uuid                     | not null     |
+| agent_id   | uuid                     |              |
+| seq        | integer                  | not null     |
+| event_type | text                     | not null     |
+| stream     | text                     |              |
+| level      | text                     |              |
+| color      | text                     |              |
+| message    | text                     |              |
+| payload    | jsonb                    |              |
+| created_at | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -3957,46 +3957,46 @@ Join hints:
 
 ## thread_turns
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| trigger_id | uuid |  |
-| agent_id | uuid |  |
-| routine_id | uuid |  |
-| invocation_source | text | not null |
-| trigger_detail | text |  |
-| wakeup_request_id | uuid |  |
-| thread_id | uuid |  |
-| triggering_message_id | uuid |  |
-| turn_number | integer |  |
-| runtime_type | text |  |
-| status | text | not null |
-| kind | text | not null |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| finalized_at | timestamp with time zone |  |
-| error | text |  |
-| error_code | text |  |
-| system_prompt | text |  |
-| usage_json | jsonb |  |
-| result_json | jsonb |  |
-| context_snapshot | jsonb |  |
-| session_id_before | text |  |
-| session_id_after | text |  |
-| external_run_id | text |  |
-| log_store | text |  |
-| log_ref | text |  |
-| log_bytes | integer |  |
-| log_sha256 | text |  |
-| log_compressed | boolean |  |
-| stdout_excerpt | text |  |
-| stderr_excerpt | text |  |
-| webhook_id | uuid |  |
-| last_activity_at | timestamp with time zone |  |
-| retry_attempt | integer |  |
-| origin_turn_id | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| trigger_id            | uuid                     |              |
+| agent_id              | uuid                     |              |
+| routine_id            | uuid                     |              |
+| invocation_source     | text                     | not null     |
+| trigger_detail        | text                     |              |
+| wakeup_request_id     | uuid                     |              |
+| thread_id             | uuid                     |              |
+| triggering_message_id | uuid                     |              |
+| turn_number           | integer                  |              |
+| runtime_type          | text                     |              |
+| status                | text                     | not null     |
+| kind                  | text                     | not null     |
+| started_at            | timestamp with time zone |              |
+| finished_at           | timestamp with time zone |              |
+| finalized_at          | timestamp with time zone |              |
+| error                 | text                     |              |
+| error_code            | text                     |              |
+| system_prompt         | text                     |              |
+| usage_json            | jsonb                    |              |
+| result_json           | jsonb                    |              |
+| context_snapshot      | jsonb                    |              |
+| session_id_before     | text                     |              |
+| session_id_after      | text                     |              |
+| external_run_id       | text                     |              |
+| log_store             | text                     |              |
+| log_ref               | text                     |              |
+| log_bytes             | integer                  |              |
+| log_sha256            | text                     |              |
+| log_compressed        | boolean                  |              |
+| stdout_excerpt        | text                     |              |
+| stderr_excerpt        | text                     |              |
+| webhook_id            | uuid                     |              |
+| last_activity_at      | timestamp with time zone |              |
+| retry_attempt         | integer                  |              |
+| origin_turn_id        | uuid                     |              |
+| created_at            | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -4008,47 +4008,47 @@ Join hints:
 
 ## threads
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid |  |
-| computer_id | uuid |  |
-| space_id | uuid | not null |
-| user_id | uuid |  |
-| number | integer | not null |
-| identifier | text |  |
-| title | text | not null |
-| workspace_folder_name | text |  |
-| description | text |  |
-| status | text | not null |
-| priority | text | not null |
-| type | text | not null |
-| channel | text | not null |
-| parent_id | uuid |  |
-| assignee_type | text |  |
-| assignee_id | uuid |  |
-| reporter_id | uuid |  |
-| checkout_run_id | text |  |
-| checkout_version | integer | not null |
-| billing_code | text |  |
-| labels | jsonb |  |
-| metadata | jsonb |  |
-| session_data | jsonb |  |
-| mode_override | text |  |
-| due_at | timestamp with time zone |  |
-| started_at | timestamp with time zone |  |
-| completed_at | timestamp with time zone |  |
-| cancelled_at | timestamp with time zone |  |
-| closed_at | timestamp with time zone |  |
-| archived_at | timestamp with time zone |  |
-| last_turn_completed_at | timestamp with time zone |  |
-| last_response_preview | text |  |
-| last_read_at | timestamp with time zone |  |
-| created_by_type | text |  |
-| created_by_id | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| agent_id               | uuid                     |              |
+| computer_id            | uuid                     |              |
+| space_id               | uuid                     | not null     |
+| user_id                | uuid                     |              |
+| number                 | integer                  | not null     |
+| identifier             | text                     |              |
+| title                  | text                     | not null     |
+| workspace_folder_name  | text                     |              |
+| description            | text                     |              |
+| status                 | text                     | not null     |
+| priority               | text                     | not null     |
+| type                   | text                     | not null     |
+| channel                | text                     | not null     |
+| parent_id              | uuid                     |              |
+| assignee_type          | text                     |              |
+| assignee_id            | uuid                     |              |
+| reporter_id            | uuid                     |              |
+| checkout_run_id        | text                     |              |
+| checkout_version       | integer                  | not null     |
+| billing_code           | text                     |              |
+| labels                 | jsonb                    |              |
+| metadata               | jsonb                    |              |
+| session_data           | jsonb                    |              |
+| mode_override          | text                     |              |
+| due_at                 | timestamp with time zone |              |
+| started_at             | timestamp with time zone |              |
+| completed_at           | timestamp with time zone |              |
+| cancelled_at           | timestamp with time zone |              |
+| closed_at              | timestamp with time zone |              |
+| archived_at            | timestamp with time zone |              |
+| last_turn_completed_at | timestamp with time zone |              |
+| last_response_preview  | text                     |              |
+| last_read_at           | timestamp with time zone |              |
+| created_by_type        | text                     |              |
+| created_by_id          | text                     |              |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4064,33 +4064,33 @@ Join hints:
 
 ## trace_cost_reconciliation_facts
 
-| column | type | flags |
-| --- | --- | --- |
-| id | bigserial | PK, not null |
-| tenant_id | uuid | not null |
-| trace_run_id | uuid |  |
-| trace_event_id | uuid |  |
-| cost_event_id | uuid |  |
-| source_evidence_id | uuid |  |
-| reconciliation_state | text | not null |
-| reconciliation_scope | text | not null |
-| provider | text |  |
-| model | text |  |
-| request_id | text |  |
-| attribution_level | text |  |
-| runtime_input_tokens | integer |  |
-| runtime_output_tokens | integer |  |
-| runtime_cached_read_tokens | integer |  |
-| provider_input_tokens | integer |  |
-| provider_output_tokens | integer |  |
-| provider_cached_read_tokens | integer |  |
-| runtime_amount_usd | numeric(12, 6) |  |
-| provider_amount_usd | numeric(12, 6) |  |
-| billed_amount_usd | numeric(12, 6) |  |
-| variance_usd | numeric(12, 6) |  |
-| metadata | jsonb | not null |
-| reconciled_at | timestamp with time zone | not null |
-| created_at | timestamp with time zone | not null |
+| column                      | type                     | flags        |
+| --------------------------- | ------------------------ | ------------ |
+| id                          | bigserial                | PK, not null |
+| tenant_id                   | uuid                     | not null     |
+| trace_run_id                | uuid                     |              |
+| trace_event_id              | uuid                     |              |
+| cost_event_id               | uuid                     |              |
+| source_evidence_id          | uuid                     |              |
+| reconciliation_state        | text                     | not null     |
+| reconciliation_scope        | text                     | not null     |
+| provider                    | text                     |              |
+| model                       | text                     |              |
+| request_id                  | text                     |              |
+| attribution_level           | text                     |              |
+| runtime_input_tokens        | integer                  |              |
+| runtime_output_tokens       | integer                  |              |
+| runtime_cached_read_tokens  | integer                  |              |
+| provider_input_tokens       | integer                  |              |
+| provider_output_tokens      | integer                  |              |
+| provider_cached_read_tokens | integer                  |              |
+| runtime_amount_usd          | numeric(12, 6)           |              |
+| provider_amount_usd         | numeric(12, 6)           |              |
+| billed_amount_usd           | numeric(12, 6)           |              |
+| variance_usd                | numeric(12, 6)           |              |
+| metadata                    | jsonb                    | not null     |
+| reconciled_at               | timestamp with time zone | not null     |
+| created_at                  | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4107,23 +4107,23 @@ Join hints:
 
 ## trace_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| trace_run_id | uuid | not null |
-| parent_event_id | uuid |  |
-| thread_turn_id | uuid |  |
-| request_id | text |  |
-| parent_request_id | text |  |
-| event_type | text | not null |
-| event_status | text |  |
-| observed_at | timestamp with time zone | not null |
-| duration_ms | integer |  |
-| payload_summary | jsonb | not null |
-| source_evidence_ref | jsonb | not null |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| trace_run_id        | uuid                     | not null     |
+| parent_event_id     | uuid                     |              |
+| thread_turn_id      | uuid                     |              |
+| request_id          | text                     |              |
+| parent_request_id   | text                     |              |
+| event_type          | text                     | not null     |
+| event_status        | text                     |              |
+| observed_at         | timestamp with time zone | not null     |
+| duration_ms         | integer                  |              |
+| payload_summary     | jsonb                    | not null     |
+| source_evidence_ref | jsonb                    | not null     |
+| metadata            | jsonb                    | not null     |
+| created_at          | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4138,22 +4138,22 @@ Join hints:
 
 ## trace_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| trace_id | text | not null |
-| thread_id | uuid |  |
-| thread_turn_id | uuid |  |
-| agent_id | uuid |  |
-| user_id | uuid |  |
-| runtime_type | text |  |
-| runtime_session_id | text |  |
-| status | text | not null |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| trace_id           | text                     | not null     |
+| thread_id          | uuid                     |              |
+| thread_turn_id     | uuid                     |              |
+| agent_id           | uuid                     |              |
+| user_id            | uuid                     |              |
+| runtime_type       | text                     |              |
+| runtime_session_id | text                     |              |
+| status             | text                     | not null     |
+| started_at         | timestamp with time zone |              |
+| finished_at        | timestamp with time zone |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -4164,22 +4164,22 @@ Join hints:
 
 ## trace_source_evidence
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| trace_run_id | uuid |  |
-| trace_event_id | uuid |  |
-| source_type | text | not null |
-| source_system | text | not null |
-| source_id | text |  |
-| uri | text |  |
-| observed_at | timestamp with time zone |  |
-| summary | jsonb | not null |
-| redaction_state | text | not null |
-| retention_expires_at | timestamp with time zone |  |
-| metadata | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| trace_run_id         | uuid                     |              |
+| trace_event_id       | uuid                     |              |
+| source_type          | text                     | not null     |
+| source_system        | text                     | not null     |
+| source_id            | text                     |              |
+| uri                  | text                     |              |
+| observed_at          | timestamp with time zone |              |
+| summary              | jsonb                    | not null     |
+| redaction_state      | text                     | not null     |
+| retention_expires_at | timestamp with time zone |              |
+| metadata             | jsonb                    | not null     |
+| created_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4193,14 +4193,14 @@ Join hints:
 
 ## user_model_approvals
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| user_id | uuid | not null |
-| model_id | text | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column     | type                     | flags        |
+| ---------- | ------------------------ | ------------ |
+| id         | uuid                     | PK, not null |
+| tenant_id  | uuid                     | not null     |
+| user_id    | uuid                     | not null     |
+| model_id   | text                     | not null     |
+| created_at | timestamp with time zone | not null     |
+| updated_at | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -4210,17 +4210,17 @@ Join hints:
 
 ## user_plugin_activations
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| user_id | uuid | not null |
-| plugin_install_id | uuid | not null |
-| status | text | not null |
-| granted_scopes | jsonb | not null |
-| granted_at | timestamp with time zone | not null |
-| revoked_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column            | type                     | flags        |
+| ----------------- | ------------------------ | ------------ |
+| id                | uuid                     | PK, not null |
+| user_id           | uuid                     | not null     |
+| plugin_install_id | uuid                     | not null     |
+| status            | text                     | not null     |
+| granted_scopes    | jsonb                    | not null     |
+| granted_at        | timestamp with time zone | not null     |
+| revoked_at        | timestamp with time zone |              |
+| created_at        | timestamp with time zone | not null     |
+| updated_at        | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4233,25 +4233,25 @@ Join hints:
 
 ## user_profiles
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| user_id | uuid |  |
-| tenant_id | uuid |  |
-| display_name | text |  |
-| theme | text |  |
-| notification_preferences | jsonb |  |
-| operating_model | jsonb |  |
-| operating_model_history | jsonb[] | not null |
-| title | text |  |
-| timezone | text |  |
-| pronouns | text |  |
-| call_by | text |  |
-| notes | text |  |
-| family | text |  |
-| context | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                   | type                     | flags        |
+| ------------------------ | ------------------------ | ------------ |
+| id                       | uuid                     | PK, not null |
+| user_id                  | uuid                     |              |
+| tenant_id                | uuid                     |              |
+| display_name             | text                     |              |
+| theme                    | text                     |              |
+| notification_preferences | jsonb                    |              |
+| operating_model          | jsonb                    |              |
+| operating_model_history  | jsonb[]                  | not null     |
+| title                    | text                     |              |
+| timezone                 | text                     |              |
+| pronouns                 | text                     |              |
+| call_by                  | text                     |              |
+| notes                    | text                     |              |
+| family                   | text                     |              |
+| context                  | text                     |              |
+| created_at               | timestamp with time zone | not null     |
+| updated_at               | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -4260,18 +4260,18 @@ Join hints:
 
 ## user_quick_actions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| user_id | uuid | not null |
-| tenant_id | uuid | not null |
-| title | text | not null |
-| prompt | text | not null |
-| workspace_agent_id | uuid |  |
-| scope | text | not null |
-| sort_order | integer | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| user_id            | uuid                     | not null     |
+| tenant_id          | uuid                     | not null     |
+| title              | text                     | not null     |
+| prompt             | text                     | not null     |
+| workspace_agent_id | uuid                     |              |
+| scope              | text                     | not null     |
+| sort_order         | integer                  | not null     |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -4283,21 +4283,21 @@ Join hints:
 
 Note: End-user account records. Always scope by tenant_id; avoid joining across tenants in ad hoc reports.
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid |  |
-| email | text | Primary contact email for the account., ⚠ PII |
-| cognito_sub | text |  |
-| name | text |  |
-| workspace_folder_name | text |  |
-| image | text |  |
-| email_verified_at | timestamp with time zone |  |
-| phone | text |  |
-| phone_verified_at | timestamp with time zone |  |
-| wiki_compile_external_enabled | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                        | type                     | flags                                          |
+| ----------------------------- | ------------------------ | ---------------------------------------------- |
+| id                            | uuid                     | PK, not null                                   |
+| tenant_id                     | uuid                     |                                                |
+| email                         | text                     | Primary contact email for the account., ⚠ PII |
+| cognito_sub                   | text                     |                                                |
+| name                          | text                     |                                                |
+| workspace_folder_name         | text                     |                                                |
+| image                         | text                     |                                                |
+| email_verified_at             | timestamp with time zone |                                                |
+| phone                         | text                     |                                                |
+| phone_verified_at             | timestamp with time zone |                                                |
+| wiki_compile_external_enabled | boolean                  | not null                                       |
+| created_at                    | timestamp with time zone | not null                                       |
+| updated_at                    | timestamp with time zone | not null                                       |
 
 Join hints:
 
@@ -4307,18 +4307,18 @@ Not granted (do not query): `expo_push_token`.
 
 ## wakeup_requests
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| agent_id | uuid | not null |
-| reason | text |  |
-| priority | text | not null |
-| status | text | not null |
-| payload | jsonb |  |
-| scheduled_for | timestamp with time zone |  |
-| processed_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| tenant_id     | uuid                     | not null     |
+| agent_id      | uuid                     | not null     |
+| reason        | text                     |              |
+| priority      | text                     | not null     |
+| status        | text                     | not null     |
+| payload       | jsonb                    |              |
+| scheduled_for | timestamp with time zone |              |
+| processed_at  | timestamp with time zone |              |
+| created_at    | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -4327,20 +4327,20 @@ Join hints:
 
 ## work_item_comments
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| work_item_id | uuid | not null |
-| thread_id | uuid |  |
-| author_user_id | uuid |  |
-| author_agent_id | uuid |  |
-| body | text | not null |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-| archived_at | timestamp with time zone |  |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | uuid                     | PK, not null |
+| tenant_id       | uuid                     | not null     |
+| space_id        | uuid                     | not null     |
+| work_item_id    | uuid                     | not null     |
+| thread_id       | uuid                     |              |
+| author_user_id  | uuid                     |              |
+| author_agent_id | uuid                     |              |
+| body            | text                     | not null     |
+| metadata        | jsonb                    |              |
+| created_at      | timestamp with time zone | not null     |
+| updated_at      | timestamp with time zone | not null     |
+| archived_at     | timestamp with time zone |              |
 
 Join hints:
 
@@ -4353,23 +4353,23 @@ Join hints:
 
 ## work_item_documents
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| work_item_id | uuid | not null |
-| kind | text | not null |
-| title | text | not null |
-| content_type | text | not null |
-| s3_key | text | not null |
-| size_bytes | integer | not null |
-| checksum_sha256 | text |  |
-| metadata | jsonb |  |
-| created_by_user_id | uuid |  |
-| created_by_agent_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-| archived_at | timestamp with time zone |  |
+| column              | type                     | flags        |
+| ------------------- | ------------------------ | ------------ |
+| id                  | uuid                     | PK, not null |
+| tenant_id           | uuid                     | not null     |
+| work_item_id        | uuid                     | not null     |
+| kind                | text                     | not null     |
+| title               | text                     | not null     |
+| content_type        | text                     | not null     |
+| s3_key              | text                     | not null     |
+| size_bytes          | integer                  | not null     |
+| checksum_sha256     | text                     |              |
+| metadata            | jsonb                    |              |
+| created_by_user_id  | uuid                     |              |
+| created_by_agent_id | uuid                     |              |
+| created_at          | timestamp with time zone | not null     |
+| updated_at          | timestamp with time zone | not null     |
+| archived_at         | timestamp with time zone |              |
 
 Enum values:
 
@@ -4384,21 +4384,21 @@ Join hints:
 
 ## work_item_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| work_item_id | uuid | not null |
-| thread_id | uuid |  |
-| actor_user_id | uuid |  |
-| actor_agent_id | uuid |  |
-| event_type | text | not null |
-| previous_status_id | uuid |  |
-| new_status_id | uuid |  |
-| message | text |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| space_id           | uuid                     | not null     |
+| work_item_id       | uuid                     | not null     |
+| thread_id          | uuid                     |              |
+| actor_user_id      | uuid                     |              |
+| actor_agent_id     | uuid                     |              |
+| event_type         | text                     | not null     |
+| previous_status_id | uuid                     |              |
+| new_status_id      | uuid                     |              |
+| message            | text                     |              |
+| metadata           | jsonb                    |              |
+| created_at         | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4417,17 +4417,17 @@ Join hints:
 
 ## work_item_external_refs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| work_item_id | uuid | not null |
-| provider | text | not null |
-| external_id | text | not null |
-| external_url | text |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column       | type                     | flags        |
+| ------------ | ------------------------ | ------------ |
+| id           | uuid                     | PK, not null |
+| tenant_id    | uuid                     | not null     |
+| work_item_id | uuid                     | not null     |
+| provider     | text                     | not null     |
+| external_id  | text                     | not null     |
+| external_url | text                     |              |
+| metadata     | jsonb                    |              |
+| created_at   | timestamp with time zone | not null     |
+| updated_at   | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4440,13 +4440,13 @@ Join hints:
 
 ## work_item_label_assignments
 
-| column | type | flags |
-| --- | --- | --- |
-| tenant_id | uuid | not null |
-| work_item_id | uuid | not null |
-| label_id | uuid | not null |
-| created_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
+| column             | type                     | flags    |
+| ------------------ | ------------------------ | -------- |
+| tenant_id          | uuid                     | not null |
+| work_item_id       | uuid                     | not null |
+| label_id           | uuid                     | not null |
+| created_by_user_id | uuid                     |          |
+| created_at         | timestamp with time zone | not null |
 
 Join hints:
 
@@ -4457,18 +4457,18 @@ Join hints:
 
 ## work_item_labels
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| slug | text | not null |
-| color | text |  |
-| description | text |  |
-| created_by_user_id | uuid |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-| archived_at | timestamp with time zone |  |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| name               | text                     | not null     |
+| slug               | text                     | not null     |
+| color              | text                     |              |
+| description        | text                     |              |
+| created_by_user_id | uuid                     |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
+| archived_at        | timestamp with time zone |              |
 
 Join hints:
 
@@ -4477,23 +4477,23 @@ Join hints:
 
 ## work_item_saved_views
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| user_id | uuid |  |
-| space_id | uuid |  |
-| name | text | not null |
-| view_type | text | not null |
-| filters | jsonb |  |
-| grouping | jsonb |  |
-| sorting | jsonb |  |
-| view_config | jsonb |  |
-| is_private | boolean | not null |
-| is_default | boolean | not null |
-| is_favorite | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column      | type                     | flags        |
+| ----------- | ------------------------ | ------------ |
+| id          | uuid                     | PK, not null |
+| tenant_id   | uuid                     | not null     |
+| user_id     | uuid                     |              |
+| space_id    | uuid                     |              |
+| name        | text                     | not null     |
+| view_type   | text                     | not null     |
+| filters     | jsonb                    |              |
+| grouping    | jsonb                    |              |
+| sorting     | jsonb                    |              |
+| view_config | jsonb                    |              |
+| is_private  | boolean                  | not null     |
+| is_default  | boolean                  | not null     |
+| is_favorite | boolean                  | not null     |
+| created_at  | timestamp with time zone | not null     |
+| updated_at  | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4507,22 +4507,22 @@ Join hints:
 
 ## work_item_statuses
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| name | text | not null |
-| description | text |  |
-| color | text |  |
-| icon | text |  |
-| category | text | not null |
-| is_active | boolean | not null |
-| is_final | boolean | not null |
-| is_default | boolean | not null |
-| display_order | integer | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column        | type                     | flags        |
+| ------------- | ------------------------ | ------------ |
+| id            | uuid                     | PK, not null |
+| tenant_id     | uuid                     | not null     |
+| space_id      | uuid                     | not null     |
+| name          | text                     | not null     |
+| description   | text                     |              |
+| color         | text                     |              |
+| icon          | text                     |              |
+| category      | text                     | not null     |
+| is_active     | boolean                  | not null     |
+| is_final      | boolean                  | not null     |
+| is_default    | boolean                  | not null     |
+| display_order | integer                  | not null     |
+| created_at    | timestamp with time zone | not null     |
+| updated_at    | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4535,15 +4535,15 @@ Join hints:
 
 ## work_item_thread_links
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| work_item_id | uuid | not null |
-| thread_id | uuid | not null |
-| space_id | uuid | not null |
-| relationship | text | not null |
-| created_at | timestamp with time zone | not null |
+| column       | type                     | flags        |
+| ------------ | ------------------------ | ------------ |
+| id           | uuid                     | PK, not null |
+| tenant_id    | uuid                     | not null     |
+| work_item_id | uuid                     | not null     |
+| thread_id    | uuid                     | not null     |
+| space_id     | uuid                     | not null     |
+| relationship | text                     | not null     |
+| created_at   | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4558,41 +4558,41 @@ Join hints:
 
 ## work_items
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| space_id | uuid | not null |
-| status_id | uuid |  |
-| title | text | not null |
-| notes | text |  |
-| priority | text | not null |
-| owner_user_id | uuid |  |
-| owner_agent_id | uuid |  |
-| due_at | timestamp with time zone |  |
-| required | boolean | not null |
-| applicable | boolean | not null |
-| blocked | boolean | not null |
-| open_engine_enabled | boolean | not null |
-| open_engine_queue_key | text |  |
-| open_engine_claimed_by_agent_id | uuid |  |
-| open_engine_claimed_at | timestamp with time zone |  |
-| open_engine_claim_expires_at | timestamp with time zone |  |
-| open_engine_human_hold | boolean | not null |
-| open_engine_human_hold_reason | text |  |
-| open_engine_scheduled_at | timestamp with time zone |  |
-| open_engine_dependency_state | text | not null |
-| open_engine_routing | jsonb |  |
-| completed_at | timestamp with time zone |  |
-| completed_by_user_id | uuid |  |
-| completed_by_agent_id | uuid |  |
-| created_by_user_id | uuid |  |
-| created_by_agent_id | uuid |  |
-| template_source_id | uuid |  |
-| metadata | jsonb |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-| archived_at | timestamp with time zone |  |
+| column                          | type                     | flags        |
+| ------------------------------- | ------------------------ | ------------ |
+| id                              | uuid                     | PK, not null |
+| tenant_id                       | uuid                     | not null     |
+| space_id                        | uuid                     | not null     |
+| status_id                       | uuid                     |              |
+| title                           | text                     | not null     |
+| notes                           | text                     |              |
+| priority                        | text                     | not null     |
+| owner_user_id                   | uuid                     |              |
+| owner_agent_id                  | uuid                     |              |
+| due_at                          | timestamp with time zone |              |
+| required                        | boolean                  | not null     |
+| applicable                      | boolean                  | not null     |
+| blocked                         | boolean                  | not null     |
+| open_engine_enabled             | boolean                  | not null     |
+| open_engine_queue_key           | text                     |              |
+| open_engine_claimed_by_agent_id | uuid                     |              |
+| open_engine_claimed_at          | timestamp with time zone |              |
+| open_engine_claim_expires_at    | timestamp with time zone |              |
+| open_engine_human_hold          | boolean                  | not null     |
+| open_engine_human_hold_reason   | text                     |              |
+| open_engine_scheduled_at        | timestamp with time zone |              |
+| open_engine_dependency_state    | text                     | not null     |
+| open_engine_routing             | jsonb                    |              |
+| completed_at                    | timestamp with time zone |              |
+| completed_by_user_id            | uuid                     |              |
+| completed_by_agent_id           | uuid                     |              |
+| created_by_user_id              | uuid                     |              |
+| created_by_agent_id             | uuid                     |              |
+| template_source_id              | uuid                     |              |
+| metadata                        | jsonb                    |              |
+| created_at                      | timestamp with time zone | not null     |
+| updated_at                      | timestamp with time zone | not null     |
+| archived_at                     | timestamp with time zone |              |
 
 Enum values:
 
@@ -4615,21 +4615,21 @@ Join hints:
 
 ## workflow_configs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| dispatch | jsonb |  |
-| concurrency | jsonb |  |
-| retry | jsonb |  |
-| turn_loop | jsonb |  |
-| workspace | jsonb |  |
-| stall_detection | jsonb |  |
-| orchestration | jsonb |  |
-| session_compaction | jsonb |  |
-| prompt_template | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column             | type                     | flags        |
+| ------------------ | ------------------------ | ------------ |
+| id                 | uuid                     | PK, not null |
+| tenant_id          | uuid                     | not null     |
+| dispatch           | jsonb                    |              |
+| concurrency        | jsonb                    |              |
+| retry              | jsonb                    |              |
+| turn_loop          | jsonb                    |              |
+| workspace          | jsonb                    |              |
+| stall_detection    | jsonb                    |              |
+| orchestration      | jsonb                    |              |
+| session_compaction | jsonb                    |              |
+| prompt_template    | text                     |              |
+| created_at         | timestamp with time zone | not null     |
+| updated_at         | timestamp with time zone | not null     |
 
 Join hints:
 
@@ -4637,27 +4637,27 @@ Join hints:
 
 ## workflow_engine_bindings
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| workflow_id | uuid | not null |
-| workflow_version_id | uuid |  |
-| binding_type | text | not null |
-| binding_status | text | not null |
-| routine_id | uuid |  |
-| routine_asl_version_id | uuid |  |
-| plugin_install_id | uuid |  |
-| managed_application_id | uuid |  |
-| external_workflow_id | text |  |
-| external_workflow_name | text |  |
-| external_version_id | text |  |
-| connection_ref | jsonb | not null |
-| capability_flags | jsonb | not null |
-| readiness_state | text | not null |
-| readiness_reasons | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| workflow_id            | uuid                     | not null     |
+| workflow_version_id    | uuid                     |              |
+| binding_type           | text                     | not null     |
+| binding_status         | text                     | not null     |
+| routine_id             | uuid                     |              |
+| routine_asl_version_id | uuid                     |              |
+| plugin_install_id      | uuid                     |              |
+| managed_application_id | uuid                     |              |
+| external_workflow_id   | text                     |              |
+| external_workflow_name | text                     |              |
+| external_version_id    | text                     |              |
+| connection_ref         | jsonb                    | not null     |
+| capability_flags       | jsonb                    | not null     |
+| readiness_state        | text                     | not null     |
+| readiness_reasons      | jsonb                    | not null     |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4677,21 +4677,21 @@ Join hints:
 
 ## workflow_evidence
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| workflow_id | uuid | not null |
-| workflow_run_id | uuid |  |
-| evidence_type | text | not null |
-| source_system | text | not null |
-| source_id | text |  |
-| uri | text |  |
-| summary | jsonb | not null |
-| redaction_state | text | not null |
-| sensitivity | text |  |
-| retention_expires_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| workflow_id          | uuid                     | not null     |
+| workflow_run_id      | uuid                     |              |
+| evidence_type        | text                     | not null     |
+| source_system        | text                     | not null     |
+| source_id            | text                     |              |
+| uri                  | text                     |              |
+| summary              | jsonb                    | not null     |
+| redaction_state      | text                     | not null     |
+| sensitivity          | text                     |              |
+| retention_expires_at | timestamp with time zone |              |
+| created_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4705,19 +4705,19 @@ Join hints:
 
 ## workflow_run_events
 
-| column | type | flags |
-| --- | --- | --- |
-| id | bigserial | PK, not null |
-| tenant_id | uuid | not null |
-| workflow_run_id | uuid | not null |
-| event_type | text | not null |
-| event_status | text |  |
-| provenance | text | not null |
-| occurred_at | timestamp with time zone | not null |
-| message | text |  |
-| payload_summary | jsonb | not null |
-| evidence_ref | jsonb | not null |
-| created_at | timestamp with time zone | not null |
+| column          | type                     | flags        |
+| --------------- | ------------------------ | ------------ |
+| id              | bigserial                | PK, not null |
+| tenant_id       | uuid                     | not null     |
+| workflow_run_id | uuid                     | not null     |
+| event_type      | text                     | not null     |
+| event_status    | text                     |              |
+| provenance      | text                     | not null     |
+| occurred_at     | timestamp with time zone | not null     |
+| message         | text                     |              |
+| payload_summary | jsonb                    | not null     |
+| evidence_ref    | jsonb                    | not null     |
+| created_at      | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4730,34 +4730,34 @@ Join hints:
 
 ## workflow_runs
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| workflow_id | uuid | not null |
-| workflow_version_id | uuid |  |
-| engine_binding_id | uuid |  |
-| status | text | not null |
-| trigger_family | text | not null |
-| trigger_source | text |  |
-| actor_type | text |  |
-| actor_id | uuid |  |
-| idempotency_key | text |  |
-| correlation_id | text |  |
-| backend_execution_id | text |  |
-| backend_execution_ref | jsonb | not null |
-| capability_snapshot | jsonb | not null |
-| readiness_snapshot | jsonb | not null |
-| input_summary | jsonb |  |
-| output_summary | jsonb |  |
-| started_at | timestamp with time zone |  |
-| finished_at | timestamp with time zone |  |
-| last_event_at | timestamp with time zone |  |
-| error_code | text |  |
-| error_message | text |  |
-| total_cost_usd_cents | bigint |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                | type                     | flags        |
+| --------------------- | ------------------------ | ------------ |
+| id                    | uuid                     | PK, not null |
+| tenant_id             | uuid                     | not null     |
+| workflow_id           | uuid                     | not null     |
+| workflow_version_id   | uuid                     |              |
+| engine_binding_id     | uuid                     |              |
+| status                | text                     | not null     |
+| trigger_family        | text                     | not null     |
+| trigger_source        | text                     |              |
+| actor_type            | text                     |              |
+| actor_id              | uuid                     |              |
+| idempotency_key       | text                     |              |
+| correlation_id        | text                     |              |
+| backend_execution_id  | text                     |              |
+| backend_execution_ref | jsonb                    | not null     |
+| capability_snapshot   | jsonb                    | not null     |
+| readiness_snapshot    | jsonb                    | not null     |
+| input_summary         | jsonb                    |              |
+| output_summary        | jsonb                    |              |
+| started_at            | timestamp with time zone |              |
+| finished_at           | timestamp with time zone |              |
+| last_event_at         | timestamp with time zone |              |
+| error_code            | text                     |              |
+| error_message         | text                     |              |
+| total_cost_usd_cents  | bigint                   |              |
+| created_at            | timestamp with time zone | not null     |
+| updated_at            | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4772,22 +4772,22 @@ Join hints:
 
 ## workflow_triggers
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| workflow_id | uuid | not null |
-| workflow_version_id | uuid |  |
-| trigger_family | text | not null |
-| source_system | text |  |
-| enabled | boolean | not null |
-| idempotency_required | boolean | not null |
-| trigger_config | jsonb | not null |
-| actor_contract | jsonb | not null |
-| readiness_state | text | not null |
-| readiness_reasons | jsonb | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column               | type                     | flags        |
+| -------------------- | ------------------------ | ------------ |
+| id                   | uuid                     | PK, not null |
+| tenant_id            | uuid                     | not null     |
+| workflow_id          | uuid                     | not null     |
+| workflow_version_id  | uuid                     |              |
+| trigger_family       | text                     | not null     |
+| source_system        | text                     |              |
+| enabled              | boolean                  | not null     |
+| idempotency_required | boolean                  | not null     |
+| trigger_config       | jsonb                    | not null     |
+| actor_contract       | jsonb                    | not null     |
+| readiness_state      | text                     | not null     |
+| readiness_reasons    | jsonb                    | not null     |
+| created_at           | timestamp with time zone | not null     |
+| updated_at           | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4802,22 +4802,22 @@ Join hints:
 
 ## workflow_versions
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| workflow_id | uuid | not null |
-| version_number | integer | not null |
-| version_status | text | not null |
-| source_kind | text | not null |
-| source_metadata | jsonb | not null |
-| definition_snapshot | jsonb | not null |
-| capability_snapshot | jsonb | not null |
-| routine_asl_version_id | uuid |  |
-| created_by_actor_type | text |  |
-| created_by_actor_id | uuid |  |
-| published_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| workflow_id            | uuid                     | not null     |
+| version_number         | integer                  | not null     |
+| version_status         | text                     | not null     |
+| source_kind            | text                     | not null     |
+| source_metadata        | jsonb                    | not null     |
+| definition_snapshot    | jsonb                    | not null     |
+| capability_snapshot    | jsonb                    | not null     |
+| routine_asl_version_id | uuid                     |              |
+| created_by_actor_type  | text                     |              |
+| created_by_actor_id    | uuid                     |              |
+| published_at           | timestamp with time zone |              |
+| created_at             | timestamp with time zone | not null     |
 
 Enum values:
 
@@ -4831,28 +4831,28 @@ Join hints:
 
 ## workflows
 
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| slug | text | not null |
-| description | text |  |
-| lifecycle_status | text | not null |
-| visibility | text | not null |
-| owner_user_id | uuid |  |
-| owner_agent_id | uuid |  |
-| primary_trigger_family | text | not null |
-| current_version_id | uuid |  |
-| current_version_number | integer |  |
-| capability_flags | jsonb | not null |
-| readiness_state | text | not null |
-| readiness_reasons | jsonb | not null |
-| last_run_id | uuid |  |
-| source_agent_loop_id | uuid |  |
-| last_run_at | timestamp with time zone |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
+| column                 | type                     | flags        |
+| ---------------------- | ------------------------ | ------------ |
+| id                     | uuid                     | PK, not null |
+| tenant_id              | uuid                     | not null     |
+| name                   | text                     | not null     |
+| slug                   | text                     | not null     |
+| description            | text                     |              |
+| lifecycle_status       | text                     | not null     |
+| visibility             | text                     | not null     |
+| owner_user_id          | uuid                     |              |
+| owner_agent_id         | uuid                     |              |
+| primary_trigger_family | text                     | not null     |
+| current_version_id     | uuid                     |              |
+| current_version_number | integer                  |              |
+| capability_flags       | jsonb                    | not null     |
+| readiness_state        | text                     | not null     |
+| readiness_reasons      | jsonb                    | not null     |
+| last_run_id            | uuid                     |              |
+| source_agent_loop_id   | uuid                     |              |
+| last_run_at            | timestamp with time zone |              |
+| created_at             | timestamp with time zone | not null     |
+| updated_at             | timestamp with time zone | not null     |
 
 Enum values:
 
