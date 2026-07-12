@@ -149,6 +149,10 @@ block and re-emit.
   pinned version is preserved.
 - **After emitting, keep the thread reply to one or two sentences** — e.g.
   "Done — the report is ready" plus anything the user must decide next. The
-  document card under your reply already shows the title, abstract, and an
-  open link; never recap the document's sections, contents, styling, or
+  platform attaches the document to your reply automatically and surfaces it
+  the right way for wherever the user is reading — a card in the ThinkWork
+  app, a link in chat surfaces like Slack. So write surface-neutral prose:
+  never tell the user to look at a "card", never say "above" or "below",
+  never describe the surface at all — just state that the deliverable is
+  ready. Never recap the document's sections, contents, styling, or
   document_id in chat. The document is the deliverable, not the reply.

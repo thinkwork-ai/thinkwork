@@ -46,13 +46,23 @@ The install flow requests the minimum bot scopes for the shipped surfaces — ev
 | Scope                                                              | Why ThinkWork needs it                                                                                      |
 | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `app_mentions:read`                                                | Receive `@ThinkWork` mentions.                                                                              |
+| `assistant:write`                                                  | Show the ephemeral "is thinking…" status in DMs (`assistant.threads.setStatus`).                            |
 | `channels:history`, `groups:history`, `im:history`, `mpim:history` | Receive DM and file-attachment message events, and read bounded thread context via `conversations.replies`. |
 | `chat:write`                                                       | Post acknowledgements, final responses, and link prompts.                                                   |
 | `files:read`                                                       | Download files attached to invoked Slack messages.                                                          |
 
 No other scopes are requested. In particular, `commands`, `chat:write.customize`, and `users:read.email` belong to removed or forbidden behaviors (slash commands, customized attribution, email auto-linking), and metadata-read scopes (`channels:read` etc.), `im:write`, and `users:read` were dropped because no code path uses them — the unlinked-user prompt is posted into the originating conversation with `chat:write`, not via a newly opened DM.
 
-Slack does not revoke previously granted scopes: a workspace installed before a scope trim keeps its broader grant until the app is reinstalled. Reinstall through ThinkWork admin to converge an existing workspace onto the minimum set.
+Slack does not revoke previously granted scopes: a workspace installed before a scope trim keeps its broader grant until the app is reinstalled. Reinstall through ThinkWork admin to converge an existing workspace onto the minimum set. The same applies in reverse to newly added scopes: a workspace installed before `assistant:write` was added does not have it, so the DM typing status silently falls back to the placeholder message until the workspace is reinstalled.
+
+## Working indicators
+
+While a turn is running, ThinkWork shows progress differently per surface, because Slack only exposes a typing-status API for assistant threads:
+
+- **DMs** — the app sets a native ephemeral "is thinking…" status on the thread. Slack clears it automatically when the answer is posted, so the answer arrives as a fresh message.
+- **Channel mentions** — Slack has no typing-status API for a bot @mentioned in a channel, so ThinkWork posts a `ThinkWork is working on it…` placeholder reply and updates that same message in place with the final answer.
+
+If the DM status call fails for any reason (most commonly a workspace that has not been reinstalled since `assistant:write` was added), the DM falls back to the channel behavior: a placeholder that is replaced by the answer.
 
 ## Reliability semantics
 

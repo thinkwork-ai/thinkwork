@@ -16,6 +16,11 @@ export const SLACK_INSTALL_STATE_TTL_MS = 10 * 60 * 1000;
  */
 export const SLACK_BOT_SCOPES = [
   "app_mentions:read",
+  // Powers the ephemeral "is thinking…" typing status in DMs
+  // (assistant.threads.setStatus). Existing installs must reinstall the
+  // workspace to grant it; until then the DM path falls back to the
+  // in-place placeholder message used for channel mentions.
+  "assistant:write",
   "channels:history",
   "chat:write",
   "files:read",
@@ -62,7 +67,7 @@ export function createSlackInstallState({
 export function verifySlackInstallState(
   state: string,
   clientSecret: string,
-  nowMs: () => number = Date.now
+  nowMs: () => number = Date.now,
 ): SlackInstallStatePayload {
   return verifySignedPayload(state, clientSecret, {
     validate: isSlackInstallStatePayload,
@@ -92,14 +97,14 @@ export function slackOAuthRedirectUri(): string {
   const apiUrl = getConfig("THINKWORK_API_URL")?.replace(/\/+$/, "");
   if (!apiUrl) {
     throw new Error(
-      "THINKWORK_API_URL or SLACK_OAUTH_REDIRECT_URI is required to start Slack install."
+      "THINKWORK_API_URL or SLACK_OAUTH_REDIRECT_URI is required to start Slack install.",
     );
   }
   return `${apiUrl}/slack/oauth/install`;
 }
 
 export function sanitizeSlackInstallReturnUrl(
-  value: string | null | undefined
+  value: string | null | undefined,
 ): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
@@ -116,14 +121,14 @@ export function sanitizeSlackInstallReturnUrl(
     !(parsed.protocol === "http:" && isLocalhost)
   ) {
     throw new Error(
-      "returnUrl must use https, except localhost development URLs"
+      "returnUrl must use https, except localhost development URLs",
     );
   }
   return parsed.toString();
 }
 
 function isSlackInstallStatePayload(
-  value: unknown
+  value: unknown,
 ): value is SlackInstallStatePayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Partial<SlackInstallStatePayload>;

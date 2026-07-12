@@ -19,6 +19,7 @@ import {
   fetchSlackThreadContext,
   postSlackThreadMessage,
   publishSlackHomeView,
+  setSlackAssistantStatus,
   type SlackWebhookClassification,
 } from "../../lib/slack/provider.js";
 import {
@@ -95,6 +96,16 @@ export interface SlackEventsDeps {
     fileRefs: ReturnType<typeof buildSlackThreadTurnInput>["fileRefs"];
   }) => Promise<MaterializedSlackAttachment[]>;
   dispatchDefaultAgent?: DispatchDefaultAgent;
+  /**
+   * DM-only ephemeral typing status. Slack exposes no equivalent API for a
+   * bot @mentioned in a channel, so channels keep the placeholder message.
+   */
+  setAssistantStatus?: (input: {
+    token: string;
+    channelId: string;
+    threadTs: string;
+    status: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
   persistAckTs?: (input: {
     tenantId: string;
     messageId: string;
@@ -162,6 +173,7 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     deps.materializeSlackFiles ?? materializeSlackFilesAsThreadAttachments;
   const dispatchDefaultAgent =
     deps.dispatchDefaultAgent ?? dispatchDefaultAgentTurn;
+  const setAssistantStatus = deps.setAssistantStatus ?? setSlackAssistantStatus;
   const persistAckTs =
     deps.persistAckTs ?? ((input) => persistSlackAckTs(dbClient, input));
   const metrics = deps.metrics ?? slackMetrics;
@@ -264,20 +276,35 @@ export function createSlackEventsDispatcher(deps: SlackEventsDeps = {}) {
     }
 
     if (mapping.messageCreated || wakeup.enqueued) {
-      const ackTs = await safePostAcknowledgement(slackApi, {
-        token: args.botToken,
-        channel: channelId,
-        threadTs,
-      });
-      // Stamp the ack ts onto the triggering user message so the finalizer
-      // can update that message in place instead of posting a second one.
-      // Best-effort: a stamp failure must never fail ingress.
-      if (ackTs) {
-        await safeStampAckTs(persistAckTs, {
-          tenantId: args.workspace.tenantId,
-          messageId: mapping.messageId,
-          ackTs,
+      // DMs are assistant threads: Slack renders a native ephemeral status
+      // and clears it when the finalizer posts the answer as a fresh
+      // message, so no placeholder (and no ackTs) is needed. Channels have
+      // no such API — they always get the in-place-updated placeholder.
+      const statusShown =
+        channelType === "im" &&
+        (await safeSetAssistantStatus(setAssistantStatus, {
+          token: args.botToken,
+          channelId,
+          threadTs,
+          status: "is thinking…",
+        }));
+
+      if (!statusShown) {
+        const ackTs = await safePostAcknowledgement(slackApi, {
+          token: args.botToken,
+          channel: channelId,
+          threadTs,
         });
+        // Stamp the ack ts onto the triggering user message so the finalizer
+        // can update that message in place instead of posting a second one.
+        // Best-effort: a stamp failure must never fail ingress.
+        if (ackTs) {
+          await safeStampAckTs(persistAckTs, {
+            tenantId: args.workspace.tenantId,
+            messageId: mapping.messageId,
+            ackTs,
+          });
+        }
       }
     }
 
@@ -373,6 +400,41 @@ async function safeFetchThreadContext(
       error: error instanceof Error ? error.message : String(error),
     });
     return [];
+  }
+}
+
+/**
+ * Try the DM typing status. Returns true only when Slack actually showed it.
+ * A Slack-level `ok: false` (the app currently lacks `assistant:write` until
+ * the workspace is reinstalled, and non-assistant apps never get it) or a
+ * transport failure returns false, so the caller falls back to the
+ * placeholder post that channels already use.
+ */
+async function safeSetAssistantStatus(
+  setAssistantStatus: NonNullable<SlackEventsDeps["setAssistantStatus"]>,
+  input: {
+    token: string;
+    channelId: string;
+    threadTs: string;
+    status: string;
+  },
+): Promise<boolean> {
+  try {
+    const result = await setAssistantStatus(input);
+    if (!result.ok) {
+      console.warn(
+        "[slack:events] assistant status unavailable, falling back to placeholder",
+        { error: result.error ?? "unknown" },
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn(
+      "[slack:events] assistant status unavailable, falling back to placeholder",
+      { error: error instanceof Error ? error.message : String(error) },
+    );
+    return false;
   }
 }
 

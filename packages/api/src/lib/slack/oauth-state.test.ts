@@ -61,6 +61,8 @@ describe("Slack OAuth install state", () => {
     const scope = url.searchParams.get("scope") ?? "";
     expect(scope).toContain("app_mentions:read");
     expect(scope).toContain("chat:write");
+    // Powers the DM "is thinking…" typing status (assistant.threads.setStatus).
+    expect(scope.split(",")).toContain("assistant:write");
     expect(scope).not.toContain("chat:write.customize");
     expect(scope.split(",")).not.toContain("commands");
     expect(scope).not.toContain("users:read.email");
