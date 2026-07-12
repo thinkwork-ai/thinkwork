@@ -9,9 +9,11 @@
  */
 
 import type { S3Client } from "@aws-sdk/client-s3";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
 import {
+  memoryClaimEvidence,
+  memoryClaims,
   memoryEvidenceItems,
   memoryRunItems,
 } from "@thinkwork/database-pg/schema";
@@ -79,6 +81,23 @@ import {
   backscanTokenFrom,
   cursorFromCheckpoint,
 } from "./adapters/twenty-adapter.js";
+import {
+  defaultIdentityRules,
+  matchCanonicalEntity,
+  normalizeNaturalKeys,
+  type MatchNaturalKey,
+} from "../entity-identity/matcher.js";
+import {
+  computeIdentitySignature,
+  type IdentityRule,
+} from "../entity-identity/normalizers.js";
+import {
+  attachIdentityEvidence,
+  createCanonicalEntity,
+  openOrCoalesceResolutionCase,
+  type ResolutionCaseKeyInput,
+} from "../entity-identity/resolution.js";
+import { loadIdentityRulesByTypeSlug } from "../entity-identity/snapshot-resolution.js";
 
 // Re-exports for existing importers/tests (helpers moved in the U5 seam
 // extraction; twenty cursor helpers now live with the twenty adapter).
@@ -458,7 +477,7 @@ const LEASE_STOP_THRESHOLD_MS = 60_000;
  */
 function evidenceBatchLimit(
   ctx: StageContext,
-  optionKey: "projectBatch" | "retainBatch",
+  optionKey: "projectBatch" | "retainBatch" | "resolveBatch",
 ): number {
   const boundary = (ctx.sources[0]?.boundary ?? {}) as Record<string, unknown>;
   const options = ctx.event.options ?? {};
@@ -1088,10 +1107,8 @@ export async function runCompound(
 }
 
 // ---------------------------------------------------------------------------
-// U3 stage stubs: extract/resolve pass through (claim extraction currently
-// happens inside project; deterministic identity resolution lands in U4);
-// graph/wiki are SHARED-ONLY stubs that hard-reject user_* targets now and
-// gain their real implementations in U4.
+// U3 stage stub: extract passes through (claim extraction currently happens
+// inside project).
 // ---------------------------------------------------------------------------
 
 export async function runExtract(
@@ -1107,15 +1124,494 @@ export async function runExtract(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Resolve stage: link the claim ledger to canonical identity.
+//
+// Every ACTIVE claim carries a subject_key (`twenty:company:<id>`,
+// `web:page:<url>`, `email:thread:<id>`, `kb:document:<key>`); resolve maps
+// each subject to a canonical entity through the U4 matcher and stamps
+// memory_claims.canonical_subject_id on every active claim of that subject.
+// Without it the ledger is never reachable by canonical entity, which is the
+// claim-layer half of AE1 (a Twenty company and the same company's scraped
+// web page must land on ONE canonical customer — the `customer.domain` claim
+// is the join).
+//
+// Verdict → action:
+//   exact | auto_link   → stamp; shared runs also (idempotently) attach the
+//                         source mapping + identity claims so the NEXT run is
+//                         an exact hit.
+//   new (shared only)   → createCanonicalEntity (matcher/resolution writer),
+//                         then stamp.
+//   suggestion|ambiguous→ open/coalesce a resolution case, run item
+//                         'deferred', canonical_subject_id stays NULL.
+//   private_unmapped    → AE4: a user-scoped (private) subject with no
+//                         existing exact mapping to REUSE creates no tenant
+//                         mapping, no canonical row, and no case. Run item
+//                         'noop', canonical_subject_id stays NULL.
+// ---------------------------------------------------------------------------
+
+/** Source-mapping conventions per subject-key family. */
+const SUBJECT_FAMILY_MAPPINGS: Record<
+  string,
+  { sourceSystem: string; entityTypeSlug: string }
+> = {
+  twenty: { sourceSystem: "twenty", entityTypeSlug: "customer" },
+  web: { sourceSystem: "web", entityTypeSlug: "customer" },
+  email: { sourceSystem: "gmail", entityTypeSlug: "email_thread" },
+  kb: { sourceSystem: "bedrock_kb", entityTypeSlug: "document" },
+};
+
+export interface SubjectIdentity {
+  sourceSystem: string;
+  /** Subject family's kind segment (`company` / `page` / `thread` / …). */
+  namespace: string;
+  externalId: string;
+  entityTypeSlug: string;
+}
+
+/**
+ * PURE: `<family>:<kind>:<externalId>` → a source-mapping identity. The
+ * external id keeps every remaining colon (web page subjects embed a URL).
+ * Unknown families return null — resolve records them as no-ops rather than
+ * inventing a mapping convention.
+ */
+export function parseSubjectKey(subjectKey: string): SubjectIdentity | null {
+  const first = subjectKey.indexOf(":");
+  if (first < 0) return null;
+  const second = subjectKey.indexOf(":", first + 1);
+  if (second < 0) return null;
+  const family = subjectKey.slice(0, first);
+  const namespace = subjectKey.slice(first + 1, second);
+  const externalId = subjectKey.slice(second + 1);
+  const mapping = SUBJECT_FAMILY_MAPPINGS[family];
+  if (!mapping || !namespace || !externalId) return null;
+  return { ...mapping, namespace, externalId };
+}
+
+/** Claim predicates that carry identity (email.subject deliberately does not). */
+const IDENTITY_PREDICATES: Record<string, { keyKind: string; field: string }> =
+  {
+    "customer.name": { keyKind: "name", field: "text" },
+    "customer.domain": { keyKind: "domain", field: "url" },
+    "document.title": { keyKind: "name", field: "text" },
+  };
+
+/** Display-name preference order (first present wins). */
+const DISPLAY_NAME_PREDICATES = [
+  "customer.name",
+  "document.title",
+  "customer.web_page_title",
+];
+
+/**
+ * PURE: natural keys + a display name for one subject, from its OWN active
+ * claims. `customer.domain` is what makes the cross-source join work: the
+ * CRM company and the scraped page both assert it, so both resolve to the
+ * same canonical customer.
+ */
+export function identityFromClaims(
+  subjectKey: string,
+  claims: Array<{
+    ontology_predicate: string;
+    value: unknown;
+  }>,
+): { naturalKeys: MatchNaturalKey[]; displayName: string } {
+  const naturalKeys: MatchNaturalKey[] = [];
+  const seen = new Set<string>();
+  const byPredicate = new Map<string, Record<string, unknown>>();
+  for (const claim of claims) {
+    const value = (claim.value ?? {}) as Record<string, unknown>;
+    if (!byPredicate.has(claim.ontology_predicate)) {
+      byPredicate.set(claim.ontology_predicate, value);
+    }
+    const spec = IDENTITY_PREDICATES[claim.ontology_predicate];
+    if (!spec) continue;
+    const raw = value[spec.field];
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    const dedupe = `${spec.keyKind}:${raw}`;
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+    naturalKeys.push({ keyKind: spec.keyKind, rawValue: raw });
+  }
+  let displayName = subjectKey;
+  for (const predicate of DISPLAY_NAME_PREDICATES) {
+    const raw = byPredicate.get(predicate)?.text;
+    if (typeof raw === "string" && raw.trim()) {
+      displayName = raw.trim();
+      break;
+    }
+  }
+  return { naturalKeys, displayName };
+}
+
+/**
+ * Identity rules for a claim subject type: the tenant's approved ontology
+ * rules when present, otherwise the matcher's default (unique + autoLink
+ * exact name). `domain` is appended as a strong key for customers unless the
+ * operator's own rules already define it — it is the deterministic
+ * cross-source join (Twenty `domainName` ≡ web page host).
+ */
+export function claimIdentityRules(
+  entityTypeSlug: string,
+  tenantRules: IdentityRule[] | undefined,
+): IdentityRule[] {
+  const rules =
+    tenantRules && tenantRules.length > 0
+      ? [...tenantRules]
+      : defaultIdentityRules();
+  const has = (keyKind: string): boolean =>
+    rules.some((rule) => rule.keyKind === keyKind);
+  if (!has("name")) rules.push(...defaultIdentityRules());
+  if (entityTypeSlug === "customer" && !has("domain")) {
+    rules.push({
+      slug: "default-domain",
+      keyKind: "domain",
+      normalization: "domain",
+      unique: true,
+      uniquenessScope: "tenant",
+      sourcePrecedence: [],
+      autoLink: true,
+      version: 0,
+    });
+  }
+  return rules;
+}
+
+/** Subject work item: everything the resolve loop needs for one subject. */
+interface ResolveSubject {
+  subjectKey: string;
+  sourceConfigId: string;
+  subjectEntityType: string | null;
+}
+
+/**
+ * Bounded, deterministic work list: distinct subjects of this run's sources
+ * whose ACTIVE claims are not yet linked to a canonical entity. Ordered by
+ * subject key so a continuation invocation resumes exactly where the previous
+ * batch stopped (the work list shrinks as subjects get stamped).
+ */
+async function unresolvedSubjects(
+  ctx: StageContext,
+  target: { target_scope: EvidenceTargetScope; target_id: string },
+): Promise<ResolveSubject[]> {
+  const tenantId = ctx.processor.tenant_id;
+  const sourceIds = ctx.sources.map((source) => source.id);
+  if (sourceIds.length === 0) return [];
+  const edges = await ctx.db
+    .select({
+      claim_id: memoryClaimEvidence.claim_id,
+      source_config_id: memoryClaimEvidence.source_config_id,
+    })
+    .from(memoryClaimEvidence)
+    .where(
+      and(
+        eq(memoryClaimEvidence.tenant_id, tenantId),
+        eq(memoryClaimEvidence.status, "active"),
+        inArray(memoryClaimEvidence.source_config_id, sourceIds),
+      ),
+    );
+  if (edges.length === 0) return [];
+  const sourceByClaimId = new Map<string, string>();
+  for (const edge of edges) {
+    if (!sourceByClaimId.has(edge.claim_id)) {
+      sourceByClaimId.set(edge.claim_id, edge.source_config_id);
+    }
+  }
+  const rows = await ctx.db
+    .select({
+      id: memoryClaims.id,
+      subject_key: memoryClaims.subject_key,
+      subject_entity_type: memoryClaims.subject_entity_type,
+    })
+    .from(memoryClaims)
+    .where(
+      and(
+        eq(memoryClaims.tenant_id, tenantId),
+        eq(memoryClaims.target_scope, target.target_scope),
+        eq(memoryClaims.target_id, target.target_id),
+        eq(memoryClaims.status, "active"),
+        isNull(memoryClaims.canonical_subject_id),
+        inArray(memoryClaims.id, [...sourceByClaimId.keys()]),
+      ),
+    );
+  const subjects = new Map<string, ResolveSubject>();
+  for (const row of rows) {
+    if (subjects.has(row.subject_key)) continue;
+    const sourceConfigId = sourceByClaimId.get(row.id);
+    if (!sourceConfigId) continue;
+    subjects.set(row.subject_key, {
+      subjectKey: row.subject_key,
+      sourceConfigId,
+      subjectEntityType: row.subject_entity_type,
+    });
+  }
+  return [...subjects.values()].sort((a, b) =>
+    a.subjectKey.localeCompare(b.subjectKey),
+  );
+}
+
 export async function runResolve(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
+  try {
+    return await runResolveInner(ctx);
+  } catch (err) {
+    if (err instanceof SourceEraseFencedError) {
+      return failed(ctx.event.stage, err.message);
+    }
+    throw err;
+  }
+}
+
+async function runResolveInner(
+  ctx: StageContext,
+): Promise<MemoryStageWorkerResult> {
+  const { db, event } = ctx;
+  const counts = { changed: 0, created: 0, deferred: 0, noop: 0 };
+  if (ctx.sources.length === 0) {
+    return {
+      status: "succeeded",
+      stage: event.stage,
+      counts: { ...counts, noop: 1 },
+      output: { note: "no enabled sources selected for this run" },
+    };
+  }
+  // Personal (user-scoped) processors run resolve too — with PRIVATE
+  // visibility, so the matcher may reuse an existing exact mapping but never
+  // mints tenant identity from personal evidence (AE4).
+  const writable = requireWritableProcessor(ctx);
+  if (!writable) {
+    return failed(
+      event.stage,
+      `processor ${ctx.processor.id} targets '${ctx.processor.target_scope}' — canonical resolution may only target 'user', 'space', or 'tenant' scopes`,
+    );
+  }
+  const tenantId = writable.tenant_id;
+  const visibility: "tenant" | "private" =
+    writable.target_scope === "user" ? "private" : "tenant";
+
+  const backlog = await unresolvedSubjects(ctx, writable);
+  const subjects = backlog.slice(0, evidenceBatchLimit(ctx, "resolveBatch"));
+  if (backlog.length === 0) {
+    return {
+      status: "succeeded",
+      stage: event.stage,
+      counts: { ...counts, noop: 1 },
+      output: { note: "no unresolved claim subjects for this run's sources" },
+    };
+  }
+
+  const sourceById = new Map(ctx.sources.map((source) => [source.id, source]));
+  const rulesByType = await loadIdentityRulesByTypeSlug(db, tenantId);
+  const resolved: Array<{ subjectKey: string; canonicalEntityId: string }> = [];
+  const deferredCaseIds: string[] = [];
+
+  let processed = 0;
+  for (const subject of subjects) {
+    if (leaseExhausted(ctx)) break;
+    processed += 1;
+    const source = sourceById.get(subject.sourceConfigId);
+    const eraseFence = source
+      ? {
+          tenantId,
+          sourceConfigId: source.id,
+          expectedEraseGeneration: source.erase_generation ?? 0,
+        }
+      : undefined;
+    const runItem = async (
+      result: "changed" | "deferred" | "noop",
+      detail: Record<string, unknown>,
+    ): Promise<void> => {
+      await recordRunItem(db, {
+        tenantId,
+        workflowRunId: event.workflowRunId,
+        sourceConfigId: subject.sourceConfigId,
+        sourceItemId: subject.subjectKey,
+        stage: "resolve",
+        result,
+        detail,
+      });
+    };
+
+    const identity = parseSubjectKey(subject.subjectKey);
+    if (!identity) {
+      counts.noop += 1;
+      await runItem("noop", {
+        reason: `subject key "${subject.subjectKey}" has no source-mapping convention`,
+      });
+      continue;
+    }
+    const entityTypeSlug = subject.subjectEntityType ?? identity.entityTypeSlug;
+    const rules = claimIdentityRules(
+      entityTypeSlug,
+      rulesByType.get(entityTypeSlug),
+    );
+    const activeClaims = await listActiveClaimsForSubject(db, {
+      tenantId,
+      targetScope: writable.target_scope,
+      targetId: writable.target_id,
+      subjectKey: subject.subjectKey,
+    });
+    const { naturalKeys, displayName } = identityFromClaims(
+      subject.subjectKey,
+      activeClaims,
+    );
+    const sourceKeys = [
+      {
+        sourceSystem: identity.sourceSystem,
+        namespace: identity.namespace,
+        externalId: identity.externalId,
+      },
+    ];
+    const request = {
+      tenantId,
+      entityTypeSlug,
+      displayName,
+      visibility,
+      sourceKeys,
+      naturalKeys,
+    };
+    const verdict = await matchCanonicalEntity(db, request, rules);
+
+    const ruleByKeyKind = new Map(rules.map((rule) => [rule.keyKind, rule]));
+    const identityKeys: ResolutionCaseKeyInput[] = normalizeNaturalKeys(
+      request,
+      rules,
+    ).map((key) => ({
+      keyKind: key.keyKind,
+      normalizedValue: key.normalizedValue,
+      ruleSlug: ruleByKeyKind.get(key.keyKind)?.slug,
+      ruleVersion: ruleByKeyKind.get(key.keyKind)?.version,
+    }));
+
+    const stamp = async (canonicalEntityId: string): Promise<void> => {
+      // Erase write-fence (round-3 P1-2): a source disabled or erased
+      // mid-run must not get fresh canonical links written behind the sweep.
+      if (eraseFence) await assertSourceWritable(db, eraseFence);
+      await db
+        .update(memoryClaims)
+        .set({
+          canonical_subject_id: canonicalEntityId,
+          updated_at: new Date(),
+        })
+        .where(
+          and(
+            eq(memoryClaims.tenant_id, tenantId),
+            eq(memoryClaims.target_scope, writable.target_scope),
+            eq(memoryClaims.target_id, writable.target_id),
+            eq(memoryClaims.subject_key, subject.subjectKey),
+            eq(memoryClaims.status, "active"),
+          ),
+        );
+      resolved.push({ subjectKey: subject.subjectKey, canonicalEntityId });
+    };
+
+    if (verdict.kind === "exact" || verdict.kind === "auto_link") {
+      if (visibility === "tenant") {
+        // Idempotent: the mapping makes the NEXT run an exact hit, and the
+        // identity claims make other sources' natural keys land here too.
+        await attachIdentityEvidence(db, {
+          tenantId,
+          canonicalEntityId: verdict.canonicalEntityId,
+          createdBy: "rule",
+          sourceKeys,
+          identityKeys,
+          visibility: "tenant",
+        });
+      }
+      await stamp(verdict.canonicalEntityId);
+      counts.changed += 1;
+      await runItem("changed", {
+        verdict: verdict.kind,
+        canonicalEntityId: verdict.canonicalEntityId,
+        ...(verdict.kind === "auto_link" ? { ruleSlug: verdict.ruleSlug } : {}),
+      });
+      continue;
+    }
+
+    if (verdict.kind === "private_unmapped") {
+      // AE4: personal evidence with nothing to reuse. No tenant mapping, no
+      // canonical row, no resolution case — the claim stays unlinked.
+      counts.noop += 1;
+      await runItem("noop", {
+        verdict: "private_unmapped",
+        reason:
+          "personal (user-scoped) subject with no existing exact mapping to reuse — private evidence never creates shared identity",
+      });
+      continue;
+    }
+
+    if (verdict.kind === "new") {
+      const created = await createCanonicalEntity(db, {
+        tenantId,
+        entityTypeSlug,
+        displayName,
+        createdBy: "rule",
+        sourceKeys,
+        identityKeys,
+        visibility: "tenant",
+      });
+      await stamp(created.canonicalEntityId);
+      counts.changed += 1;
+      counts.created += 1;
+      await runItem("changed", {
+        verdict: "new",
+        canonicalEntityId: created.canonicalEntityId,
+        created: true,
+      });
+      continue;
+    }
+
+    // suggestion | ambiguous — defer to the operator queue; NEVER link.
+    const signatureHash = computeIdentitySignature({
+      entityTypeSlug,
+      keys: identityKeys.map((key) => ({
+        keyKind: key.keyKind,
+        normalizedValue: key.normalizedValue,
+      })),
+    });
+    const candidates =
+      verdict.kind === "ambiguous"
+        ? verdict.candidates.map((candidate) => ({
+            canonicalEntityId: candidate.canonicalEntityId,
+            displayName: candidate.displayName,
+            matchedKeyKinds: candidate.matchedKeyKinds,
+          }))
+        : [
+            {
+              canonicalEntityId: verdict.canonicalEntityId,
+              displayName: null,
+              matchedKeyKinds: verdict.matchedKeyKinds,
+            },
+          ];
+    const { caseId } = await openOrCoalesceResolutionCase(db, {
+      tenantId,
+      signatureHash,
+      entityTypeSlug,
+      displayHint: displayName,
+      candidates,
+      conflictingClaims: [],
+      impactSummary: { subjectKey: subject.subjectKey },
+      pendingKeys: identityKeys,
+    });
+    counts.deferred += 1;
+    deferredCaseIds.push(caseId);
+    await runItem("deferred", {
+      verdict: verdict.kind,
+      caseId,
+      candidates: candidates.map((c) => c.canonicalEntityId),
+    });
+  }
+
+  const remaining = backlog.length - processed;
   return {
     status: "succeeded",
-    stage: ctx.event.stage,
-    counts: { noop: 1 },
+    stage: event.stage,
+    counts,
     output: {
-      note: "resolve is a pass-through in U3 — canonical identity resolution lands in U4",
+      resolved: resolved.slice(0, 50),
+      deferredCaseIds: deferredCaseIds.slice(0, 50),
+      ...(remaining > 0 ? { continuation: true, remaining } : {}),
     },
   };
 }
