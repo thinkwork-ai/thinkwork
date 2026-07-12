@@ -11,6 +11,10 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: resolveCallerTenantIdMock,
   resolveCallerUserId: resolveCallerUserIdMock,
 }));
+const resolveConnectionForUserByIdMock = vi.hoisted(() => vi.fn());
+vi.mock("../../../lib/oauth-token.js", () => ({
+  resolveConnectionForUserById: resolveConnectionForUserByIdMock,
+}));
 
 import { grantMemorySourceAuthorization } from "./grantMemorySourceAuthorization.mutation.js";
 
@@ -19,6 +23,16 @@ const PROCESSOR = "58a7be3f-8c0f-4a8b-b7be-8f97a1c8e9d2";
 const USER = "b7de6c4a-8f2e-45cf-a231-5a5f9a3f6c1a";
 
 const PROCESSOR_ROW = { id: PROCESSOR, tenant_id: TENANT, status: "active" };
+const CONNECTION = "3f0f2a52-9d24-4e0b-9a51-2f8f19c2a111";
+const PERSONAL_PROCESSOR_ROW = {
+  id: PROCESSOR,
+  tenant_id: TENANT,
+  status: "active",
+  mode: "personal",
+  target_scope: "user",
+  target_id: USER,
+  created_by_user_id: USER,
+};
 
 const ACTIVE_GRANT_ROW = {
   id: "grant-old",
@@ -111,6 +125,7 @@ describe("grantMemorySourceAuthorization mutation", () => {
     requireTenantAdminMock.mockReset().mockResolvedValue(undefined);
     resolveCallerTenantIdMock.mockReset().mockResolvedValue(null);
     resolveCallerUserIdMock.mockReset().mockResolvedValue(USER);
+    resolveConnectionForUserByIdMock.mockReset().mockResolvedValue(null);
   });
 
   it("is tenant-admin gated and inserts an active grant", async () => {
@@ -300,5 +315,160 @@ describe("grantMemorySourceAuthorization mutation", () => {
         boundary: { maxRecords: 500, objects: ["companies", "relations"] },
       }),
     );
+  });
+
+  // ---- U6 personal self-grant -----------------------------------------
+
+  it("lets the owner self-grant their own email connection to their own personal processor", async () => {
+    resolveConnectionForUserByIdMock.mockResolvedValue({
+      connectionId: CONNECTION,
+      providerId: "prov-1",
+    });
+    const { ctx, insertValues } = buildCtx({
+      processorRows: [PERSONAL_PROCESSOR_ROW],
+      existingGrants: [],
+    });
+    const result = await grantMemorySourceAuthorization(
+      {},
+      {
+        processorConfigId: PROCESSOR,
+        sourceFamily: "email",
+        sourceBindingKey: CONNECTION,
+        boundary: { labels: ["INBOX", "Label_123"], maxMessages: 100 },
+      },
+      ctx,
+    );
+    expect(requireTenantAdminMock).not.toHaveBeenCalled();
+    expect(resolveConnectionForUserByIdMock).toHaveBeenCalledWith({
+      tenantId: TENANT,
+      userId: USER,
+      providerName: "google_productivity",
+      connectionId: CONNECTION,
+    });
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_family: "email",
+        source_binding_key: CONNECTION,
+        boundary: { labels: ["INBOX", "Label_123"], maxMessages: 100 },
+        status: "active",
+      }),
+    );
+    expect(result.sourceFamily).toBe("email");
+  });
+
+  it("rejects a self-grant by a non-owner and a self-grant of an unowned connection", async () => {
+    // Non-owner caller: no write happens.
+    resolveCallerUserIdMock.mockResolvedValue("someone-else");
+    resolveConnectionForUserByIdMock.mockResolvedValue({
+      connectionId: CONNECTION,
+      providerId: "prov-1",
+    });
+    const notOwner = buildCtx({
+      processorRows: [PERSONAL_PROCESSOR_ROW],
+      existingGrants: [],
+    });
+    await expect(
+      grantMemorySourceAuthorization(
+        {},
+        {
+          processorConfigId: PROCESSOR,
+          sourceFamily: "email",
+          sourceBindingKey: CONNECTION,
+          boundary: { labels: ["INBOX"] },
+        },
+        notOwner.ctx,
+      ),
+    ).rejects.toThrow(/Only the owner/);
+    expect(notOwner.insert).not.toHaveBeenCalled();
+
+    // Owner, but the connection is not theirs / not active: fail closed.
+    resolveCallerUserIdMock.mockResolvedValue(USER);
+    resolveConnectionForUserByIdMock.mockResolvedValue(null);
+    const unowned = buildCtx({
+      processorRows: [PERSONAL_PROCESSOR_ROW],
+      existingGrants: [],
+    });
+    await expect(
+      grantMemorySourceAuthorization(
+        {},
+        {
+          processorConfigId: PROCESSOR,
+          sourceFamily: "email",
+          sourceBindingKey: CONNECTION,
+          boundary: { labels: ["INBOX"] },
+        },
+        unowned.ctx,
+      ),
+    ).rejects.toThrow(/connection you own/);
+    expect(unowned.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a personal self-grant for a non-email family", async () => {
+    const { ctx, insert } = buildCtx({
+      processorRows: [PERSONAL_PROCESSOR_ROW],
+      existingGrants: [],
+    });
+    await expect(
+      grantMemorySourceAuthorization(
+        {},
+        {
+          processorConfigId: PROCESSOR,
+          sourceFamily: "twenty",
+          sourceBindingKey: "conn-1",
+        },
+        ctx,
+      ),
+    ).rejects.toThrow(/not self-serviceable/);
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("keeps shared email grants tenant-admin gated (AE7/R9)", async () => {
+    const { ctx, insertValues } = buildCtx({
+      processorRows: [{ ...PROCESSOR_ROW, mode: "shared" }],
+      existingGrants: [],
+    });
+    await grantMemorySourceAuthorization(
+      {},
+      {
+        processorConfigId: PROCESSOR,
+        sourceFamily: "email",
+        sourceBindingKey: CONNECTION,
+        boundary: { labels: ["Label_shared"] },
+      },
+      ctx,
+    );
+    expect(requireTenantAdminMock).toHaveBeenCalledWith(ctx, TENANT);
+    // The self-service connection ownership check is NOT the shared path.
+    expect(resolveConnectionForUserByIdMock).not.toHaveBeenCalled();
+    expect(insertValues).toHaveBeenCalled();
+  });
+
+  it("rejects malformed email label boundaries at grant time (fail closed)", async () => {
+    for (const boundary of [
+      { labels: [""] },
+      { labels: ["ok", 7] },
+      { labels: "INBOX" },
+      { labelz: ["INBOX"] },
+      { maxMessages: 0 },
+      { pageSize: 1000 },
+    ]) {
+      const { ctx, transaction } = buildCtx({
+        processorRows: [PROCESSOR_ROW],
+        existingGrants: [],
+      });
+      await expect(
+        grantMemorySourceAuthorization(
+          {},
+          {
+            processorConfigId: PROCESSOR,
+            sourceFamily: "email",
+            sourceBindingKey: CONNECTION,
+            boundary,
+          },
+          ctx,
+        ),
+      ).rejects.toThrow();
+      expect(transaction).not.toHaveBeenCalled();
+    }
   });
 });

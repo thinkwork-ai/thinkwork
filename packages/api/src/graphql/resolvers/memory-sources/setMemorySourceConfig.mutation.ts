@@ -1,6 +1,8 @@
 /**
- * setMemorySourceConfig — create, update, or disable a source config on a
- * SHARED processor (THINK-193 U5). Tenant-admin gated.
+ * setMemorySourceConfig — create, update, or disable a source config
+ * (THINK-193 U5/U6). SHARED processors are tenant-admin gated; PERSONAL
+ * processors are OWNER self-service restricted to family 'email' with a
+ * caller-owned connection as the binding (personal-email-self-service.ts).
  *
  * The boundary is validated against the family's governed-dimension schema
  * (assertSourceConfigBoundaryValid — typo'd keys and malformed values are
@@ -25,6 +27,7 @@ import {
 } from "../../../lib/memory-sources/policy.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import { assertPersonalEmailSelfService } from "./personal-email-self-service.js";
 
 type SourceConfigRow = typeof memorySourceConfigsTable.$inferSelect;
 
@@ -47,7 +50,6 @@ export async function setMemorySourceConfig(
   const tenantId =
     args.tenantId ?? ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
   if (!tenantId) throw new Error("Tenant context required");
-  await requireTenantAdmin(ctx, tenantId);
 
   const [processor] = await ctx.db
     .select()
@@ -60,13 +62,6 @@ export async function setMemorySourceConfig(
     )
     .limit(1);
   if (!processor) throw new Error("Memory processor config not found");
-  if (processor.mode !== "shared") {
-    // U5 scope: source configuration is a shared-workflow operator surface;
-    // personal source families arrive with the Gmail tracer (U6).
-    throw new Error(
-      "Source configs can only be managed on shared processors — personal source configuration arrives with the Gmail tracer (U6)",
-    );
-  }
 
   let existing: SourceConfigRow | null = null;
   if (args.sourceConfigId) {
@@ -110,6 +105,20 @@ export async function setMemorySourceConfig(
     throw new Error(
       `Unknown source family "${sourceFamily}" — expected one of ${MEMORY_SOURCE_FAMILIES.join(", ")}`,
     );
+  }
+
+  // Authz (U6): shared processors are operator surfaces (tenant admin);
+  // personal processors are owner self-service, restricted to the caller's
+  // own email connection.
+  if (processor.mode === "personal") {
+    await assertPersonalEmailSelfService(ctx, {
+      tenantId,
+      processor,
+      sourceFamily,
+      sourceBindingKey,
+    });
+  } else {
+    await requireTenantAdmin(ctx, tenantId);
   }
 
   const boundary =

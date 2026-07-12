@@ -517,7 +517,10 @@ extend type Mutation {
 External Memory Compounding (THINK-193 U2). Operator-only inspection and
 control surface for external memory sources: processor configs, source
 bindings, authorization grants, the evidence ledger, ontology claims, and
-the retraction ledger. All queries and mutations below require tenant admin.
+the retraction ledger. Queries and mutations below require tenant admin,
+with one exception (THINK-193 U6): grantMemorySourceAuthorization and
+setMemorySourceConfig on a PERSONAL processor are owner self-service,
+restricted to family 'email' bound to a connection the caller owns.
 """
 type MemoryProcessorConfig {
   id: ID!
@@ -750,6 +753,9 @@ extend type Mutation {
   """
   Insert an active grant for a source binding, superseding (revoking) any
   existing active grant for the same binding — one active grant per binding.
+  Shared processors: tenant admin. Personal processors (U6): owner
+  self-grant of the caller's OWN email connection to the caller's OWN
+  personal processor only.
   """
   grantMemorySourceAuthorization(
     tenantId: ID
@@ -760,11 +766,13 @@ extend type Mutation {
     expiresAt: AWSDateTime
   ): MemorySourceAuthorization!
   """
-  Create, update, or disable a source config on a SHARED processor
-  (THINK-193 U5). The boundary is validated against the family's governed
-  dimension schema and — when an active grant exists for the binding —
-  proven within the grant envelope. sourceFamily/sourceBindingKey are
-  required on create and immutable afterwards.
+  Create, update, or disable a source config (THINK-193 U5/U6). Shared
+  processors: tenant admin. Personal processors: owner self-service for
+  family 'email' bound to a caller-owned connection. The boundary is
+  validated against the family's governed dimension schema and — when an
+  active grant exists for the binding — proven within the grant envelope.
+  sourceFamily/sourceBindingKey are required on create and immutable
+  afterwards.
   """
   setMemorySourceConfig(
     tenantId: ID
