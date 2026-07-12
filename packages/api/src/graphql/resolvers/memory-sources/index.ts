@@ -8,6 +8,7 @@ import { memoryProcessorConfigs } from "./memoryProcessorConfigs.query.js";
 import { personalMemoryAutomation } from "./personalMemoryAutomation.query.js";
 import { memorySourceConfigs } from "./memorySourceConfigs.query.js";
 import { memorySourceAuthorizations } from "./memorySourceAuthorizations.query.js";
+import { setMemorySourceConfig } from "./setMemorySourceConfig.mutation.js";
 import { memoryEvidenceItems } from "./memoryEvidenceItems.query.js";
 import { memoryClaims } from "./memoryClaims.query.js";
 import { memoryRetractionAttempts } from "./memoryRetractionAttempts.query.js";
@@ -33,6 +34,7 @@ export const memorySourceMutations = {
   ensureSharedMemoryWorkflow,
   setPersonalMemoryAutomationSchedule,
   grantMemorySourceAuthorization,
+  setMemorySourceConfig,
   revokeMemorySourceAuthorization,
   retractMemoryDerivation,
   eraseMemorySource,

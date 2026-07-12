@@ -4332,6 +4332,14 @@ export type Mutation = {
   setDefaultEvalProfile: EvalProfile;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   /**
+   * Create, update, or disable a source config on a SHARED processor
+   * (THINK-193 U5). The boundary is validated against the family's governed
+   * dimension schema and — when an active grant exists for the binding —
+   * proven within the grant envelope. sourceFamily/sourceBindingKey are
+   * required on create and immutable afterwards.
+   */
+  setMemorySourceConfig: MemorySourceConfig;
+  /**
    * Replace an entity type's identity rules (THINK-193 U4). Bumps
    * identityRulesVersion. Tenant-admin gated.
    */
@@ -5435,6 +5443,16 @@ export type MutationSetDefaultEvalProfileArgs = {
 
 export type MutationSetManagedApplicationDeploymentArgs = {
   input: SetManagedApplicationDeploymentInput;
+};
+
+export type MutationSetMemorySourceConfigArgs = {
+  boundary?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  processorConfigId: Scalars["ID"]["input"];
+  sourceBindingKey?: InputMaybe<Scalars["String"]["input"]>;
+  sourceConfigId?: InputMaybe<Scalars["ID"]["input"]>;
+  sourceFamily?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationSetOntologyEntityTypeIdentityRulesArgs = {
