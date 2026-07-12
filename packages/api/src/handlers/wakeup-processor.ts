@@ -145,6 +145,7 @@ import {
 } from "../lib/goal-mode.js";
 import { normalizeThreadJsonRenderParts } from "../lib/chat-finalize/notify.js";
 import { goalRunProjectionFromFinalizePayload } from "../lib/chat-finalize/process-finalize.js";
+import { sendThreadReplySlack } from "../lib/slack/thread-reply.js";
 import { projectWorkflowStepFinalizeSafely } from "../lib/workflows/workflow-step-finalize.js";
 import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
@@ -2477,6 +2478,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           wakeup.agent_id,
           responseText,
           responseParts,
+          run.id,
         );
         if (assistantMsg) {
           await notifyNewMessage({
@@ -3735,6 +3737,7 @@ async function insertAssistantMessage(
   agentId: string,
   content: string,
   uiMessageParts?: Array<Record<string, unknown>>,
+  sourceTurnId?: string | null,
 ): Promise<{ id: string } | null> {
   try {
     const parts = normalizeThreadJsonRenderParts(uiMessageParts);
@@ -3748,9 +3751,14 @@ async function insertAssistantMessage(
         sender_type: "agent",
         sender_id: agentId,
         parts: parts || undefined,
+        // Stamp the turn link so origin-aware external delivery (Slack reply,
+        // THINK-84 U2) can resolve the triggering user message through
+        // thread_turns; parity with chat-agent-finalize's assistant insert.
+        metadata: sourceTurnId ? { sourceTurnId } : undefined,
       })
       .returning({ id: messages.id });
     console.log(`[wakeup-processor] Inserted assistant message: ${row.id}`);
+    await deliverSlackReplyForAssistantMessage(tenantId, threadId, row.id);
     return row;
   } catch (err) {
     console.error(
@@ -3758,6 +3766,44 @@ async function insertAssistantMessage(
       err,
     );
     return null;
+  }
+}
+
+/**
+ * Deliver a finalized assistant message back to its originating Slack thread
+ * (THINK-84 U2). Platform-agent turns dispatched through the durable wakeup
+ * path finalize here, NOT through chat-agent-finalize, so the Slack reply
+ * delivery that U2 wired into process-finalize must also run on this path or
+ * the final response never reaches Slack (only the ack does).
+ *
+ * `sendThreadReplySlack` is origin-gated — a cheap no-op ("not_slack_origin")
+ * unless the turn's triggering user message came from Slack — and idempotent
+ * per assistant message, so invoking it for every assistant insert is safe:
+ * non-Slack threads skip after one indexed lookup, and redelivery cannot
+ * double-post. Best-effort: a delivery failure is persisted/retryable inside
+ * the helper and never blocks assistant-message persistence.
+ */
+async function deliverSlackReplyForAssistantMessage(
+  tenantId: string,
+  threadId: string,
+  assistantMessageId: string,
+): Promise<void> {
+  try {
+    const delivery = await sendThreadReplySlack({
+      tenantId,
+      threadId,
+      assistantMessageId,
+    });
+    if (!delivery.delivered && delivery.retryable) {
+      console.error(
+        `[wakeup-processor] Slack reply dispatch failed assistant=${assistantMessageId} reason=${delivery.reason} error=${delivery.error ?? "unknown"}`,
+      );
+    }
+  } catch (err) {
+    console.error(
+      `[wakeup-processor] Slack reply dispatch threw assistant=${assistantMessageId}:`,
+      err,
+    );
   }
 }
 
