@@ -14,14 +14,18 @@
 
 import {
   advanceCursor,
+  approvalStepWaits,
+  APPROVAL_OVERRIDE_OUTPUT_KEY,
   boundDocumentIdFromTargetSpec,
   buildWorkflowStepWakeupPayload,
   decideWorkflowContinuation,
+  mergeApprovalOverrideIntoOptions,
   normalizeTargetSpec,
   planNextStep,
   planRollover,
   readWorkflowDefinition,
   resolveStepTemplates,
+  sanitizeApprovalPlanOverride,
   type ExecutableWorkflowStep,
   type InterpreterCursor,
   type StepTemplateContext,
@@ -101,7 +105,14 @@ export type WorkflowStepDispatchEvent =
   | {
       phase: "record_approval";
       cursor: InterpreterCursor;
-      approval: { approved: boolean; note?: string | null };
+      approval: {
+        approved: boolean;
+        note?: string | null;
+        /** THINK-193 U3: approved-plan narrowing override (frozen protocol
+         * shape from agent-loops-core; validated upstream by
+         * resolveWorkflowApproval and re-sanitized here). */
+        override?: unknown;
+      };
     }
   | {
       phase: "await_memory_stage";
@@ -132,6 +143,10 @@ interface RunRow {
   backend_execution_id: string | null;
   workflow_version_id: string | null;
   input_summary: Record<string, unknown> | null;
+  /** THINK-193 U3: approval steps with a `when.triggerFamily` predicate gate
+   * on this — a run whose family the predicate excludes records a visible
+   * skipped approval and advances. */
+  trigger_family: string | null;
   /** THINK-227 U4: the deliver step's new-edition gate compares the bound
    * document's last successful refresh against this. */
   started_at: Date | string | null;
@@ -150,6 +165,7 @@ async function loadRun(
       backend_execution_id: workflowRuns.backend_execution_id,
       workflow_version_id: workflowRuns.workflow_version_id,
       input_summary: workflowRuns.input_summary,
+      trigger_family: workflowRuns.trigger_family,
       started_at: workflowRuns.started_at,
     })
     .from(workflowRuns)
@@ -242,7 +258,40 @@ export async function handleLoadNext(
 
   // Approval step: mark the run waiting BEFORE the machine parks on the task
   // token, so operators see the pending decision the moment the step starts.
+  // A `when.triggerFamily` predicate that excludes this run's family records
+  // a VISIBLE skipped approval instead and advances (THINK-193 U3, AE2): the
+  // scheduled run proceeds inside its saved envelope with no human pause.
   if (plan.type === "approval_step") {
+    if (!approvalStepWaits(plan.step, run.trigger_family)) {
+      await recordWorkflowStepEvent(db, {
+        tenantId: cursor.tenantId,
+        workflowRunId: run.id,
+        eventType: "workflow_approval_skipped",
+        summary: {
+          stepId: plan.step.id,
+          stepKind: "approval",
+          iteration: cursor.iteration,
+          status: "skipped",
+          reason: "trigger_family_not_reviewed",
+          triggerFamily: run.trigger_family ?? undefined,
+          summary: `plan review skipped: ${run.trigger_family} runs proceed inside the saved configuration without human review`,
+        },
+        runStatus: "running",
+        now,
+      });
+      return await advanceAfterStepOutcome(db, {
+        cursor,
+        run,
+        definition,
+        step: plan.step,
+        turnStatus: "completed",
+        evidence: null,
+        stepErrorSummary: undefined,
+        // The skip event above IS the step's completion record.
+        completionAlreadyRecorded: true,
+        now,
+      });
+    }
     await recordWorkflowStepEvent(db, {
       tenantId: cursor.tenantId,
       workflowRunId: run.id,
@@ -648,9 +697,8 @@ export interface StepExecutors {
 
 export const defaultStepExecutors: StepExecutors = {
   invokeRoutine: async ({ routineId, input }) => {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const explicit = process.env.ROUTINE_EXEC_GIT_FUNCTION_NAME;
     const stage = process.env.STAGE;
@@ -694,9 +742,8 @@ export const defaultStepExecutors: StepExecutors = {
   },
   httpFetch: fetch,
   invokeArtifactDeliver: async (input) => {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const explicit = process.env.ARTIFACT_DELIVER_FUNCTION_NAME;
     const stage = process.env.STAGE;
@@ -734,9 +781,8 @@ export const defaultStepExecutors: StepExecutors = {
     }
   },
   invokeMemoryStageWorker: async (payload) => {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const explicit = process.env.MEMORY_STAGE_WORKER_FUNCTION_NAME;
     const stage = process.env.STAGE;
@@ -1364,6 +1410,22 @@ export async function handleRecordApproval(
     return { directive: "terminal_canceled", cursor };
   }
 
+  // Approved-plan override (THINK-193 U3): a reviewer's narrowing rides the
+  // resume payload. Sanitize into the frozen protocol shape; a malformed
+  // override degrades to none (the mutation validated it — this is a second
+  // fence, not the primary validator) and the stages' narrow-only semantics
+  // hold regardless.
+  let override: ReturnType<typeof sanitizeApprovalPlanOverride> = null;
+  if (isApprovalStep && approval.override != null) {
+    try {
+      override = sanitizeApprovalPlanOverride(approval.override);
+    } catch (error) {
+      console.warn(
+        `[workflow-step-dispatch] run ${run.id}: dropping malformed approval override: ${boundedMessage(error)}`,
+      );
+    }
+  }
+
   await recordWorkflowStepEvent(db, {
     tenantId: cursor.tenantId,
     workflowRunId: run.id,
@@ -1374,10 +1436,35 @@ export async function handleRecordApproval(
       iteration: cursor.iteration,
       decision: "approved",
       summary: approval.note ?? undefined,
+      ...(override
+        ? {
+            overrideSourceCount: override.sourceConfigIds?.length,
+            overrideFocusCount: override.focusKeys?.length,
+            overrideTimeFrom: override.timeRange?.from,
+            overrideTimeTo: override.timeRange?.to,
+            overrideMaxRecords: override.maxRecords,
+          }
+        : {}),
     },
     runStatus: "running",
     now,
   });
+
+  // Persist the override as the approval step's OUTPUT so downstream
+  // memory_stage dispatches (and the sweeper's payload reconstruction) merge
+  // it into stage options — a skipped approval simply records no output.
+  if (isApprovalStep && override) {
+    await recordWorkflowStepOutput(db, {
+      tenantId: cursor.tenantId,
+      workflowId: run.workflow_id,
+      workflowRunId: run.id,
+      stepId: step.id,
+      stepKind: step.kind,
+      iteration: cursor.iteration,
+      output: { [APPROVAL_OVERRIDE_OUTPUT_KEY]: override },
+      now,
+    });
+  }
 
   if (isApprovalStep) {
     return await advanceAfterStepOutcome(db, {
@@ -1482,6 +1569,15 @@ export async function handleAwaitMemoryStage(
     );
   }
 
+  // THINK-193 U3: fold an approved-plan override (persisted as an approval
+  // step's output) into the stage options. Narrow-only enforcement happens
+  // in the worker/stages; a skipped approval recorded no output, so
+  // scheduled runs pass through unchanged.
+  const optionsWithOverride = mergeApprovalOverrideIntoOptions(
+    context.steps,
+    options ?? null,
+  );
+
   try {
     await executors.invokeMemoryStageWorker({
       workflowRunId: run.id,
@@ -1494,7 +1590,7 @@ export async function handleAwaitMemoryStage(
         typeof sourceConfigId === "string" && sourceConfigId
           ? sourceConfigId
           : null,
-      options: options ?? null,
+      options: optionsWithOverride,
     });
   } catch (error) {
     return await failStep(

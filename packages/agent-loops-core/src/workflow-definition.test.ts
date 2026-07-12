@@ -493,3 +493,166 @@ describe("readWorkflowDefinition", () => {
     expect(readWorkflowDefinition(null)).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: approval trigger predicate + approved-plan override
+// ---------------------------------------------------------------------------
+
+import {
+  approvalStepWaits,
+  mergeApprovalOverrideIntoOptions,
+  sanitizeApprovalPlanOverride,
+} from "./workflow-definition.js";
+
+function approvalDefinition(when?: unknown) {
+  return {
+    version: 1,
+    steps: [
+      {
+        id: "plan-review",
+        kind: "approval",
+        prompt: "Review the plan",
+        ...(when !== undefined ? { when } : {}),
+      },
+      minimalAgentStep,
+    ],
+  };
+}
+
+describe("approval step `when` predicate validation", () => {
+  it("accepts a manual-only triggerFamily predicate", () => {
+    const result = validateWorkflowDefinition(
+      approvalDefinition({ triggerFamily: ["manual"] }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects an unknown trigger family", () => {
+    const result = validateWorkflowDefinition(
+      approvalDefinition({ triggerFamily: ["manual", "telepathy"] }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        stepId: "plan-review",
+        field: "steps[0].when.triggerFamily",
+      });
+    }
+  });
+
+  it("rejects an empty triggerFamily array", () => {
+    const result = validateWorkflowDefinition(
+      approvalDefinition({ triggerFamily: [] }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects unknown predicate keys (no expression evaluator)", () => {
+    const result = validateWorkflowDefinition(
+      approvalDefinition({
+        triggerFamily: ["manual"],
+        expression: "run.cost < 5",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]!.reason).toContain("unknown key");
+    }
+  });
+
+  it("rejects a non-object when", () => {
+    const result = validateWorkflowDefinition(
+      approvalDefinition("triggerFamily=manual"),
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("approvalStepWaits", () => {
+  const step = { when: { triggerFamily: ["manual" as const] } };
+
+  it("waits for a listed family and skips an excluded one", () => {
+    expect(approvalStepWaits(step, "manual")).toBe(true);
+    expect(approvalStepWaits(step, "schedule")).toBe(false);
+  });
+
+  it("always waits without a predicate", () => {
+    expect(approvalStepWaits({}, "schedule")).toBe(true);
+    expect(approvalStepWaits({ when: undefined }, "schedule")).toBe(true);
+  });
+
+  it("fails safe (waits) for null/unknown trigger families", () => {
+    expect(approvalStepWaits(step, null)).toBe(true);
+    expect(approvalStepWaits(step, undefined)).toBe(true);
+    expect(approvalStepWaits(step, "mystery_family")).toBe(true);
+  });
+});
+
+describe("sanitizeApprovalPlanOverride", () => {
+  it("returns null for empty/absent input", () => {
+    expect(sanitizeApprovalPlanOverride(null)).toBeNull();
+    expect(sanitizeApprovalPlanOverride(undefined)).toBeNull();
+    expect(sanitizeApprovalPlanOverride({})).toBeNull();
+  });
+
+  it("passes through a well-formed narrowing", () => {
+    expect(
+      sanitizeApprovalPlanOverride({
+        sourceConfigIds: ["sc-1"],
+        focusKeys: [" acme "],
+        timeRange: { from: "2026-07-01T00:00:00Z", to: "2026-07-10T00:00:00Z" },
+        maxRecords: 25,
+      }),
+    ).toEqual({
+      sourceConfigIds: ["sc-1"],
+      focusKeys: ["acme"],
+      timeRange: { from: "2026-07-01T00:00:00Z", to: "2026-07-10T00:00:00Z" },
+      maxRecords: 25,
+    });
+  });
+
+  it("throws on malformed shapes", () => {
+    expect(() => sanitizeApprovalPlanOverride("x")).toThrow();
+    expect(() =>
+      sanitizeApprovalPlanOverride({ sourceConfigIds: [] }),
+    ).toThrow();
+    expect(() =>
+      sanitizeApprovalPlanOverride({ sourceConfigIds: [42] }),
+    ).toThrow();
+    expect(() => sanitizeApprovalPlanOverride({ maxRecords: 0 })).toThrow();
+    expect(() =>
+      sanitizeApprovalPlanOverride({
+        timeRange: { from: "2026-07-10T00:00:00Z", to: "2026-07-01T00:00:00Z" },
+      }),
+    ).toThrow();
+    expect(() =>
+      sanitizeApprovalPlanOverride({ timeRange: { from: "not-a-date" } }),
+    ).toThrow();
+  });
+});
+
+describe("mergeApprovalOverrideIntoOptions", () => {
+  it("merges a persisted approvalOverride under options.override", () => {
+    const merged = mergeApprovalOverrideIntoOptions(
+      {
+        "plan-review": {
+          output: { approvalOverride: { sourceConfigIds: ["sc-1"] } },
+        },
+      },
+      { pageSize: 10 },
+    );
+    expect(merged).toEqual({
+      pageSize: 10,
+      override: { sourceConfigIds: ["sc-1"] },
+    });
+  });
+
+  it("returns options untouched when no override exists (skipped approval)", () => {
+    expect(
+      mergeApprovalOverrideIntoOptions({ other: { output: { x: 1 } } }, null),
+    ).toBeNull();
+    expect(mergeApprovalOverrideIntoOptions({}, { pageSize: 10 })).toEqual({
+      pageSize: 10,
+    });
+  });
+});

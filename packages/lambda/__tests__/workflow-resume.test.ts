@@ -192,3 +192,73 @@ describe("resumeWorkflowApproval — idempotency", () => {
     expect(mockSfnSend).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: approved-plan override rides the resume payload
+// ---------------------------------------------------------------------------
+
+describe("resumeWorkflowApproval — approved-plan override (U3)", () => {
+  it("approve carries the sanitized override in the SendTaskSuccess output", async () => {
+    fake.selectQueue.push(
+      [waitingRun()],
+      [{ iteration: 1, step_id: "plan-review" }],
+    );
+    fake.updateQueue.push([{ token: "approval-token-3" }]);
+
+    await resumeWorkflowApproval(
+      {
+        ...APPROVE,
+        override: { sourceConfigIds: [" sc-1 "], maxRecords: 25 },
+      },
+      { db: fake.db as never },
+    );
+
+    const command = mockSfnSend.mock.calls[0][0] as {
+      input: { output: string };
+    };
+    expect(JSON.parse(command.input.output)).toEqual({
+      approved: true,
+      note: "looks good",
+      override: { sourceConfigIds: ["sc-1"], maxRecords: 25 },
+    });
+  });
+
+  it("deny ignores any override", async () => {
+    fake.selectQueue.push(
+      [waitingRun()],
+      [{ iteration: 1, step_id: "plan-review" }],
+    );
+    fake.updateQueue.push([{ token: "approval-token-4" }]);
+
+    await resumeWorkflowApproval(
+      {
+        tenantId: "t1",
+        workflowRunId: "run-1",
+        approved: false,
+        override: { sourceConfigIds: ["sc-1"] },
+      },
+      { db: fake.db as never },
+    );
+    const command = mockSfnSend.mock.calls[0][0] as {
+      input: { output: string };
+    };
+    expect(JSON.parse(command.input.output)).toEqual({
+      approved: false,
+      note: null,
+    });
+  });
+
+  it("a malformed override errors BEFORE the token is consumed", async () => {
+    fake.selectQueue.push(
+      [waitingRun()],
+      [{ iteration: 1, step_id: "plan-review" }],
+    );
+    await expect(
+      resumeWorkflowApproval(
+        { ...APPROVE, override: { maxRecords: -1 } },
+        { db: fake.db as never },
+      ),
+    ).rejects.toThrow(/maxRecords/);
+    expect(mockSfnSend).not.toHaveBeenCalled();
+  });
+});
