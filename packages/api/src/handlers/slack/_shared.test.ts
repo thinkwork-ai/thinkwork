@@ -98,7 +98,6 @@ function makeMetrics() {
     unknownTeam: vi.fn(),
     dispatchSuccess: vi.fn(),
     dispatchFailure: vi.fn(),
-    attributionDegraded: vi.fn(),
   };
 }
 
@@ -341,7 +340,7 @@ describe("createSlackHandler", () => {
     }));
     const handler = createSlackHandler(
       {
-        name: "slash-command",
+        name: "form-surface",
         extractTeamId: ({ rawBodyText }) =>
           new URLSearchParams(rawBodyText).get("team_id"),
         dispatch,

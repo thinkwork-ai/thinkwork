@@ -30,8 +30,6 @@ locals {
       "oauth-authorize",
       "oauth-callback",
       "slack-events",
-      "slack-slash-command",
-      "slack-interactivity",
       "slack-oauth-install",
     ],
   )
@@ -346,8 +344,6 @@ locals {
     "oauth-authorize"     = local.slack_handler_env
     "oauth-callback"      = local.slack_handler_env
     "slack-events"        = local.slack_handler_env
-    "slack-slash-command" = local.slack_handler_env
-    "slack-interactivity" = local.slack_handler_env
     "slack-oauth-install" = local.slack_handler_env
     "thread-attachments-finalize" = {
       REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
@@ -642,8 +638,6 @@ resource "aws_lambda_function" "handler" {
     "email-provider-webhook",
     "email-readiness-probe",
     "slack-events",
-    "slack-slash-command",
-    "slack-interactivity",
     "slack-oauth-install",
     "github-app",
     "memory",
@@ -1419,8 +1413,6 @@ locals {
       # Slack workspace app ingress. These unauthenticated public endpoints
       # verify Slack signatures in handler code before any tenant work happens.
       "POST /slack/events"        = "slack-events"
-      "POST /slack/slash-command" = "slack-slash-command"
-      "POST /slack/interactivity" = "slack-interactivity"
       "GET /slack/oauth/install"  = "slack-oauth-install"
       "POST /slack/oauth/install" = "slack-oauth-install"
 

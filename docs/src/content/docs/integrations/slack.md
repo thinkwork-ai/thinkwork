@@ -1,75 +1,72 @@
 ---
 title: Slack Workspace App
-description: "Slack integration is currently disabled while the Spaces-based ingestion path is being designed. This page describes the previous Computer-routed design as historical reference."
+description: "Mention or DM the ThinkWork bot in Slack to run a turn as your linked ThinkWork user, with the final response delivered back to the originating thread."
 ---
 
-:::caution[Slack integration is currently disabled]
-The Slack workspace app described on this page is **not operational in v1**. The previous Computer-routed implementation was retired in PR #1666 alongside the Computer feature kill. Inbound Slack endpoints (`/slack/events`, `/slack/slash-command`, `/slack/interactivity`) currently respond 200 OK and drop events.
-
-The replacement design — Slack ingestion flowing into Spaces and the tenant platform agent — is on the roadmap. This page is preserved as historical reference for the install model, scopes, and attribution patterns that the replacement will likely re-use.
+:::note[Internal dogfood]
+The Slack workspace app is deployed and functional for mentions and direct messages. It is currently in internal dogfood (THINK-84); distribution beyond internal workspaces is an operational follow-up.
 :::
 
-The Slack workspace app (when re-enabled) lets people work with the tenant platform agent from Slack without turning Slack into a separate agent runtime. Slack is an ingress and delivery surface: messages are verified, mapped to the right tenant workspace and linked requester, routed to a Space, and answered back in Slack with explicit attribution.
+The Slack workspace app lets people work with the tenant platform agent from Slack without turning Slack into a separate agent runtime. Slack is an ingress and delivery surface: events are signature-verified, mapped to the installed tenant workspace and the explicitly linked ThinkWork user, persisted as ordinary ThinkWork thread messages in the general Space, executed by the platform agent, and answered back in the originating Slack thread.
 
-## What the app does
-
-- Handles `@ThinkWork` mentions in channels and direct messages to the bot.
-- Handles `/thinkwork <computer> <prompt>` slash commands, such as `/thinkwork finance summarize this thread`.
-- Handles message shortcuts for asking a Computer to work from a specific Slack message or thread.
-- Preserves Slack thread context and supported file references in the Computer task envelope.
-- Returns an immediate Slack acknowledgement, then delivers the completed Computer response through a placeholder update, modal update, `response_url`, or threaded message.
-- Shows which shared Computer acted and who requested it with an always-on footer: `Routed via @ThinkWork · Finance Computer · requested by Eric`.
-
-## Install and linking model
-
-An admin installs the Slack app for a workspace from ThinkWork admin. The install stores the workspace bot token in AWS Secrets Manager under a tenant-scoped path. End users then link their own Slack identity from the mobile connection flow or Slack App Home, which creates a `slack_user_links` row from Slack user id to ThinkWork user id. Computer access is resolved from the user's direct and Team shared Computer assignments at invocation time.
-
-The app is workspace-scoped in v1. Enterprise Grid customers can install ThinkWork separately into each workspace that needs it.
+ThinkWork remains the system of record. The transport edge uses pinned low-level Chat SDK Slack primitives (`@chat-adapter/slack`) for verification, payload parsing, and Web API calls only; no provider object becomes ThinkWork state, and the workspace bot token is transport-only.
 
 ## Supported surfaces
 
-| Slack surface    | User action                                      | Slack response behavior                                                                                         |
-| ---------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Channel mention  | `@ThinkWork finance summarize this thread`       | A placeholder is posted in-thread, then updated with the selected shared Computer response.                     |
-| Direct message   | `finance draft a customer update`                | The selected shared Computer response is posted back in the DM.                                                 |
-| Slash command    | `/thinkwork finance what changed this week?`     | Slack receives an empty 200 ack; the answer is sent as an ephemeral response with a **Post to channel** button. |
-| Message shortcut | Use the ThinkWork shortcut on a message          | A working modal opens immediately. If multiple Computers are assigned, the next version presents a picker.      |
-| Public promotion | Click **Post to channel** on an ephemeral answer | The response is posted publicly with shared Computer and requester attribution.                                 |
+| Slack surface              | User action                                       | Behavior                                                                                                                        |
+| -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Channel mention            | `@ThinkWork summarize this thread`                | A brief acknowledgement is posted in-thread; the finalized agent response is posted to the same thread when the turn completes. |
+| Direct message             | `draft a customer update`                         | Same loop in the bot DM — no mention token required.                                                                            |
+| Threaded channel follow-up | Reply in the thread **and mention the bot again** | Continues the same ThinkWork thread; the response returns to the same Slack thread.                                             |
+
+In channels, every invocation requires an explicit `@ThinkWork` mention — a plain thread reply without a mention is not received or processed. Only bot DMs work without a mention.
+
+Slash commands, message shortcuts, modals, and interactive components are **not supported**. Their endpoints were removed rather than left accepting and dropping requests. If a workspace's Slack app configuration still registers a `/thinkwork` slash command or an interactivity request URL from an earlier install, remove them in the Slack app settings — those requests now receive a 404 (Slack shows `dispatch_failed` for the command).
+
+## Install and linking model
+
+An admin installs the Slack app for a workspace from ThinkWork admin (`GET /slack/oauth/install` with signed, expiring state). The install stores the workspace bot token in AWS Secrets Manager under a tenant-scoped path and upserts a `slack_workspaces` row.
+
+End users then link their own Slack identity explicitly (mobile connection flow), creating a `slack_user_links` row from Slack user id to ThinkWork user id. **There is no email-based auto-linking.** An unlinked user who invokes the bot receives a link prompt and no work is executed.
+
+Every turn executes as the linked ThinkWork user — never as the bot or workspace identity.
+
+## Event subscriptions
+
+The app requires these Events API subscriptions:
+
+- `app_mention` — channel mentions
+- `message.im` — direct messages to the bot
+- `message.channels` (and `message.groups` for private channels) — required for mentions on messages with file attachments: Slack delivers those as `message` events with subtype `file_share` instead of `app_mention`, and ThinkWork promotes ones whose text mentions the bot. All other channel messages are acknowledged no-ops.
 
 ## Slack scopes
 
-The app requests the minimum bot and OAuth scopes needed for the supported surfaces. Scope names may vary slightly as Slack evolves, but v1 expects:
+The install flow requests the minimum bot scopes for the shipped surfaces — every scope maps to an event subscription or Web API call the code actually makes:
 
-| Scope                                                              | Why ThinkWork needs it                                                                                          |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `app_mentions:read`                                                | Receive `@ThinkWork` mentions.                                                                                  |
-| `channels:history`, `groups:history`, `im:history`, `mpim:history` | Read the source thread context that the user explicitly invoked from.                                           |
-| `chat:write`                                                       | Post placeholders, final responses, link prompts, and promoted public messages.                                 |
-| `commands`                                                         | Receive `/thinkwork` slash commands.                                                                            |
-| `files:read`                                                       | Reference files attached to invoked Slack messages.                                                             |
-| `im:write`                                                         | Send connection prompts when a Slack user is not linked yet.                                                    |
-| `users:read`                                                       | Resolve display names and avatar metadata for attribution.                                                      |
-| `users:read.email`                                                 | Match Slack users to ThinkWork users during linking.                                                            |
-| `chat:write.customize`                                             | Optional. Lets ThinkWork render responses with ThinkWork branding while preserving shared Computer attribution. |
+| Scope                                                              | Why ThinkWork needs it                                                                                      |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `app_mentions:read`                                                | Receive `@ThinkWork` mentions.                                                                              |
+| `channels:history`, `groups:history`, `im:history`, `mpim:history` | Receive DM and file-attachment message events, and read bounded thread context via `conversations.replies`. |
+| `chat:write`                                                       | Post acknowledgements, final responses, and link prompts.                                                   |
+| `files:read`                                                       | Download files attached to invoked Slack messages.                                                          |
 
-### Why `chat:write.customize` is optional
+No other scopes are requested. In particular, `commands`, `chat:write.customize`, and `users:read.email` belong to removed or forbidden behaviors (slash commands, customized attribution, email auto-linking), and metadata-read scopes (`channels:read` etc.), `im:write`, and `users:read` were dropped because no code path uses them — the unlinked-user prompt is posted into the originating conversation with `chat:write`, not via a newly opened DM.
 
-ThinkWork uses `chat:write.customize` only for clearer attribution in shared channels. Some enterprise IT teams remove or reject that scope because it allows a bot to customize message identity. The Slack app still works without it: the dispatcher retries with the plain bot identity, prefixes the message body with the shared Computer name when needed, keeps the attribution footer, and emits the `slack.attribution.degraded` metric for operators.
+Slack does not revoke previously granted scopes: a workspace installed before a scope trim keeps its broader grant until the app is reinstalled. Reinstall through ThinkWork admin to converge an existing workspace onto the minimum set.
 
-## Unlinked users
+## Reliability semantics
 
-If a Slack user invokes ThinkWork before linking their identity, ThinkWork does not create Computer work. The app posts a short connection prompt and publishes the App Home connect action. After the user links Slack to ThinkWork, the same Slack surface proceeds only for shared Computers assigned to that user.
+- **Idempotent ingress** — every accepted event stores a provider-prefixed source event id on the message row behind a tenant-scoped unique index. Slack redeliveries (with or without retry headers) reuse the existing message and never create a duplicate turn.
+- **Exactly-once replies** — final delivery is claimed and recorded per assistant message (`metadata.slackDelivery`); retries redrive failures without double-posting.
+- **Origin-gated delivery** — a web or mobile follow-up on a Slack-created thread never posts back to Slack; only turns triggered by a Slack-originated message deliver externally.
+- **Fail-visible delivery** — a Slack API failure is persisted and retryable; it never rolls back the assistant message or the turn.
 
-## Unassigned users and ambiguous targets
+## Data sent to the agent
 
-Slack never creates a personal Computer fallback. If a linked user has no assigned shared Computers, ThinkWork returns assignment guidance and does not enqueue work. If a user has multiple assigned Computers and omits the target, ThinkWork asks for a target such as `finance` or `sales` instead of guessing.
-
-## Data sent to the Computer
-
-ThinkWork sends only the invoked Slack context needed for the turn: Slack team id, channel id, invoking Slack user id, selected shared Computer id, requester ThinkWork user id, source message, summarized messages from the source thread, and referenced file metadata. Messages outside the invoked thread are not included.
+ThinkWork sends only the invoked Slack context needed for the turn: team id, channel id, invoking Slack user id, linked requester ThinkWork user id, source message, bounded messages from the source thread, and referenced file metadata. Messages outside the invoked thread are not included. Completed turns follow the ordinary Hindsight memory and Wiki processing paths.
 
 For the formal disclosure, see [Slack data handling](/compliance/slack-data-handling/).
 
 ## Operations
 
-The runtime emits CloudWatch EMF metrics for Slack ingress, dedupe, unknown teams, dispatch success/failure, and attribution degradation. Operators should start with the [Slack dispatch runbook](/operations/slack-dispatch-runbook/) when a Slack alarm fires.
+The runtime emits CloudWatch EMF metrics for Slack ingress latency, dedupe hits, unknown teams, and dispatch success/failure in the `ThinkWork/Slack` namespace. Operators should start with the [Slack operations runbook](/operations/slack-dispatch-runbook/) when a Slack alarm fires.

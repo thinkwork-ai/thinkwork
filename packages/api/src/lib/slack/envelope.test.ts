@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildSlackMessageActionInput,
-  buildSlackSlashCommandInput,
   buildSlackThreadTurnInput,
   slackFileRefs,
   summarizeSlackThreadContext,
@@ -110,8 +108,6 @@ describe("Slack event envelope helpers", () => {
       channelType: "im",
       threadTs: "1710000001.000000",
       messageTs: "1710000001.000000",
-      responseUrl: null,
-      placeholderTs: null,
       actorId: "user-1",
     });
   });
@@ -204,58 +200,5 @@ describe("Slack event envelope helpers", () => {
     expect(input.fileRefs).toEqual([
       expect.objectContaining({ id: "F123", name: "current.md" }),
     ]);
-  });
-
-  it("builds a slash command input with response_url metadata", () => {
-    expect(
-      buildSlackSlashCommandInput({
-        slackTeamId: "T123",
-        slackUserId: "U123",
-        channelId: "C123",
-        text: "summarize Q3",
-        responseUrl: "https://hooks.slack.com/commands/response",
-        triggerId: "trigger-1",
-        actorId: "user-1",
-      }),
-    ).toMatchObject({
-      source: "slack",
-      channelType: "slash",
-      eventId: "slash:trigger-1",
-      responseUrl: "https://hooks.slack.com/commands/response",
-      sourceMessage: { text: "summarize Q3" },
-      actorId: "user-1",
-    });
-  });
-
-  it("builds a message-action input with modal and file metadata", () => {
-    expect(
-      buildSlackMessageActionInput({
-        slackTeamId: "T123",
-        slackUserId: "U123",
-        channelId: "C123",
-        triggerId: "trigger-1",
-        responseUrl: "https://hooks.slack.com/actions/response",
-        modalViewId: "V123",
-        actorId: "user-1",
-        message: {
-          user: "U456",
-          text: "review this",
-          ts: "1710000001.000000",
-          thread_ts: "1710000000.000000",
-          files: [{ id: "F123", name: "brief.pdf" }],
-        },
-      }),
-    ).toMatchObject({
-      source: "slack",
-      channelType: "message_action",
-      eventId: "message_action:trigger-1",
-      threadTs: "1710000000.000000",
-      messageTs: "1710000001.000000",
-      responseUrl: "https://hooks.slack.com/actions/response",
-      modalViewId: "V123",
-      sourceMessage: { text: "review this", user: "U456" },
-      fileRefs: [{ id: "F123", name: "brief.pdf" }],
-      actorId: "user-1",
-    });
   });
 });

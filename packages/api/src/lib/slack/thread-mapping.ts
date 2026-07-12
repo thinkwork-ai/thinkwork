@@ -142,11 +142,7 @@ async function createMappedThread(
 
 function slackThreadTitle(envelope: SlackThreadTurnInput): string {
   const text = envelope.slack.sourceMessage?.text?.trim() ?? "";
-  const prefix =
-    envelope.slack.triggerSurface === "slash_command"
-      ? "Slack /thinkwork"
-      : "Slack";
-  if (!text) return prefix;
+  if (!text) return "Slack";
   return text.length <= 80
     ? text
     : text.substring(0, 80).replace(/\s+\S*$/, "...");

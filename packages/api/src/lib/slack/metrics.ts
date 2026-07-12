@@ -3,8 +3,7 @@ export type SlackMetricName =
   | "slack.events.dedupe_hits"
   | "slack.events.unknown_team"
   | "slack.dispatch.success"
-  | "slack.dispatch.failure"
-  | "slack.attribution.degraded";
+  | "slack.dispatch.failure";
 
 export type SlackMetricUnit = "Count" | "Milliseconds";
 
@@ -22,7 +21,6 @@ export interface SlackMetrics {
   unknownTeam(dimensions?: Record<string, string>): void;
   dispatchSuccess(surface: string): void;
   dispatchFailure(errorClass: string): void;
-  attributionDegraded(dimensions?: Record<string, string>): void;
 }
 
 const SLACK_METRICS_NAMESPACE = "ThinkWork/Slack";
@@ -74,14 +72,6 @@ export function createSlackMetrics(
         value: 1,
         unit: "Count",
         dimensions: { error_class: errorClass },
-      });
-    },
-    attributionDegraded(dimensions) {
-      metrics.emit({
-        name: "slack.attribution.degraded",
-        value: 1,
-        unit: "Count",
-        dimensions,
       });
     },
   };

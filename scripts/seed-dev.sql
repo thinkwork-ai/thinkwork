@@ -63,10 +63,9 @@ INSERT INTO connect_providers (name, display_name, provider_type, auth_type, con
     'token_url',         'https://slack.com/api/oauth.v2.access',
     'userinfo_url',      'https://slack.com/api/users.identity',
     'scopes', jsonb_build_object(
-      'chat',            'chat:write',
-      'chat_customize',  'chat:write.customize',
-      'channels',        'channels:read',
-      'users',           'users:read'
+      'chat',     'chat:write',
+      'channels', 'channels:read',
+      'users',    'users:read'
     ),
     'user_scopes', jsonb_build_object(
       'identity',       'identity.basic',

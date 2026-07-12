@@ -58,7 +58,12 @@ describe("Slack OAuth install state", () => {
     expect(url.searchParams.get("redirect_uri")).toBe(
       "https://api.example.com/slack/oauth/install",
     );
-    expect(url.searchParams.get("scope")).toContain("chat:write.customize");
+    const scope = url.searchParams.get("scope") ?? "";
+    expect(scope).toContain("app_mentions:read");
+    expect(scope).toContain("chat:write");
+    expect(scope).not.toContain("chat:write.customize");
+    expect(scope.split(",")).not.toContain("commands");
+    expect(scope).not.toContain("users:read.email");
   });
 
   it("accepts https and localhost return URLs only", () => {
