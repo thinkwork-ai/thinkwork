@@ -76,6 +76,9 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
   }));
   const materializeSlackFiles = vi.fn(async () => []);
   const persistAckTs = vi.fn(async () => {});
+  const setAssistantStatus = vi.fn(
+    async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true }),
+  );
   const slackApi = {
     fetchThreadMessages: vi.fn(async () => [
       { user: "U123", botId: null, ts: "1710000000.000000", text: "Earlier" },
@@ -94,9 +97,28 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     dispatchDefaultAgent,
     materializeSlackFiles,
     persistAckTs,
+    setAssistantStatus,
     slackApi,
     metrics,
     ...overrides,
+  };
+}
+
+function dmPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "event_callback",
+    team_id: "T123",
+    event_id: "EvDM",
+    event: {
+      type: "message",
+      channel_type: "im",
+      team: "T123",
+      user: "U123",
+      channel: "D123",
+      text: "hello",
+      ts: "1710000003.000000",
+      ...overrides,
+    },
   };
 }
 
@@ -190,6 +212,87 @@ describe("Slack events handler", () => {
     expect(result.statusCode).toBe(200);
     expect(deps.slackApi.postMessage).toHaveBeenCalledTimes(1);
     expect(deps.persistAckTs).not.toHaveBeenCalled();
+  });
+
+  it("shows the native DM typing status instead of posting a placeholder", async () => {
+    const deps = makeDeps();
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    const result = await dispatch(makeArgs(dmPayload()));
+
+    expect(result.statusCode).toBe(200);
+    expect(deps.setAssistantStatus).toHaveBeenCalledWith({
+      token: "xoxb-token",
+      channelId: "D123",
+      threadTs: "1710000003.000000",
+      status: "is thinking…",
+    });
+    // Slack clears the status when the finalizer posts the real answer, so
+    // there is no placeholder message to update in place.
+    expect(deps.slackApi.postMessage).not.toHaveBeenCalled();
+    expect(deps.persistAckTs).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the placeholder when the DM status scope is missing", async () => {
+    const deps = makeDeps({
+      setAssistantStatus: vi.fn(async () => ({
+        ok: false,
+        error: "missing_scope",
+      })),
+    });
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    const result = await dispatch(makeArgs(dmPayload()));
+
+    expect(result.statusCode).toBe(200);
+    expect(deps.setAssistantStatus).toHaveBeenCalledTimes(1);
+    expect(deps.slackApi.postMessage).toHaveBeenCalledWith({
+      token: "xoxb-token",
+      channel: "D123",
+      threadTs: "1710000003.000000",
+      text: "ThinkWork is working on it…",
+    });
+    expect(deps.persistAckTs).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      messageId: "message-1",
+      ackTs: "1710000002.000000",
+    });
+  });
+
+  it("falls back to the placeholder when the DM status call throws", async () => {
+    const deps = makeDeps({
+      setAssistantStatus: vi.fn(async () => {
+        throw new Error("socket hang up");
+      }),
+    });
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    const result = await dispatch(makeArgs(dmPayload()));
+
+    expect(result.statusCode).toBe(200);
+    expect(deps.slackApi.postMessage).toHaveBeenCalledTimes(1);
+    expect(deps.persistAckTs).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      messageId: "message-1",
+      ackTs: "1710000002.000000",
+    });
+  });
+
+  it("never attempts the typing status for a channel mention", async () => {
+    const deps = makeDeps();
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    await dispatch(makeArgs(appMentionPayload()));
+
+    // Slack has no typing-status API for a channel @mention — the in-place
+    // placeholder is the only option there.
+    expect(deps.setAssistantStatus).not.toHaveBeenCalled();
+    expect(deps.slackApi.postMessage).toHaveBeenCalledTimes(1);
+    expect(deps.persistAckTs).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      messageId: "message-1",
+      ackTs: "1710000002.000000",
+    });
   });
 
   it("accepts a linked direct message without requiring a bot mention", async () => {

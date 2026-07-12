@@ -399,6 +399,59 @@ export async function publishSlackHomeView(
   );
 }
 
+export interface SlackAssistantStatusResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Set the ephemeral "is typing…"-style status on an assistant thread (a DM
+ * with the app). Slack clears it automatically as soon as the app posts a
+ * real message, so callers that succeed here must not also post a
+ * placeholder.
+ *
+ * Only valid in assistant threads (DMs) of an assistant-enabled app holding
+ * the `assistant:write` scope. Every Slack-level `ok: false` — `missing_scope`,
+ * a non-assistant app, an invalid thread — is normalized into
+ * `{ ok: false, error }` (via the shared asSlackApiFailure path) so callers
+ * can fall back to a placeholder post; HTTP and transport failures throw,
+ * matching postSlackThreadMessage / publishSlackHomeView.
+ */
+export async function setSlackAssistantStatus(
+  input: SlackApiCallInput & {
+    channelId: string;
+    threadTs: string;
+    status: string;
+  },
+): Promise<SlackAssistantStatusResult> {
+  try {
+    const result = await callSlackApi(
+      "assistant.threads.setStatus",
+      {
+        channel_id: input.channelId,
+        thread_ts: input.threadTs,
+        status: input.status,
+      },
+      {
+        token: input.token,
+        contentType: "json",
+        fetch: input.fetchFn,
+      },
+    );
+    if (result.ok !== true) {
+      return {
+        ok: false,
+        error: optionalString(result.error) ?? "unknown_error",
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    const apiFailure = asSlackApiFailure(error);
+    if (apiFailure) return { ok: false, error: apiFailure.error };
+    throw error;
+  }
+}
+
 function asSlackApiFailure(error: unknown): SlackPostMessageResult | null {
   if (
     error instanceof SlackApiError &&

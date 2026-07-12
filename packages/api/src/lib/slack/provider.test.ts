@@ -5,6 +5,7 @@ import {
   fetchSlackThreadContext,
   postSlackThreadMessage,
   publishSlackHomeView,
+  setSlackAssistantStatus,
   updateSlackThreadMessage,
   verifySlackWebhookSignature,
 } from "./provider.js";
@@ -433,6 +434,93 @@ describe("postSlackThreadMessage", () => {
       }),
     ).rejects.toThrow();
     expect(neverResolving.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
+});
+
+describe("setSlackAssistantStatus", () => {
+  it("sets the assistant thread status as a JSON call", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ ok: true }));
+
+    const result = await setSlackAssistantStatus({
+      token: "xoxb-token",
+      channelId: "D123",
+      threadTs: "1710000001.000000",
+      status: "is thinking…",
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({ ok: true });
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [
+      URL,
+      { headers: Record<string, string>; body: string },
+    ];
+    expect(String(url)).toBe(
+      "https://slack.com/api/assistant.threads.setStatus",
+    );
+    expect(init.headers.authorization).toBe("Bearer xoxb-token");
+    expect(JSON.parse(init.body)).toEqual({
+      channel_id: "D123",
+      thread_ts: "1710000001.000000",
+      status: "is thinking…",
+    });
+  });
+
+  it("normalizes missing_scope into a failed result instead of throwing", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ ok: false, error: "missing_scope" }),
+    );
+
+    await expect(
+      setSlackAssistantStatus({
+        token: "xoxb-token",
+        channelId: "D123",
+        threadTs: "1710000001.000000",
+        status: "is thinking…",
+        fetchFn: fetchFn as unknown as typeof fetch,
+      }),
+    ).resolves.toEqual({ ok: false, error: "missing_scope" });
+  });
+
+  it("normalizes any Slack-level ok:false (non-assistant app, bad thread)", async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ ok: false, error: "not_an_assistant_thread" }),
+    );
+
+    await expect(
+      setSlackAssistantStatus({
+        token: "xoxb-token",
+        channelId: "C123",
+        threadTs: "1710000001.000000",
+        status: "is thinking…",
+        fetchFn: fetchFn as unknown as typeof fetch,
+      }),
+    ).resolves.toEqual({ ok: false, error: "not_an_assistant_thread" });
+  });
+
+  it("throws on HTTP failures and transport errors", async () => {
+    const httpFailure = vi.fn(async () => jsonResponse({ ok: false }, 500));
+    await expect(
+      setSlackAssistantStatus({
+        token: "t",
+        channelId: "D1",
+        threadTs: "1.0",
+        status: "s",
+        fetchFn: httpFailure as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("HTTP 500");
+
+    const transport = vi.fn(async () => {
+      throw new Error("socket hang up");
+    });
+    await expect(
+      setSlackAssistantStatus({
+        token: "t",
+        channelId: "D1",
+        threadTs: "1.0",
+        status: "s",
+        fetchFn: transport as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("socket hang up");
   });
 });
 
