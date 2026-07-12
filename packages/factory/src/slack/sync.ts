@@ -92,6 +92,15 @@ function actionWarrantsThread(
   candidate: PollCandidate,
   action: EngineAction,
 ): boolean {
+  // Done is TERMINAL. A finished issue never opens a thread or escalates on a
+  // stale label — the only Done action that warrants operator visibility is a
+  // genuine compound `launch` (the engine launches compound only for a
+  // factory-driven, not-yet-compounded Done issue, and the `compounded` flag
+  // makes that one-shot). This mirrors the engine's own Done-is-terminal guard
+  // (the loop fix): without it, an old Done issue carrying a stale `Needs User`
+  // or lane label re-opens a thread + @mention every tick even though the
+  // engine correctly noops it — the Done-issue Slack churn.
+  if (candidate.issue.state === "Done") return action.kind === "launch";
   // A live `Needs User` question always warrants a thread (the escalation).
   if (candidate.blockerLabels.includes(NEEDS_USER)) return true;
   switch (action.kind) {
@@ -215,8 +224,13 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
       // issue — a bare `noop` gets no thread, no post.
       if (!actionWarrantsThread(candidate, action)) return;
       const ref = await ensureThread(candidate);
-      // A live `Needs User` blocker takes priority: escalate the question.
-      if (candidate.blockerLabels.includes(NEEDS_USER)) {
+      // A live `Needs User` blocker takes priority: escalate the question — but
+      // NEVER for a Done issue (a stale label on a finished issue is not a live
+      // question; the only Done thread here is a one-shot compound launch).
+      if (
+        candidate.issue.state !== "Done" &&
+        candidate.blockerLabels.includes(NEEDS_USER)
+      ) {
         await maybeEscalate(candidate, ref);
         return;
       }
