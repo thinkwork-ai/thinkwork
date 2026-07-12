@@ -4,6 +4,10 @@
 -- cache/ledger, and must be rebuildable from a fresh Linear scan.
 --
 -- Applied idempotently (CREATE ... IF NOT EXISTS) on every daemon start.
+--
+-- NOT standalone SQL: this file is a template consumed by src/store/db.ts,
+-- which substitutes __TERMINAL_ATTEMPT_STATES__ from the authoritative
+-- TERMINAL_ATTEMPT_STATES constant before applying it.
 
 CREATE TABLE IF NOT EXISTS issues (
   issue_id        TEXT PRIMARY KEY,
@@ -34,8 +38,17 @@ CREATE TABLE IF NOT EXISTS attempts (
   -- sync by SQLite itself, so the unique index below cannot drift from the
   -- state column. (Partial indexes can't reference an IN list via a plain
   -- WHERE on state in older SQLite grammars; a generated column is cleanest.)
+  --
+  -- INVARIANT: the terminal-state list is NOT written here. The placeholder
+  -- below is substituted at schema-application time from the single
+  -- authoritative list, TERMINAL_ATTEMPT_STATES in src/store/db.ts — add or
+  -- remove terminal states THERE, never here. openStore() additionally
+  -- asserts on every open that the list baked into an existing DB file's
+  -- generated column still matches the TS constant, so a stale factory.db
+  -- (or an edit to only one side) fails loudly instead of silently breaking
+  -- the unique-active-attempt invariant.
   active INTEGER GENERATED ALWAYS AS (
-    CASE WHEN state IN ('Succeeded', 'Failed', 'TimedOut', 'Stalled', 'QuotaCooldown', 'CanceledByReconciliation')
+    CASE WHEN state IN (__TERMINAL_ATTEMPT_STATES__)
       THEN 0 ELSE 1 END
   ) VIRTUAL
 );

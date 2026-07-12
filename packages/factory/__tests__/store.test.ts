@@ -3,7 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { openStore, type FactoryStore } from "../src/store/db.js";
+import Database from "better-sqlite3";
+
+import {
+  TERMINAL_ATTEMPT_STATES,
+  openStore,
+  readDbTerminalAttemptStates,
+  type FactoryStore,
+} from "../src/store/db.js";
 
 let dir: string;
 let store: FactoryStore;
@@ -26,6 +33,51 @@ describe("schema", () => {
   it("applies idempotently (open twice, no error)", () => {
     const second = openStore(dir);
     second.close();
+  });
+
+  it("the generated active column's terminal set equals TERMINAL_ATTEMPT_STATES (single source of truth)", () => {
+    // schema.sql carries a placeholder, not a list — what the DB treats as
+    // terminal must be exactly the TS constant, no drift possible.
+    expect(new Set(readDbTerminalAttemptStates(store.db))).toEqual(
+      new Set(TERMINAL_ATTEMPT_STATES),
+    );
+  });
+
+  it("refuses to open a stale DB whose baked-in terminal set drifted from TERMINAL_ATTEMPT_STATES", () => {
+    // Simulate a factory.db created under an OLDER terminal list (missing
+    // one state). CREATE TABLE IF NOT EXISTS would silently keep it; the
+    // startup assertion must fail loudly instead.
+    const staleDir = mkdtempSync(join(tmpdir(), "factory-store-stale-"));
+    try {
+      const stale = new Database(join(staleDir, "factory.db"));
+      const outdated = TERMINAL_ATTEMPT_STATES.slice(0, -1)
+        .map((s) => `'${s}'`)
+        .join(", ");
+      stale.exec(`
+        CREATE TABLE attempts (
+          id             INTEGER PRIMARY KEY AUTOINCREMENT,
+          issue_id       TEXT NOT NULL,
+          phase          TEXT NOT NULL,
+          attempt_number INTEGER NOT NULL,
+          state          TEXT NOT NULL,
+          host           TEXT,
+          worktree_path  TEXT,
+          branch         TEXT,
+          pid            INTEGER,
+          log_path       TEXT,
+          started_at     TEXT NOT NULL,
+          ended_at       TEXT,
+          detail         TEXT,
+          active INTEGER GENERATED ALWAYS AS (
+            CASE WHEN state IN (${outdated}) THEN 0 ELSE 1 END
+          ) VIRTUAL
+        );
+      `);
+      stale.close();
+      expect(() => openStore(staleDir)).toThrow(/terminal-attempt-state drift/);
+    } finally {
+      rmSync(staleDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -114,14 +166,9 @@ describe("attempts", () => {
   });
 
   it("every terminal state deactivates the attempt", () => {
-    const terminal = [
-      "Succeeded",
-      "Failed",
-      "TimedOut",
-      "Stalled",
-      "CanceledByReconciliation",
-    ];
-    for (const [i, state] of terminal.entries()) {
+    // Sweep the authoritative constant itself so a newly added terminal
+    // state is exercised here automatically.
+    for (const [i, state] of TERMINAL_ATTEMPT_STATES.entries()) {
       const issueId = `iss_t${i}`;
       const id = store.insertAttempt({ ...base, issueId });
       store.transitionAttempt(id, state);

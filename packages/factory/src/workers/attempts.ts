@@ -223,6 +223,14 @@ export interface DriveAttemptInput {
    */
   checkEvidence: () => Promise<boolean>;
   resultOptions?: { pollMs?: number; timeoutMs?: number };
+  /**
+   * Phase wall-clock SLA in minutes (KTD-4). When `resultOptions.timeoutMs`
+   * is not set, the runner's result wait is bounded to this SLA instead of
+   * the runner's own default. WIRING CONTRACT (batch B): the executor/CLI
+   * must pass `phaseConfig.wallClockSlaMinutes` here so a 120-minute
+   * implement phase is not cut off by the runner's 15-minute default wait.
+   */
+  wallClockSlaMinutes?: number;
   onTransition?: (state: AttemptState) => void;
   /** Launch context passed to the runner; issueId/phase for log naming. */
   launchContext?: { issueId: string; phase: string; attemptNumber: number };
@@ -279,8 +287,53 @@ export async function driveAttempt(
   machine.recordLaunch(attemptId, { pid: handle.pid, logPath: handle.logPath });
   step("Running");
 
-  const result = await runner.result(handle, input.resultOptions);
-  if (result.rateLimited) {
+  // Bound the result wait by the phase wall-clock SLA when the caller did
+  // not pin an explicit timeout (see wallClockSlaMinutes wiring contract).
+  const timeoutMs =
+    input.resultOptions?.timeoutMs ??
+    (input.wallClockSlaMinutes !== undefined
+      ? input.wallClockSlaMinutes * 60_000
+      : undefined);
+  const resultOptions =
+    timeoutMs !== undefined
+      ? { ...input.resultOptions, timeoutMs }
+      : input.resultOptions;
+
+  let result;
+  try {
+    result = await runner.result(handle, resultOptions);
+  } catch (e) {
+    // A throw here must not strand the attempt in Running (orphaned forever
+    // by decideAction) — land it terminal like every other lifecycle step.
+    return fail(`result wait failed: ${String(e)}`);
+  }
+
+  if (!result.exitObserved) {
+    // The wait bound elapsed with the worker potentially still alive. NEVER
+    // mark the attempt terminal over a live worker — that frees the
+    // issue+phase slot and the next tick would launch a duplicate worker.
+    // Kill first, then release the slot as TimedOut.
+    let alive = true;
+    try {
+      alive = await runner.liveness(handle);
+    } catch {
+      // Liveness probe failed — assume alive and kill best-effort.
+    }
+    if (alive) {
+      try {
+        await runner.kill(handle);
+      } catch {
+        // Best-effort: kill failures must not block the terminal transition.
+      }
+    }
+    step("TimedOut", "wall-clock timeout — worker killed before slot release");
+    return "TimedOut";
+  }
+
+  // A rate-limit signal only diverts to cooldown when the run did NOT reach
+  // a successful completion — incidental quota chatter on a healthy run must
+  // not eclipse an observed success.
+  if (result.rateLimited && !(result.completed && result.success)) {
     step("QuotaCooldown", "provider rate-limit signal observed");
     return "QuotaCooldown";
   }

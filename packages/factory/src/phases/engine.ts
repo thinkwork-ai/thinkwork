@@ -13,9 +13,10 @@
  * .agents/skills/thinkwork-linear-dispatcher/references/routing-contract.md
  */
 
+import type { LaneLabel } from "../domain/statuses.js";
+import { ROUTING_STATUSES } from "../domain/statuses.js";
 import type { LinearIssueSnapshot } from "../linear/client.js";
 import type { Ledger } from "../linear/ledger.js";
-import type { LaneLabel } from "../linear/poller.js";
 import { TERMINAL_ATTEMPT_STATES } from "../store/db.js";
 
 /** Factory pipeline phases a launch action can name. */
@@ -27,21 +28,13 @@ export type Phase =
   | "verify"
   | "compound";
 
-/** Every status the routing contract's table routes. */
-export const ROUTING_STATUSES = [
-  "Todo",
-  "Brainstorming",
-  "Requirements Review",
-  "Planning",
-  "Debug",
-  "Plan Review",
-  "Ready to Work",
-  "Ready To Work",
-  "In Progress",
-  "Verification",
-  "Review",
-  "Done",
-] as const;
+/**
+ * Every status the routing contract's table routes — canonical list lives in
+ * src/domain/statuses.ts, derived as ACTIVE_STATES ∪ VERIFICATION_STATES so
+ * the engine's table can never drift from the poller's enrollment filter.
+ * Re-exported for the exhaustive table test.
+ */
+export { ROUTING_STATUSES };
 
 /**
  * Handoff-baton statuses per phase: which `handoff:<ID>:<STATUS>` comment a

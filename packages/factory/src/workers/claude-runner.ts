@@ -106,13 +106,15 @@ export function parseClaudeStreamEvents(logText: string): RunnerEvent[] {
       continue;
     }
 
-    const rateLimited = RATE_LIMIT_PATTERN.test(trimmed);
-    if (rateLimited) {
-      events.push({ kind: "rate-limit", detail: trimmed.slice(0, 500) });
-    }
     if (obj.type === "result") {
       const isError = obj.is_error === true || obj.subtype !== "success";
-      if (isError && !rateLimited) {
+      // The substring heuristic runs ONLY on genuine error outcome lines —
+      // never on assistant/tool content, where healthy transcripts in this
+      // repo legitimately mention "quota"/"429" (budget & cost work).
+      const rateLimited = isError && RATE_LIMIT_PATTERN.test(trimmed);
+      if (rateLimited) {
+        events.push({ kind: "rate-limit", detail: trimmed.slice(0, 500) });
+      } else if (isError) {
         events.push({
           kind: "error",
           detail: String(obj.result ?? obj.subtype ?? "unknown error").slice(

@@ -3,6 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  ACTIVE_STATES,
+  VERIFICATION_STATES,
+} from "../src/domain/statuses.js";
 import type { LinearCommentSnapshot } from "../src/linear/client.js";
 import { DEFAULT_LEDGER, type Ledger } from "../src/linear/ledger.js";
 import {
@@ -149,6 +153,17 @@ describe("phase table — exhaustive routing-contract coverage", () => {
     ]) {
       expect(ROUTING_STATUSES).toContain(status);
     }
+  });
+
+  it("ROUTING_STATUSES is exactly the poller vocabulary: ACTIVE_STATES ∪ VERIFICATION_STATES", () => {
+    // Single-source guarantee: the engine routes exactly what the enrollment
+    // filter enrolls — no independently maintained third list.
+    expect(new Set(ROUTING_STATUSES)).toEqual(
+      new Set([...ACTIVE_STATES, ...VERIFICATION_STATES]),
+    );
+    expect(ROUTING_STATUSES.length).toBe(
+      ACTIVE_STATES.length + VERIFICATION_STATES.length,
+    );
   });
 
   it("Todo advances to Brainstorming (dispatcher move, no worker)", () => {

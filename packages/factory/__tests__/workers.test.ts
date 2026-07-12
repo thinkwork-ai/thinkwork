@@ -178,18 +178,38 @@ describe("parseClaudeStreamEvents", () => {
     expect(completion!.success).toBe(false);
   });
 
-  it("classifies rate-limit / quota signals separately from errors", () => {
+  it("classifies rate-limit / quota signals on error result lines separately from errors", () => {
     for (const line of [
       '{"type":"result","subtype":"error","is_error":true,"result":"Claude AI usage limit reached|1770000000"}',
       '{"type":"result","subtype":"error","is_error":true,"result":"API Error: 429 rate_limit_error"}',
-      '{"type":"assistant","message":{"content":[{"type":"text","text":"overloaded_error: Overloaded"}]}}',
     ]) {
       const events = parseClaudeStreamEvents(line);
       expect(
         events.some((e) => e.kind === "rate-limit"),
         `expected rate-limit signal in: ${line}`,
       ).toBe(true);
+      expect(
+        events.some((e) => e.kind === "error"),
+        `quota signal must not also be a plain error: ${line}`,
+      ).toBe(false);
     }
+  });
+
+  it("does NOT rate-limit-classify incidental quota/429 text in content lines of a healthy run", () => {
+    // This repo does budget/cost work — healthy transcripts legitimately
+    // mention "quota" and "429" in assistant text and tool results. The
+    // substring heuristic must only run on genuine outcome/error lines.
+    const events = parseClaudeStreamEvents(
+      [
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"The tenant quota table shows 429 rows affected by the rate limit fix."}]}}',
+        '{"type":"user","message":{"content":[{"type":"tool_result","content":"HTTP 429 handling verified; quota reconciliation test passed"}]}}',
+        '{"type":"result","subtype":"success","is_error":false,"result":"Done: documented quota behavior"}',
+      ].join("\n"),
+    );
+    expect(events.some((e) => e.kind === "rate-limit")).toBe(false);
+    const completion = events.find((e) => e.kind === "completion");
+    expect(completion).toBeDefined();
+    expect(completion!.success).toBe(true);
   });
 
   it("does not misread the CLI's routine allowed rate_limit_event telemetry", () => {

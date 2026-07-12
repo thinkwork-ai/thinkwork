@@ -11,7 +11,19 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Attempt states considered terminal — mirror of the CASE list in schema.sql. */
+/**
+ * Attempt states considered terminal — the SINGLE authoritative list.
+ *
+ * The generated `active` column in schema.sql does not hard-code these
+ * states: its `__TERMINAL_ATTEMPT_STATES__` placeholder is substituted from
+ * this constant when the schema is applied, and `openStore` asserts on every
+ * open that an existing DB file's baked-in list still matches (SQLite bakes
+ * the CASE expression into the table at CREATE time, so a factory.db created
+ * under an older list would otherwise silently disagree with the app-layer
+ * terminal check and break the unique-active-attempt invariant).
+ *
+ * Add or remove terminal states HERE and only here.
+ */
 export const TERMINAL_ATTEMPT_STATES = [
   "Succeeded",
   "Failed",
@@ -103,9 +115,72 @@ export interface FactoryStore {
   close(): void;
 }
 
+const TERMINAL_STATES_PLACEHOLDER = "__TERMINAL_ATTEMPT_STATES__";
+
 function schemaSql(): string {
   const here = dirname(fileURLToPath(import.meta.url));
-  return readFileSync(join(here, "schema.sql"), "utf-8");
+  const template = readFileSync(join(here, "schema.sql"), "utf-8");
+  if (!template.includes(TERMINAL_STATES_PLACEHOLDER)) {
+    throw new Error(
+      `schema.sql is missing the ${TERMINAL_STATES_PLACEHOLDER} placeholder — ` +
+        "the terminal-state list must come from TERMINAL_ATTEMPT_STATES, not be hard-coded",
+    );
+  }
+  const list = TERMINAL_ATTEMPT_STATES.map(
+    (s) => `'${s.replaceAll("'", "''")}'`,
+  ).join(", ");
+  return template.replaceAll(TERMINAL_STATES_PLACEHOLDER, list);
+}
+
+/**
+ * Read the terminal-state list baked into the `attempts` table's generated
+ * `active` column of an OPEN database (from the CREATE TABLE text SQLite
+ * stores in sqlite_master). Exposed so tests can assert it equals
+ * TERMINAL_ATTEMPT_STATES.
+ */
+export function readDbTerminalAttemptStates(db: Database.Database): string[] {
+  const row = db
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'attempts'",
+    )
+    .get() as { sql: string } | undefined;
+  if (row === undefined) {
+    throw new Error("attempts table does not exist in this database");
+  }
+  const match = row.sql.match(/\bstate\s+IN\s*\(([^)]*)\)/i);
+  if (match === null) {
+    throw new Error(
+      "attempts.active generated column has no `state IN (...)` CASE — cannot verify terminal states",
+    );
+  }
+  return [...match[1].matchAll(/'((?:[^']|'')*)'/g)].map((m) =>
+    m[1].replaceAll("''", "'"),
+  );
+}
+
+/**
+ * Fail loudly if the DB's baked-in terminal set differs from
+ * TERMINAL_ATTEMPT_STATES (e.g. a factory.db created under an older list).
+ * CREATE TABLE IF NOT EXISTS never rewrites an existing table, so this is
+ * the only guard keeping the generated `active` column and the app-layer
+ * terminal check in agreement.
+ */
+function assertDbTerminalStatesMatch(db: Database.Database): void {
+  const inDb = readDbTerminalAttemptStates(db);
+  const expected = new Set<string>(TERMINAL_ATTEMPT_STATES);
+  const actual = new Set(inDb);
+  const missing = [...expected].filter((s) => !actual.has(s));
+  const extra = [...actual].filter((s) => !expected.has(s));
+  if (missing.length > 0 || extra.length > 0) {
+    throw new Error(
+      "factory.db terminal-attempt-state drift: the attempts.active generated column " +
+        `treats [${inDb.join(", ")}] as terminal but TERMINAL_ATTEMPT_STATES is ` +
+        `[${TERMINAL_ATTEMPT_STATES.join(", ")}] ` +
+        `(missing in DB: [${missing.join(", ")}]; extra in DB: [${extra.join(", ")}]). ` +
+        "The DB file was created under a different list — migrate or rebuild it " +
+        "(the store is a rebuildable cache) before running the daemon.",
+    );
+  }
 }
 
 export function openStore(
@@ -117,6 +192,12 @@ export function openStore(
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(schemaSql());
+  try {
+    assertDbTerminalStatesMatch(db);
+  } catch (err) {
+    db.close();
+    throw err;
+  }
 
   const now = () => clock().toISOString();
 

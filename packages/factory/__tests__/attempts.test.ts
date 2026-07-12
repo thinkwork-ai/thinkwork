@@ -17,6 +17,7 @@ import type {
   LaunchContext,
   LaunchOptions,
   ProviderRunner,
+  ResultOptions,
   RunnerResult,
   WorkerHandle,
 } from "../src/workers/runner.js";
@@ -177,10 +178,14 @@ describe("begin / relaunch — attempt numbering, branches, worktrees", () => {
 });
 
 /** Fake provider runner for lifecycle-driver tests. */
-function makeFakeRunner(result: Partial<RunnerResult> = {}): {
+function makeFakeRunner(
+  result: Partial<RunnerResult> = {},
+  behavior: { alive?: boolean; resultError?: Error } = {},
+): {
   runner: ProviderRunner;
   launches: { attempt: LaunchContext; prompt: string; opts: LaunchOptions }[];
   killed: WorkerHandle[];
+  resultCalls: (ResultOptions | undefined)[];
 } {
   const launches: {
     attempt: LaunchContext;
@@ -188,6 +193,7 @@ function makeFakeRunner(result: Partial<RunnerResult> = {}): {
     opts: LaunchOptions;
   }[] = [];
   const killed: WorkerHandle[] = [];
+  const resultCalls: (ResultOptions | undefined)[] = [];
   const runner: ProviderRunner = {
     async launch(attempt, prompt, opts) {
       launches.push({ attempt, prompt, opts });
@@ -200,7 +206,7 @@ function makeFakeRunner(result: Partial<RunnerResult> = {}): {
       };
     },
     async liveness() {
-      return false;
+      return behavior.alive ?? false;
     },
     async logTail() {
       return "";
@@ -209,7 +215,9 @@ function makeFakeRunner(result: Partial<RunnerResult> = {}): {
       killed.push(handle);
       return true;
     },
-    async result() {
+    async result(_handle, opts) {
+      resultCalls.push(opts);
+      if (behavior.resultError) throw behavior.resultError;
       return {
         exitObserved: true,
         completed: true,
@@ -220,7 +228,7 @@ function makeFakeRunner(result: Partial<RunnerResult> = {}): {
       };
     },
   };
-  return { runner, launches, killed };
+  return { runner, launches, killed, resultCalls };
 }
 
 describe("driveAttempt — fake-runner integration", () => {
@@ -283,6 +291,122 @@ describe("driveAttempt — fake-runner integration", () => {
     });
     expect(final).toBe("QuotaCooldown");
     expect(store.getAttempt(attemptId)!.state).toBe("QuotaCooldown");
+  });
+
+  it("wait-bound elapsed with worker still alive → kill + TimedOut, never a terminal row over a live worker", async () => {
+    const { attemptId } = machine.begin(beginInput);
+    const { runner, killed } = makeFakeRunner(
+      { exitObserved: false, completed: false, success: false },
+      { alive: true },
+    );
+    const final = await driveAttempt({
+      machine,
+      runner,
+      attemptId,
+      buildPrompt: async () => "p",
+      launchOptions: { model: "sonnet", cwd: "/tmp/wt" },
+      checkEvidence: async () => true,
+    });
+    expect(final).toBe("TimedOut");
+    const row = store.getAttempt(attemptId)!;
+    expect(row.state).toBe("TimedOut");
+    expect(row.state).not.toBe("Failed");
+    expect(row.detail).toMatch(/wall-clock timeout/i);
+    // The worker was killed BEFORE the slot was released, so a relaunch can
+    // never produce a duplicate live worker for the same issue+phase.
+    expect(killed).toHaveLength(1);
+    expect(killed[0].pid).toBe(54321);
+    expect(store.getActiveAttempt("iss_10", "implement")).toBeUndefined();
+  });
+
+  it("wait-bound elapsed but worker already dead → TimedOut without a kill", async () => {
+    const { attemptId } = machine.begin(beginInput);
+    const { runner, killed } = makeFakeRunner(
+      { exitObserved: false, completed: false, success: false },
+      { alive: false },
+    );
+    const final = await driveAttempt({
+      machine,
+      runner,
+      attemptId,
+      buildPrompt: async () => "p",
+      launchOptions: { model: "sonnet", cwd: "/tmp/wt" },
+      checkEvidence: async () => true,
+    });
+    expect(final).toBe("TimedOut");
+    expect(killed).toHaveLength(0);
+  });
+
+  it("runner.result() throwing lands the attempt in terminal Failed, not stranded Running", async () => {
+    const { attemptId } = machine.begin(beginInput);
+    const { runner } = makeFakeRunner(
+      {},
+      { resultError: new Error("transport exploded mid-wait") },
+    );
+    const final = await driveAttempt({
+      machine,
+      runner,
+      attemptId,
+      buildPrompt: async () => "p",
+      launchOptions: { model: "sonnet", cwd: "/tmp/wt" },
+      checkEvidence: async () => true,
+    });
+    expect(final).toBe("Failed");
+    const row = store.getAttempt(attemptId)!;
+    expect(row.state).toBe("Failed");
+    expect(row.detail).toMatch(/transport exploded mid-wait/);
+    expect(store.getActiveAttempt("iss_10", "implement")).toBeUndefined();
+  });
+
+  it("wallClockSlaMinutes bounds the result wait when resultOptions has no timeout", async () => {
+    const { attemptId } = machine.begin(beginInput);
+    const { runner, resultCalls } = makeFakeRunner();
+    await driveAttempt({
+      machine,
+      runner,
+      attemptId,
+      buildPrompt: async () => "p",
+      launchOptions: { model: "sonnet", cwd: "/tmp/wt" },
+      checkEvidence: async () => true,
+      wallClockSlaMinutes: 120,
+    });
+    expect(resultCalls).toHaveLength(1);
+    expect(resultCalls[0]?.timeoutMs).toBe(120 * 60_000);
+  });
+
+  it("an explicit resultOptions.timeoutMs wins over wallClockSlaMinutes", async () => {
+    const { attemptId } = machine.begin(beginInput);
+    const { runner, resultCalls } = makeFakeRunner();
+    await driveAttempt({
+      machine,
+      runner,
+      attemptId,
+      buildPrompt: async () => "p",
+      launchOptions: { model: "sonnet", cwd: "/tmp/wt" },
+      checkEvidence: async () => true,
+      resultOptions: { timeoutMs: 1_000 },
+      wallClockSlaMinutes: 120,
+    });
+    expect(resultCalls[0]?.timeoutMs).toBe(1_000);
+  });
+
+  it("an observed successful completion wins over a spurious rateLimited flag", async () => {
+    const { attemptId } = machine.begin(beginInput);
+    const { runner } = makeFakeRunner({
+      rateLimited: true,
+      completed: true,
+      success: true,
+    });
+    const final = await driveAttempt({
+      machine,
+      runner,
+      attemptId,
+      buildPrompt: async () => "p",
+      launchOptions: { model: "sonnet", cwd: "/tmp/wt" },
+      checkEvidence: async () => true,
+    });
+    expect(final).toBe("Succeeded");
+    expect(store.getAttempt(attemptId)!.state).toBe("Succeeded");
   });
 
   it("a failing launch marks the attempt Failed with detail", async () => {
