@@ -537,3 +537,92 @@ describe("firecrawl boundary schema (urlSet envelope)", () => {
     ).toThrow(/maxRecord/);
   });
 });
+
+describe("bedrock_kb boundary schema (stringSet envelope, U7)", () => {
+  const KB_A = "33333333-3333-4333-8333-333333333333";
+  const KB_B = "44444444-4444-4444-8444-444444444444";
+
+  it("allows a config KB id inside the granted identifier set", () => {
+    expect(
+      within(
+        { knowledgeBaseIds: [KB_A, KB_B] },
+        { knowledgeBaseIds: [KB_A], maxDocuments: 10 },
+        "bedrock_kb",
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects a config KB id outside the granted set", () => {
+    expect(
+      within(
+        { knowledgeBaseIds: [KB_A] },
+        { knowledgeBaseIds: [KB_B] },
+        "bedrock_kb",
+      ),
+    ).toThrow(/outside the granted identifier set/);
+  });
+
+  it("an empty/omitted grant allows exactly nothing", () => {
+    expect(within({}, { knowledgeBaseIds: [KB_A] }, "bedrock_kb")).toThrow(
+      MemoryAuthorizationError,
+    );
+    expect(
+      within(
+        { knowledgeBaseIds: [] },
+        { knowledgeBaseIds: [KB_A] },
+        "bedrock_kb",
+      ),
+    ).toThrow(MemoryAuthorizationError);
+    // …and an empty config requests nothing — fine.
+    expect(within({}, {}, "bedrock_kb")).not.toThrow();
+  });
+
+  it("fails closed on malformed stringSet values (either side)", () => {
+    expect(
+      within({ knowledgeBaseIds: ["  padded  "] }, {}, "bedrock_kb"),
+    ).toThrow(/non-empty trimmed string/);
+    expect(
+      within({ knowledgeBaseIds: [42 as unknown as string] }, {}, "bedrock_kb"),
+    ).toThrow(/not a string/);
+    expect(
+      within(
+        { knowledgeBaseIds: [KB_A] },
+        { knowledgeBaseIds: ["a".repeat(300)] },
+        "bedrock_kb",
+      ),
+    ).toThrow(/longer than/);
+    expect(
+      within({ knowledgeBaseIds: "not-an-array" }, {}, "bedrock_kb"),
+    ).toThrow(/array of identifier strings/);
+  });
+
+  it("enforces the maxDocuments cap envelope (1..500, default 25)", () => {
+    const dim = BOUNDARY_SCHEMAS.bedrock_kb!.maxDocuments;
+    expect(dim).toEqual({ kind: "cap", default: 25, min: 1, max: 500 });
+    expect(
+      within(
+        { knowledgeBaseIds: [KB_A], maxDocuments: 50 },
+        { knowledgeBaseIds: [KB_A], maxDocuments: 100 },
+        "bedrock_kb",
+      ),
+    ).toThrow(/exceeds the grant envelope cap/);
+    expect(
+      within({ knowledgeBaseIds: [KB_A] }, { maxDocuments: 501 }, "bedrock_kb"),
+    ).toThrow(MemoryAuthorizationError);
+  });
+
+  it("grant-time and config-time validation both name violating keys", () => {
+    expect(() =>
+      assertGrantBoundaryValid(
+        { knowledgeBaseId: [KB_A] },
+        { sourceFamily: "bedrock_kb" },
+      ),
+    ).toThrow(/knowledgeBaseId/);
+    expect(() =>
+      assertSourceConfigBoundaryValid(
+        { knowledgeBaseIds: [""] },
+        { sourceFamily: "bedrock_kb" },
+      ),
+    ).toThrow(/knowledgeBaseIds/);
+  });
+});

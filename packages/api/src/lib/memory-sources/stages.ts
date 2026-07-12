@@ -223,7 +223,7 @@ function adapterForSource(
       ok: false,
       result: failed(
         stage,
-        `source family "${source.source_family}" has no registered memory-source adapter (implemented: twenty, firecrawl)`,
+        `source family "${source.source_family}" has no registered memory-source adapter (implemented: twenty, firecrawl, bedrock_kb)`,
       ),
     };
   }

@@ -138,10 +138,12 @@ export interface MemorySourceAdapter {
 
 import { twentyAdapter } from "./twenty-adapter.js";
 import { firecrawlAdapter } from "./firecrawl.js";
+import { bedrockKbAdapter } from "./bedrock-kb.js";
 
 const ADAPTERS: Record<string, MemorySourceAdapter> = {
   [twentyAdapter.family]: twentyAdapter,
   [firecrawlAdapter.family]: firecrawlAdapter,
+  [bedrockKbAdapter.family]: bedrockKbAdapter,
 };
 
 /** The adapter for a source family, or null (caller fails visibly). */
