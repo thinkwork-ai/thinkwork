@@ -349,9 +349,11 @@ export const memoryEvidenceItems = pgTable(
       table.source_config_id,
       table.lifecycle,
     ),
+    // v2 (THINK-193 U6): personal email evidence targets the owner's User
+    // Bank — 'user' joined the shared scopes (migration 0240).
     check(
-      "memory_evidence_items_target_scope_check",
-      sql`${table.target_scope} IN ('space', 'tenant')`,
+      "memory_evidence_items_target_scope_check_v2",
+      sql`${table.target_scope} IN ('user', 'space', 'tenant')`,
     ),
     check(
       "memory_evidence_items_lifecycle_check",
@@ -580,9 +582,11 @@ export const memoryClaims = pgTable(
       table.subject_key,
     ),
     index("memory_claims_tenant_status_idx").on(table.tenant_id, table.status),
+    // v2 (THINK-193 U6): personal email claims are user-scoped (migration
+    // 0240); shared-only APIs keep the SharedTargetScope type guard.
     check(
-      "memory_claims_target_scope_check",
-      sql`${table.target_scope} IN ('space', 'tenant')`,
+      "memory_claims_target_scope_check_v2",
+      sql`${table.target_scope} IN ('user', 'space', 'tenant')`,
     ),
     check(
       "memory_claims_status_check",
