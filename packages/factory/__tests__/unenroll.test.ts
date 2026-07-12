@@ -206,6 +206,30 @@ describe("runUnenrollPass — abandoned", () => {
     assertFullyUnenrolled(issue, attemptId);
   });
 
+  it("un-enrolls an enrolled issue demoted BACK to Todo (below the Brainstorming floor)", async () => {
+    // Todo ∉ ACTIVE_STATES — the enrollment floor is Brainstorming. An enrolled
+    // issue an operator moves back to Todo has left the active work queue and
+    // must be wound down just like a Backlog demotion.
+    const issue = makeIssue({
+      identifier: "THINK-103",
+      state: "Todo",
+      labels: ["Claude"],
+    });
+    const gateway = new FakeGateway([issue]);
+    const transport = new FakeTransport();
+    transport.pids.add(4242);
+    const attemptId = enroll(issue);
+
+    const result = await runUnenrollPass(
+      { store, gateway, transport, log },
+      [],
+    );
+
+    expect(result.outcomes).toEqual([{ issue: "THINK-103", verdict: "abandoned" }]);
+    assertFullyUnenrolled(issue, attemptId);
+    expect(transport.killed).toEqual([4242]);
+  });
+
   it("un-enrolls an issue whose lane label was removed", async () => {
     const issue = makeIssue({
       identifier: "THINK-102",
@@ -288,10 +312,10 @@ describe("runUnenrollPass — abandoned", () => {
 });
 
 describe("runUnenrollPass — transient-miss guard", () => {
-  it("does NOT un-enroll an enrolled id missing from candidates but still a valid Todo+lane candidate", async () => {
+  it("does NOT un-enroll an enrolled id missing from candidates but still a valid In-Progress+lane candidate", async () => {
     const issue = makeIssue({
       identifier: "THINK-110",
-      state: "Todo",
+      state: "In Progress",
       labels: ["Claude"],
     });
     const gateway = new FakeGateway([issue]);
@@ -300,7 +324,7 @@ describe("runUnenrollPass — transient-miss guard", () => {
     const attemptId = enroll(issue);
 
     // Empty candidate set this tick (a transient poll miss), but the live fetch
-    // shows a still-valid Todo+lane candidate.
+    // shows a still-valid In-Progress+lane candidate.
     const result = await runUnenrollPass(
       { store, gateway, transport, log },
       [],

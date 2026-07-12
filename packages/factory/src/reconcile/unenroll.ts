@@ -4,9 +4,10 @@
  * An issue is ENROLLED only while it is real, active work; it must be
  * UN-ENROLLED the moment it leaves. Two directives:
  *
- *   1. Abandoned — an enrolled issue moved back to Backlog / Canceled, or which
- *      lost its lane label, drops out of the poller's candidate set silently
- *      (Backlog ∉ ACTIVE_STATES). The poller just stops seeing it, but the
+ *   1. Abandoned — an enrolled issue moved back below the enrollment floor
+ *      (Backlog / Todo / Canceled), or which lost its lane label, drops out of
+ *      the poller's candidate set silently (Backlog and Todo ∉ ACTIVE_STATES —
+ *      the floor is Brainstorming). The poller just stops seeing it, but the
  *      Slack thread, lease, attempt, and worker linger. This pass detects the
  *      drop-out and winds everything down: closing note, cancel the active
  *      attempt (CanceledByReconciliation), kill the worker process group, and
@@ -40,8 +41,8 @@ const LANE_LABELS = ["Claude", "Codex"] as const;
 
 /** One-line note posted to an abandoned issue's thread before winding it down. */
 export const ABANDONED_NOTE =
-  "Un-enrolled — moved out of the active work queue (Backlog/Canceled/lane " +
-  "removed); automation stopped. Re-add a lane label + move to Todo to resume.";
+  "Un-enrolled — moved out of the active work queue (Backlog/Todo/Canceled/lane " +
+  "removed); automation stopped. Re-add a lane label + move to Brainstorming to resume.";
 
 export type UnenrollVerdict = "abandoned" | "completed" | "gone";
 

@@ -426,13 +426,12 @@ function routeByStatus(candidate: EngineCandidate): EngineAction {
   const { issue, hasLfg } = candidate;
   const id = issue.identifier;
   switch (issue.state) {
-    case "Todo":
-      return {
-        kind: "advance",
-        toStatus: "Brainstorming",
-        evidence: "lane-labeled Todo issue (contract: move to Brainstorming, update ledger, stop)",
-      };
-
+    // No `Todo` case: the enrollment floor is Brainstorming (see ACTIVE_STATES).
+    // A lane-labeled Todo issue is ideation the operator still owns; the daemon
+    // no longer auto-advances Todo → Brainstorming. Moving an issue INTO
+    // Brainstorming is the operator's "start the factory" gesture. A stray Todo
+    // reaching here (it cannot, the poller filters it out) falls through to the
+    // default noop.
     case "Brainstorming":
       return launch(candidate, requireLaunchPhase(issue.state));
 

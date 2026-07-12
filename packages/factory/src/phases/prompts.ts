@@ -192,8 +192,9 @@ notes, risks, and explicit verification contract for each child/unit — the
 verification contract must name the complete user flows that prove the unit
 works end to end, since verification drives them in a real browser against
 deployed dev. Create/update Linear child issues for shippable units when
-appropriate, in Todo status (never Backlog — the dispatcher ignores Backlog),
-inheriting the parent's lane label plus LFG when present. Define
+appropriate, in Brainstorming status — the enrollment floor (never Backlog or
+Todo — the dispatcher ignores both; a below-floor child strands until a human
+promotes it), inheriting the parent's lane label plus LFG when present. Define
 the expected checkpoint PR boundary for each unit: one PR per unit by default,
 with explicit justification for any grouped units. Commit the plan artifact,
 open a PR to main, wait for checks, fix real failures, squash-merge when

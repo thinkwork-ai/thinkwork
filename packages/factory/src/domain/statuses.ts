@@ -31,9 +31,18 @@ export const BLOCKER_LABELS = [
 ] as const;
 export type BlockerLabel = (typeof BLOCKER_LABELS)[number];
 
-/** Workflow states the dispatcher routes for lane-labeled issues. */
+/**
+ * Workflow states the dispatcher routes for lane-labeled issues.
+ *
+ * Enrollment floor is **Brainstorming** — the factory kicks off when an
+ * operator moves a lane-labeled issue into Brainstorming (or Debug, or any
+ * later state). `Todo` is deliberately EXCLUDED: a lane-labeled issue sitting
+ * in Todo is ideation the operator still owns (ce-ideate), and the daemon must
+ * not touch it until the operator promotes it to Brainstorming. Moving an
+ * issue INTO Brainstorming is the manual "start the factory" gesture; the
+ * daemon no longer auto-advances Todo → Brainstorming.
+ */
 export const ACTIVE_STATES = [
-  "Todo",
   "Brainstorming",
   "Requirements Review",
   "Planning",

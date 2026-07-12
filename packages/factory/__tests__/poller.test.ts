@@ -40,11 +40,15 @@ describe("candidate filter", () => {
         state: "Done",
         labels: ["Claude", "LFG"],
       }),
+      // Lane label but Todo → BELOW the Brainstorming enrollment floor → not a
+      // candidate. Todo is operator-owned ideation; the daemon ignores it.
+      makeIssue({ identifier: "T-8", state: "Todo", labels: ["Claude"] }),
     ]);
 
     const result = await pollTick(gateway, TEAM);
     const ids = result.candidates.map((c) => c.issue.identifier).sort();
     // T-7 (Done + lane) IS a candidate: the engine decides compound vs noop.
+    // T-8 (Todo + lane) is NOT: Todo is below the enrollment floor.
     expect(ids).toEqual(["T-1", "T-2", "T-3", "T-4", "T-7"]);
 
     const byId = Object.fromEntries(

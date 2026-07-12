@@ -109,8 +109,8 @@ the issue title. The progress document controls unit-level continuity: current
 active work, next steps, open PRs, branch/worktree names, worker ids, blockers,
 verification evidence, and cleanup state.
 
-If the progress document is missing for an issue that is beyond `Todo`, create
-it before launching workers. If it conflicts with Linear status, comments,
+If the progress document is missing for an issue at `Brainstorming` or beyond
+(the enrollment floor), create it before launching workers. If it conflicts with Linear status, comments,
 threads, worktrees, or PR state, do not launch a worker until the mismatch is
 reconciled and recorded.
 
@@ -121,7 +121,7 @@ unrecorded "about to launch" point.
 
 | Status                            | Behavior                                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Todo`                            | If labeled with this dispatcher's lane label, move to `Brainstorming`, update ledger, stop. (Eric runs `ce-ideate` manually in Todo before adding a lane label.)                                                                                                                                                                                        |
+| `Todo`                            | **Below the enrollment floor — ignored.** A lane-labeled `Todo` issue is operator-owned ideation (Eric runs `ce-ideate` manually in `Todo`). The dispatcher does NOT enroll, advance, or touch it. Moving an issue INTO `Brainstorming` is the operator's "start the factory" gesture; the dispatcher no longer auto-advances `Todo` → `Brainstorming`.                                                                                                                                                                                        |
 | `Brainstorming`                   | Create/continue a `ce-brainstorm` worker. `LFG` may proceed to Planning after merged requirements artifact; non-`LFG` stops at Requirements Review.                                                                                                                                                                                                     |
 | `Requirements Review`             | If `LFG`, move to Planning and stop. Otherwise wait.                                                                                                                                                                                                                                                                                                    |
 | `Planning`                        | Create/continue a `ce-plan` worker. `LFG` moves to Ready to Work after merged plan artifact; non-`LFG` stops at Plan Review.                                                                                                                                                                                                                            |
@@ -139,13 +139,16 @@ Linear child issues are the canonical autonomous implementation unit.
 During Planning, create/update child issues when work has multiple shippable
 units. Each child needs objective, scope, dependencies, verification contract,
 and the parent's inherited lane label plus `LFG` when present. Create children
-in `Todo`, never `Backlog` — the dispatcher's candidate scan ignores Backlog,
-so a Backlog child is reachable only through its parent's routing and can
-strand if the parent is manually moved (observed on THINK-202: the plan worker
-created children in Backlog and the dispatcher had to route them via the
-parent's handoff). A dispatcher encountering a lane-labeled Backlog child of
-an actively routed parent should treat it as `Todo` for routing purposes and
-fix its status.
+in `Brainstorming` (the enrollment floor), never `Backlog` or `Todo` — the
+dispatcher's candidate scan ignores both (the floor is `Brainstorming`), so a
+below-floor child is reachable only through its parent's routing and can strand
+if the parent is manually moved (observed on THINK-202: the plan worker created
+children in Backlog and the dispatcher had to route them via the parent's
+handoff). Creating a child directly in `Brainstorming` gives it the exact full
+pipeline the old `Todo` → auto-advance flow produced, minus the redundant hop. A
+dispatcher encountering a lane-labeled below-floor (`Backlog`/`Todo`) child of
+an actively routed parent should treat it as `Brainstorming` for routing
+purposes and fix its status.
 
 Before launching parent implementation, inspect child issues and active child
 workers. Do not launch parent implementation if any child issue is in an

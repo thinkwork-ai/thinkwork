@@ -117,7 +117,11 @@ function makeDeps(
 }
 
 describe("runTick — end-to-end with the real executor", () => {
-  it("advances a lane-labeled Todo issue to Brainstorming and writes the ledger", async () => {
+  it("does NOT enroll a lane-labeled Todo issue — Todo is below the Brainstorming floor", async () => {
+    // The enrollment floor is Brainstorming. A lane-labeled Todo issue is
+    // ideation the operator still owns (ce-ideate); the daemon must not touch
+    // it — no decision, no state change, no ledger. The operator moving it to
+    // Brainstorming is the "start the factory" gesture.
     const issue = makeIssue({
       identifier: "THINK-10",
       state: "Todo",
@@ -144,13 +148,13 @@ describe("runTick — end-to-end with the real executor", () => {
 
     const tick = await runTick(deps);
 
-    expect(tick.decisions).toEqual([{ issue: "THINK-10", kind: "advance" }]);
-    expect(issue.state).toBe("Brainstorming");
+    expect(tick.decisions).toEqual([]);
+    expect(issue.state).toBe("Todo"); // untouched
     expect(
       issue.comments.some((c) =>
         c.body.includes("automation-ledger:THINK-10"),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("preflight-blocks credential work before the engine ever decides", async () => {
@@ -176,12 +180,12 @@ describe("runTick — end-to-end with the real executor", () => {
   it("onlyIssues scope processes the in-scope issue and skips every other candidate", async () => {
     const inScope = makeIssue({
       identifier: "THINK-20",
-      state: "Todo",
+      state: "Brainstorming",
       labels: ["Claude"],
     });
     const outOfScope = makeIssue({
       identifier: "THINK-21",
-      state: "Todo",
+      state: "Brainstorming",
       labels: ["Codex"],
     });
     const gateway = new FakeGateway([inScope, outOfScope]);
@@ -195,11 +199,11 @@ describe("runTick — end-to-end with the real executor", () => {
 
     const tick = await runTick(deps);
 
-    // Only the scoped issue is decided/executed; the out-of-scope Codex Todo
-    // issue is never touched (no advance, no ledger write).
-    expect(tick.decisions).toEqual([{ issue: "THINK-20", kind: "advance" }]);
+    // Only the scoped issue is decided/executed; the out-of-scope Codex issue
+    // is never touched (never fetched, no state change).
+    expect(tick.decisions).toEqual([{ issue: "THINK-20", kind: "launch" }]);
     expect(executed).toEqual(["THINK-20"]);
-    expect(outOfScope.state).toBe("Todo");
+    expect(outOfScope.state).toBe("Brainstorming");
     expect(
       outOfScope.comments.some((c) => c.body.includes("automation-ledger")),
     ).toBe(false);
@@ -434,8 +438,8 @@ describe("buildStoreView — duplicate-worker guard", () => {
 describe("runDaemon — shutdown contract", () => {
   it("stop mid-tick: current issue finishes, remaining skipped, loop exits", async () => {
     const issues = [
-      makeIssue({ identifier: "THINK-20", state: "Todo", labels: ["Claude"] }),
-      makeIssue({ identifier: "THINK-21", state: "Todo", labels: ["Claude"] }),
+      makeIssue({ identifier: "THINK-20", state: "Brainstorming", labels: ["Claude"] }),
+      makeIssue({ identifier: "THINK-21", state: "Brainstorming", labels: ["Claude"] }),
     ];
     const gateway = new FakeGateway(issues);
     const controller = createDaemonController();
@@ -458,7 +462,7 @@ describe("runDaemon — shutdown contract", () => {
 
   it("--once mode runs exactly one tick and returns", async () => {
     const gateway = new FakeGateway([
-      makeIssue({ identifier: "THINK-22", state: "Todo", labels: ["Claude"] }),
+      makeIssue({ identifier: "THINK-22", state: "Brainstorming", labels: ["Claude"] }),
     ]);
     const executed: string[] = [];
     const deps = makeDeps(gateway, async (_a, c) => {
@@ -475,7 +479,7 @@ describe("runDaemon — heartbeat decoupled from tick progress (KTD-6)", () => {
 
   it("keeps the heartbeat fresh while a tick is awaiting a long worker", async () => {
     const gateway = new FakeGateway([
-      makeIssue({ identifier: "THINK-30", state: "Todo", labels: ["Claude"] }),
+      makeIssue({ identifier: "THINK-30", state: "Brainstorming", labels: ["Claude"] }),
     ]);
     // Hang the tick: listTeamIssues awaits a gate the test controls, so the
     // whole tick is stuck in an await (as it would be during a 120-min worker).
