@@ -2,13 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireTenantAdminMock = vi.hoisted(() => vi.fn());
 const resolveCallerTenantIdMock = vi.hoisted(() => vi.fn());
+const resolveCallerUserIdMock = vi.hoisted(() => vi.fn());
 const getActiveGrantMock = vi.hoisted(() => vi.fn());
+const resolveConnectionForUserByIdMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: requireTenantAdminMock,
 }));
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: resolveCallerTenantIdMock,
+  resolveCallerUserId: resolveCallerUserIdMock,
+}));
+vi.mock("../../../lib/oauth-token.js", () => ({
+  resolveConnectionForUserById: resolveConnectionForUserByIdMock,
 }));
 vi.mock("../../../lib/memory-sources/policy.js", async (importOriginal) => ({
   ...(await importOriginal<
@@ -24,6 +30,16 @@ const PROCESSOR = "58a7be3f-8c0f-4a8b-b7be-8f97a1c8e9d2";
 const SOURCE = "9b1de2c4-1111-4222-8333-444455556666";
 
 const SHARED_PROCESSOR = { id: PROCESSOR, tenant_id: TENANT, mode: "shared" };
+const OWNER = "b7de6c4a-8f2e-45cf-a231-5a5f9a3f6c1a";
+const CONNECTION = "3f0f2a52-9d24-4e0b-9a51-2f8f19c2a111";
+const PERSONAL_PROCESSOR = {
+  id: PROCESSOR,
+  tenant_id: TENANT,
+  mode: "personal",
+  target_scope: "user",
+  target_id: OWNER,
+  created_by_user_id: OWNER,
+};
 const EXISTING_SOURCE = {
   id: SOURCE,
   tenant_id: TENANT,
@@ -97,7 +113,9 @@ describe("setMemorySourceConfig mutation", () => {
   beforeEach(() => {
     requireTenantAdminMock.mockReset().mockResolvedValue(undefined);
     resolveCallerTenantIdMock.mockReset().mockResolvedValue(null);
+    resolveCallerUserIdMock.mockReset().mockResolvedValue(OWNER);
     getActiveGrantMock.mockReset().mockResolvedValue(null);
+    resolveConnectionForUserByIdMock.mockReset().mockResolvedValue(null);
   });
 
   it("creates a firecrawl source config with a validated URL boundary", async () => {
@@ -225,10 +243,63 @@ describe("setMemorySourceConfig mutation", () => {
     ).rejects.toThrow(/immutable/);
   });
 
-  it("rejects personal processors, unknown families, and missing tenants", async () => {
-    const personal = buildCtx({
-      processorRows: [{ ...SHARED_PROCESSOR, mode: "personal" }],
+  // ---- U6 personal self-service --------------------------------------
+
+  it("lets the owner self-configure an email source bound to their own connection", async () => {
+    resolveConnectionForUserByIdMock.mockResolvedValue({
+      connectionId: CONNECTION,
+      providerId: "prov-1",
     });
+    const { ctx, written } = buildCtx({
+      processorRows: [PERSONAL_PROCESSOR],
+    });
+    const result = await setMemorySourceConfig(
+      {},
+      {
+        processorConfigId: PROCESSOR,
+        sourceFamily: "email",
+        sourceBindingKey: CONNECTION,
+        boundary: { labels: ["INBOX"], maxMessages: 25 },
+      },
+      ctx,
+    );
+    // Owner path: no tenant-admin requirement; the connection ownership
+    // was proven with the caller's own user id.
+    expect(requireTenantAdminMock).not.toHaveBeenCalled();
+    expect(resolveConnectionForUserByIdMock).toHaveBeenCalledWith({
+      tenantId: TENANT,
+      userId: OWNER,
+      providerName: "google_productivity",
+      connectionId: CONNECTION,
+    });
+    expect(written[0]).toMatchObject({
+      source_family: "email",
+      source_binding_key: CONNECTION,
+      boundary: { labels: ["INBOX"], maxMessages: 25 },
+    });
+    expect(result.sourceFamily).toBe("email");
+  });
+
+  it("rejects personal self-config for non-owners, non-email families, and unowned connections", async () => {
+    // Caller is not the processor owner.
+    resolveCallerUserIdMock.mockResolvedValue("someone-else");
+    const notOwner = buildCtx({ processorRows: [PERSONAL_PROCESSOR] });
+    await expect(
+      setMemorySourceConfig(
+        {},
+        {
+          processorConfigId: PROCESSOR,
+          sourceFamily: "email",
+          sourceBindingKey: CONNECTION,
+        },
+        notOwner.ctx,
+      ),
+    ).rejects.toThrow(/Only the owner/);
+    expect(notOwner.insert).not.toHaveBeenCalled();
+
+    // Family other than email is never self-serviceable.
+    resolveCallerUserIdMock.mockResolvedValue(OWNER);
+    const wrongFamily = buildCtx({ processorRows: [PERSONAL_PROCESSOR] });
     await expect(
       setMemorySourceConfig(
         {},
@@ -237,10 +308,59 @@ describe("setMemorySourceConfig mutation", () => {
           sourceFamily: "firecrawl",
           sourceBindingKey: "web-extract",
         },
-        personal.ctx,
+        wrongFamily.ctx,
       ),
-    ).rejects.toThrow(/shared processors/);
+    ).rejects.toThrow(/not self-serviceable/);
 
+    // Binding must be an ACTIVE caller-owned Google connection.
+    const unowned = buildCtx({ processorRows: [PERSONAL_PROCESSOR] });
+    await expect(
+      setMemorySourceConfig(
+        {},
+        {
+          processorConfigId: PROCESSOR,
+          sourceFamily: "email",
+          sourceBindingKey: CONNECTION,
+        },
+        unowned.ctx,
+      ),
+    ).rejects.toThrow(/connection you own/);
+    expect(unowned.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed email label boundaries fail-closed", async () => {
+    resolveConnectionForUserByIdMock.mockResolvedValue({
+      connectionId: CONNECTION,
+      providerId: "prov-1",
+    });
+    for (const boundary of [
+      { labels: [""] },
+      { labels: ["ok", 3] },
+      { labels: "INBOX" },
+      { maxMessages: 0 },
+      { label: ["INBOX"] },
+    ]) {
+      const { ctx, insert, update } = buildCtx({
+        processorRows: [PERSONAL_PROCESSOR],
+      });
+      await expect(
+        setMemorySourceConfig(
+          {},
+          {
+            processorConfigId: PROCESSOR,
+            sourceFamily: "email",
+            sourceBindingKey: CONNECTION,
+            boundary,
+          },
+          ctx,
+        ),
+      ).rejects.toThrow();
+      expect(insert).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects unknown families and missing tenants", async () => {
     const unknown = buildCtx({ processorRows: [SHARED_PROCESSOR] });
     await expect(
       setMemorySourceConfig(

@@ -2225,7 +2225,7 @@ Join hints:
 
 Enum values:
 
-- `target_scope`: `space`, `tenant`
+- `target_scope`: `user`, `space`, `tenant`
 - `status`: `active`, `superseded`, `retracted`
 - `conflict_state`: `none`, `conflicted`
 
@@ -2288,7 +2288,7 @@ Join hints:
 
 Enum values:
 
-- `target_scope`: `space`, `tenant`
+- `target_scope`: `user`, `space`, `tenant`
 - `lifecycle`: `active`, `superseded`, `deleted`, `deferred`, `failed`
 
 Join hints:

@@ -174,11 +174,15 @@ export async function recordAcquiredPage(
             snapshot_ref: item.snapshotRef ?? null,
             // F6 boundary: when the adapter already uploaded the snapshot to
             // S3 (snapshotRef set), the raw content must NOT also land inline
-            // in Postgres where analyst_reader could reach it. Inline storage
-            // remains only as the pre-upload back-compat path; offloadSnapshots
-            // (stages.ts) migrates those rows to S3 on the next project run.
+            // in Postgres where analyst_reader could reach it. The only thing
+            // allowed inline alongside a ref is an explicit CONTENT-FREE
+            // skeleton (U6 email privacy: ids/labels/counts/hash, marked
+            // contentFree: true — see EvidenceUpsert.inlineSkeleton). Inline
+            // full-snapshot storage remains only as the pre-upload back-compat
+            // path; offloadSnapshots (stages.ts) migrates those rows to S3 on
+            // the next project run.
             normalized_snapshot: item.snapshotRef
-              ? null
+              ? (item.inlineSkeleton ?? null)
               : item.normalizedSnapshot,
             extraction_recipe: item.extractionRecipe,
           })),

@@ -37,6 +37,14 @@ export type MemoryDerivationRow = typeof memoryDerivations.$inferSelect;
 /** Shared processors may only target space or tenant banks (R11/AE7). */
 export type SharedTargetScope = Extract<MemoryTargetScope, "space" | "tenant">;
 
+/**
+ * Scopes evidence/claim WRITES may target (THINK-193 U6): personal-capable
+ * families (email) additionally write the owner's User Bank. Shared-only
+ * APIs (graph/wiki publication, shared workflow provisioning) keep
+ * SharedTargetScope.
+ */
+export type EvidenceTargetScope = MemoryTargetScope;
+
 /** One normalized source item, as produced by a source-family adapter. */
 export interface EvidenceUpsert {
   sourceItemId: string;
@@ -47,11 +55,18 @@ export interface EvidenceUpsert {
   normalizedSnapshot: Record<string, unknown> | null;
   /** Recipe/model/ontology version used for extraction. */
   extractionRecipe: Record<string, unknown>;
-  targetScope: SharedTargetScope;
+  targetScope: EvidenceTargetScope;
   targetId: string;
   sensitivity?: string | null;
   /** Optional S3 ref for the raw snapshot. */
   snapshotRef?: string | null;
+  /**
+   * Content-free inline skeleton stored in Postgres ALONGSIDE an S3
+   * snapshotRef (THINK-193 U6 email privacy). Must carry `contentFree: true`
+   * and no message bodies/subjects/snippets — only ids, label ids, counts,
+   * and hashes. Ignored when snapshotRef is absent.
+   */
+  inlineSkeleton?: Record<string, unknown> | null;
 }
 
 /** One acquired page from a source adapter, plus its resume cursor. */

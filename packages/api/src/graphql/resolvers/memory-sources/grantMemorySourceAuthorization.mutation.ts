@@ -4,6 +4,15 @@
  * grant for the same (processorConfig, sourceFamily, sourceBindingKey) is
  * revoked first so exactly one active grant exists per binding (matching
  * the partial unique index memory_source_authorizations_active_uidx).
+ *
+ * AUTHZ (THINK-193 U6): SHARED processors stay tenant-admin gated. A
+ * PERSONAL processor takes the SELF-GRANT path instead — the caller may
+ * grant THEIR OWN mailbox to THEIR OWN personal processor only:
+ *   - caller === processor owner (created_by_user_id AND target_id),
+ *   - sourceFamily 'email' (the only personal-capable family),
+ *   - sourceBindingKey is an ACTIVE Google connection the caller owns.
+ * Connection ownership alone never authorizes shared memory (R9): shared
+ * email grants still require a tenant admin.
  */
 
 import {
@@ -20,6 +29,7 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 import { toGraphqlAuthorization } from "./memorySourceAuthorizations.query.js";
+import { assertPersonalEmailSelfService } from "./personal-email-self-service.js";
 
 type AuthorizationRow = typeof memorySourceAuthorizationsTable.$inferSelect;
 
@@ -38,7 +48,6 @@ export async function grantMemorySourceAuthorization(
   const tenantId =
     args.tenantId ?? ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
   if (!tenantId) throw new Error("Tenant context required");
-  await requireTenantAdmin(ctx, tenantId);
 
   if (
     !(MEMORY_SOURCE_FAMILIES as readonly string[]).includes(args.sourceFamily)
@@ -75,6 +84,20 @@ export async function grantMemorySourceAuthorization(
       )
       .limit(1);
     if (!processor) throw new Error("Memory processor config not found");
+
+    // Authz branch (U6), before ANY write: a PERSONAL processor takes the
+    // owner self-grant path (own mailbox → own processor, family 'email'
+    // only); shared processors stay tenant-admin gated.
+    if (processor.mode === "personal") {
+      await assertPersonalEmailSelfService(ctx, {
+        tenantId,
+        processor,
+        sourceFamily: args.sourceFamily,
+        sourceBindingKey: args.sourceBindingKey,
+      });
+    } else {
+      await requireTenantAdmin(ctx, tenantId);
+    }
 
     const now = new Date();
     const bindingFilters = and(

@@ -8,15 +8,17 @@
 import { snakeToCamel } from "../../utils.js";
 import type { EnsuredMemoryAutomation } from "../../../lib/memory-sources/provisioning.js";
 
-interface ReadinessReason {
+export interface ReadinessReason {
   code: string;
   message: string;
 }
 
 export function toGraphqlManagedMemoryWorkflow(
   ensured: EnsuredMemoryAutomation,
+  /** Caller-computed extra readiness reasons (U6: email connect state). */
+  extraReasons: ReadinessReason[] = [],
 ) {
-  const reasons: ReadinessReason[] = [];
+  const reasons: ReadinessReason[] = [...extraReasons];
   if (!ensured.workflow) {
     reasons.push({
       code: "no_workflow",

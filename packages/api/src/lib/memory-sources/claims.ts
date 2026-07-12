@@ -22,7 +22,7 @@ import type { Database } from "@thinkwork/database-pg";
 import * as dbSchema from "@thinkwork/database-pg/schema";
 
 import { computeContentHash } from "./evidence.js";
-import type { DbHandle, SharedTargetScope } from "./types.js";
+import type { DbHandle, EvidenceTargetScope } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,6 +62,8 @@ export const SINGLE_VALUED_PREDICATES = [
   // removal is handled by the zero-support sweep / retraction.
   "document.title",
   "document.effective_date",
+  // U6 email-thread predicate: one current subject per thread subject.
+  "email.subject",
 ] as const;
 
 const SINGLE_VALUED = new Set<string>(SINGLE_VALUED_PREDICATES);
@@ -130,7 +132,7 @@ function deepEquals(a: unknown, b: unknown): boolean {
 export function extractCompanyClaims(input: {
   snapshot: Record<string, unknown>;
   sourceItemId: string;
-  targetScope: SharedTargetScope;
+  targetScope: EvidenceTargetScope;
   targetId: string;
   extractionVersion?: string;
 }): ClaimUpsert[] {
@@ -245,7 +247,7 @@ const WEB_TITLE_CHARS = 300;
 /** Flatten + bound hostile page text for a claim value: newlines collapse
  * (no markdown structure survives), HTML comments cannot terminate the
  * projection's provenance comments, and the length is capped. */
-function boundedInlineText(value: string, max: number): string {
+export function boundedInlineText(value: string, max: number): string {
   return value
     .replace(/\s*\r?\n\s*/g, " ")
     .replace(/<!--|-->/g, " ")
@@ -271,7 +273,7 @@ export function extractWebPageClaims(input: {
   snapshot: Record<string, unknown>;
   /** Normalized requested URL — the evidence source_item_id. */
   sourceItemId: string;
-  targetScope: SharedTargetScope;
+  targetScope: EvidenceTargetScope;
   targetId: string;
   extractionVersion?: string;
 }): ClaimUpsert[] {
@@ -325,6 +327,112 @@ export function extractWebPageClaims(input: {
 }
 
 // ---------------------------------------------------------------------------
+// extractEmailThreadClaims (pure, U6)
+// ---------------------------------------------------------------------------
+
+/** Email extraction recipe version stamped on claims. */
+const EMAIL_EXTRACTION_VERSION = "u6.1";
+const EMAIL_SUBJECT_CHARS = 300;
+const EMAIL_EXCERPT_CHARS = 700;
+const EMAIL_ADDRESS_CHARS = 320;
+/** Bounded per-thread claim fan-out. */
+const EMAIL_MAX_PARTICIPANT_CLAIMS = 25;
+const EMAIL_MAX_MESSAGE_CLAIMS = 25;
+
+/** Durable claim-ledger subject key for one email thread (U6). */
+export function subjectKeyForEmailThread(threadId: string): string {
+  return `email:thread:${threadId}`;
+}
+
+/**
+ * PURE: reduce a normalized email-thread snapshot (adapters/gmail.ts
+ * normalizeGmailThread) into provider-neutral `email.*` claims. Mail
+ * bodies, subjects, and addresses are HOSTILE input: every value is
+ * inline-flattened and bounded (boundedInlineText) so crafted mail cannot
+ * inject markdown structure, break provenance comments, or smuggle
+ * instructions into the claim projection as anything but quoted data.
+ */
+export function extractEmailThreadClaims(input: {
+  snapshot: Record<string, unknown>;
+  /** The thread id — the evidence source_item_id. */
+  sourceItemId: string;
+  targetScope: EvidenceTargetScope;
+  targetId: string;
+  extractionVersion?: string;
+}): ClaimUpsert[] {
+  const { snapshot } = input;
+  const subjectKey = subjectKeyForEmailThread(input.sourceItemId);
+  const extractionVersion = input.extractionVersion ?? EMAIL_EXTRACTION_VERSION;
+  const threadEffectiveFrom = parseDate(snapshot.latestMessageAt);
+  const claims: ClaimUpsert[] = [];
+
+  const push = (
+    ontologyPredicate: string,
+    value: Record<string, unknown>,
+    effectiveFrom: Date | null = threadEffectiveFrom,
+  ): void => {
+    if (Object.keys(value).length === 0) return;
+    claims.push({
+      subjectKey,
+      subjectEntityType: "email_thread",
+      ontologyPredicate,
+      value,
+      valueHash: computeContentHash(value),
+      effectiveFrom,
+      extractionVersion,
+    });
+  };
+
+  const subject = stringOrNull(snapshot.subject);
+  if (subject) {
+    const text = boundedInlineText(subject, EMAIL_SUBJECT_CHARS);
+    if (text) push("email.subject", { text });
+  }
+
+  if (Array.isArray(snapshot.participants)) {
+    for (const raw of snapshot.participants.slice(
+      0,
+      EMAIL_MAX_PARTICIPANT_CLAIMS,
+    )) {
+      const participant = recordOrNull(raw);
+      const email = stringOrNull(participant?.email);
+      if (!participant || !email) continue;
+      const value: Record<string, unknown> = {
+        email: boundedInlineText(email, EMAIL_ADDRESS_CHARS),
+      };
+      const name = stringOrNull(participant.name);
+      if (name) value.name = boundedInlineText(name, EMAIL_ADDRESS_CHARS);
+      push("email.participant", value);
+    }
+  }
+
+  if (Array.isArray(snapshot.messages)) {
+    for (const raw of snapshot.messages.slice(0, EMAIL_MAX_MESSAGE_CLAIMS)) {
+      const message = recordOrNull(raw);
+      const externalId = stringOrNull(message?.id);
+      if (!message || !externalId) continue;
+      const value: Record<string, unknown> = { externalId };
+      const from = stringOrNull(message.from);
+      if (from) value.from = boundedInlineText(from, EMAIL_ADDRESS_CHARS);
+      const sentAt = stringOrNull(message.sentAt);
+      if (sentAt) value.sentAt = sentAt;
+      const text = stringOrNull(message.text);
+      if (text) {
+        const excerpt = boundedInlineText(text, EMAIL_EXCERPT_CHARS);
+        if (excerpt) value.excerpt = excerpt;
+      }
+      push(
+        "email.message",
+        value,
+        parseDate(message.sentAt) ?? threadEffectiveFrom,
+      );
+    }
+  }
+
+  return claims;
+}
+
+// ---------------------------------------------------------------------------
 // upsertClaimsForEvidence
 // ---------------------------------------------------------------------------
 
@@ -365,7 +473,7 @@ export async function upsertClaimsForEvidence(
   db: Database,
   args: {
     tenantId: string;
-    targetScope: SharedTargetScope;
+    targetScope: EvidenceTargetScope;
     targetId: string;
     sourceConfigId: string;
     evidenceItemId: string;
@@ -715,7 +823,7 @@ export async function listActiveClaimsForSubject(
   db: DbHandle,
   args: {
     tenantId: string;
-    targetScope: SharedTargetScope;
+    targetScope: EvidenceTargetScope;
     targetId: string;
     subjectKey: string;
   },

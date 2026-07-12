@@ -34,11 +34,21 @@ type PersonalMemoryAutomationData = {
       sourceFamily: string;
       sourceBindingKey: string;
       enabled: boolean;
+      boundary?: unknown;
     }>;
     readiness: string;
     readinessReasons?: unknown;
   } | null;
 };
+
+/** Approved mailbox label ids from an email source's boundary. */
+function emailLabelsFrom(boundary: unknown): string[] {
+  const parsed = typeof boundary === "string" ? safeParse(boundary) : boundary;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+  const labels = (parsed as { labels?: unknown }).labels;
+  if (!Array.isArray(labels)) return [];
+  return labels.filter((label): label is string => typeof label === "string");
+}
 
 function readinessMessages(reasons: unknown): string[] {
   const parsed =
@@ -90,6 +100,12 @@ export function PersonalMemoryAutomation() {
   const scheduled = workflow?.primaryTriggerFamily === "schedule";
   const reasons = readinessMessages(automation.readinessReasons);
   const busy = triggerState.fetching || scheduleState.fetching;
+  const emailSources = automation.sources.filter(
+    (source) => source.sourceFamily === "email",
+  );
+  const emailConnectionBlocked = reasons.some((message) =>
+    message.toLowerCase().includes("google connection"),
+  );
 
   const runNow = async () => {
     if (!workflow) return;
@@ -161,6 +177,28 @@ export function PersonalMemoryAutomation() {
                   .map((source) => source.sourceFamily)
                   .join(", ")}`}
           </p>
+          {emailSources.map((source) => {
+            const labels = emailLabelsFrom(source.boundary);
+            return (
+              <p
+                key={source.id}
+                className="mt-0.5 text-xs text-muted-foreground"
+              >
+                Email (Gmail){source.enabled ? "" : " — disabled"}:{" "}
+                {emailConnectionBlocked ? (
+                  <span className="text-destructive">
+                    Google connection needs attention
+                  </span>
+                ) : (
+                  "connected via your Google account"
+                )}
+                {" · "}
+                {labels.length > 0
+                  ? `approved labels: ${labels.join(", ")}`
+                  : "no labels approved yet — an empty label set reads nothing"}
+              </p>
+            );
+          })}
           {reasons.length > 0 ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
               {reasons.join(" ")}

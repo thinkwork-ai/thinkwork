@@ -5,6 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 // out entirely.
 vi.mock("./claims.js", () => ({
   deactivateOrphanedClaims: vi.fn().mockResolvedValue(0),
+  // U6 email exports pulled in via the adapter registry module graph.
+  extractWebPageClaims: vi.fn(() => []),
+  extractEmailThreadClaims: vi.fn(() => []),
+  subjectKeyForEmailThread: (threadId: string) => `email:thread:${threadId}`,
+  boundedInlineText: (value: string) => value,
 }));
 
 import { HindsightRetainError } from "../memory/adapters/hindsight-adapter.js";

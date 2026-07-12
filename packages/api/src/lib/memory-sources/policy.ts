@@ -86,13 +86,15 @@ export type BoundaryDimension =
    */
   | { kind: "urlSet"; default: readonly string[] }
   /**
-   * Opaque-identifier allowlist over an OPEN value domain (U7). Values on
-   * BOTH sides are non-empty trimmed strings (bounded length); the envelope
-   * relation is plain subset-of — every requested value must appear
-   * verbatim in the grant. The default is [] — an empty/omitted grant
-   * allows exactly nothing. Unlike `allowlist` there is no closed domain:
-   * the ids are tenant data (e.g. knowledge_bases.id values), validated
-   * for shape only.
+   * Opaque-identifier allowlist over an OPEN value domain (U6 email label
+   * ids like "INBOX"/"Label_1234…", U7 knowledge_bases.id values — both
+   * are dynamic tenant/provider data, so a closed allowlist domain is
+   * impossible). Values on BOTH sides are non-empty trimmed single-line
+   * strings (bounded length, no control characters —
+   * stringSetValueInvalidReason); the envelope relation is plain
+   * subset-of: every requested value must appear verbatim in the grant.
+   * The default is [] — an empty/omitted grant allows exactly nothing.
+   * Malformed values fail closed on either side.
    */
   | { kind: "stringSet"; default: readonly string[] };
 
@@ -289,6 +291,18 @@ export const BOUNDARY_SCHEMAS: Record<string, BoundarySchema> = {
     knowledgeBaseIds: { kind: "stringSet", default: [] },
     maxDocuments: { kind: "cap", default: 25, min: 1, max: 500 },
     pageSize: { kind: "cap", default: 10, min: 1, max: 100 },
+    projectBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },
+  },
+  // U6: email (Gmail behind the provider-neutral adapter). `labels` is the
+  // readable envelope of provider label ids (default [] = nothing readable —
+  // fail closed); `maxMessages` caps message reads per run; `pageSize` caps
+  // history.list pages. Defaults/caps track adapters/gmail.ts constants.
+  email: {
+    labels: { kind: "stringSet", default: [] },
+    maxMessages: { kind: "cap", default: 50, min: 1, max: 500 },
+    pageSize: { kind: "cap", default: 25, min: 1, max: 100 },
     projectBatch: { kind: "cap", default: 25, min: 1, max: 100 },
     retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
     snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },
