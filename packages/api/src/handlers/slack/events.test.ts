@@ -1,11 +1,16 @@
+import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { describe, expect, it, vi } from "vitest";
-import type { SlackWorkspaceContext } from "./_shared.js";
+import {
+  computeSlackSignature,
+  type SlackWorkspaceContext,
+} from "./_shared.js";
 import {
   resolveOrCreateSlackThread,
   type SlackThreadMappingStore,
 } from "../../lib/slack/thread-mapping.js";
 import {
   createSlackEventsDispatcher,
+  createSlackEventsHandler,
   handleUrlVerification,
 } from "./events.js";
 
@@ -359,6 +364,58 @@ describe("Slack events handler", () => {
     expect(deps.dispatchDefaultAgent).not.toHaveBeenCalled();
   });
 
+  it("promotes a channel file_share mention of the bot to an app_mention turn", async () => {
+    const deps = makeDeps();
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    const result = await dispatch(
+      makeArgs(
+        appMentionPayload({
+          type: "message",
+          subtype: "file_share",
+          text: "<@B123> summarize this",
+          files: [
+            {
+              id: "F123",
+              name: "brief.pdf",
+              mimetype: "application/pdf",
+              url_private: "https://files.slack.com/files-pri/F123",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(deps.resolveSlackThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envelope: expect.objectContaining({
+          channelType: "app_mention",
+          fileRefs: [expect.objectContaining({ id: "F123" })],
+        }),
+      }),
+    );
+    expect(deps.dispatchDefaultAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("acknowledges a malformed event body without dispatch", async () => {
+    const deps = makeDeps();
+    const dispatch = createSlackEventsDispatcher(deps);
+
+    const result = await dispatch({
+      ...makeArgs({}),
+      rawBodyText: "{not json",
+      rawBody: Buffer.from("{not json"),
+    });
+
+    expect(JSON.parse(result.body || "{}")).toEqual({
+      ok: true,
+      ignored: true,
+    });
+    expect(deps.loadLinkedUser).not.toHaveBeenCalled();
+    expect(deps.dispatchDefaultAgent).not.toHaveBeenCalled();
+  });
+
   it("continues text dispatch when Slack attachment materialization fails", async () => {
     const materializeSlackFiles = vi.fn(async () => {
       throw new Error("s3 unavailable");
@@ -383,5 +440,185 @@ describe("Slack events handler", () => {
 
     expect(materializeSlackFiles).toHaveBeenCalled();
     expect(deps.dispatchDefaultAgent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Slack events handler end to end", () => {
+  const NOW_SECONDS = 1_800_000_000;
+  const NOW_MS = NOW_SECONDS * 1000;
+  const SIGNING_SECRET = "slack-signing-secret";
+
+  function makeSignedEvent(
+    rawBody: string,
+    opts: { signature?: string; timestamp?: string } = {},
+  ): APIGatewayProxyEventV2 {
+    const timestamp = opts.timestamp ?? String(NOW_SECONDS);
+    const signature =
+      opts.signature ??
+      computeSlackSignature(SIGNING_SECRET, timestamp, Buffer.from(rawBody));
+    return {
+      version: "2.0",
+      routeKey: "POST /slack/events",
+      rawPath: "/slack/events",
+      rawQueryString: "",
+      headers: {
+        "content-type": "application/json",
+        "x-slack-request-timestamp": timestamp,
+        "x-slack-signature": signature,
+      },
+      requestContext: {
+        http: {
+          method: "POST",
+          path: "/slack/events",
+          sourceIp: "127.0.0.1",
+          userAgent: "Slackbot",
+        },
+      } as APIGatewayProxyEventV2["requestContext"],
+      body: rawBody,
+      isBase64Encoded: false,
+    };
+  }
+
+  function makeSignedHandler(deps: ReturnType<typeof makeDeps>) {
+    return createSlackEventsHandler(deps, {
+      loadSigningSecret: async () => SIGNING_SECRET,
+      lookupWorkspace: async () => WORKSPACE,
+      loadBotToken: async () => "xoxb-token",
+      nowMs: () => NOW_MS,
+    });
+  }
+
+  it("parses a recorded signed app_mention into the same dispatch input", async () => {
+    const deps = makeDeps();
+    const handler = makeSignedHandler(deps);
+
+    const response = await handler(
+      makeSignedEvent(JSON.stringify(appMentionPayload())),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(deps.resolveSlackThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        actorId: "user-1",
+        envelope: expect.objectContaining({
+          slackTeamId: "T123",
+          slackUserId: "U123",
+          channelId: "C123",
+          threadTs: "1710000001.000000",
+          eventId: "Ev123",
+          sourceMessage: expect.objectContaining({
+            text: "research this vendor",
+          }),
+        }),
+      }),
+    );
+    expect(deps.dispatchDefaultAgent).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      spaceId: "space-1",
+      messageId: "message-1",
+      content: "research this vendor",
+      sender: { type: "user", id: "user-1" },
+    });
+    expect(JSON.parse(response.body || "{}")).toEqual({
+      ok: true,
+      threadId: "thread-1",
+      messageId: "message-1",
+      wakeupRequestId: "wakeup-1",
+    });
+  });
+
+  it("keeps direct-message behavior for a recorded signed message.im", async () => {
+    const deps = makeDeps();
+    const handler = makeSignedHandler(deps);
+
+    const response = await handler(
+      makeSignedEvent(
+        JSON.stringify({
+          type: "event_callback",
+          team_id: "T123",
+          event_id: "EvDM",
+          event: {
+            type: "message",
+            channel_type: "im",
+            team: "T123",
+            user: "U123",
+            channel: "D123",
+            text: "hello",
+            ts: "1710000003.000000",
+          },
+        }),
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(deps.resolveSlackThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envelope: expect.objectContaining({
+          channelType: "im",
+          channelId: "D123",
+          triggerSurface: "message_im",
+        }),
+      }),
+    );
+    expect(deps.dispatchDefaultAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a tampered signature before any dispatch", async () => {
+    const deps = makeDeps();
+    const handler = makeSignedHandler(deps);
+
+    const response = await handler(
+      makeSignedEvent(JSON.stringify(appMentionPayload()), {
+        signature: "v0=" + "ab".repeat(32),
+      }),
+    );
+
+    expect(response.statusCode).toBe(401);
+    expect(deps.loadLinkedUser).not.toHaveBeenCalled();
+    expect(deps.dispatchDefaultAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed malformed body with the previous 400 outcome", async () => {
+    const deps = makeDeps();
+    const handler = makeSignedHandler(deps);
+
+    const response = await handler(makeSignedEvent("{not json"));
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body || "{}")).toEqual({
+      error: "Slack team_id is required",
+    });
+    expect(deps.dispatchDefaultAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed form-encoded body with the previous 400 outcome", async () => {
+    const deps = makeDeps();
+    const handler = makeSignedHandler(deps);
+    const event = makeSignedEvent("team_id=T123&text=hello");
+    event.headers["content-type"] = "application/x-www-form-urlencoded";
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body || "{}")).toEqual({
+      error: "Slack team_id is required",
+    });
+    expect(deps.dispatchDefaultAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale signing timestamp before any dispatch", async () => {
+    const deps = makeDeps();
+    const handler = makeSignedHandler(deps);
+
+    const response = await handler(
+      makeSignedEvent(JSON.stringify(appMentionPayload()), {
+        timestamp: String(NOW_SECONDS - 6 * 60),
+      }),
+    );
+
+    expect(response.statusCode).toBe(401);
+    expect(deps.dispatchDefaultAgent).not.toHaveBeenCalled();
   });
 });
