@@ -77,6 +77,7 @@ export * from "./billing";
 export * from "./agent-workspace-events";
 export * from "./compliance";
 export * from "./slack";
+export * from "./msteams";
 export * from "./spaces";
 export * from "./goals";
 export * from "./deployments";

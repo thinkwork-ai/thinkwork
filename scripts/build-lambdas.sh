@@ -504,6 +504,15 @@ build_handler "slack-events" \
 build_handler "slack-oauth-install" \
   "$REPO_ROOT/packages/api/src/handlers/slack/oauth-install.ts"
 
+build_handler "msteams-install-start" \
+  "$REPO_ROOT/packages/api/src/handlers/msteams/install-start.ts"
+
+build_handler "msteams-install-complete" \
+  "$REPO_ROOT/packages/api/src/handlers/msteams/install-complete.ts"
+
+build_handler "msteams-account-link-complete" \
+  "$REPO_ROOT/packages/api/src/handlers/msteams/account-link-complete.ts"
+
 
 build_handler "webhooks" \
   "$REPO_ROOT/packages/api/src/handlers/webhooks.ts"

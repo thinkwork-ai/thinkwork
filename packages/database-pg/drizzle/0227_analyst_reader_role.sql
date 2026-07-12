@@ -642,6 +642,21 @@ BEGIN
   ELSE
     missing := missing || 'model_catalog'::text;
   END IF;
+  IF to_regclass('public.msteams_tenant_installs') IS NOT NULL THEN
+    GRANT SELECT ON public.msteams_tenant_installs TO analyst_reader;
+  ELSE
+    missing := missing || 'msteams_tenant_installs'::text;
+  END IF;
+  IF to_regclass('public.msteams_threads') IS NOT NULL THEN
+    GRANT SELECT ON public.msteams_threads TO analyst_reader;
+  ELSE
+    missing := missing || 'msteams_threads'::text;
+  END IF;
+  IF to_regclass('public.msteams_user_links') IS NOT NULL THEN
+    GRANT SELECT ON public.msteams_user_links TO analyst_reader;
+  ELSE
+    missing := missing || 'msteams_user_links'::text;
+  END IF;
   IF to_regclass('public.mutation_idempotency') IS NOT NULL THEN
     GRANT SELECT ON public.mutation_idempotency TO analyst_reader;
   ELSE

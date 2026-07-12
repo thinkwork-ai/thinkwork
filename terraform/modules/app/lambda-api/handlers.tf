@@ -32,6 +32,11 @@ locals {
       "slack-events",
       "slack-oauth-install",
     ],
+    var.enable_msteams_app ? [] : [
+      "msteams-install-start",
+      "msteams-install-complete",
+      "msteams-account-link-complete",
+    ],
   )
 
   # Config-class configuration shared by all API handlers. As of plan
@@ -235,6 +240,10 @@ locals {
     SLACK_APP_CREDENTIALS_SECRET_ARN = var.enable_slack_workspace_app ? aws_secretsmanager_secret.slack_app_credentials[0].arn : ""
   }
 
+  msteams_handler_env = {
+    MSTEAMS_APP_CREDENTIALS_SECRET_ARN = var.enable_msteams_app ? aws_secretsmanager_secret.msteams_app_credentials[0].arn : ""
+  }
+
   handler_extra_env = {
     # Analyst query broker (THINK-228 U3). Reader role + caller credential
     # secrets, and the workspace bucket's analyst-staging/ prefix for
@@ -353,10 +362,13 @@ locals {
     "memory-retraction-drainer" = {
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
     }
-    "oauth-authorize"     = local.slack_handler_env
-    "oauth-callback"      = local.slack_handler_env
-    "slack-events"        = local.slack_handler_env
-    "slack-oauth-install" = local.slack_handler_env
+    "oauth-authorize"               = local.slack_handler_env
+    "oauth-callback"                = local.slack_handler_env
+    "slack-events"                  = local.slack_handler_env
+    "slack-oauth-install"           = local.slack_handler_env
+    "msteams-install-start"         = local.msteams_handler_env
+    "msteams-install-complete"      = local.msteams_handler_env
+    "msteams-account-link-complete" = local.msteams_handler_env
     "thread-attachments-finalize" = {
       REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
     }
@@ -660,6 +672,9 @@ resource "aws_lambda_function" "handler" {
     "email-readiness-probe",
     "slack-events",
     "slack-oauth-install",
+    "msteams-install-start",
+    "msteams-install-complete",
+    "msteams-account-link-complete",
     "github-app",
     "memory",
     "memory-retain",
@@ -1595,6 +1610,15 @@ locals {
       "POST /slack/events"        = "slack-events"
       "GET /slack/oauth/install"  = "slack-oauth-install"
       "POST /slack/oauth/install" = "slack-oauth-install"
+
+      # Microsoft Teams install + account-link ingress. Like the Slack block
+      # above, these routes have no gateway authorizer: install/start and
+      # account-link/complete verify the Cognito JWT in-handler, and
+      # install/complete (the Microsoft admin-consent redirect) verifies the
+      # HMAC-signed install state in-handler before any tenant work happens.
+      "POST /msteams/install/start"         = "msteams-install-start"
+      "GET /msteams/install/complete"       = "msteams-install-complete"
+      "POST /msteams/account-link/complete" = "msteams-account-link-complete"
 
       # Memory
       "ANY /api/memory/{proxy+}" = "memory"

@@ -107,6 +107,9 @@ Conventions:
 - [message_mentions](#message-mentions)
 - [messages](#messages)
 - [model_catalog](#model-catalog)
+- [msteams_tenant_installs](#msteams-tenant-installs)
+- [msteams_threads](#msteams-threads)
+- [msteams_user_links](#msteams-user-links)
 - [mutation_idempotency](#mutation-idempotency)
 - [pending_user_questions](#pending-user-questions)
 - [pi_extension_assignments](#pi-extension-assignments)
@@ -2570,6 +2573,77 @@ Note: Platform-global model reference data — not tenant-scoped. RLS is intenti
 | is_available | boolean | not null |
 | created_at | timestamp with time zone | not null |
 | updated_at | timestamp with time zone | not null |
+
+## msteams_tenant_installs
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| entra_tenant_id | text | not null |
+| bot_app_id | text | not null |
+| status | text | not null |
+| consent_status | text | not null |
+| installed_by_user_id | uuid |  |
+| installed_at | timestamp with time zone |  |
+| uninstalled_at | timestamp with time zone |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `status`: `pending`, `active`, `uninstalled`, `revoked`
+- `consent_status`: `pending`, `granted`, `admin_required`, `revoked`
+
+Join hints:
+
+- `msteams_tenant_installs.installed_by_user_id` → `users.id`
+- `msteams_tenant_installs.tenant_id` → `tenants.id`
+
+## msteams_threads
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| entra_tenant_id | text | not null |
+| conversation_id | text | not null |
+| service_url | text | not null |
+| thread_id | uuid | not null |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `msteams_threads.entra_tenant_id` → `msteams_tenant_installs.entra_tenant_id`
+- `msteams_threads.tenant_id` → `tenants.id`
+- `msteams_threads.thread_id` → `threads.id`
+
+## msteams_user_links
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| entra_tenant_id | text | not null |
+| aad_object_id | text | not null |
+| user_id | uuid | not null |
+| display_name | text |  |
+| status | text | not null |
+| linked_at | timestamp with time zone | not null |
+| unlinked_at | timestamp with time zone |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `status`: `active`, `unlinked`, `orphaned`, `suspended`
+
+Join hints:
+
+- `msteams_user_links.entra_tenant_id` → `msteams_tenant_installs.entra_tenant_id`
+- `msteams_user_links.tenant_id` → `tenants.id`
+- `msteams_user_links.user_id` → `users.id`
 
 ## mutation_idempotency
 
