@@ -63,6 +63,23 @@ export interface ToolWorkflowStep {
   input?: Record<string, unknown>;
 }
 
+/**
+ * Trigger families an approval predicate may name — the same closed set the
+ * workflow control plane records on runs (workflows.primary_trigger_family /
+ * workflow_runs.trigger_family).
+ */
+export const APPROVAL_TRIGGER_FAMILIES = [
+  "manual",
+  "schedule",
+  "webhook",
+  "crm",
+  "n8n",
+  "api",
+  "agent",
+  "child_workflow",
+] as const;
+export type ApprovalTriggerFamily = (typeof APPROVAL_TRIGGER_FAMILIES)[number];
+
 export interface ApprovalWorkflowStep {
   id: string;
   kind: "approval";
@@ -72,6 +89,30 @@ export interface ApprovalWorkflowStep {
   approverUserId?: string;
   /** Optional wait ceiling before the run fails as unattended. */
   timeoutSeconds?: number;
+  /**
+   * Restricted trigger predicate (THINK-193 U3): when present, the approval
+   * only WAITS for runs whose trigger family is listed; every other run
+   * records a visible `workflow_approval_skipped` event and advances. This
+   * is a validated allowlist over APPROVAL_TRIGGER_FAMILIES — there is no
+   * arbitrary expression evaluator.
+   */
+  when?: { triggerFamily: ApprovalTriggerFamily[] };
+}
+
+/**
+ * PURE: does this approval step wait for a run with the given trigger
+ * family? No predicate means it always waits; an UNKNOWN/null family also
+ * waits — human review is the fail-safe side of the predicate.
+ */
+export function approvalStepWaits(
+  step: Pick<ApprovalWorkflowStep, "when">,
+  triggerFamily: string | null | undefined,
+): boolean {
+  const families = step.when?.triggerFamily;
+  if (!families || families.length === 0) return true;
+  if (triggerFamily == null) return true;
+  if (!APPROVAL_TRIGGER_FAMILIES.includes(triggerFamily as never)) return true;
+  return families.includes(triggerFamily as ApprovalTriggerFamily);
 }
 
 /**
@@ -134,6 +175,156 @@ export interface MemoryStageWorkerResult {
   counts?: Record<string, number>;
   error?: string;
   output?: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Approved-plan override (THINK-193 U3) — the narrowing a human applies when
+// approving a memory workflow's plan review. Frozen protocol shared by the
+// resolveWorkflowApproval mutation (packages/api), the workflow-resume Lambda,
+// record_approval / await_memory_stage in workflow-step-dispatch
+// (packages/lambda), and the memory-stage worker/sweeper (packages/api).
+// The override may only NARROW saved authorization/config boundaries — the
+// mutation validates it against the processor's saved sources and the stage
+// runtime re-enforces narrow-only semantics (effectiveLimit / source
+// intersection) regardless.
+// ---------------------------------------------------------------------------
+
+export interface ApprovalPlanOverride {
+  /** Restrict the run to these already-configured source configs. */
+  sourceConfigIds?: string[];
+  /** Advisory focus keys chosen from the preflight plan. */
+  focusKeys?: string[];
+  /** ISO-8601 bounds narrowing the evidence time range. */
+  timeRange?: { from?: string; to?: string };
+  /** Cap on records this run may acquire (narrows boundary/budget caps). */
+  maxRecords?: number;
+}
+
+const OVERRIDE_MAX_LIST = 50;
+const OVERRIDE_MAX_KEY_CHARS = 200;
+
+/**
+ * Shape-validate an untrusted override into the frozen protocol shape, or
+ * null when nothing usable is present. Throws on structurally invalid input
+ * (wrong types, oversized lists, unordered time range) so callers surface a
+ * clear error instead of silently dropping a reviewer's narrowing.
+ */
+export function sanitizeApprovalPlanOverride(
+  input: unknown,
+): ApprovalPlanOverride | null {
+  if (input === null || input === undefined) return null;
+  if (typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("approval override must be a JSON object");
+  }
+  const raw = input as Record<string, unknown>;
+  const override: ApprovalPlanOverride = {};
+
+  const readList = (key: "sourceConfigIds" | "focusKeys"): void => {
+    const value = raw[key];
+    if (value === undefined || value === null) return;
+    if (!Array.isArray(value) || value.length === 0) {
+      throw new Error(`approval override ${key} must be a non-empty array`);
+    }
+    if (value.length > OVERRIDE_MAX_LIST) {
+      throw new Error(
+        `approval override ${key} allows at most ${OVERRIDE_MAX_LIST} entries`,
+      );
+    }
+    const items = value.map((item) => {
+      if (
+        typeof item !== "string" ||
+        !item.trim() ||
+        item.length > OVERRIDE_MAX_KEY_CHARS
+      ) {
+        throw new Error(
+          `approval override ${key} entries must be non-empty strings of at most ${OVERRIDE_MAX_KEY_CHARS} characters`,
+        );
+      }
+      return item.trim();
+    });
+    override[key] = items;
+  };
+  readList("sourceConfigIds");
+  readList("focusKeys");
+
+  const timeRange = raw.timeRange;
+  if (timeRange !== undefined && timeRange !== null) {
+    if (typeof timeRange !== "object" || Array.isArray(timeRange)) {
+      throw new Error("approval override timeRange must be a JSON object");
+    }
+    const { from, to } = timeRange as { from?: unknown; to?: unknown };
+    const range: { from?: string; to?: string } = {};
+    for (const [key, value] of [
+      ["from", from],
+      ["to", to],
+    ] as const) {
+      if (value === undefined || value === null) continue;
+      if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+        throw new Error(
+          `approval override timeRange.${key} must be an ISO-8601 timestamp`,
+        );
+      }
+      range[key] = value;
+    }
+    if (
+      range.from &&
+      range.to &&
+      Date.parse(range.from) > Date.parse(range.to)
+    ) {
+      throw new Error(
+        "approval override timeRange.from must not be after timeRange.to",
+      );
+    }
+    if (range.from || range.to) override.timeRange = range;
+  }
+
+  const maxRecords = raw.maxRecords;
+  if (maxRecords !== undefined && maxRecords !== null) {
+    if (
+      typeof maxRecords !== "number" ||
+      !Number.isInteger(maxRecords) ||
+      maxRecords <= 0
+    ) {
+      throw new Error(
+        "approval override maxRecords must be a positive integer",
+      );
+    }
+    override.maxRecords = maxRecords;
+  }
+
+  return Object.keys(override).length > 0 ? override : null;
+}
+
+/** Step-output key record_approval persists an approved override under. */
+export const APPROVAL_OVERRIDE_OUTPUT_KEY = "approvalOverride";
+
+/**
+ * Merge a run's recorded approval override (if any approval step persisted
+ * one as its step output) into a memory_stage step's options under the
+ * `override` key. Shared by workflow-step-dispatch (park time) and the
+ * memory-stage sweeper (payload reconstruction) so a redriven run keeps the
+ * reviewer's narrowing.
+ */
+export function mergeApprovalOverrideIntoOptions(
+  stepOutputs: Record<string, { output: unknown }>,
+  options: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  let override: unknown = null;
+  for (const entry of Object.values(stepOutputs)) {
+    const output = entry?.output;
+    if (
+      output &&
+      typeof output === "object" &&
+      !Array.isArray(output) &&
+      (output as Record<string, unknown>)[APPROVAL_OVERRIDE_OUTPUT_KEY]
+    ) {
+      override = (output as Record<string, unknown>)[
+        APPROVAL_OVERRIDE_OUTPUT_KEY
+      ];
+    }
+  }
+  if (!override) return options;
+  return { ...(options ?? {}), override };
 }
 
 export const HTTP_STEP_METHODS = [
@@ -632,6 +823,61 @@ function validateApprovalStep(
       field: `steps[${index}].timeoutSeconds`,
       reason: "timeoutSeconds must be a positive integer when present",
     });
+  }
+  if (rawStep.when !== undefined) {
+    validateApprovalWhen(rawStep.when, id, index, errors);
+  }
+}
+
+/**
+ * `when` is a validated allowlist predicate, never an expression: exactly
+ * one key (triggerFamily) holding a non-empty array drawn from
+ * APPROVAL_TRIGGER_FAMILIES.
+ */
+function validateApprovalWhen(
+  when: unknown,
+  id: string | null,
+  index: number,
+  errors: DefinitionValidationError[],
+): void {
+  if (!isRecord(when)) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].when`,
+      reason: "when must be a JSON object when present",
+    });
+    return;
+  }
+  const unknownKeys = Object.keys(when).filter(
+    (key) => key !== "triggerFamily",
+  );
+  if (unknownKeys.length > 0) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].when`,
+      reason: `when supports only the triggerFamily predicate — unknown key(s): ${unknownKeys.join(", ")}`,
+    });
+  }
+  const families = when.triggerFamily;
+  if (!Array.isArray(families) || families.length === 0) {
+    errors.push({
+      stepId: id,
+      field: `steps[${index}].when.triggerFamily`,
+      reason: "when.triggerFamily must be a non-empty array",
+    });
+    return;
+  }
+  for (const family of families) {
+    if (
+      typeof family !== "string" ||
+      !APPROVAL_TRIGGER_FAMILIES.includes(family as ApprovalTriggerFamily)
+    ) {
+      errors.push({
+        stepId: id,
+        field: `steps[${index}].when.triggerFamily`,
+        reason: `"${String(family)}" is not a trigger family — allowed: ${APPROVAL_TRIGGER_FAMILIES.join(", ")}`,
+      });
+    }
   }
 }
 

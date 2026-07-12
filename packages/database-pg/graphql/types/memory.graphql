@@ -671,7 +671,34 @@ type MemorySourceEraseResult {
   checkpointsDeleted: Boolean!
 }
 
+"""
+A managed memory processor plus its blueprint-owned Workflow (THINK-193 U3).
+Personal: one per user (mode personal, agent_private workflow owned by the
+user). Shared: operator-owned per Space/Tenant target (tenant_shared
+workflow). The workflow definition is always the platform blueprint —
+ensured lazily, never hand-authored.
+"""
+type ManagedMemoryWorkflow {
+  processor: MemoryProcessorConfig!
+  workflow: Workflow
+  sources: [MemorySourceConfig!]!
+  """
+  ready | blocked_not_ready — computed from workflow readiness and the
+  configured source set.
+  """
+  readiness: String!
+  """
+  JSON array of {code, message} readiness reasons (empty when ready).
+  """
+  readinessReasons: AWSJSON
+}
+
 extend type Query {
+  """
+  Owner-only: the signed-in user's Personal Memory Automation. Lazily
+  provisions the processor + workflow + current blueprint version on read.
+  """
+  personalMemoryAutomation: ManagedMemoryWorkflow!
   memoryProcessorConfigs(tenantId: ID): [MemoryProcessorConfig!]!
   memorySourceConfigs(
     tenantId: ID
@@ -701,6 +728,25 @@ extend type Query {
 }
 
 extend type Mutation {
+  """
+  Operator-only: idempotently ensure the shared Memory Workflow (processor +
+  tenant_shared blueprint workflow) for one Space or Tenant target.
+  """
+  ensureSharedMemoryWorkflow(
+    tenantId: ID
+    targetScope: String!
+    targetId: ID!
+  ): ManagedMemoryWorkflow!
+  """
+  Owner-only: set/clear the caller's personal memory automation schedule.
+  enabled=true requires a rate(...)/cron(...) scheduleExpression; false
+  disables the scheduled trigger (manual runs stay available).
+  """
+  setPersonalMemoryAutomationSchedule(
+    scheduleExpression: String
+    timezone: String
+    enabled: Boolean!
+  ): ManagedMemoryWorkflow!
   """
   Insert an active grant for a source binding, superseding (revoking) any
   existing active grant for the same binding — one active grant per binding.

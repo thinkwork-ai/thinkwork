@@ -1128,3 +1128,190 @@ describe("approval step", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: approval trigger predicate + approved-plan override
+// ---------------------------------------------------------------------------
+
+const GATED_APPROVAL_DEF: WorkflowDefinition = {
+  version: 1,
+  steps: [
+    {
+      id: "plan-review",
+      kind: "approval",
+      prompt: "Review the plan",
+      when: { triggerFamily: ["manual"] },
+    },
+    { id: "announce", kind: "emit_event", eventType: "x.y" },
+  ],
+};
+
+describe("approval `when` predicate (U3, AE2)", () => {
+  it("a scheduled run records a VISIBLE workflow_approval_skipped event and advances", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "schedule" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+      [], // no prior policy decision (advance tail dedupe)
+    );
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("continue");
+    expect(result.cursor).toMatchObject({ stepPointer: 1, iteration: 1 });
+    const skipped = fake.inserts.find(
+      (r) => r.event_type === "workflow_approval_skipped",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(skipped?.payload_summary).toMatchObject({
+      stepId: "plan-review",
+      status: "skipped",
+      reason: "trigger_family_not_reviewed",
+      triggerFamily: "schedule",
+    });
+    // The run never enters waiting_for_human.
+    expect(fake.updates.some((u) => u.status === "waiting_for_human")).toBe(
+      false,
+    );
+  });
+
+  it("a manual run still parks on await_approval as waiting_for_human", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "manual" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+    );
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("await_approval");
+    expect(fake.updates.some((u) => u.status === "waiting_for_human")).toBe(
+      true,
+    );
+  });
+
+  it("a run with an unknown/null trigger family fails safe and waits", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: null })],
+      [versionRow(GATED_APPROVAL_DEF)],
+    );
+    const result = await handleLoadNext(
+      fake.db as never,
+      { phase: "load_next", cursor: cursor(), executionArn: "arn:exec" },
+      NOW,
+    );
+    expect(result.directive).toBe("await_approval");
+  });
+});
+
+describe("approved-plan override (U3)", () => {
+  it("record_approval persists the sanitized override as the approval step's output", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "manual" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+      [], // prior policy decision check (advance tail)
+    );
+    const result = await handleRecordApproval(
+      fake.db as never,
+      {
+        phase: "record_approval",
+        cursor: cursor(),
+        approval: {
+          approved: true,
+          note: "narrowed",
+          override: {
+            sourceConfigIds: ["sc-1", "sc-2"],
+            maxRecords: 40,
+            timeRange: { from: "2026-07-01T00:00:00Z" },
+          },
+        },
+      },
+      NOW,
+    );
+    expect(result.directive).toBe("continue");
+    const output = fake.inserts.find(
+      (r) => r.evidence_type === "step_output",
+    ) as {
+      summary?: { stepId?: string; output?: Record<string, unknown> };
+    };
+    expect(output?.summary?.stepId).toBe("plan-review");
+    expect(output?.summary?.output).toEqual({
+      approvalOverride: {
+        sourceConfigIds: ["sc-1", "sc-2"],
+        maxRecords: 40,
+        timeRange: { from: "2026-07-01T00:00:00Z" },
+      },
+    });
+    const decision = fake.inserts.find(
+      (r) => r.event_type === "workflow_approval_decision",
+    ) as { payload_summary?: Record<string, unknown> };
+    expect(decision?.payload_summary).toMatchObject({
+      decision: "approved",
+      overrideSourceCount: 2,
+      overrideMaxRecords: 40,
+      overrideTimeFrom: "2026-07-01T00:00:00Z",
+    });
+  });
+
+  it("record_approval without an override records no step output", async () => {
+    fake.selectQueue.push(
+      [runRow({ trigger_family: "manual" })],
+      [versionRow(GATED_APPROVAL_DEF)],
+      [],
+    );
+    await handleRecordApproval(
+      fake.db as never,
+      {
+        phase: "record_approval",
+        cursor: cursor(),
+        approval: { approved: true },
+      },
+      NOW,
+    );
+    expect(fake.inserts.some((r) => r.evidence_type === "step_output")).toBe(
+      false,
+    );
+  });
+
+  it("await_memory_stage merges a recorded approvalOverride into the worker options", async () => {
+    const calls: Array<{ options: Record<string, unknown> | null }> = [];
+    fake.selectQueue.push(
+      [
+        runRow({
+          trigger_family: "manual",
+          input_summary: { agentId: "a1", sourceConfigId: "src-9" },
+        }),
+      ],
+      [versionRow(MEMORY_STAGE_DEF)],
+      [
+        {
+          summary: {
+            stepId: "plan-review",
+            output: { approvalOverride: { sourceConfigIds: ["sc-1"] } },
+          },
+          created_at: NOW,
+        },
+      ], // prior step outputs (template context)
+    );
+    await handleAwaitMemoryStage(
+      fake.db as never,
+      {
+        phase: "await_memory_stage",
+        cursor: cursor(),
+        taskToken: "tok-mem-9",
+      },
+      NOW,
+      makeExecutors({
+        invokeMemoryStageWorker: async (payload) => {
+          calls.push(payload);
+        },
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.options).toEqual({
+      batchSize: 5,
+      override: { sourceConfigIds: ["sc-1"] },
+    });
+  });
+});

@@ -19,11 +19,18 @@ import { workflowRuns } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { assertCanReadWorkflowTenant } from "./types.js";
+import {
+  assertOverrideNarrowsSavedConfig,
+  overrideInputToProtocol,
+  type WorkflowApprovalOverrideInput,
+} from "./approval-override.js";
 
 type ResolveWorkflowApprovalArgs = {
   runId: string;
   approve: boolean;
   note?: string | null;
+  /** THINK-193 U3: approved-plan narrowing override (memory workflows). */
+  override?: WorkflowApprovalOverrideInput | null;
 };
 
 export async function resolveWorkflowApproval(
@@ -49,6 +56,18 @@ export async function resolveWorkflowApproval(
     );
   }
 
+  // Approved-plan override (THINK-193 U3): shape-sanitize, then validate it
+  // only NARROWS the saved processor configuration — BEFORE any Lambda
+  // invoke, so a widening attempt errors without consuming the token.
+  const override = args.approve ? overrideInputToProtocol(args.override) : null;
+  if (override) {
+    await assertOverrideNarrowsSavedConfig(db, {
+      tenantId: run.tenant_id,
+      workflowId: run.workflow_id,
+      override,
+    });
+  }
+
   const stage = process.env.STAGE;
   if (!stage) {
     throw new Error(
@@ -70,6 +89,7 @@ export async function resolveWorkflowApproval(
           workflowRunId: run.id,
           approved: args.approve,
           note: args.note ?? null,
+          override,
         }),
       ),
     }),

@@ -49,6 +49,26 @@ function stepOutputHeading(item: WorkflowEvidenceItem): string | null {
     .join(" ");
 }
 
+/**
+ * THINK-193 U3: memory_stage step outputs carry per-stage counts
+ * ({stage, counts: {changed, seen, ...}}). Render them inline so a memory
+ * run's evidence reads as stage-by-stage numbers without expanding JSON.
+ */
+function memoryStageCounts(item: WorkflowEvidenceItem): string | null {
+  if (item.evidenceType !== "step_output") return null;
+  const summary = jsonRecord(item.summary);
+  if (summary.stepKind !== "memory_stage") return null;
+  const output = jsonRecord(summary.output);
+  const counts = jsonRecord(output.counts);
+  const entries = Object.entries(counts).filter(
+    (entry): entry is [string, number] => typeof entry[1] === "number",
+  );
+  if (entries.length === 0) return null;
+  const stage = typeof output.stage === "string" ? output.stage : null;
+  const rendered = entries.map(([key, value]) => `${key} ${value}`).join(" · ");
+  return stage ? `${stage}: ${rendered}` : rendered;
+}
+
 export function WorkflowEvidencePanel({
   evidence,
 }: {
@@ -74,6 +94,7 @@ export function WorkflowEvidencePanel({
 function EvidenceRow({ item }: { item: WorkflowEvidenceItem }) {
   const [open, setOpen] = useState(false);
   const stepHeading = stepOutputHeading(item);
+  const stageCounts = memoryStageCounts(item);
 
   return (
     <div className="space-y-2 rounded-md border border-border/70 p-3">
@@ -88,6 +109,9 @@ function EvidenceRow({ item }: { item: WorkflowEvidenceItem }) {
           {titleize(item.redactionState)}
         </Badge>
       </div>
+      {stageCounts ? (
+        <p className="text-xs text-muted-foreground">{stageCounts}</p>
+      ) : null}
       {item.sourceId ? (
         <p className="truncate text-xs text-muted-foreground">
           Source ID: {item.sourceId}

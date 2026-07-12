@@ -13,6 +13,11 @@ import {
   WorkflowEvidencePanel,
   type WorkflowEvidenceItem,
 } from "./WorkflowEvidencePanel";
+import {
+  preflightPlanFromEvidence,
+  WorkflowPlanReview,
+  type ApprovalOverridePayload,
+} from "./WorkflowPlanReview";
 import { WorkflowRunTimeline } from "./WorkflowRunTimeline";
 import {
   DefinitionList,
@@ -140,16 +145,26 @@ export function WorkflowRunDetail({
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const approvalDisabled = approvalState.fetching || approvalError !== null;
 
-  const decide = async (approve: boolean) => {
+  const decide = async (
+    approve: boolean,
+    decisionNote?: string | null,
+    override?: ApprovalOverridePayload | null,
+  ) => {
     setApprovalError(null);
     const res = await resolveApproval({
       runId,
       approve,
-      note: note.trim() || null,
+      note: decisionNote !== undefined ? decisionNote : note.trim() || null,
+      override: override ?? null,
     });
     if (res.error) {
+      // Narrow-only validation errors surface verbatim (e.g. a stale grant
+      // or an over-cap record limit); anything else means the run moved on.
+      const validation = res.error.graphQLErrors?.[0]?.message;
       setApprovalError(
-        "This run has already left the waiting state — refresh to see its current status.",
+        validation && !/waiting/i.test(validation)
+          ? validation
+          : "This run has already left the waiting state — refresh to see its current status.",
       );
       return;
     }
@@ -191,6 +206,10 @@ export function WorkflowRunDetail({
     );
   }
 
+  // THINK-193 U3: a memory workflow's preflight stage records the reviewable
+  // plan as step-output evidence; its presence upgrades the approval block
+  // into the plan-review editor.
+  const preflightPlan = preflightPlanFromEvidence(run.evidence);
   const backendRef = jsonRecord(run.backendExecutionRef);
   const routineId =
     run.engineBinding?.routineId ?? nestedString(backendRef, "routineId");
@@ -264,7 +283,18 @@ export function WorkflowRunDetail({
         </InfoCard>
       </div>
 
-      {isWaitingForHuman ? (
+      {isWaitingForHuman && preflightPlan ? (
+        <InfoCard title="Plan review">
+          <WorkflowPlanReview
+            plan={preflightPlan}
+            busy={approvalState.fetching}
+            error={approvalError}
+            onDecide={(approve, decisionNote, override) =>
+              decide(approve, decisionNote, override)
+            }
+          />
+        </InfoCard>
+      ) : isWaitingForHuman ? (
         <InfoCard title="Approval required">
           <p className="text-sm text-muted-foreground">
             This run is paused on a human-approval checkpoint. Approve to

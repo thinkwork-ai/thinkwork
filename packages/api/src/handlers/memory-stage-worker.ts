@@ -26,24 +26,28 @@ import { eq } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
 import { readWorkflowDefinition } from "@thinkwork/agent-loops-core";
 import {
-  assertSharedScope,
+  assertStageAllowedForScope,
   assertTargetInTenant,
   getProcessorConfig,
   getSourceConfig,
+  listEnabledSourceConfigs,
   MemoryScopeError,
 } from "../lib/memory-sources/repository.js";
-import type {
-  MemoryProcessorConfig,
-  MemorySourceConfig,
-} from "../lib/memory-sources/types.js";
+import type { MemorySourceConfig } from "../lib/memory-sources/types.js";
 import {
   failed,
+  overrideFrom,
   runAcquire,
   runCompound,
+  runExtract,
+  runGraph,
   runProject,
+  runResolve,
   runRetain,
+  runWiki,
   type StageContext,
 } from "../lib/memory-sources/stages.js";
+import { runPreflight } from "../lib/memory-sources/preflight.js";
 
 // Frozen dispatch<->worker protocol — shared with workflow-step-dispatch via
 // @thinkwork/agent-loops-core so the shapes cannot drift.
@@ -61,9 +65,8 @@ const _DEFAULT_SFN_CLIENT = new SFNClient({});
  * continuation). The shared api role may invoke every api Lambda,
  * including this one. */
 async function defaultSelfInvoke(event: MemoryStageWorkerEvent): Promise<void> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const stage = process.env.STAGE;
   const fnName =
     process.env.MEMORY_STAGE_WORKER_FUNCTION_NAME ??
@@ -188,7 +191,9 @@ async function executeStage(
     return failed(event.stage, "processor is disabled");
   }
   try {
-    assertSharedScope(processor);
+    // U3: personal processors (mode personal, target_scope user) run the
+    // pipeline; graph/wiki remain shared-only and hard-reject user_* (AE7).
+    assertStageAllowedForScope(processor, event.stage);
     // R11: the target must actually belong to this tenant — never derive a
     // bank id from an unverified target_id.
     await assertTargetInTenant(db, processor);
@@ -216,38 +221,78 @@ async function executeStage(
     }
     sources = [found.source];
   } else {
-    return failed(
-      event.stage,
-      "U1 requires an explicit sourceConfigId on the memory_stage step",
-    );
+    // U3 blueprint steps omit sourceConfigId: the stage runs the processor's
+    // full ENABLED source set. Zero sources is a stage-level visible no-op.
+    sources = await listEnabledSourceConfigs(db, {
+      tenantId: event.tenantId,
+      processorConfigId: processor.id,
+    });
   }
 
-  // TODO(stages agent): type `lease` on StageContext — passed as an optional
-  // extra property until stages.ts (owned by a parallel agent) declares it.
-  const ctx = {
+  // U3: every implemented source family writes shared banks; a personal
+  // processor carrying one is a mis-configuration, rejected before any read.
+  if (processor.mode === "personal") {
+    const sharedOnly = sources.filter((s) =>
+      SHARED_ONLY_SOURCE_FAMILIES.has(s.source_family),
+    );
+    if (sharedOnly.length > 0) {
+      return failed(
+        event.stage,
+        `personal processor ${processor.id} is bound to shared-only source famil${sharedOnly.length > 1 ? "ies" : "y"} (${[...new Set(sharedOnly.map((s) => s.source_family))].join(", ")}) — personal source families arrive with the Gmail tracer (U6)`,
+      );
+    }
+  }
+
+  // Approved-plan override (U3): a reviewer's source selection NARROWS the
+  // configured set by intersection — ids outside the processor's own sources
+  // simply select nothing; nothing can be added.
+  const override = overrideFrom(event.options);
+  if (override?.sourceConfigIds) {
+    const allowed = new Set(override.sourceConfigIds);
+    sources = sources.filter((source) => allowed.has(source.id));
+  }
+
+  const ctx: StageContext = {
     db,
     event,
-    processor: processor as StageContext["processor"],
+    processor,
     sources,
     lease,
-  } as StageContext;
+  };
 
   switch (event.stage) {
+    case "preflight":
+      return runPreflight(ctx);
     case "acquire":
       return runAcquire(ctx);
+    case "extract":
+      return runExtract(ctx);
     case "project":
       return runProject(ctx);
+    case "resolve":
+      return runResolve(ctx);
     case "retain":
       return runRetain(ctx);
     case "compound":
       return runCompound(ctx);
+    case "graph":
+      return runGraph(ctx);
+    case "wiki":
+      return runWiki(ctx);
     default:
       return failed(
         event.stage,
-        `stage "${event.stage}" is not implemented in U1 (acquire|project|retain|compound)`,
+        `unknown memory stage "${event.stage}" — supported: preflight|acquire|extract|project|resolve|retain|compound|graph|wiki`,
       );
   }
 }
+
+/** Source families whose evidence/claims write shared scopes only (U3). */
+const SHARED_ONLY_SOURCE_FAMILIES = new Set([
+  "twenty",
+  "firecrawl",
+  "bedrock_kb",
+]);
 
 async function sendTaskSuccess(
   sfn: SFNClient,

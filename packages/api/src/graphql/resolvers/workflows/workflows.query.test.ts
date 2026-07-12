@@ -7,6 +7,7 @@ const mockLimit = vi.fn();
 const mockRequireTenantMember = vi.fn();
 const mockRequireAdminOrServiceCaller = vi.fn();
 const mockResolveCallerTenantId = vi.fn();
+const mockResolveCallerUserId = vi.fn();
 
 vi.mock("../../utils.js", () => ({
   db: {
@@ -79,6 +80,7 @@ vi.mock("../core/authz.js", () => ({
 
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: mockResolveCallerTenantId,
+  resolveCallerUserId: mockResolveCallerUserId,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -102,6 +104,8 @@ beforeEach(async () => {
   vi.resetModules();
 
   mockResolveCallerTenantId.mockResolvedValue(null);
+  mockResolveCallerUserId.mockReset();
+  mockResolveCallerUserId.mockResolvedValue("user-caller");
   mockLimit.mockImplementation(() => Promise.resolve(mockRows()));
   mockOrderBy.mockReturnValue({ limit: mockLimit });
   mockWhere.mockReturnValue({
@@ -263,5 +267,46 @@ describe("workflow queries", () => {
 
     expect(result).toBeNull();
     expect(mockRequireAdminOrServiceCaller).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: another user's personal (user-owned agent_private) workflow
+// never appears in the tenant list.
+// ---------------------------------------------------------------------------
+
+describe("workflow list visibility (U3)", () => {
+  it("hides other users' personal workflows and keeps own + shared + agent-owned", async () => {
+    mockRows.mockReturnValueOnce([
+      { id: "wf-shared", visibility: "tenant_shared", owner_user_id: null },
+      {
+        id: "wf-own-personal",
+        visibility: "agent_private",
+        owner_user_id: "user-caller",
+      },
+      {
+        id: "wf-other-personal",
+        visibility: "agent_private",
+        owner_user_id: "user-someone-else",
+      },
+      {
+        id: "wf-agent-owned",
+        visibility: "agent_private",
+        owner_user_id: null,
+        owner_agent_id: "agent-1",
+      },
+    ]);
+
+    const result = (await workflowQueries.workflows(
+      null,
+      { tenantId: "tenant-a" },
+      { auth: { tenantId: "tenant-a" } } as any,
+    )) as Array<{ id: string }>;
+
+    expect(result.map((row) => row.id)).toEqual([
+      "wf-shared",
+      "wf-own-personal",
+      "wf-agent-owned",
+    ]);
   });
 });

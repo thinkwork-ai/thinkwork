@@ -21,6 +21,7 @@
  */
 
 import { SendTaskSuccessCommand, SFNClient } from "@aws-sdk/client-sfn";
+import { sanitizeApprovalPlanOverride } from "@thinkwork/agent-loops-core";
 import { consumeTaskToken, getDb } from "@thinkwork/database-pg";
 import {
   workflowRuns,
@@ -44,6 +45,11 @@ export interface WorkflowResumeInput {
   workflowRunId: string;
   approved: boolean;
   note?: string | null;
+  /** THINK-193 U3: approved-plan narrowing override. Shape-validated here
+   * (sanitizeApprovalPlanOverride); boundary validation against the saved
+   * processor configuration happens in resolveWorkflowApproval BEFORE this
+   * Lambda is invoked. Ignored on deny. */
+  override?: unknown;
 }
 
 export interface WorkflowResumeResult {
@@ -119,6 +125,12 @@ export async function resumeWorkflowApproval(
     return { ok: true, status: "already_resolved", approved: input.approved };
   }
 
+  // Sanitize the override BEFORE consuming the token so a malformed
+  // override errors without burning the one-shot approval token.
+  const override = input.approved
+    ? sanitizeApprovalPlanOverride(input.override)
+    : null;
+
   // CAS consume so a double-resume is a clean already-resolved result.
   const consumed = await consumeTaskToken(db, {
     workflowRunId: input.workflowRunId,
@@ -132,9 +144,11 @@ export async function resumeWorkflowApproval(
 
   // Approve AND deny both resume via SendTaskSuccess (see file header). The
   // record_approval phase reads $.approval = this JSON and terminalizes.
+  // An approved-plan override rides along; deny carries none.
   const output = JSON.stringify({
     approved: input.approved,
     note: input.note ?? null,
+    ...(override ? { override } : {}),
   });
   try {
     await sfn.send(

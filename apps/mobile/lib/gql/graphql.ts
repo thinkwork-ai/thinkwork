@@ -13,7 +13,7 @@ export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & {
 };
 export type MakeEmpty<
   T extends { [key: string]: unknown },
-  K extends keyof T,
+  K extends keyof T
 > = { [_ in K]?: never };
 export type Incremental<T> =
   | T
@@ -3411,6 +3411,27 @@ export type ManagedApplicationMcpRegistration = {
 };
 
 /**
+ * A managed memory processor plus its blueprint-owned Workflow (THINK-193 U3).
+ * Personal: one per user (mode personal, agent_private workflow owned by the
+ * user). Shared: operator-owned per Space/Tenant target (tenant_shared
+ * workflow). The workflow definition is always the platform blueprint —
+ * ensured lazily, never hand-authored.
+ */
+export type ManagedMemoryWorkflow = {
+  __typename?: "ManagedMemoryWorkflow";
+  processor: MemoryProcessorConfig;
+  /**
+   * ready | blocked_not_ready — computed from workflow readiness and the
+   * configured source set.
+   */
+  readiness: Scalars["String"]["output"];
+  /** JSON array of {code, message} readiness reasons (empty when ready). */
+  readinessReasons?: Maybe<Scalars["AWSJSON"]["output"]>;
+  sources: Array<MemorySourceConfig>;
+  workflow?: Maybe<Workflow>;
+};
+
+/**
  * Batch mark a caller's threads read or unread. The tenant is resolved from the
  * authenticated caller (never the input); only the caller's own
  * thread_participants rows are written. read: false marks unread.
@@ -4109,6 +4130,11 @@ export type Mutation = {
   enableWorkflow: WorkflowBinding;
   enableWorkflowTemplate: WorkflowTemplateBinding;
   /**
+   * Operator-only: idempotently ensure the shared Memory Workflow (processor +
+   * tenant_shared blueprint workflow) for one Space or Tenant target.
+   */
+  ensureSharedMemoryWorkflow: ManagedMemoryWorkflow;
+  /**
    * Disable a source config and run the durable erase aggregate: enqueue erase
    * attempts for its derivations, drain a bounded batch inline, and — only when
    * every derivation is retracted — delete S3 evidence snapshots, clear
@@ -4310,6 +4336,12 @@ export type Mutation = {
    * identityRulesVersion. Tenant-admin gated.
    */
   setOntologyEntityTypeIdentityRules: OntologyEntityType;
+  /**
+   * Owner-only: set/clear the caller's personal memory automation schedule.
+   * enabled=true requires a rate(...)/cron(...) scheduleExpression; false
+   * disables the scheduled trigger (manual runs stay available).
+   */
+  setPersonalMemoryAutomationSchedule: ManagedMemoryWorkflow;
   setRoutineTrigger: RoutineTrigger;
   setSkillEvalGate: SkillEvalGate;
   setSpaceEmailTriggers: Space;
@@ -4870,6 +4902,12 @@ export type MutationEnableWorkflowTemplateArgs = {
   input: EnableWorkflowTemplateInput;
 };
 
+export type MutationEnsureSharedMemoryWorkflowArgs = {
+  targetId: Scalars["ID"]["input"];
+  targetScope: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type MutationEraseMemorySourceArgs = {
   sourceConfigId: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -5264,6 +5302,7 @@ export type MutationResolveEntityResolutionCaseArgs = {
 export type MutationResolveWorkflowApprovalArgs = {
   approve: Scalars["Boolean"]["input"];
   note?: InputMaybe<Scalars["String"]["input"]>;
+  override?: InputMaybe<WorkflowApprovalOverrideInput>;
   runId: Scalars["ID"]["input"];
 };
 
@@ -5402,6 +5441,12 @@ export type MutationSetOntologyEntityTypeIdentityRulesArgs = {
   entityTypeId: Scalars["ID"]["input"];
   rules: Scalars["AWSJSON"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type MutationSetPersonalMemoryAutomationScheduleArgs = {
+  enabled: Scalars["Boolean"]["input"];
+  scheduleExpression?: InputMaybe<Scalars["String"]["input"]>;
+  timezone?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type MutationSetRoutineTriggerArgs = {
@@ -6693,6 +6738,11 @@ export type Query = {
   openEngineEligibleWorkItems: Array<WorkItem>;
   pendingSystemReviewsCount: Scalars["Int"]["output"];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
+  /**
+   * Owner-only: the signed-in user's Personal Memory Automation. Lazily
+   * provisions the processor + workflow + current blueprint version on read.
+   */
+  personalMemoryAutomation: ManagedMemoryWorkflow;
   piExtensions: Array<PiExtension>;
   pinnedThreads: Array<PinnedThread>;
   plateConformance: PlateConformanceSummary;
@@ -11494,6 +11544,20 @@ export type WorkflowRunsArgs = {
   cursor?: InputMaybe<Scalars["String"]["input"]>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   status?: InputMaybe<WorkflowRunStatus>;
+};
+
+/**
+ * Approved-plan narrowing override (THINK-193 U3): applies only to memory
+ * workflow plan-review approvals. Server-side validated to only NARROW the
+ * saved processor configuration — sources must already be configured, caps
+ * must not exceed saved boundaries. Ignored on deny.
+ */
+export type WorkflowApprovalOverrideInput = {
+  focusKeys?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  maxRecords?: InputMaybe<Scalars["Int"]["input"]>;
+  sourceConfigIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+  timeRangeFrom?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  timeRangeTo?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 };
 
 export type WorkflowBinding = {

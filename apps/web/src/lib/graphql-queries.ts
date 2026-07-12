@@ -583,11 +583,78 @@ export const ResolveWorkflowApprovalMutation = gql`
     $runId: ID!
     $approve: Boolean!
     $note: String
+    $override: WorkflowApprovalOverrideInput
   ) {
-    resolveWorkflowApproval(runId: $runId, approve: $approve, note: $note) {
+    resolveWorkflowApproval(
+      runId: $runId
+      approve: $approve
+      note: $note
+      override: $override
+    ) {
       id
       status
       updatedAt
+    }
+  }
+`;
+
+// THINK-193 U3: the signed-in user's managed Personal Memory Automation.
+// Lazily provisioned server-side on read.
+export const PersonalMemoryAutomationQuery = gql`
+  query PersonalMemoryAutomation {
+    personalMemoryAutomation {
+      processor {
+        id
+        mode
+        targetScope
+        enabled
+        status
+      }
+      workflow {
+        id
+        name
+        slug
+        primaryTriggerFamily
+        lastRunId
+        lastRunAt
+        lastRun {
+          id
+          status
+        }
+      }
+      sources {
+        id
+        sourceFamily
+        sourceBindingKey
+        enabled
+        boundary
+      }
+      readiness
+      readinessReasons
+    }
+  }
+`;
+
+export const SetPersonalMemoryAutomationScheduleMutation = gql`
+  mutation SetPersonalMemoryAutomationSchedule(
+    $scheduleExpression: String
+    $timezone: String
+    $enabled: Boolean!
+  ) {
+    setPersonalMemoryAutomationSchedule(
+      scheduleExpression: $scheduleExpression
+      timezone: $timezone
+      enabled: $enabled
+    ) {
+      processor {
+        id
+      }
+      workflow {
+        id
+        primaryTriggerFamily
+      }
+      readiness
+      readinessReasons
     }
   }
 `;

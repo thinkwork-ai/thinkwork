@@ -8,6 +8,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockRequireTenantAdmin = vi.fn();
 const mockResolveCallerTenantId = vi.fn();
 const mockSyncSchedule = vi.fn();
+const mockFindMemoryProcessor = vi.fn(
+  async (): Promise<Record<string, unknown> | null> => null,
+);
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
@@ -21,6 +24,9 @@ vi.mock("../../../lib/workflows/schedule-binding.js", () => ({
 vi.mock("../../utils.js", () => ({
   db: {},
   snakeToCamel: (row: unknown) => row,
+}));
+vi.mock("@thinkwork/database-pg", () => ({
+  findMemoryProcessorForWorkflow: mockFindMemoryProcessor,
 }));
 
 type Rows = Record<string, unknown>[];
@@ -65,6 +71,7 @@ beforeEach(async () => {
   mockRequireTenantAdmin.mockReset().mockResolvedValue("admin");
   mockResolveCallerTenantId.mockReset().mockResolvedValue("tenant-1");
   mockSyncSchedule.mockReset().mockResolvedValue({ scheduledJobId: "job-1" });
+  mockFindMemoryProcessor.mockReset().mockResolvedValue(null);
   vi.resetModules();
   resolver = await import("./saveWorkflow.mutation.js");
 });
@@ -209,5 +216,101 @@ describe("saveWorkflow", () => {
     expect(typeof result.webhookToken).toBe("string");
     const webhookInsert = inserts.find((v) => v.target_type === "workflow");
     expect(webhookInsert).toMatchObject({ workflow_id: "wf-2", enabled: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THINK-193 U3: blueprint-managed memory workflows are platform-owned.
+// ---------------------------------------------------------------------------
+
+describe("saveWorkflow — managed memory workflow guards (U3)", () => {
+  it("rejects ANY edit of a personal memory automation", async () => {
+    const { db, selects, inserts } = makeDb();
+    selects.push([
+      {
+        id: "wf-personal",
+        tenant_id: "tenant-1",
+        name: "Personal Memory Processing",
+        current_version_number: 1,
+      },
+    ]);
+    mockFindMemoryProcessor.mockResolvedValue({
+      id: "proc-1",
+      mode: "personal",
+      target_scope: "user",
+      target_id: "user-owner",
+      created_by_user_id: "user-owner",
+    });
+
+    await expect(
+      resolver.saveWorkflow(
+        null,
+        { input: { id: "wf-personal", name: "Renamed" } },
+        ctx,
+        { db: db as never },
+      ),
+    ).rejects.toThrow(/platform-managed personal memory automation/);
+    expect(inserts).toHaveLength(0);
+  });
+
+  it("rejects DEFINITION edits on a shared memory workflow (blueprint-owned)", async () => {
+    const { db, selects, inserts } = makeDb();
+    selects.push([
+      {
+        id: "wf-shared-mem",
+        tenant_id: "tenant-1",
+        name: "Company Memory Workflow",
+        current_version_number: 2,
+      },
+    ]);
+    mockFindMemoryProcessor.mockResolvedValue({
+      id: "proc-2",
+      mode: "shared",
+      target_scope: "tenant",
+      target_id: "tenant-1",
+      created_by_user_id: null,
+    });
+
+    const result = (await resolver.saveWorkflow(
+      null,
+      { input: { id: "wf-shared-mem", definition: VALID_DEFINITION } },
+      ctx,
+      { db: db as never },
+    )) as { workflow: unknown; errors: Array<Record<string, unknown>> };
+
+    expect(result.workflow).toBeNull();
+    expect(result.errors[0]).toMatchObject({ field: "definition" });
+    expect(inserts).toHaveLength(0);
+  });
+
+  it("allows operator metadata edits on a shared memory workflow", async () => {
+    const { db, selects } = makeDb();
+    selects.push(
+      [
+        {
+          id: "wf-shared-mem",
+          tenant_id: "tenant-1",
+          name: "Company Memory Workflow",
+          current_version_number: 2,
+        },
+      ],
+      [{ id: "wf-shared-mem", tenant_id: "tenant-1", name: "Renamed" }], // final re-read
+    );
+    mockFindMemoryProcessor.mockResolvedValue({
+      id: "proc-2",
+      mode: "shared",
+      target_scope: "tenant",
+      target_id: "tenant-1",
+      created_by_user_id: null,
+    });
+
+    const result = (await resolver.saveWorkflow(
+      null,
+      { input: { id: "wf-shared-mem", name: "Renamed" } },
+      ctx,
+      { db: db as never },
+    )) as { workflow: { name?: string } | null; errors: unknown[] };
+    expect(result.errors).toHaveLength(0);
+    expect(result.workflow).toMatchObject({ name: "Renamed" });
   });
 });

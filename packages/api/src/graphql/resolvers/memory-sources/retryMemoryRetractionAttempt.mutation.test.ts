@@ -16,9 +16,7 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: resolveCallerTenantIdMock,
 }));
 vi.mock("../../../lib/memory-sources/retraction.js", async (orig) => ({
-  ...(await orig<
-    typeof import("../../../lib/memory-sources/retraction.js")
-  >()),
+  ...(await orig<typeof import("../../../lib/memory-sources/retraction.js")>()),
   requeueRetractionAttempt: requeueMock,
 }));
 

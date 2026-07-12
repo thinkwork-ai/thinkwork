@@ -52,6 +52,9 @@ export const WORKFLOW_STEP_EVENT_TYPES = [
   "workflow_policy_decision",
   "workflow_run_rollover",
   "workflow_approval_decision",
+  // THINK-193 U3: an approval step whose `when.triggerFamily` predicate
+  // excludes the run's trigger family records this VISIBLE skip and advances.
+  "workflow_approval_skipped",
 ] as const;
 
 export type WorkflowStepEventType = (typeof WORKFLOW_STEP_EVENT_TYPES)[number];
@@ -74,6 +77,14 @@ export interface WorkflowStepEventSummary {
   nextIteration?: number;
   tokensUsed?: number;
   supersededExecutionArn?: string;
+  /** THINK-193 U3: the run trigger family a skipped approval gated on. */
+  triggerFamily?: string;
+  /** THINK-193 U3: approved-plan override audit scalars. */
+  overrideSourceCount?: number;
+  overrideFocusCount?: number;
+  overrideTimeFrom?: string;
+  overrideTimeTo?: string;
+  overrideMaxRecords?: number;
 }
 
 function safeSummary(
@@ -94,6 +105,12 @@ function safeSummary(
     "nextIteration",
     "tokensUsed",
     "supersededExecutionArn",
+    "triggerFamily",
+    "overrideSourceCount",
+    "overrideFocusCount",
+    "overrideTimeFrom",
+    "overrideTimeTo",
+    "overrideMaxRecords",
   ];
   for (const key of scalarKeys) {
     const value = input[key];
