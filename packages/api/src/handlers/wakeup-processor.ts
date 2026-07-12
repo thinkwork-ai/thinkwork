@@ -242,9 +242,8 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -361,9 +360,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1322,15 +1320,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -2736,6 +2731,40 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
+    // THINK-84 U4: deliver the finalized reply to the originating Slack thread
+    // AFTER orphan artifacts are linked to the assistant message above — so the
+    // reply can include the artifact's public share link (loadTurnArtifacts
+    // resolves artifacts by source_message_id, which is only set by the linking
+    // step). Origin-gated (a no-op for non-Slack turns) and idempotent per
+    // assistant message, so running it once here is safe.
+    if (runThreadId) {
+      try {
+        const [deliverTarget] = await db
+          .select({ id: messages.id })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.thread_id, runThreadId),
+              eq(messages.role, "assistant"),
+            ),
+          )
+          .orderBy(desc(messages.created_at))
+          .limit(1);
+        if (deliverTarget) {
+          await deliverSlackReplyForAssistantMessage(
+            wakeup.tenant_id,
+            runThreadId,
+            deliverTarget.id,
+          );
+        }
+      } catch (err) {
+        console.error(
+          "[wakeup-processor] Slack reply dispatch (post-artifact-link) failed:",
+          err,
+        );
+      }
+    }
+
     // PRD-15: If thread_id was resolved mid-flight (email branches), update the thread_turn
     if (runThreadId && !run.thread_id) {
       try {
@@ -3161,9 +3190,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
@@ -3758,7 +3786,6 @@ async function insertAssistantMessage(
       })
       .returning({ id: messages.id });
     console.log(`[wakeup-processor] Inserted assistant message: ${row.id}`);
-    await deliverSlackReplyForAssistantMessage(tenantId, threadId, row.id);
     return row;
   } catch (err) {
     console.error(
