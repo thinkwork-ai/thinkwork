@@ -497,9 +497,13 @@ locals {
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
           # knowledge-graph-observations-ingest: graphql-http's
           # startKnowledgeGraphObservationsIngest mutation invokes this with
-          # RequestResponse. (The worker's self-invoke drain is retired —
-          # AWS recursive-loop detection terminated those chains; backlog
-          # drains in-process now.)
+          # RequestResponse, and memory-stage-worker's graph stage (THINK-193
+          # U4 stitch) RequestResponse-invokes it with a targeted bankIds
+          # payload — the Bedrock classifier/extraction model config lives on
+          # the ingest Lambda's own env, so the worker never runs the ingest
+          # in-process. (The worker's self-invoke drain is retired — AWS
+          # recursive-loop detection terminated those chains; backlog drains
+          # in-process now.)
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-observations-ingest",
           # wiki-bootstrap-import: bootstrapJournalImport admin mutation
           # Event-invokes this for the long-running ingest path.
