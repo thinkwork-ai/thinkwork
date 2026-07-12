@@ -672,6 +672,12 @@ resource "aws_lambda_function" "handler" {
     # rate(5 minutes) EventBridge Scheduler + MaxRetryAttempts=0 (dedicated
     # resources below) — the next tick IS the retry.
     "memory-retraction-drainer",
+    # THINK-193 U3: stalled memory_stage token sweeper — re-invokes the
+    # memory-stage-worker for pending/executing tokens past their lease and
+    # redrives consumed-but-unsent results; unrecoverable parks get a
+    # terminal step event + SendTaskFailure. rate(15 minutes) schedule
+    # (dedicated resource below).
+    "memory-stage-sweeper",
     "wiki-compile",
     "knowledge-graph-observations-ingest",
     "ontology-scan",
@@ -886,7 +892,7 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -1905,6 +1911,25 @@ resource "aws_scheduler_schedule" "requester_memory_dreaming" {
 # pending to keep the admin queue honest and surface the reject action in
 # the audit log.
 # ---------------------------------------------------------------------------
+
+# THINK-193 U3: memory_stage stall recovery — every 15 minutes, bounded batch.
+resource "aws_scheduler_schedule" "memory_stage_sweeper" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-memory-stage-sweeper"
+  group_name          = "default"
+  schedule_expression = "rate(15 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["memory-stage-sweeper"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
 
 resource "aws_scheduler_schedule" "mcp_approval_sweeper" {
   count = local.deploy_lambda_handlers ? 1 : 0

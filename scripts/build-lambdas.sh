@@ -259,6 +259,11 @@ build_handler "memory-stage-worker" \
 # it resolves the memory adapter via getMemoryServices (bedrock-agentcore SDK).
 build_handler "memory-retraction-drainer" \
   "$REPO_ROOT/packages/api/src/handlers/memory-retraction-drainer.ts"
+# THINK-193 U3: scheduled recovery for stalled memory_stage task tokens —
+# re-invokes the worker (claim CAS dedupes) or terminal-fails an
+# unrecoverable park. Plain flags: no bedrock/agentcore SDK use.
+build_handler "memory-stage-sweeper" \
+  "$REPO_ROOT/packages/api/src/handlers/memory-stage-sweeper.ts"
 
 build_handler "connector-poller" \
   "$REPO_ROOT/packages/api/src/handlers/connector-poller.ts"
