@@ -85,10 +85,10 @@ async function recall(query: string) {
     `/v1/default/banks/${bankId}/memories/recall`,
     { query, budget: "low", max_tokens: 800 },
   );
-  const units = ((json as any)?.memory_units ?? []) as Array<{
-    id: string;
-    text: string;
-  }>;
+  // 0.8.4 responds {results: [...]}; older builds used {memory_units: [...]}.
+  const units = ((json as any)?.results ??
+    (json as any)?.memory_units ??
+    []) as Array<{ id: string; text: string }>;
   return { status, texts: units.map((u) => u.text) };
 }
 
@@ -116,7 +116,7 @@ async function main() {
     docIds.length === 0
       ? []
       : q(
-          `SELECT id, document_id, left(text, 60) AS text FROM ${pgSchema}.memory_units WHERE document_id = ANY($1::uuid[])`,
+          `SELECT id, document_id, left(text, 60) AS text FROM ${pgSchema}.memory_units WHERE document_id = ANY($1::text[])`,
           [docIds],
         );
 
