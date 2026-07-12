@@ -1,0 +1,34 @@
+{
+  "evidence": {
+    "sourceItemId": "6bb03870-cd00-44ba-b945-b11001e2ca68",
+    "sourceVersion": "2026-07-12T01:55:56.951Z",
+    "contentHash": "c16c9cd97e561f8714d1c007742334566d16b0b881974f6a095f17040f7f3c71",
+    "extractionRecipe": {
+      "kind": "company_dossier",
+      "depth": 1,
+      "source": "twenty",
+      "recipeVersion": "u1.1"
+    },
+    "targetScope": "tenant",
+    "lifecycle": "active"
+  },
+  "normalizedSnapshot": {
+    "id": "6bb03870-cd00-44ba-b945-b11001e2ca68",
+    "name": "Acme Probe (THINK-193 U1)",
+    "address": {
+      "addressLat": null,
+      "addressLng": null,
+      "addressCity": "",
+      "addressState": "",
+      "addressCountry": "",
+      "addressStreet1": "",
+      "addressStreet2": "",
+      "addressPostcode": ""
+    },
+    "createdAt": "2026-07-12T01:26:53.385Z",
+    "employees": 77,
+    "updatedAt": "2026-07-12T01:55:56.951Z"
+  },
+  "dossierMarkdown": "# Acme Probe (THINK-193 U1)\n\n## Overview\n- Employees: 77",
+  "hindsightDocumentId": "external:44a5684b-f236-4f87-8336-6373c2e926da:company:6bb03870-cd00-44ba-b945-b11001e2ca68"
+}
