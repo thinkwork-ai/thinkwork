@@ -278,6 +278,7 @@ import { memoryRecordTypeResolvers } from "./memory/types.js";
 import { wikiPageTypeResolvers } from "./wiki/index.js";
 import { routineExecutionTypeResolvers } from "./routines/types.js";
 import { tenantTypeResolvers } from "./core/types.js";
+import { knowledgeBaseTypeResolvers } from "./knowledge/types.js";
 
 export const typeResolvers: Record<string, Record<string, any>> = {
   Tenant: tenantTypeResolvers,
@@ -295,6 +296,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   EvalRun: evalRunTypeResolvers,
   SkillEvalScore: skillEvalScoreTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
+  KnowledgeBase: knowledgeBaseTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
   Workflow: workflowTypeResolvers,
   WorkflowVersion: workflowVersionTypeResolvers,

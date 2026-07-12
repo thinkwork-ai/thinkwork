@@ -84,9 +84,37 @@ export type BoundaryDimension =
    * EQUAL granted domain rule. The default is [] — nothing readable.
    * Malformed values fail closed on either side.
    */
-  | { kind: "urlSet"; default: readonly string[] };
+  | { kind: "urlSet"; default: readonly string[] }
+  /**
+   * Opaque-identifier allowlist over an OPEN value domain (U7). Values on
+   * BOTH sides are non-empty trimmed strings (bounded length); the envelope
+   * relation is plain subset-of — every requested value must appear
+   * verbatim in the grant. The default is [] — an empty/omitted grant
+   * allows exactly nothing. Unlike `allowlist` there is no closed domain:
+   * the ids are tenant data (e.g. knowledge_bases.id values), validated
+   * for shape only.
+   */
+  | { kind: "stringSet"; default: readonly string[] };
 
 export type BoundarySchema = Record<string, BoundaryDimension>;
+
+/** stringSet value shape: non-empty, no control chars, bounded length. */
+const STRING_SET_MAX_CHARS = 256;
+
+/** PURE: why one stringSet value is malformed, or null when valid. */
+export function stringSetValueInvalidReason(value: unknown): string | null {
+  if (typeof value !== "string") return "not a string";
+  if (value.trim() === "" || value !== value.trim()) {
+    return "must be a non-empty trimmed string";
+  }
+  if (value.length > STRING_SET_MAX_CHARS) {
+    return `longer than ${STRING_SET_MAX_CHARS} characters`;
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/u.test(value))
+    return "contains control characters";
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // urlSet value parsing (U5)
@@ -251,6 +279,20 @@ export const BOUNDARY_SCHEMAS: Record<string, BoundarySchema> = {
     retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
     snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },
   },
+  // U7: Bedrock Knowledge Base document projection. `knowledgeBaseIds`
+  // is the readable envelope of knowledge_bases.id values (default [] =
+  // nothing readable); the source_binding_key convention is the
+  // knowledge_bases.id — one source config per KB — so the config-side
+  // set is normally exactly [bindingKey]. `maxDocuments` caps manifest
+  // rows acquired per run. Defaults/caps track adapters/bedrock-kb.ts.
+  bedrock_kb: {
+    knowledgeBaseIds: { kind: "stringSet", default: [] },
+    maxDocuments: { kind: "cap", default: 25, min: 1, max: 500 },
+    pageSize: { kind: "cap", default: 10, min: 1, max: 100 },
+    projectBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
+    snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },
+  },
 };
 
 function schemaFor(sourceFamily: string | undefined): BoundarySchema {
@@ -313,6 +355,22 @@ function assertBoundarySideValid(
         } catch (err) {
           throw new MemoryAuthorizationError(
             `${side} boundary key '${key}' includes ${JSON.stringify(item)}: ${(err as Error).message}`,
+          );
+        }
+      }
+      continue;
+    }
+    if (dimension.kind === "stringSet") {
+      if (!Array.isArray(value)) {
+        throw new MemoryAuthorizationError(
+          `${side} boundary key '${key}' (${JSON.stringify(value)}) must be an array of identifier strings`,
+        );
+      }
+      for (const item of value) {
+        const reason = stringSetValueInvalidReason(item);
+        if (reason !== null) {
+          throw new MemoryAuthorizationError(
+            `${side} boundary key '${key}' includes ${JSON.stringify(item)}: ${reason}`,
           );
         }
       }
@@ -426,6 +484,19 @@ export function assertBoundaryWithin(
         if (!urlEntryWithin(parseUrlSetEntry(item), grantedEntries)) {
           throw new MemoryAuthorizationError(
             `source-config boundary key '${key}' includes ${JSON.stringify(item)}, which is outside the granted URL envelope`,
+          );
+        }
+      }
+      continue;
+    }
+    if (dimension.kind === "stringSet") {
+      // Plain subset-of over verbatim identifiers. An empty/omitted grant
+      // value allows exactly nothing.
+      const granted = new Set(allowance as readonly string[]);
+      for (const item of requested as readonly string[]) {
+        if (!granted.has(item)) {
+          throw new MemoryAuthorizationError(
+            `source-config boundary key '${key}' includes ${JSON.stringify(item)}, which is outside the granted identifier set`,
           );
         }
       }

@@ -784,6 +784,18 @@ locals {
         "bedrock:GetIngestionJob",
         "bedrock:ListIngestionJobs",
         "bedrock:Retrieve",
+        # THINK-193 U7: knowledge-base-manager reconciles the per-document
+        # manifest after successful syncs (List/Get) and gates deletion
+        # settlement on Get + the scoped Retrieve above. Ingest/Delete cover
+        # the explicit direct-delete path for S3 RETAIN'd documents — the
+        # manager never races them with StartIngestionJob. The workspace-
+        # bucket S3 read the memory-stage-worker needs for document text is
+        # already granted by the shared role's workspace "s3-access"
+        # statement (data-plane group).
+        "bedrock:ListKnowledgeBaseDocuments",
+        "bedrock:GetKnowledgeBaseDocuments",
+        "bedrock:IngestKnowledgeBaseDocuments",
+        "bedrock:DeleteKnowledgeBaseDocuments",
       ]
       # CreateKnowledgeBase/CreateDataSource have no resource ARN at create
       # time and don't support resource-level scoping, so a knowledge-base/*

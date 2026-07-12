@@ -270,6 +270,9 @@ describe("SINGLE_VALUED_PREDICATES", () => {
         "customer.name",
         "customer.web_page_title",
         "customer.web_snapshot",
+        // U7 KB-document predicates.
+        "document.title",
+        "document.effective_date",
       ].sort(),
     );
   });

@@ -81,6 +81,7 @@ Conventions:
 - [inbox_item_comments](#inbox-item-comments)
 - [inbox_item_links](#inbox-item-links)
 - [inbox_items](#inbox-items)
+- [knowledge_base_documents](#knowledge-base-documents)
 - [knowledge_bases](#knowledge-bases)
 - [knowledge_graph_entities](#knowledge-graph-entities)
 - [knowledge_graph_evidence](#knowledge-graph-evidence)
@@ -1789,6 +1790,37 @@ Join hints:
 Join hints:
 
 - `inbox_items.tenant_id` → `tenants.id`
+
+## knowledge_base_documents
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| knowledge_base_id | uuid | not null |
+| data_source_id | text | not null |
+| document_key | text | not null |
+| s3_version_id | text |  |
+| etag | text |  |
+| content_hash | text |  |
+| edition | integer | not null |
+| effective_from | timestamp with time zone |  |
+| effective_to | timestamp with time zone |  |
+| ingest_status | text | not null |
+| projection_status | text | not null |
+| last_error | text |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `ingest_status`: `pending`, `ingesting`, `indexed`, `failed`, `deleting`, `absent_verified`
+- `projection_status`: `pending`, `projected`, `skipped`, `failed`, `retracting`, `retracted`
+
+Join hints:
+
+- `knowledge_base_documents.knowledge_base_id` → `knowledge_bases.id`
+- `knowledge_base_documents.tenant_id` → `tenants.id`
 
 ## knowledge_bases
 

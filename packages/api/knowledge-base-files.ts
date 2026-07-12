@@ -19,6 +19,10 @@ import { getDb } from "@thinkwork/database-pg";
 import { knowledgeBases, tenants } from "@thinkwork/database-pg/schema";
 import { authenticate } from "./src/lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
+import {
+  stampDocumentDeleteIntent,
+  stampDocumentUploadIntent,
+} from "./src/lib/knowledge/kb-document-manifest.js";
 
 interface APIGatewayProxyEvent {
   headers?: Record<string, string | undefined>;
@@ -212,6 +216,14 @@ export async function handler(
           Body: buf,
         }),
       );
+      // THINK-193 U7: stamp pending-edition intent on the manifest row (if
+      // one exists — the first reconcile after the next sync inserts new
+      // documents). Presigned uploads (getUploadUrl) are reconcile-only:
+      // this handler never observes their completion.
+      await stampDocumentUploadIntent(db, {
+        knowledgeBaseId: kbId,
+        documentKey: `${prefix}${filename}`,
+      });
       return json(200, { ok: true, key: `${prefix}${filename}` });
     }
 
@@ -258,6 +270,13 @@ export async function handler(
           Key: `${prefix}${filename}`,
         }),
       );
+      // THINK-193 U7: stamp pending-delete intent immediately; the next
+      // sync's reconciliation chains the Hindsight retraction and the
+      // settlement pass verifies Bedrock absence (absent_verified).
+      await stampDocumentDeleteIntent(db, {
+        knowledgeBaseId: kbId,
+        documentKey: `${prefix}${filename}`,
+      });
       return json(200, { ok: true });
     }
 

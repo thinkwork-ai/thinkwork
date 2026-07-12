@@ -57,6 +57,11 @@ export const SINGLE_VALUED_PREDICATES = [
   // U5 web-page predicates: one current title/snapshot per page subject.
   "customer.web_page_title",
   "customer.web_snapshot",
+  // U7 KB-document predicates: one current title/effective date per
+  // document subject. document.policy_statement stays multi-valued —
+  // removal is handled by the zero-support sweep / retraction.
+  "document.title",
+  "document.effective_date",
 ] as const;
 
 const SINGLE_VALUED = new Set<string>(SINGLE_VALUED_PREDICATES);
