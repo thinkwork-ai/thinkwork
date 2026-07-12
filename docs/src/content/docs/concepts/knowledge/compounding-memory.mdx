@@ -74,6 +74,20 @@ Right now, every page belongs to one agent. If you have two agents in the same w
 
 This is deliberate. Shared wikis across a team raise real questions — who sees what, what gets merged, what stays private — and we'd rather answer those questions explicitly than smuggle them in through a default. Team and company wikis will come later, with their own rules.
 
+## External memory sources (THINK-193)
+
+Beyond conversations, compounding memory can ingest **external memory sources** — four V1 source families: Twenty CRM (`twenty`), web pages via Firecrawl (`firecrawl`), Gmail behind a provider-neutral adapter (`email`), and Bedrock knowledge-base documents (`bedrock_kb`). Each item flows through one lifecycle:
+
+**source → evidence → claims → projection → bank → canonical identity → Wiki.**
+
+- **Acquire (evidence).** An adapter reads inside an explicitly granted boundary and records each item edition as an evidence row: source id, content-sensitive version, bounded snapshot (raw payloads live in encrypted S3 with a 7–90 day TTL, default 30). Replays are no-ops; the source stays authoritative — evidence is never a shadow mailbox or CRM.
+- **Extract (claims).** Deterministic extraction reduces the snapshot to ontology-shaped **claims** (subject, predicate, value, effective interval) supported by claim-evidence edges. New editions supersede stale single-valued claims; facts removed at the source lose support and close their interval.
+- **Project + retain (bank).** Active claims render into a deterministic markdown projection with per-line claim provenance and retain into the right Hindsight bank — the user's private bank for personal processors, the Space/Tenant bank for shared ones. **Derivations** record exactly which evidence produced which document so retraction can undo it.
+- **Resolve (canonical identity).** Subjects resolve to **canonical entities** (exact source mappings win; strong natural keys like domains corroborate; ambiguity defers to the operator Resolution Queue instead of guessing).
+- **Compile (Wiki).** Tenant-scope Entity pages materialize one canonical entity each — canonical ID is the key, title and slug are presentation — so Twenty, a scraped website, a shared email thread, and a policy PDF that all describe "Acme" land on ONE page with cross-source citations.
+
+Two modes run this pipeline: a **personal** processor per user (opt-in sources, manual runs show an editable preflight plan, writes only your private bank — nothing personal enters shared memory) and operator-owned **shared** processors per Space/Tenant (read only explicitly granted shared sources). Deleting a source is an **erase epoch**: provider documents are retracted, snapshots destroyed, and the evidence ledger hard-deleted, so re-onboarding the same source later starts clean.
+
 ## Related pages
 
 - [Memory Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how a memory actually becomes a page

@@ -447,10 +447,20 @@ export function extractEmailThreadClaims(input: {
  *      exact-fingerprint row (incl. effective_from, any status) is reused
  *      idempotently WITHOUT touching its status — reprocessing an older
  *      edition must not resurrect a superseded historical value over the
- *      current claim. Only then insert (status 'active'); a value that
- *      recurs later (77→91→77) becomes a NEW temporal edition with the new
- *      effective_from, preserving the interval history. Hash matches with
- *      a differing stored value throw ClaimHashCollisionError;
+ *      current claim. EXCEPTION (U8 erase epoch): when the matched row is
+ *      NON-ACTIVE, has ZERO evidence edges left (the erase cleanup
+ *      hard-deleted the supporting evidence and its edges), and the source
+ *      config carries erase_generation > 0, the row is a dead pre-erase
+ *      epoch remnant — it is DELETED and a NEW active claim edition is
+ *      minted, so re-onboarding an erased source with identical provider
+ *      content produces live claims instead of silently reusing the dead
+ *      row. The anti-resurrection rule is unaffected: older-edition
+ *      reprocessing always finds surviving evidence edges (retracted edges
+ *      are kept as rows, only erase cascades remove them). Only then
+ *      insert (status 'active'); a value that recurs later (77→91→77)
+ *      becomes a NEW temporal edition with the new effective_from,
+ *      preserving the interval history. Hash matches with a differing
+ *      stored value throw ClaimHashCollisionError;
  *  (b) ensure a memory_claim_evidence support edge (claim_id,
  *      evidence_item_id) exists and is active — previously retracted edges
  *      are re-activated;
@@ -544,7 +554,8 @@ export async function upsertClaimsForEvidence(
       );
       // Same-value reassertion: reuse the earliest ACTIVE row regardless of
       // effective_from (preserves the original observation time).
-      let [existing] = await tx
+      let existing: typeof memoryClaims.$inferSelect | undefined;
+      [existing] = await tx
         .select()
         .from(memoryClaims)
         .where(and(identity, eq(memoryClaims.status, "active")))
@@ -569,14 +580,49 @@ export async function upsertClaimsForEvidence(
           .limit(1);
       }
 
+      if (existing && !deepEquals(existing.value, claim.value)) {
+        throw new ClaimHashCollisionError(
+          `value_hash ${claim.valueHash} for ${claim.subjectKey} ${claim.ontologyPredicate} matches claim ${existing.id} but the stored value differs — sha256 collision, refusing to merge`,
+        );
+      }
+      // Erase-epoch re-onboarding (U8 P1): a NON-ACTIVE fingerprint match
+      // with ZERO evidence edges (any status) can only be a pre-erase
+      // remnant — the erase cleanup hard-deletes evidence rows and their
+      // edges cascade away, while every other lifecycle path retains
+      // retracted edges as rows. Confirm the source actually went through
+      // an erase (erase_generation > 0), then delete the dead row and fall
+      // through to mint a NEW active claim edition.
+      if (existing && existing.status !== "active") {
+        const anyEdge = await tx
+          .select({ id: memoryClaimEvidence.id })
+          .from(memoryClaimEvidence)
+          .where(eq(memoryClaimEvidence.claim_id, existing.id))
+          .limit(1);
+        if (anyEdge.length === 0) {
+          const sources = await tx
+            .select({
+              erase_generation: dbSchema.memorySourceConfigs.erase_generation,
+            })
+            .from(dbSchema.memorySourceConfigs)
+            .where(
+              and(
+                eq(dbSchema.memorySourceConfigs.id, args.sourceConfigId),
+                eq(dbSchema.memorySourceConfigs.tenant_id, args.tenantId),
+              ),
+            )
+            .limit(1);
+          if ((sources[0]?.erase_generation ?? 0) > 0) {
+            await tx
+              .delete(memoryClaims)
+              .where(eq(memoryClaims.id, existing.id));
+            existing = undefined;
+          }
+        }
+      }
+
       let claimId: string;
       let claimIsActive: boolean;
       if (existing) {
-        if (!deepEquals(existing.value, claim.value)) {
-          throw new ClaimHashCollisionError(
-            `value_hash ${claim.valueHash} for ${claim.subjectKey} ${claim.ontologyPredicate} matches claim ${existing.id} but the stored value differs — sha256 collision, refusing to merge`,
-          );
-        }
         claimId = existing.id;
         claimIsActive = existing.status === "active";
       } else {

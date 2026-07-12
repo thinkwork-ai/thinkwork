@@ -523,7 +523,7 @@ function makeEraseWorld(opts: {
       world.evidenceResidue = false;
       return 2;
     },
-    async purgeNonDerivedEvidence() {
+    async purgeSourceEvidence() {
       return { deleted: 1, nextCursor: null };
     },
     async deleteCheckpoints() {

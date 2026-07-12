@@ -950,6 +950,114 @@ describe("upsertClaimsForEvidence erase fence", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Erase-epoch re-onboarding (THINK-193 U8 P1): after a source erase the
+// cleanup hard-deletes evidence rows, so the dead claims' evidence edges
+// are gone (cascade). Re-acquiring IDENTICAL provider content must mint
+// fresh active claim editions instead of silently reusing retracted rows.
+// ---------------------------------------------------------------------------
+
+describe("upsertClaimsForEvidence erase-epoch re-onboarding (U8)", () => {
+  const snapshot = {
+    id: "co-1",
+    name: "Acme",
+    address: { addressCity: "Springfield" },
+    updatedAt: T1,
+  };
+
+  function seedSource(store: FakeMemoryStore, eraseGeneration: number) {
+    store.sourceConfigs.push({
+      id: SOURCE_CONFIG_ID,
+      tenant_id: TENANT_ID,
+      enabled: true,
+      erase_generation: eraseGeneration,
+    });
+  }
+
+  /** Simulate the erase: saga retracts the claims, then the evidence purge
+   * hard-deletes evidence rows and their edges cascade away. */
+  function simulateErase(store: FakeMemoryStore) {
+    for (const claim of store.claims) {
+      claim.status = "retracted";
+      claim.effective_to = new Date(T2);
+    }
+    store.claimEdges.length = 0;
+    const source = store.sourceConfigs[0]!;
+    source.erase_generation = (source.erase_generation as number) + 1;
+  }
+
+  it("post-erase re-acquisition of identical content mints NEW active claim editions", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 0);
+    await applyEdition(db, store, { evidenceItemId: "ev-1", snapshot });
+    const deadIds = store.claims.map((c) => c.id);
+    simulateErase(store);
+
+    // Re-onboard: identical provider content, fresh acquisition run.
+    const result = await applyEdition(db, store, {
+      evidenceItemId: "ev-2",
+      snapshot,
+    });
+
+    expect(result.created).toBe(2);
+    for (const predicate of ["customer.name", "customer.address"]) {
+      const rows = claimsFor(store, predicate);
+      expect(rows).toHaveLength(1); // dead row deleted, one fresh edition
+      expect(rows[0]!.status).toBe("active");
+      expect(rows[0]!.effective_to).toBeNull();
+      expect(deadIds).not.toContain(rows[0]!.id);
+    }
+    const activeEdges = store.claimEdges.filter((e) => e.status === "active");
+    expect(activeEdges).toHaveLength(2);
+    expect(activeEdges.every((e) => e.evidence_item_id === "ev-2")).toBe(true);
+  });
+
+  it("anti-resurrection preserved: a retracted row with surviving edge rows is reused status-unchanged even at erase_generation > 0", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 1); // source has an erase in its past
+    await applyEdition(db, store, { evidenceItemId: "ev-1", snapshot });
+    // Ordinary retraction: edges flip to 'retracted' but the ROWS survive
+    // (only the erase purge cascade removes them).
+    retractSupportEdges(store, "ev-1");
+    for (const claim of store.claims) {
+      claim.status = "retracted";
+      claim.effective_to = new Date(T2);
+    }
+    const priorIds = [...store.claims.map((c) => c.id)].sort();
+
+    const result = await applyEdition(db, store, {
+      evidenceItemId: "ev-2",
+      snapshot,
+    });
+
+    expect(result.created).toBe(0);
+    expect(store.claims.map((c) => c.id).sort()).toEqual(priorIds);
+    for (const predicate of ["customer.name", "customer.address"]) {
+      expect(claimsFor(store, predicate)[0]!.status).toBe("retracted");
+    }
+  });
+
+  it("zero-edge retracted rows are NOT re-minted when the source never erased (generation 0)", async () => {
+    const { db, store } = makeFakeMemoryDb();
+    seedSource(store, 0);
+    await applyEdition(db, store, { evidenceItemId: "ev-1", snapshot });
+    for (const claim of store.claims) claim.status = "retracted";
+    store.claimEdges.length = 0;
+    const priorIds = [...store.claims.map((c) => c.id)].sort();
+
+    const result = await applyEdition(db, store, {
+      evidenceItemId: "ev-2",
+      snapshot,
+    });
+
+    expect(result.created).toBe(0);
+    expect(store.claims.map((c) => c.id).sort()).toEqual(priorIds);
+    expect(
+      store.claims.every((c) => (c.status as string) === "retracted"),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // extractWebPageClaims (THINK-193 U5)
 // ---------------------------------------------------------------------------
 

@@ -1349,12 +1349,21 @@ export interface SourceEraseStore {
     now: Date,
   ): Promise<number>;
   /**
-   * Bounded purge of evidence rows that never produced a derivation: their
-   * claim edges are retracted and orphaned claims deactivated, then the
-   * rows are deleted — at most `limit` rows per call, resuming from
-   * `cursor` (last processed evidence id). nextCursor is null when done.
+   * Bounded hard-DELETE of ALL the source's evidence rows (U8 erase
+   * epoch): per batch, remaining active claim edges are retracted and
+   * orphaned claims deactivated, then the claim-evidence edges,
+   * derivations, and evidence rows themselves are deleted outright — at
+   * most `limit` rows per call, resuming from `cursor` (last processed
+   * evidence id). nextCursor is null when done.
+   *
+   * Rationale: leaving lifecycle='deleted' tombstones occupied the
+   * (source_config_id, source_item_id, source_version) unique slot, so
+   * re-onboarding the source with identical provider content was a silent
+   * acquire no-op. The erase AGGREGATE marker and memory_run_items remain
+   * the audit trail; retraction attempt rows survive (derivation_id is ON
+   * DELETE SET NULL) with provider_document_id intact.
    */
-  purgeNonDerivedEvidence(
+  purgeSourceEvidence(
     tenantId: string,
     sourceConfigId: string,
     opts: { cursor: string | null; limit: number; now: Date },
@@ -1511,7 +1520,7 @@ export function createDrizzleSourceEraseStore(db: DbHandle): SourceEraseStore {
       return rows.length;
     },
 
-    async purgeNonDerivedEvidence(tenantId, sourceConfigId, opts) {
+    async purgeSourceEvidence(tenantId, sourceConfigId, opts) {
       return db.transaction(async (tx) => {
         const batch = await tx
           .select({ id: memoryEvidenceItems.id })
@@ -1520,7 +1529,6 @@ export function createDrizzleSourceEraseStore(db: DbHandle): SourceEraseStore {
             and(
               eq(memoryEvidenceItems.tenant_id, tenantId),
               eq(memoryEvidenceItems.source_config_id, sourceConfigId),
-              sql`NOT EXISTS (SELECT 1 FROM ${memoryDerivations} WHERE ${memoryDerivations.evidence_item_id} = ${memoryEvidenceItems.id})`,
               ...(opts.cursor
                 ? [sql`${memoryEvidenceItems.id} > ${opts.cursor}`]
                 : []),
@@ -1546,15 +1554,39 @@ export function createDrizzleSourceEraseStore(db: DbHandle): SourceEraseStore {
           });
         }
         if (batch.length > 0) {
-          await tx.delete(memoryEvidenceItems).where(
-            and(
-              eq(memoryEvidenceItems.tenant_id, tenantId),
-              inArray(
-                memoryEvidenceItems.id,
-                batch.map((r) => r.id),
+          const ids = batch.map((r) => r.id);
+          // U8 erase epoch: hard-DELETE outright. The FK cascades
+          // (memory_claim_evidence / memory_derivations → evidence ON
+          // DELETE CASCADE) would remove the dependents anyway; explicit
+          // set-based deletes in the same transaction keep the intent
+          // auditable and the order deterministic. Derivation rows go too
+          // (evidence_item_id is NOT NULL) — the retraction attempt ledger
+          // (derivation_id ON DELETE SET NULL, provider_document_id kept)
+          // and memory_run_items remain the durable audit trail.
+          await tx
+            .delete(memoryClaimEvidence)
+            .where(
+              and(
+                eq(memoryClaimEvidence.tenant_id, tenantId),
+                inArray(memoryClaimEvidence.evidence_item_id, ids),
               ),
-            ),
-          );
+            );
+          await tx
+            .delete(memoryDerivations)
+            .where(
+              and(
+                eq(memoryDerivations.tenant_id, tenantId),
+                inArray(memoryDerivations.evidence_item_id, ids),
+              ),
+            );
+          await tx
+            .delete(memoryEvidenceItems)
+            .where(
+              and(
+                eq(memoryEvidenceItems.tenant_id, tenantId),
+                inArray(memoryEvidenceItems.id, ids),
+              ),
+            );
         }
         return {
           deleted: batch.length,
@@ -1900,7 +1932,7 @@ export type SourceEraseDeps = ProcessRetractionDeps & {
   /** Bound on inline saga processing per call (remainder drains via the
    * scheduled memory-retraction-drainer). */
   maxInlineAttempts?: number;
-  /** Bound on non-derived evidence rows purged per cleanup pass. */
+  /** Bound on evidence rows hard-deleted per cleanup pass. */
   cleanupBatch?: number;
   /**
    * S2 (IAM blast radius): destructive S3 cleanup runs ONLY when true —
@@ -1950,7 +1982,9 @@ function eraseOutcome(
  * after (a) every derivation of the source is retracted through the saga,
  * (b) every evidence snapshot object VERSION under the source's S3 prefix is
  * deleted, (c) all evidence rows are scrubbed (lifecycle 'deleted', snapshot
- * payloads cleared) and non-derived evidence rows are removed, and (d) —
+ * payloads cleared) and then ALL evidence rows are hard-deleted (U8 erase
+ * epoch — tombstones would occupy the source_version unique slot and turn
+ * re-onboarding into a silent no-op), and (d) —
  * only then — checkpoints are deleted and the durable marker retired.
  *
  * Partial progress surfaces as status "pending" — and the erase is
@@ -2089,7 +2123,7 @@ export async function runSourceErase(
   };
 
   // Bounded phase machine with durable progress on the marker. Order:
-  // S3 snapshot versions → evidence scrub + bounded non-derived purge →
+  // S3 snapshot versions → evidence scrub + bounded hard-delete purge →
   // checkpoints LAST → marker retired. A failure at any step records a
   // fenced cleanup failure (backoff / DLQ) and later passes resume at the
   // recorded phase; checkpoints are never deleted before S3 + evidence
@@ -2131,7 +2165,7 @@ export async function runSourceErase(
         args.sourceConfigId,
         nowFn(),
       );
-      const purged = await eraseStore.purgeNonDerivedEvidence(
+      const purged = await eraseStore.purgeSourceEvidence(
         args.tenantId,
         args.sourceConfigId,
         {

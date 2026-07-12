@@ -355,12 +355,39 @@ export function makeFakeMemoryDb(): {
     return chain;
   };
 
+  const makeDelete = (tableSpec: TableSpec) => {
+    let cond: FakeCond | undefined;
+    const exec = (): Row[] => {
+      const removed: Row[] = [];
+      for (let i = tableSpec.rows.length - 1; i >= 0; i -= 1) {
+        if (!matches(tableSpec.rows[i]!, cond)) continue;
+        removed.push(tableSpec.rows[i]!);
+        tableSpec.rows.splice(i, 1);
+      }
+      return removed.reverse();
+    };
+    const chain = {
+      where: (c: FakeCond) => {
+        cond = c;
+        return chain;
+      },
+      returning: (proj?: Record<string, Col>) =>
+        Promise.resolve().then(() => project(exec(), proj)),
+      then: (
+        resolve: (rows: Row[]) => unknown,
+        reject: (err: unknown) => unknown,
+      ) => Promise.resolve().then(exec).then(resolve, reject),
+    };
+    return chain;
+  };
+
   const db = {
     select: (proj?: Record<string, Col>) => ({
       from: (table: unknown) => makeSelect(spec(table), proj),
     }),
     insert: (table: unknown) => makeInsert(spec(table)),
     update: (table: unknown) => makeUpdate(spec(table)),
+    delete: (table: unknown) => makeDelete(spec(table)),
     // Raw-SQL escape hatch: upsertClaimsForEvidence takes a per-subject
     // pg_advisory_xact_lock here. Single-threaded tests need no locking —
     // record the statement so tests can assert the lock was requested.
