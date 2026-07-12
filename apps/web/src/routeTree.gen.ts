@@ -108,6 +108,7 @@ import { Route as AuthedSettingsPluginsN8nSettingsRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
 import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
+import { Route as AuthedShellWikiTypeSlugRouteImport } from "./routes/_authed/_shell/wiki.$type.$slug";
 import { Route as AuthedShellAppsPluginKeyAppRouteSegmentRouteImport } from "./routes/_authed/_shell/apps.$pluginKey.$appRouteSegment";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
@@ -681,6 +682,11 @@ const AuthedSettingsEvaluationsDatasetsSlugRoute =
     path: "/evaluations/datasets/$slug",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedShellWikiTypeSlugRoute = AuthedShellWikiTypeSlugRouteImport.update({
+  id: "/wiki/$type/$slug",
+  path: "/wiki/$type/$slug",
+  getParentRoute: () => AuthedShellRoute,
+} as any);
 const AuthedShellAppsPluginKeyAppRouteSegmentRoute =
   AuthedShellAppsPluginKeyAppRouteSegmentRouteImport.update({
     id: "/apps/$pluginKey/$appRouteSegment",
@@ -826,6 +832,7 @@ export interface FileRoutesByFullPath {
   "/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
   "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
+  "/wiki/$type/$slug": typeof AuthedShellWikiTypeSlugRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
@@ -930,6 +937,7 @@ export interface FileRoutesByTo {
   "/settings/webhooks": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows": typeof AuthedSettingsWorkflowsIndexRoute;
   "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
+  "/wiki/$type/$slug": typeof AuthedShellWikiTypeSlugRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
@@ -1041,6 +1049,7 @@ export interface FileRoutesById {
   "/_authed/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/_authed/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
   "/_authed/_shell/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
+  "/_authed/_shell/wiki/$type/$slug": typeof AuthedShellWikiTypeSlugRoute;
   "/_authed/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/_authed/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
@@ -1151,6 +1160,7 @@ export interface FileRouteTypes {
     | "/settings/webhooks/"
     | "/settings/workflows/"
     | "/apps/$pluginKey/$appRouteSegment"
+    | "/wiki/$type/$slug"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
@@ -1255,6 +1265,7 @@ export interface FileRouteTypes {
     | "/settings/webhooks"
     | "/settings/workflows"
     | "/apps/$pluginKey/$appRouteSegment"
+    | "/wiki/$type/$slug"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
@@ -1365,6 +1376,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/webhooks/"
     | "/_authed/settings/workflows/"
     | "/_authed/_shell/apps/$pluginKey/$appRouteSegment"
+    | "/_authed/_shell/wiki/$type/$slug"
     | "/_authed/settings/evaluations/datasets/$slug"
     | "/_authed/settings/evaluations/studio/$testCaseId"
     | "/_authed/settings/evaluations/studio/new"
@@ -2090,6 +2102,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsEvaluationsDatasetsSlugRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/_shell/wiki/$type/$slug": {
+      id: "/_authed/_shell/wiki/$type/$slug";
+      path: "/wiki/$type/$slug";
+      fullPath: "/wiki/$type/$slug";
+      preLoaderRoute: typeof AuthedShellWikiTypeSlugRouteImport;
+      parentRoute: typeof AuthedShellRoute;
+    };
     "/_authed/_shell/apps/$pluginKey/$appRouteSegment": {
       id: "/_authed/_shell/apps/$pluginKey/$appRouteSegment";
       path: "/apps/$pluginKey/$appRouteSegment";
@@ -2236,6 +2255,7 @@ interface AuthedShellRouteChildren {
   AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
   AuthedShellWorkItemsIndexRoute: typeof AuthedShellWorkItemsIndexRoute;
   AuthedShellAppsPluginKeyAppRouteSegmentRoute: typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
+  AuthedShellWikiTypeSlugRoute: typeof AuthedShellWikiTypeSlugRoute;
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
@@ -2258,6 +2278,7 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellWorkItemsIndexRoute: AuthedShellWorkItemsIndexRoute,
   AuthedShellAppsPluginKeyAppRouteSegmentRoute:
     AuthedShellAppsPluginKeyAppRouteSegmentRoute,
+  AuthedShellWikiTypeSlugRoute: AuthedShellWikiTypeSlugRoute,
 };
 
 const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(

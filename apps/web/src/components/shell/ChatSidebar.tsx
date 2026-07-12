@@ -831,14 +831,24 @@ export function ChatSidebar() {
     [activateThread, defaultSpaceIds, navigate],
   );
 
-  // Wiki / entity rails deep-link to the operator memory surfaces. Per-page
-  // focus (opening a specific page/entity sheet) lands with U5's dossier work;
-  // U4 navigates to the tab. Non-operators are redirected by the route guard.
-  const openSearchWiki = useCallback(() => {
-    setSearchOpen(false);
-    void navigate({ to: "/settings/memory/wiki" });
-  }, [navigate]);
+  // A wiki result opens that specific page in the full-page reader (THINK-263
+  // U5) — reachable by any tenant member, unlike the operator-gated graph tab.
+  const openSearchWiki = useCallback(
+    (hit: { page: { type: string; slug: string } }) => {
+      setSearchOpen(false);
+      void navigate({
+        to: "/wiki/$type/$slug",
+        params: {
+          type: hit.page.type.toLowerCase(),
+          slug: hit.page.slug,
+        },
+      });
+    },
+    [navigate],
+  );
 
+  // Entity rail still routes to the Knowledge Model tab; the entity dossier
+  // (U5) supersedes this with a grounded per-entity surface.
   const openSearchEntity = useCallback(() => {
     setSearchOpen(false);
     void navigate({ to: "/settings/memory/ontology" });

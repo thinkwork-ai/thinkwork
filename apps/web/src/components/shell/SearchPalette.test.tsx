@@ -97,9 +97,8 @@ function threadSummary(
   overrides: Partial<ChatThreadSummary> & { id: string },
 ): ChatThreadSummary {
   return {
-    id: overrides.id,
-    title: overrides.title ?? `Thread ${overrides.id}`,
-    lastActivityAt: overrides.lastActivityAt ?? "2026-07-12T00:00:00.000Z",
+    title: `Thread ${overrides.id}`,
+    lastActivityAt: "2026-07-12T00:00:00.000Z",
     ...overrides,
   } as ChatThreadSummary;
 }

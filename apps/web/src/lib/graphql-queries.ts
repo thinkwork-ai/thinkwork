@@ -2574,6 +2574,7 @@ export const SearchQuery = gql`
           matchedAlias
           page {
             id
+            type
             slug
             title
             displayType
