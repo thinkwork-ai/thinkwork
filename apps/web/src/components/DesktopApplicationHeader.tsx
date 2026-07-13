@@ -128,11 +128,18 @@ export function DesktopApplicationHeader() {
   // provider's `open` flag is still true — that trigger is the only way to
   // reopen the nav once it's a Sheet.
   const showCollapsedChrome = !open || isMobile;
-  const activeTab =
-    [...tabs]
-      .reverse()
-      .find((tab) => pathname === tab.to || pathname.startsWith(`${tab.to}/`))
-      ?.to ?? "";
+  // Match AppTopBar: tabs can share a pathname and differ only by search
+  // params (e.g. Definition vs ?tab=executions), so the toggle value must
+  // include the search and an explicit `active` flag wins over prefix match.
+  const tabValue = (tab: { to: string; search?: Record<string, string> }) =>
+    tab.search ? `${tab.to}?${JSON.stringify(tab.search)}` : tab.to;
+  const explicitActive = tabs.find((tab) => tab.active);
+  const activeTab = explicitActive
+    ? tabValue(explicitActive)
+    : ([...tabs]
+        .reverse()
+        .find((tab) => pathname === tab.to || pathname.startsWith(`${tab.to}/`))
+        ?.to ?? "");
 
   if (!showCollapsedChrome && !hasContent) {
     return (
@@ -158,11 +165,14 @@ export function DesktopApplicationHeader() {
           }}
         />
       ) : null}
+      {/* Same 3-column grid as AppTopBar so the tab strip centers on the
+          header instead of floating in whatever space the breadcrumbs and
+          actions leave over. */}
       <div
-        className={`flex min-w-0 flex-1 items-center gap-2 ${headerActions || tabs.length > 0 ? "" : "pointer-events-none"}`}
+        className={`grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 ${headerActions || tabs.length > 0 ? "" : "pointer-events-none"}`}
       >
         {headerActions ? (
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="col-start-1 flex min-w-0 items-center gap-1">
             {headerActions.breadcrumbs &&
             headerActions.breadcrumbs.length > 0 ? (
               <nav
@@ -251,16 +261,18 @@ export function DesktopApplicationHeader() {
         ) : null}
 
         {tabs.length > 0 ? (
-          <div className="flex flex-1 justify-center">
+          <div className="col-start-2">
             <ToggleGroup type="single" value={activeTab} variant="outline">
               {tabs.map((tab) => (
                 <ToggleGroupItem
-                  key={tab.to}
-                  value={tab.to}
+                  key={tabValue(tab)}
+                  value={tabValue(tab)}
                   asChild
                   className="px-3 text-xs"
                 >
-                  <Link to={tab.to}>{tab.label}</Link>
+                  <Link to={tab.to} search={tab.search}>
+                    {tab.label}
+                  </Link>
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -268,7 +280,7 @@ export function DesktopApplicationHeader() {
         ) : null}
 
         <div
-          className={`ml-auto flex shrink-0 items-center ${desktopToolbarGapClassName}`}
+          className={`col-start-3 ml-auto flex min-w-0 shrink-0 items-center ${desktopToolbarGapClassName}`}
         >
           {headerActions?.action ? headerActions.action : null}
         </div>
