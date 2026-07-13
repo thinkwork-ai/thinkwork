@@ -30,6 +30,7 @@
  * queue".
  */
 
+import { recordDoneToday } from "../slack/board.js";
 import type { LinearGateway, LinearIssueSnapshot } from "../linear/client.js";
 import type { Logger } from "../logger.js";
 import { matchesFilter } from "../linear/poller.js";
@@ -162,6 +163,19 @@ async function windDown(
   store.deleteNagTimersForIssue(issueId);
   store.releaseLocksHeldBy(issueId);
   store.deleteSlackThread(issueId);
+
+  if (verdict === "completed") {
+    // Board memory (U9): Done issues leave the poll set, so the pinned
+    // board's done-today group is fed from here, persisted in meta.
+    try {
+      recordDoneToday(store, identifier);
+    } catch (e) {
+      log.warn("un-enroll: done-today record failed — board only", {
+        issue: identifier,
+        error: String(e),
+      });
+    }
+  }
 
   log.info("un-enrolled issue", { issue: identifier, verdict });
 }

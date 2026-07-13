@@ -32,6 +32,7 @@ import type {
 } from "./client.js";
 import { section } from "./blocks.js";
 import type { GithubGateway } from "../phases/evidence.js";
+import { createBoardUpdater, BOARD_RENDER_KEY } from "./board.js";
 import {
   CONSOLE_ACTION_PREFIX,
   actionsForState,
@@ -225,6 +226,12 @@ export interface SlackSync {
    */
   handleAction(action: SlackBlockAction): Promise<void>;
   /**
+   * Refresh the pinned live board from this tick's candidates (R15). Called
+   * once per tick after the un-enroll pass (KTD4). Best-effort like every
+   * other Slack call.
+   */
+  updateBoard(candidates: readonly PollCandidate[]): Promise<void>;
+  /**
    * Post a terminal closing note into an issue's thread and nothing else — the
    * store-side un-enrollment (deleting the thread row + winding down workers)
    * is the daemon's job. No-op when the issue has no mapped thread. Best-effort:
@@ -263,6 +270,12 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     log: deps.log,
     trust: deps.trust,
   };
+  const boardUpdater = createBoardUpdater({
+    slack: deps.slack,
+    store: deps.store,
+    channelId: deps.channelId,
+    log: deps.log,
+  });
   const consoleDeps: ConsoleDeps = {
     gateway: deps.gateway,
     slack: deps.slack,
@@ -447,6 +460,10 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
       await maybeMergedPrNote(candidate, ref);
     },
 
+    async updateBoard(candidates) {
+      await boardUpdater.updateBoard(candidates);
+    },
+
     async closeThread(issueId, text) {
       const row = deps.store.getSlackThreadByIssue(issueId);
       if (row === undefined) return; // no thread mapped — nothing to close
@@ -458,6 +475,29 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     },
 
     async handleInbound(message) {
+      // R16: `status` at the CHANNEL ROOT re-posts a fresh board snapshot
+      // (the last tick's render, persisted in meta). Thread `status` keeps
+      // its per-issue live behavior below.
+      if (message.threadTs === null && isStatusKeyword(message.text)) {
+        const raw = deps.store.getMeta(BOARD_RENDER_KEY);
+        let text = "No board rendered yet — the daemon hasn't completed a tick since this shipped.";
+        let blocks: unknown[] | undefined;
+        if (raw !== undefined) {
+          try {
+            const rendered = JSON.parse(raw) as { text: string; blocks: unknown[] };
+            text = rendered.text;
+            blocks = rendered.blocks;
+          } catch {
+            // fall through to the plain notice
+          }
+        }
+        await deps.slack
+          .postMessage(message.channel, text, blocks !== undefined ? { blocks } : {})
+          .catch((e: unknown) =>
+            deps.log.warn("slack board snapshot post failed", { error: String(e) }),
+          );
+        return;
+      }
       // A bare `status` in a mapped thread answers with that issue's state.
       // Status/labels come from a LIVE Linear read — the store's issue row
       // only refreshes when a launch settles, and answering from it alone

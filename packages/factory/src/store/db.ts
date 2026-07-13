@@ -156,6 +156,10 @@ export interface FactoryStore {
     threadTs: string,
   ): SlackThreadRow | undefined;
   /** Update one of the outbound/inbound idempotency high-water marks. */
+  /** Singleton key/value metadata (U8/U9). */
+  getMeta(key: string): string | undefined;
+  setMeta(key: string, value: string): void;
+  deleteMeta(key: string): void;
   setSlackThreadMarker(
     issueId: string,
     field:
@@ -713,6 +717,23 @@ export function openStore(
       return getSlackThreadByThreadTsStmt.get(channelId, threadTs) as
         | SlackThreadRow
         | undefined;
+    },
+
+    getMeta(key) {
+      const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
+        | { value: string }
+        | undefined;
+      return row?.value;
+    },
+
+    setMeta(key, value) {
+      db.prepare(
+        "INSERT INTO meta (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+      ).run(key, value, new Date().toISOString());
+    },
+
+    deleteMeta(key) {
+      db.prepare("DELETE FROM meta WHERE key = ?").run(key);
     },
 
     setSlackThreadMarker(issueId, field, value) {

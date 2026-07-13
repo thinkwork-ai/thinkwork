@@ -114,6 +114,10 @@ export interface SlackGateway {
    * Slack `missing_scope` error the caller acks (U10 documents the setup).
    */
   uploadFiles(channel: string, threadTs: string, paths: string[]): Promise<void>;
+  /** Pin a message in the channel (pins.add; needs `pins:write`). */
+  pinMessage(channel: string, ts: string): Promise<void>;
+  /** Permalink for a message (chat.getPermalink), or null on failure. */
+  getPermalink(channel: string, ts: string): Promise<string | null>;
   /** Register the single inbound-message handler (Socket Mode). */
   onMessage(handler: SlackMessageHandler): void;
   /** Register the single block-action (button click) handler (Socket Mode). */
@@ -284,6 +288,22 @@ export async function createSlackGateway(
         text,
         ...(blocks !== undefined ? { blocks: blocks as never } : {}),
       });
+    },
+
+    async pinMessage(channel, ts) {
+      await web.pins.add({ channel, timestamp: ts });
+    },
+
+    async getPermalink(channel, ts) {
+      try {
+        const res = (await web.chat.getPermalink({
+          channel,
+          message_ts: ts,
+        })) as { permalink?: string };
+        return res.permalink ?? null;
+      } catch {
+        return null;
+      }
     },
 
     async uploadFiles(channel, threadTs, paths) {
