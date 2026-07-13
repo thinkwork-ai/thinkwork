@@ -46,8 +46,10 @@ import {
 import {
   buildMemoryPipelineFlowGraph,
   MEMORY_TRIGGER_NODE_ID,
+  memoryPipelineSourceNodes,
   readMemoryReadinessReasons,
   type MemoryPipelineStageView,
+  type MemoryPipelineSourceNode,
   type MemoryPipelineView,
 } from "./memoryPipelineFlowGraph";
 
@@ -484,6 +486,20 @@ function MemoryNodeInspector({
       </InspectorShell>
     );
   }
+  const source = memoryPipelineSourceNodes(pipeline).find(
+    (candidate) => candidate.nodeId === nodeId,
+  );
+  if (source) {
+    return (
+      <InspectorShell
+        testId={`automation-inspector-source-${source.family}`}
+        title={source.label}
+        onClose={onClose}
+      >
+        <MemorySourceInspector source={source} />
+      </InspectorShell>
+    );
+  }
   const stage = pipeline.stages.find((s) => s.id === nodeId);
   if (!stage) return null;
   return (
@@ -498,6 +514,41 @@ function MemoryNodeInspector({
         onError={onError}
       />
     </InspectorShell>
+  );
+}
+
+function MemorySourceInspector({
+  source,
+}: {
+  source: MemoryPipelineSourceNode;
+}) {
+  const stateLabel = !source.optional
+    ? "Always on"
+    : source.enabled
+      ? "Configured"
+      : "Skipped";
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">
+          {source.optional ? "Optional source" : "Baseline source"}
+        </span>
+        <Badge variant={source.enabled ? "secondary" : "outline"}>
+          {stateLabel}
+        </Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">{source.description}</p>
+      {source.optional && !source.configured ? (
+        <p className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+          This source is optional and is not configured, so its node is skipped
+          without blocking Thread memory processing.
+        </p>
+      ) : source.optional && !source.enabled ? (
+        <p className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+          This source is configured but disabled, so its node is skipped.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -588,6 +639,7 @@ function MemoryTriggerInspector({
   const [hours, setHours] = useState(() =>
     String(hoursFromRate(pipeline.scheduleExpression) ?? 24),
   );
+  const sources = memoryPipelineSourceNodes(pipeline);
 
   const saveSchedule = async (enabled: boolean, hoursValue: string) => {
     const parsed = Number.parseInt(hoursValue, 10);
@@ -652,25 +704,23 @@ function MemoryTriggerInspector({
 
       <div className="mt-2 rounded-md border border-border/70 bg-muted/20 p-3">
         <p className="text-xs font-medium">Sources</p>
-        {pipeline.sources.length === 0 ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            No sources configured yet.
-          </p>
-        ) : (
-          <ul className="mt-1 space-y-1">
-            {pipeline.sources.map((source) => (
-              <li
-                key={source.id}
-                className="flex items-center justify-between text-xs"
-              >
-                <span>{source.sourceFamily}</span>
-                <Badge variant={source.enabled ? "secondary" : "outline"}>
-                  {source.enabled ? "enabled" : "off"}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="mt-1 space-y-1">
+          {sources.map((source) => (
+            <li
+              key={source.nodeId}
+              className="flex items-center justify-between text-xs"
+            >
+              <span>{source.label}</span>
+              <Badge variant={source.enabled ? "secondary" : "outline"}>
+                {!source.optional
+                  ? "always on"
+                  : source.enabled
+                    ? "enabled"
+                    : "skipped"}
+              </Badge>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

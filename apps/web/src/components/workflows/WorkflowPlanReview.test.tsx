@@ -93,6 +93,23 @@ describe("preflightPlanFromEvidence", () => {
 });
 
 describe("WorkflowPlanReview", () => {
+  it("keeps Threads included when no optional external sources are configured", () => {
+    const onDecide = vi.fn();
+    render(
+      <WorkflowPlanReview
+        plan={{ sources: [], focus: [] }}
+        busy={false}
+        error={null}
+        onDecide={onDecide}
+      />,
+    );
+    expect(screen.getByText("Threads")).toBeTruthy();
+    expect(screen.getByText("always included")).toBeTruthy();
+    expect(screen.queryByText(/visible no-op/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
+    expect(onDecide).toHaveBeenCalledWith(true, null, null);
+  });
+
   it("renders sources grouped with grant status; blocked sources are not selectable", () => {
     render(
       <WorkflowPlanReview

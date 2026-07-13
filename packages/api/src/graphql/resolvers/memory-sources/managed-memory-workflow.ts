@@ -30,17 +30,23 @@ export function toGraphqlManagedMemoryWorkflow(
       message: "The managed workflow is not ready to run.",
     });
   }
-  if (ensured.sources.length === 0) {
-    reasons.push({
-      code: "no_sources_configured",
-      message:
-        "No memory sources are configured yet — add a source to give this automation something to process.",
-    });
-  } else if (!ensured.sources.some((source) => source.enabled)) {
-    reasons.push({
-      code: "all_sources_disabled",
-      message: "Every configured source is disabled.",
-    });
+  // Thread conversations are the baseline source for personal processors and
+  // are retained into the target Hindsight bank at the end of each turn. A
+  // shared processor has no Thread baseline, so it still needs an enabled
+  // configured source before it can do useful work.
+  if (ensured.processor.mode !== "personal") {
+    if (ensured.sources.length === 0) {
+      reasons.push({
+        code: "no_sources_configured",
+        message:
+          "No memory sources are configured yet — add a source to give this automation something to process.",
+      });
+    } else if (!ensured.sources.some((source) => source.enabled)) {
+      reasons.push({
+        code: "all_sources_disabled",
+        message: "Every configured source is disabled.",
+      });
+    }
   }
 
   return {

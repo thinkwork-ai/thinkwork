@@ -1036,11 +1036,11 @@ export async function runCompound(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
   const { db, event, processor } = ctx;
-  // Zero enabled sources: nothing was acquired/retained, so there is
-  // nothing to consolidate — settle as a VISIBLE no-op. Recording a run
-  // item here would violate the memory_run_items FK (there is no real
-  // source_config_id to reference); the no-op is carried in stage output.
-  if (ctx.sources.length === 0) {
+  // Only personal processors have Thread conversations retained independently
+  // of the optional external-source acquisition stages. A zero-source shared
+  // processor has no bank input to compound and should settle visibly as a
+  // no-op without writing an invalid source-config foreign key.
+  if (processor.mode !== "personal" && ctx.sources.length === 0) {
     return {
       status: "succeeded",
       stage: event.stage,
@@ -1079,20 +1079,22 @@ export async function runCompound(
     );
   }
 
-  await recordRunItem(db, {
-    tenantId: processor.tenant_id,
-    workflowRunId: event.workflowRunId,
-    // Zero-source runs returned above; sources[0] is a real FK target here.
-    sourceConfigId: ctx.sources[0]!.id,
-    sourceItemId: bankId,
-    stage: "compound",
-    result: "changed",
-    detail: {
-      dreamRunId: bank.runId,
-      status: bank.status,
-      applied: bank.applied ?? null,
-    },
-  });
+  const sourceConfigId = ctx.sources[0]?.id;
+  if (sourceConfigId) {
+    await recordRunItem(db, {
+      tenantId: processor.tenant_id,
+      workflowRunId: event.workflowRunId,
+      sourceConfigId,
+      sourceItemId: bankId,
+      stage: "compound",
+      result: "changed",
+      detail: {
+        dreamRunId: bank.runId,
+        status: bank.status,
+        applied: bank.applied ?? null,
+      },
+    });
+  }
 
   return {
     status: "succeeded",
