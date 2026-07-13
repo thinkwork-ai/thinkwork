@@ -253,8 +253,15 @@ describe("executeAction — launch", () => {
     expect(ledgerComment).toBeDefined();
     expect(ledgerComment!.body).toContain("phase: plan");
 
-    // Issue row upserted for reconciliation.
-    expect(store.getIssue(issue.id)).toBeDefined();
+    // Issue row upserted for reconciliation — recording the status the worker
+    // MOVED the issue to (observed by the evidence checks), not the status it
+    // launched from. Recording the launch status left the store one phase
+    // behind reality, which the in-thread Slack `status` keyword then served
+    // as current.
+    const row = store.getIssue(issue.id);
+    expect(row).toBeDefined();
+    expect(row!.state).toBe("Ready to Work");
+    expect(row!.phase).toBe("plan");
   });
 
   it("a consumesEscalationOverride launch supersedes the block marker (one-shot override)", async () => {

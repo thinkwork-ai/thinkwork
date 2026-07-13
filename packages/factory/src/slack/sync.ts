@@ -26,8 +26,9 @@ import type { SlackGateway, SlackInboundMessage } from "./client.js";
 import { relayInboundMessage, type RelayDeps } from "./relay.js";
 import {
   buildIssueStatus,
-  formatIssueStatus,
+  formatIssueStatusLive,
   isStatusKeyword,
+  type LiveIssueFacts,
 } from "./status.js";
 import {
   openThreadForIssue,
@@ -249,17 +250,33 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
 
     async handleInbound(message) {
       // A bare `status` in a mapped thread answers with that issue's state.
+      // Status/labels come from a LIVE Linear read — the store's issue row
+      // only refreshes when a launch settles, and answering from it alone
+      // reported "Ready to Work" while Linear showed Verification. The store
+      // still supplies worker attempts, and serves as a labeled fallback when
+      // Linear is unreachable.
       if (message.threadTs !== null && isStatusKeyword(message.text)) {
         const row = deps.store.getSlackThreadByThreadTs(
           message.channel,
           message.threadTs,
         );
         if (row !== undefined) {
-          const status = buildIssueStatus(deps.store, row.issue_id);
-          const text =
-            status === null
-              ? `${row.identifier}: not tracked in the store yet.`
-              : formatIssueStatus(status);
+          const stored = buildIssueStatus(deps.store, row.issue_id);
+          let live: LiveIssueFacts | null = null;
+          try {
+            const [snap] = await deps.gateway.getIssuesByIdentifier([
+              row.identifier,
+            ]);
+            if (snap !== undefined && snap.state !== "") {
+              live = { state: snap.state, labels: snap.labels };
+            }
+          } catch (e) {
+            deps.log.warn(
+              "slack status: live Linear read failed — answering from the store",
+              { issue: row.identifier, error: String(e) },
+            );
+          }
+          const text = formatIssueStatusLive(row.identifier, live, stored);
           await deps.slack
             .postThreadReply(message.channel, message.threadTs, text)
             .catch((e: unknown) =>

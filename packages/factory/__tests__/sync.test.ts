@@ -242,19 +242,26 @@ describe("syncCandidate", () => {
 });
 
 describe("handleInbound routing", () => {
-  it("answers a `status` keyword in a mapped thread from the store", async () => {
-    const issue = makeIssue({ identifier: "THINK-3", state: "Planning", labels: ["Claude"] });
+  it("answers a `status` keyword with LIVE Linear state, even when the store row is stale", async () => {
+    // Live Linear says Verification; the store row froze at the implement
+    // launch ("Ready to Work") — the answer must report Verification.
+    const issue = makeIssue({
+      identifier: "THINK-3",
+      state: "Verification",
+      labels: ["Claude", "LFG"],
+    });
     const gateway = new FakeGateway([issue]);
     const slack = new FakeSlackGateway();
     const sync = makeSync(gateway, slack);
-    // Enroll (open thread) + record an issue row for the status view.
+    // Enroll (open thread) + record a STALE issue row (as the executor did
+    // before the lastObservedStatus fix, and as any mid-phase row still does).
     await sync.syncCandidate(candidateFor(issue), advance);
     store.upsertIssue({
       issueId: issue.id,
       identifier: "THINK-3",
       lane: "Claude",
-      phase: "plan",
-      state: "Planning",
+      phase: "implement",
+      state: "Ready to Work",
     });
     const threadTs = store.getSlackThreadByIssue(issue.id)!.thread_ts;
     slack.posts.length = 0;
@@ -268,9 +275,40 @@ describe("handleInbound routing", () => {
     });
 
     expect(slack.posts).toHaveLength(1);
-    expect(slack.posts[0].text).toContain("THINK-3");
+    expect(slack.posts[0].text).toContain("THINK-3 — Verification");
+    expect(slack.posts[0].text).not.toContain("Ready to Work");
     // A status read must NOT clear any blocker.
     expect(gateway.writesOf("removeLabel")).toHaveLength(0);
+  });
+
+  it("falls back to the store view (labeled) when the live Linear read fails", async () => {
+    const issue = makeIssue({ identifier: "THINK-3", state: "Planning", labels: ["Claude"] });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    await sync.syncCandidate(candidateFor(issue), advance);
+    store.upsertIssue({
+      issueId: issue.id,
+      identifier: "THINK-3",
+      lane: "Claude",
+      phase: "plan",
+      state: "Planning",
+    });
+    const threadTs = store.getSlackThreadByIssue(issue.id)!.thread_ts;
+    slack.posts.length = 0;
+    gateway.failNextListIssues = true;
+
+    await sync.handleInbound({
+      channel: CHANNEL,
+      threadTs,
+      ts: "1700.000900",
+      userId: OPERATOR,
+      text: "status",
+    });
+
+    expect(slack.posts).toHaveLength(1);
+    expect(slack.posts[0].text).toContain('status "Planning"');
+    expect(slack.posts[0].text).toContain("couldn't reach Linear");
   });
 
   it("routes a non-status reply to the relay (answer round-trip)", async () => {
