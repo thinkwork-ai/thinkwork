@@ -79,7 +79,11 @@ import {
 import { EntityDossierCard } from "@/components/shell/EntityDossierCard";
 import type { SearchAskViewModel } from "@/components/shell/SearchAskView";
 import { humanizeAskStep } from "@/components/shell/SearchAskView";
-import type { EntityDossierResult, SearchAskResult } from "@/gql/graphql";
+import type {
+  EntityDossierResult,
+  SearchAskResult,
+  SearchResearchResult,
+} from "@/gql/graphql";
 import { SEARCH_PALETTE_RAILS_ENABLED } from "@/lib/search-palette-gate";
 import {
   DEFAULT_WORK_ITEM_SEARCH,
@@ -99,6 +103,7 @@ import {
   PinnedThreadsQuery,
   ReorderPinnedThreadsMutation,
   SearchAskMutation,
+  SearchResearchMutation,
   SetThreadNotificationPreferenceMutation,
   SpaceThreadsQuery,
   SpacesQuery,
@@ -262,6 +267,7 @@ export function ChatSidebar() {
   } | null>(null);
   const askSeenSeqRef = useRef<Set<number>>(new Set());
   const [, executeSearchAsk] = useMutation(SearchAskMutation);
+  const [, executeSearchResearch] = useMutation(SearchResearchMutation);
   const pendingThreadDeletes = usePendingThreadDeletes();
   const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
   const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
@@ -1147,6 +1153,49 @@ export function ChatSidebar() {
     void navigate({ to: "/threads/$id", params: { id: askThreadId } });
   }, [activateThread, askThreadId, navigate]);
 
+  // U9 research escalation: enqueue a BACKGROUND run and confirm via a toast
+  // that links to the (new) thread the async answer will post to. Unlike ask,
+  // we do NOT stream inline or navigate away — the user stays where they are.
+  // The palette only closes AFTER the confirming (or error) toast, never a
+  // silent close.
+  const researchFromPalette = useCallback(
+    (query: string) => {
+      if (!tenantId) return;
+      void executeSearchResearch({ tenantId, query }).then((result) => {
+        if (result.error) {
+          toast.error(searchAskErrorMessage(result.error));
+          setSearchOpen(false);
+          return;
+        }
+        const threadId = (
+          result.data as { searchResearch?: SearchResearchResult } | null
+        )?.searchResearch?.threadId;
+        if (!threadId) {
+          toast.error("Couldn't start research — please try again.");
+          setSearchOpen(false);
+          return;
+        }
+        toast.success(
+          `Researching “${query}” — I'll post the answer to your new thread.`,
+          {
+            action: {
+              label: "Open thread",
+              onClick: () => {
+                activateThread(threadId);
+                void navigate({
+                  to: "/threads/$id",
+                  params: { id: threadId },
+                });
+              },
+            },
+          },
+        );
+        setSearchOpen(false);
+      });
+    },
+    [activateThread, executeSearchResearch, navigate, tenantId],
+  );
+
   const refreshThreadPins = useCallback(() => {
     reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
     reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
@@ -1394,6 +1443,7 @@ export function ChatSidebar() {
         onSelectWiki={openSearchWiki}
         onSelectEntity={(hit) => selectDossierEntity(hit.entityId)}
         onAsk={askFromPalette}
+        onResearch={researchFromPalette}
         askView={askView}
         onAskBack={resetAsk}
         onAskOpenPermalink={openAskPermalink}

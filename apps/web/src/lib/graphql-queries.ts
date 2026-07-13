@@ -2206,6 +2206,19 @@ export const SearchAskMutation = gql`
   }
 `;
 
+// THINK-263 U9 — enqueue a "Research this" BACKGROUND run for a palette query.
+// Creates a VISIBLE thread (or posts into $threadId when supplied and writable)
+// and dispatches the agent in NORMAL mode; the answer arrives asynchronously as
+// a reply on the returned thread. Only the thread id crosses the wire. Can
+// reject with extensions.code "FORBIDDEN" or "BUDGET_EXCEEDED".
+export const SearchResearchMutation = gql`
+  mutation SearchResearch($tenantId: ID!, $query: String!, $threadId: ID) {
+    searchResearch(tenantId: $tenantId, query: $query, threadId: $threadId) {
+      threadId
+    }
+  }
+`;
+
 export const NewMessageSubscription = gql`
   subscription NewMessage($threadId: ID!) {
     onNewMessage(threadId: $threadId) {
