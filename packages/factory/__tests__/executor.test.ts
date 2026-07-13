@@ -428,11 +428,22 @@ describe("executeAction — launch", () => {
     };
 
     const candidate = await candidateFor(h.gateway, "THINK-4");
-    const action = decideAction(candidate, {
-      activeAttempt: null,
-      hasChildIssues: false,
-    });
-    expect(action.kind).toBe("launch");
+    // Auto-compound is DISABLED — decideAction noops a Done issue, so the daemon
+    // never launches compound. But the executor's compound path is retained for
+    // a manual `ce-compound`; construct the launch directly to keep that path
+    // (worker-posted compounded:true → attempt Succeeded) under test.
+    const action: EngineAction = {
+      kind: "launch",
+      phase: "compound",
+      runner: "claude",
+      hostRequirement: "any",
+      repair: false,
+      promptInputs: {
+        issueIdentifier: "THINK-4",
+        title: candidate.issue.title,
+        handoffStatus: "Done",
+      },
+    };
 
     await executeAction(action, candidate, h.deps);
 

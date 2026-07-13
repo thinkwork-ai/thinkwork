@@ -118,7 +118,9 @@ describe("phase table — exhaustive routing-contract coverage", () => {
       case "Review":
         return lfg ? "launch" : "wait";
       case "Done":
-        return lfg ? "launch" : "noop";
+        // Done is terminal — auto-compound disabled, so ALWAYS noop
+        // (regardless of LFG / ledger state).
+        return "noop";
       default:
         throw new Error(`unexpected status ${status}`);
     }
@@ -303,10 +305,15 @@ describe("phase table — exhaustive routing-contract coverage", () => {
 // 5. compounded guard on Done
 // ---------------------------------------------------------------------------
 
-describe("Done / compound guard", () => {
-  it("Done + LFG + not compounded + factory-driven (real ledger) → launch compound", () => {
+describe("Done is terminal — auto-compound disabled", () => {
+  it("Done + LFG + not compounded + factory-driven (real ledger) → noop (NOT a compound launch)", () => {
+    // Auto-compound is disabled: the factory never launches a worker on a Done
+    // issue, even a factory-driven one that was never compounded. (ce-compound
+    // is a manual operator action now.) This is what closes the compound
+    // retry-loop: an already-compounded issue's re-dispatched worker exited
+    // "nothing to compound" without leaving compounded:true, so the executor
+    // marked a successful run Failed and relaunched it forever.
     const action = decideAction(
-      // synthesized:false = the factory wrote this ledger, i.e. it drove the issue.
       makeCandidate({
         state: "Done",
         labels: ["Claude", "LFG"],
@@ -314,13 +321,13 @@ describe("Done / compound guard", () => {
       }),
       emptyView(),
     );
-    expect(action).toMatchObject({ kind: "launch", phase: "compound" });
+    expect(action.kind).toBe("noop");
+    expect(action).toMatchObject({
+      reason: expect.stringContaining("auto-compound disabled"),
+    });
   });
 
-  it("Done + LFG but synthesized ledger (pre-factory issue) → noop, never compound a backlog issue", () => {
-    // The compound cutoff: a legacy Done issue the factory never enrolled has
-    // no authored ledger (synthesized). Guards the first real poll from
-    // mass-dispatching compound workers across the historical Done backlog.
+  it("Done + LFG but synthesized ledger (pre-factory issue) → noop", () => {
     const action = decideAction(
       makeCandidate({
         state: "Done",
@@ -330,12 +337,9 @@ describe("Done / compound guard", () => {
       emptyView(),
     );
     expect(action.kind).toBe("noop");
-    expect(action).toMatchObject({
-      reason: expect.stringContaining("never drove it"),
-    });
   });
 
-  it("Done + LFG + compounded=true → noop, never relaunch compound", () => {
+  it("Done + LFG + compounded=true → noop", () => {
     const action = decideAction(
       makeCandidate({
         state: "Done",
@@ -689,8 +693,8 @@ describe("worker exit without evidence (engine + U4 machine)", () => {
 // 7. AE1 (Claude half) skeleton: full walk driven by evidence transitions
 // ---------------------------------------------------------------------------
 
-describe("AE1 skeleton — one issue walks label → Done → compound on the Claude lane", () => {
-  it("produces the exact action sequence 5 launches → noop", async () => {
+describe("AE1 skeleton — one issue walks label → Done on the Claude lane", () => {
+  it("produces the exact action sequence 4 launches → noop (Done is terminal; no compound)", async () => {
     const ID = "T-9";
     const TITLE = "Paper cut: tooltip clipped";
     // Enrollment floor: the operator has moved the issue into Brainstorming
@@ -764,13 +768,12 @@ describe("AE1 skeleton — one issue walks label → Done → compound on the Cl
           break;
         case "verify":
           expect(action.hostRequirement).toBe("browser-auth");
-          post(`${handoffMarker(ID, "Done")}\n\nGoal: compound it.`);
+          post(`${handoffMarker(ID, "Done")}\n\nGoal: done.`);
           state = "Done";
           break;
-        case "compound":
-          compounded = true; // executor sets the ledger flag after compound
-          break;
         default:
+          // compound is never auto-launched (Done is terminal); the walk ends
+          // at the Done noop after verify.
           throw new Error(`unexpected phase ${action.phase}`);
       }
 
@@ -791,7 +794,6 @@ describe("AE1 skeleton — one issue walks label → Done → compound on the Cl
       "launch:plan",
       "launch:implement",
       "launch:verify",
-      "launch:compound",
       "noop",
     ]);
   });

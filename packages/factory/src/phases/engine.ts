@@ -207,7 +207,8 @@ const STATUS_LAUNCH_PHASE: Readonly<Record<string, Phase>> = {
   "In Progress": "implement",
   Verification: "verify",
   Review: "verify",
-  Done: "compound",
+  // No `Done` entry: auto-compound is disabled — Done is terminal and never
+  // launches a worker (the `compound` phase remains for a manual ce-compound).
 };
 
 /**
@@ -487,31 +488,21 @@ function routeByStatus(candidate: EngineCandidate): EngineAction {
           };
 
     case "Done":
-      if (!hasLfg) {
-        return {
-          kind: "noop",
-          reason: `${id} is Done without LFG — no automated compounding`,
-        };
-      }
-      // Compound cutoff: only compound issues the factory actually drove. A
-      // synthesized ledger means no factory-authored block ever existed, so
-      // this is a pre-factory / externally-completed Done issue — the routing
-      // contract scopes compounding to "recently completed CE-driven issues,"
-      // never a historical backlog. Without this, the first real poll would
-      // launch a compound worker on every legacy Done issue at once.
-      if (candidate.ledger.synthesized) {
-        return {
-          kind: "noop",
-          reason: `${id} is Done but the factory never drove it (no ledger) — not compounding a pre-existing issue`,
-        };
-      }
-      if (candidate.ledger.ledger.compounded) {
-        return {
-          kind: "noop",
-          reason: `${id} is Done and already compounded — never relaunch compound`,
-        };
-      }
-      return launch(candidate, requireLaunchPhase(issue.state));
+      // Done is TERMINAL — the factory NEVER launches a worker on a Done issue.
+      // Auto-compound is disabled (operator decision): the daemon must be fully
+      // hands-off on finished work, so `ce-compound` is a manual/operator
+      // action, not an autonomous phase. This also closes the compound
+      // retry-loop class of bug — an already-compounded issue's re-dispatched
+      // worker exits "nothing to compound" but leaves no `compounded: true`
+      // evidence, so the executor marked a SUCCESSFUL run as Failed and
+      // re-dispatched it every tick forever. With Done always a noop, a Done
+      // issue produces zero activity (no thread, no worker, no escalation — the
+      // Slack layer's Done-is-terminal guard already suppresses everything but a
+      // launch, and there is no longer any launch).
+      return {
+        kind: "noop",
+        reason: `${id} is Done — terminal (auto-compound disabled; run ce-compound manually)`,
+      };
 
     default:
       return {
