@@ -1,6 +1,28 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { KnowledgeModelTab } from "./KnowledgeModelTab";
+
+vi.mock("@/components/settings/knowledge-graph/KnowledgeGraphTab", () => ({
+  KnowledgeGraphTab: () => <div>Definitions content</div>,
+}));
+
+vi.mock("./IdentityList", () => ({
+  IdentityList: () => <div>Identity content</div>,
+}));
+
+vi.mock("./ResolutionQueue", () => ({
+  ResolutionQueue: () => <div>Resolution queue content</div>,
+}));
+
+afterEach(cleanup);
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 const tabSource = read(
@@ -17,12 +39,13 @@ const queueSource = read(
 );
 
 describe("KnowledgeModelTab", () => {
-  it("owns a single title row with the toggle group in the badge slot", () => {
+  it("owns a single title row whose title opens the view menu", () => {
     expect(tabSource).toContain("SettingsPageTitle");
-    expect(tabSource).toContain("badge={");
-    expect(tabSource).toContain("<ToggleGroup");
-    expect(tabSource).toContain('aria-label="Model view"');
-    expect(tabSource).not.toContain('aria-label="Knowledge model view"');
+    expect(tabSource).toContain("<DropdownMenu");
+    expect(tabSource).toContain("<DropdownMenuTrigger");
+    expect(tabSource).toContain("<DropdownMenuRadioGroup");
+    expect(tabSource).toContain("aria-label={`Ontology view: ${title}`}");
+    expect(tabSource).not.toContain("<ToggleGroup");
   });
 
   it("swaps title and description from the per-view map", () => {
@@ -40,9 +63,25 @@ describe("KnowledgeModelTab", () => {
     expect(tabSource).not.toContain("approved ontology terms");
   });
 
-  it("keeps the toggle position stable while titles swap", () => {
-    expect(tabSource).toContain("min-w-52");
-    expect(tabSource).toContain("titleClassName");
+  it("switches views from the title menu", async () => {
+    render(<KnowledgeModelTab />);
+
+    expect(screen.getByText("Definitions content")).toBeTruthy();
+    const trigger = screen.getByRole("button", {
+      name: "Ontology view: Definitions",
+    });
+
+    fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
+    fireEvent.click(
+      await screen.findByRole("menuitemradio", { name: "Identity" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Ontology view: Identity" }),
+      ).toBeTruthy();
+      expect(screen.getByText("Identity content")).toBeTruthy();
+    });
   });
 
   it("renders the sub-views as content only", () => {
