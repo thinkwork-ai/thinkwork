@@ -238,20 +238,20 @@ describe("phase table — exhaustive routing-contract coverage", () => {
     }
   });
 
-  it("Verification with Codex lane label still launches the Claude runner with browser-auth host requirement", () => {
+  it("Verification ALWAYS launches the Codex runner (computer-use strength), any lane label", () => {
     const action = decideAction(
-      makeCandidate({ state: "Verification", labels: ["Codex", "LFG"] }),
+      makeCandidate({ state: "Verification", labels: ["Claude", "LFG"] }),
       emptyView(),
     );
     expect(action).toMatchObject({
       kind: "launch",
       phase: "verify",
-      runner: "claude",
+      runner: "codex",
       hostRequirement: "browser-auth",
     });
   });
 
-  it("Verification with no lane label at all still routes to the Claude runner", () => {
+  it("Verification with no lane label at all still routes to the Codex runner", () => {
     const action = decideAction(
       makeCandidate({ state: "Verification", labels: ["LFG"] }),
       emptyView(),
@@ -259,7 +259,7 @@ describe("phase table — exhaustive routing-contract coverage", () => {
     expect(action).toMatchObject({
       kind: "launch",
       phase: "verify",
-      runner: "claude",
+      runner: "codex",
     });
   });
 

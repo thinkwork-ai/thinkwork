@@ -595,6 +595,26 @@ async function runLaunch(
               error: String(e),
             });
           });
+        // Board legibility: an implement worker actively running is VISIBLE —
+        // move Ready to Work → In Progress at spawn. Without this the board
+        // shows "Ready to Work" for the worker's whole multi-hour run,
+        // indistinguishable from an idle issue (live operator complaint
+        // 2026-07-13). In Progress routes implement identically, statusAtLaunch
+        // keeps the original status so evidence detection is unaffected, and
+        // failures relaunch from In Progress the same as Ready to Work.
+        if (
+          action.phase === "implement" &&
+          (statusAtLaunch === "Ready to Work" || statusAtLaunch === "Ready To Work")
+        ) {
+          void deps.gateway
+            .setState(issue.id, "In Progress")
+            .catch((e: unknown) =>
+              deps.log.warn("launch-time In Progress move failed — cosmetic only", {
+                issue: id,
+                error: String(e),
+              }),
+            );
+        }
       }
       deps.log.info("attempt transition", {
         issue: id,

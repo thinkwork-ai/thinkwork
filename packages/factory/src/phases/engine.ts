@@ -277,10 +277,13 @@ function launch(
   phase: Phase,
   opts: { repair?: boolean } = {},
 ): EngineAction {
-  // Verification is ALWAYS the Claude lane (real browser + operator auth),
-  // regardless of the lane label; every other phase follows the lane label.
+  // Verification is ALWAYS the Codex runner (operator decision 2026-07-13:
+  // Codex is stronger at computer use, and verification drives a real
+  // browser against deployed dev), regardless of the lane label. The exit
+  // contract is unchanged: pass → Done, fail → Ready to Work +
+  // `Verification Failed`. Every other phase follows the lane label.
   const runner: RunnerKind =
-    phase === "verify" ? "claude" : candidate.lane === "Codex" ? "codex" : "claude";
+    phase === "verify" ? "codex" : candidate.lane === "Codex" ? "codex" : "claude";
   return {
     kind: "launch",
     phase,
