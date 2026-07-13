@@ -395,6 +395,35 @@ describe("default agent routing", () => {
     });
   });
 
+  it("does NOT fall back to a wakeup for an ask turn when direct invoke is unavailable (THINK-263 U6)", async () => {
+    // The wakeup path dispatches with use_memory:true and would retain the
+    // ephemeral ask answer; an ask must only ride the direct (use_memory:false)
+    // path, so a failed direct invoke reports a miss instead of enqueuing.
+    const repository = makeRepository({ agentId: "agent-1" });
+
+    const result = await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "who is acme?",
+        askMode: true,
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent() {
+          return false;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(repository.wakeups).toEqual([]);
+    expect(result).toMatchObject({ directInvoked: false, enqueued: false });
+  });
+
   it("forwards the selected parent model to direct chat invoke", async () => {
     const repository = makeRepository({ agentId: "agent-1" });
     const invoked: unknown[] = [];

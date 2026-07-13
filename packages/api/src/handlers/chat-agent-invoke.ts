@@ -319,6 +319,12 @@ interface InvokeEvent {
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   goalMode?: RuntimeGoalMode;
   skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
+  /**
+   * THINK-263 U6: this turn opens a palette "ask". The invoke payload sends
+   * `use_memory: false` so the ephemeral answer is cost-metered but never
+   * retained to memory (the retain runtime honors only `use_memory === true`).
+   */
+  askMode?: boolean;
   modelId?: string;
   requestedModelId?: string;
   requestedProfileSlug?: string;
@@ -586,6 +592,16 @@ export function createDrizzleChatInvokeIdentityDeps(
       return u?.email || "";
     },
   };
+}
+
+/**
+ * THINK-263 U6 — decide the invoke payload's `use_memory` value. A palette
+ * "ask" turn (`askMode`) suppresses retention (false); every other turn opts
+ * in (true). The retain runtime honors ONLY `true`, so this is the whole
+ * contract — no retain-handler change is needed to keep ask answers ephemeral.
+ */
+export function resolveTurnUseMemory(askMode?: boolean | null): boolean {
+  return askMode ? false : true;
 }
 
 export function resolveChatInvocationRuntimeType(args: {
@@ -1511,7 +1527,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       trace_id: traceId,
       message: userMessage,
       messages_history: messagesHistory,
-      use_memory: true,
+      // THINK-263 U6: a palette "ask" turn suppresses retention. The retain
+      // runtime honors ONLY `use_memory === true` as opt-in (anything else
+      // skips retain), so sending false here is a zero-handler-change way to
+      // meter cost while never writing the ephemeral answer to memory.
+      use_memory: resolveTurnUseMemory(event.askMode),
       tenant_slug: tenantSlug || undefined,
       instance_id: agentSlug || undefined,
       agent_name: agent.name,
