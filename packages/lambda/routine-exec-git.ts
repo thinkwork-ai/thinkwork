@@ -96,6 +96,10 @@ export interface RoutineExecGitInput {
   files?: Record<string, string>;
   /** dry_run only: module path within `files`. */
   modulePath?: string;
+  /** THINK-280 U6: exact capability dependency snapshot
+   * ([{ twcap, contractHash, definitionVersionId }]) pinned onto the
+   * routine_code_cache row when this gate promotes the SHA. */
+  capabilityDependencies?: unknown[];
 }
 
 export interface FixtureResult {
@@ -354,6 +358,7 @@ export async function executeGitRoutine(
       octokit,
       db,
       options,
+      capabilityDependencies: event.capabilityDependencies,
     });
     if (mode === "gate") {
       return {
@@ -1081,6 +1086,8 @@ async function gateSha(args: {
   octokit: Octokit;
   db: ReturnType<typeof getDb>;
   options: RoutineExecGitOptions;
+  /** THINK-280 U6: capability dependency snapshot to pin on the cache row. */
+  capabilityDependencies?: unknown[];
 }): Promise<GateResult> {
   // Prior verdict for this SHA short-circuits (idempotent gate).
   const [cached] = await args.db
@@ -1133,6 +1140,7 @@ async function gateSha(args: {
       ),
       fixture_status: gate.status,
       fixture_result_json: JSON.stringify(gate.fixtures),
+      capability_dependencies: args.capabilityDependencies ?? null,
       validated_at: gate.status === "green" ? new Date() : null,
     })
     .onConflictDoUpdate({
@@ -1140,6 +1148,9 @@ async function gateSha(args: {
       set: {
         fixture_status: gate.status,
         fixture_result_json: JSON.stringify(gate.fixtures),
+        ...(args.capabilityDependencies !== undefined
+          ? { capability_dependencies: args.capabilityDependencies }
+          : {}),
         validated_at: gate.status === "green" ? new Date() : null,
       },
     });

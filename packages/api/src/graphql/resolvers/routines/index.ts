@@ -16,6 +16,13 @@ import { tenantToolInventory } from "./tenantToolInventory.query.js";
 import { triggerRoutineRun } from "./triggerRoutineRun.mutation.js";
 import { updateRoutineDefinition } from "./updateRoutineDefinition.mutation.js";
 import { updateRoutine } from "./updateRoutine.mutation.js";
+import {
+  createRoutineProposal,
+  rejectRoutineProposal,
+  routineProposal,
+  routineProposals,
+} from "./createRoutineProposal.mutation.js";
+import { approveRoutineProposal } from "./approveRoutineProposal.mutation.js";
 
 export const routineQueries = {
   routineExecution,
@@ -27,6 +34,9 @@ export const routineQueries = {
   routineRecipeCatalog,
   routineSource,
   tenantToolInventory,
+  // THINK-280 U6 — Routine promotion proposals.
+  routineProposal,
+  routineProposals,
 };
 
 // Live Step Functions mutations replace the legacy `triggers/` versions.
@@ -40,4 +50,8 @@ export const routineMutations = {
   triggerRoutineRun,
   updateRoutine,
   updateRoutineDefinition,
+  // THINK-280 U6 — Routine promotion proposals.
+  createRoutineProposal,
+  approveRoutineProposal,
+  rejectRoutineProposal,
 };

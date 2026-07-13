@@ -26,7 +26,8 @@ import type { RuntimeEnvSnapshot } from "../../handler-context.js";
 
 export type CapabilityControlAction =
   | "capability_search"
-  | "connection_research";
+  | "connection_research"
+  | "routine_propose";
 
 export interface CapabilityControlRequest {
   action: CapabilityControlAction;
@@ -46,6 +47,11 @@ export interface CapabilityControlRequest {
     definitionId?: string;
     payload: unknown;
     sourceUrls: string[];
+  };
+  /** routine_propose: immutable bundle + optional target routine. */
+  routineProposal?: {
+    routineId?: string;
+    bundle: unknown;
   };
 }
 

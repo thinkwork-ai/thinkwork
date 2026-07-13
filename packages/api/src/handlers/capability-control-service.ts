@@ -55,12 +55,17 @@ import {
   type CapabilityConnectionProposalRow,
   type CapabilityDefinitionRow,
 } from "../lib/capabilities/research.js";
+import {
+  createRoutineProposal,
+  type RoutineProposalBundle,
+} from "../lib/capabilities/routine-proposal.js";
 
 const LOG_PREFIX = "[capability-control-service]";
 
 export const CAPABILITY_CONTROL_ACTIONS = [
   "capability_search",
   "connection_research",
+  "routine_propose",
 ] as const;
 export type CapabilityControlAction =
   (typeof CAPABILITY_CONTROL_ACTIONS)[number];
@@ -82,6 +87,8 @@ export interface CapabilityControlEvent {
   query?: unknown;
   allowExternal?: unknown;
   proposal?: unknown;
+  /** routine_propose: the immutable bundle + optional target routine. */
+  routineProposal?: unknown;
 }
 
 export type CapabilityControlRejection = {
@@ -141,6 +148,14 @@ export interface ConnectionResearchResultOut {
   };
 }
 
+export interface RoutineProposeResultOut {
+  outcome: "applied" | "rejected";
+  reason?: string;
+  proposalId?: string;
+  payloadFingerprint?: string;
+  status?: string;
+}
+
 export type CapabilityControlResponse =
   | CapabilityControlRejection
   | { ok: true; action: "capability_search"; result: CapabilitySearchResult }
@@ -148,6 +163,11 @@ export type CapabilityControlResponse =
       ok: true;
       action: "connection_research";
       result: ConnectionResearchResultOut;
+    }
+  | {
+      ok: true;
+      action: "routine_propose";
+      result: RoutineProposeResultOut;
     };
 
 // ---------------------------------------------------------------------------
@@ -470,6 +490,71 @@ async function runConnectionResearch(
 }
 
 // ---------------------------------------------------------------------------
+// routine_propose — create/update a Routine promotion proposal ONLY
+// ---------------------------------------------------------------------------
+
+/**
+ * The narrow trusted-service leg for Routine proposals (THINK-280 U6). It
+ * can ONLY create/update a proposal (status 'submitted' at most) — it never
+ * approves, commits, validates, or activates. Tenant + actor are derived
+ * from the VERIFIED caller context; the plaintext bundle cannot assert
+ * another tenant/user, and dependencies are validated against the verified
+ * tenant's admitted definition versions (a dependency absent from that
+ * manifest is rejected by the lib).
+ */
+async function runRoutinePropose(
+  db: ReturnType<typeof getDb>,
+  context: CapabilityCallerContextPayload,
+  event: CapabilityControlEvent,
+): Promise<CapabilityControlResponse> {
+  const raw = event.routineProposal;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return reject(
+      "invalid_routine_proposal",
+      "routine_propose requires a routineProposal object with a bundle",
+    );
+  }
+  const record = raw as Record<string, unknown>;
+  if (
+    !record.bundle ||
+    typeof record.bundle !== "object" ||
+    Array.isArray(record.bundle)
+  ) {
+    return reject(
+      "invalid_routine_proposal",
+      "routineProposal.bundle required",
+    );
+  }
+
+  const created = await createRoutineProposal(db, {
+    tenantId: context.tenantId,
+    routineId: asString(record.routineId) || null,
+    bundle: record.bundle as unknown as RoutineProposalBundle,
+    // Broker-sanitized already; the lib re-scrubs + fail-closes on residual
+    // secret shapes. No secret material is asserted over the plaintext leg.
+    secretSources: [],
+    status: "submitted",
+    actor: { type: "agent", id: context.agentId },
+  });
+
+  return {
+    ok: true,
+    action: "routine_propose",
+    result: {
+      outcome: created.outcome,
+      ...(created.reason ? { reason: created.reason } : {}),
+      ...(created.proposal
+        ? {
+            proposalId: created.proposal.id,
+            payloadFingerprint: created.proposal.payload_fingerprint,
+            status: created.proposal.status,
+          }
+        : {}),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -515,6 +600,9 @@ export async function handleCapabilityControl(
   try {
     if (action === "capability_search") {
       return await runCapabilitySearch(db, context, event);
+    }
+    if (action === "routine_propose") {
+      return await runRoutinePropose(db, context, event);
     }
     return await runConnectionResearch(db, context, event);
   } catch (err) {
