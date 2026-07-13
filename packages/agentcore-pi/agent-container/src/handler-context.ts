@@ -197,6 +197,13 @@ export interface RuntimeEnvSnapshot {
    * Empty string falls back to HTTP fetch for local/debug invocations.
    */
   manifestLogFnName?: string;
+  /**
+   * Name of the API's `capability-control-service` Lambda (THINK-280 U2,
+   * `thinkwork-${stage}-api-capability-control-service`). Backs the
+   * capability_search / connection_research tools via direct
+   * RequestResponse invoke; empty string leaves both tools unregistered.
+   */
+  capabilityControlFnName?: string;
   dbClusterArn: string;
   dbSecretArn: string;
   dbName: string;
@@ -236,6 +243,7 @@ export function snapshotRuntimeEnv(
     chatAgentFinalizeFnName: env.CHAT_AGENT_FINALIZE_FN_NAME || "",
     chatAgentActivityFnName: env.CHAT_AGENT_ACTIVITY_FN_NAME || "",
     manifestLogFnName: env.MANIFEST_LOG_FUNCTION_NAME || "",
+    capabilityControlFnName: env.CAPABILITY_CONTROL_FN_NAME || "",
     dbClusterArn: env.DB_CLUSTER_ARN || "",
     dbSecretArn: env.DB_SECRET_ARN || "",
     dbName: env.DB_NAME || "thinkwork",

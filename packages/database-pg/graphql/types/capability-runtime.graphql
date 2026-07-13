@@ -1,0 +1,252 @@
+# Governed capability runtime control plane (THINK-280 U2).
+#
+# Research, admission, service principals, and per-binding readiness for
+# Connection definitions. This surface never dispatches a provider
+# operation: research produces non-executable proposals, admission signs an
+# immutable definition version and materializes the folder projection, and
+# readiness runs only the declared cheap read-only probe inside the trusted
+# API path. Broker/session APIs are deliberately absent (they arrive in U3
+# behind the private broker endpoint, not GraphQL).
+#
+# Credential material never crosses this schema: bindings expose readiness
+# state and redacted probe evidence only — vault references and secret
+# hashes stay server-side (analyst denylist mirrors this in the DB layer).
+
+type CapabilityDefinition {
+  id: ID!
+  # Null = platform-scoped reference definition (visible for admission,
+  # never auto-granted).
+  tenantId: ID
+  namespace: String!
+  class: String!
+  slug: String!
+  displayName: String!
+  # active | retired
+  status: String!
+  createdAt: AWSDateTime!
+  versions: [CapabilityDefinitionVersion!]!
+  # Latest admitted version, when one exists.
+  admittedVersion: CapabilityDefinitionVersion
+}
+
+type CapabilityDefinitionVersion {
+  id: ID!
+  definitionId: ID!
+  version: Int!
+  # candidate | admitted | rejected | retired
+  lifecycle: String!
+  # RFC 8785 + SHA-256 over the canonical descriptor payload.
+  descriptorFingerprint: String!
+  # The full canonical descriptor (CapabilityDescriptor shape from
+  # @thinkwork/capability-contracts), exactly as fingerprinted/signed.
+  descriptor: AWSJSON!
+  # { [operationId]: sha256hex } searchable projection.
+  contractHashes: AWSJSON!
+  # Official-source provenance + research evidence references.
+  provenance: AWSJSON!
+  sourceProposalId: ID
+  admittedAt: AWSDateTime
+  admittedByUserId: ID
+  createdAt: AWSDateTime!
+  # Per-operation view derived from the signed descriptor — includes the
+  # exact twcap reference and executability withholding reasons.
+  operations: [CapabilityOperationView!]!
+}
+
+type CapabilityOperationView {
+  operationId: String!
+  # Full twcap://... operation reference (portable opaque form).
+  twcap: String!
+  contractHash: String!
+  # none | read | create | update | delete | execute
+  effect: String!
+  # requester | agent_owner | service
+  principalModes: [String!]!
+  # never | once | always
+  approvalPolicy: String!
+  costClass: String!
+  latencyClass: String!
+  outputClass: String!
+  # False when any security-relevant annotation withholds the operation
+  # from automated execution (unknown classes, credential data, ...).
+  executable: Boolean!
+  # Why-not-executable reasons, verbatim from the shared contract validator.
+  withheldReasons: [String!]!
+}
+
+type CapabilityConnectionProposal {
+  id: ID!
+  tenantId: ID!
+  # Target logical definition when refreshing; null for a new Connection.
+  definitionId: ID
+  # Immutable proposed descriptor + research payload (non-executable
+  # evidence — never appears in working search).
+  payload: AWSJSON!
+  # RFC 8785 + SHA-256 fingerprint — admission consumes exactly this.
+  payloadFingerprint: String!
+  # Official-source URLs + cached research provenance (with expiry).
+  provenance: AWSJSON!
+  # draft | submitted | admitted | rejected | superseded
+  status: String!
+  # Link to the human decision item; the Inbox owns the decision.
+  inboxItemId: ID
+  createdByActorType: String
+  createdByActorId: ID
+  decidedAt: AWSDateTime
+  decidedByUserId: ID
+  createdAt: AWSDateTime!
+}
+
+type TenantServicePrincipal {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  displayName: String!
+  purpose: String
+  # active | revoked
+  status: String!
+  createdAt: AWSDateTime!
+  revokedAt: AWSDateTime
+}
+
+type CapabilityCredentialBinding {
+  id: ID!
+  tenantId: ID!
+  definitionVersionId: ID!
+  # requester | agent_owner | service — exactly one explicit mode; action-
+  # time resolution never falls back across modes (R6).
+  principalMode: String!
+  servicePrincipalId: ID
+  subjectUserId: ID
+  # pending_setup | verifying | ready | degraded | revoked
+  readiness: String!
+  # Redacted, version-specific probe evidence — never raw provider bodies,
+  # never credential references.
+  readinessEvidence: AWSJSON!
+  lastVerifiedAt: AWSDateTime
+  revokedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type ConnectionResearchPayload {
+  # ok | degraded (external discovery unavailable/bounded-out; admitted
+  # results still present — AE research availability never gates admission)
+  state: String!
+  stateDetail: String
+  # Admitted/platform definitions matching the query (working knowledge).
+  definitions: [CapabilityDefinition!]!
+  # Stored proposals matching the query (research knowledge — non-executable).
+  proposals: [CapabilityConnectionProposal!]!
+}
+
+input CreateConnectionProposalInput {
+  tenantId: ID!
+  # Refresh target; omit for a new Connection.
+  definitionId: ID
+  # Proposed descriptor payload + research evidence. Validated fail-closed
+  # against the shared contract schema before persistence.
+  payload: AWSJSON!
+  # Official provider source URLs backing every material claim (required).
+  sourceUrls: [String!]!
+}
+
+input AdmitConnectionProposalInput {
+  tenantId: ID!
+  proposalId: ID!
+  # The exact fingerprint the operator reviewed. A mismatch (payload changed
+  # since review) rejects the admission — approvals are single-use and exact.
+  reviewedFingerprint: String!
+}
+
+input CreateServicePrincipalInput {
+  tenantId: ID!
+  slug: String!
+  displayName: String!
+  purpose: String
+}
+
+input CreateCredentialBindingInput {
+  tenantId: ID!
+  definitionVersionId: ID!
+  # requester | agent_owner | service
+  principalMode: String!
+  # Required for service mode; forbidden otherwise.
+  servicePrincipalId: ID
+  # Optional user pin for requester/agent_owner bindings.
+  subjectUserId: ID
+  # Vault references only ({ [credentialKind]: tenantCredentialId }); raw
+  # secret values are rejected server-side.
+  credentialRefs: AWSJSON!
+}
+
+type CapabilityRuntimeMutationResult {
+  # applied | rejected | noop
+  outcome: String!
+  # Safe, operator-readable reason when rejected.
+  reason: String
+  definition: CapabilityDefinition
+  version: CapabilityDefinitionVersion
+  proposal: CapabilityConnectionProposal
+  servicePrincipal: TenantServicePrincipal
+  binding: CapabilityCredentialBinding
+}
+
+extend type Query {
+  # Catalog view: admitted/candidate definitions for the tenant, plus
+  # platform reference definitions.
+  capabilityRuntimeCatalog(tenantId: ID!): [CapabilityDefinition!]!
+  # Research view: working definitions + stored proposals matching a query.
+  connectionResearch(
+    tenantId: ID!
+    query: String!
+    # When true, permit the bounded external-discovery fetch (size/time
+    # limited, cached with expiry). Default false: stored knowledge only.
+    allowExternal: Boolean
+  ): ConnectionResearchPayload!
+  # Bindings view: readiness grouped by definition version and principal.
+  capabilityCredentialBindings(
+    tenantId: ID!
+    definitionVersionId: ID
+  ): [CapabilityCredentialBinding!]!
+  tenantServicePrincipals(tenantId: ID!): [TenantServicePrincipal!]!
+}
+
+extend type Mutation {
+  # Research/draft path — agents (via the service Lambda) and operators can
+  # create proposals; only admission signs anything.
+  createConnectionProposal(
+    input: CreateConnectionProposalInput!
+  ): CapabilityRuntimeMutationResult!
+  # Admin-only: verify official sources, sign the canonical descriptor, and
+  # materialize the admitted version + folder projection. Exact-fingerprint
+  # single-use approval (AE-style: any payload change invalidates).
+  admitConnectionProposal(
+    input: AdmitConnectionProposalInput!
+  ): CapabilityRuntimeMutationResult!
+  rejectConnectionProposal(
+    tenantId: ID!
+    proposalId: ID!
+    reason: String
+  ): CapabilityRuntimeMutationResult!
+  createServicePrincipal(
+    input: CreateServicePrincipalInput!
+  ): CapabilityRuntimeMutationResult!
+  revokeServicePrincipal(
+    tenantId: ID!
+    servicePrincipalId: ID!
+  ): CapabilityRuntimeMutationResult!
+  createCredentialBinding(
+    input: CreateCredentialBindingInput!
+  ): CapabilityRuntimeMutationResult!
+  # Runs the declared cheap read-only probe inside the trusted API path;
+  # moves ONLY this binding through verifying → ready|degraded and stores
+  # redacted evidence. Never promotes a definition.
+  verifyCredentialBinding(
+    tenantId: ID!
+    bindingId: ID!
+  ): CapabilityRuntimeMutationResult!
+  revokeCredentialBinding(
+    tenantId: ID!
+    bindingId: ID!
+  ): CapabilityRuntimeMutationResult!
+}

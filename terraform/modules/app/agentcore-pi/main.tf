@@ -26,6 +26,11 @@ locals {
   chat_agent_activity_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.chat_agent_activity_fn_name}"
   manifest_log_fn_name        = "thinkwork-${var.stage}-api-manifest-log"
   manifest_log_fn_arn         = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.manifest_log_fn_name}"
+  # THINK-280 U2 — capability control plane service (capability_search /
+  # connection_research Pi tools). Direct InvokeCommand, RequestResponse;
+  # no HTTP route exists for this Lambda.
+  capability_control_fn_name = "thinkwork-${var.stage}-api-capability-control-service"
+  capability_control_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.capability_control_fn_name}"
   # Release-backed deployments use an immutable, source-derived target tag so
   # changing the release image also changes aws_lambda_function.image_uri.
   # Reusing pi-latest lets Terraform miss the update even after ECR is retagged.
@@ -259,6 +264,7 @@ resource "aws_iam_role_policy" "agentcore_pi" {
           local.chat_agent_finalize_fn_arn,
           local.chat_agent_activity_fn_arn,
           local.manifest_log_fn_arn,
+          local.capability_control_fn_arn,
         ]
       },
       {
@@ -384,6 +390,7 @@ resource "aws_lambda_function" "agentcore_pi" {
       CHAT_AGENT_FINALIZE_FN_NAME            = local.chat_agent_finalize_fn_name
       CHAT_AGENT_ACTIVITY_FN_NAME            = local.chat_agent_activity_fn_name
       MANIFEST_LOG_FUNCTION_NAME             = local.manifest_log_fn_name
+      CAPABILITY_CONTROL_FN_NAME             = local.capability_control_fn_name
       HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
       # THINK-220 cutover flag — see the variable description.
       HINDSIGHT_DATABASE_NAME = var.hindsight_database_name

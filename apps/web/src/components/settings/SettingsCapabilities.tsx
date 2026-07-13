@@ -32,12 +32,15 @@ import {
 import {
   Bot,
   Info,
+  KeyRound,
+  LibraryBig,
   ListChecks,
   Loader2,
   Puzzle,
   RefreshCw,
   ScanSearch,
   SlidersHorizontal,
+  Telescope,
   UserRound,
 } from "lucide-react";
 import { useMutation, useQuery } from "urql";
@@ -120,6 +123,9 @@ import {
 } from "@/components/settings/ComposerWorkspaceEditor";
 import { CapabilityInspectorView } from "@/components/settings/CapabilityInspectorView";
 import { AgentProfilesSheet } from "@/components/settings/AgentProfilesSheet";
+import { CapabilityCatalogView } from "@/components/settings/CapabilityCatalogView";
+import { CapabilityResearchView } from "@/components/settings/CapabilityResearchView";
+import { CapabilityBindingsView } from "@/components/settings/CapabilityBindingsView";
 
 const CLASS_LABELS: Record<string, string> = {
   skill: "Skills",
@@ -279,7 +285,11 @@ export type ComposerSheetId =
   | "config"
   | "profiles"
   | "extensions"
-  | "inspector";
+  | "inspector"
+  // Capability runtime control plane (THINK-280 U2).
+  | "catalog"
+  | "research"
+  | "bindings";
 
 export function SettingsCapabilities({
   urlSheet = null,
@@ -304,7 +314,7 @@ export function SettingsCapabilities({
     target?: { profileId?: string | null; focus?: string | null },
   ) => void;
 } = {}) {
-  const { tenant, tenantId, userId } = useTenant();
+  const { tenant, tenantId, userId, isOperator } = useTenant();
   // No default filters (Agent page merge U12): the empty selection IS the
   // default agent in the default space, and every row state is visible.
   const [pendingRow, setPendingRow] = useState<string | null>(null);
@@ -321,6 +331,11 @@ export function SettingsCapabilities({
   // Inspector view (Agent page merge U8): read-only diagnostics for every
   // class — survives the capability list's retirement (U9).
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  // Capability runtime control plane sheets (THINK-280 U2): governed
+  // catalog, connection research/admission, and credential bindings.
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [researchOpen, setResearchOpen] = useState(false);
+  const [bindingsOpen, setBindingsOpen] = useState(false);
   // Profiles sheet (Agent page merge U2): list → detail editing; the tree's
   // "Configure Agent Profile" deep-links straight to a profile's detail.
   const [profilesSheet, setProfilesSheet] = useState<{
@@ -335,6 +350,9 @@ export function SettingsCapabilities({
     setConfigOpen(urlSheet === "config");
     setExtensionsSheetOpen(urlSheet === "extensions");
     setInspectorOpen(urlSheet === "inspector");
+    setCatalogOpen(urlSheet === "catalog");
+    setResearchOpen(urlSheet === "research");
+    setBindingsOpen(urlSheet === "bindings");
     setProfilesSheet({
       open: urlSheet === "profiles",
       profileId: urlSheet === "profiles" ? (urlProfileId ?? null) : null,
@@ -352,6 +370,9 @@ export function SettingsCapabilities({
     setConfigOpen(sheet === "config");
     setExtensionsSheetOpen(sheet === "extensions");
     setInspectorOpen(sheet === "inspector");
+    setCatalogOpen(sheet === "catalog");
+    setResearchOpen(sheet === "research");
+    setBindingsOpen(sheet === "bindings");
     setProfilesSheet({
       open: sheet === "profiles",
       profileId: sheet === "profiles" ? (target?.profileId ?? null) : null,
@@ -1317,6 +1338,38 @@ export function SettingsCapabilities({
       >
         <ScanSearch className="size-4" />
       </TooltipIconButton>
+      {/* Capability runtime control plane (THINK-280 U2): governed catalog,
+          connection research/admission, credential bindings. */}
+      <TooltipIconButton
+        type="button"
+        label="Capability catalog — admitted Connection definitions"
+        aria-label="Capability catalog"
+        className={desktopToolbarButtonClassName}
+        onClick={() => requestSheet("catalog")}
+        data-testid="open-catalog-sheet"
+      >
+        <LibraryBig className="size-4" />
+      </TooltipIconButton>
+      <TooltipIconButton
+        type="button"
+        label="Connection research — search and admit proposals"
+        aria-label="Connection research"
+        className={desktopToolbarButtonClassName}
+        onClick={() => requestSheet("research")}
+        data-testid="open-research-sheet"
+      >
+        <Telescope className="size-4" />
+      </TooltipIconButton>
+      <TooltipIconButton
+        type="button"
+        label="Credential bindings — per-binding readiness"
+        aria-label="Credential bindings"
+        className={desktopToolbarButtonClassName}
+        onClick={() => requestSheet("bindings")}
+        data-testid="open-bindings-sheet"
+      >
+        <KeyRound className="size-4" />
+      </TooltipIconButton>
       <TooltipIconButton
         type="button"
         label="Refresh"
@@ -1784,6 +1837,84 @@ export function SettingsCapabilities({
               loading={loading}
               focusRowKey={urlFocus ?? focusedRowKey}
             />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Capability runtime control plane (THINK-280 U2): three sheets over
+          the governed catalog/research/bindings GraphQL surface. Tenant-wide
+          (not selection-scoped) — the Composer scope bar doesn't apply. */}
+      <Sheet
+        open={catalogOpen}
+        onOpenChange={(open) => requestSheet(open ? "catalog" : null)}
+      >
+        <SheetContent
+          className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(760px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+          data-testid="capability-catalog-sheet"
+        >
+          <SheetHeader className="px-6">
+            <SheetTitle>Capability catalog</SheetTitle>
+            <SheetDescription>
+              Admitted and candidate Connection definitions — signed versions,
+              fingerprints, and per-operation contracts.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
+            {catalogOpen ? (
+              <CapabilityCatalogView tenantId={tenantId ?? ""} />
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={researchOpen}
+        onOpenChange={(open) => requestSheet(open ? "research" : null)}
+      >
+        <SheetContent
+          className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(760px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+          data-testid="connection-research-sheet"
+        >
+          <SheetHeader className="px-6">
+            <SheetTitle>Connection research</SheetTitle>
+            <SheetDescription>
+              Search admitted Connections and research proposals. Admission
+              signs exactly the fingerprint you review.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
+            {researchOpen ? (
+              <CapabilityResearchView
+                tenantId={tenantId ?? ""}
+                canAdmit={isOperator}
+              />
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={bindingsOpen}
+        onOpenChange={(open) => requestSheet(open ? "bindings" : null)}
+      >
+        <SheetContent
+          className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(760px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none"
+          data-testid="capability-bindings-sheet"
+        >
+          <SheetHeader className="px-6">
+            <SheetTitle>Credential bindings</SheetTitle>
+            <SheetDescription>
+              Per-binding readiness for admitted versions, plus tenant service
+              principals. Credential material never appears here.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-8">
+            {bindingsOpen ? (
+              <CapabilityBindingsView
+                tenantId={tenantId ?? ""}
+                canManage={isOperator}
+              />
+            ) : null}
           </div>
         </SheetContent>
       </Sheet>

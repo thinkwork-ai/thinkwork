@@ -835,6 +835,14 @@ resource "aws_lambda_function" "handler" {
     # POSTs one row per agent-session-start. Shared
     # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
     "manifest-log",
+    # Governed capability runtime control-plane service (THINK-280 U2).
+    # NO HTTP route: the Pi container invokes it directly (RequestResponse)
+    # via lambda:InvokeFunction over the approved in-account path — public
+    # execute-api is not reliable from Pi's private VPC. Identity comes
+    # exclusively from the Ed25519-signed capability caller context (the
+    # CAPABILITY_SIGNING_PUBLIC_KEY in the shared runtime-config document
+    # verifies it); plaintext payload fields are never trusted.
+    "capability-control-service",
     # SI-7 catalog-list read endpoint (plan §U15 pt 3/3). The runtime
     # fetches the allowed builtin-tool slug set once per
     # session-start + feature-flag-gated enforcement filter drops

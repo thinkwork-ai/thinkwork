@@ -379,6 +379,18 @@ export const COMPLIANCE_EVENT_TYPES = [
   // already admitted by the prefix-based event-type CHECK constraints
   // (drizzle/0160 *_v3) — no migration needed.
   "data.query_executed",
+  // Governed capability runtime control plane (THINK-280 U2): connection
+  // research/admission, tenant service principals, and per-binding
+  // credential readiness. The agent. prefix is already admitted by the
+  // prefix-based event-type CHECK constraints — no migration needed.
+  "agent.connection_proposal_created",
+  "agent.connection_proposal_admitted",
+  "agent.connection_proposal_rejected",
+  "agent.service_principal_created",
+  "agent.service_principal_revoked",
+  "agent.credential_binding_created",
+  "agent.credential_binding_verified",
+  "agent.credential_binding_revoked",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

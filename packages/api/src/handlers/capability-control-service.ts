@@ -1,0 +1,537 @@
+/**
+ * capability-control-service — the narrow service Lambda behind Pi's two
+ * capability control-plane tools (THINK-280 U2).
+ *
+ * Direct-invoke only (RequestResponse; NO HTTP route): the Pi container
+ * reaches it via `lambda:InvokeFunction` over the approved in-account path
+ * (public execute-api is not reliable from Pi's private VPC). The Pi role
+ * may invoke exactly this function (agentcore-pi ApiLambdaInvoke).
+ *
+ * Identity is derived EXCLUSIVELY from a per-call Ed25519-signed caller
+ * context (`@thinkwork/lambda/capability-caller-context`, kind tag
+ * `capability-caller-context` — cryptographically domain-separated from
+ * analyst contexts under the same key). Plaintext payload fields NEVER
+ * name a tenant/agent/actor; a forged, absent, expired, or wrong-kind
+ * context is rejected fail-closed with a uniform reason.
+ *
+ * Closed action union:
+ *   - `capability_search` — the working projection: resolve ONE exact
+ *     invocation tuple (namespace/class/slug[/version]/operationId +
+ *     principal mode) against the verified tenant's ADMITTED definition
+ *     versions. Only executable operations with a `ready` binding for the
+ *     exact requested principal mode resolve (no cross-mode fallback, AE2).
+ *     Research records and unsigned proposals can never appear here.
+ *   - `connection_research` — non-executable research knowledge: search
+ *     admitted/platform definitions + stored proposals, and optionally
+ *     create a draft proposal (evidence only). It cannot sign, bind
+ *     credentials, or dispatch — those code paths do not exist here.
+ *
+ * Responses are structured objects; expected failures return
+ * `{ ok: false, reason }` rather than throwing, so the Pi client can relay
+ * a safe message without a Lambda FunctionError.
+ */
+
+import { getDb } from "@thinkwork/database-pg";
+import {
+  capabilityCredentialBindings,
+  capabilityDefinitions,
+  capabilityDefinitionVersions,
+} from "@thinkwork/database-pg/schema";
+import { and, eq } from "drizzle-orm";
+import { getConfig } from "@thinkwork/runtime-config";
+import {
+  verifyCapabilityCallerContext,
+  type CapabilityCallerContextPayload,
+} from "@thinkwork/lambda/capability-caller-context";
+import {
+  formatTwcapRef,
+  operationExecutabilityViolations,
+  type CapabilityDescriptor,
+  type OperationContract,
+} from "@thinkwork/capability-contracts";
+import {
+  createConnectionProposal,
+  searchCapabilityRuntime,
+  type CapabilityConnectionProposalRow,
+  type CapabilityDefinitionRow,
+} from "../lib/capabilities/research.js";
+
+const LOG_PREFIX = "[capability-control-service]";
+
+export const CAPABILITY_CONTROL_ACTIONS = [
+  "capability_search",
+  "connection_research",
+] as const;
+export type CapabilityControlAction =
+  (typeof CAPABILITY_CONTROL_ACTIONS)[number];
+
+const PRINCIPAL_MODES = new Set(["requester", "agent_owner", "service"]);
+
+// ---------------------------------------------------------------------------
+// Wire shapes
+// ---------------------------------------------------------------------------
+
+export interface CapabilityControlEvent {
+  action?: unknown;
+  /** Encoded signed caller context — the ONLY identity source. */
+  callerContext?: unknown;
+  /** capability_search: the exact invocation tuple + principal mode. */
+  tuple?: unknown;
+  principalMode?: unknown;
+  /** connection_research: query + optional draft-proposal payload. */
+  query?: unknown;
+  allowExternal?: unknown;
+  proposal?: unknown;
+}
+
+export type CapabilityControlRejection = {
+  ok: false;
+  reason: string;
+  detail?: string;
+};
+
+export interface CapabilitySearchMatch {
+  found: true;
+  twcap: string;
+  contractHash: string;
+  operationId: string;
+  effect: string;
+  approvalPolicy: string;
+  costClass: string;
+  latencyClass: string;
+  outputClass: string;
+  principalMode: string;
+  bindingId: string;
+  definitionVersionId: string;
+  version: number;
+}
+
+export type CapabilitySearchResult =
+  | CapabilitySearchMatch
+  | { found: false; reason: string; withheldReasons?: string[] };
+
+export interface ConnectionResearchDefinitionSummary {
+  id: string;
+  namespace: string;
+  class: string;
+  slug: string;
+  displayName: string;
+  status: string;
+  tenantScoped: boolean;
+}
+
+export interface ConnectionResearchProposalSummary {
+  id: string;
+  status: string;
+  payloadFingerprint: string;
+  definitionId: string | null;
+  createdAt: string | null;
+}
+
+export interface ConnectionResearchResultOut {
+  state: "ok" | "degraded";
+  stateDetail?: string;
+  definitions: ConnectionResearchDefinitionSummary[];
+  proposals: ConnectionResearchProposalSummary[];
+  createdProposal?: {
+    outcome: "applied" | "rejected";
+    reason?: string;
+    proposalId?: string;
+    payloadFingerprint?: string;
+  };
+}
+
+export type CapabilityControlResponse =
+  | CapabilityControlRejection
+  | { ok: true; action: "capability_search"; result: CapabilitySearchResult }
+  | {
+      ok: true;
+      action: "connection_research";
+      result: ConnectionResearchResultOut;
+    };
+
+// ---------------------------------------------------------------------------
+// Seams (tests inject; production uses defaults)
+// ---------------------------------------------------------------------------
+
+export interface CapabilityControlDeps {
+  db?: ReturnType<typeof getDb>;
+  publicKeyPem?: string | null;
+  nowMs?: number;
+}
+
+function readCapabilityPublicKey(): string | null {
+  // Document-only key: read via getConfig ONLY (its env-wins merge still
+  // honors a hand-set env var as an incident/test override).
+  let value = "";
+  try {
+    value = getConfig("CAPABILITY_SIGNING_PUBLIC_KEY") || "";
+  } catch {
+    value = "";
+  }
+  if (!value.trim()) return null;
+  return value.includes("\\n") ? value.replace(/\\n/g, "\n") : value;
+}
+
+function reject(reason: string, detail?: string): CapabilityControlRejection {
+  return { ok: false, reason, ...(detail ? { detail } : {}) };
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+// ---------------------------------------------------------------------------
+// capability_search
+// ---------------------------------------------------------------------------
+
+interface SearchTuple {
+  namespace: string;
+  class: string;
+  slug: string;
+  /** Decimal version string; absent = latest admitted. */
+  version?: string;
+  operationId: string;
+}
+
+function parseSearchTuple(raw: unknown): SearchTuple | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const namespace = asString(record.namespace);
+  const klass = asString(record.class);
+  const slug = asString(record.slug);
+  const operationId = asString(record.operationId);
+  const version = asString(record.version);
+  if (!namespace || !klass || !slug || !operationId) return null;
+  if (version && !/^[0-9]+$/.test(version)) return null;
+  return {
+    namespace,
+    class: klass,
+    slug,
+    operationId,
+    ...(version ? { version } : {}),
+  };
+}
+
+async function runCapabilitySearch(
+  db: ReturnType<typeof getDb>,
+  context: CapabilityCallerContextPayload,
+  event: CapabilityControlEvent,
+): Promise<CapabilityControlResponse> {
+  const tuple = parseSearchTuple(event.tuple);
+  if (!tuple) {
+    return reject(
+      "invalid_tuple",
+      "capability_search requires { namespace, class, slug, operationId } (+ optional decimal version)",
+    );
+  }
+  const principalMode = asString(event.principalMode);
+  if (!PRINCIPAL_MODES.has(principalMode)) {
+    return reject(
+      "invalid_principal_mode",
+      "principalMode must be requester | agent_owner | service",
+    );
+  }
+
+  // Working knowledge is the verified tenant's own admitted contracts —
+  // platform (tenant_id NULL) definitions are admission references, never
+  // auto-granted, so they do not resolve here.
+  const definitionRows = (await db
+    .select()
+    .from(capabilityDefinitions)
+    .where(
+      and(
+        eq(capabilityDefinitions.namespace, tuple.namespace),
+        eq(capabilityDefinitions.class, tuple.class),
+        eq(capabilityDefinitions.slug, tuple.slug),
+      ),
+    )) as CapabilityDefinitionRow[];
+  const definition = definitionRows.find(
+    (row) => row.tenant_id === context.tenantId && row.status === "active",
+  );
+  if (!definition) {
+    return {
+      ok: true,
+      action: "capability_search",
+      result: { found: false, reason: "definition_not_found" },
+    };
+  }
+
+  const versionRows = (await db
+    .select()
+    .from(capabilityDefinitionVersions)
+    .where(eq(capabilityDefinitionVersions.definition_id, definition.id))) as
+    | Array<typeof capabilityDefinitionVersions.$inferSelect>
+    | [];
+  const admitted = versionRows
+    .filter((row) => row.lifecycle === "admitted")
+    .sort((a, b) => a.version - b.version);
+  const versionRow = tuple.version
+    ? admitted.find((row) => String(row.version) === tuple.version)
+    : admitted.at(-1);
+  if (!versionRow) {
+    return {
+      ok: true,
+      action: "capability_search",
+      result: { found: false, reason: "no_admitted_version" },
+    };
+  }
+
+  const descriptor = versionRow.descriptor_json as CapabilityDescriptor;
+  const operation: OperationContract | undefined = Array.isArray(
+    descriptor?.operations,
+  )
+    ? descriptor.operations.find((op) => op.operationId === tuple.operationId)
+    : undefined;
+  if (!operation) {
+    return {
+      ok: true,
+      action: "capability_search",
+      result: { found: false, reason: "operation_not_found" },
+    };
+  }
+
+  const withheldReasons = operationExecutabilityViolations(operation);
+  if (withheldReasons.length > 0) {
+    return {
+      ok: true,
+      action: "capability_search",
+      result: { found: false, reason: "operation_withheld", withheldReasons },
+    };
+  }
+  if (!operation.principalModes.includes(principalMode as never)) {
+    return {
+      ok: true,
+      action: "capability_search",
+      result: { found: false, reason: "principal_mode_not_accepted" },
+    };
+  }
+
+  const contractHashes =
+    versionRow.contract_hashes_json &&
+    typeof versionRow.contract_hashes_json === "object"
+      ? (versionRow.contract_hashes_json as Record<string, unknown>)
+      : {};
+  const contractHash = contractHashes[tuple.operationId];
+  if (typeof contractHash !== "string") {
+    return {
+      ok: true,
+      action: "capability_search",
+      result: { found: false, reason: "contract_hash_missing" },
+    };
+  }
+
+  // Exact-principal binding (R6/AE2): the requested mode must have its own
+  // ready binding — resolution NEVER falls back across modes. User-pinned
+  // bindings only satisfy the verified acting user.
+  const bindingRows = (await db
+    .select()
+    .from(capabilityCredentialBindings)
+    .where(
+      and(
+        eq(capabilityCredentialBindings.tenant_id, context.tenantId),
+        eq(capabilityCredentialBindings.definition_version_id, versionRow.id),
+      ),
+    )) as Array<typeof capabilityCredentialBindings.$inferSelect>;
+  const binding = bindingRows.find(
+    (row) =>
+      row.principal_mode === principalMode &&
+      row.readiness === "ready" &&
+      (row.subject_user_id === null ||
+        (context.actorUserId !== undefined &&
+          row.subject_user_id === context.actorUserId)),
+  );
+  if (!binding) {
+    return {
+      ok: true,
+      action: "capability_search",
+      result: { found: false, reason: "no_ready_binding_for_principal" },
+    };
+  }
+
+  return {
+    ok: true,
+    action: "capability_search",
+    result: {
+      found: true,
+      twcap: formatTwcapRef({
+        namespace: definition.namespace,
+        class: definition.class,
+        slug: definition.slug,
+        version: String(versionRow.version),
+        operationId: operation.operationId,
+        contractHash,
+      }),
+      contractHash,
+      operationId: operation.operationId,
+      effect: operation.effect,
+      approvalPolicy: operation.approvalPolicy,
+      costClass: operation.costClass,
+      latencyClass: operation.latencyClass,
+      outputClass: operation.outputClass,
+      principalMode,
+      bindingId: binding.id,
+      definitionVersionId: versionRow.id,
+      version: versionRow.version,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// connection_research
+// ---------------------------------------------------------------------------
+
+function definitionSummary(
+  row: CapabilityDefinitionRow,
+): ConnectionResearchDefinitionSummary {
+  return {
+    id: row.id,
+    namespace: row.namespace,
+    class: row.class,
+    slug: row.slug,
+    displayName: row.display_name,
+    status: row.status,
+    tenantScoped: row.tenant_id !== null,
+  };
+}
+
+function proposalSummary(
+  row: CapabilityConnectionProposalRow,
+): ConnectionResearchProposalSummary {
+  return {
+    id: row.id,
+    status: row.status,
+    payloadFingerprint: row.payload_fingerprint,
+    definitionId: row.definition_id ?? null,
+    createdAt: row.created_at ? row.created_at.toISOString() : null,
+  };
+}
+
+async function runConnectionResearch(
+  db: ReturnType<typeof getDb>,
+  context: CapabilityCallerContextPayload,
+  event: CapabilityControlEvent,
+): Promise<CapabilityControlResponse> {
+  const query = asString(event.query);
+  if (!query && !event.proposal) {
+    return reject(
+      "invalid_query",
+      "connection_research requires a non-empty query (or a proposal to record)",
+    );
+  }
+
+  const search = await searchCapabilityRuntime(db, {
+    tenantId: context.tenantId,
+    query,
+    allowExternal: event.allowExternal === true,
+    // External discovery is a later slice — the lib degrades `state`.
+    externalFetcher: undefined,
+  });
+
+  const result: ConnectionResearchResultOut = {
+    state: search.state,
+    ...(search.stateDetail !== undefined
+      ? { stateDetail: search.stateDetail }
+      : {}),
+    definitions: search.definitions.map(definitionSummary),
+    proposals: search.proposals.map(proposalSummary),
+  };
+
+  // Optional draft-proposal creation: evidence only. Admission (signing),
+  // bindings, and dispatch are structurally absent from this Lambda.
+  if (event.proposal !== undefined) {
+    const raw = event.proposal;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return reject("invalid_proposal", "proposal must be an object");
+    }
+    const record = raw as Record<string, unknown>;
+    const created = await createConnectionProposal(db, {
+      tenantId: context.tenantId,
+      definitionId: asString(record.definitionId) || null,
+      payload: record.payload,
+      sourceUrls: Array.isArray(record.sourceUrls)
+        ? (record.sourceUrls as string[])
+        : [],
+      actor: { type: "agent", id: context.agentId },
+    });
+    result.createdProposal = {
+      outcome: created.outcome,
+      ...(created.reason ? { reason: created.reason } : {}),
+      ...(created.proposal
+        ? {
+            proposalId: created.proposal.id,
+            payloadFingerprint: created.proposal.payload_fingerprint,
+          }
+        : {}),
+    };
+  }
+
+  return { ok: true, action: "connection_research", result };
+}
+
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
+
+export async function handleCapabilityControl(
+  event: CapabilityControlEvent,
+  deps: CapabilityControlDeps = {},
+): Promise<CapabilityControlResponse> {
+  const action = asString(event.action);
+  if (!CAPABILITY_CONTROL_ACTIONS.includes(action as CapabilityControlAction)) {
+    return reject("unknown_action");
+  }
+
+  // Fail-closed identity: absent key or absent/forged context both reject
+  // with a uniform reason; the typed detail goes to the structured log only.
+  const publicKeyPem =
+    deps.publicKeyPem !== undefined
+      ? deps.publicKeyPem
+      : readCapabilityPublicKey();
+  if (!publicKeyPem) {
+    console.error(
+      `${LOG_PREFIX} CAPABILITY_SIGNING_PUBLIC_KEY unavailable — rejecting`,
+    );
+    return reject("invalid_caller_context");
+  }
+  const contextValue = asString(event.callerContext);
+  if (!contextValue) {
+    return reject("invalid_caller_context");
+  }
+  const verified = verifyCapabilityCallerContext({
+    contextValue,
+    publicKeyPem,
+    nowMs: deps.nowMs ?? Date.now(),
+  });
+  if (!verified.ok) {
+    console.warn(
+      `${LOG_PREFIX} caller-context rejected: ${verified.reason} (action=${action})`,
+    );
+    return reject("invalid_caller_context");
+  }
+  const context = verified.payload;
+
+  const db = deps.db ?? getDb();
+  try {
+    if (action === "capability_search") {
+      return await runCapabilitySearch(db, context, event);
+    }
+    return await runConnectionResearch(db, context, event);
+  } catch (err) {
+    console.error(
+      `${LOG_PREFIX} ${action} failed for tenant ${context.tenantId}:`,
+      err,
+    );
+    return reject(
+      "internal_error",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+/** Lambda entry (direct InvokeCommand, RequestResponse). */
+export async function handler(
+  event: CapabilityControlEvent,
+): Promise<CapabilityControlResponse> {
+  return handleCapabilityControl(event ?? {});
+}
