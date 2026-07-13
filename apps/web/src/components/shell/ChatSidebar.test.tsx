@@ -106,6 +106,7 @@ const {
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
+    EntityDossierQuery: Symbol("EntityDossierQuery"),
     MarkThreadsReadMutation: Symbol("MarkThreadsReadMutation"),
     PinThreadMutation: Symbol("PinThreadMutation"),
     PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
