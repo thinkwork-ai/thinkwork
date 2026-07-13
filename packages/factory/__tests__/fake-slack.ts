@@ -6,6 +6,8 @@
 
 import {
   withMentions,
+  type SlackActionHandler,
+  type SlackBlockAction,
   type SlackGateway,
   type SlackInboundMessage,
   type SlackMessageHandler,
@@ -18,14 +20,26 @@ export interface SlackPost {
   text: string;
   threadTs?: string;
   mentionUserIds?: string[];
+  /** Block Kit blocks, when the post carried an answer form. */
+  blocks?: unknown[];
   /** The ts this post was assigned. */
   ts: string;
 }
 
+/** A recorded chat.update call (button-strip after an answered form). */
+export interface SlackUpdate {
+  channel: string;
+  ts: string;
+  text: string;
+  blocks?: unknown[];
+}
+
 export class FakeSlackGateway implements SlackGateway {
   posts: SlackPost[] = [];
+  updates: SlackUpdate[] = [];
   started = false;
   private handler: SlackMessageHandler | null = null;
+  private actionHandler: SlackActionHandler | null = null;
   private seq = 1;
   botUserId = "UBOT";
 
@@ -41,9 +55,19 @@ export class FakeSlackGateway implements SlackGateway {
       text: withMentions(text, opts?.mentionUserIds),
       threadTs: opts?.threadTs,
       mentionUserIds: opts?.mentionUserIds,
+      blocks: opts?.blocks,
       ts,
     });
     return ts;
+  }
+
+  async updateMessage(
+    channel: string,
+    ts: string,
+    text: string,
+    blocks?: unknown[],
+  ): Promise<void> {
+    this.updates.push({ channel, ts, text, blocks });
   }
 
   postThreadReply(
@@ -57,6 +81,10 @@ export class FakeSlackGateway implements SlackGateway {
 
   onMessage(handler: SlackMessageHandler): void {
     this.handler = handler;
+  }
+
+  onAction(handler: SlackActionHandler): void {
+    this.actionHandler = handler;
   }
 
   async start(): Promise<void> {
@@ -79,6 +107,13 @@ export class FakeSlackGateway implements SlackGateway {
   async deliver(message: SlackInboundMessage): Promise<void> {
     if (this.handler === null) throw new Error("no onMessage handler registered");
     await this.handler(message);
+  }
+
+  /** Simulate a block_actions button click arriving over Socket Mode. */
+  async emitAction(action: SlackBlockAction): Promise<void> {
+    if (this.actionHandler === null)
+      throw new Error("no onAction handler registered");
+    await this.actionHandler(action);
   }
 
   /** Posts that carried an @mention (escalations). */

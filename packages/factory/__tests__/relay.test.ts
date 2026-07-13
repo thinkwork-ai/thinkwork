@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLogger, type Logger } from "../src/logger.js";
 import { handoffMarker } from "../src/phases/prompts.js";
 import {
+  relayAnswer,
   relayInboundMessage,
   SLACK_RELAY_MARKER_PREFIX,
   type RelayDeps,
@@ -262,5 +263,45 @@ describe("relayInboundMessage — the answer round-trip", () => {
         .filter((w) => w.args[1].startsWith("handoff:")).length,
     ).toBe(batonWritesAfterFirst);
     void issue;
+  });
+
+  it("relayAnswer via a button produces the same baton + mirror as a typed message", async () => {
+    // Parity by construction: the button path calls the SAME core the typed
+    // path does — assert the injected Linear artifacts are byte-identical.
+    const typed = setup();
+    await relayInboundMessage(
+      {
+        channel: CHANNEL,
+        threadTs: THREAD_TS,
+        ts: "1700.000200",
+        userId: OPERATOR,
+        text: "Q1: Read-only (drive.readonly)",
+      },
+      typed.deps,
+    );
+
+    // Fresh store row for the button run (same issue shape, separate fakes).
+    store.deleteSlackThread(typed.issue.id);
+    const clicked = setup();
+    const result = await relayAnswer(clicked.deps, {
+      channel: CHANNEL,
+      threadTs: THREAD_TS,
+      identifier: clicked.issue.identifier,
+      issueId: clicked.issue.id,
+      userId: OPERATOR,
+      answer: "Q1: Read-only (drive.readonly)",
+      source: "button",
+    });
+    expect(result.relayed).toBe(true);
+
+    const artifacts = (linear: (typeof typed)["linear"]) =>
+      linear.writesOf("createComment").map((w) => w.args[1]);
+    expect(artifacts(clicked.linear)).toEqual(artifacts(typed.linear));
+
+    // Buttons don't advance the message-ts high-water mark — that is the
+    // typed path's idempotency; clicks rely on the no-open-question check.
+    expect(
+      store.getSlackThreadByIssue(clicked.issue.id)!.last_relayed_ts,
+    ).toBeNull();
   });
 });

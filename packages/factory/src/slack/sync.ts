@@ -11,6 +11,9 @@
  *   - handleInbound(message): route an inbound Socket Mode message — a bare
  *     `status` keyword answers with the issue's state; anything else goes to
  *     the inbound relay (the answer round-trip).
+ *   - handleAction(action): route an answer-form button click (block_actions
+ *     over the same Socket Mode connection) — option/retry buttons run the
+ *     shared relay core; "Other…" posts typing instructions.
  *
  * Outbound posts are deduped with idempotency keys persisted on the
  * slack_threads row (last_escalated_key / last_milestone_key), so repeated
@@ -22,8 +25,20 @@ import type { Logger } from "../logger.js";
 import type { EngineAction } from "../phases/engine.js";
 import type { PollCandidate } from "../linear/poller.js";
 import type { FactoryStore } from "../store/db.js";
-import type { SlackGateway, SlackInboundMessage } from "./client.js";
-import { relayInboundMessage, type RelayDeps } from "./relay.js";
+import type {
+  SlackBlockAction,
+  SlackGateway,
+  SlackInboundMessage,
+} from "./client.js";
+import {
+  buildQuestionBlocks,
+  buildRetryBlocks,
+  parseAnswerForm,
+  OTHER_ACTION_ID,
+  RETRY_ACTION_ID,
+  type AnswerButtonValue,
+} from "./questions.js";
+import { relayAnswer, relayInboundMessage, type RelayDeps } from "./relay.js";
 import {
   buildIssueStatus,
   formatIssueStatusLive,
@@ -177,6 +192,12 @@ export interface SlackSync {
   syncCandidate(candidate: PollCandidate, action: EngineAction): Promise<void>;
   handleInbound(message: SlackInboundMessage): Promise<void>;
   /**
+   * Route an answer-form button click (`block_actions` over Socket Mode):
+   * option/retry buttons run the shared relay core; "Other…" posts typing
+   * instructions. Malformed or unmapped clicks log and are ignored.
+   */
+  handleAction(action: SlackBlockAction): Promise<void>;
+  /**
    * Post a terminal closing note into an issue's thread and nothing else — the
    * store-side un-enrollment (deleting the thread row + winding down workers)
    * is the daemon's job. No-op when the issue has no mapped thread. Best-effort:
@@ -246,15 +267,29 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     } else {
       body = `Blocked on \`${NEEDS_USER}\` with no recorded question — see ${link} in Linear.`;
     }
-    await postEscalation(
-      ref,
-      `${link} needs an answer (\`${NEEDS_USER}\`) — reply here to answer, \`question\` to re-show it.\n\n${body}`,
-      threadDeps,
-    );
+    const text = `${link} needs an answer (\`${NEEDS_USER}\`) — reply here to answer, \`question\` to re-show it.\n\n${body}`;
+    // Interactive answer form: a worker question carrying a parseable
+    // ```answers fence renders as option buttons; everything else (a daemon
+    // factory-block ceiling, a fence-less question) gets the retry/Other pair.
+    // The plain text stays as the notification fallback either way.
+    const form = question !== null ? parseAnswerForm(question.body) : null;
+    const blocks =
+      form !== null
+        ? buildQuestionBlocks(candidate.issue.identifier, key, form, text)
+        : buildRetryBlocks(candidate.issue.identifier, key, text);
+    const escalationTs = await postEscalation(ref, text, threadDeps, blocks);
     deps.store.setSlackThreadMarker(candidate.issue.id, "last_escalated_key", key);
+    // Remember the escalation MESSAGE ts so a button click can chat.update it
+    // (strip the buttons once answered — no double-fire surface left behind).
+    deps.store.setSlackThreadMarker(
+      candidate.issue.id,
+      "last_escalated_ts",
+      escalationTs,
+    );
     deps.log.info("slack escalation posted", {
       issue: candidate.issue.identifier,
       key,
+      form: form !== null,
     });
   }
 
@@ -404,6 +439,110 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
       }
       // Otherwise: the answer round-trip.
       await relayInboundMessage(message, relayDeps);
+    },
+
+    async handleAction(action) {
+      // A click on an escalation is always inside a mapped thread (escalations
+      // are thread replies). No thread ts / no row → some other message; ignore.
+      if (action.threadTs === null) {
+        deps.log.debug("slack action: no thread ts — ignored", {
+          actionId: action.actionId,
+        });
+        return;
+      }
+      const row = deps.store.getSlackThreadByThreadTs(
+        action.channel,
+        action.threadTs,
+      );
+      if (row === undefined) {
+        deps.log.debug("slack action: unmapped thread — ignored", {
+          threadTs: action.threadTs,
+          actionId: action.actionId,
+        });
+        return;
+      }
+
+      // Button values are OUR JSON — but be tolerant anyway (a stale message
+      // from an older build, a re-installed app): malformed → log + ignore.
+      let value: AnswerButtonValue;
+      try {
+        const parsed: unknown = JSON.parse(action.value);
+        if (typeof parsed !== "object" || parsed === null) throw new Error("not an object");
+        value = parsed as AnswerButtonValue;
+      } catch {
+        deps.log.warn("slack action: malformed button value — ignored", {
+          issue: row.identifier,
+          actionId: action.actionId,
+          value: action.value.slice(0, 200),
+        });
+        return;
+      }
+
+      // "Other…" — the escape hatch: instruct, relay nothing, change nothing.
+      if (action.actionId === OTHER_ACTION_ID) {
+        await deps.slack
+          .postThreadReply(
+            action.channel,
+            action.threadTs,
+            "Reply in this thread with your answer — it will be relayed verbatim as the operator answer.",
+          )
+          .catch((e: unknown) =>
+            deps.log.warn("slack action: other-instruction post failed", {
+              issue: row.identifier,
+              error: String(e),
+            }),
+          );
+        return;
+      }
+
+      // Resolve the answer text for the two relaying buttons.
+      let answer: string;
+      if (action.actionId === RETRY_ACTION_ID) {
+        answer =
+          "Retry: operator cleared the blocker via Slack without additional guidance — re-attempt from the newest baton and prior evidence.";
+      } else if (typeof value.answer === "string" && value.answer.trim() !== "") {
+        answer = value.answer;
+      } else {
+        deps.log.warn("slack action: option button without an answer value — ignored", {
+          issue: row.identifier,
+          actionId: action.actionId,
+        });
+        return;
+      }
+
+      // The shared relay core: authorization → question-state → baton →
+      // clear blocker → mirror → ack. Its no-open-question check makes a
+      // SECOND click a polite no-op (the first relay removed `Needs User`),
+      // so clicks need no ts high-water mark of their own.
+      const result = await relayAnswer(relayDeps, {
+        channel: action.channel,
+        threadTs: action.threadTs,
+        identifier: row.identifier,
+        issueId: row.issue_id,
+        userId: action.userId,
+        answer,
+        source: "button",
+      });
+
+      // On success, strip the buttons from the escalation message so the form
+      // cannot fire again — replace it with an answered summary. Best-effort:
+      // the answer is already injected; a failed edit only leaves stale
+      // buttons, and a re-click is a polite no-op anyway.
+      if (result.relayed && row.last_escalated_ts !== null) {
+        const excerpt = answer.trim().replace(/\s+/g, " ").slice(0, 120);
+        const summary = `✅ Answered by <@${action.userId}>: ${excerpt}`;
+        await deps.slack
+          .updateMessage(action.channel, row.last_escalated_ts, summary, [
+            { type: "section", text: { type: "mrkdwn", text: summary } },
+          ])
+          .catch((e: unknown) =>
+            deps.log.warn("slack action: escalation update failed — stale buttons remain", {
+              issue: row.identifier,
+              ts: row.last_escalated_ts,
+              error: String(e),
+            }),
+          );
+      }
     },
   };
 }
