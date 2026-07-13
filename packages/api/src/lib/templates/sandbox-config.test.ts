@@ -50,6 +50,15 @@ describe("validateTemplateSandbox", () => {
     if (!r.ok) expect(r.error).toMatch(/must be one of/);
   });
 
+  it("rejects capability-private as a template env (runtime-selected only, THINK-280 U4)", () => {
+    const r = validateTemplateSandbox({ environment: "capability-private" });
+    expect(r.ok).toBe(false);
+    if (!r.ok)
+      expect(r.error).toMatch(
+        /capability-private is selected per-invocation from a signed capability manifest/,
+      );
+  });
+
   it("rejects missing environment", () => {
     const r = validateTemplateSandbox({});
     expect(r.ok).toBe(false);
