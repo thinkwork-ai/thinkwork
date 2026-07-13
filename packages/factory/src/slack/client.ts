@@ -108,6 +108,12 @@ export interface SlackGateway {
     text: string,
     blocks?: unknown[],
   ): Promise<void>;
+  /**
+   * Upload local files (screenshots) inline into a thread via files.uploadV2.
+   * Requires the `files:write` bot scope — a missing scope surfaces as a
+   * Slack `missing_scope` error the caller acks (U10 documents the setup).
+   */
+  uploadFiles(channel: string, threadTs: string, paths: string[]): Promise<void>;
   /** Register the single inbound-message handler (Socket Mode). */
   onMessage(handler: SlackMessageHandler): void;
   /** Register the single block-action (button click) handler (Socket Mode). */
@@ -277,6 +283,16 @@ export async function createSlackGateway(
         ts,
         text,
         ...(blocks !== undefined ? { blocks: blocks as never } : {}),
+      });
+    },
+
+    async uploadFiles(channel, threadTs, paths) {
+      if (paths.length === 0) return;
+      const { basename } = await import("node:path");
+      await web.files.uploadV2({
+        channel_id: channel,
+        thread_ts: threadTs,
+        file_uploads: paths.map((p) => ({ file: p, filename: basename(p) })),
       });
     },
 

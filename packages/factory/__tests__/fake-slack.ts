@@ -37,6 +37,9 @@ export interface SlackUpdate {
 export class FakeSlackGateway implements SlackGateway {
   posts: SlackPost[] = [];
   updates: SlackUpdate[] = [];
+  uploads: { channel: string; threadTs: string; paths: string[] }[] = [];
+  /** When set, uploadFiles throws (missing files:write scope, etc.). */
+  uploadError: Error | null = null;
   started = false;
   private handler: SlackMessageHandler | null = null;
   private actionHandler: SlackActionHandler | null = null;
@@ -77,6 +80,15 @@ export class FakeSlackGateway implements SlackGateway {
     opts?: Omit<SlackPostOptions, "threadTs">,
   ): Promise<string> {
     return this.postMessage(channel, text, { ...opts, threadTs });
+  }
+
+  async uploadFiles(
+    channel: string,
+    threadTs: string,
+    paths: string[],
+  ): Promise<void> {
+    if (this.uploadError !== null) throw this.uploadError;
+    this.uploads.push({ channel, threadTs, paths });
   }
 
   onMessage(handler: SlackMessageHandler): void {

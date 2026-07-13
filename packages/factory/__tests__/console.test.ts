@@ -23,7 +23,9 @@ import {
 } from "../src/slack/console.js";
 import { decideAction } from "../src/phases/engine.js";
 import type { GithubOps, PrDetail } from "../src/phases/evidence.js";
-import { createMergeExecutor } from "../src/slack/console.js";
+import { createInspectionExecutors, createMergeExecutor, newestImages } from "../src/slack/console.js";
+import { LocalTransport } from "../src/workers/transport.js";
+import { mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { createSteeringExecutors, formatElapsed } from "../src/slack/console.js";
 import { createSlackSync, type SlackSync } from "../src/slack/sync.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
@@ -669,5 +671,193 @@ describe("U5: merge executor", () => {
     expect(gh.merges).toEqual([]);
     const final = h.slack.updates[h.slack.updates.length - 1]?.text ?? "";
     expect(final).toContain("already merged");
+  });
+});
+
+describe("U6: inspection executors", () => {
+  function inspectionHarness(
+    issue: FakeIssue,
+    opts: { github?: Partial<GithubOps> } = {},
+  ) {
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const github: GithubOps = {
+      prsForBranch: async () => [],
+      prView: async () => null,
+      prChecks: async () => ({ ok: true, summary: "" }),
+      prMerge: async () => ({ ok: true, output: "" }),
+      ...opts.github,
+    };
+    const artifactsRoot = join(dir, "artifacts");
+    const sync = createSlackSync({
+      slack,
+      store,
+      gateway,
+      channelId: CHANNEL,
+      operatorUserIds: [OPERATOR],
+      log,
+      consoleExecutors: createInspectionExecutors({
+        gateway,
+        store,
+        github,
+        slack,
+        transport: new LocalTransport(),
+        artifactsDirFor: (id) => join(artifactsRoot, id),
+        log,
+      }),
+    });
+    return { gateway, slack, sync, artifactsRoot };
+  }
+
+  async function enrollFor(sync: SlackSync, issue: FakeIssue): Promise<string> {
+    await sync.syncCandidate(candidateFor(issue), {
+      kind: "advance",
+      toStatus: issue.state,
+      evidence: "seed",
+    });
+    return store.getSlackThreadByIssue(issue.id)!.thread_ts;
+  }
+
+  it("AE4: artifacts present → screenshots upload inline into the thread", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-80",
+      state: "Verification",
+      labels: ["Claude"],
+      comments: [
+        { id: "h1", body: "handoff:THINK-80:Done\n\nGoal reached; everything verified.", authorId: "viewer-daemon" },
+      ],
+    });
+    const h = inspectionHarness(issue);
+    const threadTs = await enrollFor(h.sync, issue);
+    const artDir = join(h.artifactsRoot, "THINK-80");
+    mkdirSync(artDir, { recursive: true });
+    writeFileSync(join(artDir, "01-login.png"), "png");
+    writeFileSync(join(artDir, "02-board.png"), "png");
+    writeFileSync(join(artDir, "notes.txt"), "not an image");
+
+    await h.sync.handleInbound({
+      channel: CHANNEL, threadTs, ts: "9.1", userId: OPERATOR, text: "result",
+    });
+
+    expect(h.slack.uploads).toHaveLength(1);
+    expect(h.slack.uploads[0].threadTs).toBe(threadTs);
+    expect(h.slack.uploads[0].paths).toHaveLength(2);
+    expect(h.slack.uploads[0].paths.every((p) => p.endsWith(".png"))).toBe(true);
+    // The final ack (edited ⏳ line) carries the handoff summary.
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(JSON.stringify(final.blocks)).toContain("Goal reached");
+  });
+
+  it("result with no artifacts says so plainly", async () => {
+    const issue = makeIssue({ identifier: "THINK-81", state: "Verification", labels: ["Claude"] });
+    const h = inspectionHarness(issue);
+    const threadTs = await enrollFor(h.sync, issue);
+    await h.sync.handleInbound({
+      channel: CHANNEL, threadTs, ts: "9.2", userId: OPERATOR, text: "result",
+    });
+    expect(h.slack.uploads).toHaveLength(0);
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(JSON.stringify(final.blocks)).toContain("No screenshots on file");
+  });
+
+  it("result surfaces merged PR links from the issue's attempt branches", async () => {
+    const issue = makeIssue({ identifier: "THINK-82", state: "Done", labels: ["Claude"] });
+    // enroll while active
+    issue.state = "Verification";
+    const h = inspectionHarness(issue, {
+      github: {
+        prsForBranch: async () => [
+          { number: 42, state: "MERGED", url: "https://github.test/pull/42", mergedAt: "2026-07-13T00:00:00Z" },
+        ],
+      },
+    });
+    const threadTs = await enrollFor(h.sync, issue);
+    store.upsertIssue({
+      issueId: issue.id, identifier: issue.identifier, phase: "implement",
+      state: issue.state, lane: "Claude",
+    });
+    store.insertAttempt({
+      issueId: issue.id, phase: "implement", attemptNumber: 1,
+      state: "Succeeded", host: "local", pid: 1, branch: "auto/think-82-implement-a1",
+    });
+    await h.sync.handleInbound({
+      channel: CHANNEL, threadTs, ts: "9.3", userId: OPERATOR, text: "result",
+    });
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(JSON.stringify(final.blocks)).toContain("pull/42");
+  });
+
+  it("upload failure is acked, result still renders (R11)", async () => {
+    const issue = makeIssue({ identifier: "THINK-83", state: "Verification", labels: ["Claude"] });
+    const h = inspectionHarness(issue);
+    const threadTs = await enrollFor(h.sync, issue);
+    const artDir = join(h.artifactsRoot, "THINK-83");
+    mkdirSync(artDir, { recursive: true });
+    writeFileSync(join(artDir, "01-x.png"), "png");
+    h.slack.uploadError = new Error("missing_scope: files:write");
+    await h.sync.handleInbound({
+      channel: CHANNEL, threadTs, ts: "9.4", userId: OPERATOR, text: "result",
+    });
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(JSON.stringify(final.blocks)).toContain("upload failed");
+    expect(JSON.stringify(final.blocks)).toContain("missing_scope");
+  });
+
+  it("logs tails the newest attempt log via the transport, fenced", async () => {
+    const issue = makeIssue({ identifier: "THINK-84", state: "In Progress", labels: ["Claude"] });
+    const h = inspectionHarness(issue);
+    const threadTs = await enrollFor(h.sync, issue);
+    const logPath = join(dir, "worker.log");
+    writeFileSync(logPath, Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n"));
+    store.upsertIssue({
+      issueId: issue.id, identifier: issue.identifier, phase: "implement",
+      state: issue.state, lane: "Claude",
+    });
+    store.insertAttempt({
+      issueId: issue.id, phase: "implement", attemptNumber: 2,
+      state: "Running", host: "local", pid: 9, logPath,
+    });
+    await h.sync.handleInbound({
+      channel: CHANNEL, threadTs, ts: "9.5", userId: OPERATOR, text: "logs 10",
+    });
+    const texts = h.slack.repliesIn(threadTs).map((p) => JSON.stringify(p.blocks ?? p.text));
+    const logReply = texts.find((t) => t.includes("line 60"));
+    expect(logReply).toBeDefined();
+    expect(logReply).not.toContain("line 50"); // only the last 10 lines
+    expect(logReply).toContain("attempt 2");
+  });
+
+  it("logs with no attempt on file says so", async () => {
+    const issue = makeIssue({ identifier: "THINK-85", state: "In Progress", labels: ["Claude"] });
+    const h = inspectionHarness(issue);
+    const threadTs = await enrollFor(h.sync, issue);
+    await h.sync.handleInbound({
+      channel: CHANNEL, threadTs, ts: "9.6", userId: OPERATOR, text: "logs",
+    });
+    expect(lastReplyText(h.slack, threadTs)).toContain("no worker log yet");
+  });
+});
+
+function lastReplyText(slack: FakeSlackGateway, threadTs: string): string {
+  const replies = slack.repliesIn(threadTs);
+  return replies[replies.length - 1]?.text ?? "";
+}
+
+describe("newestImages", () => {
+  it("returns newest-first, images only, capped", () => {
+    const d = join(dir, "imgs");
+    mkdirSync(d, { recursive: true });
+    for (let i = 1; i <= 12; i++) {
+      const p = join(d, `${String(i).padStart(2, "0")}-shot.png`);
+      writeFileSync(p, "x");
+      const t = new Date(2026, 0, i).getTime() / 1000;
+      utimesSync(p, t, t);
+    }
+    writeFileSync(join(d, "readme.md"), "x");
+    const imgs = newestImages(d, 10);
+    expect(imgs).toHaveLength(10);
+    expect(imgs[0]).toContain("12-shot.png");
+    expect(imgs.every((p) => p.endsWith(".png"))).toBe(true);
+    expect(newestImages(join(d, "missing"), 10)).toEqual([]);
   });
 });

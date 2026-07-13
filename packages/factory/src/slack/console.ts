@@ -16,11 +16,15 @@
  */
 
 import type { LinearGateway, LinearIssueSnapshot } from "../linear/client.js";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 import type { GithubOps } from "../phases/evidence.js";
+import type { HostTransport } from "../workers/transport.js";
 import type { Logger } from "../logger.js";
 import { findNewestBaton } from "../phases/prompts.js";
 import type { FactoryStore } from "../store/db.js";
-import { actions, section, type ButtonSpec, type SlackBlock } from "./blocks.js";
+import { actions, context, section, type ButtonSpec, type SlackBlock } from "./blocks.js";
 import type { SlackGateway } from "./client.js";
 import {
   buildAppendedBaton,
@@ -606,4 +610,186 @@ export function mergedPrNoteActions(): SlackBlock {
 /** A `Merge #N` button for surfaces that discovered an OPEN factory PR. */
 export function mergeButton(pr: number): ButtonSpec {
   return consoleButton("merge", { arg: String(pr), label: `🔀 Merge #${pr}` });
+}
+
+// ---------------------------------------------------------------------------
+// Inspection executors (U6): result / logs
+// ---------------------------------------------------------------------------
+
+export interface InspectionDeps {
+  gateway: LinearGateway;
+  store: FactoryStore;
+  github: GithubOps;
+  slack: SlackGateway;
+  transport: HostTransport;
+  /** Durable artifacts folder for an issue (config.getArtifactsDir). */
+  artifactsDirFor(identifier: string): string;
+  log: Logger;
+}
+
+/** Newest ≤`max` image files in a dir, by mtime desc. Missing dir → []. */
+export function newestImages(dir: string, max: number): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((f) => /\.(png|jpe?g|gif|webp)$/i.test(f))
+    .map((f) => {
+      const path = join(dir, f);
+      try {
+        return { path, mtime: statSync(path).mtimeMs };
+      } catch {
+        return null;
+      }
+    })
+    .filter((e): e is { path: string; mtime: number } => e !== null)
+    .sort((a, b) => b.mtime - a.mtime)
+    .slice(0, max)
+    .map((e) => e.path);
+}
+
+const HANDOFF_SUMMARY_MAX = 1500;
+
+/** URLs in comment bodies worth surfacing as result links. */
+function collectLinks(comments: readonly { body: string }[]): {
+  reports: string[];
+  docs: string[];
+} {
+  const reports = new Set<string>();
+  const docs = new Set<string>();
+  for (const c of comments) {
+    for (const m of c.body.matchAll(/https?:\/\/[^\s)>\]"']+/g)) {
+      const url = m[0];
+      if (/dogfood/i.test(url)) reports.add(url);
+      else if (/linear\.app\/.+\/document\//.test(url)) docs.add(url);
+    }
+  }
+  return { reports: [...reports].slice(-3), docs: [...docs].slice(-1) };
+}
+
+/**
+ * The inspection verbs (R12–R14). Read-only, but STILL allowlist-gated by the
+ * pipeline (R17): log tails and screenshots are disclosure.
+ */
+export function createInspectionExecutors(
+  deps: InspectionDeps,
+): Partial<Record<ConsoleVerb, ConsoleExecutor>> {
+  return {
+    // R12/R13: the newest phase artifact — handoff summary, merged PR links,
+    // report/Progress links, then inline screenshot uploads (≤10 newest).
+    result: async (ctx) => {
+      const comments = await deps.gateway
+        .listComments(ctx.issueId)
+        .catch(() => []);
+      // Newest handoff comment; the rolling ledger's prose as fallback.
+      let summary: string | null = null;
+      let summaryKind = "handoff";
+      for (let i = comments.length - 1; i >= 0; i--) {
+        const first = (comments[i].body.trimStart().split("\n", 1)[0] ?? "").trim();
+        if (first.startsWith(`handoff:${ctx.identifier}:`)) {
+          summary = comments[i].body;
+          break;
+        }
+      }
+      if (summary === null) {
+        for (let i = comments.length - 1; i >= 0; i--) {
+          const first = (comments[i].body.trimStart().split("\n", 1)[0] ?? "").trim();
+          if (first.startsWith("automation-ledger:")) {
+            summary = comments[i].body;
+            summaryKind = "ledger";
+            break;
+          }
+        }
+      }
+
+      // Merged PRs across this issue's attempt branches (newest 5 branches).
+      const branches = (
+        deps.store.db
+          .prepare(
+            "SELECT DISTINCT branch FROM attempts WHERE issue_id = ? AND branch IS NOT NULL ORDER BY id DESC LIMIT 5",
+          )
+          .all(ctx.issueId) as { branch: string }[]
+      ).map((r) => r.branch);
+      const prLinks: string[] = [];
+      for (const branch of branches) {
+        try {
+          for (const pr of await deps.github.prsForBranch(branch)) {
+            if (pr.state === "MERGED") prLinks.push(`<${pr.url}|#${pr.number}>`);
+          }
+        } catch {
+          // GitHub unavailable — the rest of the result still renders.
+        }
+      }
+      const { reports, docs } = collectLinks(comments);
+
+      const ref = refOf(ctx.issue);
+      const blocks: SlackBlock[] = [section(`*Result — ${ref}* (${ctx.issue.state})`)];
+      if (summary !== null) {
+        const body =
+          summary.length > HANDOFF_SUMMARY_MAX
+            ? summary.slice(0, HANDOFF_SUMMARY_MAX) + "\n_(truncated — full text in Linear)_"
+            : summary;
+        blocks.push(section(body));
+      } else {
+        blocks.push(section("_No handoff or ledger comment yet — no phase has completed._"));
+      }
+      const linkLines: string[] = [];
+      if (prLinks.length > 0) linkLines.push(`Merged PRs: ${prLinks.join(", ")}`);
+      if (reports.length > 0)
+        linkLines.push(`Report: ${reports.map((u) => `<${u}|dogfood report>`).join(", ")}`);
+      if (docs.length > 0) linkLines.push(`<${docs[0]}|Progress document>`);
+      if (linkLines.length > 0) blocks.push(section(linkLines.join("\n")));
+
+      // Screenshots: newest ≤10 from the durable artifacts folder (KTD5).
+      const images = newestImages(deps.artifactsDirFor(ctx.identifier), 10);
+      let uploadNote: string;
+      if (images.length === 0) {
+        uploadNote = "No screenshots on file for this issue (verify runs before the artifacts contract shipped leave none).";
+      } else {
+        try {
+          await deps.slack.uploadFiles(ctx.channel, ctx.threadTs, images);
+          uploadNote = `Uploaded ${images.length} screenshot${images.length === 1 ? "" : "s"} below.`;
+        } catch (e) {
+          uploadNote = `⚠️ Screenshot upload failed (${images.length} on file): ${String(e).slice(0, 300)}`;
+          deps.log.warn("result: screenshot upload failed", {
+            issue: ctx.identifier,
+            error: String(e),
+          });
+        }
+      }
+      blocks.push(context(uploadNote));
+      const fallback = `Result — ${ctx.identifier} (${summaryKind}${images.length > 0 ? `, ${images.length} screenshots` : ""})`;
+      return { text: fallback, blocks };
+    },
+
+    // R14: the newest worker log's tail, sized for a phone.
+    logs: async (ctx) => {
+      const n = Math.min(Math.max(Number(ctx.arg) || 40, 5), 400);
+      const attempt = deps.store.db
+        .prepare(
+          "SELECT phase, attempt_number, state, log_path FROM attempts WHERE issue_id = ? AND log_path IS NOT NULL ORDER BY active DESC, id DESC LIMIT 1",
+        )
+        .get(ctx.issueId) as
+        | { phase: string; attempt_number: number; state: string; log_path: string }
+        | undefined;
+      if (attempt === undefined) {
+        return { text: `${refOf(ctx.issue)} has no worker log yet.` };
+      }
+      const tail = await deps.transport.readTail(attempt.log_path, n);
+      if (tail.trim() === "") {
+        return {
+          text: `${refOf(ctx.issue)}: log for ${attempt.phase} attempt ${attempt.attempt_number} is empty or gone (${attempt.log_path}).`,
+        };
+      }
+      const header = `*Logs — ${ctx.identifier}* ${attempt.phase} attempt ${attempt.attempt_number} (${attempt.state}), last ${n} lines:`;
+      // Fence the tail; section() truncates past the Slack limit with a note.
+      return {
+        text: `Logs — ${ctx.identifier} (${attempt.phase} #${attempt.attempt_number})`,
+        blocks: [section(header), section("```\n" + tail + "\n```")],
+      };
+    },
+  };
 }
