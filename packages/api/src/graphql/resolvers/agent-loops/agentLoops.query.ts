@@ -7,7 +7,8 @@ import {
   agentLoopRowToGraphql,
   clampAgentLoopQueryLimit,
   normalizeAgentLoopEnum,
-  resolveAgentLoopTenantId,
+  resolveAgentLoopReadScope,
+  type AgentLoopAccessScope,
 } from "./types.js";
 
 /**
@@ -33,6 +34,7 @@ export async function agentLoops(
   _parent: unknown,
   args: {
     tenantId: string;
+    scope?: AgentLoopAccessScope | null;
     lifecycleStatus?: string | null;
     enabled?: boolean | null;
     limit?: number | null;
@@ -40,9 +42,17 @@ export async function agentLoops(
   },
   ctx: GraphQLContext,
 ): Promise<unknown[]> {
-  const tenantId = await resolveAgentLoopTenantId(ctx, args.tenantId);
+  const readScope = await resolveAgentLoopReadScope(
+    ctx,
+    args.tenantId,
+    args.scope ?? "USER",
+  );
+  const tenantId = readScope.tenantId;
   await ensureSystemAutomations(ctx, tenantId);
   const conditions = [eq(agentLoopsTable.tenant_id, tenantId)];
+  if (readScope.ownerUserId) {
+    conditions.push(eq(agentLoopsTable.owner_user_id, readScope.ownerUserId));
+  }
 
   const lifecycleStatus = normalizeAgentLoopEnum(args.lifecycleStatus);
   if (lifecycleStatus) {

@@ -5,15 +5,11 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
-import { resolveCallerUserId } from "../core/resolve-auth-user.js";
-import {
-  assertCanReadWorkflowTenant,
-  isWorkflowHiddenFromCaller,
-} from "./types.js";
+import { canReadWorkflow, type WorkflowReadScope } from "./types.js";
 
 export async function workflowRun(
   _parent: unknown,
-  args: { id: string },
+  args: { id: string; scope?: WorkflowReadScope | null },
   ctx: GraphQLContext,
 ): Promise<unknown | null> {
   const [row] = await db
@@ -23,20 +19,19 @@ export async function workflowRun(
     .limit(1);
 
   if (row) {
-    await assertCanReadWorkflowTenant(ctx, row.tenant_id);
-    // THINK-193 U3: runs of another user's personal automation read as
-    // absent — the run detail (preflight plan, evidence) is owner-only.
     const [workflow] = await db
       .select({
+        tenant_id: workflowsTable.tenant_id,
         visibility: workflowsTable.visibility,
         owner_user_id: workflowsTable.owner_user_id,
+        source_agent_loop_id: workflowsTable.source_agent_loop_id,
       })
       .from(workflowsTable)
       .where(eq(workflowsTable.id, row.workflow_id))
       .limit(1);
     if (
-      workflow &&
-      isWorkflowHiddenFromCaller(workflow, await resolveCallerUserId(ctx))
+      !workflow ||
+      !(await canReadWorkflow(ctx, workflow, args.scope ?? "USER"))
     ) {
       return null;
     }

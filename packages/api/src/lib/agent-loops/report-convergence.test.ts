@@ -79,7 +79,12 @@ const unboundTargetSpec = normalizeTargetSpec({
 function baseInput(overrides: Record<string, unknown> = {}) {
   return {
     tenantId: "tenant-1",
-    loop: { id: "loop-12345678-rest", name: "Weekly Pipeline Report" },
+    loop: {
+      id: "loop-12345678-rest",
+      name: "Weekly Pipeline Report",
+      ownerUserId: "user-1",
+      ownerAgentId: null,
+    },
     version: {
       id: "version-1",
       routineActionsSpec: null,
@@ -158,6 +163,9 @@ describe("syncReportAutomationConvergence", () => {
       readiness_state: "ready",
       primary_trigger_family: "schedule",
       source_agent_loop_id: "loop-12345678-rest",
+      visibility: "agent_private",
+      owner_user_id: "user-1",
+      owner_agent_id: null,
     });
 
     const versionInsert = mocks.inserts[1].values;

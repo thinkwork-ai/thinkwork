@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   insertValues: vi.fn(),
   updateValues: vi.fn(),
   requireAdminOrServiceCaller: vi.fn(),
+  requireTenantMember: vi.fn(),
   resolveCallerUserId: vi.fn(),
   ensureThreadForWork: vi.fn(),
 }));
@@ -111,6 +112,7 @@ vi.mock("../../utils.js", () => ({
 
 vi.mock("../core/authz.js", () => ({
   requireAdminOrServiceCaller: mocks.requireAdminOrServiceCaller,
+  requireTenantMember: mocks.requireTenantMember,
 }));
 
 vi.mock("../core/resolve-auth-user.js", () => ({
@@ -142,6 +144,7 @@ beforeEach(() => {
   mocks.insertValues.mockReset();
   mocks.updateValues.mockReset();
   mocks.requireAdminOrServiceCaller.mockReset();
+  mocks.requireTenantMember.mockReset().mockResolvedValue("admin");
   mocks.resolveCallerUserId.mockReset().mockResolvedValue("user-1");
   mocks.ensureThreadForWork.mockReset().mockResolvedValue({
     threadId: "thread-1",
@@ -151,15 +154,37 @@ beforeEach(() => {
 });
 
 describe("AgentLoop resolvers", () => {
-  it("auth-gates manual run creation by loop tenant", async () => {
+  it("denies a tenant admin manual execution of another user's Automation on the user surface", async () => {
+    mocks.requireAdminOrServiceCaller.mockResolvedValue(undefined);
+    mocks.selectRows.mockResolvedValueOnce([
+      {
+        id: "loop-other",
+        tenant_id: "tenant-1",
+        owner_user_id: "user-other",
+        current_version_id: "version-1",
+      },
+    ]);
+
+    await expect(
+      triggerAgentLoopRun(
+        null,
+        { input: { agentLoopId: "loop-other" } },
+        ctx(),
+      ),
+    ).rejects.toThrow(/own automation|not found/i);
+    expect(mocks.insertValues).not.toHaveBeenCalled();
+  });
+
+  it("auth-gates owner manual run creation by tenant membership", async () => {
     mocks.selectRows.mockResolvedValueOnce([
       {
         id: "loop-1",
         tenant_id: "tenant-1",
+        owner_user_id: "user-1",
         current_version_id: "version-1",
       },
     ]);
-    mocks.requireAdminOrServiceCaller.mockRejectedValue(
+    mocks.requireTenantMember.mockRejectedValue(
       Object.assign(new Error("Tenant admin role required"), {
         extensions: { code: "FORBIDDEN" },
       }),
@@ -169,10 +194,9 @@ describe("AgentLoop resolvers", () => {
       triggerAgentLoopRun(null, { input: { agentLoopId: "loop-1" } }, ctx()),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
 
-    expect(mocks.requireAdminOrServiceCaller).toHaveBeenCalledWith(
+    expect(mocks.requireTenantMember).toHaveBeenCalledWith(
       expect.anything(),
       "tenant-1",
-      "trigger_agent_loop_run",
     );
     expect(mocks.insertValues).not.toHaveBeenCalled();
   });
@@ -188,6 +212,7 @@ describe("AgentLoop resolvers", () => {
             name: "Loop",
             enabled: true,
             lifecycle_status: "active",
+            owner_user_id: "user-1",
             current_version_id: "version-1",
             space_id: "loop-space-1",
           },

@@ -58,16 +58,19 @@ import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
 import {
   SettingsDeploymentStatusQuery,
   SettingsPluginCatalogQuery,
+  SettingsTenantMembersQuery,
 } from "@/lib/settings-queries";
 
 function mockWorkflowInventoryQueries({
   workflows,
   pluginCatalog = [],
   managedApplications = [],
+  tenantMembers = [],
 }: {
   workflows: unknown[];
   pluginCatalog?: unknown[];
   managedApplications?: unknown[];
+  tenantMembers?: unknown[];
 }) {
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
     if (query === SettingsWorkflowsQuery) {
@@ -97,6 +100,15 @@ function mockWorkflowInventoryQueries({
               managedApplications,
             },
           },
+        },
+      ];
+    }
+
+    if (query === SettingsTenantMembersQuery) {
+      return [
+        {
+          fetching: false,
+          data: { tenantMembers },
         },
       ];
     }
@@ -178,6 +190,40 @@ describe("WorkflowInventory", () => {
     expect(screen.queryByText("Step Functions routine")).toBeNull();
     expect(screen.queryByText("Version")).toBeNull();
     expect(screen.queryByText("Last run")).toBeNull();
+  });
+
+  it("shows the Automation flag and owning user in the operator inventory", () => {
+    mockWorkflowInventoryQueries({
+      workflows: [
+        {
+          id: "workflow-automation",
+          name: "Eric's pipeline report",
+          lifecycleStatus: "active",
+          ownerUserId: "user-eric",
+          sourceAgentLoopId: "loop-1",
+          primaryTriggerFamily: "schedule",
+          readinessState: "ready",
+          readinessReasons: [],
+          bindings: [],
+          triggers: [],
+        },
+      ],
+      tenantMembers: [
+        {
+          principalId: "user-eric",
+          user: {
+            id: "user-eric",
+            name: "Eric Odom",
+            email: "eric@example.com",
+          },
+        },
+      ],
+    });
+
+    render(<WorkflowInventory />);
+
+    expect(screen.getAllByText("Automation").length).toBeGreaterThan(0);
+    expect(screen.getByText("Eric Odom")).toBeTruthy();
   });
 
   it("links n8n bridge source badges to n8n workflows when no direct workflow id exists", () => {

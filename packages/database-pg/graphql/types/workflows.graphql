@@ -85,6 +85,16 @@ enum WorkflowEvidenceRedactionState {
   raw_allowed
 }
 
+"""
+Workflow inventory read scope. USER preserves normal visibility rules.
+OPERATOR includes every owner's private workflows and requires tenant-admin
+authorization on the server.
+"""
+enum WorkflowReadScope {
+  USER
+  OPERATOR
+}
+
 type Workflow {
   id: ID!
   tenantId: ID!
@@ -260,20 +270,22 @@ input TriggerWorkflowRunInput {
 extend type Query {
   workflows(
     tenantId: ID
+    scope: WorkflowReadScope = USER
     lifecycleStatus: WorkflowLifecycleStatus
     readinessState: WorkflowReadinessState
     limit: Int
     cursor: String
   ): [Workflow!]!
-  workflow(id: ID!): Workflow
+  workflow(id: ID!, scope: WorkflowReadScope = USER): Workflow
   workflowRuns(
     tenantId: ID
+    scope: WorkflowReadScope = USER
     workflowId: ID
     status: WorkflowRunStatus
     limit: Int
     cursor: String
   ): [WorkflowRun!]!
-  workflowRun(id: ID!): WorkflowRun
+  workflowRun(id: ID!, scope: WorkflowReadScope = USER): WorkflowRun
 }
 
 """

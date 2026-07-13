@@ -24,6 +24,7 @@ import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
 import {
   SettingsDeploymentStatusQuery,
   SettingsPluginCatalogQuery,
+  SettingsTenantMembersQuery,
 } from "@/lib/settings-queries";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import {
@@ -40,6 +41,9 @@ type WorkflowRow = {
   name: string;
   description?: string | null;
   lifecycleStatus: string;
+  ownerUserId?: string | null;
+  ownerAgentId?: string | null;
+  sourceAgentLoopId?: string | null;
   primaryTriggerFamily: string;
   currentVersionNumber?: number | null;
   currentVersion?: {
@@ -63,6 +67,13 @@ type WorkflowRow = {
 type WorkflowsData = {
   workflows: WorkflowRow[];
 };
+
+type WorkflowOwnerMember = {
+  principalId: string;
+  user?: { id: string; name?: string | null; email?: string | null } | null;
+};
+
+type WorkflowMembersData = { tenantMembers?: WorkflowOwnerMember[] };
 
 const N8N_WORKFLOWS_PATH = "/settings/plugins/n8n/workflows";
 const WORKFLOW_FILTER_COLUMNS = {
@@ -139,6 +150,11 @@ export function WorkflowInventory({
     query: SettingsDeploymentStatusQuery,
     requestPolicy: "cache-and-network",
   });
+  const [membersResult] = useQuery<WorkflowMembersData>({
+    query: SettingsTenantMembersQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
 
   const rows = useMemo(
     () => result.data?.workflows ?? [],
@@ -153,6 +169,16 @@ export function WorkflowInventory({
       (candidate) => candidate.key === "n8n",
     );
   const n8nLaunchUrl = n8nRuntime?.url ?? n8nCatalogEntry?.launchUrl ?? null;
+  const ownerLabels = useMemo(
+    () =>
+      new Map(
+        (membersResult.data?.tenantMembers ?? []).map((member) => [
+          member.user?.id ?? member.principalId,
+          member.user?.name || member.user?.email || member.principalId,
+        ]),
+      ),
+    [membersResult.data?.tenantMembers],
+  );
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const tokenFilterColumns = useMemo(
     () => buildWorkflowTokenFilterColumns(rows),
@@ -204,6 +230,39 @@ export function WorkflowInventory({
             ) : null}
           </div>
         ),
+      },
+      {
+        id: "automation",
+        header: "Automation",
+        meta: {
+          headClassName: "w-px whitespace-nowrap text-center",
+          cellClassName: "w-px whitespace-nowrap text-center",
+        },
+        cell: ({ row }) =>
+          row.original.sourceAgentLoopId ? (
+            <Badge variant="secondary" className="text-xs">
+              Automation
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: "owner",
+        header: "Owner",
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px max-w-[180px] truncate whitespace-nowrap",
+        },
+        cell: ({ row }) => {
+          const ownerId = row.original.ownerUserId;
+          const label = ownerId ? (ownerLabels.get(ownerId) ?? ownerId) : "—";
+          return (
+            <span className="text-muted-foreground" title={label}>
+              {label}
+            </span>
+          );
+        },
       },
       {
         id: "readinessStatus",
@@ -260,7 +319,7 @@ export function WorkflowInventory({
         ),
       },
     ],
-    [n8nLaunchUrl],
+    [n8nLaunchUrl, ownerLabels],
   );
 
   const loading = result.fetching && !result.data;

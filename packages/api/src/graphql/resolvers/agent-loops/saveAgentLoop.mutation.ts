@@ -32,6 +32,7 @@ import {
 import { syncReportAutomationConvergence } from "../../../lib/agent-loops/report-convergence.js";
 import { syncAgentLoopWebhookBinding } from "../../../lib/agent-loops/webhook-binding.js";
 import { agentLoopRowToGraphql, parseAwsJsonObject } from "./types.js";
+import type { AgentLoopAccessScope } from "./types.js";
 import { requireAgentLoopWriteAccess } from "./write-access.js";
 import {
   normalizeAutomationDraft,
@@ -64,7 +65,7 @@ type SaveAgentLoopInput = {
 
 export async function saveAgentLoop(
   _parent: unknown,
-  args: { input: SaveAgentLoopInput },
+  args: { input: SaveAgentLoopInput; scope?: AgentLoopAccessScope | null },
   ctx: GraphQLContext,
 ): Promise<unknown> {
   const input = args.input;
@@ -93,6 +94,7 @@ export async function saveAgentLoop(
   await requireAgentLoopWriteAccess(ctx, input.tenantId, {
     operationName: "save_agent_loop",
     actorId,
+    accessScope: args.scope ?? "USER",
     submittedOwnerUserId: input.ownerUserId,
     submittedRunAsUserId: input.runAsUserId,
     targetSpec: normalized.targetSpec,
@@ -208,6 +210,8 @@ async function createAgentLoop(
       id: loop.id,
       name: input.name.trim(),
       description: input.description,
+      ownerUserId: loop.owner_user_id ?? null,
+      ownerAgentId: loop.owner_agent_id ?? null,
     },
     version: {
       id: version.id,
@@ -363,6 +367,14 @@ async function updateAgentLoop(
           id: existing.id,
           name: input.name.trim(),
           description: input.description,
+          ownerUserId:
+            input.ownerUserId === undefined
+              ? (existing.owner_user_id ?? null)
+              : input.ownerUserId,
+          ownerAgentId:
+            input.ownerAgentId === undefined
+              ? (existing.owner_agent_id ?? null)
+              : input.ownerAgentId,
         },
         version: {
           id: currentVersionId,

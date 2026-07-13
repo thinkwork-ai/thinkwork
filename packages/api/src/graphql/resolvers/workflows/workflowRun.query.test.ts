@@ -63,6 +63,9 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   workflows: {
     id: "workflows.id",
     tenant_id: "workflows.tenant_id",
+    visibility: "workflows.visibility",
+    owner_user_id: "workflows.owner_user_id",
+    source_agent_loop_id: "workflows.source_agent_loop_id",
     updated_at: "workflows.updated_at",
   },
 }));
@@ -80,7 +83,11 @@ vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => ({ and: args }),
   desc: (col: unknown) => ({ desc: col }),
   eq: (col: unknown, val: unknown) => ({ eq: [col, val] }),
+  inArray: (col: unknown, val: unknown) => ({ inArray: [col, val] }),
+  isNull: (col: unknown) => ({ isNull: col }),
   lt: (col: unknown, val: unknown) => ({ lt: [col, val] }),
+  ne: (col: unknown, val: unknown) => ({ ne: [col, val] }),
+  or: (...args: unknown[]) => ({ or: args }),
 }));
 
 let workflowRunQuery: typeof import("./workflowRun.query.js");
@@ -132,7 +139,11 @@ describe("workflow run queries", () => {
     ]);
     // U3 visibility check loads the parent workflow.
     mockRows.mockReturnValueOnce([
-      { visibility: "tenant_shared", owner_user_id: null },
+      {
+        tenant_id: "tenant-a",
+        visibility: "tenant_shared",
+        owner_user_id: null,
+      },
     ]);
 
     const result = await workflowRunQuery.workflowRun(null, { id: "run-1" }, {
@@ -167,7 +178,13 @@ describe("workflow run queries", () => {
       },
     ]);
     mockResolveCallerTenantId.mockResolvedValue("tenant-a");
-    mockRows.mockReturnValueOnce([]); // workflow row for the visibility check
+    mockRows.mockReturnValueOnce([
+      {
+        tenant_id: "tenant-b",
+        visibility: "tenant_shared",
+        owner_user_id: null,
+      },
+    ]);
 
     await workflowRunQuery.workflowRun(null, { id: "run-1" }, {
       auth: { tenantId: null },
@@ -322,5 +339,54 @@ describe("workflow run visibility (U3)", () => {
       { auth: { tenantId: "tenant-a" } } as any,
     );
     expect(result).toEqual([]);
+  });
+
+  it("filters tenant-wide run listings to workflows readable by the caller", async () => {
+    mockRows.mockReturnValueOnce([
+      {
+        id: "run-own",
+        tenant_id: "tenant-a",
+        workflow_id: "wf-own",
+      },
+    ]);
+
+    const result = await workflowRunsQuery.workflowRuns(
+      null,
+      { tenantId: "tenant-a" },
+      { auth: { tenantId: "tenant-a" } } as any,
+    );
+
+    expect(result).toEqual([
+      {
+        id: "run-own",
+        tenantId: "tenant-a",
+        workflowId: "wf-own",
+      },
+    ]);
+    expect(mockWhere).toHaveBeenNthCalledWith(1, {
+      and: [
+        { eq: ["workflows.tenant_id", "tenant-a"] },
+        {
+          or: [
+            { ne: ["workflows.visibility", "agent_private"] },
+            {
+              and: [
+                { isNull: "workflows.owner_user_id" },
+                { isNull: "workflows.source_agent_loop_id" },
+              ],
+            },
+            { eq: ["workflows.owner_user_id", "user-caller"] },
+          ],
+        },
+      ],
+    });
+    expect(mockWhere).toHaveBeenNthCalledWith(2, {
+      and: [
+        { eq: ["workflow_runs.tenant_id", "tenant-a"] },
+        {
+          inArray: ["workflow_runs.workflow_id", expect.anything()],
+        },
+      ],
+    });
   });
 });

@@ -151,6 +151,7 @@ export function WorkflowDetail({
     variables: {
       tenantId: editor.tenantId ?? "",
       limit: 100,
+      scope: "OPERATOR",
     },
     pause: !editor.tenantId || !legacyAutomationPrefix,
     requestPolicy: "cache-and-network",
@@ -164,7 +165,11 @@ export function WorkflowDetail({
   }, [legacyAutomationPrefix, legacyInventoryResult.data?.agentLoops]);
   const [legacySourceResult] = useQuery<{ agentLoop?: AgentLoopRow | null }>({
     query: SettingsAgentLoopQuery,
-    variables: { id: legacySourceId ?? "", runLimit: 25 },
+    variables: {
+      id: legacySourceId ?? "",
+      runLimit: 25,
+      scope: "OPERATOR",
+    },
     pause: !legacySourceId,
     requestPolicy: "cache-and-network",
   });
@@ -248,7 +253,10 @@ export function WorkflowDetail({
   }
 
   async function saveSourceAutomation(payload: SaveAgentLoopPayload) {
-    const response = await saveSourceAutomationMutation({ input: payload });
+    const response = await saveSourceAutomationMutation({
+      input: payload,
+      scope: "OPERATOR",
+    });
     if (response.error) throw response.error;
     refetch({ requestPolicy: "network-only" });
     refetchSourceAutomation({ requestPolicy: "network-only" });

@@ -234,6 +234,7 @@ export const SettingsWorkflowsQuery = gql`
   ) {
     workflows(
       tenantId: $tenantId
+      scope: OPERATOR
       lifecycleStatus: $lifecycleStatus
       readinessState: $readinessState
       limit: $limit
@@ -246,6 +247,9 @@ export const SettingsWorkflowsQuery = gql`
       description
       lifecycleStatus
       visibility
+      ownerUserId
+      ownerAgentId
+      sourceAgentLoopId
       primaryTriggerFamily
       currentVersionNumber
       currentVersion {
@@ -292,7 +296,7 @@ export const SettingsWorkflowsQuery = gql`
 
 export const SettingsWorkflowQuery = gql`
   query SettingsWorkflow($id: ID!, $runLimit: Int) {
-    workflow(id: $id) {
+    workflow(id: $id, scope: OPERATOR) {
       id
       tenantId
       name
@@ -372,7 +376,7 @@ export const SettingsWorkflowQuery = gql`
 
 export const SettingsWorkflowSourceAutomationQuery = gql`
   query SettingsWorkflowSourceAutomation($id: ID!, $runLimit: Int) {
-    workflow(id: $id) {
+    workflow(id: $id, scope: OPERATOR) {
       id
       sourceAutomation {
         id
@@ -450,6 +454,7 @@ export const SettingsWorkflowRunsQuery = gql`
   ) {
     workflowRuns(
       tenantId: $tenantId
+      scope: OPERATOR
       workflowId: $workflowId
       status: $status
       limit: $limit
@@ -483,7 +488,7 @@ export const SettingsWorkflowRunsQuery = gql`
 
 export const SettingsWorkflowRunQuery = gql`
   query SettingsWorkflowRun($id: ID!) {
-    workflowRun(id: $id) {
+    workflowRun(id: $id, scope: OPERATOR) {
       id
       tenantId
       workflowId
@@ -713,6 +718,7 @@ export const SetMemoryPipelineStageEnabledMutation = gql`
 export const SettingsAgentLoopsQuery = gql`
   query SettingsAgentLoops(
     $tenantId: ID!
+    $scope: AgentLoopAccessScope = USER
     $lifecycleStatus: AgentLoopLifecycleStatus
     $enabled: Boolean
     $limit: Int
@@ -720,6 +726,7 @@ export const SettingsAgentLoopsQuery = gql`
   ) {
     agentLoops(
       tenantId: $tenantId
+      scope: $scope
       lifecycleStatus: $lifecycleStatus
       enabled: $enabled
       limit: $limit
@@ -785,8 +792,12 @@ export const SettingsAgentLoopsQuery = gql`
 
 export const SettingsAgentLoopQuery = gql`
   ${MemoryPipelineFragment}
-  query SettingsAgentLoop($id: ID!, $runLimit: Int) {
-    agentLoop(id: $id) {
+  query SettingsAgentLoop(
+    $id: ID!
+    $runLimit: Int
+    $scope: AgentLoopAccessScope = USER
+  ) {
+    agentLoop(id: $id, scope: $scope) {
       id
       tenantId
       name
@@ -873,8 +884,12 @@ export const SettingsAgentLoopQuery = gql`
 `;
 
 export const SettingsAgentLoopLinkedWorkflowQuery = gql`
-  query SettingsAgentLoopLinkedWorkflow($id: ID!, $runLimit: Int) {
-    agentLoop(id: $id) {
+  query SettingsAgentLoopLinkedWorkflow(
+    $id: ID!
+    $runLimit: Int
+    $scope: AgentLoopAccessScope = USER
+  ) {
+    agentLoop(id: $id, scope: $scope) {
       id
       linkedWorkflow {
         id
@@ -910,8 +925,8 @@ export const SettingsAgentLoopLinkedWorkflowQuery = gql`
 `;
 
 export const SettingsAgentLoopRunQuery = gql`
-  query SettingsAgentLoopRun($id: ID!) {
-    agentLoopRun(id: $id) {
+  query SettingsAgentLoopRun($id: ID!, $scope: AgentLoopAccessScope = USER) {
+    agentLoopRun(id: $id, scope: $scope) {
       id
       tenantId
       agentLoopId
@@ -1026,8 +1041,11 @@ export const WorkflowRoutineSummaryQuery = gql`
 `;
 
 export const SettingsSaveAgentLoopMutation = gql`
-  mutation SettingsSaveAgentLoop($input: SaveAgentLoopInput!) {
-    saveAgentLoop(input: $input) {
+  mutation SettingsSaveAgentLoop(
+    $input: SaveAgentLoopInput!
+    $scope: AgentLoopAccessScope = USER
+  ) {
+    saveAgentLoop(input: $input, scope: $scope) {
       id
       tenantId
       name

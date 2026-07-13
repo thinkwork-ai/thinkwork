@@ -183,6 +183,39 @@ describe("workflow queries", () => {
     );
   });
 
+  it("returns every owner's private workflows only through the admin-gated operator scope", async () => {
+    mockRows.mockReturnValueOnce([
+      {
+        id: "wf-own",
+        visibility: "agent_private",
+        owner_user_id: "user-caller",
+      },
+      {
+        id: "wf-other",
+        visibility: "agent_private",
+        owner_user_id: "user-other",
+      },
+    ]);
+
+    const result = (await workflowQueries.workflows(
+      null,
+      { tenantId: "tenant-a", scope: "OPERATOR" },
+      {
+        auth: {
+          authType: "cognito",
+          tenantId: "tenant-a",
+        },
+      } as any,
+    )) as Array<{ id: string }>;
+
+    expect(mockRequireAdminOrServiceCaller).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-a",
+      "read_workflow",
+    );
+    expect(result.map((row) => row.id)).toEqual(["wf-own", "wf-other"]);
+  });
+
   it("projects readiness-blocked Step Functions routine bindings", async () => {
     mockRows.mockReturnValueOnce([
       {

@@ -7,13 +7,15 @@ import {
   clampWorkflowQueryLimit,
   isWorkflowHiddenFromCaller,
   normalizeWorkflowEnum,
-  resolveReadableTenantId,
+  resolveWorkflowReadAccess,
+  type WorkflowReadScope,
 } from "./types.js";
 
 export async function workflows(
   _parent: unknown,
   args: {
     tenantId?: string | null;
+    scope?: WorkflowReadScope | null;
     lifecycleStatus?: string | null;
     readinessState?: string | null;
     limit?: number | null;
@@ -21,7 +23,12 @@ export async function workflows(
   },
   ctx: GraphQLContext,
 ): Promise<unknown[]> {
-  const tenantId = await resolveReadableTenantId(ctx, args.tenantId);
+  const readAccess = await resolveWorkflowReadAccess(
+    ctx,
+    args.tenantId,
+    args.scope ?? "USER",
+  );
+  const tenantId = readAccess.tenantId;
   const conditions = [eq(workflowsTable.tenant_id, tenantId)];
 
   const lifecycleStatus = normalizeWorkflowEnum(args.lifecycleStatus);
@@ -47,6 +54,7 @@ export async function workflows(
 
   // THINK-193 U3: hide OTHER users' personal (user-owned agent_private)
   // workflows — they are owner-only surfaces, not tenant inventory.
+  if (readAccess.includePrivate) return rows.map(snakeToCamel);
   const callerUserId = await resolveCallerUserId(ctx);
   return rows
     .filter((row) => !isWorkflowHiddenFromCaller(row, callerUserId))

@@ -17,7 +17,10 @@ import {
   requireAdminOrServiceCaller,
   requireTenantMember,
 } from "../core/authz.js";
-import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import {
+  resolveCallerTenantId,
+  resolveCallerUserId,
+} from "../core/resolve-auth-user.js";
 
 type TenantScoped = {
   tenantId?: string | null;
@@ -95,19 +98,63 @@ export async function assertCanReadWorkflowTenant(
   await requireTenantMember(ctx, tenantId);
 }
 
+export type WorkflowReadScope = "USER" | "OPERATOR";
+
+export async function resolveWorkflowReadAccess(
+  ctx: GraphQLContext,
+  requestedTenantId?: string | null,
+  scope: WorkflowReadScope = "USER",
+): Promise<{ tenantId: string; includePrivate: boolean }> {
+  if (scope !== "OPERATOR") {
+    return {
+      tenantId: await resolveReadableTenantId(ctx, requestedTenantId),
+      includePrivate: false,
+    };
+  }
+
+  const callerTenantId =
+    ctx.auth?.tenantId ?? (await resolveCallerTenantId(ctx));
+  const tenantId = requestedTenantId ?? callerTenantId;
+  if (!tenantId) throw new Error("Unable to resolve tenant for workflow query");
+  await requireAdminOrServiceCaller(ctx, tenantId, "read_workflow");
+  return { tenantId, includePrivate: true };
+}
+
+export async function canReadWorkflow(
+  ctx: GraphQLContext,
+  row: {
+    tenant_id: string;
+    visibility?: string | null;
+    owner_user_id?: string | null;
+    source_agent_loop_id?: string | null;
+  },
+  scope: WorkflowReadScope = "USER",
+): Promise<boolean> {
+  if (scope === "OPERATOR") {
+    await requireAdminOrServiceCaller(ctx, row.tenant_id, "read_workflow");
+    return true;
+  }
+  await assertCanReadWorkflowTenant(ctx, row.tenant_id);
+  return !isWorkflowHiddenFromCaller(row, await resolveCallerUserId(ctx));
+}
+
 /**
- * THINK-193 U3: user-owned agent_private workflows (personal memory
- * automations) are visible to their OWNER only — user A must not see user
- * B's personal automation in lists, reads, or run queries. Agent-owned
- * private workflows keep today's tenant visibility (operator inventory).
+ * User-owned agent_private workflows are visible to their owner only. A
+ * workflow projected from an Automation is also owner-only even when old
+ * data is missing its owner: fail closed instead of exposing it tenant-wide.
+ * Other agent-owned private workflows keep their existing tenant visibility.
  */
 export function isWorkflowHiddenFromCaller(
-  row: { visibility?: string | null; owner_user_id?: string | null },
+  row: {
+    visibility?: string | null;
+    owner_user_id?: string | null;
+    source_agent_loop_id?: string | null;
+  },
   callerUserId: string | null,
 ): boolean {
   return (
     row.visibility === "agent_private" &&
-    row.owner_user_id != null &&
+    (row.owner_user_id != null || row.source_agent_loop_id != null) &&
     row.owner_user_id !== callerUserId
   );
 }

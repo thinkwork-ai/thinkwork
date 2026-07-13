@@ -350,6 +350,16 @@ export type AgentLoopWebhookDeliveriesArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
+/**
+ * Authorization scope for Automation operations. USER is owner-scoped even when
+ * the signed-in user is a tenant admin. OPERATOR is tenant-wide and requires the
+ * server-side tenant admin gate; UI route guards are not sufficient.
+ */
+export enum AgentLoopAccessScope {
+  Operator = "OPERATOR",
+  User = "USER",
+}
+
 export type AgentLoopIteration = {
   __typename?: "AgentLoopIteration";
   agentLoopRun?: Maybe<AgentLoopRun>;
@@ -4937,6 +4947,7 @@ export type MutationDelegateThreadArgs = {
 
 export type MutationDeleteAgentLoopArgs = {
   id: Scalars["ID"]["input"];
+  scope?: InputMaybe<AgentLoopAccessScope>;
 };
 
 export type MutationDeleteAgentProfileArgs = {
@@ -5542,6 +5553,7 @@ export type MutationRunScheduledJobArgs = {
 
 export type MutationSaveAgentLoopArgs = {
   input: SaveAgentLoopInput;
+  scope?: InputMaybe<AgentLoopAccessScope>;
 };
 
 export type MutationSaveAppletArgs = {
@@ -5751,6 +5763,7 @@ export type MutationTestWebhookArgs = {
 
 export type MutationTriggerAgentLoopRunArgs = {
   input: TriggerAgentLoopRunInput;
+  scope?: InputMaybe<AgentLoopAccessScope>;
 };
 
 export type MutationTriggerRoutineRunArgs = {
@@ -7165,10 +7178,12 @@ export type QueryAgentCostBreakdownArgs = {
 
 export type QueryAgentLoopArgs = {
   id: Scalars["ID"]["input"];
+  scope?: InputMaybe<AgentLoopAccessScope>;
 };
 
 export type QueryAgentLoopRunArgs = {
   id: Scalars["ID"]["input"];
+  scope?: InputMaybe<AgentLoopAccessScope>;
 };
 
 export type QueryAgentLoopsArgs = {
@@ -7176,6 +7191,7 @@ export type QueryAgentLoopsArgs = {
   enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
   lifecycleStatus?: InputMaybe<AgentLoopLifecycleStatus>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
+  scope?: InputMaybe<AgentLoopAccessScope>;
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -8200,15 +8216,18 @@ export type QueryWorkItemsArgs = {
 
 export type QueryWorkflowArgs = {
   id: Scalars["ID"]["input"];
+  scope?: InputMaybe<WorkflowReadScope>;
 };
 
 export type QueryWorkflowRunArgs = {
   id: Scalars["ID"]["input"];
+  scope?: InputMaybe<WorkflowReadScope>;
 };
 
 export type QueryWorkflowRunsArgs = {
   cursor?: InputMaybe<Scalars["String"]["input"]>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
+  scope?: InputMaybe<WorkflowReadScope>;
   status?: InputMaybe<WorkflowRunStatus>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   workflowId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -8219,6 +8238,7 @@ export type QueryWorkflowsArgs = {
   lifecycleStatus?: InputMaybe<WorkflowLifecycleStatus>;
   limit?: InputMaybe<Scalars["Int"]["input"]>;
   readinessState?: InputMaybe<WorkflowReadinessState>;
+  scope?: InputMaybe<WorkflowReadScope>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
@@ -11999,6 +12019,16 @@ export enum WorkflowLifecycleStatus {
   Archived = "archived",
   Deprecated = "deprecated",
   Draft = "draft",
+}
+
+/**
+ * Workflow inventory read scope. USER preserves normal visibility rules.
+ * OPERATOR includes every owner's private workflows and requires tenant-admin
+ * authorization on the server.
+ */
+export enum WorkflowReadScope {
+  Operator = "OPERATOR",
+  User = "USER",
 }
 
 export enum WorkflowReadinessState {
