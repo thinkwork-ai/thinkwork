@@ -51,6 +51,7 @@ import {
   wikiCompileCursors,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
+import { composeWikiPageRender } from "./render.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1813,6 +1814,15 @@ export async function upsertSections(
     .update(wikiPages)
     .set({ body_md: rendered, updated_at: sql`now()` as any })
     .where(eq(wikiPages.id, pageId));
+
+  // Best-effort plate render (THINK-273): compiled from the same assembled
+  // markdown on the same client/transaction as the body_md rewrite, so
+  // render and sections commit atomically. Never throws — failure persists
+  // the NULL render triple instead of failing the page write (R3).
+  await composeWikiPageRender(
+    { pageId, markdown: rendered, sectionCount: allSections.length },
+    db,
+  );
 }
 
 // ---------------------------------------------------------------------------
