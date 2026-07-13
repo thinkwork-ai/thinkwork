@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { DOCUMENT_RENDER_MAX_BYTES } from "../artifacts/document-preflight.js";
-import { composeWikiPageRender, type WikiRenderCompile } from "./render.js";
+import type { PlateStore } from "../artifacts/plate-registry.js";
+import {
+  buildWikiRenderCompile,
+  composeWikiPageRender,
+  type WikiRenderCompile,
+} from "./render.js";
 
 interface FakeDbOptions {
   /** Row returned by the page re-read (undefined → page missing). */
@@ -243,15 +248,84 @@ describe("composeWikiPageRender", () => {
     });
   });
 
-  it("degrades to the NULL triple with the default compile until THINK-272 lands", async () => {
-    const { db, captured } = fakeDb({ pageRow: PAGE_ROW });
+  describe("real compile (buildWikiRenderCompile, THINK-272 wired)", () => {
+    const fakeStore = (): PlateStore => ({
+      getPlateRow: async () => null,
+      listPlateRows: async () => [],
+      getTenantDocumentPalette: async () => ({ light: {}, dark: {} }),
+    });
 
-    const result = await composeWikiPageRender(SOURCE, db);
+    it("compiles a real plate render carrying the wiki plate shell", async () => {
+      const { db, captured } = fakeDb({ pageRow: PAGE_ROW });
 
-    expect(result.outcome).toBe("cleared");
-    expect((result as { reason: string }).reason).toContain("THINK-272");
-    expect(captured.sets).toEqual([
-      { render_html: null, render_plate_slug: null, rendered_at: null },
-    ]);
+      const result = await composeWikiPageRender(
+        SOURCE,
+        db,
+        buildWikiRenderCompile(fakeStore()),
+      );
+
+      expect(result.outcome).toBe("rendered");
+      expect((result as { plateSlug: string }).plateSlug).toBe("wiki-entity");
+      const html = captured.sets[0]!.render_html as string;
+      expect(html).toContain('<meta name="tw-plate" content="wiki-entity">');
+      expect(html).toContain("Acme ships anvils.");
+      expect(html).not.toContain("<script");
+    });
+
+    it("is deterministic: two identical compiles produce byte-identical HTML", async () => {
+      const compile = buildWikiRenderCompile(fakeStore());
+      const a = await composeWikiPageRender(
+        SOURCE,
+        fakeDb({ pageRow: PAGE_ROW }).db,
+        compile,
+      );
+      const first = fakeDb({ pageRow: PAGE_ROW });
+      const second = fakeDb({ pageRow: PAGE_ROW });
+      await composeWikiPageRender(SOURCE, first.db, compile);
+      await composeWikiPageRender(SOURCE, second.db, compile);
+      expect(a.outcome).toBe("rendered");
+      expect(first.captured.sets[0]!.render_html).toBe(
+        second.captured.sets[0]!.render_html,
+      );
+    });
+
+    it("clears to the NULL triple for an unknown page type", async () => {
+      const { db, captured } = fakeDb({
+        pageRow: { ...PAGE_ROW, type: "bogus" },
+      });
+
+      const result = await composeWikiPageRender(
+        SOURCE,
+        db,
+        buildWikiRenderCompile(fakeStore()),
+      );
+
+      expect(result.outcome).toBe("cleared");
+      expect((result as { reason: string }).reason).toContain("bogus");
+      expect(captured.sets).toEqual([
+        { render_html: null, render_plate_slug: null, rendered_at: null },
+      ]);
+    });
+
+    it("clears to the NULL triple on a compositor rejection (AE2: tw: fence under allowedDirectives [])", async () => {
+      const { db, captured } = fakeDb({ pageRow: PAGE_ROW });
+
+      const result = await composeWikiPageRender(
+        {
+          ...SOURCE,
+          markdown: "## Overview\n\n```tw:chart\n{}\n```\n",
+        },
+        db,
+        buildWikiRenderCompile(fakeStore()),
+      );
+
+      expect(result.outcome).toBe("cleared");
+      expect((result as { reason: string }).reason).toContain(
+        "DIRECTIVE_GENRE_RESTRICTED",
+      );
+      expect(captured.sets).toEqual([
+        { render_html: null, render_plate_slug: null, rendered_at: null },
+      ]);
+    });
   });
 });

@@ -19,6 +19,11 @@ import type { PgTransaction } from "drizzle-orm/pg-core";
 import { wikiPages } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
 import { DOCUMENT_RENDER_MAX_BYTES } from "../artifacts/document-preflight.js";
+import {
+  resolveWikiPlate,
+  type PlateStore,
+} from "../artifacts/plate-registry.js";
+import { compileDocument } from "../artifacts/document-compositor.js";
 
 type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
 
@@ -67,37 +72,40 @@ export type WikiRenderOutcome =
   | { outcome: "error"; reason: string };
 
 /**
- * Default compile: resolve the page type's wiki plate and run the Document
- * Compositor with the in-wiki internal-link policy.
- *
- * THINK-272 (wiki plates + compositor link policy) has not merged yet —
- * `resolveWikiPlate` and the `CompileDocumentInput` link-policy option do
- * not exist on main. Until it lands, every render degrades to the NULL
- * triple (R3 best-effort semantics), which is the documented fallback.
- * Wire-up once THINK-272 is on main:
- *
- *   const plate = await resolveWikiPlate(input.tenantId, input.pageType);
- *   const compiled = compileDocument({
- *     plate,
- *     title: input.title,
- *     abstract: input.summary,
- *     markdownBody: input.markdown,
- *     // + the THINK-272 internal-link policy option
- *   });
- *   if (!compiled.ok) {
- *     return {
- *       ok: false,
- *       reason: compiled.diagnostics.map((d) => d.code).join(","),
- *     };
- *   }
- *   return { ok: true, renderHtml: compiled.renderHtml, plateSlug: plate.slug };
+ * Build the real compile: resolve the page type's wiki plate (THINK-272)
+ * and run the Document Compositor with the in-wiki internal-link policy.
+ * The plate store is injectable for tests; production callers use the
+ * Drizzle-backed default.
  */
-const defaultWikiRenderCompile: WikiRenderCompile = async () => {
-  return {
-    ok: false,
-    reason: "wiki plates unavailable (THINK-272 not yet merged)",
+export function buildWikiRenderCompile(store?: PlateStore): WikiRenderCompile {
+  return async (input) => {
+    const plate = store
+      ? await resolveWikiPlate(input.tenantId, input.pageType, store)
+      : await resolveWikiPlate(input.tenantId, input.pageType);
+    if (!plate) {
+      return {
+        ok: false,
+        reason: `no wiki plate for page type "${input.pageType}"`,
+      };
+    }
+    const compiled = compileDocument({
+      plate,
+      title: input.title,
+      abstract: input.summary,
+      markdownBody: input.markdown,
+      internalLinkPolicy: "wiki",
+    });
+    if (!compiled.ok) {
+      return {
+        ok: false,
+        reason: compiled.diagnostics.map((d) => d.code).join(","),
+      };
+    }
+    return { ok: true, renderHtml: compiled.renderHtml, plateSlug: plate.slug };
   };
-};
+}
+
+const defaultWikiRenderCompile: WikiRenderCompile = buildWikiRenderCompile();
 
 const NULL_TRIPLE = {
   render_html: null,
