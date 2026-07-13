@@ -643,6 +643,14 @@ build_handler "manifest-log" \
 build_handler "capability-catalog-list" \
   "$REPO_ROOT/packages/api/src/handlers/capability-catalog-list.ts"
 
+# Governed capability runtime control-plane service (THINK-280 U2). Direct
+# InvokeCommand from the Pi container ONLY (no HTTP route) — verifies the
+# Ed25519 capability caller context and serves capability_search /
+# connection_research. Standard externalized-@aws-sdk flags: it uses the
+# Drizzle/pg data path + node:crypto, no Bedrock/AgentCore SDK.
+build_handler "capability-control-service" \
+  "$REPO_ROOT/packages/api/src/handlers/capability-control-service.ts"
+
 # Admin approve/reject for plugin-installed MCP servers (plan §U11, SI-5).
 #   POST /api/tenants/:tenantId/mcp-servers/:serverId/approve
 #   POST /api/tenants/:tenantId/mcp-servers/:serverId/reject

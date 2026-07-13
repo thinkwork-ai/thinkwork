@@ -178,6 +178,12 @@ export type AdminUpdateAppletSourceInput = {
   source: Scalars['String']['input'];
 };
 
+export type AdmitConnectionProposalInput = {
+  proposalId: Scalars['ID']['input'];
+  reviewedFingerprint: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
 export type Agent = {
   __typename?: 'Agent';
   adapterConfig?: Maybe<Scalars['AWSJSON']['output']>;
@@ -1238,6 +1244,69 @@ export type CanvasWritableSpace = {
   spaceId: Scalars['ID']['output'];
 };
 
+export type CapabilityConnectionProposal = {
+  __typename?: 'CapabilityConnectionProposal';
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdByActorId?: Maybe<Scalars['ID']['output']>;
+  createdByActorType?: Maybe<Scalars['String']['output']>;
+  decidedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  decidedByUserId?: Maybe<Scalars['ID']['output']>;
+  definitionId?: Maybe<Scalars['ID']['output']>;
+  id: Scalars['ID']['output'];
+  inboxItemId?: Maybe<Scalars['ID']['output']>;
+  payload: Scalars['AWSJSON']['output'];
+  payloadFingerprint: Scalars['String']['output'];
+  provenance: Scalars['AWSJSON']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
+export type CapabilityCredentialBinding = {
+  __typename?: 'CapabilityCredentialBinding';
+  createdAt: Scalars['AWSDateTime']['output'];
+  definitionVersionId: Scalars['ID']['output'];
+  id: Scalars['ID']['output'];
+  lastVerifiedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  principalMode: Scalars['String']['output'];
+  readiness: Scalars['String']['output'];
+  readinessEvidence: Scalars['AWSJSON']['output'];
+  revokedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  servicePrincipalId?: Maybe<Scalars['ID']['output']>;
+  subjectUserId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export type CapabilityDefinition = {
+  __typename?: 'CapabilityDefinition';
+  admittedVersion?: Maybe<CapabilityDefinitionVersion>;
+  class: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  displayName: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  namespace: Scalars['String']['output'];
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  tenantId?: Maybe<Scalars['ID']['output']>;
+  versions: Array<CapabilityDefinitionVersion>;
+};
+
+export type CapabilityDefinitionVersion = {
+  __typename?: 'CapabilityDefinitionVersion';
+  admittedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  admittedByUserId?: Maybe<Scalars['ID']['output']>;
+  contractHashes: Scalars['AWSJSON']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  definitionId: Scalars['ID']['output'];
+  descriptor: Scalars['AWSJSON']['output'];
+  descriptorFingerprint: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  lifecycle: Scalars['String']['output'];
+  operations: Array<CapabilityOperationView>;
+  provenance: Scalars['AWSJSON']['output'];
+  sourceProposalId?: Maybe<Scalars['ID']['output']>;
+  version: Scalars['Int']['output'];
+};
+
 export type CapabilityDivergence = {
   __typename?: 'CapabilityDivergence';
   deltas?: Maybe<Array<CapabilityDivergenceDelta>>;
@@ -1302,6 +1371,32 @@ export type CapabilityMutationResult = {
   inspectionState: Scalars['String']['output'];
   item?: Maybe<CapabilityItem>;
   outcome: Scalars['String']['output'];
+};
+
+export type CapabilityOperationView = {
+  __typename?: 'CapabilityOperationView';
+  approvalPolicy: Scalars['String']['output'];
+  contractHash: Scalars['String']['output'];
+  costClass: Scalars['String']['output'];
+  effect: Scalars['String']['output'];
+  executable: Scalars['Boolean']['output'];
+  latencyClass: Scalars['String']['output'];
+  operationId: Scalars['String']['output'];
+  outputClass: Scalars['String']['output'];
+  principalModes: Array<Scalars['String']['output']>;
+  twcap: Scalars['String']['output'];
+  withheldReasons: Array<Scalars['String']['output']>;
+};
+
+export type CapabilityRuntimeMutationResult = {
+  __typename?: 'CapabilityRuntimeMutationResult';
+  binding?: Maybe<CapabilityCredentialBinding>;
+  definition?: Maybe<CapabilityDefinition>;
+  outcome: Scalars['String']['output'];
+  proposal?: Maybe<CapabilityConnectionProposal>;
+  reason?: Maybe<Scalars['String']['output']>;
+  servicePrincipal?: Maybe<TenantServicePrincipal>;
+  version?: Maybe<CapabilityDefinitionVersion>;
 };
 
 export enum CapabilitySetVariant {
@@ -1390,11 +1485,19 @@ export type ComplianceEventPageInfo = {
 export enum ComplianceEventType {
   AgentConnectionDetached = 'AGENT_CONNECTION_DETACHED',
   AgentConnectionGranted = 'AGENT_CONNECTION_GRANTED',
+  AgentConnectionProposalAdmitted = 'AGENT_CONNECTION_PROPOSAL_ADMITTED',
+  AgentConnectionProposalCreated = 'AGENT_CONNECTION_PROPOSAL_CREATED',
+  AgentConnectionProposalRejected = 'AGENT_CONNECTION_PROPOSAL_REJECTED',
   AgentCreated = 'AGENT_CREATED',
+  AgentCredentialBindingCreated = 'AGENT_CREDENTIAL_BINDING_CREATED',
+  AgentCredentialBindingRevoked = 'AGENT_CREDENTIAL_BINDING_REVOKED',
+  AgentCredentialBindingVerified = 'AGENT_CREDENTIAL_BINDING_VERIFIED',
   AgentDeleted = 'AGENT_DELETED',
   AgentExtensionDetached = 'AGENT_EXTENSION_DETACHED',
   AgentExtensionGranted = 'AGENT_EXTENSION_GRANTED',
   AgentMigrated = 'AGENT_MIGRATED',
+  AgentServicePrincipalCreated = 'AGENT_SERVICE_PRINCIPAL_CREATED',
+  AgentServicePrincipalRevoked = 'AGENT_SERVICE_PRINCIPAL_REVOKED',
   AgentSkillsChanged = 'AGENT_SKILLS_CHANGED',
   AgentToolDetached = 'AGENT_TOOL_DETACHED',
   AgentToolGranted = 'AGENT_TOOL_GRANTED',
@@ -1537,6 +1640,14 @@ export type ConfirmAutomationDraftInput = {
   input: SaveAgentLoopInput;
 };
 
+export type ConnectionResearchPayload = {
+  __typename?: 'ConnectionResearchPayload';
+  definitions: Array<CapabilityDefinition>;
+  proposals: Array<CapabilityConnectionProposal>;
+  state: Scalars['String']['output'];
+  stateDetail?: Maybe<Scalars['String']['output']>;
+};
+
 export type CostEvent = {
   __typename?: 'CostEvent';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -1620,6 +1731,22 @@ export type CreateArtifactInput = {
   threadId?: InputMaybe<Scalars['ID']['input']>;
   title: Scalars['String']['input'];
   type: Scalars['String']['input'];
+};
+
+export type CreateConnectionProposalInput = {
+  definitionId?: InputMaybe<Scalars['ID']['input']>;
+  payload: Scalars['AWSJSON']['input'];
+  sourceUrls: Array<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+export type CreateCredentialBindingInput = {
+  credentialRefs: Scalars['AWSJSON']['input'];
+  definitionVersionId: Scalars['ID']['input'];
+  principalMode: Scalars['String']['input'];
+  servicePrincipalId?: InputMaybe<Scalars['ID']['input']>;
+  subjectUserId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type CreateEvalDatasetInput = {
@@ -1720,6 +1847,13 @@ export type CreateScheduledJobInput = {
   tenantId: Scalars['ID']['input'];
   timezone?: InputMaybe<Scalars['String']['input']>;
   triggerType: Scalars['String']['input'];
+};
+
+export type CreateServicePrincipalInput = {
+  displayName: Scalars['String']['input'];
+  purpose?: InputMaybe<Scalars['String']['input']>;
+  slug: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 export type CreateSkillDraftInput = {
@@ -4109,6 +4243,7 @@ export type Mutation = {
   addTenantMember: TenantMember;
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
+  admitConnectionProposal: CapabilityRuntimeMutationResult;
   answerUserQuestion: UserQuestion;
   applySkillUpdate: SkillUpdateApplyResult;
   approveInboxItem: InboxItem;
@@ -4179,6 +4314,8 @@ export type Mutation = {
    * with jobError set.
    */
   createComplianceExport: ComplianceExport;
+  createConnectionProposal: CapabilityRuntimeMutationResult;
+  createCredentialBinding: CapabilityRuntimeMutationResult;
   createEvalDataset: EvalDataset;
   createEvalProfile: EvalProfile;
   createEvalTestCase: EvalTestCase;
@@ -4188,6 +4325,7 @@ export type Mutation = {
   createRecipe: Recipe;
   createRoutine: Routine;
   createScheduledJob: ScheduledJob;
+  createServicePrincipal: CapabilityRuntimeMutationResult;
   /** Create a tenant-scoped skill draft. */
   createSkillDraft: SkillDraft;
   createSpace: Space;
@@ -4372,6 +4510,7 @@ export type Mutation = {
    */
   registerInternalAnalystDataSource: AnalystDataSourceResult;
   registerPushToken: Scalars['Boolean']['output'];
+  rejectConnectionProposal: CapabilityRuntimeMutationResult;
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
@@ -4427,12 +4566,14 @@ export type Mutation = {
   retryPluginComponent: PluginInstall;
   reviewGoal: ReviewGoalPayload;
   revokeArtifactShareLink: Scalars['Boolean']['output'];
+  revokeCredentialBinding: CapabilityRuntimeMutationResult;
   revokeMemorySourceAuthorization: Scalars['Boolean']['output'];
   /**
    * ThinkWork-operator-only: revoke an issued premium plugin install key before
    * redemption.
    */
   revokePremiumPluginInstallKey: RevokePremiumPluginInstallKeyResult;
+  revokeServicePrincipal: CapabilityRuntimeMutationResult;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   routeOpenEngineWorkItem: WorkItemEvent;
@@ -4620,6 +4761,7 @@ export type Mutation = {
   upsertEmailSpacePolicy: EmailSpacePolicy;
   /** Create or replace one ThinkWork-owned overlay section for a plugin-app record. */
   upsertPluginAppOverlay: PluginAppOverlay;
+  verifyCredentialBinding: CapabilityRuntimeMutationResult;
 };
 
 
@@ -4695,6 +4837,11 @@ export type MutationAddThreadDependencyArgs = {
 
 export type MutationAdminUpdateAppletSourceArgs = {
   input: AdminUpdateAppletSourceInput;
+};
+
+
+export type MutationAdmitConnectionProposalArgs = {
+  input: AdmitConnectionProposalInput;
 };
 
 
@@ -4872,6 +5019,16 @@ export type MutationCreateComplianceExportArgs = {
 };
 
 
+export type MutationCreateConnectionProposalArgs = {
+  input: CreateConnectionProposalInput;
+};
+
+
+export type MutationCreateCredentialBindingArgs = {
+  input: CreateCredentialBindingInput;
+};
+
+
 export type MutationCreateEvalDatasetArgs = {
   input: CreateEvalDatasetInput;
   tenantId: Scalars['ID']['input'];
@@ -4917,6 +5074,11 @@ export type MutationCreateRoutineArgs = {
 
 export type MutationCreateScheduledJobArgs = {
   input: CreateScheduledJobInput;
+};
+
+
+export type MutationCreateServicePrincipalArgs = {
+  input: CreateServicePrincipalInput;
 };
 
 
@@ -5500,6 +5662,13 @@ export type MutationRegisterPushTokenArgs = {
 };
 
 
+export type MutationRejectConnectionProposalArgs = {
+  proposalId: Scalars['ID']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type MutationRejectInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<RejectInboxItemInput>;
@@ -5688,6 +5857,12 @@ export type MutationRevokeArtifactShareLinkArgs = {
 };
 
 
+export type MutationRevokeCredentialBindingArgs = {
+  bindingId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type MutationRevokeMemorySourceAuthorizationArgs = {
   authorizationId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -5696,6 +5871,12 @@ export type MutationRevokeMemorySourceAuthorizationArgs = {
 
 export type MutationRevokePremiumPluginInstallKeyArgs = {
   input: RevokePremiumPluginInstallKeyInput;
+};
+
+
+export type MutationRevokeServicePrincipalArgs = {
+  servicePrincipalId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -6288,6 +6469,12 @@ export type MutationUpsertEmailSpacePolicyArgs = {
 
 export type MutationUpsertPluginAppOverlayArgs = {
   input: UpsertPluginAppOverlayInput;
+};
+
+
+export type MutationVerifyCredentialBindingArgs = {
+  bindingId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 export type N8nAppData = {
@@ -7065,7 +7252,9 @@ export type Query = {
   canonicalEntities: Array<CanonicalEntity>;
   canonicalEntity?: Maybe<CanonicalEntity>;
   canonicalEntityMergePreview: CanonicalEntityMergeImpact;
+  capabilityCredentialBindings: Array<CapabilityCredentialBinding>;
   capabilityInspector: CapabilityInspection;
+  capabilityRuntimeCatalog: Array<CapabilityDefinition>;
   /**
    * Single event by event_id. Non-operator callers reading another tenant's
    * event_id see null (existence-oracle defense — SQL filter applies in the
@@ -7111,6 +7300,7 @@ export type Query = {
   complianceTenants: Array<Scalars['ID']['output']>;
   compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   concurrencySnapshot: ConcurrencySnapshot;
+  connectionResearch: ConnectionResearchPayload;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
   costByUser: Array<UserCostSummary>;
@@ -7307,6 +7497,7 @@ export type Query = {
   tenantMembers: Array<TenantMember>;
   tenantMentionTargets: Array<ThreadMentionTarget>;
   tenantModelCatalog: Array<TenantModelCatalogEntry>;
+  tenantServicePrincipals: Array<TenantServicePrincipal>;
   /**
    * List the caller-tenant's skill catalog (the derived skill_catalog index) for
    * composer/skill pickers. When `agentId` is provided, entries are annotated
@@ -7620,11 +7811,22 @@ export type QueryCanonicalEntityMergePreviewArgs = {
 };
 
 
+export type QueryCapabilityCredentialBindingsArgs = {
+  definitionVersionId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryCapabilityInspectorArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentProfileId?: InputMaybe<Scalars['ID']['input']>;
   perspectiveUserId?: InputMaybe<Scalars['ID']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryCapabilityRuntimeCatalogArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -7653,6 +7855,13 @@ export type QueryCompositionFeedbackSummaryArgs = {
 
 
 export type QueryConcurrencySnapshotArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryConnectionResearchArgs = {
+  allowExternal?: InputMaybe<Scalars['Boolean']['input']>;
+  query: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
 };
 
@@ -8394,6 +8603,11 @@ export type QueryTenantMentionTargetsArgs = {
 
 export type QueryTenantModelCatalogArgs = {
   includeDisabled?: InputMaybe<Scalars['Boolean']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryTenantServicePrincipalsArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -10510,6 +10724,18 @@ export type TenantModelCatalogEntry = {
   supportsVision?: Maybe<Scalars['Boolean']['output']>;
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type TenantServicePrincipal = {
+  __typename?: 'TenantServicePrincipal';
+  createdAt: Scalars['AWSDateTime']['output'];
+  displayName: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  purpose?: Maybe<Scalars['String']['output']>;
+  revokedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
 };
 
 export type TenantSettings = {

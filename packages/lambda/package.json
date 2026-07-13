@@ -6,6 +6,7 @@
   "exports": {
     "./github-workspace": "./github-workspace.ts",
     "./analyst-caller-context": "./analyst-caller-context.ts",
+    "./capability-caller-context": "./capability-caller-context.ts",
     "./analyst-reader-db": "./analyst-reader-db.ts"
   },
   "scripts": {

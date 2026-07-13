@@ -9,11 +9,21 @@ import {
 // Settings → Agent (THINK-132 U7): this route IS the Composer surface — the
 // single agent-configuration page. Sheet identity and target are URL state
 // (KTD-1) so profile deep links, refresh, and Back behave consistently:
-//   ?sheet=config|profiles|extensions|inspector, ?profile=<id>, ?focus=<row>.
+//   ?sheet=config|profiles|extensions|inspector|catalog|research|bindings,
+//   ?profile=<id>, ?focus=<row>.
 // The legacy `?view=workspace&file=…` grace shape and its redirect routes were
 // removed in U10; only the sheet/profile/focus params remain.
 
-const SHEET_IDS = ["config", "profiles", "extensions", "inspector"] as const;
+const SHEET_IDS = [
+  "config",
+  "profiles",
+  "extensions",
+  "inspector",
+  // Capability runtime control plane (THINK-280 U2).
+  "catalog",
+  "research",
+  "bindings",
+] as const;
 
 export type SettingsAgentsSearch = {
   sheet?: ComposerSheetId;

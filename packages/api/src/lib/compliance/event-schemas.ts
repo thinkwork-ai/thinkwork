@@ -44,6 +44,30 @@ const CAPABILITY_MUTATION_FIELDS: ReadonlySet<string> = new Set([
   "after",
 ]);
 
+// Shared allow-list for the governed capability runtime control-plane
+// events (THINK-280 U2): proposal research/admission, service principals,
+// credential-binding readiness. Structural identity + lifecycle only.
+const CAPABILITY_RUNTIME_FIELDS: ReadonlySet<string> = new Set([
+  "proposalId",
+  "definitionId",
+  "definitionVersionId",
+  "version",
+  "fingerprint",
+  "slug",
+  "namespace",
+  "class",
+  "status",
+  "reason",
+  "principalMode",
+  "servicePrincipalId",
+  "subjectUserId",
+  "bindingId",
+  "readiness",
+  "outcome",
+  "before",
+  "after",
+]);
+
 /**
  * Truncate a string to the largest UTF-8-byte-length-bounded prefix.
  * Bisects on character index so the cut never lands mid-codepoint —
@@ -521,6 +545,35 @@ export const EVENT_PAYLOAD_SHAPES: Record<
       "thread_id",
       "refresh_id",
     ]),
+  },
+
+  // ── Governed capability runtime control plane (THINK-280 U2) ──
+  // Structural identifiers + lifecycle summaries only. Credential
+  // references (let alone values) never enter these payloads — the
+  // resolvers build them from an explicit field list.
+  "agent.connection_proposal_created": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  "agent.connection_proposal_admitted": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  "agent.connection_proposal_rejected": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  "agent.service_principal_created": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  "agent.service_principal_revoked": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  "agent.credential_binding_created": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  "agent.credential_binding_verified": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  "agent.credential_binding_revoked": {
+    allowedFields: CAPABILITY_RUNTIME_FIELDS,
   },
 };
 
