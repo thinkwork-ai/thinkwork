@@ -157,10 +157,12 @@ describe("phase table — exhaustive routing-contract coverage", () => {
       "In Progress",
       "Verification",
       "Review",
-      "Done",
     ]) {
       expect(ROUTING_STATUSES).toContain(status);
     }
+    // Done is TERMINAL and no longer enrolled (auto-compound disabled): keeping
+    // it enrolled cost ~4 Linear API requests per Done issue per tick.
+    expect(ROUTING_STATUSES).not.toContain("Done");
   });
 
   it("Todo is BELOW the enrollment floor — not routed at all", () => {

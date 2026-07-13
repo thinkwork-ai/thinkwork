@@ -35,6 +35,9 @@ describe("candidate filter", () => {
       makeIssue({ identifier: "T-5", state: "Ready to Work", labels: ["LFG"] }),
       // Lane label but inactive state → not a candidate:
       makeIssue({ identifier: "T-6", state: "Backlog", labels: ["Claude"] }),
+      // Done is TERMINAL (auto-compound disabled) → never enrolled, even with
+      // a lane label + LFG. Keeping Done enrolled burned ~4 API requests per
+      // Done issue per tick against the 2,500 req/hr key limit.
       makeIssue({
         identifier: "T-7",
         state: "Done",
@@ -47,9 +50,9 @@ describe("candidate filter", () => {
 
     const result = await pollTick(gateway, TEAM);
     const ids = result.candidates.map((c) => c.issue.identifier).sort();
-    // T-7 (Done + lane) IS a candidate: the engine decides compound vs noop.
+    // T-7 (Done + lane) is NOT a candidate: Done is terminal.
     // T-8 (Todo + lane) is NOT: Todo is below the enrollment floor.
-    expect(ids).toEqual(["T-1", "T-2", "T-3", "T-4", "T-7"]);
+    expect(ids).toEqual(["T-1", "T-2", "T-3", "T-4"]);
 
     const byId = Object.fromEntries(
       result.candidates.map((c) => [c.issue.identifier, c]),

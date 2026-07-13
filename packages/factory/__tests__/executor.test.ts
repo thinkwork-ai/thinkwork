@@ -19,6 +19,7 @@ import type { FactoryConfig, HostConfig } from "../src/config.js";
 import { DEFAULT_PHASES } from "../src/config.js";
 import { createLogger, type Logger } from "../src/logger.js";
 import { pollTick, type PollCandidate } from "../src/linear/poller.js";
+import { findLedgerComment, parseLedgerComment } from "../src/linear/ledger.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
 import {
   createAttemptMachine,
@@ -427,11 +428,24 @@ describe("executeAction — launch", () => {
       return origResult(handle, o);
     };
 
-    const candidate = await candidateFor(h.gateway, "THINK-4");
-    // Auto-compound is DISABLED — decideAction noops a Done issue, so the daemon
-    // never launches compound. But the executor's compound path is retained for
-    // a manual `ce-compound`; construct the launch directly to keep that path
-    // (worker-posted compounded:true → attempt Succeeded) under test.
+    // Auto-compound is DISABLED — a Done issue is not even ENROLLED (Done ∉
+    // ACTIVE_STATES), so the poller never returns it and the daemon never
+    // launches compound. The executor's compound path is retained for a manual
+    // `ce-compound`; construct BOTH the candidate and the launch directly to
+    // keep that path (worker-posted compounded:true → attempt Succeeded) under
+    // test.
+    const comments = await h.gateway.listComments(issue.id);
+    const ledgerComment = findLedgerComment("THINK-4", comments);
+    const candidate: PollCandidate = {
+      issue,
+      lane: "Claude",
+      hasLfg: true,
+      isVerification: false,
+      blockerLabels: [],
+      ledger: parseLedgerComment("THINK-4", ledgerComment?.body),
+      ledgerCommentId: ledgerComment?.id ?? null,
+      comments,
+    };
     const action: EngineAction = {
       kind: "launch",
       phase: "compound",

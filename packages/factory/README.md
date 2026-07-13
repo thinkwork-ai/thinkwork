@@ -108,7 +108,7 @@ An issue is a **candidate** when it is either:
 
 ```
 Brainstorming → Requirements Review → Planning → Plan Review
-             → Ready to Work → In Progress → (Verification/Review) → Done
+             → Ready to Work → In Progress → (Verification/Review)
 Debug is also a trigger (diagnosis lane).
 ```
 
@@ -127,10 +127,12 @@ Key rules:
 - **Both lane labels** on one issue is a lane conflict → the daemon marks it
   `Needs User` and asks you to pick a lane.
 - **`Done` is terminal — the factory never touches a Done issue.** Auto-compound
-  is **disabled**: the daemon does not launch any worker (not even `ce-compound`)
-  on a Done issue. Every Done issue is a silent noop — no thread, no worker, no
-  escalation, even with a stale blocker label attached. Run `ce-compound`
-  manually when you want to distill learnings from a completed issue.
+  is **disabled**: Done is not even enrolled (it costs zero API requests per
+  tick — keeping the board's finished issues enrolled is what blew the Linear
+  2,500 req/hr key limit). An enrolled issue that reaches Done is wound down as
+  **completed** (closing summary, nothing killed) by the un-enroll pass. Run
+  `ce-compound` manually when you want to distill learnings from a completed
+  issue.
 
 The canonical semantics live in
 `.agents/skills/thinkwork-linear-dispatcher/references/routing-contract.md`; the
@@ -335,7 +337,8 @@ changed.
 | Daemon won't stay up | `launchctl list \| grep factory` (col 2 = last exit code); the `daemon.log` tail for a `ConfigError`. Run `factoryd doctor`. |
 | "config file not found / invalid" | `~/.thinkwork-factory/config.json` exists, is valid JSON, has `linear.apiKey`/`teamKey` and at least one host. |
 | Workers never spawn | `claude`/`codex`/`gh` absolute paths + auth; the host's `capabilities` include the lane; `maxConcurrent` not saturated. |
-| Nothing enrolls | Issue has a lane label **and** is at/above `Brainstorming` (Todo is ignored). |
+| Nothing enrolls | Issue has a lane label **and** is at/above `Brainstorming` (Todo is ignored; Done is terminal). |
+| `Rate limit exceeded` in `daemon.log` | The Linear key hit its 2,500 req/hr window. The daemon backs off 15 min per rate-limited tick and recovers on its own; if it recurs at idle, raise `pollIntervalSeconds`. |
 | Slack silent | `slack.botToken`+`appToken`+`channelId` set; bot invited to the channel; `operatorUserIds` non-empty for the answer round-trip. |
 | A live worker died on daemon restart | Detached workers survive a daemon restart by design; the reconciler re-adopts them. |
 

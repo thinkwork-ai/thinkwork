@@ -369,6 +369,36 @@ describe("runUnenrollPass — completed", () => {
     expect(slack.posts.some((p) => p.text.includes("Done"))).toBe(true);
   });
 
+  it("classifies a Done MISS as completed (Done is no longer enrolled): summary posted, nothing killed", async () => {
+    // Done ∉ ACTIVE_STATES, so a finished enrolled issue drops out of the
+    // candidate set and must be classified from the batched miss-fetch as
+    // COMPLETED (checkered-flag summary, no worker kill) — never abandoned.
+    const issue = makeIssue({
+      identifier: "THINK-122",
+      state: "Done",
+      labels: ["Claude", "LFG"],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const transport = new FakeTransport();
+    store.upsertSlackThread({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      channelId: CHANNEL,
+      threadTs: `ts-${issue.identifier}`,
+    });
+
+    const result = await runUnenrollPass(
+      { store, gateway, transport, log, slack: makeSlack(gateway, slack) },
+      [], // Done issue is missing from the candidate set
+    );
+
+    expect(result.outcomes).toEqual([{ issue: "THINK-122", verdict: "completed" }]);
+    expect(store.getSlackThreadByIssue(issue.id)).toBeUndefined();
+    expect(transport.killed).toEqual([]);
+    expect(slack.posts.some((p) => p.text.includes("Done"))).toBe(true);
+  });
+
   it("closes a non-LFG Done enrolled issue (nothing left to compound)", async () => {
     const issue = makeIssue({
       identifier: "THINK-121",

@@ -481,8 +481,40 @@ export async function runTick(
   return { decisions, stopped: false };
 }
 
+/**
+ * Cooldown after a tick that failed on a Linear API rate limit (2,500 req/hr
+ * per API key, rolling window). Retrying at the normal poll interval keeps the
+ * window saturated forever — the 2026-07-13 incident retried every ~35s for
+ * 40+ minutes without ever recovering. Fifteen minutes lets a meaningful
+ * fraction of the rolling window drain before the next attempt.
+ */
+export const RATE_LIMIT_COOLDOWN_SECONDS = 900;
+
+/**
+ * True when an error (however wrapped) is a Linear API rate-limit rejection.
+ * Matched on message text across the cause chain: the SDK surfaces
+ * "Rate limit exceeded" for 429s, and raw GraphQL errors carry RATELIMITED
+ * extension codes; both arrive here wrapped in PollAbortedError/plain Errors.
+ */
+export function isRateLimitError(e: unknown): boolean {
+  const parts: string[] = [];
+  let cursor: unknown = e;
+  for (let depth = 0; depth < 5 && cursor !== undefined && cursor !== null; depth++) {
+    parts.push(cursor instanceof Error ? cursor.message : String(cursor));
+    cursor = cursor instanceof Error ? cursor.cause : undefined;
+  }
+  const text = parts.join(" ");
+  return /rate ?limit/i.test(text) || /RATELIMITED/.test(text);
+}
+
 export interface RunDaemonOptions {
   pollIntervalSeconds: number;
+  /**
+   * Sleep THIS long (instead of `pollIntervalSeconds`) after a tick that
+   * failed on a Linear rate limit. Defaults to RATE_LIMIT_COOLDOWN_SECONDS;
+   * the effective sleep is never shorter than the normal poll interval.
+   */
+  rateLimitCooldownSeconds?: number;
   /** Single tick then return (tracer/observability mode). */
   once?: boolean;
   controller?: DaemonController;
@@ -576,6 +608,9 @@ export async function runDaemon(
 
     let tickCount = 0;
     for (;;) {
+      // Rate-limit backoff: a rate-limited tick extends THIS iteration's sleep
+      // to the cooldown so the daemon stops hammering a saturated window.
+      let sleepSeconds = options.pollIntervalSeconds;
       try {
         const tick = await runTick(deps, () => controller.stopping);
         deps.log.info("tick complete", {
@@ -583,7 +618,16 @@ export async function runDaemon(
           stopped: tick.stopped,
         });
       } catch (e) {
-        if (e instanceof PollAbortedError) {
+        if (isRateLimitError(e)) {
+          sleepSeconds = Math.max(
+            options.pollIntervalSeconds,
+            options.rateLimitCooldownSeconds ?? RATE_LIMIT_COOLDOWN_SECONDS,
+          );
+          deps.log.warn(
+            "tick hit the Linear API rate limit — cooling down before retry",
+            { cooldownSeconds: sleepSeconds, error: String(e) },
+          );
+        } else if (e instanceof PollAbortedError) {
           deps.log.warn("poll tick aborted — retrying next interval", {
             error: e.message,
           });
@@ -604,7 +648,7 @@ export async function runDaemon(
 
       if (options.once === true || controller.stopping) return;
 
-      const deadline = Date.now() + options.pollIntervalSeconds * 1000;
+      const deadline = Date.now() + sleepSeconds * 1000;
       while (Date.now() < deadline) {
         if (controller.stopping) return;
         await new Promise((r) =>
