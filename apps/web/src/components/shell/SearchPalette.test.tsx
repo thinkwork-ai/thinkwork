@@ -302,6 +302,32 @@ describe("SearchPalette", () => {
     expect(onAsk).toHaveBeenCalledWith("acme");
   });
 
+  it("renders the ask view in place of the rails when askView is active", () => {
+    legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
+    legResults.set("WIKI", okLeg("WIKI", { wikiHits: [] }));
+    legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
+
+    renderPalette({
+      search: "acme",
+      askView: {
+        query: "acme",
+        status: "answered",
+        activity: [],
+        answer: "The renewal closes Friday.",
+        error: null,
+        threadId: "thread-hidden",
+      },
+      onAskOpenPermalink: vi.fn(),
+      onAskBack: vi.fn(),
+    });
+
+    // The ask answer + permalink render; the broker rails do not.
+    expect(screen.getByText("The renewal closes Friday.")).toBeTruthy();
+    expect(screen.getByText(/open full answer/i)).toBeTruthy();
+    expect(screen.queryByText("Wiki")).toBeNull();
+    expect(screen.queryByText(/^Ask/)).toBeNull();
+  });
+
   it("with the rails gate off, a typed query renders only thread-only behavior", () => {
     renderPalette({
       search: "acme",
