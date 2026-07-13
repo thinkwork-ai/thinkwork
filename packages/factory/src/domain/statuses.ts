@@ -28,6 +28,11 @@ export const BLOCKER_LABELS = [
   "Unsafe Ambiguity",
   "CI Failed",
   "Blocked: Auth",
+  // Operator pause (Slack console `pause`/`resume`, KTD6). This entry is what
+  // makes the label REAL: the poller filters candidate labels through this
+  // list, so without it `pause` would ack success while workers kept
+  // launching (the label would never reach candidate.blockerLabels).
+  "Paused",
 ] as const;
 export type BlockerLabel = (typeof BLOCKER_LABELS)[number];
 

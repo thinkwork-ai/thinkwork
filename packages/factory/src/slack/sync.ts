@@ -50,7 +50,7 @@ import {
   RETRY_ACTION_ID,
   type AnswerButtonValue,
 } from "./questions.js";
-import { relayAnswer, relayInboundMessage, type RelayDeps } from "./relay.js";
+import { relayAnswer, relayInboundMessage, RETRY_ANSWER_TEXT, type RelayDeps } from "./relay.js";
 import {
   buildIssueStatus,
   formatIssueStatusLive,
@@ -616,8 +616,7 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
       // Resolve the answer text for the two relaying buttons.
       let answer: string;
       if (action.actionId === RETRY_ACTION_ID) {
-        answer =
-          "Retry: operator cleared the blocker via Slack without additional guidance — re-attempt from the newest baton and prior evidence.";
+        answer = RETRY_ANSWER_TEXT;
       } else if (typeof value.answer === "string" && value.answer.trim() !== "") {
         answer = value.answer;
       } else {

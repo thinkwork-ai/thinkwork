@@ -33,6 +33,7 @@ import { installFactoryd, uninstallFactoryd } from "./cli-install.js";
 import { createLinearGateway, type CommentTrust } from "./linear/client.js";
 import { createLogger } from "./logger.js";
 import { createSlackGateway, type SlackGateway } from "./slack/client.js";
+import { createSteeringExecutors } from "./slack/console.js";
 import { createSlackSync, type SlackSync } from "./slack/sync.js";
 import { buildStatusView, formatStatusView } from "./slack/status.js";
 import { postNag } from "./slack/threads.js";
@@ -195,6 +196,13 @@ program
           operatorUserIds: config.slack.operatorUserIds ?? [],
           log: log.child("slack"),
           trust,
+          consoleExecutors: {
+            ...createSteeringExecutors({
+              gateway,
+              store,
+              log: log.child("console"),
+            }),
+          },
         });
         slackGateway.onMessage((message) => slackSync!.handleInbound(message));
         // Answer-form button clicks (block_actions) ride the same socket.
