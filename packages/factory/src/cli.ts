@@ -197,6 +197,8 @@ program
           trust,
         });
         slackGateway.onMessage((message) => slackSync!.handleInbound(message));
+        // Answer-form button clicks (block_actions) ride the same socket.
+        slackGateway.onAction((action) => slackSync!.handleAction(action));
         await slackGateway.start();
         log.info("slack surface online", {
           channel: config.slack.channelId,

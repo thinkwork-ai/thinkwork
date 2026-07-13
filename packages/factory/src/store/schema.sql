@@ -139,6 +139,9 @@ CREATE TABLE IF NOT EXISTS hosts (
 --                         to Slack as an @mention escalation (outbound dedupe).
 --   last_milestone_key  — phase/status of the newest milestone already posted
 --                         (outbound dedupe; milestones carry no @mention).
+--   last_escalated_ts   — Slack ts of the newest escalation MESSAGE, so an
+--                         answer-form button click can chat.update that exact
+--                         message (strip the buttons once answered).
 CREATE TABLE IF NOT EXISTS slack_threads (
   issue_id           TEXT PRIMARY KEY,
   identifier         TEXT NOT NULL,
@@ -146,6 +149,7 @@ CREATE TABLE IF NOT EXISTS slack_threads (
   thread_ts          TEXT NOT NULL,
   last_relayed_ts    TEXT,
   last_escalated_key TEXT,
+  last_escalated_ts  TEXT,
   last_milestone_key TEXT,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL

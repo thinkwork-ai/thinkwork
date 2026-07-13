@@ -92,6 +92,8 @@ export interface SlackThreadRow {
   thread_ts: string;
   last_relayed_ts: string | null;
   last_escalated_key: string | null;
+  /** Slack ts of the newest escalation message (chat.update target for button clicks). */
+  last_escalated_ts: string | null;
   last_milestone_key: string | null;
   created_at: string;
   updated_at: string;
@@ -154,7 +156,11 @@ export interface FactoryStore {
   /** Update one of the outbound/inbound idempotency high-water marks. */
   setSlackThreadMarker(
     issueId: string,
-    field: "last_relayed_ts" | "last_escalated_key" | "last_milestone_key",
+    field:
+      | "last_relayed_ts"
+      | "last_escalated_key"
+      | "last_escalated_ts"
+      | "last_milestone_key",
     value: string,
   ): void;
   /** Every mapped thread, for the R18 status view. */
@@ -348,6 +354,10 @@ export function openStore(
   // alters an existing table, so add the column here (the store is a
   // rebuildable cache — no data migration needed, it just starts at 0).
   ensureColumn(db, "leases", "sla_accumulated_ms", "INTEGER NOT NULL DEFAULT 0");
+  // Same pattern for the answer-forms feature: a factory.db created before
+  // last_escalated_ts existed just gains the (nullable) column — the click
+  // handler treats null as "no escalation message to update" and moves on.
+  ensureColumn(db, "slack_threads", "last_escalated_ts", "TEXT");
   try {
     assertDbTerminalStatesMatch(db);
   } catch (err) {

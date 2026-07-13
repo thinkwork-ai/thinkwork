@@ -353,6 +353,290 @@ describe("handleInbound routing", () => {
   });
 });
 
+describe("answer-form buttons (block_actions round-trip)", () => {
+  const FENCED_QUESTION = [
+    "blocker:THINK-50:implement — @eric1",
+    "",
+    "Questions:",
+    "1. Which OAuth scope should the connector request? (recommend read-only)",
+    "",
+    "```answers",
+    "- question: Which OAuth scope should the connector request?",
+    "  recommended: 1",
+    "  options:",
+    "    - Read-only (drive.readonly)",
+    "    - Full drive access",
+    "```",
+  ].join("\n");
+
+  type Button = {
+    action_id: string;
+    value: string;
+    style?: string;
+    text: { text: string };
+  };
+  type Block = { type: string; elements?: Button[] };
+
+  function allButtons(blocks: unknown[] | undefined): Button[] {
+    return ((blocks ?? []) as Block[])
+      .filter((b) => b.type === "actions")
+      .flatMap((b) => b.elements ?? []);
+  }
+
+  /** Escalate a fenced question and return everything a click test needs. */
+  async function escalated() {
+    const issue = makeIssue({
+      identifier: "THINK-50",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        { id: "b1", body: "handoff:THINK-50:Ready to Work\n\nGoal: go", authorId: "viewer-daemon" },
+        { id: "q-1", body: FENCED_QUESTION, authorId: "worker" },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), {
+      kind: "block",
+      label: "Needs User",
+      reason: "r",
+    });
+    const row = store.getSlackThreadByIssue(issue.id)!;
+    const escalation = slack.mentions()[0];
+    return { issue, gateway, slack, sync, row, escalation };
+  }
+
+  it("escalation with a parseable fence posts option buttons (recommended = primary + ✅)", async () => {
+    const { escalation, row } = await escalated();
+    const buttons = allButtons(escalation.blocks);
+    expect(buttons.map((b) => b.action_id)).toEqual([
+      "factory-answer:0:0",
+      "factory-answer:0:1",
+      "factory-answer-other",
+    ]);
+    expect(buttons[0].style).toBe("primary");
+    expect(buttons[0].text.text).toBe("✅ Read-only (drive.readonly)");
+    // The escalation ts is stored so a click can chat.update the message.
+    expect(row.last_escalated_ts).toBe(escalation.ts);
+  });
+
+  it("escalation WITHOUT a fence posts retry blocks instead", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-51",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        {
+          id: "fb-1",
+          body: "factory-block:THINK-51\n\n2 consecutive killed attempts — escalating",
+          authorId: "viewer-daemon",
+        },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), {
+      kind: "block",
+      label: "Needs User",
+      reason: "r",
+    });
+    const buttons = allButtons(slack.mentions()[0].blocks);
+    expect(buttons.map((b) => b.action_id)).toEqual([
+      "factory-answer-retry",
+      "factory-answer-other",
+    ]);
+  });
+
+  it("clicking an option button relays: baton + blocker cleared + mirror + buttons stripped", async () => {
+    const { issue, gateway, slack, sync, row, escalation } = await escalated();
+    const button = allButtons(escalation.blocks)[0];
+
+    await sync.handleAction({
+      channel: CHANNEL,
+      messageTs: escalation.ts,
+      threadTs: row.thread_ts,
+      userId: OPERATOR,
+      actionId: button.action_id,
+      value: button.value,
+    });
+
+    // Baton appended with the option's full answer text; blocker cleared;
+    // mirror posted — identical to a typed reply.
+    expect(
+      gateway
+        .writesOf("createComment")
+        .some((w) => w.args[1].startsWith("handoff:THINK-50") && w.args[1].includes("Q1: Read-only (drive.readonly)")),
+    ).toBe(true);
+    expect(gateway.writesOf("removeLabel").map((w) => w.args)).toContainEqual([
+      issue.id,
+      "Needs User",
+    ]);
+    expect(
+      gateway.writesOf("createComment").some((w) => w.args[1].startsWith("slack-relay:")),
+    ).toBe(true);
+    // The escalation message was chat.update-d to a buttonless summary so the
+    // form cannot double-fire.
+    expect(slack.updates).toHaveLength(1);
+    expect(slack.updates[0].ts).toBe(row.last_escalated_ts);
+    expect(slack.updates[0].text).toContain(`✅ Answered by <@${OPERATOR}>`);
+    expect(allButtons(slack.updates[0].blocks)).toHaveLength(0);
+  });
+
+  it("a click by a non-operator is acknowledged but never injected", async () => {
+    const { issue, gateway, slack, sync, row, escalation } = await escalated();
+    const button = allButtons(escalation.blocks)[0];
+
+    await sync.handleAction({
+      channel: CHANNEL,
+      messageTs: escalation.ts,
+      threadTs: row.thread_ts,
+      userId: "UINTRUDER",
+      actionId: button.action_id,
+      value: button.value,
+    });
+
+    expect(gateway.writesOf("removeLabel")).toHaveLength(0);
+    expect(issue.labels).toContain("Needs User");
+    expect(slack.updates).toHaveLength(0); // buttons stay live
+    // But a polite ack was posted in the thread.
+    expect(
+      slack.repliesIn(row.thread_ts).some((p) => p.text.includes("authorized operator")),
+    ).toBe(true);
+  });
+
+  it("the Other… button posts typing instructions and relays nothing", async () => {
+    const { gateway, slack, sync, row, escalation } = await escalated();
+    const other = allButtons(escalation.blocks).find(
+      (b) => b.action_id === "factory-answer-other",
+    )!;
+    const before = gateway.writes.length;
+
+    await sync.handleAction({
+      channel: CHANNEL,
+      messageTs: escalation.ts,
+      threadTs: row.thread_ts,
+      userId: OPERATOR,
+      actionId: other.action_id,
+      value: other.value,
+    });
+
+    expect(gateway.writes).toHaveLength(before); // no Linear writes at all
+    expect(slack.updates).toHaveLength(0);
+    const replies = slack.repliesIn(row.thread_ts);
+    expect(replies[replies.length - 1].text).toContain("Reply in this thread");
+  });
+
+  it("the retry button relays the fixed retry answer", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-52",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        { id: "fb-1", body: "factory-block:THINK-52\n\nceiling hit", authorId: "viewer-daemon" },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), {
+      kind: "block",
+      label: "Needs User",
+      reason: "r",
+    });
+    const row = store.getSlackThreadByIssue(issue.id)!;
+    const retry = allButtons(slack.mentions()[0].blocks)[0];
+
+    await sync.handleAction({
+      channel: CHANNEL,
+      messageTs: slack.mentions()[0].ts,
+      threadTs: row.thread_ts,
+      userId: OPERATOR,
+      actionId: retry.action_id,
+      value: retry.value,
+    });
+
+    expect(gateway.writesOf("removeLabel").map((w) => w.args)).toContainEqual([
+      issue.id,
+      "Needs User",
+    ]);
+    expect(
+      gateway
+        .writesOf("createComment")
+        .some((w) => w.args[1].includes("operator cleared the blocker via Slack without additional guidance")),
+    ).toBe(true);
+  });
+
+  it("a malformed button value is logged and ignored", async () => {
+    const { gateway, slack, sync, row, escalation } = await escalated();
+    const before = gateway.writes.length;
+    const postsBefore = slack.posts.length;
+
+    await sync.handleAction({
+      channel: CHANNEL,
+      messageTs: escalation.ts,
+      threadTs: row.thread_ts,
+      userId: OPERATOR,
+      actionId: "factory-answer:0:0",
+      value: "not json {{{",
+    });
+
+    expect(gateway.writes).toHaveLength(before);
+    expect(slack.posts).toHaveLength(postsBefore);
+    expect(slack.updates).toHaveLength(0);
+  });
+
+  it("a click on an unmapped thread is ignored", async () => {
+    const { gateway, slack, sync, escalation } = await escalated();
+    const button = allButtons(escalation.blocks)[0];
+    const before = gateway.writes.length;
+
+    await sync.handleAction({
+      channel: CHANNEL,
+      messageTs: escalation.ts,
+      threadTs: "9999.999999",
+      userId: OPERATOR,
+      actionId: button.action_id,
+      value: button.value,
+    });
+
+    expect(gateway.writes).toHaveLength(before);
+    expect(slack.updates).toHaveLength(0);
+  });
+
+  it("a second click after the answer is a polite no-op (no double relay)", async () => {
+    const { gateway, slack, sync, row, escalation } = await escalated();
+    const button = allButtons(escalation.blocks)[0];
+    const click = {
+      channel: CHANNEL,
+      messageTs: escalation.ts,
+      threadTs: row.thread_ts,
+      userId: OPERATOR,
+      actionId: button.action_id,
+      value: button.value,
+    };
+
+    await sync.handleAction(click);
+    const batonWrites = gateway
+      .writesOf("createComment")
+      .filter((w) => w.args[1].startsWith("handoff:")).length;
+    const updates = slack.updates.length;
+
+    // Second click: the relay core's no-open-question check (Needs User is
+    // gone) makes it a polite no-op — nothing new is injected.
+    await sync.handleAction(click);
+
+    expect(
+      gateway.writesOf("createComment").filter((w) => w.args[1].startsWith("handoff:")).length,
+    ).toBe(batonWrites);
+    expect(gateway.writesOf("removeLabel")).toHaveLength(1);
+    expect(slack.updates).toHaveLength(updates); // no second edit
+    const replies = slack.repliesIn(row.thread_ts);
+    expect(replies[replies.length - 1].text).toContain("isn't waiting on an answer");
+  });
+});
+
 describe("newestQuestion — question-protocol comment wins", () => {
   it("prefers the newest blocker: comment over a NEWER worker progress note", async () => {
     // THINK-274 live failure shape (inverted): the real numbered question is a

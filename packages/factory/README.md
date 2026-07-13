@@ -251,8 +251,11 @@ Notes:
    for a private channel).
 3. Event subscriptions: `message.channels` (and `message.groups` for a private
    channel) — this is how the bot sees your in-thread replies.
-4. Install to the workspace; invite the bot to the factory channel.
-5. Put the **bot token** (`xoxb-…`), **app-level token** (`xapp-…`, Socket
+4. Enable **Interactivity & Shortcuts** — required for the answer-form buttons
+   (no Request URL needed; Socket Mode carries the click payloads). Without it,
+   buttons render but clicks silently go nowhere.
+5. Install to the workspace; invite the bot to the factory channel.
+6. Put the **bot token** (`xoxb-…`), **app-level token** (`xapp-…`, Socket
    Mode), **channel id**, and your **member id** in `operatorUserIds` into
    config. `webhookUrl` (an incoming webhook) is used by the watchdog to alert
    when the daemon goes silent.
@@ -362,6 +365,39 @@ Slack user id is in `operatorUserIds`, the answer is injected verbatim into the
 worker's relaunch baton, `Needs User` is cleared, and the issue resumes. Replies
 from anyone not on the allowlist are acknowledged but not injected. A bare
 `status` in a thread returns that issue's current pipeline state.
+
+### Answer forms in Slack
+
+Escalations arrive as clickable **Block Kit forms**, not just text. When the
+worker's `blocker:` comment carries a machine-readable fence of language
+`answers` (the worker prompt mandates one), each question renders as a row of
+option buttons — the recommended option is highlighted (`✅`, primary style).
+One click relays that option exactly as if you had typed it (baton append,
+`Needs User` cleared, Linear mirror), and the message's buttons are replaced
+with an "✅ Answered by …" summary so the form can't double-fire. Escalations
+with no parseable form (e.g. a daemon attempt-ceiling block) instead get a
+`🔁 Clear blocker & retry` button plus the same escape hatch. `✍️ Other…`
+never relays anything — it just reminds you to type your real answer in the
+thread, which is relayed verbatim as before. Clicks from users not in
+`operatorUserIds` are politely refused, exactly like typed replies.
+
+The fence contract (appended after the prose in the same blocker comment; the
+1-based `recommended` index is required, 2–4 options of ≤ 75 chars each):
+
+````markdown
+```answers
+- question: Which OAuth scope should the connector request?
+  recommended: 1
+  options:
+    - Read-only (drive.readonly)
+    - Full drive access
+```
+````
+
+One-time Slack app setup: enable **Interactivity & Shortcuts** in the app
+configuration. No Request URL is needed — Socket Mode delivers the
+`block_actions` payloads over the daemon's existing WebSocket. With
+Interactivity off, buttons render but clicks silently go nowhere.
 
 ---
 

@@ -90,14 +90,20 @@ export async function postMilestone(
   return deps.slack.postThreadReply(ref.channel, ref.threadTs, text);
 }
 
-/** Post an escalation (question / blocker) WITH an @mention of the operators. */
+/**
+ * Post an escalation (question / blocker) WITH an @mention of the operators.
+ * `blocks` (the interactive answer form) rides along when provided; the plain
+ * `text` remains the notification fallback Slack requires.
+ */
 export async function postEscalation(
   ref: ThreadRef,
   text: string,
   deps: Pick<ThreadDeps, "slack" | "operatorUserIds">,
+  blocks?: unknown[],
 ): Promise<string> {
   return deps.slack.postThreadReply(ref.channel, ref.threadTs, text, {
     mentionUserIds: [...deps.operatorUserIds],
+    ...(blocks !== undefined ? { blocks } : {}),
   });
 }
 

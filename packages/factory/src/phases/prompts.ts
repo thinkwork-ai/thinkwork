@@ -147,6 +147,25 @@ Question protocol: when a material question blocks progress, post one comment
 add Needs User, record the questions in the Progress document, and stop. Make
 trivial reversible choices autonomously and record them.
 
+In that same blocker comment, AFTER the prose, you MUST append a
+machine-readable answer form as a fenced block of language \`answers\` — the
+operator's Slack surface renders it as clickable buttons. YAML, one list item
+per numbered question:
+
+\`\`\`answers
+- question: Which OAuth scope should the connector request?
+  recommended: 1
+  options:
+    - Read-only (drive.readonly)
+    - Full drive access
+\`\`\`
+
+Rules: \`options\` are short answer labels (75 characters max each — the Slack
+button limit); give 2–4 options per question; \`recommended\` is REQUIRED and
+is the 1-based index of the option you recommend. The prose above the fence
+still carries your full reasoning and recommendations — the fence is additive,
+never a replacement for the numbered questions.
+
 LFG never-stuck rule: when the LFG label is on the issue, a question you can
 answer with a recommendation is NOT a blocker — adopt your recommended answer,
 record the decision and rationale in the Progress document and ledger, and
