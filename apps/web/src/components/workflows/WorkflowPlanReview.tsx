@@ -203,14 +203,36 @@ export function WorkflowPlanReview({
 
       <div className="space-y-2">
         <h4 className="text-sm font-medium">Sources</h4>
-        {plan.sources.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No sources are configured yet — this run will complete as a visible
-            no-op.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {plan.sources.map((source) => {
+        <ul className="space-y-2">
+          <li className="flex items-start gap-3 rounded-md border border-border/70 p-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              aria-label="Include Threads source"
+              checked
+              disabled
+              readOnly
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">Threads</span>
+                <Badge variant="default" className="text-[10px]">
+                  always included
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Completed Thread conversations are already retained in
+                Hindsight; this run compounds that memory bank.
+              </p>
+            </div>
+          </li>
+          {plan.sources.length === 0 ? (
+            <li className="rounded-md border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
+              No optional external sources are configured. Gmail, Twenty CRM,
+              web, and knowledge-base nodes will be skipped.
+            </li>
+          ) : (
+            plan.sources.map((source) => {
               const blocked =
                 !source.enabled || source.grantStatus !== "active";
               const checked =
@@ -279,9 +301,9 @@ export function WorkflowPlanReview({
                   </div>
                 </li>
               );
-            })}
-          </ul>
-        )}
+            })
+          )}
+        </ul>
       </div>
 
       {plan.focus.length > 0 ? (

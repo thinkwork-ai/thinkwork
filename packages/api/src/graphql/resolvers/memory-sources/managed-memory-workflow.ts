@@ -30,18 +30,10 @@ export function toGraphqlManagedMemoryWorkflow(
       message: "The managed workflow is not ready to run.",
     });
   }
-  if (ensured.sources.length === 0) {
-    reasons.push({
-      code: "no_sources_configured",
-      message:
-        "No memory sources are configured yet — add a source to give this automation something to process.",
-    });
-  } else if (!ensured.sources.some((source) => source.enabled)) {
-    reasons.push({
-      code: "all_sources_disabled",
-      message: "Every configured source is disabled.",
-    });
-  }
+  // Thread conversations are the baseline source and are retained into the
+  // target Hindsight bank at the end of each turn. The rows in `sources` are
+  // optional external enrichments (Gmail, Twenty, web, KB), so having none —
+  // or having every external source disabled — must not block the workflow.
 
   return {
     processor: {

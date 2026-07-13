@@ -395,7 +395,7 @@ export async function ensurePersonalMemoryAutomation(
     mode: "personal",
     name: "Personal Memory Processing",
     description:
-      "Platform-managed personal memory automation: preflight, plan review on manual runs, and bounded processing of your opted-in sources into your private memory bank.",
+      "Platform-managed personal memory automation: process Thread memory plus optional bounded external sources into your private memory bank.",
     ownerUserId: args.userId,
   });
   await ensureMemoryBlueprintVersion(db, {

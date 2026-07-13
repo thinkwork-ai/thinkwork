@@ -456,11 +456,33 @@ describe("AutomationFlowSection memory pipeline", () => {
   it("draws the server-built stage graph and keeps the shared status rail", () => {
     renderMemorySection();
     expect(screen.getByTestId("canvas-node-memory-trigger")).toBeTruthy();
+    expect(
+      screen.getByTestId("canvas-node-memory-source-threads"),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("canvas-node-memory-source-twenty").textContent,
+    ).toContain("Twenty CRM — Not configured · skipped");
+    expect(
+      screen.getByTestId("canvas-node-memory-source-email").textContent,
+    ).toContain("Gmail — Configured");
     expect(screen.getByTestId("canvas-node-stage-acquire")).toBeTruthy();
     expect(screen.getByTestId("canvas-node-stage-wiki")).toBeTruthy();
     // No generic automation nodes — the pipeline IS the definition.
     expect(screen.queryByTestId("canvas-node-work")).toBeNull();
     expect(screen.getByTestId("status-rail")).toBeTruthy();
+  });
+
+  it("explains that Threads are always processed and optional sources skip", () => {
+    renderMemorySection();
+    fireEvent.click(screen.getByTestId("canvas-node-memory-source-threads"));
+    expect(screen.getByText("Always on")).toBeTruthy();
+    expect(
+      screen.getByText(/Thread conversations are retained into Hindsight/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("canvas-node-memory-source-twenty"));
+    expect(screen.getByText("Skipped")).toBeTruthy();
+    expect(screen.getByText(/optional and is not configured/)).toBeTruthy();
   });
 
   it("toggles an optional stage through the memory mutation", () => {

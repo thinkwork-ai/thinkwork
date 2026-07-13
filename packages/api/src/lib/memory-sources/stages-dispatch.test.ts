@@ -5,8 +5,8 @@
  * behavior: per-source family dispatch (mixed-family processors), fail-closed
  * handling of unregistered families, the requiresOwnerUser gate, and — the
  * dev dogfood regression (run 929053dd) — a personal processor with ZERO
- * sources completing every stage as a visible no-op WITHOUT writing any
- * memory_run_items row (there is no valid source_config_id FK target).
+ * external sources no-oping external stages without invalid FK writes while
+ * still compounding the Thread-backed Hindsight bank.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -242,27 +242,39 @@ describe("runAcquire family dispatch", () => {
 // Zero-source runs (dev regression: run 929053dd FK violation on compound)
 // ---------------------------------------------------------------------------
 
-describe("zero-source personal run: every stage is a visible no-op with NO run items", () => {
+describe("zero-external-source personal run", () => {
   const personal = { mode: "personal", targetScope: "user", sources: [] };
 
-  it("acquire → extract → project → resolve → retain → compound all succeed", async () => {
+  it("external stages no-op but compound still processes Thread memory in the User Bank", async () => {
+    runBrainDreamState.mockResolvedValue({
+      banks: [{ status: "applied", runId: "dream-threads", applied: 3 }],
+    });
     for (const [stage, run] of [
       ["acquire", runAcquire],
       ["extract", runExtract],
       ["project", runProject],
       ["resolve", runResolve],
       ["retain", runRetain],
-      ["compound", runCompound],
     ] as const) {
       const result = await run(ctxWith({ ...personal, stage }));
       expect(result.status, stage).toBe("succeeded");
       expect(result.counts?.noop, stage).toBe(1);
     }
-    // The FK regression: no memory_run_items row may be written for a
-    // processor with zero sources (no valid source_config_id to reference),
-    // and no consolidation runs against an empty pipeline.
+
+    const compound = await runCompound(
+      ctxWith({ ...personal, stage: "compound" }),
+    );
+    expect(compound.status).toBe("succeeded");
+    expect(compound.counts).toEqual({ compounded: 1 });
+    expect(runBrainDreamState).toHaveBeenCalledTimes(1);
+    expect(runBrainDreamState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({ bankId: "user_owner-1" }),
+      }),
+    );
+    // No external source means no valid memory_run_items FK target. The
+    // workflow step output is still the durable execution evidence.
     expect(vi.mocked(recordRunItem)).not.toHaveBeenCalled();
-    expect(runBrainDreamState).not.toHaveBeenCalled();
   });
 
   it("compound with sources still records its run item against a REAL source", async () => {
