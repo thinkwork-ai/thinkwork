@@ -885,6 +885,12 @@ export type ApprovePiExtensionVersionInput = {
   versionId: Scalars['ID']['input'];
 };
 
+export type ApproveRoutineProposalInput = {
+  proposalId: Scalars['ID']['input'];
+  reviewedFingerprint: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
 export type Artifact = {
   __typename?: 'Artifact';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -1388,6 +1394,26 @@ export type CapabilityOperationView = {
   withheldReasons: Array<Scalars['String']['output']>;
 };
 
+export type CapabilityRoutineProposal = {
+  __typename?: 'CapabilityRoutineProposal';
+  approvalEvidence?: Maybe<Scalars['AWSJSON']['output']>;
+  approvalMode?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdByActorId?: Maybe<Scalars['ID']['output']>;
+  createdByActorType?: Maybe<Scalars['String']['output']>;
+  decidedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  decidedByUserId?: Maybe<Scalars['ID']['output']>;
+  evidenceRefs: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  inboxItemId?: Maybe<Scalars['ID']['output']>;
+  payload: Scalars['AWSJSON']['output'];
+  payloadFingerprint: Scalars['String']['output'];
+  promotedCommitSha?: Maybe<Scalars['String']['output']>;
+  routineId?: Maybe<Scalars['ID']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
 export type CapabilityRuntimeMutationResult = {
   __typename?: 'CapabilityRuntimeMutationResult';
   binding?: Maybe<CapabilityCredentialBinding>;
@@ -1483,6 +1509,10 @@ export type ComplianceEventPageInfo = {
 };
 
 export enum ComplianceEventType {
+  AgentCapabilityBrokerCallAuthorized = 'AGENT_CAPABILITY_BROKER_CALL_AUTHORIZED',
+  AgentCapabilityBrokerCallRejected = 'AGENT_CAPABILITY_BROKER_CALL_REJECTED',
+  AgentCapabilityBrokerSessionCancelled = 'AGENT_CAPABILITY_BROKER_SESSION_CANCELLED',
+  AgentCapabilityBrokerSessionOpened = 'AGENT_CAPABILITY_BROKER_SESSION_OPENED',
   AgentConnectionDetached = 'AGENT_CONNECTION_DETACHED',
   AgentConnectionGranted = 'AGENT_CONNECTION_GRANTED',
   AgentConnectionProposalAdmitted = 'AGENT_CONNECTION_PROPOSAL_ADMITTED',
@@ -1830,6 +1860,13 @@ export type CreateRoutineInput = {
   stepManifest?: InputMaybe<Scalars['AWSJSON']['input']>;
   tenantId: Scalars['ID']['input'];
   visibility?: InputMaybe<RoutineVisibility>;
+};
+
+export type CreateRoutineProposalInput = {
+  bundle: Scalars['AWSJSON']['input'];
+  routineId?: InputMaybe<Scalars['ID']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type CreateScheduledJobInput = {
@@ -4250,6 +4287,7 @@ export type Mutation = {
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
   approvePiExtensionVersion: PiExtension;
+  approveRoutineProposal: RoutineProposalMutationResult;
   archiveEvalDataset: EvalDataset;
   archiveEvalProfile: EvalProfile;
   assignThreadLabel: ThreadLabelAssignment;
@@ -4324,6 +4362,7 @@ export type Mutation = {
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
+  createRoutineProposal: RoutineProposalMutationResult;
   createScheduledJob: ScheduledJob;
   createServicePrincipal: CapabilityRuntimeMutationResult;
   /** Create a tenant-scoped skill draft. */
@@ -4515,6 +4554,7 @@ export type Mutation = {
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
   rejectPiExtensionVersion: PiExtension;
+  rejectRoutineProposal: RoutineProposalMutationResult;
   /** Tenant-operator rejection with rationale. */
   rejectSkillDraft: SkillDraft;
   releaseThread: Thread;
@@ -4880,6 +4920,11 @@ export type MutationApprovePiExtensionVersionArgs = {
 };
 
 
+export type MutationApproveRoutineProposalArgs = {
+  input: ApproveRoutineProposalInput;
+};
+
+
 export type MutationArchiveEvalDatasetArgs = {
   slug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
@@ -5069,6 +5114,11 @@ export type MutationCreateRecipeArgs = {
 
 export type MutationCreateRoutineArgs = {
   input: CreateRoutineInput;
+};
+
+
+export type MutationCreateRoutineProposalArgs = {
+  input: CreateRoutineProposalInput;
 };
 
 
@@ -5687,6 +5737,13 @@ export type MutationRejectOntologyChangeSetArgs = {
 
 export type MutationRejectPiExtensionVersionArgs = {
   input: RejectPiExtensionVersionInput;
+};
+
+
+export type MutationRejectRoutineProposalArgs = {
+  proposalId: Scalars['ID']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -7454,6 +7511,8 @@ export type Query = {
   routineDefinition?: Maybe<RoutineDefinition>;
   routineExecution?: Maybe<RoutineExecution>;
   routineExecutions: Array<RoutineExecution>;
+  routineProposal?: Maybe<CapabilityRoutineProposal>;
+  routineProposals: Array<CapabilityRoutineProposal>;
   routineRecipeCatalog: Array<RoutineRecipe>;
   routineRepairEvents: Array<RoutineRepairEvent>;
   routineSource: RoutineSource;
@@ -8414,6 +8473,18 @@ export type QueryRoutineExecutionsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   routineId: Scalars['ID']['input'];
   status?: InputMaybe<RoutineExecutionStatus>;
+};
+
+
+export type QueryRoutineProposalArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryRoutineProposalsArgs = {
+  routineId?: InputMaybe<Scalars['ID']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -9411,6 +9482,17 @@ export enum RoutineExecutionStatus {
   Succeeded = 'SUCCEEDED',
   TimedOut = 'TIMED_OUT'
 }
+
+export type RoutineProposalMutationResult = {
+  __typename?: 'RoutineProposalMutationResult';
+  hermetic?: Maybe<Scalars['AWSJSON']['output']>;
+  outcome: Scalars['String']['output'];
+  promotedCommitSha?: Maybe<Scalars['String']['output']>;
+  promotionOutcome?: Maybe<Scalars['String']['output']>;
+  proposal?: Maybe<CapabilityRoutineProposal>;
+  reason?: Maybe<Scalars['String']['output']>;
+  validatedSha?: Maybe<Scalars['String']['output']>;
+};
 
 export type RoutineRecipe = {
   __typename?: 'RoutineRecipe';

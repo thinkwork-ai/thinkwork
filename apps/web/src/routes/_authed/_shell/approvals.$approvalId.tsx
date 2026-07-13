@@ -3,9 +3,15 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { ApprovalDetail } from "@/components/approvals/ApprovalDetail";
 import { ApprovalQueue } from "@/components/approvals/ApprovalQueue";
-import type { ComputerApproval } from "@/components/approvals/approval-types";
+import { RoutineProposalQueue } from "@/components/approvals/RoutineProposalQueue";
+import { RoutineProposalReview } from "@/components/approvals/RoutineProposalReview";
+import {
+  routineProposalIdOf,
+  type ComputerApproval,
+} from "@/components/approvals/approval-types";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
+import { RoutineProposalQuery } from "@/lib/capability-runtime-queries";
 import {
   ApproveComputerApprovalMutation,
   ComputerApprovalQuery,
@@ -49,6 +55,18 @@ function ApprovalDetailPage() {
     RejectComputerApprovalMutation,
   );
 
+  const markedProposalId = routineProposalIdOf(data?.inboxItem);
+  // Direct-id fallback (THINK-280 U6): a SUBMITTED proposal has no inbox row
+  // yet, so the pending queue links straight to /approvals/<proposalId>.
+  // When the id resolves to no inbox item, probe it as a Routine proposal.
+  const [{ data: probeData, fetching: probeFetching }] = useQuery({
+    query: RoutineProposalQuery,
+    variables: { id: approvalId },
+    pause: fetching || data?.inboxItem != null,
+  });
+  const routineProposalId =
+    markedProposalId ??
+    (probeData?.routineProposal != null ? approvalId : null);
   const approvals = useMemo(
     () =>
       (queueData?.inboxItems ?? []).filter(
@@ -100,20 +118,30 @@ function ApprovalDetailPage() {
             isLoading={queueFetching && !queueData}
             error={queueError?.message ?? null}
           />
+          <RoutineProposalQueue tenantId={tenantId} selectedId={approvalId} />
         </aside>
-        <ApprovalDetail
-          approval={
-            data?.inboxItem?.type === "computer_approval"
-              ? data.inboxItem
-              : null
-          }
-          isLoading={fetching && !data}
-          error={error?.message ?? null}
-          isSubmitting={isSubmitting}
-          submitError={submitError}
-          onApprove={handleApprove}
-          onDeny={handleDeny}
-        />
+        {routineProposalId ? (
+          // THINK-280 U6: a Routine-promotion-linked inbox item renders the
+          // proposal review panel; the computer_approval path is untouched.
+          <RoutineProposalReview
+            proposalId={routineProposalId}
+            tenantId={data?.inboxItem?.tenantId ?? tenantId ?? ""}
+          />
+        ) : (
+          <ApprovalDetail
+            approval={
+              data?.inboxItem?.type === "computer_approval"
+                ? data.inboxItem
+                : null
+            }
+            isLoading={(fetching && !data) || probeFetching}
+            error={error?.message ?? null}
+            isSubmitting={isSubmitting}
+            submitError={submitError}
+            onApprove={handleApprove}
+            onDeny={handleDeny}
+          />
+        )}
       </div>
     </main>
   );

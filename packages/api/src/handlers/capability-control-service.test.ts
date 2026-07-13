@@ -547,3 +547,117 @@ describe("connection_research", () => {
     expect(inserted).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// routine_propose (THINK-280 U6) — create-only; never approve/commit/validate
+// ---------------------------------------------------------------------------
+
+function routineBundle(overrides: Record<string, unknown> = {}) {
+  return {
+    slug: "issue-health",
+    code: "def run(input):\n    return {'ok': True}\n",
+    inputSchema: { type: "object" },
+    outputSchema: { type: "object" },
+    fixtures: [
+      { path: "fixtures/00.json", input: { n: 1 }, expected: { ok: true } },
+    ],
+    invariants: [],
+    dependencies: [
+      {
+        twcap: "twcap://acme/connection/github-rest@1/repos.get",
+        contractHash: CONTRACT_HASH,
+        definitionVersionId: "ver-1",
+      },
+    ],
+    minimumGrants: null,
+    principal: { mode: "service" },
+    effectSummary: { effect: "read" },
+    evidence: { brokerSessionId: "bs-1" },
+    ...overrides,
+  };
+}
+
+describe("routine_propose", () => {
+  it("creates a submitted proposal, deriving tenant + actor from the verified context", async () => {
+    const { db, selectQueue, inserted } = mockDb();
+    // deps validation reads admitted versions, then the supersede scan.
+    selectQueue.push([versionRow()], []);
+    const result = await handleCapabilityControl(
+      {
+        action: "routine_propose",
+        callerContext: await mintContext(),
+        // Plaintext CANNOT assert another tenant/user — ignored by the handler.
+        routineProposal: { bundle: routineBundle() },
+      },
+      { db, publicKeyPem },
+    );
+    if (!result.ok || result.action !== "routine_propose")
+      throw new Error("expected routine_propose ok");
+    expect(result.result.outcome).toBe("applied");
+    expect(result.result.status).toBe("submitted");
+    expect(result.result.payloadFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0].tenant_id).toBe(TENANT_ID);
+    expect(inserted[0].created_by_actor_type).toBe("agent");
+    expect(inserted[0].created_by_actor_id).toBe(AGENT_ID);
+    // Create-only: status is never beyond 'submitted'; no commit sha.
+    expect(inserted[0].promoted_commit_sha ?? null).toBeNull();
+  });
+
+  it("rejects a dependency absent from the tenant's admitted versions (forged manifest)", async () => {
+    const { db, selectQueue, inserted } = mockDb();
+    selectQueue.push([], []); // no admitted version for the claimed dependency
+    const result = await handleCapabilityControl(
+      {
+        action: "routine_propose",
+        callerContext: await mintContext(),
+        routineProposal: { bundle: routineBundle() },
+      },
+      { db, publicKeyPem },
+    );
+    if (!result.ok || result.action !== "routine_propose") throw new Error();
+    expect(result.result.outcome).toBe("rejected");
+    expect(result.result.reason).toContain("dependency_not_admitted");
+    expect(inserted).toHaveLength(0);
+  });
+
+  it("has no approve/commit/validate/activate action — the service cannot promote", async () => {
+    const { db } = mockDb();
+    for (const action of [
+      "approve_routine",
+      "commit_routine",
+      "promote_routine",
+      "activate_routine",
+    ]) {
+      const result = await handleCapabilityControl(
+        { action, callerContext: await mintContext() } as never,
+        { db, publicKeyPem },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error();
+      expect(result.reason).toBe("unknown_action");
+    }
+  });
+
+  it("rejects routine_propose with a forged (wrong-key) caller context, fail-closed", async () => {
+    const { db, inserted } = mockDb();
+    const forged = await mintCapabilityCallerContext({
+      actor: "agent",
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+      signer: otherSigner,
+    });
+    const result = await handleCapabilityControl(
+      {
+        action: "routine_propose",
+        callerContext: forged!,
+        routineProposal: { bundle: routineBundle() },
+      },
+      { db, publicKeyPem },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("invalid_caller_context");
+    expect(inserted).toHaveLength(0);
+  });
+});

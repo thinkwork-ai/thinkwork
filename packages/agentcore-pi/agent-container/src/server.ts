@@ -209,6 +209,7 @@ import {
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildCapabilitySearchTool } from "./runtime/tools/capability-search.js";
 import { buildConnectionResearchTool } from "./runtime/tools/connection-research.js";
+import { buildRoutineProposeTool } from "./runtime/tools/routine-propose.js";
 import { runAgentCoreBrowserAutomation } from "./runtime/browser-automation-runner.js";
 import {
   discoverWorkspaceSkills,
@@ -1526,6 +1527,13 @@ export async function buildInvocationResources(
         callerContext: capabilityCallerContext,
       }),
       buildConnectionResearchTool({
+        env: args.env,
+        lambdaClient: capabilityLambdaClient,
+        callerContext: capabilityCallerContext,
+      }),
+      // THINK-280 U6 — propose a Routine for promotion (create-only; the
+      // backing Lambda cannot approve, commit, validate, or activate).
+      buildRoutineProposeTool({
         env: args.env,
         lambdaClient: capabilityLambdaClient,
         callerContext: capabilityCallerContext,

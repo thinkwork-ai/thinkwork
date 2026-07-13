@@ -475,6 +475,79 @@ type RoutineSource {
   files: [RoutineSourceFile!]!
 }
 
+# --- Routine promotion proposals (THINK-280 U6) ---
+
+# An immutable, non-executable Routine promotion proposal. Approval binds
+# to exactly one payloadFingerprint (R14/AE6). Creation and edits touch
+# neither Git nor execution — any edit is a NEW proposal with a NEW
+# fingerprint that supersedes the prior one.
+type CapabilityRoutineProposal {
+  id: ID!
+  tenantId: ID!
+  # Target Routine when promoting an update; null for a new Routine.
+  routineId: ID
+  # The whole immutable bundle: normalized code, typed input/output,
+  # sanitized fixtures, invariants, exact dependency refs, minimum grants,
+  # principal spec, effect/data/cost summary, and broker/turn evidence.
+  payload: AWSJSON!
+  # RFC 8785 + SHA-256 fingerprint — approval consumes exactly this.
+  payloadFingerprint: String!
+  # Source broker call / turn evidence references.
+  evidenceRefs: AWSJSON!
+  # draft | submitted | approved | rejected | superseded | promoted
+  status: String!
+  # operator | repair — repair is the sole machine-approved exception.
+  approvalMode: String
+  # Structured-field diff + hermetic fixture evidence (repair) or the
+  # promotion verdict (operator). Distinguishes operator- from
+  # repair-approved SHAs.
+  approvalEvidence: AWSJSON
+  # Link to the human decision item; the Inbox owns the decision.
+  inboxItemId: ID
+  createdByActorType: String
+  createdByActorId: ID
+  decidedAt: AWSDateTime
+  # Null for repair (machine-approved); set for operator approvals.
+  decidedByUserId: ID
+  # Git commit SHA written by promotion; null until promoted.
+  promotedCommitSha: String
+  createdAt: AWSDateTime!
+}
+
+input CreateRoutineProposalInput {
+  tenantId: ID!
+  # Existing Routine when updating; omit for a new Routine.
+  routineId: ID
+  # The immutable proposal bundle (code normalized + fixtures sanitized
+  # server-side before persistence + fingerprint).
+  bundle: AWSJSON!
+  # draft (default) | submitted (ready for operator review).
+  status: String
+}
+
+input ApproveRoutineProposalInput {
+  tenantId: ID!
+  proposalId: ID!
+  # The exact fingerprint the operator reviewed. A mismatch (payload changed
+  # since review) rejects the approval — approvals are single-use and exact.
+  reviewedFingerprint: String!
+}
+
+type RoutineProposalMutationResult {
+  # applied | rejected
+  outcome: String!
+  # Safe, operator-readable reason when rejected.
+  reason: String
+  proposal: CapabilityRoutineProposal
+  # Promotion summary (present on approve):
+  # promoted | validation_failed | commit_conflict | error
+  promotionOutcome: String
+  promotedCommitSha: String
+  validatedSha: String
+  # Hermetic fixture-gate detail for the promoted SHA.
+  hermetic: AWSJSON
+}
+
 # --- Query / Mutation extensions ---
 
 extend type Query {
@@ -500,6 +573,14 @@ extend type Query {
   # the code in-app. Operator-gated; GitHub is read live via the stored
   # routine-repo credential.
   routineSource(routineId: ID!): RoutineSource!
+
+  # THINK-280 U6 — Routine promotion proposals.
+  routineProposal(id: ID!): CapabilityRoutineProposal
+  routineProposals(
+    tenantId: ID!
+    routineId: ID
+    status: String
+  ): [CapabilityRoutineProposal!]!
 }
 
 extend type Mutation {
@@ -526,4 +607,19 @@ extend type Mutation {
     input: UpdateRoutineDefinitionInput!
   ): RoutineDefinition!
   decideRoutineApproval(input: DecideRoutineApprovalInput!): InboxItem!
+
+  # THINK-280 U6 — Routine promotion proposals. Creation is side-effect-free
+  # (no Git, no execution). Approval is exact + single-use and triggers the
+  # atomic bundle commit + hermetic validation.
+  createRoutineProposal(
+    input: CreateRoutineProposalInput!
+  ): RoutineProposalMutationResult!
+  approveRoutineProposal(
+    input: ApproveRoutineProposalInput!
+  ): RoutineProposalMutationResult!
+  rejectRoutineProposal(
+    tenantId: ID!
+    proposalId: ID!
+    reason: String
+  ): RoutineProposalMutationResult!
 }

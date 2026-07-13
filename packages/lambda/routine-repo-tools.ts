@@ -102,9 +102,8 @@ function defaultOctokitFactory(token: string): Octokit {
 async function defaultInvokeExecutor(
   input: RoutineExecGitInput,
 ): Promise<RoutineExecGitResult> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const stage = process.env.STAGE;
   const fnName =
@@ -582,6 +581,224 @@ export async function commitRoutine(
     commitSha,
     branch: targetBranch,
     gate,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// routine_bundle_commit — THINK-280 U6 Routine promotion publisher
+// ---------------------------------------------------------------------------
+
+/** One dependency reference pinned onto the promoted commit + cache row. */
+export interface RoutineBundleDependencyRef {
+  twcap: string;
+  contractHash: string;
+  definitionVersionId: string;
+}
+
+export interface CommitRoutineBundleInput {
+  tenantId: string;
+  /** Repo-safe routine slug — routines/<slug>/main.py. */
+  slug: string;
+  /** Existing Routine when promoting an update; omit to birth a new one. */
+  routineId?: string | null;
+  displayName: string;
+  /** Normalized Python module source (already sanitized upstream). */
+  code: string;
+  /** Sanitized fixtures — persisted under routines/<slug>/fixtures/NN.json. */
+  fixtures: Array<{
+    input: unknown;
+    expected: unknown;
+    mode?: "exact" | "shape";
+    invariantPaths?: string[];
+  }>;
+  invariants: unknown[];
+  dependencies: RoutineBundleDependencyRef[];
+  /** { mode, subjectId? } execution principal spec pinned on the routine. */
+  principal: { mode: string; subjectId?: string | null };
+  /** Immutable provenance written to routines/<slug>/provenance.json. */
+  provenance: Record<string, unknown>;
+  /** Approval fingerprint recorded in the commit message + provenance. */
+  approvedFingerprint: string;
+  /** Named tenant-credential bindings for sandbox injection at run time. */
+  credentialRefs?: { alias: string; credentialId: string }[];
+  /**
+   * The branch must still be at this SHA (expected-head lock). When omitted
+   * the freshly-read branch head is used as the parent — single-writer
+   * safety still holds because the commit's `updateRef` is fast-forward-only
+   * (a concurrent promotion surfaces as a non-fast-forward error), but pass
+   * an explicit parent to get a reviewable `conflict` instead of a throw.
+   */
+  parentSha?: string;
+}
+
+export interface CommitRoutineBundleResult {
+  status: "committed" | "conflict";
+  routineId: string;
+  commitSha?: string;
+  branch: string;
+  headSha?: string;
+  /** Synchronous fixture-gate verdict on the promoted SHA. */
+  gate?: RoutineExecGitResult;
+  validatedSha?: string | null;
+}
+
+/**
+ * Write ONE atomic commit for a complete Routine bundle
+ * (routines/<slug>/main.py + fixtures/*.json + dependencies.json +
+ * invariants.json + provenance.json) using the same expected-head/lock
+ * machinery as {@link commitRoutine}, then gate the exact SHA. Concurrent
+ * promotions against the same head cannot partially commit or silently
+ * overwrite — a stale head returns `status: 'conflict'` (reviewable), and
+ * the second writer's `updateRef` is fast-forward-only.
+ *
+ * This is the SOLE Routine-bundle publisher for U6 promotion — it reuses
+ * the deterministic-routines Git seam rather than introducing a second
+ * publisher (plan U6 execution note).
+ */
+export async function commitRoutineBundle(
+  input: CommitRoutineBundleInput,
+  deps: RoutineRepoToolsDeps = {},
+): Promise<CommitRoutineBundleResult> {
+  const db = deps.database ?? getDb();
+  if (!input.fixtures || input.fixtures.length === 0) {
+    throw new Error("a Routine bundle requires at least one fixture (R9)");
+  }
+
+  const modulePath = `routines/${input.slug}/main.py`;
+  const fixturePaths = input.fixtures.map(
+    (_f, i) =>
+      `routines/${input.slug}/fixtures/${String(i).padStart(2, "0")}.json`,
+  );
+
+  const credential = await resolveRepoCredential(input.tenantId, db, {
+    secretsManagerClient: deps.secretsManagerClient ?? _DEFAULT_SECRETS_CLIENT,
+  } as never);
+  const octokit = (deps.octokitFactory ?? defaultOctokitFactory)(
+    credential.token,
+  );
+
+  // Expected-head lock — never force.
+  const headSha = await branchHead(octokit, credential);
+  if (input.parentSha && headSha !== input.parentSha) {
+    return {
+      status: "conflict",
+      routineId: input.routineId ?? "",
+      branch: credential.branch,
+      headSha,
+    };
+  }
+
+  // Redaction defense-in-depth: fixtures are sanitized upstream, but re-run
+  // the resolved-credential scrub before anything reaches the repo.
+  const redactionValues = await resolveCredentialSecretValues(
+    db,
+    input.tenantId,
+    input.credentialRefs ?? [],
+    deps,
+  );
+
+  const files: Record<string, string> = {
+    [modulePath]: input.code,
+    [`routines/${input.slug}/dependencies.json`]: JSON.stringify(
+      input.dependencies,
+      null,
+      2,
+    ),
+    [`routines/${input.slug}/invariants.json`]: JSON.stringify(
+      input.invariants,
+      null,
+      2,
+    ),
+    [`routines/${input.slug}/provenance.json`]: JSON.stringify(
+      {
+        ...input.provenance,
+        approvedFingerprint: input.approvedFingerprint,
+        principal: input.principal,
+      },
+      null,
+      2,
+    ),
+  };
+  input.fixtures.forEach((fixture, i) => {
+    files[fixturePaths[i]] = redactSecrets(
+      JSON.stringify(fixture, null, 2),
+      redactionValues,
+    );
+  });
+
+  const message =
+    `routine(${input.slug}): promote approved bundle\n\n` +
+    `Authored-By: ${ROUTINE_AGENT_AUTHOR.name} <${ROUTINE_AGENT_AUTHOR.email}>\n` +
+    `Approved-Fingerprint: ${input.approvedFingerprint}`;
+
+  const commitSha = await createGitCommit({
+    octokit,
+    credential,
+    parentSha: headSha,
+    files,
+    message,
+    branch: credential.branch,
+    createBranch: false,
+  });
+
+  // Upsert the routine row so the gate can resolve module + fixtures and so
+  // the exact capability dependencies + principal are pinned on it.
+  let routineId = input.routineId ?? "";
+  if (routineId) {
+    await db
+      .update(routines)
+      .set({
+        module_path: modulePath,
+        fixture_paths: fixturePaths,
+        credential_refs: input.credentialRefs ?? [],
+        capability_dependencies: input.dependencies,
+        execution_principal: input.principal,
+        updated_at: new Date(),
+      })
+      .where(
+        and(eq(routines.id, routineId), eq(routines.tenant_id, input.tenantId)),
+      );
+  } else {
+    routineId = randomUUID();
+    await db.insert(routines).values({
+      id: routineId,
+      tenant_id: input.tenantId,
+      name: input.displayName,
+      type: "scheduled",
+      status: "active",
+      engine: "git_python",
+      visibility: "tenant_shared",
+      module_path: modulePath,
+      fixture_paths: fixturePaths,
+      credential_refs: input.credentialRefs ?? [],
+      capability_dependencies: input.dependencies,
+      execution_principal: input.principal,
+    });
+  }
+
+  // Hermetic fixture gate on the exact promoted SHA. gateSha (the sole
+  // writer of validated_sha) records the verdict + capability dependencies
+  // on routine_code_cache and promotes only a green SHA. The fixture
+  // adapter registry seam that serves recorded broker results to effectful
+  // ops (AE7) is wired into the executor's capability-private session in
+  // U7; U6 python carries no broker calls, so the gate is already
+  // side-effect-free.
+  const invoke = deps.invokeExecutor ?? defaultInvokeExecutor;
+  const gate = await invoke({
+    routineId,
+    mode: "gate",
+    sha: commitSha,
+    capabilityDependencies: input.dependencies,
+  });
+
+  return {
+    status: "committed",
+    routineId,
+    commitSha,
+    branch: credential.branch,
+    headSha,
+    gate,
+    validatedSha: gate.validatedSha ?? null,
   };
 }
 
