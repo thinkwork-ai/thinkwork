@@ -70,6 +70,9 @@ export const wikiPage = async (
       lastSourceAt: s.last_source_at?.toISOString() ?? null,
     })),
     aliases: aliases.map((a) => a.alias),
+    // Detail-only exposure (THINK-273 R4): the stored plate render rides the
+    // extras so list/search/graph surfaces never carry it.
+    renderHtml: page.render_html ?? null,
   });
 };
 

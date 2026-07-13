@@ -46,7 +46,12 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   },
 }));
 
-vi.mock("drizzle-orm", () => ({
+// Partial mock: repository.js's import graph now reaches the real
+// @thinkwork/database-pg package (via the wiki render compile seam), whose
+// schema modules use drizzle's `sql` at module scope — so everything except
+// the inspected `eq` must stay real.
+vi.mock("drizzle-orm", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("drizzle-orm")>()),
   eq: (a: unknown, b: unknown) => ({ __eq: [a, b] }),
 }));
 

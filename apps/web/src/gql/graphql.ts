@@ -4448,6 +4448,16 @@ export type Mutation = {
   saveWorkItemStatuses: Array<WorkItemStatus>;
   saveWorkItemView: WorkItemSavedView;
   saveWorkflow: SaveWorkflowResult;
+  /**
+   * THINK-263 U6 — open an "ask" turn for a palette query. Creates a HIDDEN,
+   * owner-restricted thread (owned by the caller, `metadata.systemHidden`) and a
+   * triggering user message, then dispatches the tenant's default agent in ask
+   * mode with retention suppressed (`use_memory: false`) and cost metering
+   * intact. Budget is pre-checked (BUDGET_EXCEEDED before any writes). Returns
+   * the hidden thread id so the client can stream the answer via
+   * `onThreadTurnStep`.
+   */
+  searchAsk: SearchAskResult;
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
@@ -5556,6 +5566,11 @@ export type MutationSaveWorkItemViewArgs = {
 
 export type MutationSaveWorkflowArgs = {
   input: SaveWorkflowInput;
+};
+
+export type MutationSearchAskArgs = {
+  query: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationSeedEvalTestCasesArgs = {
@@ -8970,6 +8985,17 @@ export type ScheduledJob = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+/**
+ * THINK-263 U6 — result of opening an ask turn from the palette. The hidden,
+ * owner-restricted thread the ask turn runs in; the client streams it via
+ * `onThreadTurnStep` (wired in U7). Only the thread id crosses the wire — the
+ * answer arrives on the thread's turn, never inline here.
+ */
+export type SearchAskResult = {
+  __typename?: "SearchAskResult";
+  threadId: Scalars["ID"]["output"];
+};
+
 export type SearchEntityHit = {
   __typename?: "SearchEntityHit";
   aliases?: Maybe<Array<Scalars["String"]["output"]>>;
@@ -11341,6 +11367,14 @@ export type WikiPage = {
    * since been archived.
    */
   promotedFromSection?: Maybe<WikiPromotedFromSection>;
+  /**
+   * Self-contained, sanitized, scriptless HTML plate render compiled from the
+   * page's sections (THINK-273). Null when no render is stored — compile
+   * failure or a page that predates render persistence; readers fall back to
+   * the canonical markdown. Populated on the wikiPage detail query only; list,
+   * search, graph, and dossier surfaces never carry it.
+   */
+  renderHtml?: Maybe<Scalars["String"]["output"]>;
   /**
    * Active pages rolled up into this page's named section — the denormalized
    * aggregation view (`aggregation.linked_page_ids` on the section jsonb).

@@ -48,6 +48,14 @@ type WikiPage {
   title: String!
   summary: String
   bodyMd: String
+  """
+  Self-contained, sanitized, scriptless HTML plate render compiled from the
+  page's sections (THINK-273). Null when no render is stored — compile
+  failure or a page that predates render persistence; readers fall back to
+  the canonical markdown. Populated on the wikiPage detail query only; list,
+  search, graph, and dossier surfaces never carry it.
+  """
+  renderHtml: String
   status: String!
   lastCompiledAt: AWSDateTime
   createdAt: AWSDateTime!
