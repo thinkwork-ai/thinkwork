@@ -19,6 +19,10 @@ import {
 } from "@thinkwork/ui";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  SearchAskView,
+  type SearchAskViewModel,
+} from "@/components/shell/SearchAskView";
 import { SearchQuery } from "@/lib/graphql-queries";
 import { SEARCH_PALETTE_RAILS_ENABLED } from "@/lib/search-palette-gate";
 import { formatTinyRelativeDate } from "@/lib/relative-time";
@@ -88,6 +92,10 @@ export function SearchPalette({
   emptyStateLoading,
   emptyStateError,
   dossierSlot,
+  askView,
+  onAskBack,
+  onAskOpenPermalink,
+  askSourcesSlot,
   railsEnabled = SEARCH_PALETTE_RAILS_ENABLED,
 }: {
   open: boolean;
@@ -107,6 +115,15 @@ export function SearchPalette({
   emptyStateError: string | null;
   /** U5 dossier card, rendered above the rails and first in arrow traversal. */
   dossierSlot?: ReactNode;
+  /**
+   * U7 ask view-model. When non-null, the palette renders the streaming ask
+   * answer in place of the rails (the CommandInput stays). Shell-owned so the
+   * turn survives palette close/reopen (KTD-6).
+   */
+  askView?: SearchAskViewModel | null;
+  onAskBack?: () => void;
+  onAskOpenPermalink?: () => void;
+  askSourcesSlot?: ReactNode;
   railsEnabled?: boolean;
 }) {
   const [debouncedQuery, setDebouncedQuery] = useState(search.trim());
@@ -154,7 +171,14 @@ export function SearchPalette({
           aria-label="Search"
         />
         <CommandList className="scrollbar-auto-hide max-h-[420px]">
-          {railsActive ? (
+          {askView ? (
+            <SearchAskView
+              view={askView}
+              onBack={onAskBack ?? (() => {})}
+              onOpenPermalink={onAskOpenPermalink ?? (() => {})}
+              sourcesSlot={askSourcesSlot}
+            />
+          ) : railsActive ? (
             <BrokerRails
               tenantId={tenantId}
               query={debouncedQuery}

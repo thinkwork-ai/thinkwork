@@ -105,12 +105,17 @@ const {
   subscriptionResultMock: { data: undefined as unknown },
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
+    ComputerThreadQuery: Symbol("ComputerThreadQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
     EntityDossierQuery: Symbol("EntityDossierQuery"),
     MarkThreadsReadMutation: Symbol("MarkThreadsReadMutation"),
+    NewMessageSubscription: Symbol("NewMessageSubscription"),
     PinThreadMutation: Symbol("PinThreadMutation"),
     PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
     ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
+    SearchAskMutation: Symbol("SearchAskMutation"),
+    ThreadTurnEventsQuery: Symbol("ThreadTurnEventsQuery"),
+    ThreadTurnStepSubscription: Symbol("ThreadTurnStepSubscription"),
     SetThreadNotificationPreferenceMutation: Symbol(
       "SetThreadNotificationPreferenceMutation",
     ),
