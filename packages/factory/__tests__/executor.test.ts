@@ -10,7 +10,7 @@
  * never spams a launch marker for a worker that never launched.
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -174,7 +174,8 @@ function makeHarness(
         stderr: opts.bootstrapStderr ?? "",
       };
     },
-    runnerFor: (kind) => (kind === "claude" ? runner : null),
+    // The fake runner serves both lanes (verify launches route to codex).
+    runnerFor: () => runner,
     // Tests assert post-run state deterministically — await the full run.
     awaitLaunches: true,
     log,
@@ -823,6 +824,52 @@ describe("executeAction — launch-time In Progress move (board legibility)", ()
     expect(
       h.gateway.writesOf("setState").some((w) => w.args[1] === "In Progress"),
     ).toBe(true);
+  });
+
+  it("U7: a verify launch creates the durable artifacts dir and injects it into the prompt", async () => {
+    process.env.THINKWORK_FACTORY_DIR = stateDir;
+    try {
+      const issue = makeIssue({
+        identifier: "THINK-97",
+        state: "Verification",
+        labels: ["Claude", "LFG"],
+        comments: [
+          { id: "b1", body: "handoff:THINK-97:Verification\n\nGoal: verify it.", authorId: "viewer-daemon" },
+        ],
+      });
+      const h = makeHarness(issue);
+      const candidate = await candidateFor(h.gateway, "THINK-97");
+      const action = decideAction(candidate, { activeAttempt: null, hasChildIssues: false });
+      expect(action).toMatchObject({ kind: "launch", phase: "verify" });
+
+      await executeAction(action, candidate, h.deps);
+
+      const artifactsDir = join(stateDir, "artifacts", "THINK-97");
+      expect(existsSync(artifactsDir)).toBe(true);
+      expect(h.launches[0].prompt).toContain(artifactsDir);
+    } finally {
+      delete process.env.THINKWORK_FACTORY_DIR;
+    }
+  });
+
+  it("U7: a non-verify launch creates no artifacts dir", async () => {
+    process.env.THINKWORK_FACTORY_DIR = stateDir;
+    try {
+      const issue = makeIssue({
+        identifier: "THINK-98",
+        state: "Planning",
+        labels: ["Claude"],
+      });
+      const h = makeHarness(issue);
+      const candidate = await candidateFor(h.gateway, "THINK-98");
+      const action = decideAction(candidate, { activeAttempt: null, hasChildIssues: false });
+
+      await executeAction(action, candidate, h.deps);
+
+      expect(existsSync(join(stateDir, "artifacts", "THINK-98"))).toBe(false);
+    } finally {
+      delete process.env.THINKWORK_FACTORY_DIR;
+    }
   });
 
   it("a plan launch never moves the status", async () => {

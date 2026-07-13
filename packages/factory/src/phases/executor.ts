@@ -19,6 +19,9 @@ import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { mkdirSync } from "node:fs";
+
+import { getArtifactsDir } from "../config.js";
 import type { FactoryConfig, HostConfig } from "../config.js";
 import type { Logger } from "../logger.js";
 import type { CommentTrust, LinearGateway } from "../linear/client.js";
@@ -458,6 +461,15 @@ async function runLaunch(
 
   let assembled;
   try {
+    // U7: verify workers persist screenshots to a durable per-issue folder
+    // (worktrees are cleaned after the run). Create it at launch so the
+    // prompt's mandatory copy step can never fail on a missing parent, and
+    // inject the absolute path into the template's <ARTIFACTS_DIR>.
+    let artifactsDir: string | undefined;
+    if (action.phase === "verify") {
+      artifactsDir = getArtifactsDir(id);
+      mkdirSync(artifactsDir, { recursive: true });
+    }
     const progressDoc =
       (await deps.gateway.getProgressDocument(issue.id, issue.title)) ?? "";
     assembled = assemblePrompt({
@@ -468,6 +480,7 @@ async function runLaunch(
       progressDoc,
       repair: action.repair,
       trust: deps.trust,
+      artifactsDir,
     });
   } catch (e) {
     return failBeforeSpawn(`prompt assembly failed: ${String(e)}`);

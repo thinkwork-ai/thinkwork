@@ -11,6 +11,7 @@
  * Linear BEFORE launching the worker.
  */
 
+import { getArtifactsDir } from "../config.js";
 import {
   isTrustedComment,
   type CommentTrust,
@@ -347,7 +348,13 @@ Execution:
    Capture concrete evidence per scenario: URLs, screenshots, console and
    network errors, persisted data checks. When the change affects
    compiled/persisted output, exercise FRESHLY GENERATED output.
-5. Record two verdicts per scenario: functional and experiential. A render
+5. Durable screenshots (MANDATORY): copy every screenshot you captured to
+   <ARTIFACTS_DIR>/ (create the directory if missing — mkdir -p semantics),
+   named NN-scenario-slug.png in scenario order, and reference those filenames
+   in the dogfood report. Worktrees are cleaned up after the run — a
+   screenshot left in the worktree is destroyed evidence; the operator's
+   Slack \`result\` command reads exactly this folder.
+6. Record two verdicts per scenario: functional and experiential. A render
    that contradicts the design intent is a functional FAIL, not a paper cut.
    Paper cuts do not fail verification; record them in the report and file or
    append follow-up Linear issues.
@@ -422,6 +429,13 @@ export interface AssemblePromptInput {
    * baton is synthesized (untrusted text never reaches the worker prompt).
    */
   trust?: CommentTrust;
+  /**
+   * Absolute durable artifacts path injected into the verify template's
+   * <ARTIFACTS_DIR> placeholder (U7). Defaults to the config-derived
+   * `<stateDir>/artifacts/<ISSUE>` so the placeholder can never leak into a
+   * launched prompt.
+   */
+  artifactsDir?: string;
 }
 
 export interface AssembledPrompt {
@@ -436,11 +450,17 @@ export interface AssembledPrompt {
   batonToPost: string | null;
 }
 
-function fillTemplate(template: string, issueId: string, title: string): string {
+function fillTemplate(
+  template: string,
+  issueId: string,
+  title: string,
+  artifactsDir: string,
+): string {
   return template
     .replaceAll("<ISSUE_ID>", issueId)
     .replaceAll("<SHORT_TITLE>", title)
-    .replaceAll("<feature title>", title);
+    .replaceAll("<feature title>", title)
+    .replaceAll("<ARTIFACTS_DIR>", artifactsDir);
 }
 
 /**
@@ -468,7 +488,12 @@ export function assemblePrompt(input: AssemblePromptInput): AssembledPrompt {
   const parts = [
     WORKER_COMMON_RULES,
     "---",
-    fillTemplate(PHASE_TEMPLATES[input.phase], input.issueId, input.title),
+    fillTemplate(
+      PHASE_TEMPLATES[input.phase],
+      input.issueId,
+      input.title,
+      input.artifactsDir ?? getArtifactsDir(input.issueId),
+    ),
   ];
   if (input.repair === true) {
     parts.push(

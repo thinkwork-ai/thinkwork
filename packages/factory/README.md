@@ -94,6 +94,10 @@ Durable state lives in three places, with **Linear as the source of truth**:
   authoritative — it can be rebuilt from Linear by the reconciler.
 - **git worktrees** under `~/.thinkwork-factory/worktrees/auto-<issue>-<phase>-<attempt>`:
   one per worker, branched from fresh `origin/main`, removed on completion.
+- **durable artifacts** under `~/.thinkwork-factory/artifacts/<ISSUE>/`: verify
+  workers copy their screenshots here (`NN-scenario-slug.png`) so evidence
+  survives worktree cleanup; the Slack console's `result` command reads them
+  back. No retention policy in v1 — prune by hand if disk pressure appears.
 
 ### Enrollment model
 
