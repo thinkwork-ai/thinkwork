@@ -1,0 +1,27 @@
+Deployed ComputerWikiPage query (mermaid-GHXKKRXX-Bf_x2Ucn.js @ app.thinkwork.ai), captured 2026-07-13:
+query ComputerWikiPage(
+    $tenantId: ID!
+    $userId: ID
+    $type: WikiPageType!
+    $slug: String!
+  ) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
+      id
+      type
+      slug
+      title
+      summary
+      bodyMd
+      status
+      lastCompiledAt
+      updatedAt
+      aliases
+      sections {
+        id
+        sectionSlug
+        heading
+        bodyMd
+        position
+        last
+
+>>> NOTE: no `renderHtml` field. Merged PR #3672 (2ba6d70e7) added it. Live bundle predates the merge.
