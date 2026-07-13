@@ -69,18 +69,28 @@ export function SettingsPageTitle({
   description,
   badge,
   actions,
+  titleClassName,
 }: {
   title: string;
   description?: string;
   /** Optional element rendered inline beside the title (e.g. a status badge). */
   badge?: ReactNode;
   actions?: ReactNode;
+  /** Optional extra classes on the h1 — e.g. a min-width so the inline badge
+   *  holds its position while titles of different lengths swap. */
+  titleClassName?: string;
 }) {
   return (
     <div className="mb-8 flex shrink-0 items-start justify-between gap-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          <h1
+            // Plain string join (not cn) — many tests mock @thinkwork/ui
+            // without a cn export, and this component renders inside them.
+            className={`text-2xl font-semibold tracking-tight text-foreground${
+              titleClassName ? ` ${titleClassName}` : ""
+            }`}
+          >
             {title}
           </h1>
           {badge ? <div className="shrink-0">{badge}</div> : null}
