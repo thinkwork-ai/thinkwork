@@ -37,6 +37,7 @@
 import type { CommentTrust, LinearGateway } from "../linear/client.js";
 import type { Logger } from "../logger.js";
 import { findNewestBaton, handoffMarker } from "../phases/prompts.js";
+import { section } from "./blocks.js";
 import type { SlackGateway, SlackInboundMessage } from "./client.js";
 import type { FactoryStore } from "../store/db.js";
 
@@ -193,7 +194,9 @@ export async function relayAnswer(
   const markProcessed = () => input.markProcessed?.();
   const ackThread = (text: string) =>
     deps.slack
-      .postThreadReply(input.channel, input.threadTs, text)
+      .postThreadReply(input.channel, input.threadTs, text, {
+        blocks: [section(text)],
+      })
       .catch((e: unknown) =>
         deps.log.warn("slack relay: ack post failed", {
           issue: identifier,
@@ -213,7 +216,7 @@ export async function relayAnswer(
     });
     markProcessed();
     await ackThread(
-      `Thanks <@${input.userId}> — but only an authorized operator can steer this run, so I can't apply that answer. (Ask an operator to reply here.)`,
+      `Thanks <@${input.userId}> — only an authorized operator can steer this run. Ask an operator to reply here.`,
     );
     return { relayed: false, reason: "unauthorized", issueId };
   }
@@ -287,7 +290,7 @@ export async function relayAnswer(
   markProcessed();
   const excerpt = input.answer.trim().replace(/\s+/g, " ").slice(0, 120);
   await ackThread(
-    `Relayed to ${link} as the operator answer ("${excerpt}") — \`${NEEDS_USER}\` cleared, resumes next tick. Wrong? Re-add \`${NEEDS_USER}\` in Linear before then.`,
+    `✅ Relayed to ${link}: "${excerpt}" — resumes next tick. Wrong? Re-add \`${NEEDS_USER}\` in Linear before then.`,
   );
 
   deps.log.info("slack relay: answer injected and blocker cleared", {
