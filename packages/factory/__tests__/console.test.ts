@@ -22,6 +22,8 @@ import {
   type ConsoleVerb,
 } from "../src/slack/console.js";
 import { decideAction } from "../src/phases/engine.js";
+import type { GithubOps, PrDetail } from "../src/phases/evidence.js";
+import { createMergeExecutor } from "../src/slack/console.js";
 import { createSteeringExecutors, formatElapsed } from "../src/slack/console.js";
 import { createSlackSync, type SlackSync } from "../src/slack/sync.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
@@ -505,5 +507,167 @@ describe("formatElapsed", () => {
     expect(formatElapsed("2026-07-13T11:59:20Z", now)).toBe("40s");
     expect(formatElapsed("2026-07-13T11:48:00Z", now)).toBe("12m");
     expect(formatElapsed("2026-07-13T10:20:00Z", now)).toBe("1h40");
+  });
+});
+
+describe("U5: merge executor", () => {
+  function fakeGithub(overrides: Partial<GithubOps> = {}): GithubOps & {
+    merges: number[];
+  } {
+    const merges: number[] = [];
+    return {
+      merges,
+      prsForBranch: async () => [],
+      prView: async (n): Promise<PrDetail | null> => ({
+        number: n,
+        state: "OPEN",
+        title: "feat: thing",
+        headRefName: "auto/think-70-implement-a1",
+        url: `https://github.test/pull/${n}`,
+        mergedAt: null,
+      }),
+      prChecks: async () => ({ ok: true, summary: "all checks pass" }),
+      prMerge: async (n) => {
+        merges.push(n);
+        return { ok: true, output: "auto-merge armed" };
+      },
+      ...overrides,
+    };
+  }
+
+  async function mergeHarness(
+    issue: FakeIssue,
+    github: GithubOps,
+  ): Promise<Harness> {
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = createSlackSync({
+      slack,
+      store,
+      gateway,
+      channelId: CHANNEL,
+      operatorUserIds: [OPERATOR],
+      log,
+      consoleExecutors: {
+        merge: createMergeExecutor({ gateway, store, github, log }),
+      },
+    });
+    await sync.syncCandidate(candidateFor(issue), {
+      kind: "advance",
+      toStatus: issue.state,
+      evidence: "seed",
+    });
+    const row = store.getSlackThreadByIssue(issue.id)!;
+    return { gateway, slack, sync, threadTs: row.thread_ts };
+  }
+
+  /** Attempt row so the PR's head branch associates with the issue. */
+  function seedAttempt(issue: FakeIssue, branch: string) {
+    store.upsertIssue({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      phase: "implement",
+      state: issue.state,
+      lane: "Claude",
+    });
+    store.insertAttempt({
+      issueId: issue.id,
+      phase: "implement",
+      attemptNumber: 1,
+      state: "Succeeded",
+      host: "local",
+      pid: 1,
+      branch,
+    });
+  }
+
+  it("merges a green, associated PR and acks the arm/merge outcome", async () => {
+    const issue = makeIssue({ identifier: "THINK-70", state: "In Progress", labels: ["Claude"] });
+    const gh = fakeGithub();
+    const h = await mergeHarness(issue, gh);
+    seedAttempt(issue, "auto/think-70-implement-a1");
+    await typed(h, "merge 123");
+    expect(gh.merges).toEqual([123]);
+    // Checks summary posted BEFORE the merge ack (visibility, R8).
+    const texts = h.slack.repliesIn(h.threadTs).map((p) => p.text);
+    expect(texts.some((t) => t.includes("all checks pass"))).toBe(true);
+    // Final ack rides the edited ⏳ progress line (chat.update).
+    expect(h.slack.updates.some((u) => u.text.includes("auto-merge armed"))).toBe(true);
+  });
+
+  it("refuses a PR not associated with the thread's issue, naming the mismatch", async () => {
+    const issue = makeIssue({ identifier: "THINK-71", state: "In Progress", labels: ["Claude"] });
+    const gh = fakeGithub({
+      prView: async (n) => ({
+        number: n,
+        state: "OPEN",
+        title: "some unrelated PR",
+        headRefName: "feature/other-thing",
+        url: `https://github.test/pull/${n}`,
+        mergedAt: null,
+      }),
+    });
+    const h = await mergeHarness(issue, gh);
+    await typed(h, "merge 999");
+    expect(gh.merges).toEqual([]);
+    const final = h.slack.updates[h.slack.updates.length - 1]?.text ?? lastReply(h);
+    expect(final).toContain("Refusing to merge");
+    expect(final).toContain("some unrelated PR");
+    expect(final).toContain("feature/other-thing");
+  });
+
+  it("a failing-checks PR shows the failing checks before acting", async () => {
+    const issue = makeIssue({ identifier: "THINK-72", state: "In Progress", labels: ["Claude"] });
+    const gh = fakeGithub({
+      prChecks: async () => ({ ok: false, summary: "test  fail  2m10s" }),
+    });
+    const h = await mergeHarness(issue, gh);
+    seedAttempt(issue, "auto/think-70-implement-a1");
+    await typed(h, "merge 5");
+    const texts = h.slack.repliesIn(h.threadTs).map((p) => p.text);
+    expect(texts.some((t) => t.includes("checks NOT green") && t.includes("fail"))).toBe(true);
+    expect(gh.merges).toEqual([5]); // --auto only completes when checks pass
+  });
+
+  it("gh merge failure output surfaces in the ack (R11)", async () => {
+    const issue = makeIssue({ identifier: "THINK-73", state: "In Progress", labels: ["Claude"] });
+    const gh = fakeGithub({
+      prMerge: async () => ({ ok: false, output: "GraphQL: Base branch was modified" }),
+    });
+    const h = await mergeHarness(issue, gh);
+    seedAttempt(issue, "auto/think-70-implement-a1");
+    await typed(h, "merge 7");
+    const final = h.slack.updates[h.slack.updates.length - 1]?.text ?? "";
+    expect(final).toContain("❌");
+    expect(final).toContain("Base branch was modified");
+  });
+
+  it("non-numeric or missing arg is refused with usage", async () => {
+    const issue = makeIssue({ identifier: "THINK-74", state: "In Progress", labels: ["Claude"] });
+    const gh = fakeGithub();
+    const h = await mergeHarness(issue, gh);
+    await typed(h, "merge abc");
+    expect(gh.merges).toEqual([]);
+    const final = h.slack.updates[h.slack.updates.length - 1]?.text ?? lastReply(h);
+    expect(final).toContain("Usage: `merge <pr#>`");
+  });
+
+  it("an already-merged PR is an idempotent no-op ack", async () => {
+    const issue = makeIssue({ identifier: "THINK-75", state: "In Progress", labels: ["Claude"] });
+    const gh = fakeGithub({
+      prView: async (n) => ({
+        number: n,
+        state: "MERGED",
+        title: "feat: thing",
+        headRefName: "auto/think-70-implement-a1",
+        url: `https://github.test/pull/${n}`,
+        mergedAt: "2026-07-13T00:00:00Z",
+      }),
+    });
+    const h = await mergeHarness(issue, gh);
+    await typed(h, "merge 3");
+    expect(gh.merges).toEqual([]);
+    const final = h.slack.updates[h.slack.updates.length - 1]?.text ?? "";
+    expect(final).toContain("already merged");
   });
 });

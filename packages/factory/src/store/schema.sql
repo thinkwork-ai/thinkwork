@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS slack_threads (
   last_relayed_ts    TEXT,
   last_escalated_key TEXT,
   last_escalated_ts  TEXT,
+  last_merged_pr_note TEXT,
   last_milestone_key TEXT,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL

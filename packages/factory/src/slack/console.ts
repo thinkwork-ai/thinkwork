@@ -16,6 +16,7 @@
  */
 
 import type { LinearGateway, LinearIssueSnapshot } from "../linear/client.js";
+import type { GithubOps } from "../phases/evidence.js";
 import type { Logger } from "../logger.js";
 import { findNewestBaton } from "../phases/prompts.js";
 import type { FactoryStore } from "../store/db.js";
@@ -518,4 +519,91 @@ export function createSteeringExecutors(
       return { text: `▶️ Resumed — ${refOf(ctx.issue)} re-enters automation next tick.` };
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Merge executor (U5)
+// ---------------------------------------------------------------------------
+
+export interface MergeDeps {
+  gateway: LinearGateway;
+  store: FactoryStore;
+  github: GithubOps;
+  log: Logger;
+}
+
+/**
+ * True when a PR belongs to this issue's factory work: its head is one of the
+ * issue's attempt branches, or the PR is referenced (URL, `#N`, `/pull/N`) in
+ * the issue's Linear comments. A typo'd number must never squash-merge an
+ * arbitrary repo PR (R8's "factory PR" constraint, mechanized).
+ */
+async function prBelongsToIssue(
+  deps: MergeDeps,
+  issueId: string,
+  pr: { number: number; url: string; headRefName: string },
+): Promise<boolean> {
+  const branches = (
+    deps.store.db
+      .prepare(
+        "SELECT DISTINCT branch FROM attempts WHERE issue_id = ? AND branch IS NOT NULL",
+      )
+      .all(issueId) as { branch: string }[]
+  ).map((r) => r.branch);
+  if (branches.includes(pr.headRefName)) return true;
+  const comments = await deps.gateway.listComments(issueId).catch(() => []);
+  const needles = [pr.url, `#${pr.number}`, `/pull/${pr.number}`];
+  return comments.some((c) => needles.some((n) => c.body.includes(n)));
+}
+
+/** `merge <pr#>` — checks visibility first, then squash + auto-merge (R8). */
+export function createMergeExecutor(deps: MergeDeps): ConsoleExecutor {
+  return async (ctx) => {
+    const num = Number(ctx.arg);
+    if (!Number.isInteger(num) || num <= 0) {
+      return { text: "Usage: `merge <pr#>` — a numeric PR number is required." };
+    }
+    const pr = await deps.github.prView(num);
+    if (pr === null) return { text: `PR #${num} not found in this repo.` };
+    const prLink = `<${pr.url}|#${pr.number} ${pr.title}>`;
+    if (pr.state === "MERGED") {
+      return { text: `${prLink} is already merged — nothing to do.` };
+    }
+    if (pr.state === "CLOSED") {
+      return { text: `${prLink} is closed — not merging.` };
+    }
+    if (!(await prBelongsToIssue(deps, ctx.issueId, pr))) {
+      return {
+        text: `⚠️ Refusing to merge ${prLink} (branch \`${pr.headRefName}\`) — it isn't associated with ${ctx.identifier} (no matching attempt branch, not referenced in its comments). Double-check the number.`,
+      };
+    }
+    // Checks state BEFORE acting (R8) — the operator sees what they're arming.
+    const checks = await deps.github.prChecks(num);
+    const checksNote = checks.ok ? "checks green" : "checks NOT green";
+    await ctx.post(
+      `${prLink} — ${checksNote}:\n\`\`\`\n${checks.summary.slice(0, 2000)}\n\`\`\``,
+    );
+    const merge = await deps.github.prMerge(num);
+    if (!merge.ok) {
+      return {
+        text: `❌ merge ${prLink} failed:\n\`\`\`\n${merge.output.slice(0, 1500)}\n\`\`\``,
+      };
+    }
+    return {
+      text: `🔀 ${prLink}: ${merge.output.split("\n")[0] || "auto-merge armed"} — merges (or merged) once checks pass.`,
+    };
+  };
+}
+
+/** The merged-PR note's buttons: Cut release + Result (F2 entry point). */
+export function mergedPrNoteActions(): SlackBlock {
+  return actions([
+    consoleButton("release", { style: "primary" }),
+    consoleButton("result"),
+  ]);
+}
+
+/** A `Merge #N` button for surfaces that discovered an OPEN factory PR. */
+export function mergeButton(pr: number): ButtonSpec {
+  return consoleButton("merge", { arg: String(pr), label: `🔀 Merge #${pr}` });
 }
