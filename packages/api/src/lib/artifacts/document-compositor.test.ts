@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   compileDocument,
+  resolveInternalWikiHref,
   type CompositorPlate,
   type DirectiveEngine,
 } from "./document-compositor.js";
@@ -1063,5 +1064,156 @@ Sibling heading closes the section.
     expect(pipeline.bodyChars).toBeLessThan(
       ownProse + "Sibling heading closes the section.".length,
     );
+  });
+});
+
+describe("internal-link policy (THINK-272 U3)", () => {
+  // The helper is the SOLE gate on policy-surviving anchors (P5): the
+  // rejection set below is the AE2 security contract, not style coverage.
+  describe("resolveInternalWikiHref — rejections (AE2)", () => {
+    const REJECTED = [
+      "/wiki/../admin",
+      "/wiki/./../x",
+      "//host/wiki/entity/x",
+      "https://evil.example/wiki/entity/x",
+      "http://evil.example/wiki/entity/x",
+      "/wiki/..\\admin",
+      "\\\\evil.example\\wiki\\entity\\x",
+      "/wiki/entity/a\\..\\..\\admin",
+      "/wiki/bogus-type/x",
+      "/wiki/entity/a/b",
+      "/wiki/entity/x/",
+      "/wiki/entity/",
+      "/wiki/entity",
+      "/other/path",
+      "javascript:alert(1)",
+      "mailto:x@example.com",
+      "data:text/html,x",
+      "http://[",
+      "",
+    ];
+    for (const href of REJECTED) {
+      it(`rejects ${JSON.stringify(href)}`, () => {
+        expect(resolveInternalWikiHref(href)).toBeNull();
+      });
+    }
+  });
+
+  describe("resolveInternalWikiHref — acceptance and normalization", () => {
+    it("passes well-formed paths through unchanged", () => {
+      expect(resolveInternalWikiHref("/wiki/entity/acme-corp")).toBe(
+        "/wiki/entity/acme-corp",
+      );
+      expect(resolveInternalWikiHref("/wiki/topic/best-tacos")).toBe(
+        "/wiki/topic/best-tacos",
+      );
+      expect(resolveInternalWikiHref("/wiki/decision/switched-to-haiku")).toBe(
+        "/wiki/decision/switched-to-haiku",
+      );
+    });
+
+    it("rewrites odd-but-valid input to the normalized path (R4)", () => {
+      expect(resolveInternalWikiHref("/wiki/entity/./x")).toBe(
+        "/wiki/entity/x",
+      );
+      expect(resolveInternalWikiHref("/wiki/ignored/../entity/x")).toBe(
+        "/wiki/entity/x",
+      );
+      // Document-relative input resolves against the base ROOT; safe because
+      // the emitted href is this normalized absolute path, never the raw one.
+      expect(resolveInternalWikiHref("wiki/entity/x")).toBe("/wiki/entity/x");
+    });
+
+    it("strips query and fragment; the href is the bare path", () => {
+      expect(resolveInternalWikiHref("/wiki/entity/x?q=1#f")).toBe(
+        "/wiki/entity/x",
+      );
+    });
+
+    it("pins encoded-character behavior: %20 survives, encoded separators are NOT route escapes", () => {
+      // URL.pathname does not decode percent-escapes during resolution, so
+      // %2F / %5C stay opaque slug bytes — [^/]+ is the contract.
+      expect(resolveInternalWikiHref("/wiki/topic/a%20b")).toBe(
+        "/wiki/topic/a%20b",
+      );
+      expect(resolveInternalWikiHref("/wiki/entity/a%2Fb")).toBe(
+        "/wiki/entity/a%2Fb",
+      );
+      expect(resolveInternalWikiHref("/wiki/entity/a%5Cb")).toBe(
+        "/wiki/entity/a%5Cb",
+      );
+    });
+  });
+
+  const WIKI_LINK_DOC = `## Overview
+
+[Acme](/wiki/entity/acme-corp) and [x](https://evil.example) and [y](/other/path).
+`;
+
+  it("AE1: policy-on, only the validated wiki link survives as an anchor", () => {
+    const { renderHtml } = compileOk(WIKI_LINK_DOC, {
+      internalLinkPolicy: "wiki",
+    });
+    // Full pipeline (parse → sanitize → envelope): the anchor survives the
+    // sanitizer with exactly the normalized path and no other attributes.
+    expect(renderHtml).toContain('<a href="/wiki/entity/acme-corp">Acme</a>');
+    expect(renderHtml).not.toContain('href="https://evil.example"');
+    expect(renderHtml).toContain("x (<code>https://evil.example</code>)");
+    expect(renderHtml).not.toContain('href="/other/path"');
+    expect(renderHtml).toContain("y (<code>/other/path</code>)");
+    expect(renderHtml).not.toContain("target=");
+    expect(renderHtml).not.toContain('rel="');
+  });
+
+  it("AE2: every rejection vector degrades to inert text in a policy-on compile", () => {
+    const vectors = [
+      "/wiki/../admin",
+      "//host/wiki/entity/x",
+      "https://evil.example/wiki/entity/x",
+      "/wiki/bogus-type/x",
+      "/wiki/entity/a/b",
+      "javascript:alert(1)",
+    ];
+    const doc = `## Overview\n\n${vectors
+      .map((v, i) => `[v${i}](${v})`)
+      .join(" and ")}\n`;
+    const { renderHtml } = compileOk(doc, { internalLinkPolicy: "wiki" });
+    expect(renderHtml).not.toContain('<a href="/wiki');
+    expect(renderHtml).not.toContain('href="//host');
+    expect(renderHtml).not.toContain('evil.example/wiki"');
+    expect(renderHtml).not.toContain('javascript:alert(1)"');
+    for (let i = 0; i < vectors.length; i++) {
+      expect(renderHtml).toContain(`v${i} (<code>`);
+    }
+  });
+
+  it("normalization rewrites the emitted href, not the raw input", () => {
+    const { renderHtml } = compileOk(
+      `## Overview\n\n[odd](/wiki/entity/./x)\n`,
+      { internalLinkPolicy: "wiki" },
+    );
+    expect(renderHtml).toContain('<a href="/wiki/entity/x">odd</a>');
+    expect(renderHtml).not.toContain("/wiki/entity/./x");
+  });
+
+  it("isInertHref precedence: #fragment and mailto: behave exactly as before with the policy on", () => {
+    const { renderHtml } = compileOk(
+      `## Overview\n\n[frag](#overview) and [mail](mailto:a@b.co)\n`,
+      { internalLinkPolicy: "wiki" },
+    );
+    expect(renderHtml).toContain('<a href="#overview">frag</a>');
+    expect(renderHtml).toContain('<a href="mailto:a@b.co">mail</a>');
+  });
+
+  it("opt-in means opt-in: policy-off degrades /wiki/ links like any other (R5)", () => {
+    const { renderHtml } = compileOk(WIKI_LINK_DOC);
+    expect(renderHtml).not.toContain('href="/wiki/entity/acme-corp"');
+    expect(renderHtml).toContain("Acme (<code>/wiki/entity/acme-corp</code>)");
+  });
+
+  it("determinism: two policy-on compiles produce identical bytes (R5)", () => {
+    const a = compileOk(WIKI_LINK_DOC, { internalLinkPolicy: "wiki" });
+    const b = compileOk(WIKI_LINK_DOC, { internalLinkPolicy: "wiki" });
+    expect(a.renderHtml).toBe(b.renderHtml);
   });
 });

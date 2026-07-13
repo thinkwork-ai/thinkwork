@@ -298,9 +298,56 @@ function isDataUri(href: string): boolean {
   return href.trim().toLowerCase().startsWith("data:");
 }
 
+// ---------------------------------------------------------------------------
+// Internal-link policy (THINK-272, parent THINK-270 U1 / KTD5).
+// ---------------------------------------------------------------------------
+
+/**
+ * Synthetic base for internal-href normalization. MUST be https:// — this is
+ * security-load-bearing, not a placeholder choice: only a WHATWG *special*
+ * scheme converts backslashes to slashes and dot-resolves them the way
+ * browser navigation will on click, and only a special-scheme base yields a
+ * non-null origin for the origin-equality check below. The host is arbitrary
+ * and never appears in output.
+ */
+const INTERNAL_LINK_BASE = new URL("https://internal.invalid");
+
+const WIKI_INTERNAL_PATH = /^\/wiki\/(entity|topic|decision)\/[^/]+$/;
+
+/**
+ * The sole gate on policy-surviving links: normalize a candidate href
+ * (dot-segment resolution against the synthetic base) and return the
+ * normalized `/wiki/<type>/<slug>` path, or null for everything else.
+ *
+ * Rejection order matters. Origin equality runs before the path match
+ * because `new URL("//host/wiki/entity/x", base).pathname` and
+ * `new URL("https://evil.example/wiki/entity/x", base).pathname` are both
+ * `/wiki/entity/x` — pathname-matching alone would accept protocol-relative,
+ * absolute-URL, and backslash-authority (`\\host\...`) vectors. Anything
+ * carrying its own authority or scheme therefore dies here; only root- or
+ * document-relative paths survive to the route-shape regex. Backslash
+ * traversal (`/wiki/entity/a\..\..\admin`) is neutralized by the special
+ * scheme converting `\` to `/` and dot-resolving before the regex sees it.
+ * The regex is the route contract: enum-bound page type, exactly one
+ * non-empty slug segment, no trailing slash. Exported for direct unit
+ * testing — the sanitizer provides no residual protection for these anchors.
+ */
+export function resolveInternalWikiHref(href: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(href, INTERNAL_LINK_BASE);
+  } catch {
+    return null;
+  }
+  if (url.origin !== INTERNAL_LINK_BASE.origin) return null;
+  return WIKI_INTERNAL_PATH.test(url.pathname) ? url.pathname : null;
+}
+
 interface CompileState {
   genre: string;
   engine: DirectiveEngine;
+  /** Opt-in internal-link policy (THINK-272); absent = every link inert. */
+  internalLinkPolicy?: "wiki";
   errors: CompositorDiagnostic[];
   warnings: CompositorDiagnostic[];
   /** placeholder token → post-sanitize substitution HTML (KTD4). */
@@ -370,6 +417,14 @@ function buildMarked(state: CompileState): Marked {
         const inner = this.parser.parseInline(tokens);
         if (isInertHref(href))
           return `<a href="${escapeHtml(href)}">${inner}</a>`;
+        if (state.internalLinkPolicy === "wiki") {
+          // The href emitted is the NORMALIZED path (never the raw input),
+          // so the sanitizer never sees a hostile raw value. No scheme, host,
+          // target, or rel — the reader envelope owns targeting (KTD7).
+          const path = resolveInternalWikiHref(href);
+          if (path !== null)
+            return `<a href="${escapeHtml(path)}">${inner}</a>`;
+        }
         // Documents are fully self-contained — external hrefs are rejected by
         // DocSpector, so degrade to text and keep the URL visible.
         const plain = inner.replace(/<[^>]*>/g, "");
@@ -594,6 +649,13 @@ export interface CompileDocumentInput {
   title: string;
   abstract: string;
   markdownBody: string;
+  /**
+   * Opt-in internal-link policy (THINK-272). With "wiki", a link whose href
+   * normalizes to `/wiki/(entity|topic|decision)/<slug>` survives as a real
+   * anchor (resolveInternalWikiHref is the sole gate); every other link keeps
+   * the inert degradation. Absent → output byte-identical to before.
+   */
+  internalLinkPolicy?: "wiki";
 }
 
 /**
@@ -670,6 +732,7 @@ export function compileDocument(
   const state: CompileState = {
     genre: input.plate.slug,
     engine: engineWithStructural,
+    internalLinkPolicy: input.internalLinkPolicy,
     errors: [],
     warnings,
     placeholders: new Map(),
