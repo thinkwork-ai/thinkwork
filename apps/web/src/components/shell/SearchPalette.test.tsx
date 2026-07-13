@@ -323,7 +323,7 @@ describe("SearchPalette", () => {
 
     // The ask answer + permalink render; the broker rails do not.
     expect(screen.getByText("The renewal closes Friday.")).toBeTruthy();
-    expect(screen.getByText(/open full answer/i)).toBeTruthy();
+    expect(screen.getByText(/open in thread/i)).toBeTruthy();
     expect(screen.queryByText("Wiki")).toBeNull();
     expect(screen.queryByText(/^Ask/)).toBeNull();
   });
