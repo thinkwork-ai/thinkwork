@@ -95,7 +95,8 @@ describe("assembleEntityDossier", () => {
     const { db, select } = makeDb([
       [{ canonical_entity_id: "canon-1", resolution_state: "resolved" }],
       [{ id: "e1" }, { id: "e1-mirror" }],
-      [{ thread_id: "t1" }],
+      [{ thread_id: "t1" }], // evidence thread ids
+      [], // wiki section source thread ids (none on this fixture)
     ]);
     findPageMock.mockResolvedValue(pageRow());
     select
@@ -169,6 +170,45 @@ describe("assembleEntityDossier", () => {
     expect(findPageMock).not.toHaveBeenCalled();
     expect(result.match?.threads.map((t) => t.id)).toEqual(["t1"]);
     expect(result.match?.memories.map((m) => m.memoryRecordId)).toEqual(["m1"]);
+  });
+
+  it("unions wiki-page section source threads with KG evidence threads", async () => {
+    searchKgMock.mockResolvedValue({ entities: [entity()] });
+    const { db, select } = makeDb([
+      [{ canonical_entity_id: "canon-1", resolution_state: "resolved" }],
+      [{ id: "e1" }], // mirror ids
+      [{ thread_id: "t-evidence" }], // KG evidence thread ids
+      [{ thread_id: "t-section" }], // wiki section source thread ids (U2)
+    ]);
+    findPageMock.mockResolvedValue(pageRow());
+    // Both thread ids resolve as accessible.
+    select
+      .mockReturnValueOnce(
+        selectReturning([
+          {
+            id: "t-evidence",
+            title: "From evidence",
+            identifier: null,
+            space_id: null,
+            updated_at: null,
+          },
+          {
+            id: "t-section",
+            title: "From wiki section",
+            identifier: null,
+            space_id: null,
+            updated_at: null,
+          },
+        ]),
+      )
+      .mockReturnValueOnce(selectReturning([]));
+
+    const result = await assembleEntityDossier(baseArgs(db));
+
+    expect(result.match?.threads.map((t) => t.id).sort()).toEqual([
+      "t-evidence",
+      "t-section",
+    ]);
   });
 
   it("returns a disambiguation list and assembles nothing when >1 grounded match", async () => {
@@ -259,6 +299,50 @@ describe("assembleEntityDossier", () => {
     expect(recallMock).not.toHaveBeenCalled();
     // No accessible threads → no thread/artifact selects at all.
     expect(select).not.toHaveBeenCalled();
+  });
+
+  it("resolves a selected entityId that fell outside the grounded set via a direct grounded lookup", async () => {
+    // The grounded search for this query surfaces only e1, but the user picked
+    // e2 (a valid grounded entity that didn't re-rank into the top set).
+    searchKgMock.mockResolvedValue({ entities: [entity({ id: "e1" })] });
+    const { db } = makeDb([
+      // fetchGroundedEntityById(e2)
+      [
+        {
+          id: "e2",
+          label: "Acme LLC",
+          ontology_type_slug: "organization",
+          summary: null,
+          aliases: [],
+          relationship_count: 0,
+          evidence_count: 2,
+        },
+      ],
+      // fetchCanonicalIdentity
+      [{ canonical_entity_id: null, resolution_state: "legacy" }],
+      // evidence threads
+      [],
+    ]);
+
+    const result = await assembleEntityDossier(
+      baseArgs(db, { entityId: "e2" }),
+    );
+
+    expect(result.match?.entityId).toBe("e2");
+    expect(result.match?.label).toBe("Acme LLC");
+  });
+
+  it("returns empty when a selected entityId is neither in the set nor a grounded entity", async () => {
+    searchKgMock.mockResolvedValue({ entities: [entity({ id: "e1" })] });
+    // Direct lookup finds nothing (ungrounded / cross-tenant id).
+    const { db } = makeDb([[]]);
+
+    const result = await assembleEntityDossier(
+      baseArgs(db, { entityId: "e-nope" }),
+    );
+
+    expect(result.match).toBeNull();
+    expect(result.disambiguation).toEqual([]);
   });
 
   it("selects the requested candidate by entityId out of multiple grounded matches", async () => {

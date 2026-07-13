@@ -161,9 +161,15 @@ export async function assembleEntityDossier(
 
   let chosen: ChosenEntity | undefined;
   if (args.entityId) {
-    // An explicit selector resolves an earlier disambiguation: pick that
-    // candidate out of the grounded set (never trust an unmatched id).
-    chosen = entities.find((e) => e.id === args.entityId);
+    // An explicit selector resolves an earlier disambiguation / rail pick. It is
+    // usually in the grounded set for this query, but ranking/limit drift means
+    // a valid pick can fall outside the top N — so fall back to a direct,
+    // grounded, same-tenant lookup rather than returning nothing (which reads in
+    // the palette as "the click did nothing"). Still never trusts an ungrounded
+    // or cross-tenant id.
+    chosen =
+      entities.find((e) => e.id === args.entityId) ??
+      (await fetchGroundedEntityById(args.db, args.tenantId, args.entityId));
     if (!chosen) return EMPTY_RESULT;
   } else if (entities.length > 1) {
     return { match: null, disambiguation: entities.map(toEntityHit) };
@@ -187,6 +193,7 @@ export async function assembleEntityDossier(
   // 3) Wiki page (degrade-aware): only tenant Entity pages carry a canonical
   //    id. No canonical id, or no readable page, → null.
   let wikiPage: GraphQLWikiPage | null = null;
+  let wikiPageId: string | null = null;
   if (canonicalEntityId) {
     const pageRow = await findReadablePageByCanonicalEntity(
       {
@@ -198,6 +205,7 @@ export async function assembleEntityDossier(
     );
     if (pageRow) {
       wikiPage = toGraphQLPage(pageRow, { sections: [], aliases: [] });
+      wikiPageId = pageRow.id;
     }
   }
 
@@ -209,10 +217,19 @@ export async function assembleEntityDossier(
   const evidenceEntityIds = mirrorEntityIds.includes(chosen.id)
     ? mirrorEntityIds
     : [...mirrorEntityIds, chosen.id];
-  const candidateThreadIds = await fetchEvidenceThreadIds(
-    args.db,
-    args.tenantId,
-    evidenceEntityIds,
+  // Two thread sources, per the plan: knowledge-graph evidence stamped with a
+  // thread, AND the entity's compiled wiki-page sections' source_thread_ids
+  // (U2). Both only carry threads for thread-message-derived provenance, so
+  // they are empty for observation/claim-grounded brains (e.g. dev) but light
+  // up on real tenants — union them, then permission-fence the whole set.
+  const [evidenceThreadIds, sectionThreadIds] = await Promise.all([
+    fetchEvidenceThreadIds(args.db, args.tenantId, evidenceEntityIds),
+    wikiPageId
+      ? fetchWikiSectionThreadIds(args.db, wikiPageId)
+      : Promise.resolve([]),
+  ]);
+  const candidateThreadIds = Array.from(
+    new Set([...evidenceThreadIds, ...sectionThreadIds]),
   );
 
   // 5) Permission-filter threads: resolve the accessible set AND the display
@@ -256,6 +273,41 @@ export async function assembleEntityDossier(
       artifacts: dossierArtifacts,
     },
     disambiguation: [],
+  };
+}
+
+async function fetchGroundedEntityById(
+  db: Database,
+  tenantId: string,
+  entityId: string,
+): Promise<ChosenEntity | undefined> {
+  const result = await db.execute(sql`
+    SELECT id, label, ontology_type_slug, summary, aliases,
+           relationship_count, evidence_count
+      FROM ${knowledgeGraphEntities}
+     WHERE id = ${entityId}
+       AND tenant_id = ${tenantId}
+       AND grounding_status = 'grounded'
+     LIMIT 1
+  `);
+  const row = rowsOf<{
+    id: string;
+    label: string;
+    ontology_type_slug: string | null;
+    summary: string | null;
+    aliases: string[] | null;
+    relationship_count: number | null;
+    evidence_count: number | null;
+  }>(result)[0];
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    label: row.label,
+    typeSlug: row.ontology_type_slug ?? null,
+    summary: row.summary ?? null,
+    aliases: row.aliases ?? [],
+    relationshipCount: row.relationship_count ?? 0,
+    evidenceCount: row.evidence_count ?? 0,
   };
 }
 
@@ -316,6 +368,23 @@ async function fetchEvidenceThreadIds(
        AND thread_id IS NOT NULL
   `);
   return rowsOf<{ thread_id: string }>(result)
+    .map((r) => r.thread_id)
+    .filter((id): id is string => !!id);
+}
+
+async function fetchWikiSectionThreadIds(
+  db: Database,
+  wikiPageId: string,
+): Promise<string[]> {
+  // Thread backpointers stamped onto the page's section provenance (U2).
+  const result = await db.execute(sql`
+    SELECT DISTINCT unnest(ss.source_thread_ids) AS thread_id
+      FROM wiki.section_sources ss
+      JOIN wiki.page_sections ps ON ps.id = ss.section_id
+     WHERE ps.page_id = ${wikiPageId}
+       AND ss.source_thread_ids IS NOT NULL
+  `);
+  return rowsOf<{ thread_id: string | null }>(result)
     .map((r) => r.thread_id)
     .filter((id): id is string => !!id);
 }
