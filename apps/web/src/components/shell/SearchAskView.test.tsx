@@ -81,7 +81,7 @@ describe("SearchAskView", () => {
     expect(screen.getByTestId("answer").textContent).toContain(
       "The renewal closes Friday.",
     );
-    const permalink = screen.getByRole("button", { name: /open full answer/i });
+    const permalink = screen.getByRole("button", { name: /open in thread/i });
     fireEvent.click(permalink);
     expect(onOpenPermalink).toHaveBeenCalled();
   });

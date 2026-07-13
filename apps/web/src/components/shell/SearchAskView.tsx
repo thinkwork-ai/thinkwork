@@ -82,7 +82,9 @@ export function SearchAskView({
   view: SearchAskViewModel;
   /** "Back to search" — returns the palette to rails/find mode. */
   onBack: () => void;
-  /** "Open full answer →" — navigates to the hidden thread's permalink. */
+  /** "Open in thread →" — navigates to the hidden thread's permalink (the full
+   *  turn trail: tool calls, cost, timing). The palette itself is the
+   *  authoritative full-answer surface. */
   onOpenPermalink: () => void;
   /** Seam for a future citations section (THINK-263 follow-up). */
   sourcesSlot?: ReactNode;
@@ -126,7 +128,7 @@ export function SearchAskView({
               onClick={onOpenPermalink}
               className="w-fit rounded-md text-sm font-medium text-primary outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring"
             >
-              Open full answer →
+              Open in thread →
             </button>
           ) : null}
         </div>
