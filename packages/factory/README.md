@@ -126,9 +126,11 @@ Key rules:
   `CI Failed`, `Blocked: Auth`) stop automation until removed.
 - **Both lane labels** on one issue is a lane conflict → the daemon marks it
   `Needs User` and asks you to pick a lane.
-- **`Done` is terminal.** The only Done action is a one-shot `ce-compound` for a
-  factory-driven, not-yet-compounded issue; everything else is a silent noop
-  (no thread, no escalation — even if a stale blocker label is still attached).
+- **`Done` is terminal — the factory never touches a Done issue.** Auto-compound
+  is **disabled**: the daemon does not launch any worker (not even `ce-compound`)
+  on a Done issue. Every Done issue is a silent noop — no thread, no worker, no
+  escalation, even with a stale blocker label attached. Run `ce-compound`
+  manually when you want to distill learnings from a completed issue.
 
 The canonical semantics live in
 `.agents/skills/thinkwork-linear-dispatcher/references/routing-contract.md`; the
@@ -145,7 +147,10 @@ code's single source of truth for the vocabulary is `src/domain/statuses.ts`.
 | `verify`    | dogfood verify | opus          | 60 min         |
 | `compound`  | ce-compound    | sonnet        | 30 min         |
 
-Defaults live in `DEFAULT_PHASES` (`src/config.ts`) and are overridable per
+**`compound` is not auto-launched** — auto-compound is disabled, so the daemon
+never dispatches it (a Done issue is a pure noop). The phase config remains for
+running `ce-compound` manually. Defaults live in `DEFAULT_PHASES` (`src/config.ts`)
+and are overridable per
 phase in config. Workers are governed by the **wall-clock SLA** and a
 **silence/stall budget**, not a dollar cap (subscriptions have no real spend —
 see `enforceBudgetUsd`).
