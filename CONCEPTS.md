@@ -461,6 +461,14 @@ The verification pass that judges a shipped change by exercising the deployed pr
 
 A defect or friction observed during Dogfood Verification that does not violate the verification contract, so it is recorded rather than failing the verdict. Paper cuts are listed in the dogfood report and carried into the next planning pass, where they are re-ranked on their own merits — a paper cut that misleads users (such as a fabricated write confirmation) can outrank cosmetic or capability gaps.
 
+### Answer Form
+
+The machine-readable options block a worker appends to a blocker comment (question, two to four short option labels, a required recommended index) that the factory's Slack surface renders as clickable buttons. Clicking an option injects it through the same relay path as a typed operator reply — baton append, blocker cleared, phase relaunch — with an "Other" escape hatch for a free-text answer.
+
+### Operator Console
+
+The factory's Slack surface treated as the primary operating interface: contextual action buttons on every factory message (approve, result, logs, merge, retry, release), a pinned live board message edited each daemon tick, and typed verb fallbacks — all gated on the operator allowlist. The design bar is running the factory for a full day from a phone without a terminal or Linear.
+
 ## Costs and Reconciliation
 
 ### Cost Reconciliation
