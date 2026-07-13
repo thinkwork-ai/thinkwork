@@ -141,6 +141,7 @@ describe("runTick — end-to-end with the real executor", () => {
       bootstrapScript: "/fake/worker-bootstrap.sh",
       runBootstrap: async () => ({ code: 0, stdout: "", stderr: "" }),
       runnerFor: () => null,
+      awaitLaunches: true,
       log,
     };
     const deps = makeDeps(gateway, (action, candidate) =>

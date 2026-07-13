@@ -164,6 +164,15 @@ export interface ExecutorDeps {
   github?: GithubGateway;
   /** Author allowlist for batons / baton evidence (security P1). */
   trust?: CommentTrust;
+  /**
+   * Await the worker run to completion inside executeAction (tests). The
+   * PRODUCTION default is DETACHED: the tick returns right after the launch
+   * and the run settles in a background continuation — awaiting inside the
+   * tick serialized the whole board behind one worker's multi-hour SLA
+   * (live 2026-07-13: THINK-274/270 couldn't even get a wait decision while
+   * THINK-275's implement worker ran).
+   */
+  awaitLaunches?: boolean;
 }
 
 export interface ExecuteResult {
@@ -386,6 +395,29 @@ async function runLaunch(
   const { issue } = candidate;
   const id = issue.identifier;
 
+  // ---- 0. Host capacity gate: detached launches no longer self-limit via
+  // tick serialization, so cap live attempts per host explicitly. Deferred
+  // launches simply retry on a later tick (the issue stays routable). ----
+  const activeOnHost = (
+    deps.store.db
+      .prepare("SELECT COUNT(*) AS n FROM attempts WHERE active = 1 AND host = ?")
+      .get(deps.host.name) as { n: number }
+  ).n;
+  if (activeOnHost >= deps.host.maxConcurrent) {
+    deps.log.info("host at capacity — launch deferred to a later tick", {
+      issue: id,
+      phase: action.phase,
+      host: deps.host.name,
+      active: activeOnHost,
+      maxConcurrent: deps.host.maxConcurrent,
+    });
+    return {
+      kind: "launch",
+      wrote: false,
+      detail: `host ${deps.host.name} at capacity (${activeOnHost}/${deps.host.maxConcurrent}) — deferred`,
+    };
+  }
+
   // ---- 1. Store record FIRST: attempt N+1 in PreparingWorkspace. ----------
   const slug = id.toLowerCase();
   let plan;
@@ -495,6 +527,7 @@ async function runLaunch(
   // must be able to answer "is anyone working this" while the worker runs.
   let workerLedgerWrite: Promise<void> | null = null;
 
+  const runToCompletion = async (): Promise<AttemptState> => {
   const final = await driveAttempt({
     machine: deps.machine,
     runner,
@@ -729,11 +762,57 @@ async function runLaunch(
     }
   }
 
+  return final;
+  };
+
+  // Tests await the full run for deterministic assertions; production
+  // detaches so the tick (and every other issue's decisions) never waits on
+  // a worker's wall-clock SLA. KTD-10's active-attempt guard prevents
+  // duplicate launches while the detached run is in flight, and the U7
+  // reconciler adopts the attempt if the daemon dies mid-run (the worker
+  // process is detached either way).
+  if (deps.awaitLaunches === true) {
+    const final = await runToCompletion();
+    return {
+      kind: "launch",
+      wrote: true,
+      attemptId: plan.attemptId,
+      finalState: final,
+    };
+  }
+
+  runToCompletion()
+    .then((final) =>
+      deps.log.info("detached launch settled", {
+        issue: id,
+        phase: action.phase,
+        attemptId: plan.attemptId,
+        finalState: final,
+      }),
+    )
+    .catch((e) => {
+      deps.log.error("detached launch crashed — settling attempt Failed", {
+        issue: id,
+        phase: action.phase,
+        attemptId: plan.attemptId,
+        error: String(e),
+      });
+      try {
+        deps.store.transitionAttempt(
+          plan.attemptId,
+          "Failed",
+          `detached-run-crashed: ${String(e)}`.slice(0, 1000),
+        );
+      } catch {
+        // Already terminal (or store unavailable) — the sweep/reconciler owns it.
+      }
+    });
+
   return {
     kind: "launch",
     wrote: true,
     attemptId: plan.attemptId,
-    finalState: final,
+    detail: "detached — worker running in background; the run settles asynchronously",
   };
 }
 
