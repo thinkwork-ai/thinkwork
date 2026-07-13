@@ -417,8 +417,10 @@ describe("block decisions", () => {
   });
 
   it("child issues in flight → QUIET wait, never a Needs User block (LFG never-stuck)", () => {
+    // In Progress parent (a Ready-to-Work parent first ADVANCES there for
+    // board legibility — covered in the parent-legibility describe).
     const action = decideAction(
-      makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
+      makeCandidate({ state: "In Progress", labels: ["Claude", "LFG"] }),
       emptyView({ hasChildIssues: true, childStates: ["Done", "In Progress"] }),
     );
     expect(action.kind).toBe("wait");
@@ -427,7 +429,7 @@ describe("block decisions", () => {
 
   it("child states unknown (fetch failed) → wait, never a false resume", () => {
     const action = decideAction(
-      makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
+      makeCandidate({ state: "In Progress", labels: ["Claude", "LFG"] }),
       emptyView({ hasChildIssues: true, childStates: null }),
     );
     expect(action.kind).toBe("wait");
@@ -833,5 +835,23 @@ describe("AE1 skeleton — one issue walks label → Done on the Claude lane", (
       "launch:verify",
       "noop",
     ]);
+  });
+});
+
+describe("parent board legibility", () => {
+  it("a Ready-to-Work parent with children in flight ADVANCES to In Progress (visible, not idle)", () => {
+    const action = decideAction(
+      makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
+      emptyView({ hasChildIssues: true, childStates: ["In Progress"] }),
+    );
+    expect(action).toMatchObject({ kind: "advance", toStatus: "In Progress" });
+  });
+
+  it("an In-Progress parent with children in flight waits quietly (no advance churn)", () => {
+    const action = decideAction(
+      makeCandidate({ state: "In Progress", labels: ["Claude", "LFG"] }),
+      emptyView({ hasChildIssues: true, childStates: ["In Progress"] }),
+    );
+    expect(action.kind).toBe("wait");
   });
 });

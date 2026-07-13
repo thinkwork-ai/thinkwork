@@ -356,6 +356,19 @@ export function decideAction(
       states.length > 0 &&
       states.every((st) => CHILD_TERMINAL.has(st));
     if (!allChildrenFinished) {
+      // Board legibility: a parent sitting in "Ready to Work" while its
+      // children run is indistinguishable from an idle issue (live operator
+      // escalation, THINK-278). Advance it to In Progress ONCE — In Progress
+      // routes identically, and the next tick's children-in-flight check
+      // waits there quietly.
+      if (issue.state === "Ready to Work" || issue.state === "Ready To Work") {
+        return {
+          kind: "advance",
+          toStatus: "In Progress",
+          evidence:
+            "child issues in flight — children drive the work; parent shown In Progress for board legibility",
+        };
+      }
       return {
         kind: "wait",
         reason: `${id} has child issues in flight — children drive the work; the parent resumes automatically when all children are Done`,
