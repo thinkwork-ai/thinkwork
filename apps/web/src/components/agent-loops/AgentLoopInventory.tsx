@@ -299,11 +299,17 @@ export function AgentLoopInventory({
           cellClassName: "w-full min-w-[200px] max-w-0",
         },
         cell: ({ row }) => (
-          <span
-            className="block truncate font-medium"
-            title={row.original.name}
-          >
-            {row.original.name}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium" title={row.original.name}>
+              {row.original.name}
+            </span>
+            {/* THINK-264: platform built-ins everyone has. They can be paused,
+                but not deleted or hand-edited. */}
+            {row.original.kind === "system" ? (
+              <Badge variant="secondary" className="shrink-0 text-[10px]">
+                Built-in
+              </Badge>
+            ) : null}
           </span>
         ),
       },

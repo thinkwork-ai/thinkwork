@@ -10,6 +10,15 @@ enum AgentLoopLifecycleStatus {
   archived
 }
 
+# THINK-264: `system` Automations are provisioned by the platform for every
+# user (today: Personal Memory Processing). They render in the inventory like
+# any other Automation and can be enabled/disabled, but their definition is
+# code-owned — they are never hand-created, hand-edited, or deleted.
+enum AgentLoopKind {
+  user
+  system
+}
+
 enum AgentLoopVersionStatus {
   draft
   active
@@ -57,6 +66,16 @@ type AgentLoop {
   description: String
   lifecycleStatus: AgentLoopLifecycleStatus!
   enabled: Boolean!
+  # THINK-264: `system` rows are platform built-ins — undeletable, and only
+  # their `enabled` field is writable through saveAgentLoop.
+  kind: AgentLoopKind!
+  # Which built-in this is (e.g. "personal-memory"). Null for user Automations.
+  systemKey: String
+  # The live memory pipeline behind the built-in memory Automation: its stages
+  # (with per-stage toggles), sources, and readiness. Null for every other
+  # Automation. This is what the Definition tab renders instead of the
+  # trigger→work→document→deliver projection.
+  memoryPipeline: MemoryPipeline
   ownerUserId: ID
   ownerAgentId: ID
   # THINK-137 U3 (R1): the user identity a run acts as. Defaults to the creator.

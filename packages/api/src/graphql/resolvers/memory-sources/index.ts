@@ -19,6 +19,7 @@ import { eraseMemorySource } from "./eraseMemorySource.mutation.js";
 import { retryMemoryRetractionAttempt } from "./retryMemoryRetractionAttempt.mutation.js";
 import { ensureSharedMemoryWorkflow } from "./ensureSharedMemoryWorkflow.mutation.js";
 import { setPersonalMemoryAutomationSchedule } from "./setPersonalMemoryAutomationSchedule.mutation.js";
+import { setMemoryPipelineStageEnabled } from "./setMemoryPipelineStageEnabled.mutation.js";
 
 export const memorySourceQueries = {
   personalMemoryAutomation,
@@ -33,6 +34,7 @@ export const memorySourceQueries = {
 export const memorySourceMutations = {
   ensureSharedMemoryWorkflow,
   setPersonalMemoryAutomationSchedule,
+  setMemoryPipelineStageEnabled,
   grantMemorySourceAuthorization,
   setMemorySourceConfig,
   revokeMemorySourceAuthorization,

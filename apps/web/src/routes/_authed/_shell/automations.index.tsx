@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AgentLoopInventory } from "@/components/agent-loops/AgentLoopInventory";
-import { PersonalMemoryAutomation } from "@/components/memory/PersonalMemoryAutomation";
 
 export const Route = createFileRoute("/_authed/_shell/automations/")({
   component: AutomationsRoute,
@@ -9,8 +8,9 @@ export const Route = createFileRoute("/_authed/_shell/automations/")({
 function AutomationsRoute() {
   return (
     <main className="h-full min-h-0 w-full overflow-y-auto bg-background">
-      {/* THINK-193 U3: owner-only managed Personal Memory Processing card. */}
-      <PersonalMemoryAutomation />
+      {/* THINK-264: Personal Memory Processing is a built-in row in the
+          inventory below (with a real Definition and Executions), not a
+          bespoke card bolted on top. */}
       <AgentLoopInventory routeScope="main" />
     </main>
   );

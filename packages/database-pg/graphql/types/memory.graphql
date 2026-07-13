@@ -696,6 +696,77 @@ type ManagedMemoryWorkflow {
   readinessReasons: AWSJSON
 }
 
+"""
+One step of the memory pipeline as the Definition tab renders it (THINK-264).
+"""
+type MemoryPipelineStage {
+  """
+  Step id in the workflow definition (e.g. "retain").
+  """
+  id: ID!
+  """
+  Canonical stage kind: preflight|acquire|extract|project|resolve|retain|compound|graph|wiki.
+  """
+  stage: String!
+  label: String!
+  description: String!
+  """
+  False when the user has switched this stage off. Always true for spine stages.
+  """
+  enabled: Boolean!
+  """
+  Whether the user may switch this stage off. Only the optional tail
+  (compound/graph/wiki) is toggleable: acquire → project → resolve → retain is
+  the pipeline's spine, and disabling any of it would starve everything
+  downstream and silently make the automation a no-op.
+  """
+  toggleable: Boolean!
+  """
+  This stage's outcome on the most recent run — seen|changed|retracted|
+  deferred|failed|noop — or null when the stage did not report an item.
+  """
+  lastResult: String
+}
+
+"""
+The live memory pipeline behind the built-in memory Automation (THINK-264):
+what it will run, over which sources, and whether it can run at all.
+"""
+type MemoryPipeline {
+  processorConfigId: ID!
+  """
+  personal | shared
+  """
+  mode: String!
+  workflowId: ID
+  """
+  The processor's own on/off switch — mirrors AgentLoop.enabled.
+  """
+  enabled: Boolean!
+  """
+  ready | blocked_not_ready
+  """
+  readiness: String!
+  """
+  JSON array of {code, message} readiness reasons (empty when ready).
+  """
+  readinessReasons: AWSJSON
+  """
+  The bound rate(...)/cron(...) expression, or null when there is no schedule.
+  """
+  scheduleExpression: String
+  scheduleTimezone: String
+  """
+  False when a schedule exists but is switched off (manual runs still work).
+  """
+  scheduleEnabled: Boolean!
+  sources: [MemorySourceConfig!]!
+  """
+  Ordered pipeline steps, as built from the current blueprint.
+  """
+  stages: [MemoryPipelineStage!]!
+}
+
 extend type Query {
   """
   Owner-only: the signed-in user's Personal Memory Automation. Lazily
@@ -750,6 +821,21 @@ extend type Mutation {
     timezone: String
     enabled: Boolean!
   ): ManagedMemoryWorkflow!
+  """
+  Owner-only: switch one optional pipeline stage on or off (THINK-264).
+
+  Only the optional tail (compound/graph/wiki) may be toggled — a request for
+  any spine stage (acquire/project/resolve/retain, or preflight/extract) is
+  rejected rather than silently ignored, because disabling one would starve
+  every stage after it. The toggle is stored as intent on the processor and
+  supersedes the workflow's active blueprint version through the normal lazy
+  path; in-flight runs stay pinned to the version they captured.
+  """
+  setMemoryPipelineStageEnabled(
+    agentLoopId: ID!
+    stage: String!
+    enabled: Boolean!
+  ): MemoryPipeline!
   """
   Insert an active grant for a source binding, superseding (revoking) any
   existing active grant for the same binding — one active grant per binding.

@@ -15,6 +15,7 @@ import {
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import { buildMemoryPipelineView } from "../../../lib/memory-sources/pipeline-view.js";
 
 type TenantScoped = {
   tenantId?: string | null;
@@ -25,6 +26,8 @@ type AgentLoopParent = TenantScoped & {
   id?: string;
   currentVersionId?: string | null;
   lastRunId?: string | null;
+  kind?: string | null;
+  systemKey?: string | null;
 };
 
 type AgentLoopVersionParent = TenantScoped & {
@@ -101,6 +104,35 @@ export function agentLoopRowToGraphql(row: Record<string, unknown>): unknown {
 }
 
 export const agentLoopTypeResolvers = {
+  /**
+   * THINK-264: the memory pipeline behind the built-in memory Automation.
+   * Null for every other Automation, so the Definition tab can switch
+   * renderers on presence alone. The processor id comes from the loop's
+   * target_spec ({kind: 'memory_pipeline', processorConfigId}), which is the
+   * same spec the dispatcher reads — no second source of truth.
+   */
+  memoryPipeline: async (loop: AgentLoopParent) => {
+    if (loop.kind !== "system" || !loop.currentVersionId) return null;
+    const tenantId = loop.tenantId ?? loop.tenant_id ?? null;
+    if (!tenantId) return null;
+
+    const [version] = await db
+      .select({ target_spec: agentLoopVersions.target_spec })
+      .from(agentLoopVersions)
+      .where(eq(agentLoopVersions.id, loop.currentVersionId))
+      .limit(1);
+    const spec = version?.target_spec as
+      | { kind?: string; processorConfigId?: string }
+      | undefined;
+    if (spec?.kind !== "memory_pipeline" || !spec.processorConfigId)
+      return null;
+
+    return await buildMemoryPipelineView(db, {
+      tenantId,
+      processorConfigId: spec.processorConfigId,
+    });
+  },
+
   linkedWorkflow: async (loop: AgentLoopParent) => {
     if (!loop.id) return null;
     const tenantId = loop.tenantId ?? loop.tenant_id ?? null;

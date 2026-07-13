@@ -1,12 +1,33 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { agentLoops as agentLoopsTable, db } from "../../utils.js";
+import { ensurePersonalMemoryAutomation } from "../../../lib/memory-sources/provisioning.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
   agentLoopRowToGraphql,
   clampAgentLoopQueryLimit,
   normalizeAgentLoopEnum,
   resolveAgentLoopTenantId,
 } from "./types.js";
+
+/**
+ * THINK-264: the caller's built-in Automations are provisioned on read, so
+ * they appear in the inventory for users who have never opened a memory
+ * surface. Best-effort: a provisioning hiccup must not blank the whole
+ * Automations page — the user's own Automations still list.
+ */
+async function ensureSystemAutomations(
+  ctx: GraphQLContext,
+  tenantId: string,
+): Promise<void> {
+  try {
+    const userId = await resolveCallerUserId(ctx);
+    if (!userId) return; // service callers have no personal automation
+    await ensurePersonalMemoryAutomation(db, { tenantId, userId });
+  } catch (error) {
+    console.warn("[agentLoops] system automation ensure failed", error);
+  }
+}
 
 export async function agentLoops(
   _parent: unknown,
@@ -20,6 +41,7 @@ export async function agentLoops(
   ctx: GraphQLContext,
 ): Promise<unknown[]> {
   const tenantId = await resolveAgentLoopTenantId(ctx, args.tenantId);
+  await ensureSystemAutomations(ctx, tenantId);
   const conditions = [eq(agentLoopsTable.tenant_id, tenantId)];
 
   const lifecycleStatus = normalizeAgentLoopEnum(args.lifecycleStatus);

@@ -100,6 +100,14 @@ export const agentLoops = pgTable(
     description: text("description"),
     lifecycle_status: text("lifecycle_status").notNull().default("draft"),
     enabled: boolean("enabled").notNull().default(true),
+    // THINK-264: platform-provisioned Automations every user gets. `system`
+    // rows render in the inventory like any other Automation and can be
+    // enabled/disabled, but they are never hand-created and never deletable —
+    // the platform owns their definition. `system_key` identifies which
+    // built-in it is (e.g. 'personal-memory') so provisioning stays idempotent
+    // and the UI can pick a definition renderer.
+    kind: text("kind").notNull().default("user"),
+    system_key: text("system_key"),
     owner_user_id: uuid("owner_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -152,8 +160,22 @@ export const agentLoops = pgTable(
       "agent_loops_trigger_family_check",
       sql`${table.primary_trigger_family} IN ('manual', 'schedule', 'api', 'webhook', 'app_event', 'n8n')`,
     ),
+    check("agent_loops_kind_check", sql`${table.kind} IN ('user', 'system')`),
+    // A system row is exactly identified by its key + owner; a user row must
+    // not carry one. Enforced so ensure-on-read cannot double-provision.
+    check(
+      "agent_loops_system_key_check",
+      sql`(${table.kind} = 'system') = (${table.system_key} IS NOT NULL)`,
+    ),
+    uniqueIndex("agent_loops_system_owner_uidx")
+      .on(table.tenant_id, table.system_key, table.owner_user_id)
+      .where(sql`${table.system_key} IS NOT NULL`),
   ],
 );
+
+/** Built-in Automations the platform provisions for every user. */
+export const AGENT_LOOP_SYSTEM_KEYS = ["personal-memory"] as const;
+export type AgentLoopSystemKey = (typeof AGENT_LOOP_SYSTEM_KEYS)[number];
 
 export const agentLoopVersions = pgTable(
   "agent_loop_versions",

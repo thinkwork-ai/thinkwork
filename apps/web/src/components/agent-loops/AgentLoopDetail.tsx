@@ -36,6 +36,7 @@ import {
 } from "@/lib/graphql-queries";
 import { ArtifactShareDialog } from "@/components/artifacts/ArtifactShareDialog";
 import { AutomationFlowSection } from "./AutomationFlowSection";
+import { MemoryPipelineSection } from "./MemoryPipelineSection";
 import {
   AutomationWebhookDeliveriesPanel,
   AutomationWebhookEndpointPanel,
@@ -160,7 +161,9 @@ export function AgentLoopDetail({
         onArchive={() => void archiveLoop(loop)}
       />
     ) : undefined,
-    actionKey: `agent-loop:${agentLoopId}:${loop?.lifecycleStatus ?? "loading"}:${pendingAction ?? "idle"}`,
+    actionKey: `agent-loop:${agentLoopId}:${
+      loop?.lifecycleStatus ?? "loading"
+    }:${pendingAction ?? "idle"}`,
   });
 
   async function saveLoop(payload: SaveAgentLoopPayload) {
@@ -399,7 +402,16 @@ export function AgentLoopDetailContent({
               </a>
             </div>
           ) : null}
-          {tenantId && onSave ? (
+          {loop.memoryPipeline ? (
+            // THINK-264: the built-in memory Automation's steps ARE its
+            // pipeline, so it renders the real stage list rather than the
+            // trigger → work → document → deliver projection.
+            <MemoryPipelineSection
+              agentLoopId={loop.id}
+              pipeline={loop.memoryPipeline}
+              triggerFamily={loop.primaryTriggerFamily}
+            />
+          ) : tenantId && onSave ? (
             <AutomationFlowSection
               tenantId={tenantId}
               loop={loop}
@@ -555,7 +567,9 @@ function BoundDocumentCard({
           >
             <div className="min-w-0">
               <a
-                className={`${embedded ? "break-words" : "truncate"} text-sm font-medium text-primary hover:underline`}
+                className={`${
+                  embedded ? "break-words" : "truncate"
+                } text-sm font-medium text-primary hover:underline`}
                 href={`/artifacts/${artifact.id}`}
               >
                 {artifact.title}
@@ -672,41 +686,48 @@ function HeaderActions({
         >
           <RotateCw className="size-4" />
         </IconAction>
-        <AlertDialog>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <AlertDialogTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Archive"
-                  disabled={!!pendingAction}
-                >
-                  {pendingAction === "archive" ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Archive className="size-4" />
-                  )}
-                </Button>
-              </AlertDialogTrigger>
-            </TooltipTrigger>
-            <TooltipContent>Archive</TooltipContent>
-          </Tooltip>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Archive this automation?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Archived automations stop firing and disappear from the active
-                inventory. Run history is preserved.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={onArchive}>Archive</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* THINK-264: built-in automations are platform-owned — the server
+            refuses to archive them, so don't offer a button that always
+            errors. Pause is the supported off-switch. */}
+        {loop.kind === "system" ? null : (
+          <AlertDialog>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Archive"
+                    disabled={!!pendingAction}
+                  >
+                    {pendingAction === "archive" ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Archive className="size-4" />
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Archive</TooltipContent>
+            </Tooltip>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Archive this automation?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Archived automations stop firing and disappear from the active
+                  inventory. Run history is preserved.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onArchive}>
+                  Archive
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </TooltipProvider>
   );

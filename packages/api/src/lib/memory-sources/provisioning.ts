@@ -13,11 +13,14 @@
  * processor.workflow_id link is claimed with a workflow_id IS NULL CAS.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { ensureMemoryBlueprintVersion } from "@thinkwork/database-pg";
 import {
+  agentLoops,
+  agentLoopVersions,
   memoryProcessorConfigs,
   memorySourceConfigs,
+  workflowRuns,
   workflows as workflowsTable,
 } from "@thinkwork/database-pg/schema";
 
@@ -220,11 +223,160 @@ async function listSources(
     .orderBy(memorySourceConfigs.created_at, memorySourceConfigs.id);
 }
 
+/** The system Automation key for a user's Personal Memory Processing. */
+export const PERSONAL_MEMORY_SYSTEM_KEY = "personal-memory";
+
+/**
+ * THINK-264: give the managed memory workflow a first-class Automation
+ * identity so it renders as a row in the Automations inventory — with a real
+ * Definition and real Executions — instead of a bespoke card.
+ *
+ * agent_loops is the source and workflows the projection (workflows carry
+ * source_agent_loop_id as provenance), so a memory workflow with no loop is
+ * the odd one out. This backfills the missing side of that link. The loop is
+ * `kind: 'system'`: never hand-created, never deletable, but enable/disable
+ * flows through to the processor.
+ *
+ * Idempotent and concurrency-safe: (tenant_id, system_key, owner_user_id) is
+ * partial-unique, so a double-ensure conflicts and the loser adopts the winner.
+ */
+async function ensureSystemMemoryAgentLoop(
+  db: DbHandle,
+  args: {
+    tenantId: string;
+    userId: string;
+    processor: MemoryProcessorConfig;
+    workflow: WorkflowRow | null;
+  },
+): Promise<void> {
+  const { tenantId, userId, processor, workflow } = args;
+  if (!workflow) return;
+
+  const now = new Date();
+  const triggerFamily =
+    workflow.primary_trigger_family === "schedule" ? "schedule" : "manual";
+
+  const readLoop = async () => {
+    const [row] = await db
+      .select()
+      .from(agentLoops)
+      .where(
+        and(
+          eq(agentLoops.tenant_id, tenantId),
+          eq(agentLoops.system_key, PERSONAL_MEMORY_SYSTEM_KEY),
+          eq(agentLoops.owner_user_id, userId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  };
+
+  let loop = await readLoop();
+  if (!loop) {
+    const inserted = await db
+      .insert(agentLoops)
+      .values({
+        tenant_id: tenantId,
+        name: workflow.name,
+        // Reuse the workflow's per-user slug: already unique per tenant.
+        slug: workflow.slug,
+        description: workflow.description,
+        kind: "system",
+        system_key: PERSONAL_MEMORY_SYSTEM_KEY,
+        lifecycle_status: "active",
+        enabled: processor.enabled,
+        owner_user_id: userId,
+        run_as_user_id: userId,
+        primary_trigger_family: triggerFamily,
+      })
+      .onConflictDoNothing()
+      .returning();
+    loop = inserted[0] ?? (await readLoop());
+    if (!loop) return;
+  }
+
+  // The definition graph reads target_spec to know this is a memory pipeline
+  // and which processor's stages to render.
+  const targetSpec = {
+    kind: "memory_pipeline",
+    processorConfigId: processor.id,
+    mode: processor.mode,
+    workflowId: workflow.id,
+  };
+
+  if (!loop.current_version_id) {
+    const [version] = await db
+      .insert(agentLoopVersions)
+      .values({
+        tenant_id: tenantId,
+        agent_loop_id: loop.id,
+        version_number: 1,
+        version_status: "active",
+        trigger_spec: {
+          family: triggerFamily,
+          enabled: processor.enabled,
+          config: {},
+        } as never,
+        target_spec: targetSpec,
+        source_metadata: { systemKey: PERSONAL_MEMORY_SYSTEM_KEY },
+        published_at: now,
+      })
+      .returning({ id: agentLoopVersions.id });
+    if (version) {
+      await db
+        .update(agentLoops)
+        .set({
+          current_version_id: version.id,
+          current_version_number: 1,
+          updated_at: now,
+        })
+        .where(eq(agentLoops.id, loop.id));
+    }
+  }
+
+  // Claim the provenance link so AgentLoop.linkedWorkflow resolves — this is
+  // what makes the Executions tab show real memory runs.
+  if (workflow.source_agent_loop_id !== loop.id) {
+    await db
+      .update(workflowsTable)
+      .set({ source_agent_loop_id: loop.id, updated_at: now })
+      .where(eq(workflowsTable.id, workflow.id));
+  }
+
+  // Mirror live state onto the row the inventory renders: the trigger family
+  // and enablement are owned by the workflow/processor, and the Last run column
+  // reads the loop's own columns.
+  const [lastRun] = await db
+    .select({
+      id: workflowRuns.id,
+      status: workflowRuns.status,
+      created_at: workflowRuns.created_at,
+    })
+    .from(workflowRuns)
+    .where(eq(workflowRuns.workflow_id, workflow.id))
+    .orderBy(desc(workflowRuns.created_at))
+    .limit(1);
+
+  await db
+    .update(agentLoops)
+    .set({
+      name: workflow.name,
+      enabled: processor.enabled,
+      primary_trigger_family: triggerFamily,
+      last_run_id: lastRun?.id ?? null,
+      last_run_status: lastRun?.status ?? null,
+      last_run_at: lastRun?.created_at ?? null,
+      updated_at: now,
+    })
+    .where(eq(agentLoops.id, loop.id));
+}
+
 /**
  * Idempotent ensure of the caller's Personal Memory Automation: personal
  * processor (target_scope user, target_id = the user) + owned agent_private
  * workflow (owner_user_id set, manual trigger family) + current personal
- * blueprint version. Safe to call from the configuration-read path.
+ * blueprint version + the system Automation row it renders as. Safe to call
+ * from the configuration-read path.
  */
 export async function ensurePersonalMemoryAutomation(
   db: DbHandle,
@@ -256,8 +408,15 @@ export async function ensurePersonalMemoryAutomation(
     targetScope: "user",
     targetId: args.userId,
   });
+  const effective = fresh ?? processor;
+  await ensureSystemMemoryAgentLoop(db, {
+    tenantId: args.tenantId,
+    userId: args.userId,
+    processor: effective,
+    workflow,
+  });
   return {
-    processor: fresh ?? processor,
+    processor: effective,
     workflow,
     sources: await listSources(db, processor.id),
     created: processorCreated || workflowCreated,

@@ -316,12 +316,14 @@ export type AgentLoop = {
   description?: Maybe<Scalars["String"]["output"]>;
   enabled: Scalars["Boolean"]["output"];
   id: Scalars["ID"]["output"];
+  kind: AgentLoopKind;
   lastRunAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   lastRunId?: Maybe<Scalars["ID"]["output"]>;
   lastRunStatus?: Maybe<AgentLoopRunStatus>;
   lastRunSummary: Scalars["AWSJSON"]["output"];
   lifecycleStatus: AgentLoopLifecycleStatus;
   linkedWorkflow?: Maybe<Workflow>;
+  memoryPipeline?: Maybe<MemoryPipeline>;
   name: Scalars["String"]["output"];
   ownerAgentId?: Maybe<Scalars["ID"]["output"]>;
   ownerUserId?: Maybe<Scalars["ID"]["output"]>;
@@ -330,6 +332,7 @@ export type AgentLoop = {
   runs: Array<AgentLoopRun>;
   slug: Scalars["String"]["output"];
   spaceId?: Maybe<Scalars["ID"]["output"]>;
+  systemKey?: Maybe<Scalars["String"]["output"]>;
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
   versions: Array<AgentLoopVersion>;
@@ -378,6 +381,11 @@ export enum AgentLoopIterationStatus {
   Queued = "queued",
   Running = "running",
   WaitingForHuman = "waiting_for_human",
+}
+
+export enum AgentLoopKind {
+  System = "system",
+  User = "user",
 }
 
 export enum AgentLoopLifecycleStatus {
@@ -3589,6 +3597,57 @@ export type MemoryGraphNode = {
 };
 
 /**
+ * The live memory pipeline behind the built-in memory Automation (THINK-264):
+ * what it will run, over which sources, and whether it can run at all.
+ */
+export type MemoryPipeline = {
+  __typename?: "MemoryPipeline";
+  /** The processor's own on/off switch — mirrors AgentLoop.enabled. */
+  enabled: Scalars["Boolean"]["output"];
+  /** personal | shared */
+  mode: Scalars["String"]["output"];
+  processorConfigId: Scalars["ID"]["output"];
+  /** ready | blocked_not_ready */
+  readiness: Scalars["String"]["output"];
+  /** JSON array of {code, message} readiness reasons (empty when ready). */
+  readinessReasons?: Maybe<Scalars["AWSJSON"]["output"]>;
+  /** False when a schedule exists but is switched off (manual runs still work). */
+  scheduleEnabled: Scalars["Boolean"]["output"];
+  /** The bound rate(...)/cron(...) expression, or null when there is no schedule. */
+  scheduleExpression?: Maybe<Scalars["String"]["output"]>;
+  scheduleTimezone?: Maybe<Scalars["String"]["output"]>;
+  sources: Array<MemorySourceConfig>;
+  /** Ordered pipeline steps, as built from the current blueprint. */
+  stages: Array<MemoryPipelineStage>;
+  workflowId?: Maybe<Scalars["ID"]["output"]>;
+};
+
+/** One step of the memory pipeline as the Definition tab renders it (THINK-264). */
+export type MemoryPipelineStage = {
+  __typename?: "MemoryPipelineStage";
+  description: Scalars["String"]["output"];
+  /** False when the user has switched this stage off. Always true for spine stages. */
+  enabled: Scalars["Boolean"]["output"];
+  /** Step id in the workflow definition (e.g. "retain"). */
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  /**
+   * This stage's outcome on the most recent run — seen|changed|retracted|
+   * deferred|failed|noop — or null when the stage did not report an item.
+   */
+  lastResult?: Maybe<Scalars["String"]["output"]>;
+  /** Canonical stage kind: preflight|acquire|extract|project|resolve|retain|compound|graph|wiki. */
+  stage: Scalars["String"]["output"];
+  /**
+   * Whether the user may switch this stage off. Only the optional tail
+   * (compound/graph/wiki) is toggleable: acquire → project → resolve → retain is
+   * the pipeline's spine, and disabling any of it would starve everything
+   * downstream and silently make the automation a no-op.
+   */
+  toggleable: Scalars["Boolean"]["output"];
+};
+
+/**
  * External Memory Compounding (THINK-193 U2). Operator-only inspection and
  * control surface for external memory sources: processor configs, source
  * bindings, authorization grants, the evidence ledger, ontology claims, and
@@ -4394,6 +4453,17 @@ export type Mutation = {
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
+  /**
+   * Owner-only: switch one optional pipeline stage on or off (THINK-264).
+   *
+   * Only the optional tail (compound/graph/wiki) may be toggled — a request for
+   * any spine stage (acquire/project/resolve/retain, or preflight/extract) is
+   * rejected rather than silently ignored, because disabling one would starve
+   * every stage after it. The toggle is stored as intent on the processor and
+   * supersedes the workflow's active blueprint version through the normal lazy
+   * path; in-flight runs stay pinned to the version they captured.
+   */
+  setMemoryPipelineStageEnabled: MemoryPipeline;
   /**
    * Create, update, or disable a source config (THINK-193 U5/U6). Shared
    * processors: tenant admin. Personal processors: owner self-service for
@@ -5508,6 +5578,12 @@ export type MutationSetDefaultEvalProfileArgs = {
 
 export type MutationSetManagedApplicationDeploymentArgs = {
   input: SetManagedApplicationDeploymentInput;
+};
+
+export type MutationSetMemoryPipelineStageEnabledArgs = {
+  agentLoopId: Scalars["ID"]["input"];
+  enabled: Scalars["Boolean"]["input"];
+  stage: Scalars["String"]["input"];
 };
 
 export type MutationSetMemorySourceConfigArgs = {

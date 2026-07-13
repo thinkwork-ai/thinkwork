@@ -20,6 +20,16 @@ export async function deleteAgentLoop(
 
   if (!row) return { id: args.id, ok: false };
 
+  // THINK-264: built-in Automations are platform-owned. Delete here means
+  // archive, which would also archive the linked memory workflow below and
+  // leave the user with no memory processing and no way to get it back from
+  // the UI. Disable is the supported off-switch.
+  if (row.kind === "system") {
+    throw new Error(
+      `"${row.name}" is a built-in automation and cannot be deleted. Disable it instead.`,
+    );
+  }
+
   // THINK-227 U11 (KTD10): admins keep general delete; a member may only
   // archive automations they own.
   await requireAgentLoopWriteAccess(ctx, row.tenant_id, {

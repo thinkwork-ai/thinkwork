@@ -1,3 +1,5 @@
+import type { MemoryPipelineView } from "./memoryPipelineFlowGraph";
+
 export type AgentLoopLifecycleStatus =
   | "draft"
   | "active"
@@ -168,6 +170,13 @@ export interface AgentLoopRow {
   description?: string | null;
   lifecycleStatus: string;
   enabled: boolean;
+  // THINK-264: "system" for platform built-ins (Personal Memory Processing).
+  // These are undeletable and only their enabled state is editable.
+  kind?: string | null;
+  systemKey?: string | null;
+  // Present only on the built-in memory Automation — the Definition tab
+  // renders this stage list instead of the trigger/work/document/deliver graph.
+  memoryPipeline?: MemoryPipelineView | null;
   ownerUserId?: string | null;
   ownerAgentId?: string | null;
   // THINK-137 U3 (R1): the user identity a run acts as.
