@@ -116,6 +116,11 @@ export interface SlackGateway {
   uploadFiles(channel: string, threadTs: string, paths: string[]): Promise<void>;
   /** Pin a message in the channel (pins.add; needs `pins:write`). */
   pinMessage(channel: string, ts: string): Promise<void>;
+  /**
+   * List pinned items (pins.list). Side-effect-free probe for the `pins:read`
+   * scope — doctor uses it; throws on missing scope.
+   */
+  listPins(channel: string): Promise<number>;
   /** Permalink for a message (chat.getPermalink), or null on failure. */
   getPermalink(channel: string, ts: string): Promise<string | null>;
   /** Register the single inbound-message handler (Socket Mode). */
@@ -292,6 +297,11 @@ export async function createSlackGateway(
 
     async pinMessage(channel, ts) {
       await web.pins.add({ channel, timestamp: ts });
+    },
+
+    async listPins(channel) {
+      const res = (await web.pins.list({ channel })) as { items?: unknown[] };
+      return res.items?.length ?? 0;
     },
 
     async getPermalink(channel, ts) {

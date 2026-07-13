@@ -81,6 +81,14 @@ export class FakeSlackGateway implements SlackGateway {
     this.pins.push({ channel, ts });
   }
 
+  /** When set, listPins throws (missing pins:read). */
+  listPinsError: Error | null = null;
+
+  async listPins(channel: string): Promise<number> {
+    if (this.listPinsError !== null) throw this.listPinsError;
+    return this.pins.filter((p) => p.channel === channel).length;
+  }
+
   async getPermalink(channel: string, ts: string): Promise<string | null> {
     return `https://slack.test/archives/${channel}/p${ts.replace(".", "")}`;
   }

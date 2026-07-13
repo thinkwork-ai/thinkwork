@@ -34,6 +34,7 @@ import {
 import { LocalTransport } from "../src/workers/transport.js";
 import { mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { createSteeringExecutors, formatElapsed } from "../src/slack/console.js";
+import { slackConsoleChecks } from "../src/doctor.js";
 import { createSlackSync, type SlackSync } from "../src/slack/sync.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
 import { FakeGateway, makeIssue, type FakeIssue } from "./fake-gateway.js";
@@ -1106,5 +1107,29 @@ describe("nextCanaryN", () => {
     expect(nextCanaryN("v0.1.0-canary.354\nv0.1.0-canary.353\n")).toBe(355);
     expect(nextCanaryN("")).toBe(1);
     expect(nextCanaryN("garbage\nv0.1.0-canary.7")).toBe(8);
+  });
+});
+
+describe("U10: doctor console-scope checks", () => {
+  it("passes pins:read when the gateway accepts the probe; checklist item present", async () => {
+    const slack = new FakeSlackGateway();
+    const checks = await slackConsoleChecks(slack, CHANNEL);
+    const pins = checks.find((c) => c.name === "slack-pins-read")!;
+    expect(pins.ok).toBe(true);
+    const checklist = checks.find((c) => c.name === "slack-scope-checklist")!;
+    expect(checklist.ok).toBe(true);
+    expect(checklist.detail).toContain("pins:write");
+    expect(checklist.detail).toContain("files:write");
+    expect(checklist.detail).toContain("not probe-able");
+  });
+
+  it("reports a pins.list failure as missing pins:read with the fix named", async () => {
+    const slack = new FakeSlackGateway();
+    slack.listPinsError = new Error("missing_scope: pins:read");
+    const checks = await slackConsoleChecks(slack, CHANNEL);
+    const pins = checks.find((c) => c.name === "slack-pins-read")!;
+    expect(pins.ok).toBe(false);
+    expect(pins.detail).toContain("pins:read");
+    expect(pins.detail).toContain("reinstall");
   });
 });

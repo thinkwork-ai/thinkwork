@@ -191,12 +191,50 @@ export async function runDoctor(): Promise<{
           ? `channel ${channelId} reachable`
           : `channel ${channelId} not reachable (invite the bot / check the id)`,
       );
+      for (const check of await slackConsoleChecks(slack, channelId as string)) {
+        checks.push(check);
+      }
     } catch (e) {
       add("slack-auth", false, `could not build Slack client: ${String(e)}`);
     }
   }
 
   return { checks, ok: checks.every((c) => c.ok) };
+}
+
+/**
+ * Console-scope checks (U10). `pins:read` is the one console scope probe-able
+ * without a side effect (pins.list); `pins:write` and `files:write` cannot be
+ * verified side-effect-free, so they render as checklist items — never false
+ * passes. First use of the board/result paths surfaces Slack's missing_scope
+ * with the same remediation.
+ */
+export async function slackConsoleChecks(
+  slack: Pick<import("./slack/client.js").SlackGateway, "listPins">,
+  channelId: string,
+): Promise<DoctorCheck[]> {
+  const checks: DoctorCheck[] = [];
+  try {
+    const pinCount = await slack.listPins(channelId);
+    checks.push({
+      name: "slack-pins-read",
+      ok: true,
+      detail: `pins.list ok (${pinCount} pinned)`,
+    });
+  } catch (e) {
+    checks.push({
+      name: "slack-pins-read",
+      ok: false,
+      detail: `pins.list failed — add the \`pins:read\` bot scope and reinstall the app (${String(e).split("\n")[0]})`,
+    });
+  }
+  checks.push({
+    name: "slack-scope-checklist",
+    ok: true,
+    detail:
+      "verify in the Slack app config: pins:write (pinned board) and files:write (result screenshots) — not probe-able without side effects",
+  });
+  return checks;
 }
 
 export function formatDoctorReport(checks: DoctorCheck[]): string {

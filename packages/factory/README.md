@@ -249,10 +249,12 @@ Notes:
 
 1. Create a Slack app; enable **Socket Mode** (this mints the `xapp-…`
    app-level token used for the inbound answer relay).
-2. Bot token scopes — the daemon only calls `chat.postMessage`,
-   `conversations.info`, and `auth.test`, so it needs: `chat:write` and
-   `channels:read` + `channels:history` (add `groups:read` + `groups:history`
-   for a private channel).
+2. Bot token scopes — `chat:write`, `channels:read` + `channels:history`
+   (add `groups:read` + `groups:history` for a private channel), plus the
+   operator-console scopes: `pins:read` + `pins:write` (the pinned live
+   board) and `files:write` (`result` uploads verification screenshots
+   inline). `factoryd doctor` probes `pins:read`; the write scopes surface a
+   `missing_scope` error on first use if forgotten.
 3. Event subscriptions: `message.channels` (and `message.groups` for a private
    channel) — this is how the bot sees your in-thread replies.
 4. Enable **Interactivity & Shortcuts** — required for the answer-form buttons
@@ -263,6 +265,40 @@ Notes:
    Mode), **channel id**, and your **member id** in `operatorUserIds` into
    config. `webhookUrl` (an incoming webhook) is used by the watchdog to alert
    when the daemon goes silent.
+7. Create a **`Paused`** label in Linear (any color) — the console's
+   `pause`/`resume` verbs flip it, and the poller treats it as a blocker
+   label.
+8. Operator-account hygiene: the allowlisted Slack account now carries merge
+   and release authority — keep Slack **2FA enabled** on it.
+
+### Operator console (Slack)
+
+Every factory message carries the buttons valid for the issue's current
+state; each button has a typed equivalent usable in the same thread. All
+verbs — including the read-only ones — are gated on `operatorUserIds`.
+
+| Verb | Does | Notes |
+|---|---|---|
+| `approve` (alias `advance`) | advance the current review gate | Requirements Review → Planning, Plan Review → Ready to Work, Verification → Done |
+| `result` (alias `report`) | newest handoff, merged PRs, report links, screenshots | screenshots upload inline from `~/.thinkwork-factory/artifacts/<ISSUE>/` |
+| `logs [n]` | tail of the newest worker log (default 40 lines) | active attempt first, else latest |
+| `merge <pr#>` | squash-merge a factory PR | refuses PRs not associated with the thread's issue; shows checks first |
+| `retry` | relaunch the current phase from its newest baton | no-op while a worker is running |
+| `pause` / `resume` | suspend / restore automation on the issue | flips the `Paused` Linear label |
+| `release` | cut a web canary (paired tags) | confirm round-trip: shows the exact tags + origin/main sha; only the confirm tap executes, and only at that sha |
+| `status` | in a thread: that issue; at channel root: the board snapshot | |
+| `question` | re-show the open question without answering it | |
+| `help` | list the commands valid for the issue's state | any unrecognized message shows this too |
+
+**Buttons per state:** review gates (Requirements Review / Plan Review /
+Verification) show ✅ Approve · 📄 Result · 🪵 Logs · 🔁 Retry · ⏸ Pause;
+working states drop Approve; Done shows Result only; a paused issue shows
+▶️ Resume. A merged factory PR posts a note with 🚢 Cut release · 📄 Result.
+
+**Pinned board:** one channel message, edited silently every tick — running
+(with elapsed), needs-you, waiting, paused, done-today, idle counts. Rows
+link to their Slack threads. If it gets unpinned or deleted, the daemon
+re-posts and re-pins it on the next tick.
 
 ---
 
