@@ -188,6 +188,10 @@ export interface WikiPageRow {
   /** Soft tag hints — never a structural forcing function. */
   tags: string[];
   last_compiled_at: Date | null;
+  /** THINK-273: stored plate render triple — all set together or all NULL. */
+  render_html?: string | null;
+  render_plate_slug?: string | null;
+  rendered_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
