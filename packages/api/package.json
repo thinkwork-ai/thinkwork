@@ -43,6 +43,7 @@
     "@graphql-yoga/plugin-disable-introspection": "^2.22.0",
     "@smithy/node-http-handler": "^4.5.2",
     "@thinkwork/agent-loops-core": "workspace:*",
+    "@thinkwork/capability-contracts": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-runner": "workspace:*",
     "@thinkwork/evals-core": "workspace:*",

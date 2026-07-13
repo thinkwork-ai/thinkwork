@@ -114,6 +114,16 @@ export interface CapabilityManifestEntry {
    * and (post-flip) enforce from the sidecar source.
    */
   policy?: Record<string, unknown>;
+  /**
+   * Shadow descriptor identity (THINK-280 U1b), copied verbatim from
+   * the definition's `capability_ref` frontmatter. Shadow-read only —
+   * downstream consumers (Inspector, working search) may read these;
+   * live dispatch never does in this slice. Absent on folders that do
+   * not declare the new fields, so their manifest body (and therefore
+   * fingerprint) is byte-identical to pre-U1b compiles.
+   */
+  twcap?: string;
+  descriptor_fingerprint?: string;
 }
 
 export interface WithheldCapabilityEntry {
@@ -570,6 +580,15 @@ function connectionEntry(
       : null,
     ...(sidecar.config ? { credentialRefs: sidecar.config } : {}),
     ...(sidecar.policy ? { policy: sidecar.policy } : {}),
+    ...(definition.descriptor_identity?.twcap
+      ? { twcap: definition.descriptor_identity.twcap }
+      : {}),
+    ...(definition.descriptor_identity?.descriptor_fingerprint
+      ? {
+          descriptor_fingerprint:
+            definition.descriptor_identity.descriptor_fingerprint,
+        }
+      : {}),
   };
 }
 

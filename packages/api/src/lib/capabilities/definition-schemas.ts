@@ -21,6 +21,10 @@
 
 import { splitFrontmatter, MAX_DESCRIPTION_LEN } from "../skill-md-parser.js";
 import { parse as parseYaml } from "yaml";
+import {
+  CapabilityContractError,
+  parseTwcapRef,
+} from "@thinkwork/capability-contracts";
 import type { CapabilitySignatureEnvelope } from "./sidecar-signing.js";
 
 /**
@@ -50,6 +54,35 @@ export type ConnectionType = (typeof CONNECTION_TYPES)[number];
 export const CONNECTION_PRINCIPAL_TYPES = ["app", "user"] as const;
 export type ConnectionPrincipalType =
   (typeof CONNECTION_PRINCIPAL_TYPES)[number];
+
+/**
+ * Shadow descriptor identity (THINK-280 U1b). A definition may pin the
+ * shared `twcap://` reference and/or descriptor fingerprint it claims to
+ * implement via a `capability_ref` frontmatter mapping. Shadow-read
+ * only: never consulted by live dispatch in this slice.
+ */
+export interface CapabilityDescriptorIdentity {
+  twcap?: string;
+  descriptor_fingerprint?: string;
+}
+
+/**
+ * Legacy `principalType` values (`app`/`user`) predate the three-mode
+ * principal contract (`requester`/`agent_owner`/`service`) and MUST NOT
+ * be auto-mapped into it — the mapping is a per-connection migration
+ * decision, not a mechanical rename. Surfaces the remediation instead.
+ */
+export function legacyPrincipalRemediation(
+  principalType: ConnectionPrincipalType,
+): {
+  legacy: ConnectionPrincipalType;
+  remediation: "explicit-principal-migration-required";
+} {
+  return {
+    legacy: principalType,
+    remediation: "explicit-principal-migration-required",
+  };
+}
 
 /** Forward-declared approval policy (R: declared, bluntly enforced in v1). */
 export const APPROVAL_POLICIES = ["never", "once", "always"] as const;
@@ -89,6 +122,12 @@ export interface ConnectionDefinition {
    * enforced by the secret scan.
    */
   auth?: Record<string, unknown>;
+  /**
+   * Optional shadow descriptor identity from `capability_ref`
+   * frontmatter (THINK-280 U1b). Fail-closed: present-but-malformed is
+   * a parse error, never a silent drop.
+   */
+  descriptor_identity?: CapabilityDescriptorIdentity;
   /** Prose body. */
   body: string;
   /** Remaining frontmatter fields, preserved verbatim. */
@@ -213,6 +252,11 @@ export function parseConnectionDefinition(
   );
   const auth = optionalRecord(record.auth, "auth", path, errors);
   if (auth) scanForSecretValues(auth, "auth", path, errors);
+  const descriptorIdentity = parseDescriptorIdentity(
+    record.capability_ref,
+    path,
+    errors,
+  );
 
   if (errors.length > 0 || !name || !description || !type || !principalType) {
     return { valid: false, errors };
@@ -228,6 +272,9 @@ export function parseConnectionDefinition(
       ...(url ? { url } : {}),
       operations: operations ?? [],
       ...(auth ? { auth } : {}),
+      ...(descriptorIdentity
+        ? { descriptor_identity: descriptorIdentity }
+        : {}),
       body,
       internal: stripKnown(record, [
         "name",
@@ -237,9 +284,93 @@ export function parseConnectionDefinition(
         "url",
         "operations",
         "auth",
+        "capability_ref",
       ]),
     },
   };
+}
+
+/**
+ * Parse the optional `capability_ref` frontmatter field into a shadow
+ * descriptor identity (THINK-280 U1b). Accepted shapes: a bare
+ * `twcap://` operation-reference string, or a mapping with optional
+ * `twcap` and `descriptor_fingerprint` keys. Fail-closed via
+ * `parseTwcapRef`: a malformed twcap value accumulates a FieldShape
+ * error like any other field, never a silent drop.
+ */
+function parseDescriptorIdentity(
+  raw: unknown,
+  path: string,
+  errors: CapabilityDefinitionError[],
+): CapabilityDescriptorIdentity | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const record =
+    typeof raw === "string"
+      ? { twcap: raw }
+      : optionalRecord(raw, "capability_ref", path, errors);
+  if (!record) return undefined;
+  const out: CapabilityDescriptorIdentity = {};
+  if (record.twcap !== undefined) {
+    const twcap = optionalString(
+      record.twcap,
+      "capability_ref.twcap",
+      path,
+      errors,
+    );
+    if (twcap !== undefined) {
+      try {
+        parseTwcapRef(twcap);
+        out.twcap = twcap;
+      } catch (e) {
+        const detail =
+          e instanceof CapabilityContractError
+            ? e.violations.join("; ")
+            : (e as Error).message;
+        errors.push({
+          kind: "FieldShape",
+          message: `${path} field 'capability_ref.twcap' is not a valid twcap operation reference (${detail})`,
+          details: { path, field: "capability_ref.twcap", value: twcap },
+        });
+      }
+    }
+  }
+  if (record.descriptor_fingerprint !== undefined) {
+    const fingerprint = optionalString(
+      record.descriptor_fingerprint,
+      "capability_ref.descriptor_fingerprint",
+      path,
+      errors,
+    );
+    if (fingerprint !== undefined) {
+      if (/^[0-9a-f]{64}$/.test(fingerprint)) {
+        out.descriptor_fingerprint = fingerprint;
+      } else {
+        errors.push({
+          kind: "FieldShape",
+          message: `${path} field 'capability_ref.descriptor_fingerprint' must be a lowercase sha256 hex digest`,
+          details: {
+            path,
+            field: "capability_ref.descriptor_fingerprint",
+            value: fingerprint,
+          },
+        });
+      }
+    }
+  }
+  if (
+    record.twcap === undefined &&
+    record.descriptor_fingerprint === undefined
+  ) {
+    errors.push({
+      kind: "FieldShape",
+      message: `${path} field 'capability_ref' must carry a 'twcap' reference and/or a 'descriptor_fingerprint'`,
+      details: { path, field: "capability_ref" },
+    });
+  }
+  if (out.twcap === undefined && out.descriptor_fingerprint === undefined) {
+    return undefined;
+  }
+  return out;
 }
 
 /** Parse + validate a TOOL.md document (kind-discriminated). */

@@ -6,6 +6,7 @@ import {
   parseCapabilitiesManifest,
   type CapabilityFolderInput,
 } from "./manifest-compile.js";
+import { legacyPrincipalRemediation } from "./definition-schemas.js";
 import {
   capabilitySignerFromKey,
   capabilityVerifierFromKey,
@@ -345,6 +346,98 @@ describe("compileCapabilitiesManifest", () => {
     };
     expect(verifier.verifyPayload(tampered, signature)).toBe(false);
     expect(signature?.signed_by).toBe("render");
+  });
+
+  it("legacy folder without capability_ref compiles to the pre-U1b fingerprint (regression)", () => {
+    const { manifest } = compile(
+      [
+        signedFolder({
+          klass: "connection",
+          slug: "firecrawl",
+          definition: connectionMd,
+        }),
+        signedFolder({
+          klass: "tool",
+          slug: "firecrawl-scrape",
+          definition: bindingMd("firecrawl-scrape"),
+        }),
+      ],
+      { skills: [{ slug: "sales-prep", enabled: true, active: true }] },
+    );
+    // Byte-identity proof for THINK-280 U1b shadow fields: this hash was
+    // computed with the compiler AS OF BEFORE capability_ref/twcap
+    // support landed, over exactly these fixtures. Folders that do not
+    // declare the new fields must keep producing it. (The manifest body
+    // also covers BUILTIN_TOOL_NAMES — if the builtin list changes, this
+    // pin moves for that unrelated reason and must be recomputed.)
+    expect(manifest.fingerprint).toBe(
+      "41d6388c712928254dbe73829b17c01c5690b4224186ccb9ee83647914831f16",
+    );
+    const connection = manifest.active.find((e) => e.class === "connection")!;
+    expect("twcap" in connection).toBe(false);
+    expect("descriptor_fingerprint" in connection).toBe(false);
+  });
+
+  it("shadow twcap identity round-trips parse -> compile -> parseCapabilitiesManifest", () => {
+    const twcap =
+      "twcap://acme/connection/firecrawl/versions/1/operations/scrape" +
+      `?contract=sha256:${"a".repeat(64)}`;
+    const descriptorFingerprint = "b".repeat(64);
+    const withRef = connectionMd.replace(
+      "operations:",
+      [
+        "capability_ref:",
+        `  twcap: "${twcap}"`,
+        `  descriptor_fingerprint: "${descriptorFingerprint}"`,
+        "operations:",
+      ].join("\n"),
+    );
+    const legacy = compile([
+      signedFolder({
+        klass: "connection",
+        slug: "firecrawl",
+        definition: connectionMd,
+      }),
+    ]);
+    const { manifest, json } = compile([
+      signedFolder({
+        klass: "connection",
+        slug: "firecrawl",
+        definition: withRef,
+      }),
+    ]);
+    const entry = manifest.active.find((e) => e.class === "connection")!;
+    expect(entry.twcap).toBe(twcap);
+    expect(entry.descriptor_fingerprint).toBe(descriptorFingerprint);
+    // Entries carrying the new fields MAY move the fingerprint — only
+    // unchanged-legacy-folder stability is guaranteed.
+    expect(manifest.fingerprint).not.toBe(legacy.manifest.fingerprint);
+    const reparsed = parseCapabilitiesManifest(json);
+    const roundTripped = reparsed?.active.find((e) => e.class === "connection");
+    expect(roundTripped?.twcap).toBe(twcap);
+    expect(roundTripped?.descriptor_fingerprint).toBe(descriptorFingerprint);
+  });
+
+  it("legacy principalType flows through untranslated; remediation is the only bridge", () => {
+    const { manifest } = compile([
+      signedFolder({
+        klass: "connection",
+        slug: "firecrawl",
+        definition: connectionMd.replace(
+          "type: api",
+          "type: api\nprincipal_type: user",
+        ),
+      }),
+    ]);
+    const entry = manifest.active.find((e) => e.class === "connection")!;
+    expect(entry.principalType).toBe("user");
+    expect(["requester", "agent_owner", "service"]).not.toContain(
+      entry.principalType,
+    );
+    expect(legacyPrincipalRemediation(entry.principalType as "user")).toEqual({
+      legacy: "user",
+      remediation: "explicit-principal-migration-required",
+    });
   });
 
   it("parseCapabilitiesManifest round-trips and rejects malformed input", () => {

@@ -340,10 +340,35 @@ BEGIN
   ELSE
     missing := missing || 'budget_policies'::text;
   END IF;
+  IF to_regclass('public.capability_broker_calls') IS NOT NULL THEN
+    GRANT SELECT ON public.capability_broker_calls TO analyst_reader;
+  ELSE
+    missing := missing || 'capability_broker_calls'::text;
+  END IF;
+  IF to_regclass('public.capability_broker_sessions') IS NOT NULL THEN
+    GRANT SELECT ON public.capability_broker_sessions TO analyst_reader;
+  ELSE
+    missing := missing || 'capability_broker_sessions'::text;
+  END IF;
   IF to_regclass('public.capability_catalog') IS NOT NULL THEN
     GRANT SELECT ON public.capability_catalog TO analyst_reader;
   ELSE
     missing := missing || 'capability_catalog'::text;
+  END IF;
+  IF to_regclass('public.capability_connection_proposals') IS NOT NULL THEN
+    GRANT SELECT ON public.capability_connection_proposals TO analyst_reader;
+  ELSE
+    missing := missing || 'capability_connection_proposals'::text;
+  END IF;
+  IF to_regclass('public.capability_definitions') IS NOT NULL THEN
+    GRANT SELECT ON public.capability_definitions TO analyst_reader;
+  ELSE
+    missing := missing || 'capability_definitions'::text;
+  END IF;
+  IF to_regclass('public.capability_routine_proposals') IS NOT NULL THEN
+    GRANT SELECT ON public.capability_routine_proposals TO analyst_reader;
+  ELSE
+    missing := missing || 'capability_routine_proposals'::text;
   END IF;
   IF to_regclass('public.connections') IS NOT NULL THEN
     GRANT SELECT ON public.connections TO analyst_reader;
@@ -769,7 +794,7 @@ BEGIN
   END IF;
   IF to_regclass('public.routines') IS NOT NULL THEN
     REVOKE ALL PRIVILEGES ON public.routines FROM analyst_reader;
-    GRANT SELECT (agent_id, catalog_slug, config, created_at, current_version, description, disabled_reason, documentation_md, engine, fixture_paths, id, last_run_at, module_path, name, next_run_at, owning_agent_id, schedule, state_machine_alias_arn, state_machine_arn, status, tenant_id, type, updated_at, validated_sha, visibility) ON public.routines TO analyst_reader;
+    GRANT SELECT (agent_id, capability_dependencies, catalog_slug, config, created_at, current_version, description, disabled_reason, documentation_md, engine, execution_principal, fixture_paths, id, last_run_at, module_path, name, next_run_at, owning_agent_id, schedule, state_machine_alias_arn, state_machine_arn, status, tenant_id, type, updated_at, validated_sha, visibility) ON public.routines TO analyst_reader;
   ELSE
     missing := missing || 'routines'::text;
   END IF;
@@ -906,6 +931,11 @@ BEGIN
     GRANT SELECT ON public.tenant_policy_events TO analyst_reader;
   ELSE
     missing := missing || 'tenant_policy_events'::text;
+  END IF;
+  IF to_regclass('public.tenant_service_principals') IS NOT NULL THEN
+    GRANT SELECT ON public.tenant_service_principals TO analyst_reader;
+  ELSE
+    missing := missing || 'tenant_service_principals'::text;
   END IF;
   IF to_regclass('public.tenant_settings') IS NOT NULL THEN
     GRANT SELECT ON public.tenant_settings TO analyst_reader;
