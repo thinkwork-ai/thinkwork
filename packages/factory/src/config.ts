@@ -188,6 +188,15 @@ export function getConfigPath(): string {
   return join(getStateDir(), "config.json");
 }
 
+/**
+ * Durable per-issue artifacts folder (U7): verify workers copy their
+ * screenshots here (worktrees are cleaned up after the run), and the Slack
+ * console's `result` verb reads them back. No retention policy in v1.
+ */
+export function getArtifactsDir(identifier: string): string {
+  return join(getStateDir(), "artifacts", identifier);
+}
+
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim() !== "";
 }

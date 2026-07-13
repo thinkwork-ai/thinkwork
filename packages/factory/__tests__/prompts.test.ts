@@ -36,7 +36,34 @@ describe("phase templates", () => {
       expect(prompt, phase).toContain(ID);
       expect(prompt, phase).not.toContain("<ISSUE_ID>");
       expect(prompt, phase).not.toContain("<SHORT_TITLE>");
+      expect(prompt, phase).not.toContain("<ARTIFACTS_DIR>");
     }
+  });
+
+  it("U7: the verify prompt carries the injected absolute artifacts path", () => {
+    const { prompt } = assemblePrompt({
+      phase: "verify",
+      issueId: ID,
+      title: TITLE,
+      comments: [],
+      progressDoc: "Progress body",
+      artifactsDir: "/tmp/factory-state/artifacts/" + ID,
+    });
+    expect(prompt).toContain("/tmp/factory-state/artifacts/" + ID);
+    expect(prompt).toContain("Durable screenshots (MANDATORY)");
+  });
+
+  it("U7: non-verify prompts carry no screenshot-artifacts step", () => {
+    const { prompt } = assemblePrompt({
+      phase: "implement",
+      issueId: ID,
+      title: TITLE,
+      comments: [],
+      progressDoc: "Progress body",
+      artifactsDir: "/tmp/factory-state/artifacts/" + ID,
+    });
+    expect(prompt).not.toContain("Durable screenshots");
+    expect(prompt).not.toContain("/tmp/factory-state/artifacts/");
   });
 
   it("templates stay faithful to launch-prompts.md per phase", () => {
