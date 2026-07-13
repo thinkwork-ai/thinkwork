@@ -148,7 +148,8 @@ export const DEFAULT_PHASES: Record<string, PhaseConfig> = {
     budgetUsd: 100,
   },
   verify: {
-    model: "opus",
+    // Codex runner model (verification is always Codex; engine.launch).
+    model: "gpt-5.6-sol",
     wallClockSlaMinutes: 60,
     silenceBudgetMinutes: 10,
     budgetUsd: 50,

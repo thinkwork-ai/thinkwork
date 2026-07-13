@@ -406,3 +406,79 @@ describe("ClaudeRunner (stub binary through LocalTransport)", () => {
     expect(await runner.logTail(handle, 2)).toBe("two\nthree");
   });
 });
+
+describe("parseCodexJsonEvents", () => {
+  it("classifies completion, errors, and rate limits across event shapes", async () => {
+    const { parseCodexJsonEvents } = await import("../src/workers/codex-runner.js");
+    const log = [
+      JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "Verification PASS — moved to Done." } }),
+      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 10 } }),
+      "not json",
+    ].join("\n");
+    const events = parseCodexJsonEvents(log);
+    const completion = events.find((e) => e.kind === "completion");
+    expect(completion).toMatchObject({ success: true });
+    expect((completion as { detail?: string }).detail).toContain("Verification PASS");
+
+    const errored = parseCodexJsonEvents(
+      [
+        JSON.stringify({ msg: { type: "error", message: "something broke" } }),
+        JSON.stringify({ type: "turn.completed" }),
+      ].join("\n"),
+    );
+    expect(errored.find((e) => e.kind === "completion")).toMatchObject({ success: false });
+    expect(errored.some((e) => e.kind === "error")).toBe(true);
+
+    const limited = parseCodexJsonEvents(
+      JSON.stringify({ type: "error", message: "429 rate limit exceeded, retry later" }),
+    );
+    expect(limited.some((e) => e.kind === "rate-limit")).toBe(true);
+    // No completion event → incomplete run.
+    expect(limited.some((e) => e.kind === "completion")).toBe(false);
+  });
+});
+
+describe("CodexRunner (stub binary through LocalTransport)", () => {
+  function writeStub(name: string, body: string): string {
+    const p = join(dir, name);
+    writeFileSync(p, `#!/bin/sh\n${body}\n`);
+    chmodSync(p, 0o755);
+    return p;
+  }
+
+  it("launches `exec` with --json, -C worktree, -m model, and the sandbox bypass; scrubbed env", async () => {
+    process.env.FACTORY_CANARY_SECRET = "super-secret-canary";
+    try {
+      const { CodexRunner } = await import("../src/workers/codex-runner.js");
+      const stub = writeStub("codex-args-stub", "printf '%s\\n' \"$@\"; env | sort");
+      const logsDir = join(dir, "logs");
+      const runner = new CodexRunner({
+        codexBin: stub,
+        logsDir,
+        transport: new LocalTransport(),
+      });
+      const handle = await runner.launch(
+        { attemptId: 3, issueId: "THINK-997", phase: "verify", attemptNumber: 1 },
+        "Verify it.",
+        { model: "gpt-5.6-sol", cwd: dir, budgetUsd: 50 },
+      );
+      expect(handle.pidPath).toBe(handle.logPath.replace(/\.log$/, ".pid"));
+      expect(handle.logPath).toMatch(/THINK-997-verify-.*\.log$/);
+      await runner.result(handle, { pollMs: 25, timeoutMs: 10_000 });
+      const log = readFileSync(handle.logPath, "utf-8");
+      const lines = log.split("\n");
+      expect(lines[0]).toBe("exec");
+      expect(lines[1]).toBe("Verify it.");
+      expect(log).toContain("--json");
+      expect(log).toContain("-m\ngpt-5.6-sol");
+      expect(log).toContain(`-C\n${dir}`);
+      expect(log).toContain("--dangerously-bypass-approvals-and-sandbox");
+      // Codex has no budget flag — budgetUsd must NOT leak into args.
+      expect(log).not.toContain("--max-budget-usd");
+      // Scrubbed env: daemon secrets never reach the worker.
+      expect(log).not.toContain("super-secret-canary");
+    } finally {
+      delete process.env.FACTORY_CANARY_SECRET;
+    }
+  });
+});

@@ -800,3 +800,45 @@ describe("executeAction — detached launches (production default)", () => {
     expect(h.launches).toHaveLength(0);
   });
 });
+
+describe("executeAction — launch-time In Progress move (board legibility)", () => {
+  it("an implement launch from Ready to Work moves the issue to In Progress at spawn", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-95",
+      state: "Ready to Work",
+      labels: ["Claude"],
+      comments: [
+        { id: "b1", body: "handoff:THINK-95:Ready to Work\n\nGoal: build it.", authorId: "viewer-daemon" },
+      ],
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Verification" });
+    const candidate = await candidateFor(h.gateway, "THINK-95");
+    const action = decideAction(candidate, { activeAttempt: null, hasChildIssues: false });
+    expect(action).toMatchObject({ kind: "launch", phase: "implement" });
+
+    await executeAction(action, candidate, h.deps);
+
+    // setState("In Progress") fired at spawn, before the worker's own final
+    // move (the harness stub then moved it to Verification).
+    expect(
+      h.gateway.writesOf("setState").some((w) => w.args[1] === "In Progress"),
+    ).toBe(true);
+  });
+
+  it("a plan launch never moves the status", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-96",
+      state: "Planning",
+      labels: ["Claude"],
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Ready to Work" });
+    const candidate = await candidateFor(h.gateway, "THINK-96");
+    const action = decideAction(candidate, { activeAttempt: null, hasChildIssues: false });
+
+    await executeAction(action, candidate, h.deps);
+
+    expect(
+      h.gateway.writesOf("setState").filter((w) => w.args[1] === "In Progress"),
+    ).toHaveLength(0);
+  });
+});

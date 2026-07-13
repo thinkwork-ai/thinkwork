@@ -46,6 +46,7 @@ import {
 import { openStore } from "./store/db.js";
 import { createAttemptMachine } from "./workers/attempts.js";
 import { ClaudeRunner } from "./workers/claude-runner.js";
+import { CodexRunner } from "./workers/codex-runner.js";
 import { LocalTransport } from "./workers/transport.js";
 
 const program = new Command();
@@ -136,6 +137,21 @@ program
       );
     }
 
+    const codexRunner =
+      host.codexBin !== undefined
+        ? new CodexRunner({
+            codexBin: host.codexBin,
+            logsDir: join(stateDir, "logs"),
+            transport,
+          })
+        : null;
+    if (codexRunner === null) {
+      log.warn(
+        "host has no codexBin — verification launches (always Codex) will be skipped until it is configured",
+        { host: host.name },
+      );
+    }
+
     const executorDeps: ExecutorDeps = {
       gateway,
       store,
@@ -145,7 +161,8 @@ program
       teamKey: config.linear.teamKey,
       worktreesDir: join(stateDir, "worktrees"),
       bootstrapScript: defaultBootstrapScriptPath(),
-      runnerFor: (kind) => (kind === "claude" ? claudeRunner : null),
+      runnerFor: (kind) =>
+        kind === "claude" ? claudeRunner : kind === "codex" ? codexRunner : null,
       log: log.child("executor"),
       github,
       trust,
