@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { DOCUMENT_RENDER_MAX_BYTES } from "../artifacts/document-preflight.js";
-import type { PlateStore } from "../artifacts/plate-registry.js";
+import {
+  resolveWikiPlate,
+  type PlateStore,
+} from "../artifacts/plate-registry.js";
 import {
   buildWikiRenderCompile,
   composeWikiPageRender,
@@ -254,6 +257,8 @@ describe("composeWikiPageRender", () => {
       listPlateRows: async () => [],
       getTenantDocumentPalette: async () => ({ light: {}, dark: {} }),
     });
+    const storeResolver = () => (tenantId: string, pageType: string) =>
+      resolveWikiPlate(tenantId, pageType, fakeStore());
 
     it("compiles a real plate render carrying the wiki plate shell", async () => {
       const { db, captured } = fakeDb({ pageRow: PAGE_ROW });
@@ -261,7 +266,7 @@ describe("composeWikiPageRender", () => {
       const result = await composeWikiPageRender(
         SOURCE,
         db,
-        buildWikiRenderCompile(fakeStore()),
+        buildWikiRenderCompile(storeResolver()),
       );
 
       expect(result.outcome).toBe("rendered");
@@ -273,7 +278,7 @@ describe("composeWikiPageRender", () => {
     });
 
     it("is deterministic: two identical compiles produce byte-identical HTML", async () => {
-      const compile = buildWikiRenderCompile(fakeStore());
+      const compile = buildWikiRenderCompile(storeResolver());
       const a = await composeWikiPageRender(
         SOURCE,
         fakeDb({ pageRow: PAGE_ROW }).db,
@@ -297,7 +302,7 @@ describe("composeWikiPageRender", () => {
       const result = await composeWikiPageRender(
         SOURCE,
         db,
-        buildWikiRenderCompile(fakeStore()),
+        buildWikiRenderCompile(storeResolver()),
       );
 
       expect(result.outcome).toBe("cleared");
@@ -316,7 +321,7 @@ describe("composeWikiPageRender", () => {
           markdown: "## Overview\n\n```tw:chart\n{}\n```\n",
         },
         db,
-        buildWikiRenderCompile(fakeStore()),
+        buildWikiRenderCompile(storeResolver()),
       );
 
       expect(result.outcome).toBe("cleared");

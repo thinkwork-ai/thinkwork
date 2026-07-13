@@ -21,7 +21,7 @@ import { db as defaultDb } from "../db.js";
 import { DOCUMENT_RENDER_MAX_BYTES } from "../artifacts/document-preflight.js";
 import {
   resolveWikiPlate,
-  type PlateStore,
+  type ResolvedPlate,
 } from "../artifacts/plate-registry.js";
 import { compileDocument } from "../artifacts/document-compositor.js";
 
@@ -71,17 +71,28 @@ export type WikiRenderOutcome =
   /** DB-level failure; the nested transaction rolled back. */
   | { outcome: "error"; reason: string };
 
+/** Plate lookup seam for {@link buildWikiRenderCompile}. */
+export type WikiPlateResolver = (
+  tenantId: string,
+  pageType: string,
+) => Promise<ResolvedPlate | null>;
+
 /**
  * Build the real compile: resolve the page type's wiki plate (THINK-272)
  * and run the Document Compositor with the in-wiki internal-link policy.
- * The plate store is injectable for tests; production callers use the
- * Drizzle-backed default.
+ *
+ * `resolvePlate` is injectable for tests (fake store) and for the backfill,
+ * which MUST pre-resolve plates outside the page transaction: the shared pg
+ * pool is `max: 2`, and a plate lookup issued while N concurrent page
+ * transactions hold pool connections deadlocks until the 5s connect timeout
+ * degrades every render to NULL.
  */
-export function buildWikiRenderCompile(store?: PlateStore): WikiRenderCompile {
+export function buildWikiRenderCompile(
+  resolvePlate: WikiPlateResolver = (tenantId, pageType) =>
+    resolveWikiPlate(tenantId, pageType),
+): WikiRenderCompile {
   return async (input) => {
-    const plate = store
-      ? await resolveWikiPlate(input.tenantId, input.pageType, store)
-      : await resolveWikiPlate(input.tenantId, input.pageType);
+    const plate = await resolvePlate(input.tenantId, input.pageType);
     if (!plate) {
       return {
         ok: false,

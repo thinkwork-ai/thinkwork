@@ -38,7 +38,14 @@ import {
   listPageSections,
   renderBodyMarkdown,
 } from "../src/lib/wiki/repository.js";
-import { composeWikiPageRender } from "../src/lib/wiki/render.js";
+import {
+  buildWikiRenderCompile,
+  composeWikiPageRender,
+} from "../src/lib/wiki/render.js";
+import {
+  resolveWikiPlate,
+  type ResolvedPlate,
+} from "../src/lib/artifacts/plate-registry.js";
 
 interface CliOptions {
   dryRun: boolean;
@@ -100,6 +107,7 @@ interface EligiblePage {
   id: string;
   title: string;
   type: string;
+  tenantId: string;
   hasRender: boolean;
   updatedAtText: string;
 }
@@ -140,6 +148,7 @@ async function main(): Promise<void> {
         id: wikiPages.id,
         title: wikiPages.title,
         type: wikiPages.type,
+        tenantId: wikiPages.tenant_id,
         hasRender: sql<boolean>`${wikiPages.render_html} is not null`,
         updatedAtText: sql<string>`${wikiPages.updated_at}::text`,
       })
@@ -165,6 +174,24 @@ async function main(): Promise<void> {
     errors: 0,
     wouldRender: 0,
   };
+
+  // Pre-resolve every distinct (tenant, page type) plate BEFORE the worker
+  // pool starts: the shared pg pool is max 2, so a plate lookup issued while
+  // concurrent page transactions hold pool connections deadlocks until the
+  // 5s connect timeout degrades the render to NULL. Resolved serially, with
+  // no transaction held.
+  const plateCache = new Map<string, ResolvedPlate | null>();
+  if (!opts.dryRun) {
+    for (const page of batch) {
+      const key = `${page.tenantId}:${page.type}`;
+      if (!plateCache.has(key)) {
+        plateCache.set(key, await resolveWikiPlate(page.tenantId, page.type));
+      }
+    }
+  }
+  const compile = buildWikiRenderCompile(async (resolveTenantId, pageType) => {
+    return plateCache.get(`${resolveTenantId}:${pageType}`) ?? null;
+  });
 
   const processOne = async (page: EligiblePage): Promise<void> => {
     if (opts.dryRun) {
@@ -194,6 +221,7 @@ async function main(): Promise<void> {
         expectedUpdatedAt: page.updatedAtText,
       },
       db,
+      compile,
     );
     if (result.outcome === "rendered") {
       counts.rendered++;
