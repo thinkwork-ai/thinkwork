@@ -60,11 +60,7 @@ import { composeWikiPageRender } from "./render.js";
 export type WikiPageType = "entity" | "topic" | "decision";
 export type WikiPageStatus = "active" | "archived";
 export type WikiCompileJobStatus =
-  | "pending"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "skipped";
+  "pending" | "running" | "succeeded" | "failed" | "skipped";
 export type WikiCompileTrigger =
   | "memory_retain"
   | "bootstrap_import"
@@ -90,10 +86,7 @@ export type WikiSectionSourceKind =
 export type WikiUnresolvedStatus = "open" | "promoted" | "ignored";
 export type WikiPageLinkKind = "reference" | "parent_of" | "child_of" | string;
 export type SectionPromotionStatus =
-  | "none"
-  | "candidate"
-  | "promoted"
-  | "suppressed";
+  "none" | "candidate" | "promoted" | "suppressed";
 
 /**
  * Aggregation metadata carried on a section that acts as a rollup. Leaf-style
@@ -197,19 +190,10 @@ export interface WikiPageRow {
 }
 
 export type WikiPlaceKind =
-  | "country"
-  | "region"
-  | "state"
-  | "city"
-  | "neighborhood"
-  | "poi"
-  | "custom";
+  "country" | "region" | "state" | "city" | "neighborhood" | "poi" | "custom";
 
 export type WikiPlaceSource =
-  | "google_api"
-  | "journal_metadata"
-  | "manual"
-  | "derived_hierarchy";
+  "google_api" | "journal_metadata" | "manual" | "derived_hierarchy";
 
 export interface WikiPlaceRow {
   id: string;

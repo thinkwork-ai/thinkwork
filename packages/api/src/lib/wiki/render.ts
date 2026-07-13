@@ -142,7 +142,11 @@ export async function composeWikiPageRender(
       const writeRender = async (
         values:
           | typeof NULL_TRIPLE
-          | { render_html: string; render_plate_slug: string; rendered_at: unknown },
+          | {
+              render_html: string;
+              render_plate_slug: string;
+              rendered_at: unknown;
+            },
       ): Promise<boolean> => {
         const updated = await tx
           .update(wikiPages)

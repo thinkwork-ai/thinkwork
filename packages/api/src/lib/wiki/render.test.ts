@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { DOCUMENT_RENDER_MAX_BYTES } from "../artifacts/document-preflight.js";
-import {
-  composeWikiPageRender,
-  type WikiRenderCompile,
-} from "./render.js";
+import { composeWikiPageRender, type WikiRenderCompile } from "./render.js";
 
 interface FakeDbOptions {
   /** Row returned by the page re-read (undefined → page missing). */
