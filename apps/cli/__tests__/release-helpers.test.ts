@@ -15,6 +15,8 @@ describe("buildControllerUpdateInput", () => {
       awsRegion: "us-east-1",
       availabilityZones: [],
       evidenceBucket: "thinkwork-tei-e2e-deploy-evidence",
+      agentcorePiSourceImageUri:
+        "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned@sha256:abc",
     };
     const release: ResolvedReleaseManifest = {
       version: "v0.1.0-canary.270",

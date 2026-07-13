@@ -2075,6 +2075,35 @@ def release_runtime_image(name):
     return ""
 
 
+def resolve_agentcore_pi_source_image_uri(payload):
+    operation = payload.get("operation") if isinstance(payload.get("operation"), dict) else {}
+    action = str(
+        safe_get(operation, "action", default=safe_get(payload, "action", "phase", default=""))
+    ).lower()
+    kind = str(safe_get(operation, "kind", default="")).lower()
+    is_customer_update = action == "update" or kind == "foundation"
+    explicit = safe_get(payload, "agentcorePiSourceImageUri", default="")
+    if explicit:
+        if is_customer_update:
+            account_id = safe_get(payload, "awsAccountId", default="")
+            region = safe_get(payload, "awsRegion", default=os.environ.get("AWS_REGION", ""))
+            customer_registry = f"{account_id}.dkr.ecr.{region}.amazonaws.com/"
+            if not account_id or not region or not explicit.startswith(customer_registry):
+                raise RuntimeError(
+                    "Customer foundation updates require agentcorePiSourceImageUri "
+                    "to reference the customer-owned ECR registry."
+                )
+        return explicit
+
+    if is_customer_update:
+        raise RuntimeError(
+            "Customer foundation updates require an explicit customer-ECR "
+            "agentcorePiSourceImageUri; refusing to fall back to the release registry."
+        )
+
+    return release_runtime_image("agentcore-pi-amd64")
+
+
 def release_git_sha():
     if not MANIFEST.exists():
         return ""
@@ -3161,11 +3190,7 @@ def write_runner_files(payload, runner_secrets):
         "deployment_evidence_bucket": os.environ.get("THINKWORK_EVIDENCE_BUCKET", ""),
         "deployment_terraform_module_source": terraform_module_source,
         "deployment_terraform_module_version": terraform_module_version,
-        "agentcore_pi_source_image_uri": safe_get(
-            payload,
-            "agentcorePiSourceImageUri",
-            default=release_runtime_image("agentcore-pi-amd64"),
-        ),
+        "agentcore_pi_source_image_uri": resolve_agentcore_pi_source_image_uri(payload),
     }
     enforce_customer_domain_preservation(
         current_outputs,
