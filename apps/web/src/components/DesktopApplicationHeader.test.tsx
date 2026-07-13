@@ -86,8 +86,16 @@ vi.mock("@thinkwork/ui", () => ({
       Toggle Sidebar
     </button>
   ),
-  ToggleGroup: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  ToggleGroup: ({
+    children,
+    value,
+  }: {
+    children: React.ReactNode;
+    value?: string;
+  }) => (
+    <div data-testid="tab-toggle-group" data-value={value}>
+      {children}
+    </div>
   ),
   ToggleGroupItem: ({
     children,
@@ -283,6 +291,40 @@ describe("DesktopApplicationHeader", () => {
     const parent = screen.getByRole("link", { name: "MCP Servers" });
     expect(parent.getAttribute("href")).toBe("/settings/mcp-servers");
     expect(screen.getByText("LastMile Tasks").tagName).not.toBe("A");
+  });
+
+  it("distinguishes tabs that differ only by search params and honors the active flag", () => {
+    // The Automations detail tabs share a pathname; Definition vs Executions
+    // differ only by ?tab=executions plus an explicit `active` flag. Values
+    // must include the search or both toggle items light up at once.
+    pageHeaderMock.actions = {
+      title: "Personal Memory Processing",
+      tabs: [
+        {
+          to: "/automations/loop-1",
+          label: "Definition",
+          active: false,
+        },
+        {
+          to: "/automations/loop-1",
+          label: "Executions",
+          search: { tab: "executions" },
+          active: true,
+        },
+      ],
+    };
+
+    render(<DesktopApplicationHeader />);
+
+    expect(
+      screen.getByRole("link", { name: "Executions" }).getAttribute("href"),
+    ).toBe("/automations/loop-1?tab=executions");
+    expect(
+      screen.getByRole("link", { name: "Definition" }).getAttribute("href"),
+    ).toBe("/automations/loop-1");
+    expect(
+      screen.getByTestId("tab-toggle-group").getAttribute("data-value"),
+    ).toBe(`/automations/loop-1?${JSON.stringify({ tab: "executions" })}`);
   });
 
   it("keeps local Pi status out of the desktop header", async () => {

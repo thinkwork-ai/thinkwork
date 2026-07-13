@@ -23,8 +23,12 @@ vi.mock("@/lib/utils", () => ({
     values.filter(Boolean).join(" "),
 }));
 
+const executeMutation = vi.hoisted(() =>
+  vi.fn(() => Promise.resolve({ error: undefined })),
+);
 vi.mock("urql", () => ({
   useQuery: () => [{ data: undefined, fetching: false }],
+  useMutation: () => [{ fetching: false }, executeMutation],
 }));
 
 // The real canvas is React Flow; render its nodes as plain buttons so tests
@@ -131,6 +135,13 @@ vi.mock("@thinkwork/ui", () => {
       variant?: string;
       size?: string;
     }) => <button {...props}>{children}</button>,
+    Badge: ({
+      children,
+    }: {
+      children: React.ReactNode;
+      variant?: string;
+      className?: string;
+    }) => <span>{children}</span>,
     Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
       <textarea {...props} />
     ),
@@ -366,5 +377,125 @@ describe("AutomationFlowSection (THINK-247)", () => {
     const payload = (onSave as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as SaveAgentLoopPayload;
     expect(payload.name).toBe("Renamed Automation");
+  });
+});
+
+// THINK-264: the built-in memory Automation renders through this same editor,
+// swapping in the server-built stage graph and memory-specific inspectors.
+describe("AutomationFlowSection memory pipeline", () => {
+  const MEMORY_LOOP: AgentLoopRow = {
+    ...LOOP,
+    id: "loop-mem",
+    name: "Personal Memory Processing",
+    kind: "system",
+    systemKey: "personal-memory",
+    primaryTriggerFamily: "manual",
+    currentVersion: {
+      id: "v-mem",
+      versionNumber: 1,
+      triggerSpec: { family: "manual", enabled: true, config: {} },
+      targetSpec: {
+        kind: "memory_pipeline",
+        processorConfigId: "proc-1",
+        mode: "personal",
+        workflowId: "wf-1",
+      },
+    },
+    memoryPipeline: {
+      processorConfigId: "proc-1",
+      mode: "personal",
+      workflowId: "wf-1",
+      enabled: true,
+      readiness: "ready",
+      readinessReasons: "[]",
+      scheduleExpression: "rate(24 hours)",
+      scheduleEnabled: false,
+      sources: [{ id: "src-1", sourceFamily: "email", enabled: true }],
+      stages: [
+        {
+          id: "stage-acquire",
+          stage: "acquire",
+          label: "Acquire",
+          description: "Pull new items from enabled sources.",
+          enabled: true,
+          toggleable: false,
+          lastResult: "seen",
+        },
+        {
+          id: "stage-wiki",
+          stage: "wiki",
+          label: "Wiki",
+          description: "Distill memories into wiki pages.",
+          enabled: true,
+          toggleable: true,
+          lastResult: null,
+        },
+      ],
+    },
+  };
+
+  function renderMemorySection() {
+    executeMutation.mockClear();
+    render(
+      <AutomationFlowSection
+        tenantId="tenant-1"
+        loop={MEMORY_LOOP}
+        workerOptions={[]}
+        spaceOptions={[]}
+        routineOptions={[]}
+        workflowOptions={[]}
+        memberOptions={[]}
+        currentUserId="user-1"
+        memoryPipeline={MEMORY_LOOP.memoryPipeline}
+        statusRail={<div data-testid="status-rail">rail</div>}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+  }
+
+  it("draws the server-built stage graph and keeps the shared status rail", () => {
+    renderMemorySection();
+    expect(screen.getByTestId("canvas-node-memory-trigger")).toBeTruthy();
+    expect(screen.getByTestId("canvas-node-stage-acquire")).toBeTruthy();
+    expect(screen.getByTestId("canvas-node-stage-wiki")).toBeTruthy();
+    // No generic automation nodes — the pipeline IS the definition.
+    expect(screen.queryByTestId("canvas-node-work")).toBeNull();
+    expect(screen.getByTestId("status-rail")).toBeTruthy();
+  });
+
+  it("toggles an optional stage through the memory mutation", () => {
+    renderMemorySection();
+    fireEvent.click(screen.getByTestId("canvas-node-stage-wiki"));
+    expect(screen.getByTestId("automation-inspector-wiki")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Run this step"), {
+      target: { value: "off" },
+    });
+    expect(executeMutation).toHaveBeenCalledWith({
+      agentLoopId: "loop-mem",
+      stage: "wiki",
+      enabled: false,
+    });
+  });
+
+  it("shows the spine as required with no toggle", () => {
+    renderMemorySection();
+    fireEvent.click(screen.getByTestId("canvas-node-stage-acquire"));
+    expect(screen.getByTestId("automation-inspector-acquire")).toBeTruthy();
+    expect(screen.getByText("Required step")).toBeTruthy();
+    expect(screen.queryByLabelText("Run this step")).toBeNull();
+  });
+
+  it("edits the schedule from the trigger inspector", () => {
+    renderMemorySection();
+    fireEvent.click(screen.getByTestId("canvas-node-memory-trigger"));
+    expect(screen.getByTestId("automation-inspector-trigger")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Trigger"), {
+      target: { value: "schedule" },
+    });
+    expect(executeMutation).toHaveBeenCalledWith({
+      enabled: true,
+      scheduleExpression: "rate(24 hours)",
+      timezone: null,
+    });
   });
 });

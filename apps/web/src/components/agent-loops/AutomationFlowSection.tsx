@@ -1,11 +1,16 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import { X } from "lucide-react";
-import { Button, Input, SelectItem, Textarea } from "@thinkwork/ui";
+import { Badge, Button, Input, SelectItem, Textarea } from "@thinkwork/ui";
 import { RoutineFlowCanvas } from "@/components/routines/RoutineFlowCanvas";
 import { WorkflowCanvasWorkspace } from "@/components/workflows/WorkflowCanvasWorkspace";
-import { BoundDocumentCardQuery } from "@/lib/graphql-queries";
+import { formatWorkflowSchedule } from "@/components/workflows/workflow-schedule-display";
+import {
+  BoundDocumentCardQuery,
+  SetMemoryPipelineStageEnabledMutation,
+  SetPersonalMemoryAutomationScheduleMutation,
+} from "@/lib/graphql-queries";
 import type {
   AgentLoopDraft,
   AgentLoopMemberOption,
@@ -38,6 +43,13 @@ import {
   buildAutomationFlowGraph,
   type AutomationNodeId,
 } from "./automationFlowGraph";
+import {
+  buildMemoryPipelineFlowGraph,
+  MEMORY_TRIGGER_NODE_ID,
+  readMemoryReadinessReasons,
+  type MemoryPipelineStageView,
+  type MemoryPipelineView,
+} from "./memoryPipelineFlowGraph";
 
 const NO_SPACE = "__none__";
 
@@ -49,6 +61,14 @@ const NO_SPACE = "__none__";
  * old form sheet and any read-only JSON). Edits accumulate in a draft —
  * mirrored live onto the canvas — and Save writes through `saveAgentLoop`,
  * which reconverges the linked workflow server-side.
+ *
+ * THINK-264: the built-in memory Automation renders through this same editor.
+ * When `memoryPipeline` is set the canvas draws the real pipeline stages
+ * (server-provided, from the interpreter's own blueprint) instead of the
+ * trigger → work → document → deliver projection, and the node inspectors
+ * become the stage on/off toggle and the schedule editor — the right rail,
+ * canvas chrome, and executions surface are shared with every other
+ * automation.
  */
 export function AutomationFlowSection({
   tenantId,
@@ -60,6 +80,7 @@ export function AutomationFlowSection({
   memberOptions,
   defaultSpaceId,
   currentUserId,
+  memoryPipeline,
   statusRail,
   boundDocumentPanel,
   onSave,
@@ -73,6 +94,9 @@ export function AutomationFlowSection({
   memberOptions: AgentLoopMemberOption[];
   defaultSpaceId?: string | null;
   currentUserId?: string | null;
+  /** Present on the built-in memory Automation: the server-built stage list
+   * this editor renders instead of the generic automation projection. */
+  memoryPipeline?: MemoryPipelineView | null;
   /** Shown in the right rail when no node is selected. */
   statusRail: ReactNode;
   /** Bound-document summary card (version, share link) for the document
@@ -92,9 +116,9 @@ export function AutomationFlowSection({
     [currentUserId, defaultSpaceId, loop, spaceOptions, workerOptions],
   );
   const [draft, setDraft] = useState<AgentLoopDraft>(seededDraft);
-  const [selectedNode, setSelectedNode] = useState<AutomationNodeId | null>(
-    null,
-  );
+  // Node ids are AutomationNodeId for regular automations, stage ids for the
+  // memory pipeline — the canvas only needs a string.
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -136,12 +160,29 @@ export function AutomationFlowSection({
 
   const graph = useMemo(
     () =>
-      buildAutomationFlowGraph({
-        draft,
-        targetLabel,
-        boundDocumentTitle,
-      }),
-    [draft, targetLabel, boundDocumentTitle],
+      memoryPipeline
+        ? buildMemoryPipelineFlowGraph({
+            pipeline: memoryPipeline,
+            triggerFamily: loop.primaryTriggerFamily,
+            scheduleLabel: memoryPipeline.scheduleEnabled
+              ? formatWorkflowSchedule(
+                  memoryPipeline.scheduleExpression ?? null,
+                  memoryPipeline.scheduleTimezone ?? null,
+                )
+              : null,
+          })
+        : buildAutomationFlowGraph({
+            draft,
+            targetLabel,
+            boundDocumentTitle,
+          }),
+    [
+      memoryPipeline,
+      loop.primaryTriggerFamily,
+      draft,
+      targetLabel,
+      boundDocumentTitle,
+    ],
   );
 
   // Switching the target away from agent_thread removes the document/deliver
@@ -152,9 +193,16 @@ export function AutomationFlowSection({
     }
   }, [graph, selectedNode]);
 
+  // The memory pipeline saves through its own mutations (stage toggle,
+  // schedule) rather than the draft, so the save banner never applies.
   const dirty = useMemo(
-    () => JSON.stringify(draft) !== JSON.stringify(seededDraft),
-    [draft, seededDraft],
+    () =>
+      !memoryPipeline && JSON.stringify(draft) !== JSON.stringify(seededDraft),
+    [draft, memoryPipeline, seededDraft],
+  );
+  const readinessReasons = useMemo(
+    () => (memoryPipeline ? readMemoryReadinessReasons(memoryPipeline) : []),
+    [memoryPipeline],
   );
 
   function patch(next: Partial<AgentLoopDraft>) {
@@ -190,6 +238,19 @@ export function AutomationFlowSection({
       data-testid="automation-flow-section"
       className="flex min-h-0 flex-1 flex-col gap-4"
     >
+      {readinessReasons.length > 0 ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-4 py-2.5 text-sm">
+          <p className="font-medium text-amber-600 dark:text-amber-400">
+            This automation can&apos;t run yet
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-muted-foreground">
+            {readinessReasons.map((reason) => (
+              <li key={reason.code}>{reason.message}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {dirty || error ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-2.5">
           <p className="text-sm">
@@ -202,28 +263,30 @@ export function AutomationFlowSection({
               </span>
             )}
           </p>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={saving || !dirty}
-              onClick={() => {
-                setDraft(seededDraft);
-                setError(null);
-              }}
-            >
-              Discard
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={saving || !dirty}
-              onClick={() => void save()}
-            >
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
-          </div>
+          {memoryPipeline ? null : (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={saving || !dirty}
+                onClick={() => {
+                  setDraft(seededDraft);
+                  setError(null);
+                }}
+              >
+                Discard
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={saving || !dirty}
+                onClick={() => void save()}
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -236,17 +299,23 @@ export function AutomationFlowSection({
             aslJson={null}
             graph={graph}
             selectedNodeId={selectedNode}
-            onSelectNode={(nodeId) =>
-              setSelectedNode((nodeId as AutomationNodeId | null) ?? null)
-            }
+            onSelectNode={(nodeId) => setSelectedNode(nodeId ?? null)}
             className="h-full min-h-[380px]"
             emptyLabel="This automation has no steps to draw."
           />
         }
         inspector={
-          selectedNode ? (
-            <NodeInspector
+          memoryPipeline && selectedNode ? (
+            <MemoryNodeInspector
               nodeId={selectedNode}
+              agentLoopId={loop.id}
+              pipeline={memoryPipeline}
+              onClose={() => setSelectedNode(null)}
+              onError={setError}
+            />
+          ) : selectedNode ? (
+            <NodeInspector
+              nodeId={selectedNode as AutomationNodeId}
               tenantId={tenantId}
               loop={loop}
               draft={draft}
@@ -276,6 +345,40 @@ const INSPECTOR_TITLES: Record<AutomationNodeId, string> = {
   document: "Maintained document",
   deliver: "Email delivery",
 };
+
+/** The card + heading + close chrome every node inspector renders in. */
+function InspectorShell({
+  testId,
+  title,
+  onClose,
+  children,
+}: {
+  testId: string;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <aside
+      data-testid={testId}
+      className="rounded-md border border-border/70 bg-muted/10 p-4"
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close inspector"
+          onClick={onClose}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      {children}
+    </aside>
+  );
+}
 
 function NodeInspector({
   nodeId,
@@ -309,23 +412,11 @@ function NodeInspector({
   boundDocumentPanel?: ReactNode;
 }) {
   return (
-    <aside
-      data-testid={`automation-inspector-${nodeId}`}
-      className="rounded-md border border-border/70 bg-muted/10 p-4"
+    <InspectorShell
+      testId={`automation-inspector-${nodeId}`}
+      title={INSPECTOR_TITLES[nodeId]}
+      onClose={onClose}
     >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{INSPECTOR_TITLES[nodeId]}</h3>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Close inspector"
-          onClick={onClose}
-        >
-          <X className="size-4" />
-        </Button>
-      </div>
-
       {nodeId === AUTOMATION_NODE_IDS.trigger ? (
         <TriggerInspector
           loop={loop}
@@ -358,7 +449,230 @@ function NodeInspector({
           onSelectNode={onSelectNode}
         />
       )}
-    </aside>
+    </InspectorShell>
+  );
+}
+
+/**
+ * THINK-264: inspectors for the memory pipeline's nodes, in the same shell
+ * and field idiom as the other automation inspectors. The trigger node edits
+ * the schedule (through the dedicated personal-memory mutation — the system
+ * loop rejects generic saves); a stage node shows the toggle for optional
+ * stages and the why-not for the required spine.
+ */
+function MemoryNodeInspector({
+  nodeId,
+  agentLoopId,
+  pipeline,
+  onClose,
+  onError,
+}: {
+  nodeId: string;
+  agentLoopId: string;
+  pipeline: MemoryPipelineView;
+  onClose: () => void;
+  onError: (message: string | null) => void;
+}) {
+  if (nodeId === MEMORY_TRIGGER_NODE_ID) {
+    return (
+      <InspectorShell
+        testId="automation-inspector-trigger"
+        title={INSPECTOR_TITLES.trigger}
+        onClose={onClose}
+      >
+        <MemoryTriggerInspector pipeline={pipeline} onError={onError} />
+      </InspectorShell>
+    );
+  }
+  const stage = pipeline.stages.find((s) => s.id === nodeId);
+  if (!stage) return null;
+  return (
+    <InspectorShell
+      testId={`automation-inspector-${stage.stage}`}
+      title={stage.label}
+      onClose={onClose}
+    >
+      <MemoryStageInspector
+        agentLoopId={agentLoopId}
+        stage={stage}
+        onError={onError}
+      />
+    </InspectorShell>
+  );
+}
+
+function MemoryStageInspector({
+  agentLoopId,
+  stage,
+  onError,
+}: {
+  agentLoopId: string;
+  stage: MemoryPipelineStageView;
+  onError: (message: string | null) => void;
+}) {
+  const [{ fetching }, setStageEnabled] = useMutation(
+    SetMemoryPipelineStageEnabledMutation,
+  );
+
+  return (
+    <div className="space-y-1">
+      <p className="pb-2 text-sm text-muted-foreground">{stage.description}</p>
+
+      {stage.toggleable ? (
+        <DetailRow label="Run this step">
+          <GhostSelect
+            ariaLabel="Run this step"
+            value={stage.enabled ? "on" : "off"}
+            onValueChange={(value) => {
+              if (fetching) return;
+              onError(null);
+              void setStageEnabled({
+                agentLoopId,
+                stage: stage.stage,
+                enabled: value === "on",
+              }).then((result) => {
+                if (result.error) {
+                  onError(
+                    result.error.graphQLErrors[0]?.message ??
+                      result.error.message,
+                  );
+                }
+              });
+            }}
+            placeholder="On"
+          >
+            <SelectItem value="on">On</SelectItem>
+            <SelectItem value="off">Off</SelectItem>
+          </GhostSelect>
+        </DetailRow>
+      ) : (
+        <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-sm">
+          <span className="font-medium">Required step</span>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Acquire, project, resolve, and retain feed each other. Turning one
+            off would leave the automation running while quietly writing nothing
+            to memory, so they can&apos;t be disabled.
+          </p>
+        </div>
+      )}
+
+      {stage.lastResult ? (
+        <DetailRow label="Last run">
+          <Badge variant="outline" className="mr-3">
+            {stage.lastResult}
+          </Badge>
+        </DetailRow>
+      ) : null}
+    </div>
+  );
+}
+
+/** "rate(24 hours)" -> 24. Null for cron or unset schedules. */
+function hoursFromRate(expression?: string | null): number | null {
+  if (!expression) return null;
+  const match = /^rate\((\d+)\s+hours?\)$/.exec(expression.trim());
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function MemoryTriggerInspector({
+  pipeline,
+  onError,
+}: {
+  pipeline: MemoryPipelineView;
+  onError: (message: string | null) => void;
+}) {
+  const [{ fetching }, setSchedule] = useMutation(
+    SetPersonalMemoryAutomationScheduleMutation,
+  );
+  const scheduleOn = pipeline.scheduleEnabled ?? false;
+  const [hours, setHours] = useState(() =>
+    String(hoursFromRate(pipeline.scheduleExpression) ?? 24),
+  );
+
+  const saveSchedule = async (enabled: boolean, hoursValue: string) => {
+    const parsed = Number.parseInt(hoursValue, 10);
+    if (enabled && (!Number.isFinite(parsed) || parsed < 1)) {
+      onError("Enter a whole number of hours (1 or more).");
+      return;
+    }
+    onError(null);
+    const result = await setSchedule({
+      enabled,
+      scheduleExpression: enabled
+        ? `rate(${parsed} ${parsed === 1 ? "hour" : "hours"})`
+        : null,
+      timezone: null,
+    });
+    if (result.error) {
+      onError(result.error.graphQLErrors[0]?.message ?? result.error.message);
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      <p className="pb-2 text-sm text-muted-foreground">
+        {scheduleOn
+          ? "Runs automatically on this cadence. Scheduled runs skip plan review."
+          : "Runs when you start it. Manual runs pause at plan review so you can narrow the plan first."}
+      </p>
+
+      <DetailRow label="Trigger">
+        <GhostSelect
+          ariaLabel="Trigger"
+          value={scheduleOn ? "schedule" : "manual"}
+          onValueChange={(value) => {
+            if (fetching) return;
+            void saveSchedule(value === "schedule", hours);
+          }}
+          placeholder="Manual"
+        >
+          <SelectItem value="manual">Manual</SelectItem>
+          <SelectItem value="schedule">Schedule</SelectItem>
+        </GhostSelect>
+      </DetailRow>
+
+      {scheduleOn ? (
+        <DetailRow label="Every">
+          <div className="flex items-center gap-2 py-1">
+            <Input
+              type="number"
+              min={1}
+              max={168}
+              aria-label="Schedule interval in hours"
+              value={hours}
+              disabled={fetching}
+              className="h-8 w-20"
+              onChange={(event) => setHours(event.target.value)}
+              onBlur={() => void saveSchedule(true, hours)}
+            />
+            <span className="text-xs text-muted-foreground">hours</span>
+          </div>
+        </DetailRow>
+      ) : null}
+
+      <div className="mt-2 rounded-md border border-border/70 bg-muted/20 p-3">
+        <p className="text-xs font-medium">Sources</p>
+        {pipeline.sources.length === 0 ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            No sources configured yet.
+          </p>
+        ) : (
+          <ul className="mt-1 space-y-1">
+            {pipeline.sources.map((source) => (
+              <li
+                key={source.id}
+                className="flex items-center justify-between text-xs"
+              >
+                <span>{source.sourceFamily}</span>
+                <Badge variant={source.enabled ? "secondary" : "outline"}>
+                  {source.enabled ? "enabled" : "off"}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 
