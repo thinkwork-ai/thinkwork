@@ -416,13 +416,48 @@ describe("block decisions", () => {
     expect(action).toMatchObject({ kind: "block", label: "CI Failed" });
   });
 
-  it("child issues present → block with Needs User (KTD-12)", () => {
+  it("child issues in flight → QUIET wait, never a Needs User block (LFG never-stuck)", () => {
     const action = decideAction(
       makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
-      emptyView({ hasChildIssues: true }),
+      emptyView({ hasChildIssues: true, childStates: ["Done", "In Progress"] }),
     );
-    expect(action).toMatchObject({ kind: "block", label: "Needs User" });
+    expect(action.kind).toBe("wait");
     expect((action as { reason: string }).reason).toMatch(/child/i);
+  });
+
+  it("child states unknown (fetch failed) → wait, never a false resume", () => {
+    const action = decideAction(
+      makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
+      emptyView({ hasChildIssues: true, childStates: null }),
+    );
+    expect(action.kind).toBe("wait");
+  });
+
+  it("ALL children Done → the parent proceeds normally (launches its phase)", () => {
+    const action = decideAction(
+      makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
+      emptyView({ hasChildIssues: true, childStates: ["Done", "Canceled"] }),
+    );
+    expect(action.kind).toBe("launch");
+  });
+
+  it("waiting-on dependency NOT Done → quiet wait; Done → proceeds", () => {
+    const waiting = decideAction(
+      makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
+      emptyView({
+        dependency: { identifier: "THINK-273", state: "Ready to Work", done: false },
+      }),
+    );
+    expect(waiting.kind).toBe("wait");
+    expect((waiting as { reason: string }).reason).toContain("THINK-273");
+
+    const resumed = decideAction(
+      makeCandidate({ state: "Ready to Work", labels: ["Claude", "LFG"] }),
+      emptyView({
+        dependency: { identifier: "THINK-273", state: "Done", done: true },
+      }),
+    );
+    expect(resumed.kind).toBe("launch");
   });
 
   it("block decisions are idempotent — same inputs, identical action", () => {

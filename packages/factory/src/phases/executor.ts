@@ -448,6 +448,12 @@ async function runLaunch(
   }
 
   const statusAtLaunch = issue.state;
+  // Freshest Linear status the evidence checks observed. Recording
+  // statusAtLaunch in the issue row froze the store one phase behind reality
+  // (an implement worker that moved the issue to Verification left the row at
+  // "Ready to Work" until the NEXT launch) — the in-thread Slack `status`
+  // keyword then answered with that stale state.
+  let lastObservedStatus = statusAtLaunch;
   const commentIdsAtLaunch = new Set(candidate.comments.map((c) => c.id));
 
   // ---- 3. Baton (when synthesized) + launch marker are posted AFTER the
@@ -576,6 +582,9 @@ async function runLaunch(
       const [fresh] = await deps.gateway.getIssuesByIdentifier([
         issue.identifier,
       ]);
+      if (fresh?.state !== undefined && fresh.state !== "") {
+        lastObservedStatus = fresh.state;
+      }
       const freshComments = await deps.gateway.listComments(issue.id);
       freshCommentsForRecording = freshComments;
       const freshLedgerComment = findLedgerComment(id, freshComments);
@@ -588,6 +597,7 @@ async function runLaunch(
         comments: freshComments,
         commentIdsAtLaunch,
         ledgerCompounded: freshLedger.ledger.compounded,
+        ledgerBlocker: freshLedger.ledger.blocker,
         branch: plan.branch,
         github: deps.github,
         trust: deps.trust,
@@ -619,7 +629,12 @@ async function runLaunch(
         lane: candidate.lane ?? freshParsed.ledger.lane,
         worker: null,
         attempt: plan.attemptNumber,
-        blocker: null,
+        // A dependency-wait run's whole point is the `waiting-on:` blocker —
+        // clearing it would relaunch immediately and re-hit the gate forever.
+        blocker:
+          completed.kind === "dependency-wait"
+            ? freshParsed.ledger.blocker
+            : null,
         compounded:
           action.phase === "compound" ? true : freshParsed.ledger.compounded,
       };
@@ -636,7 +651,9 @@ async function runLaunch(
         identifier: id,
         lane: candidate.lane ?? "unassigned",
         phase: action.phase,
-        state: statusAtLaunch,
+        // The freshest status observed by the evidence checks — usually where
+        // the worker MOVED the issue, not where it launched from.
+        state: lastObservedStatus,
         compounded: next.compounded ? 1 : 0,
       });
       deps.log.info("launch succeeded with evidence", {

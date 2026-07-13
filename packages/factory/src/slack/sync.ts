@@ -26,8 +26,9 @@ import type { SlackGateway, SlackInboundMessage } from "./client.js";
 import { relayInboundMessage, type RelayDeps } from "./relay.js";
 import {
   buildIssueStatus,
-  formatIssueStatus,
+  formatIssueStatusLive,
   isStatusKeyword,
+  type LiveIssueFacts,
 } from "./status.js";
 import {
   openThreadForIssue,
@@ -54,10 +55,28 @@ function isDaemonMarkerComment(body: string): boolean {
   return DAEMON_MARKER_PREFIXES.some((p) => first.startsWith(p));
 }
 
-/** Newest non-marker comment — the operator-facing question, when blocked. */
-function newestQuestion(
+/**
+ * The question-protocol comment prefix workers use when they record a hard
+ * blocker with numbered questions (`blocker:<ID>:<phase> — @operator`).
+ */
+const QUESTION_COMMENT_PREFIX = "blocker:";
+
+/**
+ * The operator-facing question for a blocked issue. Comments arrive
+ * OLDEST-FIRST (LinearGateway invariant), so scanning from the end finds the
+ * newest. A `blocker:` question-protocol comment wins over any other
+ * non-marker comment — a worker's later progress note must never be quoted as
+ * "the question" (observed live on THINK-274: the escalation quoted a
+ * status report that literally said "No user input required" while the real
+ * numbered question sat two comments later).
+ */
+export function newestQuestion(
   comments: readonly LinearCommentSnapshot[],
 ): LinearCommentSnapshot | null {
+  for (let i = comments.length - 1; i >= 0; i--) {
+    const first = (comments[i].body.trimStart().split("\n", 1)[0] ?? "").trim();
+    if (first.startsWith(QUESTION_COMMENT_PREFIX)) return comments[i];
+  }
   for (let i = comments.length - 1; i >= 0; i--) {
     if (!isDaemonMarkerComment(comments[i].body)) return comments[i];
   }
@@ -65,6 +84,43 @@ function newestQuestion(
 }
 
 const NEEDS_USER = "Needs User";
+
+/**
+ * Slack-formatted issue reference: a link to the Linear issue when the URL is
+ * known, bold text otherwise. Every operator-facing mention of THINK-x should
+ * be clickable — the operator steers from Slack and must never need to go
+ * hunting for the issue.
+ */
+export function issueRef(
+  identifier: string,
+  url?: string | null,
+): string {
+  return url ? `<${url}|${identifier}>` : `*${identifier}*`;
+}
+
+/**
+ * When `Needs User` came from the DAEMON (attempt ceiling, quota expiry, lane
+ * conflict) there is no worker `blocker:` question — the newest
+ * `factory-block:` marker comment carries the actual reason. Surfacing it
+ * beats the useless "an answer is needed to resume" (live THINK-275: two
+ * failed implements escalated with no question comment, and the operator was
+ * told to go check Linear).
+ */
+export function newestFactoryBlock(
+  comments: readonly LinearCommentSnapshot[],
+): LinearCommentSnapshot | null {
+  for (let i = comments.length - 1; i >= 0; i--) {
+    const first = (comments[i].body.trimStart().split("\n", 1)[0] ?? "").trim();
+    if (first.startsWith("factory-block:")) return comments[i];
+  }
+  return null;
+}
+
+/** A factory-block comment's body without its marker first line. */
+function factoryBlockReason(comment: LinearCommentSnapshot): string {
+  const idx = comment.body.indexOf("\n");
+  return idx === -1 ? comment.body : comment.body.slice(idx + 1).trim();
+}
 
 /**
  * Review-gate statuses whose `wait` (without LFG) is a genuine HUMAN-wait — an
@@ -164,6 +220,7 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
         issueId: candidate.issue.id,
         identifier: candidate.issue.identifier,
         title: candidate.issue.title,
+        url: candidate.issue.url,
       },
       threadDeps,
     );
@@ -174,15 +231,24 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     ref: ThreadRef,
   ): Promise<void> {
     const question = newestQuestion(candidate.comments);
-    const key = question?.id ?? "blocked-no-comment";
+    const block = question === null ? newestFactoryBlock(candidate.comments) : null;
+    const key = question?.id ?? block?.id ?? "blocked-no-comment";
     const row = deps.store.getSlackThreadByIssue(candidate.issue.id);
     if (row?.last_escalated_key === key) return; // already mirrored this one
-    const questionText =
-      question?.body ??
-      `${candidate.issue.identifier} is blocked on \`${NEEDS_USER}\` — an answer is needed to resume.`;
+    const link = issueRef(candidate.issue.identifier, candidate.issue.url);
+    let body: string;
+    if (question !== null) {
+      body = question.body;
+      if (question.url) body += `\n\n<${question.url}|Open the question in Linear>`;
+    } else if (block !== null) {
+      body = factoryBlockReason(block);
+      if (block.url) body += `\n\n<${block.url}|Open in Linear>`;
+    } else {
+      body = `Blocked on \`${NEEDS_USER}\` with no recorded question — see ${link} in Linear.`;
+    }
     await postEscalation(
       ref,
-      `*${candidate.issue.identifier}* needs an answer (\`${NEEDS_USER}\`). Reply in this thread to resume:\n\n${questionText}`,
+      `${link} needs an answer (\`${NEEDS_USER}\`) — reply here to answer, \`question\` to re-show it.\n\n${body}`,
       threadDeps,
     );
     deps.store.setSlackThreadMarker(candidate.issue.id, "last_escalated_key", key);
@@ -199,12 +265,13 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
   ): Promise<void> {
     let key: string;
     let text: string;
+    const link = issueRef(candidate.issue.identifier, candidate.issue.url);
     if (action.kind === "launch") {
       key = `launch:${action.phase}`;
-      text = `:rocket: Launched *${action.phase}* on *${candidate.issue.identifier}*.`;
+      text = `:rocket: Launched *${action.phase}* on ${link}.`;
     } else if (action.kind === "advance") {
       key = `advance:${action.toStatus}`;
-      text = `:arrow_right: *${candidate.issue.identifier}* → ${action.toStatus}.`;
+      text = `:arrow_right: ${link} → ${action.toStatus}.`;
     } else {
       return;
     }
@@ -249,17 +316,33 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
 
     async handleInbound(message) {
       // A bare `status` in a mapped thread answers with that issue's state.
+      // Status/labels come from a LIVE Linear read — the store's issue row
+      // only refreshes when a launch settles, and answering from it alone
+      // reported "Ready to Work" while Linear showed Verification. The store
+      // still supplies worker attempts, and serves as a labeled fallback when
+      // Linear is unreachable.
       if (message.threadTs !== null && isStatusKeyword(message.text)) {
         const row = deps.store.getSlackThreadByThreadTs(
           message.channel,
           message.threadTs,
         );
         if (row !== undefined) {
-          const status = buildIssueStatus(deps.store, row.issue_id);
-          const text =
-            status === null
-              ? `${row.identifier}: not tracked in the store yet.`
-              : formatIssueStatus(status);
+          const stored = buildIssueStatus(deps.store, row.issue_id);
+          let live: LiveIssueFacts | null = null;
+          try {
+            const [snap] = await deps.gateway.getIssuesByIdentifier([
+              row.identifier,
+            ]);
+            if (snap !== undefined && snap.state !== "") {
+              live = { state: snap.state, labels: snap.labels, url: snap.url };
+            }
+          } catch (e) {
+            deps.log.warn(
+              "slack status: live Linear read failed — answering from the store",
+              { issue: row.identifier, error: String(e) },
+            );
+          }
+          const text = formatIssueStatusLive(row.identifier, live, stored);
           await deps.slack
             .postThreadReply(message.channel, message.threadTs, text)
             .catch((e: unknown) =>
@@ -268,8 +351,75 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
           return;
         }
       }
+      // A `question` keyword re-shows the open question WITHOUT relaying.
+      // Before this existed, an operator asking "what's the question?" in a
+      // blocked thread had that message relayed VERBATIM as the answer —
+      // clearing the blocker and steering the relaunched worker with garbage
+      // (observed live on THINK-274).
+      if (message.threadTs !== null && isQuestionKeyword(message.text)) {
+        const row = deps.store.getSlackThreadByThreadTs(
+          message.channel,
+          message.threadTs,
+        );
+        if (row !== undefined) {
+          let text: string;
+          try {
+            const [snap] = await deps.gateway.getIssuesByIdentifier([
+              row.identifier,
+            ]);
+            const link = issueRef(row.identifier, snap?.url);
+            if (snap === undefined) {
+              text = `${row.identifier}: not found in Linear.`;
+            } else if (!snap.labels.includes(NEEDS_USER)) {
+              text = `${link} has no open question (no \`${NEEDS_USER}\` blocker) — current status: ${snap.state}.`;
+            } else {
+              const comments = await deps.gateway.listComments(row.issue_id);
+              const question = newestQuestion(comments);
+              const block = question === null ? newestFactoryBlock(comments) : null;
+              if (question !== null) {
+                text = `Open question on ${link}:\n\n${question.body}`;
+                if (question.url)
+                  text += `\n\n<${question.url}|Open the question in Linear>`;
+              } else if (block !== null) {
+                text = `${link} was blocked by the daemon (no worker question):\n\n${factoryBlockReason(block)}`;
+                if (block.url) text += `\n\n<${block.url}|Open in Linear>`;
+              } else {
+                text = `${link} is blocked on \`${NEEDS_USER}\` but has no recorded question or block reason.`;
+              }
+            }
+          } catch (e) {
+            deps.log.warn("slack question lookup failed", {
+              issue: row.identifier,
+              error: String(e),
+            });
+            text = `Sorry — couldn't reach Linear to look up ${row.identifier}'s open question. Try again in a moment.`;
+          }
+          await deps.slack
+            .postThreadReply(message.channel, message.threadTs, text)
+            .catch((e: unknown) =>
+              deps.log.warn("slack question reply failed", { error: String(e) }),
+            );
+          return;
+        }
+      }
       // Otherwise: the answer round-trip.
       await relayInboundMessage(message, relayDeps);
     },
   };
+}
+
+/**
+ * True when an in-thread message asks to SEE the open question rather than
+ * answer it. Deliberately covers the natural phrasings an operator actually
+ * types ("what's the question?"), not just the bare keyword — relaying a
+ * meta-question as the answer is the single most destructive misread this
+ * surface can make.
+ */
+export function isQuestionKeyword(text: string): boolean {
+  const t = text
+    .replace(/<@[^>]+>/g, "")
+    .trim()
+    .toLowerCase();
+  if (/^(question|q|why)\??$/.test(t)) return true;
+  return /^what('|’)?s?\s+(is\s+)?the\s+q(u?e?s?t?i?o?n?)?\??$/.test(t);
 }

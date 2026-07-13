@@ -2126,6 +2126,15 @@ export type DocumentPlatePreview = {
   html?: Maybe<Scalars['String']['output']>;
 };
 
+/** An artifact produced in an accessible thread linked to the entity. */
+export type DossierArtifact = {
+  __typename?: 'DossierArtifact';
+  id: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
+  title?: Maybe<Scalars['String']['output']>;
+  type?: Maybe<Scalars['String']['output']>;
+};
+
 export type EffectiveCapabilitySet = {
   __typename?: 'EffectiveCapabilitySet';
   computedAt: Scalars['AWSDateTime']['output'];
@@ -2396,6 +2405,34 @@ export type EnableWorkflowInput = {
 export type EnableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
+};
+
+/** Everything the tenant brain knows about one grounded entity. */
+export type EntityDossier = {
+  __typename?: 'EntityDossier';
+  aliases?: Maybe<Array<Scalars['String']['output']>>;
+  artifacts: Array<DossierArtifact>;
+  entityId: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  memories: Array<SearchMemoryHit>;
+  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
+  summary?: Maybe<Scalars['String']['output']>;
+  threads: Array<SearchThreadHit>;
+  /** Compiled Entity page; null when the entity has no page (degrade path). */
+  wikiPage?: Maybe<WikiPage>;
+};
+
+/**
+ * Two-part dossier result: exactly one of `match` (resolved) or a non-empty
+ * `disambiguation` (>1 grounded candidate) is populated. Both are empty/null
+ * when there is no grounded match.
+ */
+export type EntityDossierResult = {
+  __typename?: 'EntityDossierResult';
+  /** Grounded candidates when >1 matched and no `entityId` was supplied. */
+  disambiguation: Array<SearchEntityHit>;
+  /** The assembled dossier, or null when ambiguous or no grounded match. */
+  match?: Maybe<EntityDossier>;
 };
 
 /**
@@ -4400,6 +4437,16 @@ export type Mutation = {
   saveWorkItemStatuses: Array<WorkItemStatus>;
   saveWorkItemView: WorkItemSavedView;
   saveWorkflow: SaveWorkflowResult;
+  /**
+   * THINK-263 U6 — open an "ask" turn for a palette query. Creates a HIDDEN,
+   * owner-restricted thread (owned by the caller, `metadata.systemHidden`) and a
+   * triggering user message, then dispatches the tenant's default agent in ask
+   * mode with retention suppressed (`use_memory: false`) and cost metering
+   * intact. Budget is pre-checked (BUDGET_EXCEEDED before any writes). Returns
+   * the hidden thread id so the client can stream the answer via
+   * `onThreadTurnStep`.
+   */
+  searchAsk: SearchAskResult;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
@@ -5702,6 +5749,12 @@ export type MutationSaveWorkItemViewArgs = {
 
 export type MutationSaveWorkflowArgs = {
   input: SaveWorkflowInput;
+};
+
+
+export type MutationSearchAskArgs = {
+  query: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -7045,6 +7098,17 @@ export type Query = {
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
+  /**
+   * THINK-263 U5 — server-assembled dossier for one grounded knowledge-graph
+   * entity: its compiled wiki page (null when none — a degrade, never a
+   * fabricated fallback), contributing memories, linked threads, and artifacts.
+   * Every thread-derived surface is fenced behind the caller's thread
+   * visibility; content from threads the caller cannot open is dropped entirely
+   * (the thread, its artifacts, and any memory hit stamped with it). Multiple
+   * grounded matches with no `entityId` selector return a disambiguation list
+   * and assemble nothing; passing `entityId` resolves the ambiguity.
+   */
+  entityDossier: EntityDossierResult;
   entityResolutionCase?: Maybe<EntityResolutionCase>;
   entityResolutionCases: Array<EntityResolutionCase>;
   evalDataset?: Maybe<EvalDataset>;
@@ -7641,6 +7705,13 @@ export type QueryEmailChannelLedgerArgs = {
 
 export type QueryEmailSpaceEmailPolicyArgs = {
   spaceId: Scalars['ID']['input'];
+};
+
+
+export type QueryEntityDossierArgs = {
+  entityId?: InputMaybe<Scalars['ID']['input']>;
+  query: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -9388,6 +9459,17 @@ export type ScheduledJob = {
   timezone: Scalars['String']['output'];
   triggerType: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+/**
+ * THINK-263 U6 — result of opening an ask turn from the palette. The hidden,
+ * owner-restricted thread the ask turn runs in; the client streams it via
+ * `onThreadTurnStep` (wired in U7). Only the thread id crosses the wire — the
+ * answer arrives on the thread's turn, never inline here.
+ */
+export type SearchAskResult = {
+  __typename?: 'SearchAskResult';
+  threadId: Scalars['ID']['output'];
 };
 
 export type SearchEntityHit = {
@@ -11774,6 +11856,14 @@ export type WikiPage = {
    * since been archived.
    */
   promotedFromSection?: Maybe<WikiPromotedFromSection>;
+  /**
+   * Self-contained, sanitized, scriptless HTML plate render compiled from the
+   * page's sections (THINK-273). Null when no render is stored — compile
+   * failure or a page that predates render persistence; readers fall back to
+   * the canonical markdown. Populated on the wikiPage detail query only; list,
+   * search, graph, and dossier surfaces never carry it.
+   */
+  renderHtml?: Maybe<Scalars['String']['output']>;
   /**
    * Active pages rolled up into this page's named section — the denormalized
    * aggregation view (`aggregation.linked_page_ids` on the section jsonb).

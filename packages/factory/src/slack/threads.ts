@@ -39,6 +39,8 @@ export interface IssueThreadTarget {
   /** Human identifier, e.g. "THINK-123". */
   identifier: string;
   title: string;
+  /** Issue web URL — the root message links the identifier when set. */
+  url?: string | null;
 }
 
 function toRef(row: SlackThreadRow): ThreadRef {
@@ -58,9 +60,12 @@ export async function openThreadForIssue(
   if (existing !== undefined) return toRef(existing);
 
   // No thread yet — post the root message and persist the mapping.
+  const ref = target.url
+    ? `<${target.url}|${target.identifier}>`
+    : `*${target.identifier}*`;
   const rootTs = await deps.slack.postMessage(
     deps.channelId,
-    `:factory: *${target.identifier}* — ${target.title}\nFactory enrolled this issue. I'll post progress here; reply in this thread to answer any questions.`,
+    `:factory: ${ref} — ${target.title}\nFactory enrolled this issue. I'll post progress here; reply in this thread to answer any questions.`,
   );
   const row = deps.store.upsertSlackThread({
     issueId: target.issueId,

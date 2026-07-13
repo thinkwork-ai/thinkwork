@@ -40,6 +40,8 @@ export interface MemoryPipelineView {
   workflowId?: string | null;
   enabled: boolean;
   readiness: string;
+  /** AWSJSON — arrives as a JSON string; read via readMemoryReadinessReasons. */
+  readinessReasons?: unknown;
   scheduleExpression?: string | null;
   scheduleTimezone?: string | null;
   scheduleEnabled?: boolean;
@@ -49,6 +51,26 @@ export interface MemoryPipelineView {
     enabled: boolean;
   }[];
   stages: MemoryPipelineStageView[];
+}
+
+export interface MemoryReadinessReason {
+  code: string;
+  message: string;
+}
+
+export function readMemoryReadinessReasons(
+  pipeline: MemoryPipelineView,
+): MemoryReadinessReason[] {
+  const raw = pipeline.readinessReasons;
+  let parsed: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = [];
+    }
+  }
+  return Array.isArray(parsed) ? (parsed as MemoryReadinessReason[]) : [];
 }
 
 export interface BuildMemoryPipelineGraphInput {

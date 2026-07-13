@@ -1,11 +1,14 @@
 /**
- * The R18 status view (U8): the daemon's world as the store already knows it —
- * NO new Linear calls. Two shapes:
- *   - buildStatusView   → the whole board: issues by phase, workers by
- *                         host + state (Stalled / HostUnreachable included),
- *                         hosts, and daemon-liveness age.
- *   - buildIssueStatus  → one issue's current phase/state + its live attempts,
- *                         for the in-thread `status` keyword.
+ * The R18 status view (U8). Two shapes:
+ *   - buildStatusView   → the whole board from the STORE only (no Linear
+ *                         calls): issues by phase, workers by host + state
+ *                         (Stalled / HostUnreachable included), hosts, and
+ *                         daemon-liveness age.
+ *   - buildIssueStatus  → one issue's store view (phase/state + attempts).
+ *                         For the in-thread `status` keyword the caller pairs
+ *                         it with a LIVE Linear read (formatIssueStatusLive):
+ *                         the store's issue row only refreshes when a launch
+ *                         settles, so alone it lags reality by a phase.
  *
  * The `status` CLI command and the in-thread keyword both render these.
  * Liveness is derived from the freshest write the store holds (issue updates,
@@ -61,6 +64,22 @@ export interface IssueStatus {
   compounded: boolean;
   /** Non-terminal attempts for this issue right now. */
   activeAttempts: WorkerSummary[];
+  /** Newest attempt in ANY state — the "last result" when nothing is active. */
+  latestAttempt: WorkerSummary | null;
+}
+
+/**
+ * Live Linear facts for the in-thread `status` reply. The store's issue row is
+ * only refreshed when a launch settles, so on its own it lags reality (it once
+ * answered "Ready to Work" while Linear showed Verification). The status
+ * keyword now fetches these live and uses the store only for worker attempts
+ * (and as a labeled fallback when Linear is unreachable).
+ */
+export interface LiveIssueFacts {
+  state: string;
+  labels: string[];
+  /** Issue web URL — the reply's identifier becomes a Slack link when set. */
+  url?: string | null;
 }
 
 const TERMINAL = new Set<string>(TERMINAL_ATTEMPT_STATES);
@@ -153,13 +172,12 @@ export function buildIssueStatus(
 ): IssueStatus | null {
   const issue = store.getIssue(issueId);
   if (issue === undefined) return null;
-  const attempts = (
-    store.db
-      .prepare(
-        "SELECT * FROM attempts WHERE issue_id = ? ORDER BY started_at DESC",
-      )
-      .all(issueId) as AttemptRow[]
-  ).filter((a) => !TERMINAL.has(a.state));
+  const attempts = store.db
+    .prepare(
+      "SELECT * FROM attempts WHERE issue_id = ? ORDER BY started_at DESC",
+    )
+    .all(issueId) as AttemptRow[];
+  const active = attempts.filter((a) => !TERMINAL.has(a.state));
   return {
     issueId,
     identifier: issue.identifier,
@@ -167,7 +185,8 @@ export function buildIssueStatus(
     state: issue.state,
     lane: issue.lane,
     compounded: issue.compounded === 1,
-    activeAttempts: attempts.map((a) => toWorker(store, a)),
+    activeAttempts: active.map((a) => toWorker(store, a)),
+    latestAttempt: attempts.length > 0 ? toWorker(store, attempts[0]) : null,
   };
 }
 
@@ -216,14 +235,53 @@ export function formatIssueStatus(status: IssueStatus): string {
   const lines = [
     `${status.identifier} — phase ${status.phase}, status "${status.state}", lane ${status.lane}${status.compounded ? ", compounded" : ""}`,
   ];
-  if (status.activeAttempts.length === 0) {
-    lines.push("  no active worker");
-  } else {
+  appendAttemptLines(lines, status);
+  return lines.join("\n");
+}
+
+function appendAttemptLines(lines: string[], status: IssueStatus): void {
+  if (status.activeAttempts.length > 0) {
     for (const a of status.activeAttempts) {
       lines.push(
         `  ${a.phase} attempt ${a.attemptNumber} — ${a.state} on ${a.host ?? "?"}`,
       );
     }
+    return;
+  }
+  const last = status.latestAttempt;
+  lines.push(
+    last === null
+      ? "  no worker has run yet"
+      : `  no active worker; last: ${last.phase} attempt ${last.attemptNumber} — ${last.state}`,
+  );
+}
+
+/**
+ * Render one issue's status from LIVE Linear facts (the in-thread `status`
+ * keyword). Linear is the source of truth for status/labels; the store
+ * contributes worker attempts. `live === null` means Linear was unreachable —
+ * fall back to the store row, but SAY SO instead of presenting stale state as
+ * current.
+ */
+export function formatIssueStatusLive(
+  identifier: string,
+  live: LiveIssueFacts | null,
+  stored: IssueStatus | null,
+): string {
+  if (live === null) {
+    const fallback =
+      stored === null
+        ? `${identifier}: not tracked in the store yet.`
+        : formatIssueStatus(stored);
+    return `${fallback}\n  (couldn't reach Linear just now — this is the daemon's last recorded view and may lag)`;
+  }
+  const labels = live.labels.length > 0 ? ` (labels: ${live.labels.join(", ")})` : "";
+  const ref = live.url ? `<${live.url}|${identifier}>` : identifier;
+  const lines = [`${ref} — ${live.state}${labels}`];
+  if (stored === null) {
+    lines.push("  no worker has run yet");
+  } else {
+    appendAttemptLines(lines, stored);
   }
   return lines.join("\n");
 }

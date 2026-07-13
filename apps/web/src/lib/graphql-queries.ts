@@ -2193,6 +2193,19 @@ export const ThreadTurnUpdatedSubscription = gql`
   }
 `;
 
+// THINK-263 U6/U7 — open an "ask" turn for a palette query. Creates a HIDDEN,
+// owner-restricted thread + triggering user message and dispatches the agent in
+// ask mode; only the hidden thread id crosses the wire. The answer streams back
+// via onNewMessage (assistant message) and onThreadTurnStep (live activity).
+// Can reject with extensions.code === "BUDGET_EXCEEDED" before any writes.
+export const SearchAskMutation = gql`
+  mutation SearchAsk($tenantId: ID!, $query: String!) {
+    searchAsk(tenantId: $tenantId, query: $query) {
+      threadId
+    }
+  }
+`;
+
 export const NewMessageSubscription = gql`
   subscription NewMessage($threadId: ID!) {
     onNewMessage(threadId: $threadId) {

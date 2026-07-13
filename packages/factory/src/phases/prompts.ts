@@ -147,11 +147,32 @@ Question protocol: when a material question blocks progress, post one comment
 add Needs User, record the questions in the Progress document, and stop. Make
 trivial reversible choices autonomously and record them.
 
+LFG never-stuck rule: when the LFG label is on the issue, a question you can
+answer with a recommendation is NOT a blocker — adopt your recommended answer,
+record the decision and rationale in the Progress document and ledger, and
+keep going. With LFG, add Needs User ONLY for missing credentials/secrets or
+unsafe-irreversible ambiguity (destructive data operations, spending money,
+external communications). An LFG issue must never sit waiting on a human for
+a decision the run itself recommended.
+
+Cross-issue dependency: if your goal is gated on ANOTHER issue (e.g. a merge
+gate that waits for THINK-x to merge/deploy), do NOT add Needs User and do NOT
+burn retries: set the rolling ledger's blocker field to exactly
+\`waiting-on: THINK-x\`, record the gate in the Progress document, and end the
+run. That is a legitimate ending — the daemon waits quietly and relaunches
+this phase automatically when THINK-x reaches Done.
+
+Parent issues: if this issue's plan shipped as child issues and every child is
+Done, do NOT re-implement anything — verify the assembled outcome from the
+children's evidence and move this issue forward (post the handoff and status
+move for your phase).
+
 Goal discipline: the Goal paragraph below is the run contract, not an
-aspiration. A run has exactly two valid endings: (1) the goal's terminal
+aspiration. A run has exactly three valid endings: (1) the goal's terminal
 condition is observably true — required PRs merged, handoff comment posted,
-status moved, cleanup done — or (2) a hard blocker is recorded per the
-question protocol. Nothing in between. Never end a run "waiting on CI"; never
+status moved, cleanup done; (2) a hard blocker is recorded per the question
+protocol; or (3) a cross-issue dependency wait is recorded via the ledger
+\`waiting-on: THINK-x\` blocker. Nothing in between. Never end a run "waiting on CI"; never
 background any step on the goal's critical path. Restate your goal as your
 first action and check your last action against it before ending the run.
 

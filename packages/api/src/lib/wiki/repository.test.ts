@@ -1,4 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./render.js", () => ({
+  composeWikiPageRender: vi
+    .fn()
+    .mockResolvedValue({ outcome: "rendered", plateSlug: "wiki-entity" }),
+}));
+
+import { composeWikiPageRender } from "./render.js";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { wikiPages } from "@thinkwork/database-pg/schema";
@@ -22,6 +30,7 @@ import {
   parseCompileDedupeBucket,
   recordSectionSources,
   renderBodyMarkdown,
+  upsertSections,
   wikiReadScopeWhere,
   type WikiCompileJobRow,
 } from "./repository.js";
@@ -502,5 +511,97 @@ describe("listGraphMaterializedTenantPages / archivePagesByIds", () => {
       },
     } as never);
     expect(untouched).toBe(0);
+  });
+});
+
+describe("upsertSections render hook (THINK-273)", () => {
+  beforeEach(() => {
+    vi.mocked(composeWikiPageRender).mockClear();
+  });
+
+  /**
+   * Fake db for the upsertSections statement sequence: SELECT chains resolve
+   * queued results in call order (existing-section lookup, then the
+   * listPageSections re-read); INSERT returns a fresh section id; UPDATEs
+   * are captured.
+   */
+  function fakeUpsertDb(selectResults: unknown[][]) {
+    let call = 0;
+    const makeChain = () => {
+      const rows = selectResults[call++] ?? [];
+      const chain: any = {
+        from: () => chain,
+        where: () => chain,
+        orderBy: () => chain,
+        limit: () => Promise.resolve(rows),
+        then: (resolve: (value: unknown[]) => unknown, reject?: any) =>
+          Promise.resolve(rows).then(resolve, reject),
+      };
+      return chain;
+    };
+    const updates: Array<Record<string, unknown>> = [];
+    const db = {
+      select: () => makeChain(),
+      insert: () => ({
+        values: () => ({
+          returning: () => Promise.resolve([{ id: "sec-1" }]),
+        }),
+      }),
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          updates.push(values);
+          return { where: () => Promise.resolve() };
+        },
+      }),
+    };
+    return { db: db as never, updates };
+  }
+
+  it("invokes composeWikiPageRender after the body_md rewrite, on the same client", async () => {
+    const sectionRow = {
+      id: "sec-1",
+      section_slug: "overview",
+      heading: "Overview",
+      body_md: "Acme ships anvils.",
+      position: 0,
+      last_source_at: null,
+      aggregation: null,
+    };
+    const { db, updates } = fakeUpsertDb([
+      [], // existing-section lookup → new section
+      [sectionRow], // listPageSections re-read for the body_md rewrite
+    ]);
+
+    await upsertSections(
+      "page-1",
+      [
+        {
+          section_slug: "overview",
+          heading: "Overview",
+          body_md: "Acme ships anvils.",
+          position: 0,
+        },
+      ],
+      db,
+    );
+
+    const expectedMarkdown = renderBodyMarkdown([
+      {
+        section_slug: "overview",
+        heading: "Overview",
+        body_md: "Acme ships anvils.",
+        position: 0,
+      },
+    ]);
+    // body_md rewrite happened before the render hook.
+    expect(updates.some((u) => u.body_md === expectedMarkdown)).toBe(true);
+    expect(composeWikiPageRender).toHaveBeenCalledTimes(1);
+    const [source, client] = vi.mocked(composeWikiPageRender).mock.calls[0]!;
+    expect(source).toEqual({
+      pageId: "page-1",
+      markdown: expectedMarkdown,
+      sectionCount: 1,
+    });
+    expect(client).toBe(db);
   });
 });
