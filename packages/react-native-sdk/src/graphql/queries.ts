@@ -257,9 +257,11 @@ export const WikiPageQuery = gql`
         position
         lastSourceAt
       }
-      # Detail-screen-only read surfaces (Unit 8). Each field fires its own
-      # repository query — do NOT request these on list screens (search,
-      # recentWikiPages) or you'll N+1 the server.
+      # Detail-screen-only read surfaces (Unit 8; renderHtml is THINK-275).
+      # Each field fires its own repository query — and renderHtml can be
+      # up to 256 KiB of compiled plate HTML — so do NOT request these on
+      # list screens (search, recentWikiPages) or you'll N+1 the server.
+      renderHtml
       sourceMemoryCount
       parent {
         id
