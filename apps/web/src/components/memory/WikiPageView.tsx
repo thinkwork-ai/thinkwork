@@ -7,6 +7,7 @@ import {
   type WikiPageType,
 } from "@thinkwork/graph";
 import { Badge } from "@thinkwork/ui";
+import { DocumentFrame } from "@/components/workbench/DocumentFrame";
 import { ComputerWikiPageQuery } from "@/lib/graphql-queries";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
@@ -31,6 +32,7 @@ interface WikiPageDetail {
   title?: string | null;
   summary?: string | null;
   bodyMd?: string | null;
+  renderHtml?: string | null;
   status?: string | null;
   lastCompiledAt?: string | null;
   updatedAt?: string | null;
@@ -66,7 +68,9 @@ function isRelationshipsSection(section: WikiPageSection): boolean {
  * Reachable by any tenant member: `wikiPage` resolves under the tenant-union
  * read scope, so this route is intentionally not operator-gated.
  *
- * Content renders from the structured `sections` (the canonical compiled form,
+ * Pages with a compiled HTML plate render (`renderHtml`, THINK-274) display
+ * it through the DocumentFrame wiki navigation variant; otherwise content
+ * renders from the structured `sections` (the canonical compiled form,
  * matching `WikiPageDetailSheet`). We deliberately do NOT also render `bodyMd`
  * — it is the same content re-serialized and would duplicate every section —
  * and we avoid the prose/Streamdown renderer here because its default colors
@@ -121,6 +125,11 @@ export function WikiPageView({
   // Compiled pages populate `sections`; fall back to the raw body only when a
   // page has none, so a page is never blank.
   const showBodyFallback = sortedSections.length === 0 && !!page?.bodyMd;
+
+  // THINK-274: a compiled HTML plate render replaces only the sections region.
+  // Empty string is treated like NULL (falsy guard, matching ArtifactBodyView)
+  // so a degenerate render falls back to the section rendering contract (R4).
+  const plateHtml = page?.renderHtml || null;
 
   return (
     <main className="flex h-full min-h-0 w-full flex-col overflow-y-auto">
@@ -187,7 +196,20 @@ export function WikiPageView({
               </div>
             ) : null}
 
-            {sortedSections.length > 0 ? (
+            {plateHtml ? (
+              // Full-height reading pane inside the page scroll (KTD7): never
+              // a collapsed or letterboxed frame. The wiki navigation variant
+              // pairs the relaxed sandbox with <base target="_top"> so
+              // compositor-validated /wiki/... anchors navigate the SPA route.
+              <div className="flex h-[calc(100vh-14rem)] min-h-[480px] flex-col overflow-hidden rounded-lg border border-border">
+                <DocumentFrame
+                  html={plateHtml}
+                  title={page.title ?? slug}
+                  navigation="top-by-user-activation"
+                  fullHeight
+                />
+              </div>
+            ) : sortedSections.length > 0 ? (
               <div className="space-y-6">
                 {sortedSections.map((section) => (
                   <section key={section.id} className="space-y-2">

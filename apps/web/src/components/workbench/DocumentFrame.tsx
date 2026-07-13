@@ -31,6 +31,16 @@ export interface DocumentFrameProps {
   title: string;
   /** Fill the parent (reader route) instead of a bounded card height. */
   fullHeight?: boolean;
+  /**
+   * Navigation variant (THINK-274 KTD2/KTD3). The default keeps the
+   * document-artifact posture byte-identical: `sandbox=""`, no base tag.
+   * `"top-by-user-activation"` is the wiki reader's variant: the sandbox
+   * grants exactly `allow-top-navigation-by-user-activation` and the envelope
+   * carries `<base target="_top">`, so a user click on a compositor-validated
+   * `/wiki/...` anchor navigates the top window into the SPA route. The two
+   * halves always travel together — neither is meaningful alone.
+   */
+  navigation?: "none" | "top-by-user-activation";
 }
 
 /** Resolve the app theme to the binary token documents style against. */
@@ -57,10 +67,12 @@ export function documentThemeToken(
 export function withDocumentFrameEnvelope(
   html: string,
   theme: "light" | "dark",
+  options?: { baseTargetTop?: boolean },
 ): string {
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${DOCUMENT_FRAME_CSP}">`;
   const themeStyle = `<style data-thinkwork-document-theme>:root{color-scheme:${theme};}</style>`;
-  const themeScriptless = `${cspMeta}${themeStyle}`;
+  const baseTag = options?.baseTargetTop ? '<base target="_top">' : "";
+  const themeScriptless = `${cspMeta}${themeStyle}${baseTag}`;
 
   // Stamp data-theme on <html> so plate CSS `:root[data-theme="dark"]`
   // overrides fire without scripts.
@@ -81,21 +93,31 @@ export function withDocumentFrameEnvelope(
   return `${out.slice(0, insertAt)}${themeScriptless}${out.slice(insertAt)}`;
 }
 
-export function DocumentFrame({ html, title, fullHeight }: DocumentFrameProps) {
+export function DocumentFrame({
+  html,
+  title,
+  fullHeight,
+  navigation = "none",
+}: DocumentFrameProps) {
   const { theme } = useTheme();
   const token = documentThemeToken(theme);
+  const topNavigation = navigation === "top-by-user-activation";
   const srcDoc = useMemo(
-    () => withDocumentFrameEnvelope(html, token),
-    [html, token],
+    () =>
+      withDocumentFrameEnvelope(html, token, { baseTargetTop: topNavigation }),
+    [html, token, topNavigation],
   );
 
   return (
     <iframe
       title={title}
       srcDoc={srcDoc}
-      // Zero grants: no scripts, no forms, no popups, no same-origin. The
-      // document tier is scriptless by contract (AE5's render half).
-      sandbox=""
+      // Default: zero grants — no scripts, no forms, no popups, no
+      // same-origin. The document tier is scriptless by contract (AE5's
+      // render half). The wiki variant grants only user-activated top
+      // navigation; the attribute is always literally present (an absent
+      // sandbox attribute would be a fully privileged frame).
+      sandbox={topNavigation ? "allow-top-navigation-by-user-activation" : ""}
       data-testid="document-frame"
       className={
         fullHeight
