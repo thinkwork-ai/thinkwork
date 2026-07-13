@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import { Command } from "commander";
 
-import {
+import { getArtifactsDir,
   ConfigError,
   getStateDir,
   isSlackEnabled,
@@ -33,7 +33,7 @@ import { installFactoryd, uninstallFactoryd } from "./cli-install.js";
 import { createLinearGateway, type CommentTrust } from "./linear/client.js";
 import { createLogger } from "./logger.js";
 import { createSlackGateway, type SlackGateway } from "./slack/client.js";
-import { createMergeExecutor, createSteeringExecutors } from "./slack/console.js";
+import { createInspectionExecutors, createMergeExecutor, createSteeringExecutors } from "./slack/console.js";
 import { createSlackSync, type SlackSync } from "./slack/sync.js";
 import { buildStatusView, formatStatusView } from "./slack/status.js";
 import { postNag } from "./slack/threads.js";
@@ -206,6 +206,15 @@ program
               gateway,
               store,
               github,
+              log: log.child("console"),
+            }),
+            ...createInspectionExecutors({
+              gateway,
+              store,
+              github,
+              slack: slackGateway,
+              transport,
+              artifactsDirFor: getArtifactsDir,
               log: log.child("console"),
             }),
           },
