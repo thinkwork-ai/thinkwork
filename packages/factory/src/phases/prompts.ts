@@ -158,7 +158,8 @@ a decision the run itself recommended.
 Cross-issue dependency: if your goal is gated on ANOTHER issue (e.g. a merge
 gate that waits for THINK-x to merge/deploy), do NOT add Needs User and do NOT
 burn retries: set the rolling ledger's blocker field to exactly
-\`waiting-on: THINK-x\`, record the gate in the Progress document, and end the
+\`waiting-on THINK-x\` (NO colon after waiting-on — a nested colon breaks the
+ledger's YAML fence), record the gate in the Progress document, and end the
 run. That is a legitimate ending — the daemon waits quietly and relaunches
 this phase automatically when THINK-x reaches Done.
 
@@ -172,7 +173,7 @@ aspiration. A run has exactly three valid endings: (1) the goal's terminal
 condition is observably true — required PRs merged, handoff comment posted,
 status moved, cleanup done; (2) a hard blocker is recorded per the question
 protocol; or (3) a cross-issue dependency wait is recorded via the ledger
-\`waiting-on: THINK-x\` blocker. Nothing in between. Never end a run "waiting on CI"; never
+\`waiting-on THINK-x\` blocker. Nothing in between. Never end a run "waiting on CI"; never
 background any step on the goal's critical path. Restate your goal as your
 first action and check your last action against it before ending the run.
 

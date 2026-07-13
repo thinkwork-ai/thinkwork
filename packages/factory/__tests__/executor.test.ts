@@ -175,6 +175,8 @@ function makeHarness(
       };
     },
     runnerFor: (kind) => (kind === "claude" ? runner : null),
+    // Tests assert post-run state deterministically — await the full run.
+    awaitLaunches: true,
     log,
     resultOptions: { pollMs: 1, timeoutMs: 100 },
   };
@@ -743,5 +745,58 @@ describe("executeAction — wait/noop", () => {
 
     await executeAction(action, candidate, h.deps);
     expect(h.gateway.writes).toHaveLength(0);
+  });
+});
+
+describe("executeAction — detached launches (production default)", () => {
+  it("returns right after spawn; the run settles in the background (board never waits)", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-90",
+      state: "Planning",
+      labels: ["Claude"],
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Ready to Work" });
+    h.deps.awaitLaunches = undefined; // production default: detached
+    const candidate = await candidateFor(h.gateway, "THINK-90");
+    const action = decideAction(candidate, {
+      activeAttempt: null,
+      hasChildIssues: false,
+    });
+    expect(action.kind).toBe("launch");
+
+    const result = await executeAction(action, candidate, h.deps);
+    expect(result.kind).toBe("launch");
+    expect(result.wrote).toBe(true);
+    expect(result.detail).toContain("detached");
+    // The attempt exists and is NOT yet terminal at return time...
+    const attempt = store.getAttempt(result.attemptId!)!;
+    expect(["PreparingWorkspace", "LaunchingAgentProcess", "Running", "Finishing", "Succeeded"]).toContain(
+      attempt.state,
+    );
+    // ...and the background continuation settles it Succeeded.
+    await new Promise((r) => setTimeout(r, 150));
+    expect(store.getAttempt(result.attemptId!)!.state).toBe("Succeeded");
+  });
+
+  it("defers a launch when the host is at maxConcurrent capacity", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-91",
+      state: "Planning",
+      labels: ["Claude"],
+    });
+    const h = makeHarness(issue, { workerMovesStateTo: "Ready to Work" });
+    // Saturate the host: maxConcurrent is 2 in the test HostConfig.
+    store.insertAttempt({ issueId: "other-1", phase: "implement", attemptNumber: 1, state: "Running", host: "local", pid: 111 });
+    store.insertAttempt({ issueId: "other-2", phase: "verify", attemptNumber: 1, state: "Running", host: "local", pid: 222 });
+
+    const candidate = await candidateFor(h.gateway, "THINK-91");
+    const action = decideAction(candidate, { activeAttempt: null, hasChildIssues: false });
+    const result = await executeAction(action, candidate, h.deps);
+
+    expect(result.kind).toBe("launch");
+    expect(result.wrote).toBe(false);
+    expect(result.detail).toContain("at capacity");
+    // No attempt row created for THINK-91, no worker spawned.
+    expect(h.launches).toHaveLength(0);
   });
 });

@@ -130,7 +130,7 @@ Key rules:
   never sit waiting on a human: parent issues WAIT quietly while their child
   issues are in flight and resume automatically when all children are Done
   (never a `Needs User` block); a worker gated on another issue records
-  `waiting-on: THINK-x` in its ledger blocker and the daemon relaunches the
+  `waiting-on THINK-x` in its ledger blocker and the daemon relaunches the
   phase automatically when THINK-x reaches Done; and LFG workers self-answer
   any question they can pair with a recommendation. With LFG, `Needs User`
   is reserved for missing credentials, unsafe-irreversible ambiguity, and
