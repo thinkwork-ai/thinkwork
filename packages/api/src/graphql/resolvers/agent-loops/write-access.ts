@@ -3,9 +3,9 @@
  *
  * Replaces the bare admin gate on `saveAgentLoop`/`deleteAgentLoop`:
  *
- *   - Admin/owner principals keep today's general automation CRUD
- *     (cognito → requireTenantAdmin; apikey → the same live tenant_members
- *     role check + per-agent operation allowlist as before).
+ *   - Cognito callers are owner-scoped by default regardless of tenant role.
+ *     General CRUD requires the explicit OPERATOR scope plus tenant-admin
+ *     authorization. API keys keep their live role + operation checks.
  *   - A plain MEMBER principal passes only for automations that are
  *     member-scoped: owned by the caller, run-as the caller, every delivery
  *     recipient equal to the caller's email as stored on `users` (never
@@ -33,11 +33,12 @@ import { artifacts, db, tenantMembers, users } from "../../utils.js";
 import {
   requireAgentAllowsOperation,
   requireTenantAdmin,
+  requireTenantMember,
 } from "../core/authz.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 
 const OPERATOR_PATH_HINT =
-  "Ask an operator to make this change in the Automations editor.";
+  "Ask an operator to make this change in Settings → Workflows.";
 
 function forbidden(message: string): GraphQLError {
   return new GraphQLError(message, { extensions: { code: "FORBIDDEN" } });
@@ -47,6 +48,8 @@ export interface AgentLoopWriteAccessInput {
   operationName: "save_agent_loop" | "delete_agent_loop";
   /** Server-resolved users.id of the caller; null when unresolvable. */
   actorId: string | null;
+  /** USER is owner-scoped even for admins; OPERATOR requires tenant admin. */
+  accessScope?: "USER" | "OPERATOR" | null;
   /** Owner the request submits; undefined = keep existing / default. */
   submittedOwnerUserId?: string | null;
   /** Run-as the request submits; undefined = keep existing / default. */
@@ -66,19 +69,15 @@ export async function requireAgentLoopWriteAccess(
   input: AgentLoopWriteAccessInput,
 ): Promise<void> {
   if (ctx.auth.authType === "cognito") {
-    let isAdmin = true;
-    try {
+    if (input.accessScope === "OPERATOR") {
       await requireTenantAdmin(ctx, tenantId);
-    } catch {
-      isAdmin = false; // Plain member — member-scope check below.
-    }
-    if (isAdmin) {
-      // Admin/owner: general access, but an existing-mode binding must still
-      // reference a real document — outside the try so a not-found error is
-      // surfaced, not swallowed into the member fallback.
       await requireBoundArtifactInTenant(tenantId, input);
       return;
     }
+    // The main Automations surface is always owner-scoped. Role does not
+    // widen it: an owner/admin must opt into the separately guarded operator
+    // surface to manage another user's Automation.
+    await requireTenantMember(ctx, tenantId);
     await requireMemberScope(ctx, tenantId, input);
     return;
   }

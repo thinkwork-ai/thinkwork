@@ -134,6 +134,9 @@ export const workflows = pgTable(
       table.tenant_id,
       table.last_run_at,
     ),
+    index("workflows_source_owner_idx")
+      .on(table.tenant_id, table.owner_user_id)
+      .where(sql`${table.source_agent_loop_id} IS NOT NULL`),
     check(
       "workflows_lifecycle_status_check",
       sql`${table.lifecycle_status} IN ('draft', 'active', 'deprecated', 'archived')`,

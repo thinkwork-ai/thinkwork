@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   selectQueue: [] as unknown[][],
   requireTenantAdmin: vi.fn(),
+  requireTenantMember: vi.fn(),
   requireAgentAllowsOperation: vi.fn(),
   assertCanvasAccess: vi.fn(),
 }));
@@ -25,6 +26,7 @@ vi.mock("../../utils.js", () => ({
 
 vi.mock("../core/authz.js", () => ({
   requireTenantAdmin: mocks.requireTenantAdmin,
+  requireTenantMember: mocks.requireTenantMember,
   requireAgentAllowsOperation: mocks.requireAgentAllowsOperation,
 }));
 
@@ -91,15 +93,34 @@ const memberBoundSpec = normalizeTargetSpec({
 beforeEach(() => {
   mocks.selectQueue.length = 0;
   mocks.requireTenantAdmin.mockReset().mockResolvedValue(undefined);
+  mocks.requireTenantMember.mockReset().mockResolvedValue("admin");
   mocks.requireAgentAllowsOperation.mockReset().mockResolvedValue(undefined);
   mocks.assertCanvasAccess.mockReset().mockResolvedValue(undefined);
 });
 
 describe("requireAgentLoopWriteAccess (THINK-227 U11)", () => {
-  it("admin cognito callers pass through requireTenantAdmin unchanged", async () => {
+  it("keeps the default Cognito surface owner-scoped even for tenant admins", async () => {
+    await expect(
+      requireAgentLoopWriteAccess(cognitoCtx(), TENANT, {
+        operationName: "save_agent_loop",
+        actorId: "admin-user",
+        accessScope: "USER",
+        existing: {
+          ownerUserId: "someone-else",
+          runAsUserId: "someone-else",
+        },
+        targetSpec: memberBoundSpec,
+      }),
+    ).rejects.toThrow(/only change automations they own/i);
+    expect(mocks.requireTenantMember).toHaveBeenCalledTimes(1);
+    expect(mocks.requireTenantAdmin).not.toHaveBeenCalled();
+  });
+
+  it("allows an explicitly requested operator write only after the admin gate", async () => {
     await requireAgentLoopWriteAccess(cognitoCtx(), TENANT, {
       operationName: "save_agent_loop",
       actorId: "any-admin",
+      accessScope: "OPERATOR",
       targetSpec: memberBoundSpec,
     });
     expect(mocks.requireTenantAdmin).toHaveBeenCalledTimes(1);
@@ -266,6 +287,7 @@ describe("requireAgentLoopWriteAccess (THINK-227 U11)", () => {
       requireAgentLoopWriteAccess(cognitoCtx(), TENANT, {
         operationName: "save_agent_loop",
         actorId: "any-admin",
+        accessScope: "OPERATOR",
         targetSpec: spec,
       }),
     ).rejects.toThrow(/not found in this tenant.*no-such-artifact/is);
@@ -331,12 +353,25 @@ describe("requireAgentLoopWriteAccess (THINK-227 U11)", () => {
   });
 
   it("cognito member (non-admin) gets the same member scope", async () => {
-    mocks.requireTenantAdmin.mockRejectedValue(new Error("forbidden"));
     mocks.selectQueue.push([{ email: "member@x.com" }]); // users email
     await requireAgentLoopWriteAccess(cognitoCtx(), TENANT, {
       operationName: "save_agent_loop",
       actorId: MEMBER,
       targetSpec: memberBoundSpec,
     });
+    expect(mocks.requireTenantMember).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a Cognito caller who is not a member of the submitted tenant", async () => {
+    mocks.requireTenantMember.mockRejectedValue(
+      new Error("Tenant membership required"),
+    );
+    await expect(
+      requireAgentLoopWriteAccess(cognitoCtx(), "tenant-other", {
+        operationName: "save_agent_loop",
+        actorId: MEMBER,
+        targetSpec: memberBoundSpec,
+      }),
+    ).rejects.toThrow(/Tenant membership required/);
   });
 });

@@ -162,7 +162,18 @@ async function upsertWorkflow(
       ),
     )
     .limit(1);
-  if (existing) return existing.id;
+  if (existing) {
+    await db
+      .update(workflows)
+      .set({
+        visibility: "agent_private",
+        owner_user_id: loop.owner_user_id,
+        owner_agent_id: loop.owner_agent_id,
+        updated_at: new Date(),
+      })
+      .where(eq(workflows.id, existing.id));
+    return existing.id;
+  }
 
   const [workflow] = await db
     .insert(workflows)
@@ -173,6 +184,9 @@ async function upsertWorkflow(
       description:
         loop.description ?? "Migrated from an Automation (THINK-216).",
       lifecycle_status: "active",
+      visibility: "agent_private",
+      owner_user_id: loop.owner_user_id,
+      owner_agent_id: loop.owner_agent_id,
       readiness_state: "ready",
       primary_trigger_family: triggerFamily,
       source_agent_loop_id: loop.id,

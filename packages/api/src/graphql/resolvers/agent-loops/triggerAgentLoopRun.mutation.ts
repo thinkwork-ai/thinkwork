@@ -24,8 +24,10 @@ import {
   agentLoopRowToGraphql,
   parseAwsJsonObject,
   requireAgentLoopAdmin,
+  type AgentLoopAccessScope,
 } from "./types.js";
 import { ensureThreadForWork } from "../../../lib/thread-helpers.js";
+import { requireTenantMember } from "../core/authz.js";
 
 type TriggerAgentLoopRunArgs = {
   input: {
@@ -34,6 +36,7 @@ type TriggerAgentLoopRunArgs = {
     correlationId?: string | null;
     inputSummary?: unknown;
   };
+  scope?: AgentLoopAccessScope | null;
 };
 
 export async function triggerAgentLoopRun(
@@ -50,10 +53,19 @@ export async function triggerAgentLoopRun(
     throw new Error(`AgentLoop ${args.input.agentLoopId} not found`);
   }
 
-  await requireAgentLoopAdmin(ctx, loop.tenant_id, "trigger_agent_loop_run");
+  const actorId = await resolveCallerUserId(ctx);
+  if (ctx.auth.authType === "cognito" && args.scope !== "OPERATOR") {
+    await requireTenantMember(ctx, loop.tenant_id);
+    if (!actorId || loop.owner_user_id !== actorId) {
+      // Collapse ownership failures to not-found: do not provide an id oracle
+      // for another user's Automation.
+      throw new Error(`AgentLoop ${args.input.agentLoopId} not found`);
+    }
+  } else {
+    await requireAgentLoopAdmin(ctx, loop.tenant_id, "trigger_agent_loop_run");
+  }
 
   const version = await loadCurrentVersion(loop.current_version_id);
-  const actorId = await resolveCallerUserId(ctx);
   const inputSummary = parseAwsJsonObject(args.input.inputSummary);
   const now = new Date();
   const idempotencyKey = args.input.idempotencyKey ?? null;
@@ -196,9 +208,8 @@ async function invokeAgentLoopContinueDispatch(input: {
   threadId: string | null;
   spaceId: string | null;
 }): Promise<void> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const stage = process.env.STAGE;
   const fnName =

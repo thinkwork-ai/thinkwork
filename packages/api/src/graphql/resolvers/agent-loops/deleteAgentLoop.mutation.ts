@@ -6,10 +6,11 @@ import { syncAgentLoopScheduleBinding } from "../../../lib/agent-loops/schedule-
 import { syncWorkflowScheduleBinding } from "../../../lib/workflows/schedule-binding.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { requireAgentLoopWriteAccess } from "./write-access.js";
+import type { AgentLoopAccessScope } from "./types.js";
 
 export async function deleteAgentLoop(
   _parent: unknown,
-  args: { id: string },
+  args: { id: string; scope?: AgentLoopAccessScope | null },
   ctx: GraphQLContext,
 ): Promise<{ id: string; ok: boolean }> {
   const [row] = await db
@@ -35,6 +36,7 @@ export async function deleteAgentLoop(
   await requireAgentLoopWriteAccess(ctx, row.tenant_id, {
     operationName: "delete_agent_loop",
     actorId: await resolveCallerUserId(ctx),
+    accessScope: args.scope ?? "USER",
     existing: {
       ownerUserId: row.owner_user_id ?? null,
       runAsUserId: row.run_as_user_id ?? null,

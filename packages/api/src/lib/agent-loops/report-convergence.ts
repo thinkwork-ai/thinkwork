@@ -38,7 +38,13 @@ export function isReportAutomation(
 
 export interface SyncReportConvergenceInput {
   tenantId: string;
-  loop: { id: string; name: string; description?: string | null };
+  loop: {
+    id: string;
+    name: string;
+    description?: string | null;
+    ownerUserId: string | null;
+    ownerAgentId: string | null;
+  };
   /** The just-saved active version's spec columns (already normalized). */
   version: {
     id: string;
@@ -108,6 +114,14 @@ export async function syncReportAutomationConvergence(
 async function upsertLinkedWorkflow(
   input: SyncReportConvergenceInput,
 ): Promise<string> {
+  const ownership = {
+    // A Workflow projected from an Automation is never tenant-shared. If a
+    // malformed legacy row has no owner, private + ownerless fails closed at
+    // trigger time instead of becoming callable by the tenant.
+    visibility: "agent_private",
+    owner_user_id: input.loop.ownerUserId,
+    owner_agent_id: input.loop.ownerAgentId,
+  };
   const [existing] = await db
     .select({ id: workflows.id, name: workflows.name })
     .from(workflows)
@@ -119,12 +133,17 @@ async function upsertLinkedWorkflow(
     )
     .limit(1);
   if (existing) {
-    if (existing.name !== input.loop.name) {
-      await db
-        .update(workflows)
-        .set({ name: input.loop.name, updated_at: new Date() })
-        .where(eq(workflows.id, existing.id));
-    }
+    // Ownership is an execution boundary, not display metadata. Reassert it
+    // on every save so old tenant-shared projections heal even before the
+    // database backfill reaches them.
+    await db
+      .update(workflows)
+      .set({
+        ...(existing.name !== input.loop.name ? { name: input.loop.name } : {}),
+        ...ownership,
+        updated_at: new Date(),
+      })
+      .where(eq(workflows.id, existing.id));
     return existing.id;
   }
 
@@ -138,6 +157,7 @@ async function upsertLinkedWorkflow(
         input.loop.description ??
         "Report automation (converged at save, THINK-227).",
       lifecycle_status: "active",
+      ...ownership,
       readiness_state: "ready",
       primary_trigger_family: workflowTriggerFamily(input.triggerSpec.family),
       source_agent_loop_id: input.loop.id,

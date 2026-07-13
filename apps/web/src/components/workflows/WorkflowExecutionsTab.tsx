@@ -80,7 +80,7 @@ export function WorkflowExecutionsTab({
     agentLoopRun?: AgentLoopRunDetail | null;
   }>({
     query: SettingsAgentLoopRunQuery,
-    variables: { id: selectedRun?.id ?? "" },
+    variables: { id: selectedRun?.id ?? "", scope: "OPERATOR" },
     pause: selectedRun?.source !== "agent_loop",
     requestPolicy: "cache-and-network",
   });

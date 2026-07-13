@@ -58,6 +58,16 @@ enum AgentLoopIterationStatus {
   canceled
 }
 
+"""
+Authorization scope for Automation operations. USER is owner-scoped even when
+the signed-in user is a tenant admin. OPERATOR is tenant-wide and requires the
+server-side tenant admin gate; UI route guards are not sufficient.
+"""
+enum AgentLoopAccessScope {
+  USER
+  OPERATOR
+}
+
 type AgentLoop {
   id: ID!
   tenantId: ID!
@@ -291,21 +301,31 @@ input ConfirmAutomationDraftInput {
 extend type Query {
   agentLoops(
     tenantId: ID!
+    scope: AgentLoopAccessScope = USER
     lifecycleStatus: AgentLoopLifecycleStatus
     enabled: Boolean
     limit: Int
     cursor: String
   ): [AgentLoop!]!
-  agentLoop(id: ID!): AgentLoop
-  agentLoopRun(id: ID!): AgentLoopRun
+  agentLoop(id: ID!, scope: AgentLoopAccessScope = USER): AgentLoop
+  agentLoopRun(id: ID!, scope: AgentLoopAccessScope = USER): AgentLoopRun
 }
 
 extend type Mutation {
-  saveAgentLoop(input: SaveAgentLoopInput!): AgentLoop!
+  saveAgentLoop(
+    input: SaveAgentLoopInput!
+    scope: AgentLoopAccessScope = USER
+  ): AgentLoop!
   startAutomationBuilder(
     input: StartAutomationBuilderInput!
   ): AutomationBuilderSession!
   confirmAutomationDraft(input: ConfirmAutomationDraftInput!): AgentLoop!
-  deleteAgentLoop(id: ID!): DeleteAgentLoopResult!
-  triggerAgentLoopRun(input: TriggerAgentLoopRunInput!): AgentLoopRun!
+  deleteAgentLoop(
+    id: ID!
+    scope: AgentLoopAccessScope = USER
+  ): DeleteAgentLoopResult!
+  triggerAgentLoopRun(
+    input: TriggerAgentLoopRunInput!
+    scope: AgentLoopAccessScope = USER
+  ): AgentLoopRun!
 }

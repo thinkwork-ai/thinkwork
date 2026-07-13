@@ -14,7 +14,11 @@ import {
   webhooks,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
-import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import { requireTenantMember } from "../core/authz.js";
+import {
+  resolveCaller,
+  resolveCallerTenantId,
+} from "../core/resolve-auth-user.js";
 import { buildMemoryPipelineView } from "../../../lib/memory-sources/pipeline-view.js";
 
 type TenantScoped = {
@@ -59,6 +63,49 @@ export async function resolveAgentLoopTenantId(
   }
   await requireAdminOrServiceCaller(ctx, tenantId, "read_agent_loop");
   return tenantId;
+}
+
+export type AgentLoopAccessScope = "USER" | "OPERATOR";
+
+/**
+ * Resolves the database predicate for an Automation read. Cognito requests
+ * default to the signed-in user's rows regardless of tenant role. Tenant-wide
+ * reads are an explicit OPERATOR action and are re-authorized here.
+ */
+export async function resolveAgentLoopReadScope(
+  ctx: GraphQLContext,
+  requestedTenantId?: string | null,
+  accessScope: AgentLoopAccessScope = "USER",
+): Promise<{ tenantId: string; ownerUserId: string | null }> {
+  const caller = await resolveCaller(ctx);
+  const tenantId = requestedTenantId ?? ctx.auth.tenantId ?? caller.tenantId;
+  if (!tenantId) {
+    throw new Error("Unable to resolve tenant for AgentLoop request");
+  }
+
+  if (accessScope === "OPERATOR" || ctx.auth.authType !== "cognito") {
+    await requireAdminOrServiceCaller(ctx, tenantId, "read_agent_loop");
+    return { tenantId, ownerUserId: null };
+  }
+
+  await requireTenantMember(ctx, tenantId);
+  if (!caller.userId) {
+    throw new Error("Unable to resolve signed-in user for Automation request");
+  }
+  return { tenantId, ownerUserId: caller.userId };
+}
+
+export async function canReadAgentLoop(
+  ctx: GraphQLContext,
+  row: { tenant_id: string; owner_user_id?: string | null },
+  accessScope: AgentLoopAccessScope = "USER",
+): Promise<boolean> {
+  const scope = await resolveAgentLoopReadScope(
+    ctx,
+    row.tenant_id,
+    accessScope,
+  );
+  return scope.ownerUserId === null || row.owner_user_id === scope.ownerUserId;
 }
 
 export async function requireAgentLoopAdmin(
