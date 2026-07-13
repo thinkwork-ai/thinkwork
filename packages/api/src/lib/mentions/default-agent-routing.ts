@@ -80,6 +80,14 @@ export interface DispatchDefaultAgentTurnInput {
    * key for the original dispatch.
    */
   attempt?: number | null;
+  /**
+   * THINK-263 U6: this dispatch opens a palette "ask" turn. The direct
+   * chat-agent-invoke path reads it to send `use_memory: false`, so the
+   * ephemeral ask answer is metered for cost but never retained to memory.
+   * NOT a dispatch-critical field (not in REQUIRED_DISPATCH_FIELDS) — it only
+   * flips the inline `use_memory` value, which is exempt from the parity guard.
+   */
+  askMode?: boolean;
 }
 
 export interface DefaultAgentChatInvoke {
@@ -112,6 +120,11 @@ export interface DefaultAgentChatInvoke {
   requestedProfileSlug?: string;
   goalMode?: RuntimeGoalMode;
   skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
+  /**
+   * THINK-263 U6: opens a palette "ask" turn. chat-agent-invoke sends
+   * `use_memory: false` for these so the answer is metered but not retained.
+   */
+  askMode?: boolean;
 }
 
 export interface DefaultAgentChatExecutor {
@@ -213,11 +226,26 @@ export async function dispatchDefaultAgentChatTurn(
           ),
         }
       : {}),
+    ...(input.askMode ? { askMode: true } : {}),
   });
   if (directInvoked) {
     return {
       agentId: defaultAgent.agentId,
       directInvoked: true,
+      enqueued: false,
+      wakeupRequestId: null,
+    };
+  }
+
+  // Ask turns (THINK-263 U6) must never ride the wakeup fallback: that path
+  // dispatches with use_memory:true and would RETAIN the search-ask answer,
+  // breaking the retention-suppression invariant that the direct path enforces
+  // with use_memory:false. If the direct invoke didn't fire, report the miss
+  // rather than silently enqueuing a retaining turn.
+  if (input.askMode) {
+    return {
+      agentId: defaultAgent.agentId,
+      directInvoked: false,
       enqueued: false,
       wakeupRequestId: null,
     };
