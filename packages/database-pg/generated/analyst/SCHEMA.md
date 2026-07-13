@@ -4176,6 +4176,7 @@ Join hints:
 | compliance_tier | text | not null |
 | sandbox_interpreter_public_id | text |  |
 | sandbox_interpreter_internal_id | text |  |
+| sandbox_interpreter_capability_private_id | text |  |
 | pending_owner_email | text |  |
 | first_admin_claim_required | boolean | not null |
 | first_admin_claimed_at | timestamp with time zone |  |
