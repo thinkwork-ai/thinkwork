@@ -15,12 +15,17 @@ export {
   matchesMemoryBlueprint,
   memoryBlueprintFor,
   memoryBlueprintSourceMetadata,
+  isToggleableMemoryStage,
+  normalizeDisabledStages,
   MEMORY_BLUEPRINT_VERSION,
   PERSONAL_MEMORY_BLUEPRINT_KEY,
   SHARED_MEMORY_BLUEPRINT_KEY,
+  TOGGLEABLE_MEMORY_STAGES,
   type MemoryBlueprint,
   type MemoryBlueprintKey,
   type MemoryBlueprintSourceMetadata,
+  type MemoryStageOverrides,
+  type ToggleableMemoryStage,
 } from "@thinkwork/agent-loops-core";
 
 export {

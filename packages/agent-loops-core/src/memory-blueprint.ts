@@ -25,6 +25,46 @@ export const PERSONAL_MEMORY_BLUEPRINT_KEY = "personal-memory";
 export const SHARED_MEMORY_BLUEPRINT_KEY = "shared-memory";
 
 /**
+ * The only stages a user may turn off (THINK-264).
+ *
+ * acquire → project → resolve → retain is the pipeline's spine: each stage
+ * feeds the next, so disabling any of them starves everything downstream and
+ * silently turns the automation into a no-op (project off ⇒ no claims ⇒ retain
+ * writes nothing). Those stay structural. compound/graph/wiki are the optional
+ * tail — they refine and publish what is already retained, so switching them
+ * off degrades the product without corrupting it.
+ *
+ * This allowlist is the enforcement point: `stage_overrides.disabledStages` is
+ * intent, and anything outside this set is ignored rather than trusted.
+ */
+export const TOGGLEABLE_MEMORY_STAGES = ["compound", "graph", "wiki"] as const;
+
+export type ToggleableMemoryStage = (typeof TOGGLEABLE_MEMORY_STAGES)[number];
+
+export function isToggleableMemoryStage(
+  stage: string,
+): stage is ToggleableMemoryStage {
+  return (TOGGLEABLE_MEMORY_STAGES as readonly string[]).includes(stage);
+}
+
+/** Per-processor stage toggles, as stored on memory_processor_configs. */
+export interface MemoryStageOverrides {
+  disabledStages?: string[];
+}
+
+/**
+ * Narrow raw override intent to the stages we actually honor, de-duplicated and
+ * ordered so the value is stable enough to compare across blueprint versions.
+ */
+export function normalizeDisabledStages(
+  overrides: MemoryStageOverrides | null | undefined,
+): ToggleableMemoryStage[] {
+  const raw = overrides?.disabledStages;
+  if (!Array.isArray(raw)) return [];
+  return TOGGLEABLE_MEMORY_STAGES.filter((stage) => raw.includes(stage));
+}
+
+/**
  * Bump when a blueprint's step shape changes. Existing workflows adopt the
  * new version lazily at their next run/configuration read.
  */
@@ -39,6 +79,13 @@ export interface MemoryBlueprintSourceMetadata {
   blueprintKey: MemoryBlueprintKey;
   blueprintVersion: number;
   processorConfigId: string;
+  /**
+   * Which optional stages were switched off when this version was built. Part
+   * of the identity of the version: flipping a toggle changes the step list, so
+   * it must supersede the stored version rather than silently diverge from it.
+   * In-flight runs stay pinned to the version they captured.
+   */
+  disabledStages: ToggleableMemoryStage[];
 }
 
 function stage(
@@ -70,7 +117,9 @@ function planReview(prompt: string): ApprovalWorkflowStep {
  */
 export function buildPersonalMemoryWorkflowDefinition(
   processorConfigId: string,
+  overrides?: MemoryStageOverrides | null,
 ): WorkflowDefinition {
+  const disabled = new Set<string>(normalizeDisabledStages(overrides));
   return {
     version: WORKFLOW_DEFINITION_VERSION,
     steps: [
@@ -83,7 +132,9 @@ export function buildPersonalMemoryWorkflowDefinition(
       stage("project", "project", processorConfigId),
       stage("resolve", "resolve", processorConfigId),
       stage("retain", "retain", processorConfigId),
-      stage("compound", "compound", processorConfigId),
+      ...(disabled.has("compound")
+        ? []
+        : [stage("compound", "compound", processorConfigId)]),
     ],
   };
 }
@@ -95,7 +146,12 @@ export function buildPersonalMemoryWorkflowDefinition(
  */
 export function buildSharedMemoryWorkflowDefinition(
   processorConfigId: string,
+  overrides?: MemoryStageOverrides | null,
 ): WorkflowDefinition {
+  const disabled = new Set<string>(normalizeDisabledStages(overrides));
+  const tail = (["compound", "graph", "wiki"] as const).filter(
+    (s) => !disabled.has(s),
+  );
   return {
     version: WORKFLOW_DEFINITION_VERSION,
     steps: [
@@ -108,9 +164,7 @@ export function buildSharedMemoryWorkflowDefinition(
       stage("project", "project", processorConfigId),
       stage("resolve", "resolve", processorConfigId),
       stage("retain", "retain", processorConfigId),
-      stage("compound", "compound", processorConfigId),
-      stage("graph", "graph", processorConfigId),
-      stage("wiki", "wiki", processorConfigId),
+      ...tail.map((s) => stage(s, s, processorConfigId)),
     ],
   };
 }
@@ -118,7 +172,10 @@ export function buildSharedMemoryWorkflowDefinition(
 export interface MemoryBlueprint {
   key: MemoryBlueprintKey;
   version: number;
-  build: (processorConfigId: string) => WorkflowDefinition;
+  build: (
+    processorConfigId: string,
+    overrides?: MemoryStageOverrides | null,
+  ) => WorkflowDefinition;
 }
 
 /** The current blueprint for a processor mode. */
@@ -141,22 +198,26 @@ export function memoryBlueprintFor(
 export function memoryBlueprintSourceMetadata(
   blueprint: MemoryBlueprint,
   processorConfigId: string,
+  overrides?: MemoryStageOverrides | null,
 ): MemoryBlueprintSourceMetadata {
   return {
     blueprintKey: blueprint.key,
     blueprintVersion: blueprint.version,
     processorConfigId,
+    disabledStages: normalizeDisabledStages(overrides),
   };
 }
 
 /**
  * True when a workflow_versions.source_metadata value already carries this
- * blueprint at this version for this processor.
+ * blueprint at this version for this processor AND the same stage toggles.
+ * A toggle change makes this false, which is what drives the lazy supersede.
  */
 export function matchesMemoryBlueprint(
   sourceMetadata: unknown,
   blueprint: MemoryBlueprint,
   processorConfigId: string,
+  overrides?: MemoryStageOverrides | null,
 ): boolean {
   if (
     !sourceMetadata ||
@@ -166,9 +227,22 @@ export function matchesMemoryBlueprint(
     return false;
   }
   const meta = sourceMetadata as Record<string, unknown>;
+  if (
+    meta.blueprintKey !== blueprint.key ||
+    meta.blueprintVersion !== blueprint.version ||
+    meta.processorConfigId !== processorConfigId
+  ) {
+    return false;
+  }
+  // Pre-THINK-264 versions have no disabledStages key; treat that as "none
+  // disabled" so an untoggled processor doesn't churn a new version on deploy.
+  const stored = Array.isArray(meta.disabledStages)
+    ? TOGGLEABLE_MEMORY_STAGES.filter((s) =>
+        (meta.disabledStages as unknown[]).includes(s),
+      )
+    : [];
+  const wanted = normalizeDisabledStages(overrides);
   return (
-    meta.blueprintKey === blueprint.key &&
-    meta.blueprintVersion === blueprint.version &&
-    meta.processorConfigId === processorConfigId
+    stored.length === wanted.length && stored.every((s, i) => s === wanted[i])
   );
 }

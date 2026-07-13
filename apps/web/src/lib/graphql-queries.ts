@@ -659,6 +659,57 @@ export const SetPersonalMemoryAutomationScheduleMutation = gql`
   }
 `;
 
+/**
+ * THINK-264: the built-in memory Automation's pipeline — the stage list the
+ * Definition tab renders, plus the sources and readiness behind it.
+ */
+export const MemoryPipelineFragment = gql`
+  fragment MemoryPipelineFields on MemoryPipeline {
+    processorConfigId
+    mode
+    workflowId
+    enabled
+    readiness
+    readinessReasons
+    scheduleExpression
+    scheduleTimezone
+    scheduleEnabled
+    sources {
+      id
+      sourceFamily
+      sourceBindingKey
+      enabled
+      boundary
+    }
+    stages {
+      id
+      stage
+      label
+      description
+      enabled
+      toggleable
+      lastResult
+    }
+  }
+`;
+
+export const SetMemoryPipelineStageEnabledMutation = gql`
+  ${MemoryPipelineFragment}
+  mutation SetMemoryPipelineStageEnabled(
+    $agentLoopId: ID!
+    $stage: String!
+    $enabled: Boolean!
+  ) {
+    setMemoryPipelineStageEnabled(
+      agentLoopId: $agentLoopId
+      stage: $stage
+      enabled: $enabled
+    ) {
+      ...MemoryPipelineFields
+    }
+  }
+`;
+
 export const SettingsAgentLoopsQuery = gql`
   query SettingsAgentLoops(
     $tenantId: ID!
@@ -681,6 +732,8 @@ export const SettingsAgentLoopsQuery = gql`
       description
       lifecycleStatus
       enabled
+      kind
+      systemKey
       ownerUserId
       ownerAgentId
       runAsUserId
@@ -731,6 +784,7 @@ export const SettingsAgentLoopsQuery = gql`
 `;
 
 export const SettingsAgentLoopQuery = gql`
+  ${MemoryPipelineFragment}
   query SettingsAgentLoop($id: ID!, $runLimit: Int) {
     agentLoop(id: $id) {
       id
@@ -740,6 +794,11 @@ export const SettingsAgentLoopQuery = gql`
       description
       lifecycleStatus
       enabled
+      kind
+      systemKey
+      memoryPipeline {
+        ...MemoryPipelineFields
+      }
       ownerUserId
       ownerAgentId
       runAsUserId

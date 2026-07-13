@@ -6,9 +6,12 @@ import {
   matchesMemoryBlueprint,
   memoryBlueprintFor,
   memoryBlueprintSourceMetadata,
+  isToggleableMemoryStage,
+  normalizeDisabledStages,
   MEMORY_BLUEPRINT_VERSION,
   PERSONAL_MEMORY_BLUEPRINT_KEY,
   SHARED_MEMORY_BLUEPRINT_KEY,
+  TOGGLEABLE_MEMORY_STAGES,
 } from "./memory-blueprint.js";
 import {
   validateWorkflowDefinition,
@@ -105,5 +108,129 @@ describe("memory blueprints", () => {
     expect(matchesMemoryBlueprint(metadata, blueprint, "other")).toBe(false);
     expect(matchesMemoryBlueprint(null, blueprint, PROCESSOR_ID)).toBe(false);
     expect(matchesMemoryBlueprint({}, blueprint, PROCESSOR_ID)).toBe(false);
+  });
+});
+
+/**
+ * THINK-264 per-stage toggles.
+ *
+ * The load-bearing property is that the SPINE cannot be switched off. A user
+ * who disabled `project` or `retain` would have an automation that still runs
+ * and still reports success while writing nothing to memory — the worst
+ * failure mode for a memory product, because it is silent. The allowlist is
+ * the enforcement point, so these pin it.
+ */
+describe("memory stage toggles", () => {
+  const stagesOf = (definition: { steps: { kind: string }[] }) =>
+    definition.steps
+      .filter(
+        (step): step is MemoryStageWorkflowStep => step.kind === "memory_stage",
+      )
+      .map((step) => step.stage);
+
+  it("only compound/graph/wiki are toggleable", () => {
+    expect([...TOGGLEABLE_MEMORY_STAGES]).toEqual([
+      "compound",
+      "graph",
+      "wiki",
+    ]);
+    for (const spine of [
+      "preflight",
+      "acquire",
+      "extract",
+      "project",
+      "resolve",
+      "retain",
+    ]) {
+      expect(isToggleableMemoryStage(spine)).toBe(false);
+    }
+  });
+
+  it("IGNORES an attempt to disable a spine stage — the pipeline still retains", () => {
+    const stages = stagesOf(
+      buildSharedMemoryWorkflowDefinition(PROCESSOR_ID, {
+        disabledStages: ["acquire", "project", "resolve", "retain"],
+      }),
+    );
+    expect(stages).toContain("acquire");
+    expect(stages).toContain("project");
+    expect(stages).toContain("resolve");
+    expect(stages).toContain("retain");
+  });
+
+  it("drops disabled tail stages from the shared definition", () => {
+    const stages = stagesOf(
+      buildSharedMemoryWorkflowDefinition(PROCESSOR_ID, {
+        disabledStages: ["graph", "wiki"],
+      }),
+    );
+    expect(stages).toContain("compound");
+    expect(stages).not.toContain("graph");
+    expect(stages).not.toContain("wiki");
+  });
+
+  it("drops compound from the personal definition when disabled", () => {
+    expect(
+      stagesOf(
+        buildPersonalMemoryWorkflowDefinition(PROCESSOR_ID, {
+          disabledStages: ["compound"],
+        }),
+      ),
+    ).toEqual([
+      "preflight",
+      "acquire",
+      "extract",
+      "project",
+      "resolve",
+      "retain",
+    ]);
+  });
+
+  it("a toggled definition still validates", () => {
+    const result = validateWorkflowDefinition(
+      buildSharedMemoryWorkflowDefinition(PROCESSOR_ID, {
+        disabledStages: ["compound", "graph", "wiki"],
+      }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("normalizes junk override values to an empty set", () => {
+    expect(normalizeDisabledStages(null)).toEqual([]);
+    expect(normalizeDisabledStages({})).toEqual([]);
+    expect(
+      normalizeDisabledStages({ disabledStages: ["retain", "nonsense"] }),
+    ).toEqual([]);
+  });
+
+  it("a flipped toggle stops matching the stored version, so it supersedes", () => {
+    const blueprint = memoryBlueprintFor("personal");
+    const stored = memoryBlueprintSourceMetadata(blueprint, PROCESSOR_ID, null);
+    expect(matchesMemoryBlueprint(stored, blueprint, PROCESSOR_ID, null)).toBe(
+      true,
+    );
+    expect(
+      matchesMemoryBlueprint(stored, blueprint, PROCESSOR_ID, {
+        disabledStages: ["compound"],
+      }),
+    ).toBe(false);
+  });
+
+  it("a pre-toggle version (no disabledStages key) still matches an untoggled processor", () => {
+    // Otherwise every existing memory workflow would churn a new version on
+    // the deploy that ships this change.
+    const blueprint = memoryBlueprintFor("personal");
+    expect(
+      matchesMemoryBlueprint(
+        {
+          blueprintKey: blueprint.key,
+          blueprintVersion: blueprint.version,
+          processorConfigId: PROCESSOR_ID,
+        },
+        blueprint,
+        PROCESSOR_ID,
+        null,
+      ),
+    ).toBe(true);
   });
 });

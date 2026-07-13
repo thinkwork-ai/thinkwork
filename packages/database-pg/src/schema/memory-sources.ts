@@ -158,6 +158,16 @@ export const memoryProcessorConfigs = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    // THINK-264: per-stage operator toggles. Only the optional tail stages
+    // (compound/graph/wiki) may appear here — the acquire→project→resolve→
+    // retain spine is structural and is never disableable, so a user cannot
+    // silently turn their own pipeline into a no-op. Shape:
+    // { disabledStages: MemoryStageKind[] }. Fed to the blueprint builder;
+    // the stored workflow steps are still code-owned.
+    stage_overrides: jsonb("stage_overrides")
+      .$type<{ disabledStages?: string[] }>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     config_version: integer("config_version").notNull().default(1),
     created_by_user_id: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",

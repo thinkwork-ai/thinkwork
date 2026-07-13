@@ -34,7 +34,12 @@ function makeDb() {
       from: () => ({
         where: () => ({
           limit: () => nextSelect(),
-          orderBy: () => nextSelect(),
+          // Awaitable directly (listSources) and via .limit() (the system
+          // loop's last-run read) — both consume exactly one select slot.
+          orderBy: () => {
+            const pending = nextSelect();
+            return Object.assign(pending, { limit: () => pending });
+          },
         }),
         orderBy: () => nextSelect(),
       }),
@@ -96,6 +101,23 @@ function workflowRow(overrides: Record<string, unknown> = {}) {
     owner_user_id: USER,
     primary_trigger_family: "manual",
     readiness_state: "ready",
+    source_agent_loop_id: null,
+    ...overrides,
+  };
+}
+
+function systemLoopRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "loop-1",
+    tenant_id: TENANT,
+    name: "Personal Memory Processing",
+    slug: "personal-memory-user1",
+    kind: "system",
+    system_key: "personal-memory",
+    owner_user_id: USER,
+    enabled: true,
+    current_version_id: null,
+    current_version_number: null,
     ...overrides,
   };
 }
@@ -118,6 +140,11 @@ describe("ensurePersonalMemoryAutomation", () => {
     insertReturns.push([workflowRow()]);
     updateReturns.push([{ workflow_id: "wf-1" }]); // NULL-CAS claim wins
     selects.push([processorRow({ workflow_id: "wf-1" })]); // fresh processor
+    // THINK-264 ensureSystemMemoryAgentLoop
+    selects.push([]); // no system loop yet
+    insertReturns.push([systemLoopRow()]); // loop insert
+    insertReturns.push([{ id: "alv-1" }]); // loop version insert
+    selects.push([]); // no prior workflow runs
     selects.push([]); // sources list
 
     const result = await ensurePersonalMemoryAutomation(db, {
@@ -147,11 +174,13 @@ describe("ensurePersonalMemoryAutomation", () => {
     });
   });
 
-  it("is idempotent: an existing linked processor re-ensures the blueprint and creates nothing", async () => {
+  it("is idempotent: a fully provisioned automation re-ensures the blueprint and creates nothing", async () => {
     const { db, selects, inserts } = makeDb();
     selects.push([processorRow({ workflow_id: "wf-1" })]); // processor exists
-    selects.push([workflowRow()]); // linked workflow
+    selects.push([workflowRow({ source_agent_loop_id: "loop-1" })]); // linked workflow
     selects.push([processorRow({ workflow_id: "wf-1" })]); // fresh processor
+    selects.push([systemLoopRow({ current_version_id: "alv-1" })]); // system loop exists
+    selects.push([]); // no workflow runs
     selects.push([]); // sources
 
     const result = await ensurePersonalMemoryAutomation(db, {
@@ -162,6 +191,48 @@ describe("ensurePersonalMemoryAutomation", () => {
     expect(result.created).toBe(false);
     expect(inserts).toHaveLength(0);
     expect(dbPgMocks.ensureMemoryBlueprintVersion).toHaveBeenCalledTimes(1);
+  });
+
+  // THINK-264: the memory workflow only shows up in the Automations inventory
+  // — with a Definition and Executions — because an ensure mints a system
+  // agent_loops row and claims the workflow's source_agent_loop_id link.
+  it("provisions the system Automation row and links the workflow to it", async () => {
+    const { db, selects, insertReturns, inserts, updateReturns } = makeDb();
+    selects.push([processorRow({ workflow_id: "wf-1" })]); // processor exists
+    selects.push([workflowRow()]); // linked workflow, not yet loop-linked
+    selects.push([processorRow({ workflow_id: "wf-1" })]); // fresh processor
+    selects.push([]); // no system loop yet
+    insertReturns.push([systemLoopRow()]);
+    insertReturns.push([{ id: "alv-1" }]); // loop version
+    selects.push([]); // no workflow runs
+    selects.push([]); // sources
+
+    await ensurePersonalMemoryAutomation(db, {
+      tenantId: TENANT,
+      userId: USER,
+    });
+
+    expect(inserts[0]).toMatchObject({
+      kind: "system",
+      system_key: "personal-memory",
+      owner_user_id: USER,
+      lifecycle_status: "active",
+    });
+    // The version carries the memory_pipeline target spec the Definition tab
+    // reads to know which processor's stages to render.
+    expect(inserts[1]).toMatchObject({
+      agent_loop_id: "loop-1",
+      version_status: "active",
+      target_spec: {
+        kind: "memory_pipeline",
+        processorConfigId: "proc-1",
+        workflowId: "wf-1",
+      },
+    });
+    // …and the provenance link that makes AgentLoop.linkedWorkflow — and thus
+    // the Executions tab — resolve to the memory workflow's runs.
+    expect(updateReturns).toBeDefined();
+    expect(inserts).toHaveLength(2);
   });
 });
 

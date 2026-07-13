@@ -56,6 +56,7 @@ export async function ensureMemoryBlueprintVersion(
       id: memoryProcessorConfigs.id,
       mode: memoryProcessorConfigs.mode,
       status: memoryProcessorConfigs.status,
+      stage_overrides: memoryProcessorConfigs.stage_overrides,
     })
     .from(memoryProcessorConfigs)
     .where(
@@ -72,6 +73,10 @@ export async function ensureMemoryBlueprintVersion(
   const blueprint = memoryBlueprintFor(
     processor.mode === "personal" ? "personal" : "shared",
   );
+  // THINK-264: per-stage toggles are part of the version's identity, so a
+  // flipped toggle supersedes the active version through the same lazy path a
+  // blueprint bump takes.
+  const overrides = processor.stage_overrides ?? null;
 
   const readCurrent = async (): Promise<{
     id: string;
@@ -98,12 +103,17 @@ export async function ensureMemoryBlueprintVersion(
   const current = await readCurrent();
   if (
     current &&
-    matchesMemoryBlueprint(current.source_metadata, blueprint, processor.id)
+    matchesMemoryBlueprint(
+      current.source_metadata,
+      blueprint,
+      processor.id,
+      overrides,
+    )
   ) {
     return { managed: true, published: false, versionId: current.id };
   }
 
-  const definition = blueprint.build(processor.id);
+  const definition = blueprint.build(processor.id, overrides);
   const nextNumber = (current?.version_number ?? 0) + 1;
   try {
     if (current) {
@@ -123,6 +133,7 @@ export async function ensureMemoryBlueprintVersion(
         source_metadata: memoryBlueprintSourceMetadata(
           blueprint,
           processor.id,
+          overrides,
         ) as unknown as Record<string, unknown>,
         definition_snapshot: definition as unknown as Record<string, unknown>,
         published_at: now,
@@ -151,6 +162,7 @@ export async function ensureMemoryBlueprintVersion(
           survivor.source_metadata,
           blueprint,
           processor.id,
+          overrides,
         )
       ) {
         return { managed: true, published: false, versionId: survivor.id };

@@ -20,6 +20,7 @@ import {
   agentLoops,
   db,
   generateSlug,
+  memoryProcessorConfigs,
   routines,
   spaces,
 } from "../../utils.js";
@@ -266,6 +267,19 @@ async function updateAgentLoop(
     throw new Error("AgentLoop does not belong to this tenant");
   }
 
+  // THINK-264: a built-in Automation's definition is code-owned (the memory
+  // blueprint), so there is nothing here to version. The only writable field
+  // is the off-switch, and it belongs to the processor — writing it on the
+  // loop alone would show "disabled" while the pipeline kept running.
+  if (existing.kind === "system") {
+    if (input.enabled === undefined || input.enabled === null) {
+      throw new Error(
+        `"${existing.name}" is a built-in automation — only its enabled state can be changed.`,
+      );
+    }
+    return setSystemAgentLoopEnabled(existing, input.enabled);
+  }
+
   // R4: validate against the EFFECTIVE Space — an unchanged (undefined)
   // spaceId keeps the existing loop's Space.
   const effectiveSpaceId = spaceId === undefined ? existing.space_id : spaceId;
@@ -386,6 +400,45 @@ async function updateAgentLoop(
     loopEnabled: input.enabled ?? existing.enabled,
     actorId,
   });
+
+  return loadAgentLoop(existing.id);
+}
+
+/**
+ * Enable/disable a built-in Automation (THINK-264).
+ *
+ * The row the inventory renders is a mirror; the processor is the thing that
+ * actually gates work. Write the processor first so a failure leaves the UI
+ * saying "enabled" while processing is on — never the reverse (a row that
+ * reads "disabled" while the pipeline keeps ingesting is the dangerous
+ * direction for a memory automation).
+ */
+async function setSystemAgentLoopEnabled(
+  existing: typeof agentLoops.$inferSelect,
+  enabled: boolean,
+): Promise<unknown> {
+  if (existing.system_key === "personal-memory") {
+    if (!existing.owner_user_id) {
+      throw new Error("Built-in memory automation has no owner");
+    }
+    await db
+      .update(memoryProcessorConfigs)
+      .set({ enabled, updated_at: new Date() })
+      .where(
+        and(
+          eq(memoryProcessorConfigs.tenant_id, existing.tenant_id),
+          eq(memoryProcessorConfigs.mode, "personal"),
+          eq(memoryProcessorConfigs.target_scope, "user"),
+          eq(memoryProcessorConfigs.target_id, existing.owner_user_id),
+          eq(memoryProcessorConfigs.status, "active"),
+        ),
+      );
+  }
+
+  await db
+    .update(agentLoops)
+    .set({ enabled, updated_at: new Date() })
+    .where(eq(agentLoops.id, existing.id));
 
   return loadAgentLoop(existing.id);
 }
