@@ -120,6 +120,7 @@ function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
   const onSelectWiki = vi.fn();
   const onSelectEntity = vi.fn();
   const onAsk = vi.fn();
+  const onResearch = vi.fn();
   const utils = render(
     <SearchPalette
       open
@@ -135,13 +136,21 @@ function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
       onSelectWiki={onSelectWiki}
       onSelectEntity={onSelectEntity}
       onAsk={onAsk}
+      onResearch={onResearch}
       emptyStateLoading={false}
       emptyStateError={null}
       railsEnabled
       {...props}
     />,
   );
-  return { ...utils, onSelectThread, onSelectWiki, onSelectEntity, onAsk };
+  return {
+    ...utils,
+    onSelectThread,
+    onSelectWiki,
+    onSelectEntity,
+    onAsk,
+    onResearch,
+  };
 }
 
 describe("SearchPalette", () => {
@@ -300,6 +309,17 @@ describe("SearchPalette", () => {
     const askRow = await screen.findByText(/Ask/);
     fireEvent.click(askRow);
     expect(onAsk).toHaveBeenCalledWith("acme");
+  });
+
+  it("the Research this row renders on a typed query and activates research", async () => {
+    legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
+    legResults.set("WIKI", okLeg("WIKI", { wikiHits: [] }));
+    legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
+
+    const { onResearch } = renderPalette({ search: "acme" });
+    const researchRow = await screen.findByText(/Research this/);
+    fireEvent.click(researchRow);
+    expect(onResearch).toHaveBeenCalledWith("acme");
   });
 
   it("renders the ask view in place of the rails when askView is active", () => {

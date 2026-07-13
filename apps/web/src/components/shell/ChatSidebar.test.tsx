@@ -114,6 +114,7 @@ const {
     PinnedThreadsQuery: Symbol("PinnedThreadsQuery"),
     ReorderPinnedThreadsMutation: Symbol("ReorderPinnedThreadsMutation"),
     SearchAskMutation: Symbol("SearchAskMutation"),
+    SearchResearchMutation: Symbol("SearchResearchMutation"),
     ThreadTurnEventsQuery: Symbol("ThreadTurnEventsQuery"),
     ThreadTurnStepSubscription: Symbol("ThreadTurnStepSubscription"),
     SetThreadNotificationPreferenceMutation: Symbol(

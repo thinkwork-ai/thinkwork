@@ -4458,6 +4458,16 @@ export type Mutation = {
    * `onThreadTurnStep`.
    */
   searchAsk: SearchAskResult;
+  /**
+   * THINK-263 U9 — enqueue a "Research this" BACKGROUND run for a palette query.
+   * Creates a VISIBLE thread owned by the caller (titled `Research: <query>`) and
+   * a triggering user message, or — when `threadId` is supplied and the caller
+   * can write to it — posts into that thread instead, then dispatches the tenant's
+   * default agent in NORMAL mode (retention normal, wakeup fallback allowed, cost
+   * metered). The answer arrives asynchronously as a reply on the thread. Returns
+   * the (new or target) thread id so the client can link to it.
+   */
+  searchResearch: SearchResearchResult;
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
@@ -5571,6 +5581,12 @@ export type MutationSaveWorkflowArgs = {
 export type MutationSearchAskArgs = {
   query: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationSearchResearchArgs = {
+  query: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationSeedEvalTestCasesArgs = {
@@ -9031,6 +9047,17 @@ export type SearchMemoryHit = {
   score?: Maybe<Scalars["Float"]["output"]>;
   text: Scalars["String"]["output"];
   threadId?: Maybe<Scalars["ID"]["output"]>;
+};
+
+/**
+ * THINK-263 U9 — result of enqueuing a "Research this" background run from the
+ * palette. The VISIBLE thread the asynchronous answer will post to (a new thread,
+ * or the supplied target). Only the thread id crosses the wire — the answer
+ * arrives later as a normal reply on the thread.
+ */
+export type SearchResearchResult = {
+  __typename?: "SearchResearchResult";
+  threadId: Scalars["ID"]["output"];
 };
 
 export type SearchResults = {
