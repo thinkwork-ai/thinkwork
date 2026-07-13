@@ -143,8 +143,22 @@ export interface EngineCandidate {
 export interface StoreView {
   /** Active (non-terminal) attempt from the KTD-4 store, if any. */
   activeAttempt: { phase: string; state: string } | null;
-  /** Child issues exist on the Linear issue (KTD-12: children → block). */
+  /** Child issues exist on the Linear issue (children drive; parent waits). */
   hasChildIssues: boolean;
+  /**
+   * Workflow-state names of the child issues (present when hasChildIssues).
+   * All Done/Canceled/Duplicate -> the parent proceeds normally; anything in
+   * flight -> the parent WAITS quietly. null/absent = states unknown (fetch
+   * failed) -> treat as in-flight (fail-safe wait, never a false resume).
+   */
+  childStates?: string[] | null;
+  /**
+   * Cross-issue dependency from the ledger blocker `waiting-on: THINK-x`
+   * (resolved live by buildStoreView). `done` -> the engine proceeds (the
+   * relaunched worker clears the blocker); otherwise it WAITS quietly. LFG
+   * doctrine: a dependency wait is never a Needs User escalation.
+   */
+  dependency?: { identifier: string; state: string; done: boolean } | null;
   /**
    * Worker evidence found OUTSIDE the store (stray pids, worktrees, recorded
    * Codex thread ids). Non-empty → never launch; wait for reconciliation.
@@ -324,13 +338,28 @@ export function decideAction(
     };
   }
 
-  // KTD-12: child issues are out of v1 — block the parent with Needs User.
+  // Parent issues: the CHILDREN drive the work (the plan phase created them),
+  // so the parent waits QUIETLY while any child is in flight and proceeds
+  // normally once every child is finished. Never a Needs User block — the
+  // factory created the children itself; escalating its own structure to a
+  // human violates the LFG never-stuck doctrine (live THINK-270: the parent
+  // was blocked "a human must drive the children" over children the plan
+  // worker had just made).
   if (!isDone && view.hasChildIssues) {
-    return {
-      kind: "block",
-      label: "Needs User",
-      reason: `${id} has child issues — v1 does not route parent/child work (KTD-12); a human must drive or flatten the children`,
-    };
+    const states = view.childStates ?? null;
+    const CHILD_TERMINAL = new Set(["Done", "Canceled", "Duplicate"]);
+    const allChildrenFinished =
+      states !== null &&
+      states.length > 0 &&
+      states.every((st) => CHILD_TERMINAL.has(st));
+    if (!allChildrenFinished) {
+      return {
+        kind: "wait",
+        reason: `${id} has child issues in flight — children drive the work; the parent resumes automatically when all children are Done`,
+      };
+    }
+    // Every child finished — fall through: the parent routes normally (its
+    // next worker verifies the assembled outcome and closes the parent out).
   }
 
   // KTD-10: a running attempt is untouched; labels re-apply next decision.
@@ -341,6 +370,17 @@ export function decideAction(
     return {
       kind: "wait",
       reason: `attempt for phase "${view.activeAttempt.phase}" is ${view.activeAttempt.state} — no new action while a worker runs (KTD-10)`,
+    };
+  }
+
+  // Cross-issue dependency wait (`waiting-on: THINK-x` ledger blocker): the
+  // worker recorded a gate on another issue. Wait QUIETLY until the dependency
+  // is Done, then fall through and relaunch — the resumed worker re-checks the
+  // gate and clears the blocker. Never Needs User, never a Failed attempt.
+  if (!isDone && view.dependency != null && !view.dependency.done) {
+    return {
+      kind: "wait",
+      reason: `${id} is waiting on ${view.dependency.identifier} (currently ${view.dependency.state}) — resumes automatically when it reaches Done`,
     };
   }
 

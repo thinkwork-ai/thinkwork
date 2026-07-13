@@ -126,6 +126,15 @@ Key rules:
   `CI Failed`, `Blocked: Auth`) stop automation until removed.
 - **Both lane labels** on one issue is a lane conflict → the daemon marks it
   `Needs User` and asks you to pick a lane.
+- **LFG never-stuck doctrine.** An LFG issue with a known next action must
+  never sit waiting on a human: parent issues WAIT quietly while their child
+  issues are in flight and resume automatically when all children are Done
+  (never a `Needs User` block); a worker gated on another issue records
+  `waiting-on: THINK-x` in its ledger blocker and the daemon relaunches the
+  phase automatically when THINK-x reaches Done; and LFG workers self-answer
+  any question they can pair with a recommendation. With LFG, `Needs User`
+  is reserved for missing credentials, unsafe-irreversible ambiguity, and
+  repeated real failures (the attempt ceiling).
 - **`Done` is terminal — the factory never touches a Done issue.** Auto-compound
   is **disabled**: Done is not even enrolled (it costs zero API requests per
   tick — keeping the board's finished issues enrolled is what blew the Linear

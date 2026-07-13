@@ -37,6 +37,7 @@ import type { FiredNag } from "./sweep/nags.js";
 import type { SlackSync } from "./slack/sync.js";
 import { runUnenrollPass } from "./reconcile/unenroll.js";
 import { writeHeartbeat } from "./heartbeat.js";
+import { parseWaitingOn } from "./linear/ledger.js";
 
 /** Trailing terminal states that count as a "kill" for the attempt ceiling. */
 const KILL_TERMINALS = new Set(["Stalled", "TimedOut", "Failed"]);
@@ -304,7 +305,34 @@ export async function buildStoreView(
     }
   }
 
-  const hasChildIssues = await deps.gateway.hasChildIssues(issue.id);
+  // Child issues: children drive parents. States feed the all-finished rule;
+  // a fetch failure degrades to "in flight" (fail-safe wait).
+  let childStates: string[] | null = null;
+  try {
+    childStates = await deps.gateway.childIssueStates(issue.id);
+  } catch {
+    childStates = null;
+  }
+  // Fetch failure (null) counts as "children in unknown states" — the engine
+  // then waits one tick rather than acting on unknown structure.
+  const hasChildIssues = childStates === null ? true : childStates.length > 0;
+
+  // Cross-issue dependency (`waiting-on: THINK-x` ledger blocker): resolve the
+  // dependency's live state so the engine can wait/resume without a human.
+  let dependency: StoreView["dependency"] = null;
+  const waitingOn = parseWaitingOn(candidate.ledger.ledger.blocker);
+  if (waitingOn !== null) {
+    try {
+      const [dep] = await deps.gateway.getIssuesByIdentifier([waitingOn]);
+      dependency =
+        dep === undefined
+          ? { identifier: waitingOn, state: "unknown", done: false }
+          : { identifier: waitingOn, state: dep.state, done: dep.state === "Done" };
+    } catch {
+      // Unreachable Linear → keep waiting (never a false resume).
+      dependency = { identifier: waitingOn, state: "unknown", done: false };
+    }
+  }
 
   // ---- U6 signals: quota cooldown, attempt ceiling, dev-deployment lock. ----
   const now = deps.now?.() ?? new Date();
@@ -337,6 +365,8 @@ export async function buildStoreView(
   return {
     activeAttempt,
     hasChildIssues,
+    childStates,
+    dependency,
     externalWorkerSignals,
     quota,
     consecutiveKillsByPhase,

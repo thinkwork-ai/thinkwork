@@ -13,6 +13,8 @@ export interface FakeIssue extends LinearIssueSnapshot {
   comments: LinearCommentSnapshot[];
   /** KTD-12 guard input: does this issue have child issues? */
   hasChildren?: boolean;
+  /** Child workflow-state names; defaults derived from hasChildren. */
+  childStates?: string[];
   /** Content of the `Progress: <title>` document; null/absent = none. */
   progressDoc?: string | null;
 }
@@ -42,6 +44,7 @@ export function makeIssue(
     url: partial.url ?? `https://linear.test/issue/${partial.identifier}`,
     comments: partial.comments ?? [],
     hasChildren: partial.hasChildren ?? false,
+    childStates: partial.childStates,
     progressDoc: partial.progressDoc ?? null,
   };
 }
@@ -134,8 +137,10 @@ export class FakeGateway implements LinearGateway {
     issue.labels = issue.labels.filter((l) => l !== labelName);
   }
 
-  async hasChildIssues(issueId: string): Promise<boolean> {
-    return this.byId(issueId).hasChildren === true;
+  async childIssueStates(issueId: string): Promise<string[]> {
+    const issue = this.byId(issueId);
+    if (issue.childStates !== undefined) return issue.childStates;
+    return issue.hasChildren === true ? ["In Progress"] : [];
   }
 
   async getProgressDocument(
