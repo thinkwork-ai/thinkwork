@@ -2591,6 +2591,43 @@ export async function findReadablePageBySlug(
   return (rows[0] as WikiPageRow | undefined) ?? null;
 }
 
+/**
+ * Single Entity-page lookup by canonical entity id under a {@link WikiReadScope}
+ * (THINK-263 U5 dossier). Only tenant Entity pages carry a `canonical_entity_id`
+ * (the `uq_pages_tenant_canonical_entity` partial unique index guarantees ≤1
+ * live page per (tenant, canonical id)), so this resolves the dossier's compiled
+ * page without a slug round-trip. Returns null when the entity has no compiled
+ * page — the confirmed degrade path (the dossier surfaces memories/threads with
+ * `wikiPage: null` rather than fabricating one).
+ */
+export async function findReadablePageByCanonicalEntity(
+  args: {
+    tenantId: string;
+    canonicalEntityId: string;
+    scope: WikiReadScope;
+  },
+  db: DbClient = defaultDb,
+): Promise<WikiPageRow | null> {
+  if (!isValidUuid(args.canonicalEntityId)) return null;
+  const rows = await db
+    .select()
+    .from(wikiPages)
+    .where(
+      and(
+        eq(wikiPages.tenant_id, args.tenantId),
+        wikiReadScopeWhere(wikiPages.owner_id, args.scope),
+        eq(wikiPages.canonical_entity_id, args.canonicalEntityId),
+        eq(wikiPages.type, "entity"),
+        eq(wikiPages.status, "active"),
+      ),
+    )
+    // false < true: a caller's own user-scoped page (should the transition
+    // window still hold one) sorts ahead of the tenant page.
+    .orderBy(asc(sql`${wikiPages.owner_id} IS NULL`))
+    .limit(1);
+  return (rows[0] as WikiPageRow | undefined) ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Graph-materializer reconciliation (plan 2026-06-09-004 U10)
 // ---------------------------------------------------------------------------
