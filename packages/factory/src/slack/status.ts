@@ -78,6 +78,8 @@ export interface IssueStatus {
 export interface LiveIssueFacts {
   state: string;
   labels: string[];
+  /** Issue web URL — the reply's identifier becomes a Slack link when set. */
+  url?: string | null;
 }
 
 const TERMINAL = new Set<string>(TERMINAL_ATTEMPT_STATES);
@@ -274,7 +276,8 @@ export function formatIssueStatusLive(
     return `${fallback}\n  (couldn't reach Linear just now — this is the daemon's last recorded view and may lag)`;
   }
   const labels = live.labels.length > 0 ? ` (labels: ${live.labels.join(", ")})` : "";
-  const lines = [`${identifier} — ${live.state}${labels}`];
+  const ref = live.url ? `<${live.url}|${identifier}>` : identifier;
+  const lines = [`${ref} — ${live.state}${labels}`];
   if (stored === null) {
     lines.push("  no worker has run yet");
   } else {

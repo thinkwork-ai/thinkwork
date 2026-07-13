@@ -39,6 +39,7 @@ export function makeIssue(
     description: partial.description ?? "",
     state: partial.state ?? "Todo",
     labels: partial.labels ?? [],
+    url: partial.url ?? `https://linear.test/issue/${partial.identifier}`,
     comments: partial.comments ?? [],
     hasChildren: partial.hasChildren ?? false,
     progressDoc: partial.progressDoc ?? null,

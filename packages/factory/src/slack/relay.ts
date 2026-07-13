@@ -230,6 +230,7 @@ export async function relayInboundMessage(
     );
     return { relayed: false, reason: "issue-not-found", issueId };
   }
+  const link = issue.url ? `<${issue.url}|${identifier}>` : identifier;
   if (!issue.labels.includes(NEEDS_USER)) {
     deps.log.info("slack relay: no open question — polite no-op", {
       issue: identifier,
@@ -237,7 +238,7 @@ export async function relayInboundMessage(
     });
     advanceHighWater();
     await ackThread(
-      `Thanks — but ${identifier} isn't waiting on an answer right now (no \`${NEEDS_USER}\` blocker), so I left it as-is.`,
+      `${link} isn't waiting on an answer (no \`${NEEDS_USER}\` blocker) — nothing relayed.`,
     );
     return { relayed: false, reason: "no-open-question", issueId };
   }
@@ -274,7 +275,7 @@ export async function relayInboundMessage(
   advanceHighWater();
   const excerpt = message.text.trim().replace(/\s+/g, " ").slice(0, 120);
   await ackThread(
-    `Got it — I relayed your reply to ${identifier} VERBATIM as the operator answer ("${excerpt}") and cleared the \`${NEEDS_USER}\` blocker. It will resume on the next tick. If that wasn't meant as the answer, re-add \`${NEEDS_USER}\` in Linear before the next tick.`,
+    `Relayed to ${link} as the operator answer ("${excerpt}") — \`${NEEDS_USER}\` cleared, resumes next tick. Wrong? Re-add \`${NEEDS_USER}\` in Linear before then.`,
   );
 
   deps.log.info("slack relay: answer injected and blocker cleared", {

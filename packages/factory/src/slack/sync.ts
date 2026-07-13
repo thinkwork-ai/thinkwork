@@ -86,6 +86,43 @@ export function newestQuestion(
 const NEEDS_USER = "Needs User";
 
 /**
+ * Slack-formatted issue reference: a link to the Linear issue when the URL is
+ * known, bold text otherwise. Every operator-facing mention of THINK-x should
+ * be clickable — the operator steers from Slack and must never need to go
+ * hunting for the issue.
+ */
+export function issueRef(
+  identifier: string,
+  url?: string | null,
+): string {
+  return url ? `<${url}|${identifier}>` : `*${identifier}*`;
+}
+
+/**
+ * When `Needs User` came from the DAEMON (attempt ceiling, quota expiry, lane
+ * conflict) there is no worker `blocker:` question — the newest
+ * `factory-block:` marker comment carries the actual reason. Surfacing it
+ * beats the useless "an answer is needed to resume" (live THINK-275: two
+ * failed implements escalated with no question comment, and the operator was
+ * told to go check Linear).
+ */
+export function newestFactoryBlock(
+  comments: readonly LinearCommentSnapshot[],
+): LinearCommentSnapshot | null {
+  for (let i = comments.length - 1; i >= 0; i--) {
+    const first = (comments[i].body.trimStart().split("\n", 1)[0] ?? "").trim();
+    if (first.startsWith("factory-block:")) return comments[i];
+  }
+  return null;
+}
+
+/** A factory-block comment's body without its marker first line. */
+function factoryBlockReason(comment: LinearCommentSnapshot): string {
+  const idx = comment.body.indexOf("\n");
+  return idx === -1 ? comment.body : comment.body.slice(idx + 1).trim();
+}
+
+/**
  * Review-gate statuses whose `wait` (without LFG) is a genuine HUMAN-wait — an
  * operator must act, so the wait warrants a thread. Every OTHER `wait`
  * (KTD-10 running attempt, duplicate-worker guard, quota cooldown, dev-lock) is
@@ -183,6 +220,7 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
         issueId: candidate.issue.id,
         identifier: candidate.issue.identifier,
         title: candidate.issue.title,
+        url: candidate.issue.url,
       },
       threadDeps,
     );
@@ -193,19 +231,24 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     ref: ThreadRef,
   ): Promise<void> {
     const question = newestQuestion(candidate.comments);
-    const key = question?.id ?? "blocked-no-comment";
+    const block = question === null ? newestFactoryBlock(candidate.comments) : null;
+    const key = question?.id ?? block?.id ?? "blocked-no-comment";
     const row = deps.store.getSlackThreadByIssue(candidate.issue.id);
     if (row?.last_escalated_key === key) return; // already mirrored this one
-    const questionText =
-      question?.body ??
-      `${candidate.issue.identifier} is blocked on \`${NEEDS_USER}\` — an answer is needed to resume.`;
+    const link = issueRef(candidate.issue.identifier, candidate.issue.url);
+    let body: string;
+    if (question !== null) {
+      body = question.body;
+      if (question.url) body += `\n\n<${question.url}|Open the question in Linear>`;
+    } else if (block !== null) {
+      body = factoryBlockReason(block);
+      if (block.url) body += `\n\n<${block.url}|Open in Linear>`;
+    } else {
+      body = `Blocked on \`${NEEDS_USER}\` with no recorded question — see ${link} in Linear.`;
+    }
     await postEscalation(
       ref,
-      `*${candidate.issue.identifier}* needs an answer (\`${NEEDS_USER}\`). ` +
-        `The open question:\n\n${questionText}\n\n` +
-        `_Any reply here is relayed VERBATIM as the operator answer and clears ` +
-        `\`${NEEDS_USER}\`. Reply \`question\` to re-show the open question, or ` +
-        `\`status\` for current state — those never relay._`,
+      `${link} needs an answer (\`${NEEDS_USER}\`) — reply here to answer, \`question\` to re-show it.\n\n${body}`,
       threadDeps,
     );
     deps.store.setSlackThreadMarker(candidate.issue.id, "last_escalated_key", key);
@@ -222,12 +265,13 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
   ): Promise<void> {
     let key: string;
     let text: string;
+    const link = issueRef(candidate.issue.identifier, candidate.issue.url);
     if (action.kind === "launch") {
       key = `launch:${action.phase}`;
-      text = `:rocket: Launched *${action.phase}* on *${candidate.issue.identifier}*.`;
+      text = `:rocket: Launched *${action.phase}* on ${link}.`;
     } else if (action.kind === "advance") {
       key = `advance:${action.toStatus}`;
-      text = `:arrow_right: *${candidate.issue.identifier}* → ${action.toStatus}.`;
+      text = `:arrow_right: ${link} → ${action.toStatus}.`;
     } else {
       return;
     }
@@ -290,7 +334,7 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
               row.identifier,
             ]);
             if (snap !== undefined && snap.state !== "") {
-              live = { state: snap.state, labels: snap.labels };
+              live = { state: snap.state, labels: snap.labels, url: snap.url };
             }
           } catch (e) {
             deps.log.warn(
@@ -323,17 +367,25 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
             const [snap] = await deps.gateway.getIssuesByIdentifier([
               row.identifier,
             ]);
+            const link = issueRef(row.identifier, snap?.url);
             if (snap === undefined) {
               text = `${row.identifier}: not found in Linear.`;
             } else if (!snap.labels.includes(NEEDS_USER)) {
-              text = `${row.identifier} has no open question (no \`${NEEDS_USER}\` blocker) — current status: ${snap.state}.`;
+              text = `${link} has no open question (no \`${NEEDS_USER}\` blocker) — current status: ${snap.state}.`;
             } else {
               const comments = await deps.gateway.listComments(row.issue_id);
               const question = newestQuestion(comments);
-              text =
-                question !== null
-                  ? `Open question on ${row.identifier}:\n\n${question.body}\n\n_Reply here (anything except \`question\`/\`status\`) to answer it._`
-                  : `${row.identifier} is blocked on \`${NEEDS_USER}\`, but I couldn't find a question comment — check the issue's automation ledger and Progress document in Linear.`;
+              const block = question === null ? newestFactoryBlock(comments) : null;
+              if (question !== null) {
+                text = `Open question on ${link}:\n\n${question.body}`;
+                if (question.url)
+                  text += `\n\n<${question.url}|Open the question in Linear>`;
+              } else if (block !== null) {
+                text = `${link} was blocked by the daemon (no worker question):\n\n${factoryBlockReason(block)}`;
+                if (block.url) text += `\n\n<${block.url}|Open in Linear>`;
+              } else {
+                text = `${link} is blocked on \`${NEEDS_USER}\` but has no recorded question or block reason.`;
+              }
             }
           } catch (e) {
             deps.log.warn("slack question lookup failed", {
