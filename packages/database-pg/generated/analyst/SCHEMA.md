@@ -369,6 +369,8 @@ Join hints:
 | description | text |  |
 | lifecycle_status | text | not null |
 | enabled | boolean | not null |
+| kind | text | not null |
+| system_key | text |  |
 | owner_user_id | uuid |  |
 | owner_agent_id | uuid |  |
 | run_as_user_id | uuid |  |
@@ -386,6 +388,7 @@ Join hints:
 Enum values:
 
 - `lifecycle_status`: `draft`, `active`, `paused`, `archived`
+- `kind`: `user`, `system`
 - `primary_trigger_family`: `manual`, `schedule`, `api`, `webhook`, `app_event`, `n8n`
 
 Join hints:
@@ -2312,6 +2315,7 @@ Not granted (do not query): `normalized_snapshot`.
 | enabled | boolean | not null |
 | status | text | not null |
 | budget | jsonb | not null |
+| stage_overrides | jsonb | not null |
 | config_version | integer | not null |
 | created_by_user_id | uuid |  |
 | created_at | timestamp with time zone | not null |
