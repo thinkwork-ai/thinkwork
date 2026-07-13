@@ -42,6 +42,14 @@ const THINKWORK_OUTPUTS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/outputs.tf",
 );
+const COGNITO_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/foundation/cognito/main.tf",
+);
+const COGNITO_VARIABLES = resolve(
+  REPO_ROOT,
+  "terraform/modules/foundation/cognito/variables.tf",
+);
 const GREENFIELD_MAIN = resolve(
   REPO_ROOT,
   "terraform/examples/greenfield/main.tf",
@@ -102,6 +110,28 @@ describe("enterprise Terraform release artifacts", () => {
         ),
       );
     }
+  });
+
+  it("Cognito custom auth consumes the same remote release artifacts", () => {
+    const variables = read(COGNITO_VARIABLES);
+    const cognito = read(COGNITO_MAIN);
+    const thinkwork = read(THINKWORK_MAIN);
+
+    expect(variables).toMatch(/variable "custom_auth_lambda_s3_bucket"/);
+    expect(variables).toMatch(/variable "custom_auth_lambda_s3_key"/);
+    expect(cognito).toMatch(/use_remote_custom_auth_artifact\s*=/);
+    expect(cognito).toMatch(
+      /s3_bucket\s*=\s*local\.use_remote_custom_auth_artifact \? var\.custom_auth_lambda_s3_bucket : null/,
+    );
+    expect(cognito).toMatch(
+      /s3_key\s*=\s*local\.use_remote_custom_auth_artifact \? var\.custom_auth_lambda_s3_key : null/,
+    );
+    expect(thinkwork).toMatch(
+      /custom_auth_lambda_s3_bucket\s*=\s*var\.lambda_artifact_bucket/,
+    );
+    expect(thinkwork).toMatch(
+      /custom_auth_lambda_s3_key\s*=\s*var\.lambda_artifact_bucket != "" \? "\$\{trim\(trimspace\(var\.lambda_artifact_prefix\), "\/"\)\}\/cognito-custom-auth\.zip" : ""/,
+    );
   });
 
   it("dependent routes, queues, schedules, and outputs turn on for remote artifacts", () => {
