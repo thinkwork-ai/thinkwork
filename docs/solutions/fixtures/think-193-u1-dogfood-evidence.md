@@ -177,3 +177,65 @@ here so U8's acceptance run has one evidence trail.
     policy-edition retraction. Also record the erase → re-onboard proof
     (erase-reonboarding integration test against dev, or a live re-enable).
 -->
+
+---
+
+## Final acceptance — deployed dev, 2026-07-12 (U3–U8 + post-merge fixes)
+
+Stack: main through the resolve stage; dev, app.thinkwork.ai/desktop, TEI and
+McPherson all on v0.1.0-canary.350 (customers deployed via the controller;
+see the release-deploy learning doc for the correct entrypoint).
+
+### Golden set — **PASS (5/5)**
+`run-external-memory-golden-set.ts --entity "McPherson Oil"`:
+entity_precision · duplicate_page_rate · claim_faithfulness ·
+provenance_completeness · retraction_correctness.
+
+### AE1 — cross-source canonical join (the plan's central bet)
+Canonical entity **McPherson Oil** carries **19 active claims from two source
+families** (`twenty` + `web`): CRM records and a live Firecrawl scrape of
+mcphersonoil.com converge on one entity, one canonical Wiki page. KB documents
+(`Expense Reimbursement Policy`, 5 claims) and other Twenty customers resolve
+alongside. All 41 active claims carry `canonical_subject_id`.
+
+### AE5 — guarded merge repair
+Graph ingest had created `McPherson Oil` (from observation prose) while resolve
+created `mcphersonoil.com` (the Twenty record's name field *is* the domain).
+`computeMergeImpact` previewed exactly {2 source mappings, 2 identity claims,
+19 memory claims, survivor page}; `mergeCanonicalEntities` executed
+transactionally against that confirmed preview, repointing all 19 claims. The
+loser survives as `status='merged'` with a redirect. No Split UI exists.
+
+### Rollout gates (external-memory-readiness.ts)
+source_ledger OK · personal_manual OK · shared_workflow OK · canonical_wiki OK ·
+retraction_erase OK · personal_schedule ATTENTION (no schedule enabled yet — the
+next gate to open).
+
+### Claim invariants — all five zero
+No duplicate active claims, no single-valued duplicates, no active edges to
+non-active evidence, no unsupported active claims, no unclosed superseded
+intervals.
+
+### Integration suite against the live database — all green
+migration-0237 repair · claims concurrency (advisory lock + partial unique) ·
+erase-epoch re-onboarding · retract-then-reingest revival · resolve cross-source
+canonical join.
+
+### Defects the acceptance run caught (all fixed and merged)
+1. **Retracted claims never revived** (P1): a claim retracted by the saga kept its
+   edge rows, so the erase-epoch mint never fired — retract a derivation, let the
+   source re-assert the fact, and the memory never came back. Revival is now
+   decided by *why* the claim died (retracted → new edition with edge repointing;
+   superseded → anti-resurrection). PR #3646.
+2. **`canonical_subject_id` never populated**: `runResolve` was a pass-through
+   stub, so the claim ledger was never linked to canonical identity — AE1 held at
+   the graph/wiki layer but not at the claim layer. PR #3648.
+3. **Zero-source compound FK violation** (found in the U3 personal-run dogfood),
+   fixed in the U5 batch.
+
+### Still open
+- Gmail happy-path (AE3/AE4 live half) — dev Google connection lacks the Gmail
+  scope; the adapter failed closed correctly (403 → connection marked expired →
+  visible resumable stage failure). Reconnect Google from the new web Connections
+  page and re-run the personal automation.
+- Personal schedule gate (deliberately not yet enabled).
