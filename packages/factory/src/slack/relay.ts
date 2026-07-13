@@ -272,8 +272,9 @@ export async function relayInboundMessage(
   );
 
   advanceHighWater();
+  const excerpt = message.text.trim().replace(/\s+/g, " ").slice(0, 120);
   await ackThread(
-    `Got it — relayed your answer to ${identifier} and cleared the \`${NEEDS_USER}\` blocker. It will resume on the next tick.`,
+    `Got it — I relayed your reply to ${identifier} VERBATIM as the operator answer ("${excerpt}") and cleared the \`${NEEDS_USER}\` blocker. It will resume on the next tick. If that wasn't meant as the answer, re-add \`${NEEDS_USER}\` in Linear before the next tick.`,
   );
 
   deps.log.info("slack relay: answer injected and blocker cleared", {

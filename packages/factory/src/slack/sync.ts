@@ -55,10 +55,28 @@ function isDaemonMarkerComment(body: string): boolean {
   return DAEMON_MARKER_PREFIXES.some((p) => first.startsWith(p));
 }
 
-/** Newest non-marker comment — the operator-facing question, when blocked. */
-function newestQuestion(
+/**
+ * The question-protocol comment prefix workers use when they record a hard
+ * blocker with numbered questions (`blocker:<ID>:<phase> — @operator`).
+ */
+const QUESTION_COMMENT_PREFIX = "blocker:";
+
+/**
+ * The operator-facing question for a blocked issue. Comments arrive
+ * OLDEST-FIRST (LinearGateway invariant), so scanning from the end finds the
+ * newest. A `blocker:` question-protocol comment wins over any other
+ * non-marker comment — a worker's later progress note must never be quoted as
+ * "the question" (observed live on THINK-274: the escalation quoted a
+ * status report that literally said "No user input required" while the real
+ * numbered question sat two comments later).
+ */
+export function newestQuestion(
   comments: readonly LinearCommentSnapshot[],
 ): LinearCommentSnapshot | null {
+  for (let i = comments.length - 1; i >= 0; i--) {
+    const first = (comments[i].body.trimStart().split("\n", 1)[0] ?? "").trim();
+    if (first.startsWith(QUESTION_COMMENT_PREFIX)) return comments[i];
+  }
   for (let i = comments.length - 1; i >= 0; i--) {
     if (!isDaemonMarkerComment(comments[i].body)) return comments[i];
   }
@@ -183,7 +201,11 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
       `${candidate.issue.identifier} is blocked on \`${NEEDS_USER}\` — an answer is needed to resume.`;
     await postEscalation(
       ref,
-      `*${candidate.issue.identifier}* needs an answer (\`${NEEDS_USER}\`). Reply in this thread to resume:\n\n${questionText}`,
+      `*${candidate.issue.identifier}* needs an answer (\`${NEEDS_USER}\`). ` +
+        `The open question:\n\n${questionText}\n\n` +
+        `_Any reply here is relayed VERBATIM as the operator answer and clears ` +
+        `\`${NEEDS_USER}\`. Reply \`question\` to re-show the open question, or ` +
+        `\`status\` for current state — those never relay._`,
       threadDeps,
     );
     deps.store.setSlackThreadMarker(candidate.issue.id, "last_escalated_key", key);
@@ -285,8 +307,67 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
           return;
         }
       }
+      // A `question` keyword re-shows the open question WITHOUT relaying.
+      // Before this existed, an operator asking "what's the question?" in a
+      // blocked thread had that message relayed VERBATIM as the answer —
+      // clearing the blocker and steering the relaunched worker with garbage
+      // (observed live on THINK-274).
+      if (message.threadTs !== null && isQuestionKeyword(message.text)) {
+        const row = deps.store.getSlackThreadByThreadTs(
+          message.channel,
+          message.threadTs,
+        );
+        if (row !== undefined) {
+          let text: string;
+          try {
+            const [snap] = await deps.gateway.getIssuesByIdentifier([
+              row.identifier,
+            ]);
+            if (snap === undefined) {
+              text = `${row.identifier}: not found in Linear.`;
+            } else if (!snap.labels.includes(NEEDS_USER)) {
+              text = `${row.identifier} has no open question (no \`${NEEDS_USER}\` blocker) — current status: ${snap.state}.`;
+            } else {
+              const comments = await deps.gateway.listComments(row.issue_id);
+              const question = newestQuestion(comments);
+              text =
+                question !== null
+                  ? `Open question on ${row.identifier}:\n\n${question.body}\n\n_Reply here (anything except \`question\`/\`status\`) to answer it._`
+                  : `${row.identifier} is blocked on \`${NEEDS_USER}\`, but I couldn't find a question comment — check the issue's automation ledger and Progress document in Linear.`;
+            }
+          } catch (e) {
+            deps.log.warn("slack question lookup failed", {
+              issue: row.identifier,
+              error: String(e),
+            });
+            text = `Sorry — couldn't reach Linear to look up ${row.identifier}'s open question. Try again in a moment.`;
+          }
+          await deps.slack
+            .postThreadReply(message.channel, message.threadTs, text)
+            .catch((e: unknown) =>
+              deps.log.warn("slack question reply failed", { error: String(e) }),
+            );
+          return;
+        }
+      }
       // Otherwise: the answer round-trip.
       await relayInboundMessage(message, relayDeps);
     },
   };
+}
+
+/**
+ * True when an in-thread message asks to SEE the open question rather than
+ * answer it. Deliberately covers the natural phrasings an operator actually
+ * types ("what's the question?"), not just the bare keyword — relaying a
+ * meta-question as the answer is the single most destructive misread this
+ * surface can make.
+ */
+export function isQuestionKeyword(text: string): boolean {
+  const t = text
+    .replace(/<@[^>]+>/g, "")
+    .trim()
+    .toLowerCase();
+  if (/^(question|q|why)\??$/.test(t)) return true;
+  return /^what('|’)?s?\s+(is\s+)?the\s+q(u?e?s?t?i?o?n?)?\??$/.test(t);
 }

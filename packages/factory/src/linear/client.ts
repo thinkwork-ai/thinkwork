@@ -86,6 +86,17 @@ export interface LinearGateway {
    * instead of draining the whole team. Unknown identifiers are skipped.
    */
   getIssuesByIdentifier(identifiers: string[]): Promise<LinearIssueSnapshot[]>;
+  /**
+   * INVARIANT: comments are returned OLDEST-FIRST (createdAt ascending).
+   * Every "newest X" finder in the codebase (findLedgerComment,
+   * findNewestBaton, the Slack escalation's newestQuestion) iterates from the
+   * array END expecting the newest comment there. @linear/sdk returns
+   * newest-first (verified empirically 2026-07-13), which silently inverted
+   * ALL of them in production — workers relaunched from the OLDEST baton (so
+   * Slack-relayed answers never reached them) and escalations quoted the
+   * oldest comment as "the question". The real gateway sorts to enforce this;
+   * fakes must keep insertion (chronological) order.
+   */
   listComments(issueId: string): Promise<LinearCommentSnapshot[]>;
   createComment(issueId: string, body: string): Promise<void>;
   updateComment(commentId: string, body: string): Promise<void>;
@@ -341,11 +352,19 @@ export function createLinearGateway(apiKey: string): LinearGateway {
         (await issue.comments()) as unknown as PageOf<{
           id: string;
           body: string;
+          createdAt: Date | string;
           /** Workspace-user author id (SDK Comment.userId getter). */
           userId?: string | null;
           /** Bot author (SDK Comment.botActor property). */
           botActor?: { id?: string | null } | null;
         }>,
+      );
+      // Enforce the interface's OLDEST-FIRST invariant: the SDK returns
+      // newest-first, and every from-the-end "newest" finder depends on
+      // chronological order (see the LinearGateway.listComments doc).
+      comments.sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       );
       return comments.map((c) => ({
         id: c.id,
