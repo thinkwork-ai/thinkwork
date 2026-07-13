@@ -177,6 +177,15 @@ export interface RelayAnswerInput {
    * lean on the no-open-question check for idempotency instead.
    */
   markProcessed?: () => void;
+  /**
+   * Override for the no-open-question no-op reply (R4): the typed-message
+   * path renders the console help text here so an unknown message never dead-
+   * ends at "isn't waiting on an answer". Button clicks keep the default.
+   */
+  formatNoOpenQuestion?: (
+    link: string,
+    issue: { state: string; labels: string[] },
+  ) => string;
 }
 
 /**
@@ -253,7 +262,11 @@ export async function relayAnswer(
     });
     markProcessed();
     await ackThread(
-      `${link} isn't waiting on an answer (no \`${NEEDS_USER}\` blocker) — nothing relayed.`,
+      input.formatNoOpenQuestion?.(link, {
+        state: issue.state,
+        labels: issue.labels,
+      }) ??
+        `${link} isn't waiting on an answer (no \`${NEEDS_USER}\` blocker) — nothing relayed.`,
     );
     return { relayed: false, reason: "no-open-question", issueId };
   }
@@ -305,6 +318,7 @@ export async function relayAnswer(
 export async function relayInboundMessage(
   message: SlackInboundMessage,
   deps: RelayDeps,
+  opts: Pick<RelayAnswerInput, "formatNoOpenQuestion"> = {},
 ): Promise<RelayResult> {
   // (1) Only in-thread replies carry answers.
   if (message.threadTs === null) {
@@ -345,5 +359,6 @@ export async function relayInboundMessage(
     source: "message",
     markProcessed: () =>
       deps.store.setSlackThreadMarker(issueId, "last_relayed_ts", message.ts),
+    formatNoOpenQuestion: opts.formatNoOpenQuestion,
   });
 }

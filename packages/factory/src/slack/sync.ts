@@ -32,6 +32,17 @@ import type {
 } from "./client.js";
 import { section } from "./blocks.js";
 import {
+  CONSOLE_ACTION_PREFIX,
+  actionsForState,
+  helpText,
+  parseVerb,
+  runConsoleAction,
+  type ConsoleButtonValue,
+  type ConsoleDeps,
+  type ConsoleExecutor,
+  type ConsoleVerb,
+} from "./console.js";
+import {
   buildQuestionBlocks,
   buildRetryBlocks,
   parseAnswerForm,
@@ -228,6 +239,8 @@ export interface SlackSyncDeps {
   operatorUserIds: readonly string[];
   log: Logger;
   trust?: CommentTrust;
+  /** Console verb executors (U4–U8 fill these); absent verbs ack "not yet". */
+  consoleExecutors?: Partial<Record<ConsoleVerb, ConsoleExecutor>>;
 }
 
 export function createSlackSync(deps: SlackSyncDeps): SlackSync {
@@ -245,6 +258,14 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     operatorUserIds: deps.operatorUserIds,
     log: deps.log,
     trust: deps.trust,
+  };
+  const consoleDeps: ConsoleDeps = {
+    gateway: deps.gateway,
+    slack: deps.slack,
+    store: deps.store,
+    operatorUserIds: deps.operatorUserIds,
+    log: deps.log,
+    executors: deps.consoleExecutors ?? {},
   };
 
   async function ensureThread(
@@ -291,6 +312,13 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
       form !== null
         ? buildQuestionBlocks(candidate.issue.identifier, key, form, text)
         : buildRetryBlocks(candidate.issue.identifier, key, text);
+    // R5: the escalation also carries the state's console buttons — the
+    // operator may want `result`/`logs` context before choosing an answer.
+    const stateActions = actionsForState(
+      candidate.issue.state,
+      candidate.issue.labels,
+    );
+    if (stateActions !== null) blocks.push(stateActions);
     const escalationTs = await postEscalation(ref, text, threadDeps, blocks);
     deps.store.setSlackThreadMarker(candidate.issue.id, "last_escalated_key", key);
     // Remember the escalation MESSAGE ts so a button click can chat.update it
@@ -330,7 +358,11 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     if (row?.last_milestone_key === key) return;
     const link = issueRef(candidate.issue.identifier, candidate.issue.url);
     const text = `${link} → ${status}`;
-    await postMilestone(ref, text, threadDeps, [section(text)]);
+    const milestoneBlocks = [section(text)];
+    // R5: every milestone carries the buttons valid for the state it announces.
+    const stateActions = actionsForState(status, candidate.issue.labels);
+    if (stateActions !== null) milestoneBlocks.push(stateActions);
+    await postMilestone(ref, text, threadDeps, milestoneBlocks);
     deps.store.setSlackThreadMarker(
       candidate.issue.id,
       "last_milestone_key",
@@ -455,8 +487,41 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
           return;
         }
       }
-      // Otherwise: the answer round-trip.
-      await relayInboundMessage(message, relayDeps);
+      // A console verb (typed path) — R6: same pipeline as the buttons.
+      // Verbs take precedence over the answer relay: `retry` in a blocked
+      // thread is a console action, not an answer to the open question.
+      if (message.threadTs !== null) {
+        const parsed = parseVerb(message.text);
+        if (parsed !== null) {
+          const row = deps.store.getSlackThreadByThreadTs(
+            message.channel,
+            message.threadTs,
+          );
+          if (row !== undefined) {
+            await runConsoleAction(consoleDeps, {
+              channel: message.channel,
+              threadTs: message.threadTs,
+              userId: message.userId,
+              issueId: row.issue_id,
+              identifier: row.identifier,
+              verb: parsed.verb,
+              arg: parsed.arg,
+            });
+            return;
+          }
+        }
+      }
+      // Otherwise: the answer round-trip. When there is no open question the
+      // relay's no-op reply becomes the R4 help text — the commands valid for
+      // the issue's CURRENT state — instead of "isn't waiting on an answer".
+      await relayInboundMessage(message, relayDeps, {
+        formatNoOpenQuestion: (link, issue) =>
+          `That's not a command I know, and ${link} isn't waiting on an answer.\n\n${helpText(
+            link,
+            issue.state,
+            issue.labels,
+          )}`,
+      });
     },
 
     async handleAction(action) {
@@ -476,6 +541,41 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
         deps.log.debug("slack action: unmapped thread — ignored", {
           threadTs: action.threadTs,
           actionId: action.actionId,
+        });
+        return;
+      }
+
+      // Console buttons (`factory-console:*`) run the shared action pipeline;
+      // the thread mapping resolved the issue (KTD1) — the button value only
+      // names the verb (+ optional arg).
+      if (action.actionId.startsWith(CONSOLE_ACTION_PREFIX)) {
+        let cv: ConsoleButtonValue;
+        try {
+          const parsed: unknown = JSON.parse(action.value);
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            typeof (parsed as { v?: unknown }).v !== "string"
+          ) {
+            throw new Error("not a console value");
+          }
+          cv = parsed as ConsoleButtonValue;
+        } catch {
+          deps.log.warn("slack console: malformed button value — ignored", {
+            issue: row.identifier,
+            actionId: action.actionId,
+            value: action.value.slice(0, 200),
+          });
+          return;
+        }
+        await runConsoleAction(consoleDeps, {
+          channel: action.channel,
+          threadTs: action.threadTs,
+          userId: action.userId,
+          issueId: row.issue_id,
+          identifier: row.identifier,
+          verb: cv.v,
+          arg: cv.arg,
         });
         return;
       }

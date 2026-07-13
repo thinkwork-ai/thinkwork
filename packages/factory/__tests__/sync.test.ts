@@ -433,10 +433,16 @@ describe("answer-form buttons (block_actions round-trip)", () => {
   it("escalation with a parseable fence posts option buttons (recommended = primary + ✅)", async () => {
     const { escalation, row } = await escalated();
     const buttons = allButtons(escalation.blocks);
+    // Answer-form buttons first, then the state's console actions (R5 —
+    // the escalation also offers result/logs/retry/pause context).
     expect(buttons.map((b) => b.action_id)).toEqual([
       "factory-answer:0:0",
       "factory-answer:0:1",
       "factory-answer-other",
+      "factory-console:result",
+      "factory-console:logs",
+      "factory-console:retry",
+      "factory-console:pause",
     ]);
     expect(buttons[0].style).toBe("primary");
     expect(buttons[0].text.text).toBe("✅ Read-only (drive.readonly)");
@@ -469,6 +475,10 @@ describe("answer-form buttons (block_actions round-trip)", () => {
     expect(buttons.map((b) => b.action_id)).toEqual([
       "factory-answer-retry",
       "factory-answer-other",
+      "factory-console:result",
+      "factory-console:logs",
+      "factory-console:retry",
+      "factory-console:pause",
     ]);
   });
 

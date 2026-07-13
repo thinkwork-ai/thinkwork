@@ -217,10 +217,11 @@ export async function createSlackGateway(
       const first = actions[0] as Record<string, unknown> | undefined;
       const actionId = typeof first?.action_id === "string" ? first.action_id : null;
       if (actionId === null) return;
-      // Defensive: only OUR answer-form buttons are routed. Any other block
-      // action (a future feature, a stray app) is dropped here, never handed
-      // to the relay.
-      if (!actionId.startsWith("factory-answer")) return;
+      // Defensive: only OUR buttons are routed — answer forms
+      // (`factory-answer*`) and console actions (`factory-console:*`) share
+      // the `factory-` namespace. Any other block action (a future feature, a
+      // stray app) is dropped here, never handed to a handler.
+      if (!actionId.startsWith("factory-")) return;
       const value = typeof first?.value === "string" ? first.value : "";
       await actionHandler({
         channel,
