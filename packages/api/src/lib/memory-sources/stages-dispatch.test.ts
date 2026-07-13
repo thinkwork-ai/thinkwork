@@ -291,6 +291,16 @@ describe("zero-external-source personal run", () => {
     );
   });
 
+  it("compound no-ops a zero-source shared processor without touching its empty bank", async () => {
+    const result = await runCompound(
+      ctxWith({ mode: "shared", stage: "compound", sources: [] }),
+    );
+    expect(result.status).toBe("succeeded");
+    expect(result.counts).toEqual({ noop: 1 });
+    expect(runBrainDreamState).not.toHaveBeenCalled();
+    expect(vi.mocked(recordRunItem)).not.toHaveBeenCalled();
+  });
+
   it("graph on a zero-source shared processor records no run item", async () => {
     const result = await runGraph(
       ctxWith({

@@ -175,9 +175,23 @@ export async function buildMemoryPipelineView(
       message: "This automation is disabled.",
     });
   }
-  // Threads are always available through the normal end-of-turn Hindsight
-  // retain path. Persisted source configs are optional external inputs, so
-  // their absence/disablement is a skipped node, not a readiness blocker.
+  // Threads are always available to personal processors through the normal
+  // end-of-turn Hindsight retain path. Shared processors have no Thread
+  // baseline and still require at least one enabled configured source.
+  if (mode === "shared") {
+    if (sources.length === 0) {
+      readinessReasons.push({
+        code: "no_sources_configured",
+        message:
+          "No memory sources are configured yet — add a source to give this automation something to process.",
+      });
+    } else if (!sources.some((s: { enabled: boolean }) => s.enabled)) {
+      readinessReasons.push({
+        code: "all_sources_disabled",
+        message: "Every configured source is disabled.",
+      });
+    }
+  }
   if (processor.workflow_id) {
     const [workflow] = await db
       .select({ readiness_state: workflows.readiness_state })

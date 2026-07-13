@@ -1036,10 +1036,20 @@ export async function runCompound(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
   const { db, event, processor } = ctx;
-  // Thread conversations are retained into this bank independently of the
-  // optional external-source acquisition stages. Compound the bank even when
-  // no external source config is enabled; otherwise the baseline Thread
-  // source can never be processed by Personal Memory Processing.
+  // Only personal processors have Thread conversations retained independently
+  // of the optional external-source acquisition stages. A zero-source shared
+  // processor has no bank input to compound and should settle visibly as a
+  // no-op without writing an invalid source-config foreign key.
+  if (processor.mode !== "personal" && ctx.sources.length === 0) {
+    return {
+      status: "succeeded",
+      stage: event.stage,
+      counts: { noop: 1 },
+      output: {
+        note: "no enabled sources selected for this run — nothing to consolidate",
+      },
+    };
+  }
   const { adapter, config } = getMemoryServices();
   if (config.engine !== "hindsight" || !adapter.consolidateBankById) {
     return failed(
