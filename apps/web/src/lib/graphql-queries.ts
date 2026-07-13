@@ -2536,6 +2536,63 @@ export const ComputerWikiSearchQuery = gql`
   }
 `;
 
+/**
+ * THINK-263 U4 — unified fan-out search broker as a palette rail query. Fired
+ * once per source rail (Threads / Wiki / Entities) so each rail hydrates and
+ * renders its own pending / empty / timeout / error state independently. The
+ * memory leg is intentionally never requested on keystrokes (find rung).
+ */
+export const SearchQuery = gql`
+  query Search(
+    $tenantId: ID!
+    $query: String!
+    $sources: [SearchSource!]
+    $limit: Int
+    $queryId: ID
+  ) {
+    search(
+      tenantId: $tenantId
+      query: $query
+      sources: $sources
+      limit: $limit
+      queryId: $queryId
+    ) {
+      queryId
+      legs {
+        source
+        status
+        error
+        threadHits {
+          id
+          identifier
+          title
+          spaceId
+          updatedAt
+        }
+        wikiHits {
+          score
+          matchedAlias
+          page {
+            id
+            type
+            slug
+            title
+            displayType
+          }
+        }
+        entityHits {
+          entityId
+          label
+          summary
+          ontologyTypeSlug
+          aliases
+          evidenceCount
+        }
+      }
+    }
+  }
+`;
+
 export const ComputerWikiPageQuery = gql`
   query ComputerWikiPage(
     $tenantId: ID!

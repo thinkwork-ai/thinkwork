@@ -55,14 +55,6 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-  Command,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandShortcut,
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
@@ -80,6 +72,11 @@ import {
   SidebarMenuItem,
 } from "@thinkwork/ui";
 import { isDefaultSpace } from "@/components/spaces/space-utils";
+import {
+  SearchPalette,
+  type PaletteThreadTarget,
+} from "@/components/shell/SearchPalette";
+import { SEARCH_PALETTE_RAILS_ENABLED } from "@/lib/search-palette-gate";
 import {
   DEFAULT_WORK_ITEM_SEARCH,
   workItemRouteSearchToParams,
@@ -376,7 +373,13 @@ export function ChatSidebar() {
       limit: SEARCH_LIMIT,
       offset: 0,
     },
-    pause: !tenantId || !searchOpen,
+    // With the rails gate on, a typed query is served by the broker rails, so
+    // the legacy thread search only feeds the empty-query recent view. With the
+    // gate off it still serves typed queries (today's behavior).
+    pause:
+      !tenantId ||
+      !searchOpen ||
+      (SEARCH_PALETTE_RAILS_ENABLED && Boolean(debouncedSearch.trim())),
     requestPolicy: "cache-and-network",
   });
 
@@ -808,7 +811,7 @@ export function ChatSidebar() {
   }, [pinnedData?.pinnedThreads]);
 
   const openSearchThread = useCallback(
-    (thread: ChatThreadSummary) => {
+    (thread: PaletteThreadTarget) => {
       activateThread(thread.id);
       setSearchOpen(false);
 
@@ -826,6 +829,41 @@ export function ChatSidebar() {
       });
     },
     [activateThread, defaultSpaceIds, navigate],
+  );
+
+  // A wiki result opens that specific page in the full-page reader (THINK-263
+  // U5) — reachable by any tenant member, unlike the operator-gated graph tab.
+  const openSearchWiki = useCallback(
+    (hit: { page: { type: string; slug: string } }) => {
+      setSearchOpen(false);
+      void navigate({
+        to: "/wiki/$type/$slug",
+        params: {
+          type: hit.page.type.toLowerCase(),
+          slug: hit.page.slug,
+        },
+      });
+    },
+    [navigate],
+  );
+
+  // Entity rail still routes to the Knowledge Model tab; the entity dossier
+  // (U5) supersedes this with a grounded per-entity surface.
+  const openSearchEntity = useCallback(() => {
+    setSearchOpen(false);
+    void navigate({ to: "/settings/memory/ontology" });
+  }, [navigate]);
+
+  // Ask escalation seam (U4 discoverability). The hidden-thread ask machinery
+  // that streams a cited answer into the palette arrives in U6/U7; until then
+  // this closes the palette and opens a fresh composer so the affordance is
+  // never a dead control. (The typed query is carried once U7 lands.)
+  const askFromPalette = useCallback(
+    (_query: string) => {
+      setSearchOpen(false);
+      void navigate({ to: "/new", search: { spaceId: undefined } });
+    },
+    [navigate],
   );
 
   const refreshThreadPins = useCallback(() => {
@@ -1061,18 +1099,22 @@ export function ChatSidebar() {
         </SidebarGroup>
       </div>
 
-      <ThreadSearchDialog
+      <SearchPalette
         open={searchOpen}
         onOpenChange={setSearchOpen}
+        tenantId={tenantId}
         search={search}
         onSearchChange={setSearch}
-        threads={searchThreads}
+        emptyStateThreads={searchThreads}
         pinnedThreadIds={pinnedThreadIdSet}
         defaultSpaceIds={defaultSpaceIds}
         locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={openSearchThread}
-        isLoading={searchFetching && !searchData}
-        error={searchError?.message ?? null}
+        onSelectWiki={openSearchWiki}
+        onSelectEntity={openSearchEntity}
+        onAsk={askFromPalette}
+        emptyStateLoading={searchFetching && !searchData}
+        emptyStateError={searchError?.message ?? null}
       />
     </div>
   );
@@ -1087,146 +1129,6 @@ function PluginAppsNavItem({ isActive }: { isActive: boolean }) {
       </Link>
     </SidebarMenuButton>
   );
-}
-
-function ThreadSearchDialog({
-  open,
-  onOpenChange,
-  search,
-  onSearchChange,
-  threads,
-  pinnedThreadIds,
-  defaultSpaceIds,
-  locallyReadThreadAt,
-  onSelectThread,
-  isLoading,
-  error,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  search: string;
-  onSearchChange: (value: string) => void;
-  threads: ChatThreadSummary[];
-  pinnedThreadIds: ReadonlySet<string>;
-  defaultSpaceIds: ReadonlySet<string>;
-  locallyReadThreadAt: LocallyReadThreadAt;
-  onSelectThread: (thread: ChatThreadSummary) => void;
-  isLoading: boolean;
-  error: string | null;
-}) {
-  const groups = useMemo(
-    () => groupSearchThreads(threads, pinnedThreadIds, defaultSpaceIds),
-    [defaultSpaceIds, pinnedThreadIds, threads],
-  );
-
-  return (
-    <CommandDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Search threads"
-      description="Search across threads and Spaces"
-      className="sm:max-w-2xl"
-      showCloseButton
-    >
-      <Command shouldFilter={false}>
-        <CommandInput
-          autoFocus
-          value={search}
-          onValueChange={onSearchChange}
-          placeholder="Search threads"
-          aria-label="Search threads"
-        />
-        <CommandList className="scrollbar-auto-hide max-h-[420px]">
-          {error ? (
-            <CommandEmpty className="text-destructive">{error}</CommandEmpty>
-          ) : isLoading ? (
-            <CommandEmpty>Searching...</CommandEmpty>
-          ) : (
-            <CommandEmpty>No threads found</CommandEmpty>
-          )}
-          {!error && !isLoading
-            ? groups.map((group) => (
-                <CommandGroup key={group.key} heading={group.label}>
-                  {group.threads.map((thread) => {
-                    const relativeDate = formatTinyRelativeDate(
-                      threadActivityAt(thread),
-                    );
-
-                    return (
-                      <CommandItem
-                        key={thread.id}
-                        value={[
-                          group.label,
-                          threadTitle(thread),
-                          thread.identifier,
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        className="h-10"
-                        onSelect={() => onSelectThread(thread)}
-                      >
-                        <span
-                          className={cn(
-                            "size-1.5 shrink-0 rounded-full",
-                            isThreadUnread(thread) &&
-                              !isThreadLocallyRead(thread, locallyReadThreadAt)
-                              ? "bg-blue-500"
-                              : "bg-transparent",
-                          )}
-                        />
-                        <span className="min-w-0 flex-1 truncate">
-                          {threadTitle(thread)}
-                        </span>
-                        {relativeDate ? (
-                          <CommandShortcut className="tracking-normal">
-                            {relativeDate}
-                          </CommandShortcut>
-                        ) : null}
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              ))
-            : null}
-        </CommandList>
-      </Command>
-    </CommandDialog>
-  );
-}
-
-function groupSearchThreads(
-  threads: ChatThreadSummary[],
-  pinnedThreadIds: ReadonlySet<string>,
-  defaultSpaceIds: ReadonlySet<string>,
-) {
-  const groups = new Map<
-    string,
-    { key: string; label: string; threads: ChatThreadSummary[] }
-  >();
-
-  for (const thread of threads) {
-    const group = pinnedThreadIds.has(thread.id)
-      ? { key: "pinned", label: "Pinned" }
-      : thread.spaceId && !defaultSpaceIds.has(thread.spaceId)
-        ? {
-            key: `space:${thread.spaceId}`,
-            label:
-              thread.space?.name ??
-              thread.space?.slug ??
-              thread.spaceId ??
-              "Space",
-          }
-        : { key: "chats", label: "Chats" };
-
-    const existing = groups.get(group.key);
-    if (existing) {
-      existing.threads.push(thread);
-    } else {
-      groups.set(group.key, { ...group, threads: [thread] });
-    }
-  }
-
-  return Array.from(groups.values());
 }
 
 function selectChatsComposeSpaceId(spaces: SpaceNavSummary[]) {
@@ -1621,7 +1523,10 @@ function PinnedThreadListSection({
                     key={thread.id}
                     thread={thread}
                     active={selectedThreadId === thread.id}
-                    locallyRead={isThreadLocallyRead(thread, locallyReadThreadAt)}
+                    locallyRead={isThreadLocallyRead(
+                      thread,
+                      locallyReadThreadAt,
+                    )}
                     onActivate={() => onActivate(thread.id)}
                     onUnpin={onUnpin ? () => onUnpin(thread.id) : undefined}
                   />
@@ -1947,7 +1852,9 @@ function SpaceThreadSection({
   const unreadThreads = filterUnreadThreads(threads, locallyReadThreadAt);
   const unreadThreadIds = unreadThreads.map((thread) => thread.id);
   const optimisticallyRead = threads.filter(
-    (thread) => isThreadUnread(thread) && isThreadLocallyRead(thread, locallyReadThreadAt),
+    (thread) =>
+      isThreadUnread(thread) &&
+      isThreadLocallyRead(thread, locallyReadThreadAt),
   ).length;
   const badgeCount = Math.max(
     0,
