@@ -547,7 +547,11 @@ describe("RoutineProposalReview promotion outcomes", () => {
       hermetic: JSON.stringify({
         status: "red",
         fixtures: [
-          { path: "fixtures/happy-path.json", passed: false, detail: "mismatch" },
+          {
+            path: "fixtures/happy-path.json",
+            passed: false,
+            detail: "mismatch",
+          },
         ],
       }),
     });

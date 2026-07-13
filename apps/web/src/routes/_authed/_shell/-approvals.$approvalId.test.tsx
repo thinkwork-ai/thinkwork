@@ -17,9 +17,7 @@ function source(path: string): string {
 
 describe("approvals route wiring for Routine proposals", () => {
   it("routes proposal-marked inbox items and direct proposal ids to the review panel", () => {
-    const route = source(
-      "src/routes/_authed/_shell/approvals.$approvalId.tsx",
-    );
+    const route = source("src/routes/_authed/_shell/approvals.$approvalId.tsx");
     // Inbox items stamped entity_type=capability_routine_proposal.
     expect(route).toContain("routineProposalIdOf");
     expect(route).toContain("RoutineProposalReview");
