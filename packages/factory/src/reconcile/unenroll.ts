@@ -13,11 +13,13 @@
  *      attempt (CanceledByReconciliation), kill the worker process group, and
  *      delete the lease / nag timers / locks / thread row.
  *
- *   2. Completed — an enrolled issue whose current state is Done with nothing
- *      left to compound (already compounded, or non-LFG so it never compounds)
- *      gets a closing SUMMARY and its store rows cleaned, WITHOUT killing
- *      anything (the work is finished). This closes finished issues' threads
- *      instead of leaving them open forever.
+ *   2. Completed — an enrolled issue whose current state is Done (terminal:
+ *      auto-compound is disabled, so nothing is ever left to automate) gets a
+ *      closing SUMMARY and its store rows cleaned, WITHOUT killing anything
+ *      (the work is finished). This closes finished issues' threads instead of
+ *      leaving them open forever. Done is NOT in the poller's enrollment
+ *      filter, so a finished issue normally arrives here as a candidate-set
+ *      MISS and is classified from the batched verification fetch.
  *
  * Cost: the pass only fetches CURRENT state+labels for enrolled ids MISSING
  * from this tick's candidate set (usually zero) — ONE batched
@@ -65,13 +67,13 @@ export interface UnenrollDeps {
 }
 
 /**
- * A Done issue with nothing left to compound: already compounded, or non-LFG
- * (the engine never compounds a non-LFG Done). Such an enrolled issue is
- * finished — close its thread and clean its rows.
+ * A Done issue is finished — auto-compound is disabled, so there is never
+ * anything left to automate. Close its thread and clean its rows. (Done is no
+ * longer enrolled by the poller, so the in-candidate path only fires under a
+ * scoped run or a stale filter; the normal path is the miss classification.)
  */
 function isCompleted(candidate: PollCandidate): boolean {
-  if (candidate.issue.state !== "Done") return false;
-  return candidate.ledger.ledger.compounded || !candidate.hasLfg;
+  return candidate.issue.state === "Done";
 }
 
 /** True when a lane conflict (both labels) — still active work needing a human. */
@@ -261,6 +263,13 @@ export async function runUnenrollPass(
       }
       if (stillValidCandidate(snapshot)) {
         // Transient poll miss — the issue is still valid work. Never un-enroll.
+        continue;
+      }
+      if (snapshot.state === "Done") {
+        // Finished work (Done is terminal and not enrolled): completed
+        // wind-down — closing summary, kill nothing.
+        await windDown(deps, id, identifier, "completed");
+        outcomes.push({ issue: identifier, verdict: "completed" });
         continue;
       }
       // Backlog / Canceled / lane label removed → abandoned.

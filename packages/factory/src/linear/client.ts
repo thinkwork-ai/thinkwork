@@ -191,11 +191,18 @@ export function createLinearGateway(apiKey: string): LinearGateway {
   const client = new LinearClient({ apiKey });
   let cachedViewerId: string | null = null;
 
-  async function teamByKey(teamKey: string) {
+  // Team ids are immutable — cache per key so the per-tick listTeamIssues call
+  // doesn't spend one of the 2,500 hourly API requests re-resolving it forever.
+  const cachedTeamIds = new Map<string, string>();
+
+  async function teamIdByKey(teamKey: string): Promise<string> {
+    const cached = cachedTeamIds.get(teamKey);
+    if (cached !== undefined) return cached;
     const teams = await client.teams({ filter: { key: { eq: teamKey } } });
     const team = teams.nodes[0];
     if (!team) throw new Error(`Linear team with key "${teamKey}" not found`);
-    return team;
+    cachedTeamIds.set(teamKey, team.id);
+    return team.id;
   }
 
   async function labelIdByName(
@@ -250,8 +257,8 @@ export function createLinearGateway(apiKey: string): LinearGateway {
       // Resolve the team first so an unknown key still fails loudly (a
       // server-side filter on a bad key would otherwise just return an empty
       // board and hide the misconfiguration).
-      const team = await teamByKey(teamKey);
-      const filter = candidateIssueFilter(team.id);
+      const teamId = await teamIdByKey(teamKey);
+      const filter = candidateIssueFilter(teamId);
       const snapshots: LinearIssueSnapshot[] = [];
       let after: string | null = null;
       for (;;) {

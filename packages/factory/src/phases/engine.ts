@@ -499,6 +499,10 @@ function routeByStatus(candidate: EngineCandidate): EngineAction {
       // issue produces zero activity (no thread, no worker, no escalation — the
       // Slack layer's Done-is-terminal guard already suppresses everything but a
       // launch, and there is no longer any launch).
+      //
+      // Done is also no longer ENROLLED (removed from ACTIVE_STATES so finished
+      // issues stop burning ~4 Linear API requests per tick each), so this case
+      // is defense-in-depth: it only fires under a scoped run or filter drift.
       return {
         kind: "noop",
         reason: `${id} is Done — terminal (auto-compound disabled; run ce-compound manually)`,

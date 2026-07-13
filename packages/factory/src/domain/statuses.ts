@@ -51,10 +51,13 @@ export const ACTIVE_STATES = [
   "Ready to Work",
   "Ready To Work",
   "In Progress",
-  // Done is routed too: the engine decides compound (LFG + not yet
-  // compounded) or noop — excluding it here made the contract's compound
-  // row unreachable (fixed in the U5 wiring slice).
-  "Done",
+  // No `Done`: auto-compound is disabled, so a Done issue is TERMINAL and the
+  // engine would only ever noop it. Keeping Done enrolled cost ~4 Linear API
+  // requests per Done issue per tick (comments + child-issue reads) — with a
+  // board's worth of finished lane-labeled issues that alone blew the
+  // 2,500 req/hr API-key rate limit. Enrolled issues that REACH Done are wound
+  // down by the un-enroll pass ("completed"), which classifies them from its
+  // one batched miss-fetch.
 ] as const;
 export type ActiveState = (typeof ACTIVE_STATES)[number];
 

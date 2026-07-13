@@ -15,12 +15,13 @@ import { DEFAULT_PHASES, type FactoryConfig, type HostConfig } from "../src/conf
 import {
   buildStoreView,
   createDaemonController,
+  isRateLimitError,
   runDaemon,
   runTick,
   type DaemonDeps,
 } from "../src/daemon.js";
 import { createLogger, type Logger } from "../src/logger.js";
-import type { PollCandidate } from "../src/linear/poller.js";
+import { PollAbortedError, type PollCandidate } from "../src/linear/poller.js";
 import { executeAction, type ExecutorDeps } from "../src/phases/executor.js";
 import type { EngineAction } from "../src/phases/engine.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
@@ -520,6 +521,84 @@ describe("runDaemon — heartbeat decoupled from tick progress (KTD-6)", () => {
     expect(readHeartbeatAgeMs(hbPath)!).toBeLessThan(60);
 
     release(); // let the hung tick complete
+    controller.stop();
+    await done;
+  });
+});
+
+describe("runDaemon — Linear rate-limit backoff", () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const RATE_LIMIT_MESSAGE =
+    "Rate limit exceeded. Only 2500 requests are allowed per 1 hour. For more " +
+    "information see our developer docs at: https://linear.app/developers/rate-limiting";
+
+  class RateLimitedGateway extends FakeGateway {
+    polls = 0;
+    override async listTeamIssues(): Promise<never> {
+      this.polls += 1;
+      throw new Error(RATE_LIMIT_MESSAGE);
+    }
+  }
+
+  it("isRateLimitError matches SDK 429 messages (also wrapped in PollAbortedError) and rejects others", () => {
+    expect(isRateLimitError(new Error(RATE_LIMIT_MESSAGE))).toBe(true);
+    expect(
+      isRateLimitError(new PollAbortedError(new Error(RATE_LIMIT_MESSAGE))),
+    ).toBe(true);
+    // Raw-GraphQL extension code shape.
+    expect(isRateLimitError(new Error("GraphQL error: RATELIMITED"))).toBe(true);
+    // Nested cause chain.
+    const inner = new Error(RATE_LIMIT_MESSAGE);
+    const outer = new Error("tick failed");
+    outer.cause = inner;
+    expect(isRateLimitError(outer)).toBe(true);
+    expect(isRateLimitError(new Error("upstream connect error (503)"))).toBe(false);
+    expect(isRateLimitError(new PollAbortedError(new Error("boom")))).toBe(false);
+  });
+
+  it("a rate-limited tick sleeps the cooldown, not the poll interval (no hammering)", async () => {
+    const gateway = new RateLimitedGateway([]);
+    const controller = createDaemonController();
+    const deps = makeDeps(gateway, async () => {});
+
+    const done = runDaemon(deps, {
+      pollIntervalSeconds: 0.01, // would re-poll every ~10ms without backoff
+      rateLimitCooldownSeconds: 60,
+      controller,
+      sleepGranularityMs: 5,
+    });
+
+    // Enough wall-clock for ~10 poll intervals; the cooldown must hold at 1.
+    await sleep(120);
+    expect(gateway.polls).toBe(1);
+
+    controller.stop();
+    await done;
+  });
+
+  it("a NON-rate-limit tick failure retries at the normal poll interval", async () => {
+    class FlakyGateway extends FakeGateway {
+      polls = 0;
+      override async listTeamIssues(): Promise<never> {
+        this.polls += 1;
+        throw new Error("upstream connect error (503)");
+      }
+    }
+    const gateway = new FlakyGateway([]);
+    const controller = createDaemonController();
+    const deps = makeDeps(gateway, async () => {});
+
+    const done = runDaemon(deps, {
+      pollIntervalSeconds: 0.01,
+      rateLimitCooldownSeconds: 60,
+      controller,
+      sleepGranularityMs: 5,
+    });
+
+    await sleep(120);
+    expect(gateway.polls).toBeGreaterThan(1);
+
     controller.stop();
     await done;
   });
