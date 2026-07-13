@@ -12,7 +12,6 @@ import {
   SettingsResolveEntityResolutionCaseMutation,
 } from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
-import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import {
   candidateSummary,
   parseJsonObjectArray,
@@ -25,9 +24,10 @@ type ResolutionCase =
 type PendingAction = "link" | "create" | null;
 
 /**
- * Resolution Queue sub-view of the Knowledge Model tab: open entity ambiguity
- * cases with link / create / defer / reject actions. Candidates and claims
- * are source-safe identity evidence only.
+ * Resolution Queue sub-view of the Model tab: open entity ambiguity cases
+ * with link / create / defer / reject actions. Candidates and claims are
+ * source-safe identity evidence only. Content only — the title row is owned
+ * by KnowledgeModelTab.
  */
 export function ResolutionQueue() {
   const { tenantId } = useTenant();
@@ -42,11 +42,7 @@ export function ResolutionQueue() {
   const refetch = () => reexecute({ requestPolicy: "network-only" });
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <SettingsPageTitle
-        title="Resolution Queue"
-        description="Open ambiguity cases awaiting an operator decision: link to an existing canonical entity, create a new one, defer, or reject."
-      />
+    <div className="flex h-full min-h-0 w-full flex-col">
       {result.error ? (
         <p className="text-destructive mb-3 text-sm" role="alert">
           Failed to load resolution cases: {result.error.message}

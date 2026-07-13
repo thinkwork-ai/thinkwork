@@ -27,9 +27,9 @@ function tabForPath(pathname: string): MemoryTab {
 }
 
 /**
- * The unified Memory settings page. Memory records, KBs, and the Knowledge
- * Model are sibling tabs rendered in the AppTopBar and driven by the route so
- * each tab is deep-linkable. The Knowledge Model tab keeps its historical
+ * The unified Memory settings page. Memory records, KBs, and the knowledge
+ * Model tab are siblings rendered in the AppTopBar and driven by the route so
+ * each tab is deep-linkable. The Model tab keeps its historical
  * /settings/memory/ontology path so existing links keep working.
  */
 export function SettingsMemoryHome() {
@@ -119,7 +119,7 @@ export function SettingsMemoryHome() {
       { to: MEMORY, label: "Memory" },
       { to: WIKI, label: "Wiki" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
-      { to: ONTOLOGY, label: "Knowledge Model" },
+      { to: ONTOLOGY, label: "Model" },
     ],
     action: refreshAction,
     actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}`,

@@ -78,11 +78,13 @@ describe("KnowledgeGraphExplorer", () => {
     expect(sheetSource).toContain("messageId");
   });
 
-  it("mounts Ontology as definitions only", () => {
-    expect(settingsSource).toContain("Ontology");
+  it("mounts the definitions view as content only", () => {
     expect(settingsSource).toContain('mode="definitions"');
-    expect(settingsSource).toContain("approved ontology terms");
+    // The title row moved up into KnowledgeModelTab; this tab renders content
+    // only and no longer names the old "Ontology" heading.
+    expect(settingsSource).not.toContain("SettingsPageTitle");
+    expect(settingsSource).not.toContain('title="Ontology"');
+    expect(settingsSource).not.toContain("approved ontology terms");
     expect(settingsSource).not.toContain("Data");
-    expect(settingsSource).not.toContain("Definitions");
   });
 });

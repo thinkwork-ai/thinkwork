@@ -14,7 +14,6 @@ import {
 import type { SettingsCanonicalEntitiesQuery as SettingsCanonicalEntitiesData } from "@/gql/graphql";
 import { SettingsCanonicalEntitiesQuery } from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
-import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { MergeDialog } from "./MergeDialog";
 import { relativeAge } from "./knowledge-model-utils";
 
@@ -44,8 +43,9 @@ function statusBadgeClass(status: string): string {
 }
 
 /**
- * Identity sub-view of the Knowledge Model tab: canonical entity instances
- * with their exact source mappings, plus the merge-repair entry point.
+ * Identity sub-view of the Model tab: canonical entity instances with their
+ * exact source mappings, plus the merge-repair entry point. Content only —
+ * the title row is owned by KnowledgeModelTab.
  */
 export function IdentityList() {
   const { tenantId } = useTenant();
@@ -73,11 +73,7 @@ export function IdentityList() {
   const loading = result.fetching && !result.data;
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col p-6">
-      <SettingsPageTitle
-        title="Identity"
-        description="Canonical entity instances and their exact source mappings. Merged entities persist as redirects."
-      />
+    <div className="flex h-full min-h-0 w-full flex-col">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2" />
