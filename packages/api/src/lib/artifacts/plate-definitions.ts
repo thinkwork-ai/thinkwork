@@ -459,3 +459,199 @@ const BY_SLUG = new Map(PLATFORM_PLATES.map((p) => [p.slug, p]));
 export function getPlatformPlate(slug: string): PlateDefinition | null {
   return BY_SLUG.get(slug) ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Wiki plates (THINK-272, parent THINK-270 U1 / KTD4).
+//
+// A SEPARATE list, deliberately not part of PLATFORM_PLATES: every composer
+// surface (emit_document dispatch, listPlates, plate preview) reaches
+// platform definitions only through getPlatformPlate/PLATFORM_PLATES, so
+// keeping wiki plates out of that list excludes them from all of it by
+// construction — no hidden-flag machinery. Resolution goes through the
+// dedicated resolveWikiPlate in plate-registry.ts, which layers tenant
+// document palettes and platform_override rows exactly like composer plates.
+//
+// Section specs are ADVISORY (`suggested` tier, never enforced) because the
+// wiki graph-materializer emits a different section vocabulary than the
+// planner templates; ids follow the KTD6 invariant (id = headingSlug(title))
+// with titles taken from the wiki template headings
+// (packages/api/src/lib/wiki/templates.ts). Palettes override only the
+// accent triad — same discipline as BUSINESS_PLATES — with three distinct
+// hues so entity/topic/decision pages read differently at a glance.
+// ---------------------------------------------------------------------------
+
+/** Wiki page types with a plate; mirrors WikiPageType (lib/wiki). */
+export const WIKI_PLATE_SLUG_BY_PAGE_TYPE = {
+  entity: "wiki-entity",
+  topic: "wiki-topic",
+  decision: "wiki-decision",
+} as const;
+
+export type WikiPlatePageType = keyof typeof WIKI_PLATE_SLUG_BY_PAGE_TYPE;
+
+/** Page type → wiki plate slug; null for anything unknown. */
+export function wikiPlateSlugForPageType(pageType: string): string | null {
+  return Object.prototype.hasOwnProperty.call(
+    WIKI_PLATE_SLUG_BY_PAGE_TYPE,
+    pageType,
+  )
+    ? WIKI_PLATE_SLUG_BY_PAGE_TYPE[pageType as WikiPlatePageType]
+    : null;
+}
+
+export const WIKI_PLATES: readonly PlateDefinition[] = [
+  {
+    slug: "wiki-entity",
+    displayName: "Wiki Entity",
+    useFor:
+      "A wiki entity page: a person, place, organization, product, or team with a stable identity.",
+    eyebrow: "WIKI · ENTITY",
+    titleSuffix: "Entity",
+    // Green accent: entity pages are the wiki's "things".
+    paletteLight: {
+      "--accent": "#2f7d52",
+      "--accent-soft": "#e7f3ec",
+      "--accent-text": "#276745",
+    },
+    paletteDark: {
+      "--accent": "#7fc9a2",
+      "--accent-soft": "#12301e",
+      "--accent-text": "#9cd8b8",
+    },
+    // Wiki section markdown carries no tw: directive fences; a stray fence
+    // rejects the compile and the page falls back to markdown rendering.
+    allowedDirectives: [],
+    sections: [
+      {
+        id: "overview",
+        title: "Overview",
+        tier: "suggested",
+        guidance:
+          "Two–four sentence summary of what this entity is, grounded in the cited records.",
+      },
+      {
+        id: "notes",
+        title: "Notes",
+        tier: "suggested",
+        guidance:
+          "Notable impressions, opinions, or qualitative observations about this entity, drawn from record quotes.",
+      },
+      {
+        id: "visits-interactions",
+        title: "Visits & Interactions",
+        tier: "suggested",
+        guidance:
+          "A chronological-ish list (newest first) of meaningful interactions or visits, with dates when available.",
+      },
+      {
+        id: "related",
+        title: "Related",
+        tier: "suggested",
+        guidance:
+          "Other wiki pages this entity is meaningfully linked to; prose only when relationships need explanation.",
+      },
+    ],
+  },
+  {
+    slug: "wiki-topic",
+    displayName: "Wiki Topic",
+    useFor:
+      "A wiki topic page: a recurring subject or theme that spans multiple records.",
+    eyebrow: "WIKI · TOPIC",
+    titleSuffix: "Topic",
+    // Blue accent: topics are the wiki's threads of thought.
+    paletteLight: {
+      "--accent": "#3865ae",
+      "--accent-soft": "#e9f0f9",
+      "--accent-text": "#2e5391",
+    },
+    paletteDark: {
+      "--accent": "#8fb4e8",
+      "--accent-soft": "#14243a",
+      "--accent-text": "#adc8ef",
+    },
+    allowedDirectives: [],
+    sections: [
+      {
+        id: "summary",
+        title: "Summary",
+        tier: "suggested",
+        guidance: "Two–four sentence description of what this topic covers.",
+      },
+      {
+        id: "highlights",
+        title: "Highlights",
+        tier: "suggested",
+        guidance:
+          "Short bulleted highlights — standout moments, patterns, or takeaways.",
+      },
+      {
+        id: "related-entities",
+        title: "Related Entities",
+        tier: "suggested",
+        guidance:
+          "Named entities that show up repeatedly in this topic, linked to their wiki pages where they exist.",
+      },
+      {
+        id: "recent",
+        title: "Recent",
+        tier: "suggested",
+        guidance: "A few of the newest records contributing to this topic.",
+      },
+    ],
+  },
+  {
+    slug: "wiki-decision",
+    displayName: "Wiki Decision",
+    useFor:
+      "A wiki decision page: a recorded choice or stance, with its context and consequences.",
+    eyebrow: "WIKI · DECISION",
+    titleSuffix: "Decision",
+    // Warm amber accent: decisions are the wiki's commitments.
+    paletteLight: {
+      "--accent": "#a85a24",
+      "--accent-soft": "#f8ede2",
+      "--accent-text": "#8c4a1d",
+    },
+    paletteDark: {
+      "--accent": "#e0a370",
+      "--accent-soft": "#33200f",
+      "--accent-text": "#ecbd93",
+    },
+    allowedDirectives: [],
+    sections: [
+      {
+        id: "context",
+        title: "Context",
+        tier: "suggested",
+        guidance:
+          "What was going on that prompted this decision, kept to what the records show.",
+      },
+      {
+        id: "decision",
+        title: "Decision",
+        tier: "suggested",
+        guidance: "The decision itself in one or two plain-language sentences.",
+      },
+      {
+        id: "rationale",
+        title: "Rationale",
+        tier: "suggested",
+        guidance: "The reasons given or evident in the source records.",
+      },
+      {
+        id: "consequences",
+        title: "Consequences",
+        tier: "suggested",
+        guidance:
+          "Observed follow-on effects: what changed, what got revisited, what to revisit next.",
+      },
+    ],
+  },
+];
+
+const WIKI_BY_SLUG = new Map(WIKI_PLATES.map((p) => [p.slug, p]));
+
+export function getWikiPlate(slug: string): PlateDefinition | null {
+  return WIKI_BY_SLUG.get(slug) ?? null;
+}

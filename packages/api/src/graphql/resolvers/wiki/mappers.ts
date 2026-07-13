@@ -40,6 +40,12 @@ export interface GraphQLWikiPage {
   title: string;
   summary: string | null;
   bodyMd: string | null;
+  /**
+   * Stored plate render (THINK-273). Present only when the detail query
+   * passes it through the `extras` — list/search/graph surfaces never
+   * populate it, so they stay render-free by construction.
+   */
+  renderHtml?: string | null;
   status: string;
   lastCompiledAt: string | null;
   createdAt: string;
@@ -84,7 +90,11 @@ export function toGraphQLPage(
     updated_at: Date | string;
     parent_page_id?: string | null;
   },
-  extras: { sections: GraphQLWikiSection[]; aliases: string[] },
+  extras: {
+    sections: GraphQLWikiSection[];
+    aliases: string[];
+    renderHtml?: string | null;
+  },
 ): GraphQLWikiPage {
   return {
     id: row.id,
@@ -101,6 +111,9 @@ export function toGraphQLPage(
     title: row.title,
     summary: row.summary,
     bodyMd: row.body_md,
+    ...(extras.renderHtml !== undefined
+      ? { renderHtml: extras.renderHtml }
+      : {}),
     status: row.status,
     lastCompiledAt: toIsoString(row.last_compiled_at),
     createdAt: toIsoString(row.created_at) as string,

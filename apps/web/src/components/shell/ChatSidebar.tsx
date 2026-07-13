@@ -77,7 +77,13 @@ import {
   type PaletteThreadTarget,
 } from "@/components/shell/SearchPalette";
 import { EntityDossierCard } from "@/components/shell/EntityDossierCard";
-import type { EntityDossierResult } from "@/gql/graphql";
+import type { SearchAskViewModel } from "@/components/shell/SearchAskView";
+import { humanizeAskStep } from "@/components/shell/SearchAskView";
+import type {
+  EntityDossierResult,
+  SearchAskResult,
+  SearchResearchResult,
+} from "@/gql/graphql";
 import { SEARCH_PALETTE_RAILS_ENABLED } from "@/lib/search-palette-gate";
 import {
   DEFAULT_WORK_ITEM_SEARCH,
@@ -88,16 +94,22 @@ import { useTenant } from "@/context/TenantContext";
 import { useThreadNotifications } from "@/hooks/useThreadNotifications";
 import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
 import {
+  ComputerThreadQuery,
   DeleteThreadMutation,
   EntityDossierQuery,
   MarkThreadsReadMutation,
+  NewMessageSubscription,
   PinThreadMutation,
   PinnedThreadsQuery,
   ReorderPinnedThreadsMutation,
+  SearchAskMutation,
+  SearchResearchMutation,
   SetThreadNotificationPreferenceMutation,
   SpaceThreadsQuery,
   SpacesQuery,
   ThreadsPagedQuery,
+  ThreadTurnEventsQuery,
+  ThreadTurnStepSubscription,
   ThreadUpdatedSubscription,
   UnpinThreadMutation,
   UpdateThreadMutation,
@@ -237,6 +249,25 @@ export function ChatSidebar() {
   // the best grounded match (or disambiguate); the entities rail sets it to
   // refine which entity the dossier shows.
   const [dossierEntityId, setDossierEntityId] = useState<string | null>(null);
+  // U7 ask (KTD-6): all state lives in the shell, not the palette dialog, so
+  // closing the palette leaves the turn running and reopening resumes the
+  // stream. The subscriptions + catch-up query below stay mounted the whole
+  // time askThreadId is set.
+  const [askThreadId, setAskThreadId] = useState<string | null>(null);
+  const [askStatus, setAskStatus] = useState<
+    SearchAskViewModel["status"] | "idle"
+  >("idle");
+  const [askError, setAskError] = useState<string | null>(null);
+  const [askQuery, setAskQuery] = useState("");
+  const [askRunId, setAskRunId] = useState<string | null>(null);
+  const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [askSteps, setAskSteps] = useState<AskStepEvent[]>([]);
+  const [askCompleted, setAskCompleted] = useState<{
+    responseLength: number;
+  } | null>(null);
+  const askSeenSeqRef = useRef<Set<number>>(new Set());
+  const [, executeSearchAsk] = useMutation(SearchAskMutation);
+  const [, executeSearchResearch] = useMutation(SearchResearchMutation);
   const pendingThreadDeletes = usePendingThreadDeletes();
   const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
   const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
@@ -307,6 +338,197 @@ export function ChatSidebar() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // --- U7 ask machinery (shell-owned, KTD-6) --------------------------------
+
+  const resetAsk = useCallback(() => {
+    setAskThreadId(null);
+    setAskStatus("idle");
+    setAskError(null);
+    setAskRunId(null);
+    setAskAnswer(null);
+    setAskSteps([]);
+    setAskCompleted(null);
+    askSeenSeqRef.current = new Set();
+  }, []);
+
+  // A new typed query (or an edit to the current one) returns the palette to
+  // rails/find mode: the ask state clears so askView drops to null.
+  const askResetQueryRef = useRef(debouncedSearch);
+  useEffect(() => {
+    if (askResetQueryRef.current === debouncedSearch) return;
+    askResetQueryRef.current = debouncedSearch;
+    resetAsk();
+  }, [debouncedSearch, resetAsk]);
+
+  // Fold a single turn step (live or from catch-up) into the accumulator,
+  // de-duped by seq (AppSync is at-least-once; catch-up overlaps the live tail).
+  const foldAskStep = useCallback(
+    (seq: number, eventType: string | null, payloadRaw: string | null) => {
+      if (askSeenSeqRef.current.has(seq)) return;
+      askSeenSeqRef.current.add(seq);
+      let payload: unknown = null;
+      if (payloadRaw) {
+        try {
+          payload = JSON.parse(payloadRaw);
+        } catch {
+          payload = null;
+        }
+      }
+      setAskSteps((prev) =>
+        [...prev, { seq, eventType, payload }].sort((a, b) => a.seq - b.seq),
+      );
+      if (eventType === "error") {
+        setAskStatus((status) => (status === "answered" ? status : "error"));
+        setAskError(
+          (existing) =>
+            existing ??
+            askStepMessage(payload) ??
+            "The answer failed midway — please try again.",
+        );
+      }
+      if (eventType === "completed") {
+        setAskCompleted({ responseLength: askResponseLength(payload) });
+      }
+    },
+    [],
+  );
+
+  // The answer arrives as an assistant message (not token deltas). Both this
+  // and the step subscription stay mounted while askThreadId is set.
+  const [{ data: askMessageEvent }] = useSubscription<{
+    onNewMessage?: { role?: string | null; content?: string | null } | null;
+  }>({
+    query: NewMessageSubscription,
+    variables: { threadId: askThreadId ?? "" },
+    pause: !askThreadId,
+  });
+  useEffect(() => {
+    const message = askMessageEvent?.onNewMessage;
+    if (!message || message.role !== "assistant") return;
+    if (typeof message.content === "string" && message.content.length > 0) {
+      setAskAnswer(message.content);
+      setAskStatus("answered");
+    }
+  }, [askMessageEvent]);
+
+  const [{ data: askStepEvent }] = useSubscription<{
+    onThreadTurnStep?: {
+      runId?: string | null;
+      seq?: number | null;
+      eventType?: string | null;
+      payload?: string | null;
+    } | null;
+  }>({
+    query: ThreadTurnStepSubscription,
+    variables: { threadId: askThreadId ?? "" },
+    pause: !askThreadId,
+  });
+  useEffect(() => {
+    const step = askStepEvent?.onThreadTurnStep;
+    if (!step?.runId || step.seq === null || step.seq === undefined) return;
+    setAskRunId((current) => current ?? step.runId ?? null);
+    foldAskStep(step.seq, step.eventType ?? null, step.payload ?? null);
+  }, [askStepEvent, foldAskStep]);
+
+  // Catch-up: onThreadTurnStep has no replay, so once we learn the runId (from
+  // the first live step) we backfill the run's steps and dedupe by seq. Note
+  // the query is threadTurnEvents(runId, limit) — there is no afterSeq arg, so
+  // we fetch the run and let the seq de-dup drop overlaps.
+  const [{ data: askCatchupData }] = useQuery<{
+    threadTurnEvents?: Array<{
+      seq?: number | null;
+      eventType?: string | null;
+      payload?: string | null;
+    }> | null;
+  }>({
+    query: ThreadTurnEventsQuery,
+    variables: { runId: askRunId ?? "", limit: 500 },
+    pause: !askRunId,
+    requestPolicy: "network-only",
+  });
+  useEffect(() => {
+    const events = askCatchupData?.threadTurnEvents;
+    if (!events) return;
+    for (const event of events) {
+      if (event.seq === null || event.seq === undefined) continue;
+      foldAskStep(event.seq, event.eventType ?? null, event.payload ?? null);
+    }
+  }, [askCatchupData, foldAskStep]);
+
+  // A `completed` turn with response_length 0 and no assistant message is an
+  // empty answer — a distinct, readable error rather than a stuck spinner.
+  useEffect(() => {
+    if (!askCompleted || askAnswer) return;
+    if (askStatus === "answered" || askStatus === "error") return;
+    if (askCompleted.responseLength === 0) {
+      setAskStatus("error");
+      setAskError("The answer came back empty — try rephrasing.");
+    }
+  }, [askCompleted, askAnswer, askStatus]);
+
+  // Answer backfill: if the turn completed with content but the live
+  // onNewMessage never delivered it (missed/late subscription, or hidden
+  // threads not surfacing onNewMessage), fetch the thread's assistant message
+  // directly so the view never hangs on "running" after a real answer landed.
+  const askNeedsBackfill =
+    !!askCompleted &&
+    !askAnswer &&
+    askStatus === "running" &&
+    askCompleted.responseLength > 0;
+  const [{ data: askBackfillData }] = useQuery<{
+    thread?: {
+      messages?: {
+        edges?: Array<{
+          node?: { role?: string | null; content?: string | null } | null;
+        } | null> | null;
+      } | null;
+    } | null;
+  }>({
+    query: ComputerThreadQuery,
+    variables: { id: askThreadId ?? "", messageLimit: 8 },
+    pause: !askThreadId || !askNeedsBackfill,
+    requestPolicy: "network-only",
+  });
+  useEffect(() => {
+    if (askAnswer || askStatus !== "running") return;
+    const edges = askBackfillData?.thread?.messages?.edges ?? [];
+    // Latest assistant message with content (edges are chronological).
+    const answer = [...edges]
+      .reverse()
+      .map((edge) => edge?.node)
+      .find(
+        (node) =>
+          node?.role === "assistant" &&
+          typeof node.content === "string" &&
+          node.content.length > 0,
+      );
+    if (answer?.content) {
+      setAskAnswer(answer.content);
+      setAskStatus("answered");
+    }
+  }, [askBackfillData, askAnswer, askStatus]);
+
+  const askActivityLines = useMemo(() => {
+    const lines: string[] = [];
+    for (const step of askSteps) {
+      const line = humanizeAskStep(step.eventType, step.payload);
+      if (line && lines[lines.length - 1] !== line) lines.push(line);
+    }
+    return lines;
+  }, [askSteps]);
+
+  const askView: SearchAskViewModel | null =
+    askStatus === "idle"
+      ? null
+      : {
+          query: askQuery,
+          status: askStatus,
+          activity: askActivityLines,
+          answer: askAnswer,
+          error: askError,
+          threadId: askThreadId,
+        };
 
   const [
     { data: spacesData, fetching: spacesFetching, error: spacesError },
@@ -894,16 +1116,84 @@ export function ChatSidebar() {
     [],
   );
 
-  // Ask escalation seam (U4 discoverability). The hidden-thread ask machinery
-  // that streams a cited answer into the palette arrives in U6/U7; until then
-  // this closes the palette and opens a fresh composer so the affordance is
-  // never a dead control. (The typed query is carried once U7 lands.)
+  // U7 ask escalation: dispatch the hidden-thread ask turn and stream the
+  // answer INTO the palette. We do NOT navigate away or close the palette — the
+  // answer, live activity, and any error render in the ask view in place of the
+  // rails. Closing the palette leaves the turn running (KTD-6).
   const askFromPalette = useCallback(
-    (_query: string) => {
-      setSearchOpen(false);
-      void navigate({ to: "/new", search: { spaceId: undefined } });
+    (query: string) => {
+      if (!tenantId) return;
+      resetAsk();
+      setAskQuery(query);
+      setAskStatus("dispatching");
+      void executeSearchAsk({ tenantId, query }).then((result) => {
+        if (result.error) {
+          setAskStatus("error");
+          setAskError(searchAskErrorMessage(result.error));
+          return;
+        }
+        const threadId = (result.data as { searchAsk?: SearchAskResult } | null)
+          ?.searchAsk?.threadId;
+        if (!threadId) {
+          setAskStatus("error");
+          setAskError("Couldn't start the answer — please try again.");
+          return;
+        }
+        setAskThreadId(threadId);
+        setAskStatus("running");
+      });
     },
-    [navigate],
+    [executeSearchAsk, resetAsk, tenantId],
+  );
+
+  const openAskPermalink = useCallback(() => {
+    if (!askThreadId) return;
+    activateThread(askThreadId);
+    setSearchOpen(false);
+    void navigate({ to: "/threads/$id", params: { id: askThreadId } });
+  }, [activateThread, askThreadId, navigate]);
+
+  // U9 research escalation: enqueue a BACKGROUND run and confirm via a toast
+  // that links to the (new) thread the async answer will post to. Unlike ask,
+  // we do NOT stream inline or navigate away — the user stays where they are.
+  // The palette only closes AFTER the confirming (or error) toast, never a
+  // silent close.
+  const researchFromPalette = useCallback(
+    (query: string) => {
+      if (!tenantId) return;
+      void executeSearchResearch({ tenantId, query }).then((result) => {
+        if (result.error) {
+          toast.error(searchAskErrorMessage(result.error));
+          setSearchOpen(false);
+          return;
+        }
+        const threadId = (
+          result.data as { searchResearch?: SearchResearchResult } | null
+        )?.searchResearch?.threadId;
+        if (!threadId) {
+          toast.error("Couldn't start research — please try again.");
+          setSearchOpen(false);
+          return;
+        }
+        toast.success(
+          `Researching “${query}” — I'll post the answer to your new thread.`,
+          {
+            action: {
+              label: "Open thread",
+              onClick: () => {
+                activateThread(threadId);
+                void navigate({
+                  to: "/threads/$id",
+                  params: { id: threadId },
+                });
+              },
+            },
+          },
+        );
+        setSearchOpen(false);
+      });
+    },
+    [activateThread, executeSearchResearch, navigate, tenantId],
   );
 
   const refreshThreadPins = useCallback(() => {
@@ -1153,6 +1443,10 @@ export function ChatSidebar() {
         onSelectWiki={openSearchWiki}
         onSelectEntity={(hit) => selectDossierEntity(hit.entityId)}
         onAsk={askFromPalette}
+        onResearch={researchFromPalette}
+        askView={askView}
+        onAskBack={resetAsk}
+        onAskOpenPermalink={openAskPermalink}
         emptyStateLoading={searchFetching && !searchData}
         emptyStateError={searchError?.message ?? null}
         dossierSlot={
@@ -1168,6 +1462,47 @@ export function ChatSidebar() {
       />
     </div>
   );
+}
+
+/** One accumulated ask turn step (parsed payload), keyed by seq for de-dup. */
+interface AskStepEvent {
+  seq: number;
+  eventType: string | null;
+  payload: unknown;
+}
+
+/** Human-facing message from an `error` step payload, if present. */
+function askStepMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const message = record.message ?? record.error;
+  return typeof message === "string" && message.length > 0 ? message : null;
+}
+
+/** `response_length` from a `completed` step payload (0 when absent). */
+function askResponseLength(payload: unknown): number {
+  if (!payload || typeof payload !== "object") return 0;
+  const value = (payload as Record<string, unknown>).response_length;
+  return typeof value === "number" ? value : 0;
+}
+
+/**
+ * Readable message for a rejected `searchAsk`. BUDGET_EXCEEDED carries a
+ * descriptive server message; surface it, else fall back to the error text.
+ */
+function searchAskErrorMessage(error: {
+  graphQLErrors?: Array<{
+    message?: string;
+    extensions?: { code?: unknown } | null;
+  }>;
+  message?: string;
+}): string {
+  const gqlError = error.graphQLErrors?.[0];
+  if (gqlError?.message) return gqlError.message;
+  const stripped = error.message?.replace(/^\[GraphQL\]\s*/, "");
+  return stripped && stripped.length > 0
+    ? stripped
+    : "Something went wrong — please try again.";
 }
 
 function PluginAppsNavItem({ isActive }: { isActive: boolean }) {

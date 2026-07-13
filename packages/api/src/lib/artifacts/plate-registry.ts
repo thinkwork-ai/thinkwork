@@ -36,8 +36,10 @@ import {
 } from "./document-directives.js";
 import {
   getPlatformPlate,
+  getWikiPlate,
   PLATFORM_PLATES,
   PLATE_SECTION_TIERS,
+  wikiPlateSlugForPageType,
   type PlateAnalysisSpec,
   type PlateDefinition,
   type PlatePalette,
@@ -597,6 +599,37 @@ export async function resolvePlate(
     slug,
     platform: getPlatformPlate(slug),
     row,
+    tenantPalette,
+  });
+}
+
+/**
+ * Resolve a wiki plate for a tenant (THINK-272 / parent THINK-270 U1).
+ * Same layering as resolvePlate — platform wiki definition → tenant document
+ * palette → platform_override row — but the platform definition comes from
+ * WIKI_PLATES (invisible to every composer surface), and TENANT-origin rows
+ * are deliberately ignored: wiki slugs are not in PLATFORM_PLATES, so a
+ * tenant could create an ordinary plate coincidentally named "wiki-entity",
+ * and passing that row through resolveFromLayers would let it shadow (KTD1)
+ * every wiki render for the tenant. Such a row keeps working as a normal
+ * composer plate; it just has no effect here. Unknown page types resolve to
+ * null without touching the store.
+ */
+export async function resolveWikiPlate(
+  tenantId: string,
+  pageType: string,
+  store: PlateStore = drizzlePlateStore(),
+): Promise<ResolvedPlate | null> {
+  const slug = wikiPlateSlugForPageType(pageType);
+  if (!slug) return null;
+  const [row, tenantPalette] = await Promise.all([
+    store.getPlateRow(tenantId, slug),
+    store.getTenantDocumentPalette(tenantId),
+  ]);
+  return resolveFromLayers({
+    slug,
+    platform: getWikiPlate(slug),
+    row: row?.origin === "platform_override" ? row : null,
     tenantPalette,
   });
 }

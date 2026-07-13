@@ -19,6 +19,7 @@ const TARGET_LABELS: Record<string, string> = {
   agent_thread: "Agent thread",
   routine: "Routine",
   workflow: "Workflow",
+  memory_pipeline: "Memory pipeline",
 };
 
 export function AutomationStatusRail({
@@ -47,6 +48,21 @@ export function AutomationStatusRail({
   const trigger = jsonRecord(version?.triggerSpec);
   const triggerConfig = jsonRecord(trigger.config);
   const target = readTargetSpec(version);
+  // THINK-264: the system memory loop's schedule lives on the processor's
+  // scheduled job, not in the trigger spec, and readTargetSpec normalizes its
+  // unknown target kind away — read both off the pipeline view instead.
+  const memoryPipeline = loop.memoryPipeline ?? null;
+  const scheduleExpression =
+    typeof triggerConfig.scheduleExpression === "string"
+      ? triggerConfig.scheduleExpression
+      : (memoryPipeline?.scheduleExpression ?? null);
+  const scheduleTimezone =
+    typeof triggerConfig.timezone === "string"
+      ? triggerConfig.timezone
+      : (memoryPipeline?.scheduleTimezone ?? null);
+  const targetLabel = memoryPipeline
+    ? TARGET_LABELS.memory_pipeline
+    : TARGET_LABELS[target.kind];
   const lastRun = loop.runs?.[0] ?? null;
   const lastRunAt = lastRun?.startedAt ?? lastRun?.createdAt ?? loop.lastRunAt;
   const lastRunStatus = lastRun?.status ?? loop.lastRunStatus;
@@ -89,16 +105,12 @@ export function AutomationStatusRail({
             <RailRow
               label="Schedule"
               value={formatWorkflowSchedule(
-                typeof triggerConfig.scheduleExpression === "string"
-                  ? triggerConfig.scheduleExpression
-                  : null,
-                typeof triggerConfig.timezone === "string"
-                  ? triggerConfig.timezone
-                  : null,
+                scheduleExpression,
+                scheduleTimezone,
               )}
             />
           ) : null}
-          <RailRow label="Target" value={TARGET_LABELS[target.kind]} />
+          <RailRow label="Target" value={targetLabel} />
           <RailRow label="Run as" value={runAsName} />
           <RailRow label="Space" value={spaceName} />
           <RailRow label="Last ran" value={formatDateTime(lastRunAt)} />

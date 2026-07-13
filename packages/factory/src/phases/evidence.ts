@@ -24,6 +24,7 @@ import {
 import { isMarkerComment } from "../linear/markers.js";
 import type { Phase } from "./engine.js";
 import { handoffMarker } from "./prompts.js";
+import { parseWaitingOn } from "../linear/ledger.js";
 
 // ---------------------------------------------------------------------------
 // GitHub gateway
@@ -165,7 +166,12 @@ const PHASE_COMPLETION: Record<
 export type PhaseEvidence =
   | {
       complete: true;
-      kind: "baton-posted" | "status-moved" | "pr-merged" | "compounded";
+      kind:
+        | "baton-posted"
+        | "status-moved"
+        | "pr-merged"
+        | "compounded"
+        | "dependency-wait";
       detail: string;
       /** For verify: pass moved to Done, fail rebounded to Ready to Work. */
       outcome?: "pass" | "fail";
@@ -190,6 +196,13 @@ export interface EvidenceInput {
   commentIdsAtLaunch?: ReadonlySet<string>;
   /** Rolling-ledger compounded flag (compound-phase completion signal). */
   ledgerCompounded?: boolean;
+  /**
+   * Rolling-ledger blocker field, fresh. A `waiting-on: THINK-x` value is a
+   * LEGITIMATE run ending (cross-issue dependency wait) — without it, a worker
+   * correctly stopping at a gate was classified Failed, burned the attempt
+   * ceiling, and escalated Needs User (the THINK-274/275 gridlock).
+   */
+  ledgerBlocker?: string | null;
   /** Attempt branch to check on GitHub (with `github`). */
   branch?: string;
   github?: GithubGateway;
@@ -279,6 +292,19 @@ export async function detectPhaseEvidence(
         detail: `PR ${merged.url} merged for branch ${input.branch}`,
       };
     }
+  }
+
+  // 4. Cross-issue dependency wait: the worker recorded `waiting-on: THINK-x`
+  //    in the ledger and ended its run. That is a legitimate ending — the
+  //    engine waits and relaunches when the dependency reaches Done. Checked
+  //    LAST so real progress evidence always wins.
+  const waitingOn = parseWaitingOn(input.ledgerBlocker);
+  if (waitingOn !== null) {
+    return {
+      complete: true,
+      kind: "dependency-wait",
+      detail: `waiting on ${waitingOn} (ledger blocker) — engine resumes this phase when it reaches Done`,
+    };
   }
 
   return {

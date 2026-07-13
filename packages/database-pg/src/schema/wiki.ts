@@ -144,6 +144,14 @@ export const wikiPages = wiki.table(
       .notNull()
       .default(sql`ARRAY[]::text[]`),
     last_compiled_at: timestamp("last_compiled_at", { withTimezone: true }),
+    // THINK-273: persisted plate render — the compositor-produced
+    // self-contained HTML compiled from this page's sections, the plate slug
+    // it was compiled with, and when. Best-effort derived data: all three are
+    // set together or all NULL (compile failure, oversize output, or a page
+    // that predates render persistence). Markdown sections stay canonical.
+    render_html: text("render_html"),
+    render_plate_slug: text("render_plate_slug"),
+    rendered_at: timestamp("rendered_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

@@ -261,9 +261,9 @@ describe("createLinearGateway — listComments author ids", () => {
     const comments = await gateway.listComments("i1");
 
     expect(comments).toEqual([
-      { id: "c1", body: "user comment", authorId: "u-1" },
-      { id: "c2", body: "bot comment", authorId: "bot-1" },
-      { id: "c3", body: "authorless comment", authorId: null },
+      { id: "c1", body: "user comment", url: null, authorId: "u-1" },
+      { id: "c2", body: "bot comment", url: null, authorId: "bot-1" },
+      { id: "c3", body: "authorless comment", url: null, authorId: null },
     ]);
   });
 });

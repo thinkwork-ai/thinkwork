@@ -7,7 +7,10 @@ import { compileDocument, headingSlug } from "./document-compositor.js";
 import {
   CORE_PLATE_SLUGS,
   PLATFORM_PLATES,
+  WIKI_PLATES,
   getPlatformPlate,
+  getWikiPlate,
+  wikiPlateSlugForPageType,
 } from "./plate-definitions.js";
 import {
   buildContractPreviewExemplar,
@@ -15,6 +18,7 @@ import {
   listPlates,
   parseTenantDocumentPalette,
   resolvePlate,
+  resolveWikiPlate,
   validatePlatePalette,
   visiblePlateSummaries,
   type PlateRow,
@@ -629,7 +633,7 @@ describe("platform plate contracts (THINK-183 U7 — the live swap)", () => {
   });
 
   it("every section id equals the heading slug of its title (KTD6)", () => {
-    for (const plate of PLATFORM_PLATES) {
+    for (const plate of [...PLATFORM_PLATES, ...WIKI_PLATES]) {
       for (const section of plate.sections ?? []) {
         expect(headingSlug(section.title), `${plate.slug}/${section.id}`).toBe(
           section.id,
@@ -1024,5 +1028,173 @@ describe("contract preview exemplar (THINK-188 U3)", () => {
         expect(exemplar.markdownBody).toContain(`## ${section.title}`);
       }
     }
+  });
+});
+
+describe("wiki plates (THINK-272 U1) — separate list, own lookup", () => {
+  it("getWikiPlate returns each definition by slug; unknown slugs are null", () => {
+    for (const slug of ["wiki-entity", "wiki-topic", "wiki-decision"]) {
+      expect(getWikiPlate(slug)?.slug).toBe(slug);
+    }
+    expect(getWikiPlate("wiki-bogus")).toBeNull();
+    expect(getWikiPlate("qbr")).toBeNull();
+  });
+
+  it("wiki and platform lists are disjoint (R3 by construction)", () => {
+    for (const plate of WIKI_PLATES) {
+      expect(getPlatformPlate(plate.slug)).toBeNull();
+    }
+    for (const plate of PLATFORM_PLATES) {
+      expect(getWikiPlate(plate.slug)).toBeNull();
+    }
+  });
+
+  it("page-type mapping covers exactly entity/topic/decision", () => {
+    expect(wikiPlateSlugForPageType("entity")).toBe("wiki-entity");
+    expect(wikiPlateSlugForPageType("topic")).toBe("wiki-topic");
+    expect(wikiPlateSlugForPageType("decision")).toBe("wiki-decision");
+    expect(wikiPlateSlugForPageType("bogus")).toBeNull();
+    expect(wikiPlateSlugForPageType("")).toBeNull();
+    // Prototype pollution shapes never map.
+    expect(wikiPlateSlugForPageType("hasOwnProperty")).toBeNull();
+    expect(wikiPlateSlugForPageType("__proto__")).toBeNull();
+  });
+
+  it("every wiki definition: no directives, accent-triad palettes, all sections suggested (R1/P2/P6)", () => {
+    expect(WIKI_PLATES).toHaveLength(3);
+    for (const plate of WIKI_PLATES) {
+      expect(plate.allowedDirectives).toEqual([]);
+      expect(plate.eyebrow.length).toBeGreaterThan(0);
+      for (const palette of [plate.paletteLight, plate.paletteDark]) {
+        expect(Object.keys(palette).sort()).toEqual([
+          "--accent",
+          "--accent-soft",
+          "--accent-text",
+        ]);
+        expect(validatePlatePalette({ ...palette }).ok).toBe(true);
+      }
+      expect(plate.sections?.length).toBeGreaterThan(0);
+      for (const section of plate.sections ?? []) {
+        expect(section.tier, `${plate.slug}/${section.id}`).toBe("suggested");
+      }
+      expect(plate.analyses).toBeUndefined();
+    }
+  });
+});
+
+describe("resolveWikiPlate (THINK-272 U2)", () => {
+  it("resolves each page type to its platform wiki definition with no tenant deltas", async () => {
+    for (const [pageType, slug] of [
+      ["entity", "wiki-entity"],
+      ["topic", "wiki-topic"],
+      ["decision", "wiki-decision"],
+    ] as const) {
+      const plate = await resolveWikiPlate(TENANT, pageType, fakeStore());
+      const def = getWikiPlate(slug)!;
+      expect(plate).not.toBeNull();
+      expect(plate!.slug).toBe(slug);
+      expect(plate!.displayName).toBe(def.displayName);
+      expect(plate!.eyebrow).toBe(def.eyebrow);
+      expect(plate!.allowedDirectives).toEqual([]);
+      expect(plate!.origin).toBe("platform");
+      expect(plate!.tokensLight).toEqual(def.paletteLight);
+      expect(plate!.tokensDark).toEqual(def.paletteDark);
+      expect(plate!.sections?.every((s) => s.tier === "suggested")).toBe(true);
+    }
+  });
+
+  it("unknown page type resolves to null without touching the store", async () => {
+    const store: PlateStore = {
+      getPlateRow: async () => {
+        throw new Error("store must not be called for unknown page types");
+      },
+      listPlateRows: async () => {
+        throw new Error("store must not be called for unknown page types");
+      },
+      getTenantDocumentPalette: async () => {
+        throw new Error("store must not be called for unknown page types");
+      },
+    };
+    expect(await resolveWikiPlate(TENANT, "bogus", store)).toBeNull();
+    expect(await resolveWikiPlate(TENANT, "wiki-entity", store)).toBeNull();
+  });
+
+  it("tenant palette and platform_override row layer in (AE4)", async () => {
+    const store = fakeStore(
+      [
+        {
+          slug: "wiki-entity",
+          origin: "platform_override",
+          config: { paletteLight: { "--accent": "#aa0000" } },
+          hidden: false,
+        },
+      ],
+      {
+        light: { "--bg": "#fffff8", "--accent": "#112233" },
+        dark: { "--bg": "#000004" },
+      },
+    );
+    const plate = await resolveWikiPlate(TENANT, "entity", store);
+    expect(plate!.tokensLight["--accent"]).toBe("#aa0000"); // override wins
+    expect(plate!.tokensLight["--bg"]).toBe("#fffff8"); // palette fills rest
+    expect(plate!.tokensDark["--bg"]).toBe("#000004");
+    // Platform wiki values keep flowing where nothing overrides.
+    expect(plate!.tokensDark["--accent"]).toBe(
+      getWikiPlate("wiki-entity")!.paletteDark["--accent"],
+    );
+    expect(plate!.customized).toBe(true);
+  });
+
+  it("a TENANT-origin row named wiki-entity cannot hijack the wiki render (P3 guard)", async () => {
+    const store = fakeStore([
+      {
+        slug: "wiki-entity",
+        origin: "tenant",
+        config: {
+          displayName: "Totally Not A Wiki Plate",
+          paletteLight: { "--accent": "#ff0000" },
+          allowedDirectives: ["stats"],
+        },
+        hidden: false,
+      },
+    ]);
+    const plate = await resolveWikiPlate(TENANT, "entity", store);
+    const def = getWikiPlate("wiki-entity")!;
+    expect(plate!.displayName).toBe(def.displayName);
+    expect(plate!.allowedDirectives).toEqual([]);
+    expect(plate!.tokensLight["--accent"]).toBe(def.paletteLight["--accent"]);
+    expect(plate!.origin).toBe("platform");
+    expect(plate!.customized).toBe(false);
+  });
+
+  it("store errors propagate (no new swallowing)", async () => {
+    const store: PlateStore = {
+      getPlateRow: async () => {
+        throw new Error("db down");
+      },
+      listPlateRows: async () => [],
+      getTenantDocumentPalette: async () => ({ light: {}, dark: {} }),
+    };
+    await expect(resolveWikiPlate(TENANT, "entity", store)).rejects.toThrow(
+      "db down",
+    );
+  });
+
+  it("no composer surface reaches a wiki slug (AE5/R3)", async () => {
+    const override: PlateRow = {
+      slug: "wiki-entity",
+      origin: "platform_override",
+      config: { paletteLight: { "--accent": "#aa0000" } },
+      hidden: false,
+    };
+    for (const rows of [[], [override]]) {
+      const plates = await listPlates(TENANT, fakeStore(rows));
+      expect(plates.some((p) => p.slug.startsWith("wiki-"))).toBe(false);
+      const summaries = visiblePlateSummaries(plates);
+      expect(summaries.some((s) => s.slug.startsWith("wiki-"))).toBe(false);
+    }
+    // resolvePlate (the composer path) cannot see wiki definitions either:
+    // with no rows, the slug is simply unknown.
+    expect(await resolvePlate(TENANT, "wiki-entity", fakeStore())).toBeNull();
   });
 });

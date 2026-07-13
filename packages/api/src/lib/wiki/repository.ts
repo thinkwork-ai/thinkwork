@@ -51,6 +51,7 @@ import {
   wikiCompileCursors,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
+import { composeWikiPageRender } from "./render.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,11 +60,7 @@ import { db as defaultDb } from "../db.js";
 export type WikiPageType = "entity" | "topic" | "decision";
 export type WikiPageStatus = "active" | "archived";
 export type WikiCompileJobStatus =
-  | "pending"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "skipped";
+  "pending" | "running" | "succeeded" | "failed" | "skipped";
 export type WikiCompileTrigger =
   | "memory_retain"
   | "bootstrap_import"
@@ -89,10 +86,7 @@ export type WikiSectionSourceKind =
 export type WikiUnresolvedStatus = "open" | "promoted" | "ignored";
 export type WikiPageLinkKind = "reference" | "parent_of" | "child_of" | string;
 export type SectionPromotionStatus =
-  | "none"
-  | "candidate"
-  | "promoted"
-  | "suppressed";
+  "none" | "candidate" | "promoted" | "suppressed";
 
 /**
  * Aggregation metadata carried on a section that acts as a rollup. Leaf-style
@@ -187,24 +181,19 @@ export interface WikiPageRow {
   /** Soft tag hints — never a structural forcing function. */
   tags: string[];
   last_compiled_at: Date | null;
+  /** THINK-273: stored plate render triple — all set together or all NULL. */
+  render_html?: string | null;
+  render_plate_slug?: string | null;
+  rendered_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
 
 export type WikiPlaceKind =
-  | "country"
-  | "region"
-  | "state"
-  | "city"
-  | "neighborhood"
-  | "poi"
-  | "custom";
+  "country" | "region" | "state" | "city" | "neighborhood" | "poi" | "custom";
 
 export type WikiPlaceSource =
-  | "google_api"
-  | "journal_metadata"
-  | "manual"
-  | "derived_hierarchy";
+  "google_api" | "journal_metadata" | "manual" | "derived_hierarchy";
 
 export interface WikiPlaceRow {
   id: string;
@@ -1813,6 +1802,15 @@ export async function upsertSections(
     .update(wikiPages)
     .set({ body_md: rendered, updated_at: sql`now()` as any })
     .where(eq(wikiPages.id, pageId));
+
+  // Best-effort plate render (THINK-273): compiled from the same assembled
+  // markdown on the same client/transaction as the body_md rewrite, so
+  // render and sections commit atomically. Never throws — failure persists
+  // the NULL render triple instead of failing the page write (R3).
+  await composeWikiPageRender(
+    { pageId, markdown: rendered, sectionCount: allSections.length },
+    db,
+  );
 }
 
 // ---------------------------------------------------------------------------

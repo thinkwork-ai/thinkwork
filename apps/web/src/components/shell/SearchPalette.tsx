@@ -17,8 +17,12 @@ import {
   CommandList,
   CommandShortcut,
 } from "@thinkwork/ui";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Telescope } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  SearchAskView,
+  type SearchAskViewModel,
+} from "@/components/shell/SearchAskView";
 import { SearchQuery } from "@/lib/graphql-queries";
 import { SEARCH_PALETTE_RAILS_ENABLED } from "@/lib/search-palette-gate";
 import { formatTinyRelativeDate } from "@/lib/relative-time";
@@ -85,9 +89,14 @@ export function SearchPalette({
   onSelectWiki,
   onSelectEntity,
   onAsk,
+  onResearch,
   emptyStateLoading,
   emptyStateError,
   dossierSlot,
+  askView,
+  onAskBack,
+  onAskOpenPermalink,
+  askSourcesSlot,
   railsEnabled = SEARCH_PALETTE_RAILS_ENABLED,
 }: {
   open: boolean;
@@ -103,10 +112,21 @@ export function SearchPalette({
   onSelectWiki: (hit: SearchWikiHit) => void;
   onSelectEntity: (hit: SearchEntityHit) => void;
   onAsk: (query: string) => void;
+  /** U9 research escalation: enqueue a background run for the current query. */
+  onResearch: (query: string) => void;
   emptyStateLoading: boolean;
   emptyStateError: string | null;
   /** U5 dossier card, rendered above the rails and first in arrow traversal. */
   dossierSlot?: ReactNode;
+  /**
+   * U7 ask view-model. When non-null, the palette renders the streaming ask
+   * answer in place of the rails (the CommandInput stays). Shell-owned so the
+   * turn survives palette close/reopen (KTD-6).
+   */
+  askView?: SearchAskViewModel | null;
+  onAskBack?: () => void;
+  onAskOpenPermalink?: () => void;
+  askSourcesSlot?: ReactNode;
   railsEnabled?: boolean;
 }) {
   const [debouncedQuery, setDebouncedQuery] = useState(search.trim());
@@ -124,6 +144,11 @@ export function SearchPalette({
   const handleAsk = () => {
     const query = search.trim();
     if (query) onAsk(query);
+  };
+
+  const handleResearch = () => {
+    const query = search.trim();
+    if (query) onResearch(query);
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -154,7 +179,14 @@ export function SearchPalette({
           aria-label="Search"
         />
         <CommandList className="scrollbar-auto-hide max-h-[420px]">
-          {railsActive ? (
+          {askView ? (
+            <SearchAskView
+              view={askView}
+              onBack={onAskBack ?? (() => {})}
+              onOpenPermalink={onAskOpenPermalink ?? (() => {})}
+              sourcesSlot={askSourcesSlot}
+            />
+          ) : railsActive ? (
             <BrokerRails
               tenantId={tenantId}
               query={debouncedQuery}
@@ -163,6 +195,7 @@ export function SearchPalette({
               onSelectWiki={onSelectWiki}
               onSelectEntity={onSelectEntity}
               onAsk={handleAsk}
+              onResearch={handleResearch}
               dossierSlot={dossierSlot}
             />
           ) : (
@@ -259,6 +292,7 @@ function BrokerRails({
   onSelectWiki,
   onSelectEntity,
   onAsk,
+  onResearch,
   dossierSlot,
 }: {
   tenantId: string | null | undefined;
@@ -268,6 +302,7 @@ function BrokerRails({
   onSelectWiki: (hit: SearchWikiHit) => void;
   onSelectEntity: (hit: SearchEntityHit) => void;
   onAsk: () => void;
+  onResearch: () => void;
   dossierSlot?: ReactNode;
 }) {
   // One shared id correlates the parallel per-rail calls of a single palette
@@ -291,6 +326,17 @@ function BrokerRails({
             Ask <span className="text-muted-foreground">“{query}”</span>
           </span>
           <CommandShortcut className="tracking-normal">⌘↵</CommandShortcut>
+        </CommandItem>
+        <CommandItem
+          value={`__research__ ${query}`}
+          className="h-10"
+          onSelect={onResearch}
+        >
+          <Telescope className="size-4 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 truncate">
+            Research this{" "}
+            <span className="text-muted-foreground">“{query}”</span>
+          </span>
         </CommandItem>
       </CommandGroup>
       {RAILS.map((rail) => (

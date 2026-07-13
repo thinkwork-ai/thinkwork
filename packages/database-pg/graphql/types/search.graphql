@@ -108,6 +108,16 @@ type SearchAskResult {
   threadId: ID!
 }
 
+"""
+THINK-263 U9 — result of enqueuing a "Research this" background run from the
+palette. The VISIBLE thread the asynchronous answer will post to (a new thread,
+or the supplied target). Only the thread id crosses the wire — the answer
+arrives later as a normal reply on the thread.
+"""
+type SearchResearchResult {
+  threadId: ID!
+}
+
 extend type Mutation {
   """
   THINK-263 U6 — open an "ask" turn for a palette query. Creates a HIDDEN,
@@ -119,6 +129,21 @@ extend type Mutation {
   `onThreadTurnStep`.
   """
   searchAsk(tenantId: ID!, query: String!): SearchAskResult!
+
+  """
+  THINK-263 U9 — enqueue a "Research this" BACKGROUND run for a palette query.
+  Creates a VISIBLE thread owned by the caller (titled `Research: <query>`) and
+  a triggering user message, or — when `threadId` is supplied and the caller
+  can write to it — posts into that thread instead, then dispatches the tenant's
+  default agent in NORMAL mode (retention normal, wakeup fallback allowed, cost
+  metered). The answer arrives asynchronously as a reply on the thread. Returns
+  the (new or target) thread id so the client can link to it.
+  """
+  searchResearch(
+    tenantId: ID!
+    query: String!
+    threadId: ID
+  ): SearchResearchResult!
 }
 
 "An artifact produced in an accessible thread linked to the entity."

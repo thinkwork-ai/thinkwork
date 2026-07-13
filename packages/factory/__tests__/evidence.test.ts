@@ -300,3 +300,47 @@ describe("createGhCliGateway", () => {
     expect(await gateway.prsForBranch("auto/x")).toEqual([]);
   });
 });
+
+describe("dependency-wait evidence", () => {
+  it("a waiting-on ledger blocker is a LEGITIMATE ending (complete, kind dependency-wait)", async () => {
+    const { detectPhaseEvidence } = await import("../src/phases/evidence.js");
+    const evidence = await detectPhaseEvidence({
+      phase: "implement",
+      issueIdentifier: "THINK-274",
+      statusAtLaunch: "Ready to Work",
+      currentStatus: "Ready to Work", // no status move
+      comments: [], // no baton
+      ledgerBlocker: "waiting-on: THINK-273",
+    });
+    expect(evidence.complete).toBe(true);
+    expect((evidence as { kind: string }).kind).toBe("dependency-wait");
+    expect((evidence as { detail: string }).detail).toContain("THINK-273");
+  });
+
+  it("real progress evidence WINS over a stale waiting-on blocker", async () => {
+    const { detectPhaseEvidence } = await import("../src/phases/evidence.js");
+    const evidence = await detectPhaseEvidence({
+      phase: "implement",
+      issueIdentifier: "THINK-274",
+      statusAtLaunch: "Ready to Work",
+      currentStatus: "Verification", // worker moved status
+      comments: [],
+      ledgerBlocker: "waiting-on: THINK-273",
+    });
+    expect(evidence.complete).toBe(true);
+    expect((evidence as { kind: string }).kind).toBe("status-moved");
+  });
+
+  it("no blocker + no evidence stays incomplete", async () => {
+    const { detectPhaseEvidence } = await import("../src/phases/evidence.js");
+    const evidence = await detectPhaseEvidence({
+      phase: "implement",
+      issueIdentifier: "THINK-274",
+      statusAtLaunch: "Ready to Work",
+      currentStatus: "Ready to Work",
+      comments: [],
+      ledgerBlocker: null,
+    });
+    expect(evidence.complete).toBe(false);
+  });
+});

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildIssueStatus,
   buildStatusView,
+  formatIssueStatusLive,
   formatStatusView,
   isStatusKeyword,
 } from "../src/slack/status.js";
@@ -120,6 +121,87 @@ describe("buildIssueStatus", () => {
     expect(status!.state).toBe("Planning");
     expect(status!.activeAttempts).toHaveLength(1);
     expect(buildIssueStatus(store, "nope")).toBeNull();
+  });
+});
+
+describe("formatIssueStatusLive", () => {
+  it("renders LIVE Linear status even when the store row lags a phase behind", () => {
+    // The store froze at implement/"Ready to Work" (status recorded at launch)
+    // while the worker moved Linear to Verification — the answer must show
+    // Verification, never the stale store state.
+    store.upsertIssue({
+      issueId: "i9",
+      identifier: "THINK-9",
+      lane: "Claude",
+      phase: "implement",
+      state: "Ready to Work",
+    });
+    store.insertAttempt({
+      issueId: "i9",
+      phase: "verify",
+      attemptNumber: 1,
+      state: "Running",
+      host: "mini",
+    });
+    const stored = buildIssueStatus(store, "i9");
+    const text = formatIssueStatusLive(
+      "THINK-9",
+      { state: "Verification", labels: ["Claude", "LFG"] },
+      stored,
+    );
+    expect(text).toContain("THINK-9 — Verification");
+    expect(text).toContain("labels: Claude, LFG");
+    expect(text).toContain("verify attempt 1 — Running on mini");
+    expect(text).not.toContain("Ready to Work");
+  });
+
+  it("shows the last terminal attempt when no worker is active", () => {
+    store.upsertIssue({
+      issueId: "i9",
+      identifier: "THINK-9",
+      lane: "Claude",
+      phase: "implement",
+      state: "In Progress",
+    });
+    const a = store.insertAttempt({
+      issueId: "i9",
+      phase: "implement",
+      attemptNumber: 1,
+      state: "Running",
+      host: "mini",
+    });
+    store.transitionAttempt(a, "Succeeded", "done");
+    const stored = buildIssueStatus(store, "i9");
+    expect(stored!.latestAttempt!.state).toBe("Succeeded");
+    const text = formatIssueStatusLive(
+      "THINK-9",
+      { state: "Verification", labels: ["Claude"] },
+      stored,
+    );
+    expect(text).toContain("no active worker; last: implement attempt 1 — Succeeded");
+  });
+
+  it("falls back to the store view — LABELED as possibly stale — when Linear is unreachable", () => {
+    store.upsertIssue({
+      issueId: "i9",
+      identifier: "THINK-9",
+      lane: "Claude",
+      phase: "plan",
+      state: "Planning",
+    });
+    const text = formatIssueStatusLive("THINK-9", null, buildIssueStatus(store, "i9"));
+    expect(text).toContain('status "Planning"');
+    expect(text).toContain("couldn't reach Linear");
+  });
+
+  it("answers from live facts alone when the store has never tracked the issue", () => {
+    const text = formatIssueStatusLive(
+      "THINK-9",
+      { state: "Brainstorming", labels: ["Claude"] },
+      null,
+    );
+    expect(text).toContain("THINK-9 — Brainstorming");
+    expect(text).toContain("no worker has run yet");
   });
 });
 

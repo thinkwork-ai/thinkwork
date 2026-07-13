@@ -205,3 +205,35 @@ describe("enum tolerance", () => {
     expect(parsed.warnings.length).toBeGreaterThan(0);
   });
 });
+
+describe("parseWaitingOn", () => {
+  it("parses the waiting-on blocker in its documented forms", async () => {
+    const { parseWaitingOn } = await import("../src/linear/ledger.js");
+    expect(parseWaitingOn("waiting-on: THINK-273")).toBe("THINK-273");
+    expect(parseWaitingOn("waiting-on THINK-273")).toBe("THINK-273");
+    expect(parseWaitingOn("Waiting-On: think-273 (merge gate)")).toBe("THINK-273");
+    expect(parseWaitingOn("Needs User")).toBeNull();
+    expect(parseWaitingOn(null)).toBeNull();
+    expect(parseWaitingOn(undefined)).toBeNull();
+    expect(parseWaitingOn("waiting-on:")).toBeNull();
+  });
+
+  it("does NOT warn 'unknown blocker' for a waiting-on value", async () => {
+    const { parseLedgerComment, renderLedgerComment } = await import("../src/linear/ledger.js");
+    const body = renderLedgerComment(
+      "THINK-9",
+      {
+        phase: "implement",
+        lane: "Claude",
+        worker: null,
+        attempt: 1,
+        blocker: "waiting-on: THINK-273",
+        compounded: false,
+      },
+      "",
+    );
+    const parsed = parseLedgerComment("THINK-9", body);
+    expect(parsed.ledger.blocker).toBe("waiting-on: THINK-273");
+    expect(parsed.warnings.filter((w) => w.includes("unknown blocker"))).toEqual([]);
+  });
+});

@@ -194,7 +194,10 @@ function coerceLedger(
     out.blocker = null;
   } else if (typeof raw.blocker === "string") {
     out.blocker = raw.blocker;
-    if (!(BLOCKER_LABELS as readonly string[]).includes(raw.blocker))
+    if (
+      !(BLOCKER_LABELS as readonly string[]).includes(raw.blocker) &&
+      parseWaitingOn(raw.blocker) === null
+    )
       warnings.push(`unknown blocker: ${raw.blocker}`);
   } else {
     warnings.push(
@@ -287,4 +290,19 @@ export function parseLedgerComment(
     .replace(/^\n+/, "")
     .trimEnd();
   return { ledger, prose, synthesized: false, warnings };
+}
+
+/**
+ * Cross-issue dependency blocker: a worker gated on another issue records
+ * `waiting-on: THINK-x` in the ledger blocker field and ends its run. The
+ * engine then WAITS quietly and relaunches the phase automatically when the
+ * dependency reaches Done — never `Needs User`, never a burned Failed attempt
+ * (LFG doctrine: an issue with a known next action is never stuck on a human).
+ * Returns the dependency identifier, or null when the blocker is not a
+ * waiting-on marker.
+ */
+export function parseWaitingOn(blocker: string | null | undefined): string | null {
+  if (blocker == null) return null;
+  const m = /^waiting-on:?\s+([A-Za-z]+-\d+)\b/i.exec(blocker.trim());
+  return m ? m[1].toUpperCase() : null;
 }

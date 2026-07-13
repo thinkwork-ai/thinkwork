@@ -253,8 +253,15 @@ describe("executeAction — launch", () => {
     expect(ledgerComment).toBeDefined();
     expect(ledgerComment!.body).toContain("phase: plan");
 
-    // Issue row upserted for reconciliation.
-    expect(store.getIssue(issue.id)).toBeDefined();
+    // Issue row upserted for reconciliation — recording the status the worker
+    // MOVED the issue to (observed by the evidence checks), not the status it
+    // launched from. Recording the launch status left the store one phase
+    // behind reality, which the in-thread Slack `status` keyword then served
+    // as current.
+    const row = store.getIssue(issue.id);
+    expect(row).toBeDefined();
+    expect(row!.state).toBe("Ready to Work");
+    expect(row!.phase).toBe("plan");
   });
 
   it("a consumesEscalationOverride launch supersedes the block marker (one-shot override)", async () => {
@@ -680,17 +687,19 @@ describe("executeAction — advance", () => {
 
 describe("executeAction — block", () => {
   it("applies label + one marker comment + ledger blocker; idempotent on re-execution", async () => {
+    // A live Needs User blocker label is the block source here (child issues
+    // now WAIT quietly instead of blocking — LFG never-stuck; and a lane
+    // conflict never reaches candidates).
     const issue = makeIssue({
       identifier: "THINK-6",
       state: "Planning",
-      labels: ["Claude"],
-      hasChildren: true,
+      labels: ["Claude", "Needs User"],
     });
     const h = makeHarness(issue);
     const candidate = await candidateFor(h.gateway, "THINK-6");
     const action = decideAction(candidate, {
       activeAttempt: null,
-      hasChildIssues: true,
+      hasChildIssues: false,
     });
     expect(action).toMatchObject({ kind: "block", label: "Needs User" });
 

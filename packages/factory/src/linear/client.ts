@@ -38,11 +38,15 @@ export interface LinearIssueSnapshot {
   state: string;
   /** Label names. */
   labels: string[];
+  /** Web URL of the issue (for operator-facing links, e.g. Slack). */
+  url?: string;
 }
 
 export interface LinearCommentSnapshot {
   id: string;
   body: string;
+  /** Web URL of the comment (deep link, e.g. for Slack question links). */
+  url?: string | null;
   /**
    * Author id: the workspace user id, or the bot actor id for
    * integration-authored comments. `null`/absent when the SDK exposes
@@ -86,6 +90,17 @@ export interface LinearGateway {
    * instead of draining the whole team. Unknown identifiers are skipped.
    */
   getIssuesByIdentifier(identifiers: string[]): Promise<LinearIssueSnapshot[]>;
+  /**
+   * INVARIANT: comments are returned OLDEST-FIRST (createdAt ascending).
+   * Every "newest X" finder in the codebase (findLedgerComment,
+   * findNewestBaton, the Slack escalation's newestQuestion) iterates from the
+   * array END expecting the newest comment there. @linear/sdk returns
+   * newest-first (verified empirically 2026-07-13), which silently inverted
+   * ALL of them in production — workers relaunched from the OLDEST baton (so
+   * Slack-relayed answers never reached them) and escalations quoted the
+   * oldest comment as "the question". The real gateway sorts to enforce this;
+   * fakes must keep insertion (chronological) order.
+   */
   listComments(issueId: string): Promise<LinearCommentSnapshot[]>;
   createComment(issueId: string, body: string): Promise<void>;
   updateComment(commentId: string, body: string): Promise<void>;
@@ -94,8 +109,13 @@ export interface LinearGateway {
   setState(issueId: string, stateName: string): Promise<void>;
   /** The authenticated (daemon) user's Linear id, cached after first fetch. */
   viewerId(): Promise<string>;
-  /** True when the issue has at least one child issue (KTD-12 guard). */
-  hasChildIssues(issueId: string): Promise<boolean>;
+  /**
+   * Workflow-state names of the issue's child issues (empty = no children).
+   * Drives the parent-issue rule: children in flight -> parent waits quietly;
+   * all children Done/Canceled -> parent proceeds. Replaces the boolean
+   * hasChildIssues (existence = states.length > 0).
+   */
+  childIssueStates(issueId: string): Promise<string[]>;
   /**
    * Markdown content of the Progress document for this issue, or null when
    * none exists. Implementation choice (documented per U5): @linear/sdk
@@ -148,6 +168,7 @@ query FactoryTeamIssues($filter: IssueFilter, $after: String) {
       identifier
       title
       description
+      url
       state { name }
       labels { nodes { name } }
     }
@@ -160,6 +181,7 @@ interface RawIssueNode {
   identifier: string;
   title: string;
   description: string | null;
+  url: string | null;
   state: { name: string } | null;
   labels: { nodes: { name: string }[] };
 }
@@ -299,6 +321,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
             description: n.description ?? "",
             state: n.state?.name ?? "",
             labels: n.labels.nodes.map((l) => l.name),
+            url: n.url ?? undefined,
           });
         }
         if (!page.pageInfo.hasNextPage) break;
@@ -330,6 +353,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
           description: issue.description ?? "",
           state: state?.name ?? "",
           labels: labels.map((l) => l.name),
+          url: issue.url,
         });
       }
       return snapshots;
@@ -341,15 +365,25 @@ export function createLinearGateway(apiKey: string): LinearGateway {
         (await issue.comments()) as unknown as PageOf<{
           id: string;
           body: string;
+          url?: string | null;
+          createdAt: Date | string;
           /** Workspace-user author id (SDK Comment.userId getter). */
           userId?: string | null;
           /** Bot author (SDK Comment.botActor property). */
           botActor?: { id?: string | null } | null;
         }>,
       );
+      // Enforce the interface's OLDEST-FIRST invariant: the SDK returns
+      // newest-first, and every from-the-end "newest" finder depends on
+      // chronological order (see the LinearGateway.listComments doc).
+      comments.sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
       return comments.map((c) => ({
         id: c.id,
         body: c.body,
+        url: c.url ?? null,
         authorId: c.userId ?? c.botActor?.id ?? null,
       }));
     },
@@ -392,12 +426,19 @@ export function createLinearGateway(apiKey: string): LinearGateway {
       await client.updateIssue(issueId, { labelIds: remaining });
     },
 
-    async hasChildIssues(issueId) {
+    async childIssueStates(issueId) {
       const issue = await client.issue(issueId);
-      const children = (await issue.children({ first: 1 })) as unknown as {
-        nodes: unknown[];
-      };
-      return children.nodes.length > 0;
+      const children = await drain(
+        (await issue.children()) as unknown as PageOf<{
+          state: Promise<{ name: string } | undefined>;
+        }>,
+      );
+      const states: string[] = [];
+      for (const child of children) {
+        const st = await child.state;
+        states.push(st?.name ?? "");
+      }
+      return states;
     },
 
     async getProgressDocument(issueId, featureTitle) {

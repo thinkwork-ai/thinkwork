@@ -12,7 +12,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLogger, type Logger } from "../src/logger.js";
 import type { PollCandidate } from "../src/linear/poller.js";
 import type { EngineAction } from "../src/phases/engine.js";
-import { createSlackSync } from "../src/slack/sync.js";
+import {
+  createSlackSync,
+  isQuestionKeyword,
+  newestQuestion,
+} from "../src/slack/sync.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
 import { FakeGateway, makeIssue, type FakeIssue } from "./fake-gateway.js";
 import { FakeSlackGateway } from "./fake-slack.js";
@@ -242,19 +246,26 @@ describe("syncCandidate", () => {
 });
 
 describe("handleInbound routing", () => {
-  it("answers a `status` keyword in a mapped thread from the store", async () => {
-    const issue = makeIssue({ identifier: "THINK-3", state: "Planning", labels: ["Claude"] });
+  it("answers a `status` keyword with LIVE Linear state, even when the store row is stale", async () => {
+    // Live Linear says Verification; the store row froze at the implement
+    // launch ("Ready to Work") — the answer must report Verification.
+    const issue = makeIssue({
+      identifier: "THINK-3",
+      state: "Verification",
+      labels: ["Claude", "LFG"],
+    });
     const gateway = new FakeGateway([issue]);
     const slack = new FakeSlackGateway();
     const sync = makeSync(gateway, slack);
-    // Enroll (open thread) + record an issue row for the status view.
+    // Enroll (open thread) + record a STALE issue row (as the executor did
+    // before the lastObservedStatus fix, and as any mid-phase row still does).
     await sync.syncCandidate(candidateFor(issue), advance);
     store.upsertIssue({
       issueId: issue.id,
       identifier: "THINK-3",
       lane: "Claude",
-      phase: "plan",
-      state: "Planning",
+      phase: "implement",
+      state: "Ready to Work",
     });
     const threadTs = store.getSlackThreadByIssue(issue.id)!.thread_ts;
     slack.posts.length = 0;
@@ -268,9 +279,40 @@ describe("handleInbound routing", () => {
     });
 
     expect(slack.posts).toHaveLength(1);
-    expect(slack.posts[0].text).toContain("THINK-3");
+    expect(slack.posts[0].text).toContain("THINK-3> — Verification"); // linkified: <url|THINK-3> — ...
+    expect(slack.posts[0].text).not.toContain("Ready to Work");
     // A status read must NOT clear any blocker.
     expect(gateway.writesOf("removeLabel")).toHaveLength(0);
+  });
+
+  it("falls back to the store view (labeled) when the live Linear read fails", async () => {
+    const issue = makeIssue({ identifier: "THINK-3", state: "Planning", labels: ["Claude"] });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    await sync.syncCandidate(candidateFor(issue), advance);
+    store.upsertIssue({
+      issueId: issue.id,
+      identifier: "THINK-3",
+      lane: "Claude",
+      phase: "plan",
+      state: "Planning",
+    });
+    const threadTs = store.getSlackThreadByIssue(issue.id)!.thread_ts;
+    slack.posts.length = 0;
+    gateway.failNextListIssues = true;
+
+    await sync.handleInbound({
+      channel: CHANNEL,
+      threadTs,
+      ts: "1700.000900",
+      userId: OPERATOR,
+      text: "status",
+    });
+
+    expect(slack.posts).toHaveLength(1);
+    expect(slack.posts[0].text).toContain('status "Planning"');
+    expect(slack.posts[0].text).toContain("couldn't reach Linear");
   });
 
   it("routes a non-status reply to the relay (answer round-trip)", async () => {
@@ -308,5 +350,182 @@ describe("handleInbound routing", () => {
     expect(
       gateway.writesOf("createComment").some((w) => w.args[1].includes("Use Cognito.")),
     ).toBe(true);
+  });
+});
+
+describe("newestQuestion — question-protocol comment wins", () => {
+  it("prefers the newest blocker: comment over a NEWER worker progress note", async () => {
+    // THINK-274 live failure shape (inverted): the real numbered question is a
+    // blocker: comment, and a worker progress note ("No user input required")
+    // exists too. The escalation must quote the blocker: comment.
+    const comments = [
+      { id: "c1", body: "worker:THINK-9:implement — merge held on a gate. No user input required." },
+      { id: "c2", body: "blocker:THINK-9:implement (attempt 2) — @eric1\n\nQuestions:\n1. Approve option (a)?" },
+      { id: "c3", body: "worker:THINK-9:implement — still holding, re-checked the gate." },
+    ];
+    const q = newestQuestion(comments);
+    expect(q!.id).toBe("c2");
+  });
+
+  it("falls back to the newest non-marker comment when no blocker: comment exists", () => {
+    const comments = [
+      { id: "c1", body: "handoff:THINK-9:Planning\n\nGoal: plan" },
+      { id: "c2", body: "@eric1 which provider? (recommend Cognito)" },
+      { id: "c3", body: "factory-block:THINK-9\n\nblocked" },
+    ];
+    expect(newestQuestion(comments)!.id).toBe("c2");
+  });
+});
+
+describe("isQuestionKeyword", () => {
+  it("matches the phrasings an operator actually types", () => {
+    expect(isQuestionKeyword("question")).toBe(true);
+    expect(isQuestionKeyword("question?")).toBe(true);
+    expect(isQuestionKeyword("q?")).toBe(true);
+    expect(isQuestionKeyword("why")).toBe(true);
+    expect(isQuestionKeyword("What's the question?")).toBe(true);
+    expect(isQuestionKeyword("What's the qustion?")).toBe(true); // live typo
+    expect(isQuestionKeyword("whats the question")).toBe(true);
+    expect(isQuestionKeyword("what is the question?")).toBe(true);
+    expect(isQuestionKeyword("<@UBOT> question")).toBe(true);
+    // Real answers must NOT match.
+    expect(isQuestionKeyword("Use Cognito.")).toBe(false);
+    expect(isQuestionKeyword("yes, approve option (a)")).toBe(false);
+    expect(isQuestionKeyword("what should we do about the gate?")).toBe(false);
+  });
+});
+
+describe("handleInbound — question keyword", () => {
+  it("re-shows the open question WITHOUT relaying (blocker intact)", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-9",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        { id: "c1", body: "worker:THINK-9:implement — progress note", authorId: "worker" },
+        {
+          id: "c2",
+          body: "blocker:THINK-9:implement (attempt 2) — @eric1\n\nQuestions:\n1. Approve option (a)?",
+          authorId: "worker",
+        },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    store.upsertSlackThread({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      channelId: CHANNEL,
+      threadTs: "ts-q",
+    });
+
+    await sync.handleInbound({
+      channel: CHANNEL,
+      threadTs: "ts-q",
+      ts: "1700.002000",
+      userId: OPERATOR,
+      text: "What's the qustion?",
+    });
+
+    expect(slack.posts).toHaveLength(1);
+    expect(slack.posts[0].text).toContain("Approve option (a)?");
+    // NOT relayed: blocker untouched, no baton/mirror comments written.
+    expect(gateway.writesOf("removeLabel")).toHaveLength(0);
+    expect(gateway.writesOf("createComment")).toHaveLength(0);
+  });
+
+  it("says there is no open question when the blocker is absent", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-9",
+      state: "Verification",
+      labels: ["Claude"],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+    store.upsertSlackThread({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      channelId: CHANNEL,
+      threadTs: "ts-q",
+    });
+
+    await sync.handleInbound({
+      channel: CHANNEL,
+      threadTs: "ts-q",
+      ts: "1700.002100",
+      userId: OPERATOR,
+      text: "question",
+    });
+
+    expect(slack.posts).toHaveLength(1);
+    expect(slack.posts[0].text).toContain("no open question");
+    expect(slack.posts[0].text).toContain("Verification");
+    expect(gateway.writesOf("removeLabel")).toHaveLength(0);
+  });
+});
+
+describe("escalation content — links, no noise footer", () => {
+  it("links the issue and the question comment; no verbose footer", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-40",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        {
+          id: "q-1",
+          body: "blocker:THINK-40:implement — @eric1\n\nQuestions:\n1. Approve?",
+          url: "https://linear.test/issue/THINK-40#comment-q-1",
+          authorId: "worker",
+        },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), {
+      kind: "block",
+      label: "Needs User",
+      reason: "r",
+    });
+
+    const mention = slack.mentions()[0];
+    expect(mention.text).toContain("<https://linear.test/issue/THINK-40|THINK-40>");
+    expect(mention.text).toContain("<https://linear.test/issue/THINK-40#comment-q-1|Open the question in Linear>");
+    expect(mention.text).toContain("1. Approve?");
+    expect(mention.text).not.toContain("VERBATIM");
+    // Root enrollment message links the issue too.
+    expect(slack.posts[0].text).toContain("<https://linear.test/issue/THINK-40|THINK-40>");
+  });
+
+  it("falls back to the newest factory-block reason when no worker question exists", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-41",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        {
+          id: "fb-1",
+          body: "factory-block:THINK-41\n\n**Automation blocked this issue** (`Needs User`).\n\nTHINK-41 phase \"implement\" has 2 consecutive killed/stalled attempts — escalating to an operator (R15/AE5)",
+          url: "https://linear.test/issue/THINK-41#comment-fb-1",
+          authorId: "viewer-daemon",
+        },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), {
+      kind: "block",
+      label: "Needs User",
+      reason: "r",
+    });
+
+    const mention = slack.mentions()[0];
+    expect(mention.text).toContain("2 consecutive killed/stalled attempts");
+    expect(mention.text).not.toContain("an answer is needed to resume");
   });
 });

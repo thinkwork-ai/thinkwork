@@ -303,12 +303,14 @@ export type AgentLoop = {
   description?: Maybe<Scalars['String']['output']>;
   enabled: Scalars['Boolean']['output'];
   id: Scalars['ID']['output'];
+  kind: AgentLoopKind;
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastRunId?: Maybe<Scalars['ID']['output']>;
   lastRunStatus?: Maybe<AgentLoopRunStatus>;
   lastRunSummary: Scalars['AWSJSON']['output'];
   lifecycleStatus: AgentLoopLifecycleStatus;
   linkedWorkflow?: Maybe<Workflow>;
+  memoryPipeline?: Maybe<MemoryPipeline>;
   name: Scalars['String']['output'];
   ownerAgentId?: Maybe<Scalars['ID']['output']>;
   ownerUserId?: Maybe<Scalars['ID']['output']>;
@@ -317,6 +319,7 @@ export type AgentLoop = {
   runs: Array<AgentLoopRun>;
   slug: Scalars['String']['output'];
   spaceId?: Maybe<Scalars['ID']['output']>;
+  systemKey?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versions: Array<AgentLoopVersion>;
@@ -367,6 +370,11 @@ export enum AgentLoopIterationStatus {
   Queued = 'queued',
   Running = 'running',
   WaitingForHuman = 'waiting_for_human'
+}
+
+export enum AgentLoopKind {
+  System = 'system',
+  User = 'user'
 }
 
 export enum AgentLoopLifecycleStatus {
@@ -2118,6 +2126,15 @@ export type DocumentPlatePreview = {
   html?: Maybe<Scalars['String']['output']>;
 };
 
+/** An artifact produced in an accessible thread linked to the entity. */
+export type DossierArtifact = {
+  __typename?: 'DossierArtifact';
+  id: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
+  title?: Maybe<Scalars['String']['output']>;
+  type?: Maybe<Scalars['String']['output']>;
+};
+
 export type EffectiveCapabilitySet = {
   __typename?: 'EffectiveCapabilitySet';
   computedAt: Scalars['AWSDateTime']['output'];
@@ -2388,6 +2405,34 @@ export type EnableWorkflowInput = {
 export type EnableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
+};
+
+/** Everything the tenant brain knows about one grounded entity. */
+export type EntityDossier = {
+  __typename?: 'EntityDossier';
+  aliases?: Maybe<Array<Scalars['String']['output']>>;
+  artifacts: Array<DossierArtifact>;
+  entityId: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  memories: Array<SearchMemoryHit>;
+  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
+  summary?: Maybe<Scalars['String']['output']>;
+  threads: Array<SearchThreadHit>;
+  /** Compiled Entity page; null when the entity has no page (degrade path). */
+  wikiPage?: Maybe<WikiPage>;
+};
+
+/**
+ * Two-part dossier result: exactly one of `match` (resolved) or a non-empty
+ * `disambiguation` (>1 grounded candidate) is populated. Both are empty/null
+ * when there is no grounded match.
+ */
+export type EntityDossierResult = {
+  __typename?: 'EntityDossierResult';
+  /** Grounded candidates when >1 matched and no `entityId` was supplied. */
+  disambiguation: Array<SearchEntityHit>;
+  /** The assembled dossier, or null when ambiguous or no grounded match. */
+  match?: Maybe<EntityDossier>;
 };
 
 /**
@@ -3541,6 +3586,57 @@ export type MemoryGraphNode = {
 };
 
 /**
+ * The live memory pipeline behind the built-in memory Automation (THINK-264):
+ * what it will run, over which sources, and whether it can run at all.
+ */
+export type MemoryPipeline = {
+  __typename?: 'MemoryPipeline';
+  /** The processor's own on/off switch — mirrors AgentLoop.enabled. */
+  enabled: Scalars['Boolean']['output'];
+  /** personal | shared */
+  mode: Scalars['String']['output'];
+  processorConfigId: Scalars['ID']['output'];
+  /** ready | blocked_not_ready */
+  readiness: Scalars['String']['output'];
+  /** JSON array of {code, message} readiness reasons (empty when ready). */
+  readinessReasons?: Maybe<Scalars['AWSJSON']['output']>;
+  /** False when a schedule exists but is switched off (manual runs still work). */
+  scheduleEnabled: Scalars['Boolean']['output'];
+  /** The bound rate(...)/cron(...) expression, or null when there is no schedule. */
+  scheduleExpression?: Maybe<Scalars['String']['output']>;
+  scheduleTimezone?: Maybe<Scalars['String']['output']>;
+  sources: Array<MemorySourceConfig>;
+  /** Ordered pipeline steps, as built from the current blueprint. */
+  stages: Array<MemoryPipelineStage>;
+  workflowId?: Maybe<Scalars['ID']['output']>;
+};
+
+/** One step of the memory pipeline as the Definition tab renders it (THINK-264). */
+export type MemoryPipelineStage = {
+  __typename?: 'MemoryPipelineStage';
+  description: Scalars['String']['output'];
+  /** False when the user has switched this stage off. Always true for spine stages. */
+  enabled: Scalars['Boolean']['output'];
+  /** Step id in the workflow definition (e.g. "retain"). */
+  id: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  /**
+   * This stage's outcome on the most recent run — seen|changed|retracted|
+   * deferred|failed|noop — or null when the stage did not report an item.
+   */
+  lastResult?: Maybe<Scalars['String']['output']>;
+  /** Canonical stage kind: preflight|acquire|extract|project|resolve|retain|compound|graph|wiki. */
+  stage: Scalars['String']['output'];
+  /**
+   * Whether the user may switch this stage off. Only the optional tail
+   * (compound/graph/wiki) is toggleable: acquire → project → resolve → retain is
+   * the pipeline's spine, and disabling any of it would starve everything
+   * downstream and silently make the automation a no-op.
+   */
+  toggleable: Scalars['Boolean']['output'];
+};
+
+/**
  * External Memory Compounding (THINK-193 U2). Operator-only inspection and
  * control surface for external memory sources: processor configs, source
  * bindings, authorization grants, the evidence ledger, ontology claims, and
@@ -4341,11 +4437,32 @@ export type Mutation = {
   saveWorkItemStatuses: Array<WorkItemStatus>;
   saveWorkItemView: WorkItemSavedView;
   saveWorkflow: SaveWorkflowResult;
+  /**
+   * THINK-263 U6 — open an "ask" turn for a palette query. Creates a HIDDEN,
+   * owner-restricted thread (owned by the caller, `metadata.systemHidden`) and a
+   * triggering user message, then dispatches the tenant's default agent in ask
+   * mode with retention suppressed (`use_memory: false`) and cost metering
+   * intact. Budget is pre-checked (BUDGET_EXCEEDED before any writes). Returns
+   * the hidden thread id so the client can stream the answer via
+   * `onThreadTurnStep`.
+   */
+  searchAsk: SearchAskResult;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
+  /**
+   * Owner-only: switch one optional pipeline stage on or off (THINK-264).
+   *
+   * Only the optional tail (compound/graph/wiki) may be toggled — a request for
+   * any spine stage (acquire/project/resolve/retain, or preflight/extract) is
+   * rejected rather than silently ignored, because disabling one would starve
+   * every stage after it. The toggle is stored as intent on the processor and
+   * supersedes the workflow's active blueprint version through the normal lazy
+   * path; in-flight runs stay pinned to the version they captured.
+   */
+  setMemoryPipelineStageEnabled: MemoryPipeline;
   /**
    * Create, update, or disable a source config (THINK-193 U5/U6). Shared
    * processors: tenant admin. Personal processors: owner self-service for
@@ -5635,6 +5752,12 @@ export type MutationSaveWorkflowArgs = {
 };
 
 
+export type MutationSearchAskArgs = {
+  query: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type MutationSeedEvalTestCasesArgs = {
   categories?: InputMaybe<Array<Scalars['String']['input']>>;
   tenantId: Scalars['ID']['input'];
@@ -5659,6 +5782,13 @@ export type MutationSetDefaultEvalProfileArgs = {
 
 export type MutationSetManagedApplicationDeploymentArgs = {
   input: SetManagedApplicationDeploymentInput;
+};
+
+
+export type MutationSetMemoryPipelineStageEnabledArgs = {
+  agentLoopId: Scalars['ID']['input'];
+  enabled: Scalars['Boolean']['input'];
+  stage: Scalars['String']['input'];
 };
 
 
@@ -6968,6 +7098,17 @@ export type Query = {
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
+  /**
+   * THINK-263 U5 — server-assembled dossier for one grounded knowledge-graph
+   * entity: its compiled wiki page (null when none — a degrade, never a
+   * fabricated fallback), contributing memories, linked threads, and artifacts.
+   * Every thread-derived surface is fenced behind the caller's thread
+   * visibility; content from threads the caller cannot open is dropped entirely
+   * (the thread, its artifacts, and any memory hit stamped with it). Multiple
+   * grounded matches with no `entityId` selector return a disambiguation list
+   * and assemble nothing; passing `entityId` resolves the ambiguity.
+   */
+  entityDossier: EntityDossierResult;
   entityResolutionCase?: Maybe<EntityResolutionCase>;
   entityResolutionCases: Array<EntityResolutionCase>;
   evalDataset?: Maybe<EvalDataset>;
@@ -7564,6 +7705,13 @@ export type QueryEmailChannelLedgerArgs = {
 
 export type QueryEmailSpaceEmailPolicyArgs = {
   spaceId: Scalars['ID']['input'];
+};
+
+
+export type QueryEntityDossierArgs = {
+  entityId?: InputMaybe<Scalars['ID']['input']>;
+  query: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -9311,6 +9459,17 @@ export type ScheduledJob = {
   timezone: Scalars['String']['output'];
   triggerType: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+/**
+ * THINK-263 U6 — result of opening an ask turn from the palette. The hidden,
+ * owner-restricted thread the ask turn runs in; the client streams it via
+ * `onThreadTurnStep` (wired in U7). Only the thread id crosses the wire — the
+ * answer arrives on the thread's turn, never inline here.
+ */
+export type SearchAskResult = {
+  __typename?: 'SearchAskResult';
+  threadId: Scalars['ID']['output'];
 };
 
 export type SearchEntityHit = {
@@ -11697,6 +11856,14 @@ export type WikiPage = {
    * since been archived.
    */
   promotedFromSection?: Maybe<WikiPromotedFromSection>;
+  /**
+   * Self-contained, sanitized, scriptless HTML plate render compiled from the
+   * page's sections (THINK-273). Null when no render is stored — compile
+   * failure or a page that predates render persistence; readers fall back to
+   * the canonical markdown. Populated on the wikiPage detail query only; list,
+   * search, graph, and dossier surfaces never carry it.
+   */
+  renderHtml?: Maybe<Scalars['String']['output']>;
   /**
    * Active pages rolled up into this page's named section — the denormalized
    * aggregation view (`aggregation.linked_page_ids` on the section jsonb).

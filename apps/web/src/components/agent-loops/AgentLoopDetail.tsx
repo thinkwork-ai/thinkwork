@@ -36,7 +36,6 @@ import {
 } from "@/lib/graphql-queries";
 import { ArtifactShareDialog } from "@/components/artifacts/ArtifactShareDialog";
 import { AutomationFlowSection } from "./AutomationFlowSection";
-import { MemoryPipelineSection } from "./MemoryPipelineSection";
 import {
   AutomationWebhookDeliveriesPanel,
   AutomationWebhookEndpointPanel,
@@ -402,19 +401,11 @@ export function AgentLoopDetailContent({
               </a>
             </div>
           ) : null}
-          {loop.memoryPipeline ? (
-            // THINK-264: the built-in memory Automation's steps ARE its
-            // pipeline, so it renders the real stage list rather than the
-            // trigger → work → document → deliver projection.
-            <MemoryPipelineSection
-              agentLoopId={loop.id}
-              pipeline={loop.memoryPipeline}
-              triggerFamily={loop.primaryTriggerFamily}
-            />
-          ) : tenantId && onSave ? (
+          {tenantId && onSave ? (
             <AutomationFlowSection
               tenantId={tenantId}
               loop={loop}
+              memoryPipeline={loop.memoryPipeline}
               workerOptions={workerOptions}
               spaceOptions={spaceOptions}
               routineOptions={routineOptions}
