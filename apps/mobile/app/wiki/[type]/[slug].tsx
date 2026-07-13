@@ -1,12 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  useWindowDimensions,
-  View,
-} from "react-native";
-import { WebView } from "react-native-webview";
+import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import type { Router } from "expo-router";
 import Markdown from "react-native-markdown-display";
@@ -42,13 +35,6 @@ import {
   shouldShowSourcesAffordance,
   type WikiSourceRecord,
 } from "@/lib/wiki/source-rows";
-import {
-  decidePlateRequest,
-  extractWikiPath,
-  WIKI_PLATE_BASE_URL,
-  WIKI_PLATE_ORIGIN_WHITELIST,
-} from "@/lib/wiki/plate-request-policy";
-import { withDocumentFrameEnvelope } from "@/lib/document-frame";
 
 /**
  * Intercept markdown link taps inside a wiki body. Rollup sections are
@@ -78,6 +64,33 @@ function buildWikiLinkHandler(
     );
     return false;
   };
+}
+
+function extractWikiPath(url: string): { type: string; slug: string } | null {
+  // Accept both relative `/wiki/…` paths and absolute URLs pointing at any
+  // host. Anything not shaped like `/wiki/<type>/<slug>` falls through.
+  let pathOnly = url;
+  try {
+    // Absolute URL (has a scheme)
+    const parsed = new URL(url);
+    pathOnly = parsed.pathname;
+  } catch {
+    // Not a valid URL — treat as a path.
+  }
+  const m = pathOnly.match(/^\/wiki\/([^/]+)\/([^/?#]+)/);
+  if (!m) return null;
+  const typeRaw = decodeURIComponent(m[1] ?? "").toLowerCase();
+  const slug = decodeURIComponent(m[2] ?? "");
+  const type =
+    typeRaw === "entity"
+      ? "ENTITY"
+      : typeRaw === "topic"
+        ? "TOPIC"
+        : typeRaw === "decision"
+          ? "DECISION"
+          : null;
+  if (!type || !slug) return null;
+  return { type, slug };
 }
 
 const TYPE_LABELS: Record<WikiPageType, string> = {
@@ -167,39 +180,6 @@ export default function WikiPageScreen() {
 
   const onLinkPress = useCallback(
     (url: string) => buildWikiLinkHandler(router, userId)(url),
-    [router, userId],
-  );
-
-  // Plate mode (THINK-275): when the page carries a compiled HTML render,
-  // it replaces the markdown sections region inside the same scriptless
-  // document-frame envelope the artifacts reader uses. Pages without a
-  // render keep the markdown path (permanent fallback, parent R9).
-  const { height: windowHeight } = useWindowDimensions();
-  const plateHtml = useMemo(
-    () =>
-      page?.renderHtml
-        ? withDocumentFrameEnvelope(page.renderHtml, isDark ? "dark" : "light")
-        : null,
-    [page?.renderHtml, isDark],
-  );
-  const [plateReady, setPlateReady] = useState(false);
-  // Scriptless = no content-height reporting, so the WebView gets an
-  // explicit viewport-derived height and scrolls its own content while
-  // the native chrome stays in the outer ScrollView (KTD5).
-  const plateHeight = Math.max(360, Math.round(windowHeight * 0.62));
-  const onPlateRequest = useCallback(
-    (req: { url: string }): boolean => {
-      const decision = decidePlateRequest(req.url);
-      if (decision.action === "push") {
-        router.push(
-          userId
-            ? `${decision.route}?userId=${encodeURIComponent(userId)}`
-            : decision.route,
-        );
-        return false;
-      }
-      return decision.action === "allow";
-    },
     [router, userId],
   );
 
@@ -485,60 +465,22 @@ export default function WikiPageScreen() {
               ) : null}
             </View>
 
-            {plateHtml ? (
-              <View
-                style={{
-                  height: plateHeight,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  overflow: "hidden",
-                  backgroundColor: isDark ? "#0a0a0a" : "#ffffff",
-                }}
-              >
-                {!plateReady && (
-                  <View className="absolute inset-0 items-center justify-center z-10">
-                    <ActivityIndicator
-                      size="small"
-                      color={colors.mutedForeground}
-                    />
-                  </View>
-                )}
-                {/* Hidden until onLoadEnd: WKWebView's first paint reflows
-                    once layout settles — only show the settled document. */}
-                <WebView
-                  source={{ html: plateHtml, baseUrl: WIKI_PLATE_BASE_URL }}
+            {page.sections.map((section) => (
+              <View key={section.id} style={{ gap: 8 }}>
+                <Text
                   style={{
-                    flex: 1,
-                    backgroundColor: isDark ? "#0a0a0a" : "#ffffff",
-                    opacity: plateReady ? 1 : 0,
+                    color: colors.foreground,
+                    fontSize: 17,
+                    fontWeight: "600",
                   }}
-                  onLoadEnd={() => setPlateReady(true)}
-                  javaScriptEnabled={false}
-                  originWhitelist={WIKI_PLATE_ORIGIN_WHITELIST}
-                  onShouldStartLoadWithRequest={onPlateRequest}
-                  setSupportMultipleWindows={false}
-                  allowsLinkPreview={false}
-                />
+                >
+                  {section.heading}
+                </Text>
+                <Markdown style={markdownStyles} onLinkPress={onLinkPress}>
+                  {section.bodyMd}
+                </Markdown>
               </View>
-            ) : (
-              page.sections.map((section) => (
-                <View key={section.id} style={{ gap: 8 }}>
-                  <Text
-                    style={{
-                      color: colors.foreground,
-                      fontSize: 17,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {section.heading}
-                  </Text>
-                  <Markdown style={markdownStyles} onLinkPress={onLinkPress}>
-                    {section.bodyMd}
-                  </Markdown>
-                </View>
-              ))
-            )}
+            ))}
 
             {page.children && page.children.length > 0 ? (
               <View style={{ gap: 8, marginTop: 12 }}>

@@ -2765,7 +2765,6 @@ export const ComputerWikiPageQuery = gql`
       title
       summary
       bodyMd
-      renderHtml
       status
       lastCompiledAt
       updatedAt

@@ -43,8 +43,6 @@ export interface WikiPageDetail {
   aliases: string[];
   sections: WikiPageSection[];
   // Unit 8 read surfaces — populated on the detail query only.
-  /** Compiled HTML plate render; null when no render exists (markdown fallback). */
-  renderHtml?: string | null;
   sourceMemoryCount?: number;
   parent?: WikiPageRef | null;
   promotedFromSection?: WikiPromotedFromSection | null;

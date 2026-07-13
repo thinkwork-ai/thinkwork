@@ -19,21 +19,16 @@ vi.mock("@/components/memory/RelatedMemories", () => ({
   RelatedMemories: () => <div data-testid="related-memories" />,
 }));
 
-import { ThemeProvider } from "@thinkwork/ui";
 import { WikiPageView } from "./WikiPageView";
 
 function renderView() {
-  // ThemeProvider: the plate branch mounts DocumentFrame, which reads the
-  // app theme for envelope stamping.
   return render(
-    <ThemeProvider>
-      <WikiPageView
-        tenantId="tenant-1"
-        userId="user-1"
-        type="ENTITY"
-        slug="acme"
-      />
-    </ThemeProvider>,
+    <WikiPageView
+      tenantId="tenant-1"
+      userId="user-1"
+      type="ENTITY"
+      slug="acme"
+    />,
   );
 }
 
@@ -170,7 +165,7 @@ describe("WikiPageView", () => {
   const RENDER_HTML =
     "<!DOCTYPE html><html><head><title>Acme</title></head><body><h1>Acme plate</h1></body></html>";
 
-  it("renders the HTML plate through the wiki frame variant when renderHtml is present (R1)", () => {
+  it("keeps native section controls when renderHtml is present", () => {
     queryResult = {
       fetching: false,
       data: {
@@ -195,84 +190,12 @@ describe("WikiPageView", () => {
     };
     renderView();
 
-    const frame = screen.getByTestId("document-frame") as HTMLIFrameElement;
-    // The wiki variant: relaxed sandbox + base target travel together (KTD3).
-    expect(frame.getAttribute("sandbox")).toBe(
-      "allow-top-navigation-by-user-activation",
-    );
-    expect(frame.getAttribute("srcdoc")).toContain('<base target="_top">');
-    // Section markup is replaced by the plate, not rendered alongside it.
-    expect(screen.queryByText(/SECTION_ONLY/)).toBeNull();
-    // Chrome invariance (KTD5): header, summary, aliases, related memories.
+    expect(screen.queryByTestId("document-frame")).toBeNull();
+    expect(screen.getByText("Overview")).toBeTruthy();
+    expect(screen.getByText("SECTION_ONLY overview text.")).toBeTruthy();
     expect(screen.getByText("Acme Corp")).toBeTruthy();
     expect(screen.getByText("A key customer.")).toBeTruthy();
     expect(screen.getByText("Acme")).toBeTruthy();
     expect(screen.getByTestId("related-memories")).toBeTruthy();
-  });
-
-  it("renders the plate even when the page has zero sections", () => {
-    queryResult = {
-      fetching: false,
-      data: {
-        wikiPage: {
-          id: "w1",
-          type: "ENTITY",
-          slug: "acme",
-          title: "Acme Corp",
-          renderHtml: RENDER_HTML,
-          sections: [],
-        },
-      },
-    };
-    renderView();
-    expect(screen.getByTestId("document-frame")).toBeTruthy();
-  });
-
-  it("keeps the section rendering when renderHtml is null (AE3/R4)", () => {
-    queryResult = {
-      fetching: false,
-      data: {
-        wikiPage: {
-          id: "w1",
-          type: "ENTITY",
-          slug: "acme",
-          title: "Acme Corp",
-          renderHtml: null,
-          sections: [
-            {
-              id: "s1",
-              heading: "Overview",
-              bodyMd: "Section overview text.",
-              position: 1,
-            },
-          ],
-        },
-      },
-    };
-    renderView();
-    expect(screen.getByText("Overview")).toBeTruthy();
-    expect(screen.getByText("Section overview text.")).toBeTruthy();
-    expect(screen.queryByTestId("document-frame")).toBeNull();
-  });
-
-  it("treats an empty-string renderHtml like null (falsy guard)", () => {
-    queryResult = {
-      fetching: false,
-      data: {
-        wikiPage: {
-          id: "w1",
-          type: "ENTITY",
-          slug: "acme",
-          title: "Acme Corp",
-          renderHtml: "",
-          sections: [
-            { id: "s1", heading: "Overview", bodyMd: "text", position: 1 },
-          ],
-        },
-      },
-    };
-    renderView();
-    expect(screen.queryByTestId("document-frame")).toBeNull();
-    expect(screen.getByText("Overview")).toBeTruthy();
   });
 });
