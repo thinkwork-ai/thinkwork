@@ -2593,6 +2593,61 @@ export const SearchQuery = gql`
   }
 `;
 
+/**
+ * THINK-263 U5 — the entity dossier: everything the tenant brain knows about
+ * one grounded knowledge-graph entity. `match` is the assembled dossier (null
+ * when ambiguous / no grounded match); `disambiguation` lists candidates when
+ * more than one grounded entity matched and no `entityId` selector was given.
+ */
+export const EntityDossierQuery = gql`
+  query EntityDossier($tenantId: ID!, $query: String!, $entityId: ID) {
+    entityDossier(tenantId: $tenantId, query: $query, entityId: $entityId) {
+      match {
+        entityId
+        label
+        ontologyTypeSlug
+        summary
+        aliases
+        wikiPage {
+          id
+          type
+          slug
+          title
+          displayType
+        }
+        memories {
+          memoryRecordId
+          text
+          score
+          threadId
+          createdAt
+        }
+        threads {
+          id
+          identifier
+          title
+          spaceId
+          updatedAt
+        }
+        artifacts {
+          id
+          title
+          type
+          threadId
+        }
+      }
+      disambiguation {
+        entityId
+        label
+        ontologyTypeSlug
+        summary
+        aliases
+        evidenceCount
+      }
+    }
+  }
+`;
+
 export const ComputerWikiPageQuery = gql`
   query ComputerWikiPage(
     $tenantId: ID!

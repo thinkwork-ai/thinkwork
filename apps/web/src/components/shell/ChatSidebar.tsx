@@ -76,6 +76,8 @@ import {
   SearchPalette,
   type PaletteThreadTarget,
 } from "@/components/shell/SearchPalette";
+import { EntityDossierCard } from "@/components/shell/EntityDossierCard";
+import type { EntityDossierResult } from "@/gql/graphql";
 import { SEARCH_PALETTE_RAILS_ENABLED } from "@/lib/search-palette-gate";
 import {
   DEFAULT_WORK_ITEM_SEARCH,
@@ -87,6 +89,7 @@ import { useThreadNotifications } from "@/hooks/useThreadNotifications";
 import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
 import {
   DeleteThreadMutation,
+  EntityDossierQuery,
   MarkThreadsReadMutation,
   PinThreadMutation,
   PinnedThreadsQuery,
@@ -230,6 +233,10 @@ export function ChatSidebar() {
   >(() => new Map(routeThreadId ? [[routeThreadId, Date.now()]] : []));
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  // U5 dossier: which entity the dossier resolves. Null lets the broker pick
+  // the best grounded match (or disambiguate); the entities rail sets it to
+  // refine which entity the dossier shows.
+  const [dossierEntityId, setDossierEntityId] = useState<string | null>(null);
   const pendingThreadDeletes = usePendingThreadDeletes();
   const recentThreadOrderRef = useRef<ChatThreadSummary[]>([]);
   const pendingThreadDeletesRef = useRef(pendingThreadDeletes);
@@ -264,6 +271,30 @@ export function ChatSidebar() {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
     return () => window.clearTimeout(timeout);
   }, [search]);
+
+  // A new typed query invalidates any prior entity refinement — the broker
+  // re-resolves the best match (or disambiguates) for the fresh query.
+  useEffect(() => {
+    setDossierEntityId(null);
+  }, [debouncedSearch]);
+
+  const dossierQueryText = debouncedSearch.trim();
+  const [{ data: dossierData, fetching: dossierFetching }] = useQuery<{
+    entityDossier: EntityDossierResult;
+  }>({
+    query: EntityDossierQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      query: dossierQueryText,
+      entityId: dossierEntityId,
+    },
+    pause:
+      !tenantId ||
+      !searchOpen ||
+      !SEARCH_PALETTE_RAILS_ENABLED ||
+      !dossierQueryText,
+    requestPolicy: "cache-and-network",
+  });
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -847,12 +878,21 @@ export function ChatSidebar() {
     [navigate],
   );
 
-  // Entity rail still routes to the Knowledge Model tab; the entity dossier
-  // (U5) supersedes this with a grounded per-entity surface.
-  const openSearchEntity = useCallback(() => {
-    setSearchOpen(false);
-    void navigate({ to: "/settings/memory/ontology" });
-  }, [navigate]);
+  // An artifact result opens the artifact's canvas/reader (THINK-263 U5).
+  const openSearchArtifact = useCallback(
+    (id: string) => {
+      setSearchOpen(false);
+      void navigate({ to: "/artifacts/$id", params: { id } });
+    },
+    [navigate],
+  );
+
+  // The entities rail no longer leaves the palette — it refines which entity
+  // the U5 dossier resolves, so picking an entity swaps the dossier in place.
+  const selectDossierEntity = useCallback(
+    (entityId: string) => setDossierEntityId(entityId),
+    [],
+  );
 
   // Ask escalation seam (U4 discoverability). The hidden-thread ask machinery
   // that streams a cited answer into the palette arrives in U6/U7; until then
@@ -1111,10 +1151,20 @@ export function ChatSidebar() {
         locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={openSearchThread}
         onSelectWiki={openSearchWiki}
-        onSelectEntity={openSearchEntity}
+        onSelectEntity={(hit) => selectDossierEntity(hit.entityId)}
         onAsk={askFromPalette}
         emptyStateLoading={searchFetching && !searchData}
         emptyStateError={searchError?.message ?? null}
+        dossierSlot={
+          <EntityDossierCard
+            result={dossierData?.entityDossier ?? null}
+            fetching={dossierFetching}
+            onOpenWikiPage={(page) => openSearchWiki({ page })}
+            onOpenThread={openSearchThread}
+            onOpenArtifact={openSearchArtifact}
+            onSelectEntity={selectDossierEntity}
+          />
+        }
       />
     </div>
   );
