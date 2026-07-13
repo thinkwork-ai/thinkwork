@@ -130,6 +130,8 @@ export interface PriorControllerInput {
   customerDomain?: string;
   customerDomainDelegated?: boolean;
   customerDomainLegacyRetired?: boolean;
+  enableHindsight?: boolean;
+  hindsightDatabaseName?: string;
   features?: unknown;
   terraform?: unknown;
 }
@@ -201,6 +203,12 @@ export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
     customerDomainLegacyRetired:
       booleanValue(input.customerDomainLegacyRetired) ??
       booleanValue(preservedConfig.customerDomainLegacyRetired),
+    enableHindsight:
+      booleanValue(input.enableHindsight) ??
+      booleanValue(preservedConfig.enableHindsight),
+    hindsightDatabaseName:
+      stringValue(input.hindsightDatabaseName) ??
+      stringValue(preservedConfig.hindsightDatabaseName),
     features: input.features,
     terraform: input.terraform,
   };
@@ -217,8 +225,8 @@ function isCustomerEcrPiImage(
 
 /**
  * Keep the newest successful controller input as the configuration baseline,
- * but recover its customer-owned Pi image pin from an older success when a
- * malformed manual dispatch omitted it.
+ * but recover customer-owned facts such as its Pi image pin and Hindsight
+ * configuration from an older success when a malformed update omitted them.
  */
 export function recoverPriorControllerInput(
   successfulInputsNewestFirst: unknown[],
@@ -227,10 +235,7 @@ export function recoverPriorControllerInput(
     throw new Error("No successful controller deployment input was provided.");
   }
 
-  const latest = parsePriorControllerInput(successfulInputsNewestFirst[0]);
-  if (isCustomerEcrPiImage(latest, latest.agentcorePiSourceImageUri)) {
-    return latest;
-  }
+  let recovered = parsePriorControllerInput(successfulInputsNewestFirst[0]);
 
   for (const raw of successfulInputsNewestFirst.slice(1)) {
     let candidate: PriorControllerInput;
@@ -240,21 +245,30 @@ export function recoverPriorControllerInput(
       continue;
     }
     const sameEnvironment =
-      candidate.environmentName === latest.environmentName &&
-      candidate.awsAccountId === latest.awsAccountId &&
-      candidate.awsRegion === latest.awsRegion;
-    if (
-      sameEnvironment &&
-      isCustomerEcrPiImage(latest, candidate.agentcorePiSourceImageUri)
-    ) {
-      return {
-        ...latest,
-        agentcorePiSourceImageUri: candidate.agentcorePiSourceImageUri,
-      };
-    }
+      candidate.environmentName === recovered.environmentName &&
+      candidate.awsAccountId === recovered.awsAccountId &&
+      candidate.awsRegion === recovered.awsRegion;
+    if (!sameEnvironment) continue;
+
+    recovered = {
+      ...recovered,
+      ...(!isCustomerEcrPiImage(
+        recovered,
+        recovered.agentcorePiSourceImageUri,
+      ) && isCustomerEcrPiImage(recovered, candidate.agentcorePiSourceImageUri)
+        ? { agentcorePiSourceImageUri: candidate.agentcorePiSourceImageUri }
+        : {}),
+      ...(recovered.enableHindsight === undefined &&
+      candidate.enableHindsight !== undefined
+        ? { enableHindsight: candidate.enableHindsight }
+        : {}),
+      ...(!recovered.hindsightDatabaseName && candidate.hindsightDatabaseName
+        ? { hindsightDatabaseName: candidate.hindsightDatabaseName }
+        : {}),
+    };
   }
 
-  return latest;
+  return recovered;
 }
 
 /**
@@ -293,6 +307,12 @@ export function buildControllerUpdateInput(options: {
       : {}),
     ...(prior.customerDomainLegacyRetired !== undefined
       ? { customerDomainLegacyRetired: prior.customerDomainLegacyRetired }
+      : {}),
+    ...(prior.enableHindsight !== undefined
+      ? { enableHindsight: prior.enableHindsight }
+      : {}),
+    ...(prior.hindsightDatabaseName
+      ? { hindsightDatabaseName: prior.hindsightDatabaseName }
       : {}),
   };
   const hasPreservedConfig = Object.keys(preservedConfig).length > 0;
