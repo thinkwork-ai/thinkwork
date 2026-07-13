@@ -30,6 +30,7 @@ import type {
   SlackGateway,
   SlackInboundMessage,
 } from "./client.js";
+import { section } from "./blocks.js";
 import {
   buildQuestionBlocks,
   buildRetryBlocks,
@@ -99,6 +100,19 @@ export function newestQuestion(
 }
 
 const NEEDS_USER = "Needs User";
+
+/**
+ * The status a launch reads as on the board (R1/AE1): an implement launch's
+ * Running hook moves the issue to In Progress at spawn (executor.ts), so its
+ * milestone shows the DESTINATION status; every other phase runs inside the
+ * status that launched it.
+ */
+export function milestoneStatusForLaunch(
+  phase: string,
+  issueState: string,
+): string {
+  return phase === "implement" ? "In Progress" : issueState;
+}
 
 /**
  * Slack-formatted issue reference: a link to the Linear issue when the URL is
@@ -267,7 +281,7 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     } else {
       body = `Blocked on \`${NEEDS_USER}\` with no recorded question — see ${link} in Linear.`;
     }
-    const text = `${link} needs an answer (\`${NEEDS_USER}\`) — reply here to answer, \`question\` to re-show it.\n\n${body}`;
+    const text = `${link} needs you — tap an option or reply here.\n\n${body}`;
     // Interactive answer form: a worker question carrying a parseable
     // ```answers fence renders as option buttons; everything else (a daemon
     // factory-block ceiling, a fence-less question) gets the retry/Other pair.
@@ -298,21 +312,25 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     action: EngineAction,
     ref: ThreadRef,
   ): Promise<void> {
-    let key: string;
-    let text: string;
-    const link = issueRef(candidate.issue.identifier, candidate.issue.url);
-    if (action.kind === "launch") {
-      key = `launch:${action.phase}`;
-      text = `:rocket: Launched *${action.phase}* on ${link}.`;
-    } else if (action.kind === "advance") {
-      key = `advance:${action.toStatus}`;
-      text = `:arrow_right: ${link} → ${action.toStatus}.`;
-    } else {
-      return;
-    }
+    // R1: a stage move is ONE short line — `THINK-279 → Verification` — for
+    // both launches and advances. A launch that implies a status move (an
+    // implement launch's Running hook moves the issue to In Progress) renders
+    // only the move, and launch/advance share the `move:<status>` idempotency
+    // key so the same transition never posts twice, whichever shape the engine
+    // decided first.
+    const status =
+      action.kind === "launch"
+        ? milestoneStatusForLaunch(action.phase, candidate.issue.state)
+        : action.kind === "advance"
+          ? action.toStatus
+          : null;
+    if (status === null) return;
+    const key = `move:${status}`;
     const row = deps.store.getSlackThreadByIssue(candidate.issue.id);
     if (row?.last_milestone_key === key) return;
-    await postMilestone(ref, text, threadDeps);
+    const link = issueRef(candidate.issue.identifier, candidate.issue.url);
+    const text = `${link} → ${status}`;
+    await postMilestone(ref, text, threadDeps, [section(text)]);
     deps.store.setSlackThreadMarker(
       candidate.issue.id,
       "last_milestone_key",

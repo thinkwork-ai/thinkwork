@@ -18,6 +18,7 @@
 
 import type { Logger } from "../logger.js";
 import type { FactoryStore, SlackThreadRow } from "../store/db.js";
+import { context, section } from "./blocks.js";
 import type { SlackGateway } from "./client.js";
 
 export interface ThreadRef {
@@ -63,10 +64,13 @@ export async function openThreadForIssue(
   const ref = target.url
     ? `<${target.url}|${target.identifier}>`
     : `*${target.identifier}*`;
-  const rootTs = await deps.slack.postMessage(
-    deps.channelId,
-    `:factory: ${ref} — ${target.title}\nFactory enrolled this issue. I'll post progress here; reply in this thread to answer any questions.`,
-  );
+  const rootText = `:factory: ${ref} — ${target.title}`;
+  const rootTs = await deps.slack.postMessage(deps.channelId, rootText, {
+    blocks: [
+      section(rootText),
+      context("Progress lands in this thread — reply here to steer."),
+    ],
+  });
   const row = deps.store.upsertSlackThread({
     issueId: target.issueId,
     identifier: target.identifier,
@@ -86,8 +90,11 @@ export async function postMilestone(
   ref: ThreadRef,
   text: string,
   deps: Pick<ThreadDeps, "slack">,
+  blocks?: unknown[],
 ): Promise<string> {
-  return deps.slack.postThreadReply(ref.channel, ref.threadTs, text);
+  return deps.slack.postThreadReply(ref.channel, ref.threadTs, text, {
+    ...(blocks !== undefined ? { blocks } : {}),
+  });
 }
 
 /**
@@ -113,7 +120,9 @@ export async function postClosingSummary(
   text: string,
   deps: Pick<ThreadDeps, "slack">,
 ): Promise<string> {
-  return deps.slack.postThreadReply(ref.channel, ref.threadTs, text);
+  return deps.slack.postThreadReply(ref.channel, ref.threadTs, text, {
+    blocks: [section(text)],
+  });
 }
 
 /**

@@ -90,8 +90,8 @@ const launch: EngineAction = {
 };
 
 describe("syncCandidate", () => {
-  it("opens the thread on enrollment and posts a milestone for a launch", async () => {
-    const issue = makeIssue({ identifier: "THINK-1", state: "In Progress", labels: ["Claude"] });
+  it("AE1: a launch posts exactly one short stage-move line — no rocket, no 'Launched'", async () => {
+    const issue = makeIssue({ identifier: "THINK-1", state: "Ready to Work", labels: ["Claude"] });
     const gateway = new FakeGateway([issue]);
     const slack = new FakeSlackGateway();
     const sync = makeSync(gateway, slack);
@@ -102,7 +102,14 @@ describe("syncCandidate", () => {
     expect(store.getSlackThreadByIssue(issue.id)).toBeDefined();
     // One root message + one milestone, no @mention on either.
     expect(slack.mentions()).toHaveLength(0);
-    expect(slack.posts.some((p) => p.text.includes("Launched"))).toBe(true);
+    const milestones = slack.posts.filter((p) => p.text.includes("→"));
+    expect(milestones).toHaveLength(1);
+    // An implement launch's Running hook moves the issue — show the DESTINATION.
+    expect(milestones[0].text).toContain("→ In Progress");
+    expect(milestones[0].text).not.toContain("Launched");
+    expect(milestones[0].text).not.toContain(":rocket:");
+    // R3: the milestone rides Block Kit with the plain text as fallback.
+    expect(milestones[0].blocks).toBeDefined();
   });
 
   it("dedupes the milestone across repeated ticks", async () => {
@@ -114,7 +121,23 @@ describe("syncCandidate", () => {
     await sync.syncCandidate(candidateFor(issue), launch);
     await sync.syncCandidate(candidateFor(issue), launch);
 
-    expect(slack.posts.filter((p) => p.text.includes("Launched"))).toHaveLength(1);
+    expect(slack.posts.filter((p) => p.text.includes("→ In Progress"))).toHaveLength(1);
+  });
+
+  it("a launch and an advance describing the same move share one milestone line", async () => {
+    const issue = makeIssue({ identifier: "THINK-1", state: "Ready to Work", labels: ["Claude"] });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    await sync.syncCandidate(candidateFor(issue), {
+      kind: "advance",
+      toStatus: "In Progress",
+      evidence: "x",
+    });
+    await sync.syncCandidate(candidateFor(issue), launch);
+
+    expect(slack.posts.filter((p) => p.text.includes("→ In Progress"))).toHaveLength(1);
   });
 
   it("opens NO thread for a noop action (a Done issue the daemon only noops)", async () => {

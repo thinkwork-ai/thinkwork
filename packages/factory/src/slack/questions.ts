@@ -21,6 +21,11 @@
  */
 
 import { parse as parseYaml } from "yaml";
+import {
+  BUTTON_LABEL_MAX,
+  SECTION_TEXT_MAX,
+  VALUE_ANSWER_MAX,
+} from "./blocks.js";
 
 export interface AnswerFormQuestion {
   question: string;
@@ -37,16 +42,9 @@ export interface AnswerForm {
 const FENCE_OPEN = "```answers";
 const FENCE_CLOSE = "```";
 
-/** Slack `plain_text` button label hard limit. */
-const BUTTON_LABEL_MAX = 75;
-/**
- * Keep the full label inside the button `value` JSON up to ~1800 chars so the
- * whole serialized value stays under Slack's 2000-char value limit with room
- * for the JSON envelope (key + indices + quoting).
- */
-const VALUE_ANSWER_MAX = 1800;
-/** Slack section `text` hard limit is 3000 — truncate with headroom for the note. */
-const SECTION_TEXT_MAX = 2900;
+// Slack hard limits live in blocks.ts (KTD7) — one source of truth. The
+// incident context (a limit breach makes chat.postMessage reject the WHOLE
+// message, so the escalation silently never posts) is documented there.
 
 /** Action id prefix shared by every answer-form button (the gateway filters on it). */
 export const ANSWER_ACTION_PREFIX = "factory-answer";
