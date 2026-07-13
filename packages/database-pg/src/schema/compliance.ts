@@ -391,6 +391,13 @@ export const COMPLIANCE_EVENT_TYPES = [
   "agent.credential_binding_created",
   "agent.credential_binding_verified",
   "agent.credential_binding_revoked",
+  // Governed capability runtime broker (THINK-280 U3): session lifecycle and
+  // action-time policy decisions. Per-call fine-grained evidence lives in the
+  // capability_broker_calls table; these are the compliance-grade subset.
+  "agent.capability_broker_session_opened",
+  "agent.capability_broker_session_cancelled",
+  "agent.capability_broker_call_authorized",
+  "agent.capability_broker_call_rejected",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

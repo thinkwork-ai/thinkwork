@@ -1190,6 +1190,31 @@ module "agentcore_pi" {
   okf_efs_read_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : ""
 }
 
+# Capability Broker (THINK-280 U3) — ship-inert, gated by
+# var.enable_capability_broker (default false). When off, this module creates
+# nothing; the broker Lambda code also fails closed. Owns a DEDICATED
+# execute-api VPCE with private DNS disabled — never folded into
+# okf_wiki_interface_endpoint_services (THINK-144).
+module "capability_broker" {
+  source = "../app/capability-broker"
+
+  enabled    = var.enable_capability_broker
+  stage      = var.stage
+  account_id = var.account_id
+  region     = var.region
+
+  vpc_id         = module.vpc.vpc_id
+  vpc_cidr_block = module.vpc.vpc_cidr_block
+  subnet_ids     = local.okf_wiki_subnet_ids
+
+  db_cluster_arn = module.database.db_cluster_arn
+  db_secret_arn  = module.database.graphql_db_secret_arn
+
+  lambda_zips_dir        = var.lambda_zips_dir
+  lambda_artifact_bucket = var.lambda_artifact_bucket
+  lambda_artifact_prefix = var.lambda_artifact_prefix
+}
+
 # Runtime identity rename: the former dedicated Flue module is now the Pi
 # module. Move existing state to the renamed module/resource addresses so the
 # deployed Lambda, role, log group, and invoke config are updated in place.

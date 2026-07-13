@@ -68,6 +68,29 @@ const CAPABILITY_RUNTIME_FIELDS: ReadonlySet<string> = new Set([
   "after",
 ]);
 
+// Governed capability runtime broker events (THINK-280 U3). Safe digests and
+// policy-decision codes only — the broker's fine-grained per-call evidence
+// (request/result bodies, credential decisions) stays in capability_broker_calls
+// and never enters the compliance payload.
+const CAPABILITY_BROKER_FIELDS: ReadonlySet<string> = new Set([
+  "sessionId",
+  "clientRequestId",
+  "callId",
+  "operationRef",
+  "contractHash",
+  "definitionVersionId",
+  "bindingId",
+  "principalMode",
+  "effect",
+  "status",
+  "errorCategory",
+  "policyDecision",
+  "requestDigest",
+  "resultDigest",
+  "adapterKind",
+  "outcome",
+]);
+
 /**
  * Truncate a string to the largest UTF-8-byte-length-bounded prefix.
  * Bisects on character index so the cut never lands mid-codepoint —
@@ -574,6 +597,23 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   },
   "agent.credential_binding_revoked": {
     allowedFields: CAPABILITY_RUNTIME_FIELDS,
+  },
+  // ── Governed capability runtime broker (THINK-280 U3) ──
+  // Session lifecycle + action-time policy outcomes. Safe request/result
+  // digests and policy-decision codes only; never signatures, keys, secret
+  // material, or provider bodies (those never leave the broker's own
+  // capability_broker_calls evidence table).
+  "agent.capability_broker_session_opened": {
+    allowedFields: CAPABILITY_BROKER_FIELDS,
+  },
+  "agent.capability_broker_session_cancelled": {
+    allowedFields: CAPABILITY_BROKER_FIELDS,
+  },
+  "agent.capability_broker_call_authorized": {
+    allowedFields: CAPABILITY_BROKER_FIELDS,
+  },
+  "agent.capability_broker_call_rejected": {
+    allowedFields: CAPABILITY_BROKER_FIELDS,
   },
 };
 
