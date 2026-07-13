@@ -1,20 +1,23 @@
 /**
- * Capability Broker Lambda (THINK-280 U3) — INERT (no live adapter).
+ * Capability Broker Lambda (THINK-280 U3, U5) — INERT in production.
  *
  * The dedicated broker's private data endpoint. It runs a SESSIONED,
  * replay-safe proof-of-possession protocol and, only after exhaustive
- * action-time authorization, dispatches through the adapter registry — which
- * ships EMPTY, so every authorized call returns typed
- * `failed/unavailable_adapter` evidence with no side effect.
+ * action-time authorization, resolves the binding's credentials and dispatches
+ * through the adapter registry (U5 installs the `http_openapi` and `platform`
+ * adapters). It stays inert in production because the shipped authorization
+ * loader denies every request until a later unit wires it — so no provider call
+ * happens yet. The adapters + credential resolver are exercised via injected
+ * deps in tests.
  *
  * Strict order for a call request (nothing later runs until each step passes):
  *   parse/canonicalize → load session → verify audience/signature/clock →
  *   atomically CONSUME the sequence (conditional) → RECORD the nonce
  *   (conditional, replay-reject) → re-authorize from freshly reloaded state →
- *   [credential resolution seam — inert] → dispatch adapter (registry →
- *   unavailable_adapter) → validate/classify → persist evidence → return a
- *   safe envelope. Sequence + nonce are consumed BEFORE any policy/credential/
- *   adapter work, so a replay is rejected without downstream effect.
+ *   resolve credentials (only after an installed adapter is found) → dispatch
+ *   adapter → validate/classify → persist evidence → return a safe envelope.
+ *   Sequence + nonce are consumed BEFORE any policy/credential/adapter work, so
+ *   a replay is rejected without downstream effect.
  *
  * Lost-response safety: the durable `capability_broker_calls` row is written
  * `authorized` BEFORE dispatch and finalized after. A signed STATUS request
@@ -68,10 +71,15 @@ import {
   type StoredBrokerCall,
 } from "./lib/capability-broker/evidence.js";
 import {
-  createEmptyAdapterRegistry,
+  buildCapabilityAdapterRegistry,
   type AdapterDispatchOutcome,
   type AdapterRegistry,
 } from "./lib/capability-broker/adapters/registry.js";
+import {
+  createPassthroughCredentialResolver,
+  createSecretsManagerCredentialResolver,
+  type CredentialResolver,
+} from "./lib/capability-broker/credential-resolver.js";
 
 // ---------------------------------------------------------------------------
 // Re-authorization seam
@@ -117,6 +125,15 @@ export interface BrokerDeps {
   evidence: EvidenceStore;
   registry: AdapterRegistry;
   loadAuthorization: AuthorizationLoader;
+  /**
+   * Credential-resolution seam. Resolves the binding's vault references to
+   * secret handles INSIDE the broker, immediately before dispatch and only
+   * once an installed adapter is found. Defaults to a no-op passthrough that
+   * reads no secrets (empty handles) so the pure core needs no vault access;
+   * the handler injects the SecretsManager-backed resolver and tests inject
+   * fakes.
+   */
+  credentialResolver?: CredentialResolver;
   /** Epoch milliseconds. */
   now: () => number;
   /** Provider-call wall-clock budget in ms (applied to accepted adapters). */
@@ -181,6 +198,8 @@ function verifySessionSignature(
 
 export function createBroker(deps: BrokerDeps) {
   const now = deps.now;
+  const credentialResolver =
+    deps.credentialResolver ?? createPassthroughCredentialResolver();
 
   /** Build a base evidence row shared by rejected and authorized inserts. */
   function baseRow(
@@ -456,10 +475,11 @@ export function createBroker(deps: BrokerDeps) {
       );
     }
 
-    // 10. Credential resolution seam — INERT (no secret is resolved in this slice).
-
-    // 11. Dispatch through the adapter registry (empty → unavailable_adapter).
-    const outcome = await dispatch(session, snapshot, request);
+    // 10. Credential resolution seam + dispatch. Credentials are resolved INSIDE
+    // `dispatch` — only after an installed adapter is found — so an
+    // unavailable-adapter call never touches the vault, and resolved secrets are
+    // handed straight to the adapter without ever entering this scope.
+    const outcome = await dispatch(session, snapshot, request, callId);
 
     // 12. Normalize + validate the outcome, then finalize evidence.
     const { result, status, resultDigest, durable, errorCategory } =
@@ -514,6 +534,7 @@ export function createBroker(deps: BrokerDeps) {
     session: BrokerSessionState,
     snapshot: AuthorizationSnapshot,
     request: BrokerCallRequest,
+    callId: string,
   ): Promise<AdapterDispatchOutcome> {
     if (!snapshot.adapterKind || !snapshot.operation) {
       return {
@@ -525,8 +546,8 @@ export function createBroker(deps: BrokerDeps) {
     }
     const adapter = deps.registry.lookup(snapshot.adapterKind);
     if (!adapter) {
-      // Inert registry: a permitted call to an uninstalled adapter has NO side
-      // effect and returns typed unavailable_adapter evidence.
+      // A permitted call to an uninstalled adapter has NO side effect (and no
+      // credential is resolved) and returns typed unavailable_adapter evidence.
       return {
         status: "failed",
         category: "unavailable_adapter",
@@ -534,6 +555,22 @@ export function createBroker(deps: BrokerDeps) {
         retryable: false,
       };
     }
+
+    // Resolve the binding's vault references to secret handles. A resolution
+    // failure is a typed failure and NO dispatch happens — the adapter never
+    // sees a reference, and resolved material stays out of this scope's return.
+    const credentialRefs = snapshot.binding?.credentialRefs ?? {};
+    const resolution =
+      await credentialResolver.resolveCredentialRefs(credentialRefs);
+    if (!resolution.ok) {
+      return {
+        status: "failed",
+        category: resolution.category,
+        message: resolution.message,
+        retryable: false,
+      };
+    }
+
     return adapter.dispatch({
       tenantId: session.tenantId,
       operationRef: request.operation,
@@ -545,7 +582,13 @@ export function createBroker(deps: BrokerDeps) {
           (session.principalMode as PrincipalMode),
         subjectId: snapshot.binding?.subjectId ?? session.subjectId,
       },
-      credentialRefs: snapshot.binding?.credentialRefs ?? {},
+      credentialRefs,
+      credentials: resolution.credentials,
+      provenance: {
+        routineExecutionId: session.routineExecutionId ?? null,
+        threadTurnId: session.threadTurnId ?? null,
+        brokerCallId: callId,
+      },
       deadlineEpochMs: now() + (deps.dispatchDeadlineMs ?? 15000),
     });
   }
@@ -913,12 +956,24 @@ export async function handler(event: HttpEventLike): Promise<{
 
   const evidence = await buildDrizzleEvidence();
 
+  // Real adapters are installed (http_openapi + platform), but the
+  // authorization loader still denies every request in this slice — so no
+  // provider call happens in production until a later unit wires the loader.
+  const { createDrizzlePlatformArtifactWriter } =
+    await import("./lib/capability-broker/adapters/platform-artifact-writer.js");
+  const registry = buildCapabilityAdapterRegistry({
+    artifactWriter: createDrizzlePlatformArtifactWriter(),
+  });
+
   const broker = createBroker({
     dynamo,
     table,
     evidence,
-    registry: createEmptyAdapterRegistry(),
+    registry,
     loadAuthorization: denyingAuthorizationLoader,
+    credentialResolver: createSecretsManagerCredentialResolver({
+      region: getAwsRegion(),
+    }),
     now: () => Date.now(),
   });
 
