@@ -175,6 +175,21 @@ describe("candidate filter", () => {
     const result = await pollTick(gateway, TEAM);
     expect(result.candidates[0].blockerLabels).toEqual(["Needs Credentials"]);
   });
+
+  it("U4/KTD6: the Paused label reaches blockerLabels through the real filter", async () => {
+    // The console's pause verb is only real if the poller's BLOCKER_LABELS
+    // filter admits "Paused" — otherwise pause acks success while workers
+    // keep launching.
+    const gateway = new FakeGateway([
+      makeIssue({
+        identifier: "T-2",
+        state: "In Progress",
+        labels: ["Claude", "Paused"],
+      }),
+    ]);
+    const result = await pollTick(gateway, TEAM);
+    expect(result.candidates[0].blockerLabels).toContain("Paused");
+  });
 });
 
 describe("lane conflict (AE2)", () => {

@@ -117,11 +117,19 @@ function stripFirstLine(body: string): string {
 }
 
 /**
+ * The canned answer both retry surfaces inject (the escalation's retry button
+ * and the console's `retry` verb) — one text, byte-identical batons.
+ */
+export const RETRY_ANSWER_TEXT =
+  "Retry: operator cleared the blocker via Slack without additional guidance — re-attempt from the newest baton and prior evidence.";
+
+/**
  * Build the fresh relaunch baton: the marker line, the prior baton body
  * carried forward (so no context is lost), then the operator's answer
- * verbatim under a clearly-labeled heading.
+ * verbatim under a clearly-labeled heading. Exported for the console's
+ * `retry` executor, which writes the same baton shape outside the relay.
  */
-function buildAppendedBaton(
+export function buildAppendedBaton(
   identifier: string,
   readStatus: string,
   priorBaton: string | null,

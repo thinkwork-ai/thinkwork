@@ -17,9 +17,16 @@
 
 import type { LinearGateway, LinearIssueSnapshot } from "../linear/client.js";
 import type { Logger } from "../logger.js";
+import { findNewestBaton } from "../phases/prompts.js";
 import type { FactoryStore } from "../store/db.js";
 import { actions, section, type ButtonSpec, type SlackBlock } from "./blocks.js";
 import type { SlackGateway } from "./client.js";
+import {
+  buildAppendedBaton,
+  relaunchReadStatus,
+  RETRY_ANSWER_TEXT,
+} from "./relay.js";
+import { buildIssueStatus } from "./status.js";
 
 /** Action-id prefix for every console button (gateway filters on `factory-`). */
 export const CONSOLE_ACTION_PREFIX = "factory-console";
@@ -394,4 +401,121 @@ export async function runConsoleAction(
       text: `❌ \`${input.verb}\` failed on ${link}: ${String(e).slice(0, 400)}`,
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Steering executors (U4): approve / retry / pause / resume
+// ---------------------------------------------------------------------------
+
+const NEEDS_USER_LABEL = "Needs User";
+const VERIFICATION_FAILED_LABEL = "Verification Failed";
+
+export interface SteeringDeps {
+  gateway: LinearGateway;
+  store: FactoryStore;
+  log: Logger;
+}
+
+/** Human-short elapsed time, e.g. `1h40` / `12m` / `40s`. */
+export function formatElapsed(startedAtIso: string, now: Date = new Date()): string {
+  const seconds = Math.max(
+    0,
+    Math.round((now.getTime() - new Date(startedAtIso).getTime()) / 1000),
+  );
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  return `${h}h${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function refOf(issue: LinearIssueSnapshot): string {
+  return issue.url ? `<${issue.url}|${issue.identifier}>` : `*${issue.identifier}*`;
+}
+
+/**
+ * The issue-steering verbs (R7, R9). Wired into `SlackSyncDeps.consoleExecutors`
+ * by the daemon bring-up; each returns the explicit R11 ack.
+ */
+export function createSteeringExecutors(
+  deps: SteeringDeps,
+): Partial<Record<ConsoleVerb, ConsoleExecutor>> {
+  return {
+    // R7: advance through the current human gate. The pipeline's staleCheck
+    // already guaranteed the LIVE state is a gate in APPROVE_TARGETS.
+    approve: async (ctx) => {
+      const target = APPROVE_TARGETS[ctx.issue.state];
+      if (target === undefined) {
+        // Belt and suspenders — staleCheck should have refused already.
+        return { text: `Approve doesn't apply — ${refOf(ctx.issue)} is in *${ctx.issue.state}*.` };
+      }
+      await deps.gateway.setState(ctx.issueId, target);
+      return { text: `✅ Approved — ${refOf(ctx.issue)} → *${target}*.` };
+    },
+
+    // R9: relaunch the current phase from its newest baton. With a live
+    // running attempt this is a polite no-op — the store's one-active-attempt
+    // invariant makes a relaunch impossible, and killing the worker would
+    // contradict the recoverable-single-click decision.
+    retry: async (ctx) => {
+      const status = buildIssueStatus(deps.store, ctx.issueId);
+      const active = status?.activeAttempts[0];
+      if (active !== undefined) {
+        return {
+          text: `${refOf(ctx.issue)} already has a running *${active.phase}* worker (attempt ${active.attemptNumber}, ${formatElapsed(active.startedAt)} in) — nothing relaunched. \`logs\` tails it.`,
+        };
+      }
+      // Blocker cleanup + the retry baton note, so the next tick relaunches
+      // with the operator's "no additional guidance" context on the baton.
+      const cleared: string[] = [];
+      for (const label of [NEEDS_USER_LABEL, VERIFICATION_FAILED_LABEL]) {
+        if (ctx.issue.labels.includes(label)) {
+          await deps.gateway.removeLabel(ctx.issueId, label);
+          cleared.push(label);
+        }
+      }
+      const readStatus = relaunchReadStatus(ctx.issue.state);
+      if (readStatus !== null) {
+        const comments = await deps.gateway
+          .listComments(ctx.issueId)
+          .catch(() => []);
+        const prior = findNewestBaton(ctx.identifier, readStatus, comments);
+        await deps.gateway.createComment(
+          ctx.issueId,
+          buildAppendedBaton(
+            ctx.identifier,
+            readStatus,
+            prior?.body ?? null,
+            ctx.userId,
+            RETRY_ANSWER_TEXT,
+          ),
+        );
+      }
+      const clearedNote =
+        cleared.length > 0 ? ` (cleared ${cleared.map((c) => `\`${c}\``).join(", ")})` : "";
+      return {
+        text: `🔁 Retry armed${clearedNote} — ${refOf(ctx.issue)} relaunches *${ctx.issue.state}* from its newest baton next tick.`,
+      };
+    },
+
+    // R9 + KTD6: pause = the `Paused` blocker label. Visible and undoable in
+    // Linear; the poller/engine's blocker-label handling does the rest.
+    pause: async (ctx) => {
+      if (ctx.issue.labels.includes("Paused")) {
+        return { text: `${refOf(ctx.issue)} is already paused.` };
+      }
+      await deps.gateway.addLabel(ctx.issueId, "Paused");
+      return {
+        text: `⏸️ Paused — automation skips ${refOf(ctx.issue)} until \`resume\`. Running workers finish their current attempt.`,
+      };
+    },
+
+    resume: async (ctx) => {
+      if (!ctx.issue.labels.includes("Paused")) {
+        return { text: `${refOf(ctx.issue)} isn't paused — nothing to resume.` };
+      }
+      await deps.gateway.removeLabel(ctx.issueId, "Paused");
+      return { text: `▶️ Resumed — ${refOf(ctx.issue)} re-enters automation next tick.` };
+    },
+  };
 }

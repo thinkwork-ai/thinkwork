@@ -21,6 +21,8 @@ import {
   type ConsoleExecutor,
   type ConsoleVerb,
 } from "../src/slack/console.js";
+import { decideAction } from "../src/phases/engine.js";
+import { createSteeringExecutors, formatElapsed } from "../src/slack/console.js";
 import { createSlackSync, type SlackSync } from "../src/slack/sync.js";
 import { openStore, type FactoryStore } from "../src/store/db.js";
 import { FakeGateway, makeIssue, type FakeIssue } from "./fake-gateway.js";
@@ -361,5 +363,147 @@ describe("helpText", () => {
     expect(text).toContain("`result`");
     expect(text).not.toContain("`approve`");
     expect(text).toContain("`merge <pr#>`");
+  });
+});
+
+describe("U4: steering executors", () => {
+  function steering(h: Harness) {
+    return createSteeringExecutors({ gateway: h.gateway, store, log });
+  }
+
+  async function enrolledWithSteering(issue: FakeIssue): Promise<Harness> {
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = createSlackSync({
+      slack,
+      store,
+      gateway,
+      channelId: CHANNEL,
+      operatorUserIds: [OPERATOR],
+      log,
+      consoleExecutors: createSteeringExecutors({ gateway, store, log }),
+    });
+    await sync.syncCandidate(candidateFor(issue), {
+      kind: "advance",
+      toStatus: issue.state,
+      evidence: "seed",
+    });
+    const row = store.getSlackThreadByIssue(issue.id);
+    if (row === undefined) throw new Error("enrollment did not map a thread");
+    return { gateway, slack, sync, threadTs: row.thread_ts };
+  }
+
+  // One test per gate: the store is per-test, and the fake Slack gateway's ts
+  // sequence restarts per instance — two enrollments in one test would collide
+  // on (channel, thread_ts) in slack_threads.
+  for (const [state, target] of [
+    ["Requirements Review", "Planning"],
+    ["Plan Review", "Ready to Work"],
+    ["Verification", "Done"],
+  ] as const) {
+    it(`approve advances ${state} → ${target} (R7)`, async () => {
+      const issue = makeIssue({ identifier: "THINK-60", state, labels: ["Claude"] });
+      const h = await enrolledWithSteering(issue);
+      await typed(h, "approve");
+      expect(
+        h.gateway.writesOf("setState").some((w) => w.args[1] === target),
+      ).toBe(true);
+      expect(lastReply(h)).toContain(target);
+    });
+  }
+
+  it("approve from In Progress refuses politely, naming the state", async () => {
+    const issue = makeIssue({ identifier: "THINK-64", state: "In Progress", labels: ["Claude"] });
+    const h = await enrolledWithSteering(issue);
+    await typed(h, "approve");
+    expect(h.gateway.writesOf("setState")).toHaveLength(0);
+    expect(lastReply(h)).toContain("In Progress");
+  });
+
+  it("retry on a blocked idle issue clears blockers and posts the retry baton", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-65",
+      state: "In Progress",
+      labels: ["Claude", "Needs User", "Verification Failed"],
+    });
+    const h = await enrolledWithSteering(issue);
+    await typed(h, "retry");
+    const removed = h.gateway.writesOf("removeLabel").map((w) => w.args[1]);
+    expect(removed).toContain("Needs User");
+    expect(removed).toContain("Verification Failed");
+    const batons = h.gateway
+      .writesOf("createComment")
+      .filter((w) => String(w.args[1]).startsWith("handoff:THINK-65:"));
+    expect(batons).toHaveLength(1);
+    expect(String(batons[0].args[1])).toContain("Retry: operator cleared the blocker");
+    expect(lastReply(h)).toContain("🔁 Retry armed");
+  });
+
+  it("retry with an ACTIVE running attempt is a polite no-op naming the attempt", async () => {
+    const issue = makeIssue({ identifier: "THINK-66", state: "In Progress", labels: ["Claude"] });
+    const h = await enrolledWithSteering(issue);
+    store.upsertIssue({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      phase: "implement",
+      state: issue.state,
+      lane: "Claude",
+    });
+    store.insertAttempt({
+      issueId: issue.id,
+      phase: "implement",
+      attemptNumber: 1,
+      state: "Running",
+      host: "local",
+      pid: 4242,
+    });
+    await typed(h, "retry");
+    expect(lastReply(h)).toContain("already has a running");
+    expect(lastReply(h)).toContain("implement");
+    expect(h.gateway.writesOf("createComment")).toHaveLength(0);
+  });
+
+  it("pause adds the Paused label and the engine then blocks the issue (KTD6)", async () => {
+    const issue = makeIssue({ identifier: "THINK-67", state: "In Progress", labels: ["Claude"] });
+    const h = await enrolledWithSteering(issue);
+    await typed(h, "pause");
+    expect(h.gateway.writesOf("addLabel").map((w) => w.args[1])).toContain("Paused");
+    expect(lastReply(h)).toContain("⏸️ Paused");
+
+    // The engine's blocked-wait: a candidate carrying Paused blocks.
+    const decision = decideAction(
+      { ...candidateFor(issue), blockerLabels: ["Paused"] },
+      { activeAttempt: null, hasChildIssues: false },
+    );
+    expect(decision).toMatchObject({ kind: "block", label: "Paused" });
+  });
+
+  it("resume removes the Paused label; resume when not paused is a no-op ack", async () => {
+    const issue = makeIssue({ identifier: "THINK-68", state: "In Progress", labels: ["Claude", "Paused"] });
+    const h = await enrolledWithSteering(issue);
+    await typed(h, "resume");
+    expect(h.gateway.writesOf("removeLabel").map((w) => w.args[1])).toContain("Paused");
+    expect(lastReply(h)).toContain("▶️ Resumed");
+
+    issue.labels = issue.labels.filter((l) => l !== "Paused");
+    await typed(h, "resume");
+    expect(lastReply(h)).toContain("isn't paused");
+  });
+
+  it("pause when already paused acks idempotently without a second label write", async () => {
+    const issue = makeIssue({ identifier: "THINK-69", state: "In Progress", labels: ["Claude", "Paused"] });
+    const h = await enrolledWithSteering(issue);
+    await typed(h, "pause");
+    expect(h.gateway.writesOf("addLabel")).toHaveLength(0);
+    expect(lastReply(h)).toContain("already paused");
+  });
+});
+
+describe("formatElapsed", () => {
+  it("renders human-short elapsed", () => {
+    const now = new Date("2026-07-13T12:00:00Z");
+    expect(formatElapsed("2026-07-13T11:59:20Z", now)).toBe("40s");
+    expect(formatElapsed("2026-07-13T11:48:00Z", now)).toBe("12m");
+    expect(formatElapsed("2026-07-13T10:20:00Z", now)).toBe("1h40");
   });
 });
