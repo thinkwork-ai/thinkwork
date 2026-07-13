@@ -38,11 +38,15 @@ export interface LinearIssueSnapshot {
   state: string;
   /** Label names. */
   labels: string[];
+  /** Web URL of the issue (for operator-facing links, e.g. Slack). */
+  url?: string;
 }
 
 export interface LinearCommentSnapshot {
   id: string;
   body: string;
+  /** Web URL of the comment (deep link, e.g. for Slack question links). */
+  url?: string | null;
   /**
    * Author id: the workspace user id, or the bot actor id for
    * integration-authored comments. `null`/absent when the SDK exposes
@@ -159,6 +163,7 @@ query FactoryTeamIssues($filter: IssueFilter, $after: String) {
       identifier
       title
       description
+      url
       state { name }
       labels { nodes { name } }
     }
@@ -171,6 +176,7 @@ interface RawIssueNode {
   identifier: string;
   title: string;
   description: string | null;
+  url: string | null;
   state: { name: string } | null;
   labels: { nodes: { name: string }[] };
 }
@@ -310,6 +316,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
             description: n.description ?? "",
             state: n.state?.name ?? "",
             labels: n.labels.nodes.map((l) => l.name),
+            url: n.url ?? undefined,
           });
         }
         if (!page.pageInfo.hasNextPage) break;
@@ -341,6 +348,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
           description: issue.description ?? "",
           state: state?.name ?? "",
           labels: labels.map((l) => l.name),
+          url: issue.url,
         });
       }
       return snapshots;
@@ -352,6 +360,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
         (await issue.comments()) as unknown as PageOf<{
           id: string;
           body: string;
+          url?: string | null;
           createdAt: Date | string;
           /** Workspace-user author id (SDK Comment.userId getter). */
           userId?: string | null;
@@ -369,6 +378,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
       return comments.map((c) => ({
         id: c.id,
         body: c.body,
+        url: c.url ?? null,
         authorId: c.userId ?? c.botActor?.id ?? null,
       }));
     },

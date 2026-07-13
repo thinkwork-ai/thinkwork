@@ -279,7 +279,7 @@ describe("handleInbound routing", () => {
     });
 
     expect(slack.posts).toHaveLength(1);
-    expect(slack.posts[0].text).toContain("THINK-3 — Verification");
+    expect(slack.posts[0].text).toContain("THINK-3> — Verification"); // linkified: <url|THINK-3> — ...
     expect(slack.posts[0].text).not.toContain("Ready to Work");
     // A status read must NOT clear any blocker.
     expect(gateway.writesOf("removeLabel")).toHaveLength(0);
@@ -463,5 +463,69 @@ describe("handleInbound — question keyword", () => {
     expect(slack.posts[0].text).toContain("no open question");
     expect(slack.posts[0].text).toContain("Verification");
     expect(gateway.writesOf("removeLabel")).toHaveLength(0);
+  });
+});
+
+describe("escalation content — links, no noise footer", () => {
+  it("links the issue and the question comment; no verbose footer", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-40",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        {
+          id: "q-1",
+          body: "blocker:THINK-40:implement — @eric1\n\nQuestions:\n1. Approve?",
+          url: "https://linear.test/issue/THINK-40#comment-q-1",
+          authorId: "worker",
+        },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), {
+      kind: "block",
+      label: "Needs User",
+      reason: "r",
+    });
+
+    const mention = slack.mentions()[0];
+    expect(mention.text).toContain("<https://linear.test/issue/THINK-40|THINK-40>");
+    expect(mention.text).toContain("<https://linear.test/issue/THINK-40#comment-q-1|Open the question in Linear>");
+    expect(mention.text).toContain("1. Approve?");
+    expect(mention.text).not.toContain("VERBATIM");
+    // Root enrollment message links the issue too.
+    expect(slack.posts[0].text).toContain("<https://linear.test/issue/THINK-40|THINK-40>");
+  });
+
+  it("falls back to the newest factory-block reason when no worker question exists", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-41",
+      state: "Ready to Work",
+      labels: ["Claude", "Needs User"],
+      comments: [
+        {
+          id: "fb-1",
+          body: "factory-block:THINK-41\n\n**Automation blocked this issue** (`Needs User`).\n\nTHINK-41 phase \"implement\" has 2 consecutive killed/stalled attempts — escalating to an operator (R15/AE5)",
+          url: "https://linear.test/issue/THINK-41#comment-fb-1",
+          authorId: "viewer-daemon",
+        },
+      ],
+    });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = makeSync(gateway, slack);
+
+    await sync.syncCandidate(candidateFor(issue, ["Needs User"]), {
+      kind: "block",
+      label: "Needs User",
+      reason: "r",
+    });
+
+    const mention = slack.mentions()[0];
+    expect(mention.text).toContain("2 consecutive killed/stalled attempts");
+    expect(mention.text).not.toContain("an answer is needed to resume");
   });
 });
