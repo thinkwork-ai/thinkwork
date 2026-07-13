@@ -241,6 +241,19 @@ export function computeRoleName(stage: string, tenantId: string): string {
   return `thinkwork-${stage}-sandbox-tenant-${suffix}`.slice(0, 64);
 }
 
+// THINK-280 U4: the capability-private VPC-mode interpreter runs under a
+// SEPARATE least-privilege role — distinct from the shared public/internal
+// sandbox role, whose policy can read tenant sandbox secrets. Base:
+// "thinkwork-{stage}-cappriv-tenant-" = 24 chars + len(stage); same 64-char
+// ceiling and defensive truncation as computeRoleName.
+export function computeCapabilityPrivateRoleName(
+  stage: string,
+  tenantId: string,
+): string {
+  const suffix = tenantId.replace(/-/g, "");
+  return `thinkwork-${stage}-cappriv-tenant-${suffix}`.slice(0, 64);
+}
+
 export function buildTrustPolicy(accountId: string): Record<string, unknown> {
   return {
     Version: "2012-10-17",
@@ -286,6 +299,59 @@ export function buildInlinePolicy(
   };
 }
 
+// THINK-280 U4: restricted execution role for the capability-private VPC-mode
+// interpreter. Deliberately LACKS the tenant sandbox Secrets Manager wildcard,
+// tenant S3, and any database/provider access — the private interpreter reaches
+// providers only through the capability broker's PoP session (AE5). Logs are the
+// only genuine boot requirement. Proving this policy is minimal is a plan §U4
+// security test scenario.
+export function buildCapabilityPrivateInlinePolicy(
+  region: string,
+  accountId: string,
+): Record<string, unknown> {
+  return {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "CapabilityPrivateCloudWatchLogs",
+        Effect: "Allow",
+        Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+        Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/bedrock-agentcore/runtimes/*`,
+      },
+    ],
+  };
+}
+
+// VPC placement for the capability-private interpreter is sourced from the
+// agentcore-admin Lambda env, wired (when the capability broker is enabled) from
+// the broker module's no-NAT interpreter subnets + a dedicated egress-only SG.
+// Reads are wrapped in functions so tests can mutate process.env per case
+// (feedback_vitest_env_capture_timing).
+export function readCapabilityPrivateSubnetIds(): string[] {
+  return (process.env.CAPABILITY_PRIVATE_SUBNET_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function readCapabilityPrivateSecurityGroupIds(): string[] {
+  return (process.env.CAPABILITY_PRIVATE_SECURITY_GROUP_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// The capability-private environment is provisioned ONLY when both VPC env vars
+// are present (i.e. the broker is enabled). Absent → skip it silently and leave
+// tenants.sandbox_interpreter_capability_private_id NULL; the two-env path is
+// unchanged.
+export function capabilityPrivateProvisioningEnabled(): boolean {
+  return (
+    readCapabilityPrivateSubnetIds().length > 0 &&
+    readCapabilityPrivateSecurityGroupIds().length > 0
+  );
+}
+
 // Exposed for a sandbox GC follow-up (Unit 5.5): returns a map of environment
 // id -> interpreter id for everything the control plane reports under the
 // given tenant's tag. Listing is paginated; we walk every page.
@@ -317,13 +383,28 @@ async function listCodeInterpretersByTenant(
   return found;
 }
 
+type SandboxEnvId = "default-public" | "internal-only" | "capability-private";
+type SandboxResultKey = "public_id" | "internal_id" | "capability_private_id";
+
 const SANDBOX_ENVIRONMENTS: Array<{
-  id: "default-public" | "internal-only";
-  networkMode: "PUBLIC" | "SANDBOX";
+  id: SandboxEnvId;
+  networkMode: "PUBLIC" | "SANDBOX" | "VPC";
 }> = [
   { id: "default-public", networkMode: "PUBLIC" },
   { id: "internal-only", networkMode: "SANDBOX" },
+  // THINK-280 U4: VPC-mode; only provisioned when the broker VPC env vars are
+  // present (capabilityPrivateProvisioningEnabled()). See provisionTenantSandbox.
+  { id: "capability-private", networkMode: "VPC" },
 ];
+
+// Maps an environment id to its result/response key and its tenants column.
+// Replaces the old default-public?public_id:internal_id ternary now that a
+// third environment exists.
+const RESULT_KEY_BY_ENV: Record<SandboxEnvId, SandboxResultKey> = {
+  "default-public": "public_id",
+  "internal-only": "internal_id",
+  "capability-private": "capability_private_id",
+};
 
 async function provisionTenantSandbox(body: any) {
   const tenantId: string = body.tenant_id ?? body.tenantId;
@@ -377,25 +458,83 @@ async function provisionTenantSandbox(body: any) {
     }),
   );
 
+  // --- Capability-private (VPC-mode) gate + separate restricted role ---------
+  // Only when the broker VPC env vars are present. When absent, the third
+  // environment is skipped entirely — no restricted role, no VPC interpreter,
+  // and the capability-private column is left untouched (NULL). This keeps the
+  // proven two-environment path byte-for-byte unchanged.
+  const vpcEnabled = capabilityPrivateProvisioningEnabled();
+  const subnets = readCapabilityPrivateSubnetIds();
+  const securityGroups = readCapabilityPrivateSecurityGroupIds();
+  const capPrivRoleName = computeCapabilityPrivateRoleName(stage, tenantId);
+  let capPrivRoleArn: string | undefined;
+  if (vpcEnabled) {
+    try {
+      const existing = await iam.send(
+        new GetRoleCommand({ RoleName: capPrivRoleName }),
+      );
+      capPrivRoleArn = existing.Role!.Arn!;
+    } catch (err: any) {
+      if (err?.name !== "NoSuchEntityException") throw err;
+      const created = await iam.send(
+        new CreateRoleCommand({
+          RoleName: capPrivRoleName,
+          AssumeRolePolicyDocument: JSON.stringify(buildTrustPolicy(accountId)),
+          Description: `AgentCore capability-private (VPC) execution role for tenant ${tenantId}`,
+          Tags: [
+            { Key: "Stage", Value: stage },
+            { Key: "TenantId", Value: tenantId },
+            { Key: "Purpose", Value: "agentcore-code-interpreter-cappriv" },
+          ],
+        }),
+      );
+      capPrivRoleArn = created.Role!.Arn!;
+    }
+    await iam.send(
+      new PutRolePolicyCommand({
+        RoleName: capPrivRoleName,
+        PolicyName: "capability-private-execution",
+        PolicyDocument: JSON.stringify(
+          buildCapabilityPrivateInlinePolicy(region, accountId),
+        ),
+      }),
+    );
+  }
+
   // --- Code Interpreters (idempotent via tag cross-reference) ---
   const existingByEnv = await listCodeInterpretersByTenant(tenantId, stage);
-  const result: { public_id: string | null; internal_id: string | null } = {
+  const result: {
+    public_id: string | null;
+    internal_id: string | null;
+    capability_private_id: string | null;
+  } = {
     public_id: existingByEnv["default-public"] ?? null,
     internal_id: existingByEnv["internal-only"] ?? null,
+    capability_private_id: existingByEnv["capability-private"] ?? null,
   };
   let partial = false;
 
-  for (const env of SANDBOX_ENVIRONMENTS) {
-    const key = env.id === "default-public" ? "public_id" : "internal_id";
+  const envsToProvision = SANDBOX_ENVIRONMENTS.filter(
+    (env) => env.id !== "capability-private" || vpcEnabled,
+  );
+
+  for (const env of envsToProvision) {
+    const key = RESULT_KEY_BY_ENV[env.id];
     if (result[key]) continue;
+    const isCapPriv = env.id === "capability-private";
     try {
       const suffix = tenantId.replace(/-/g, "").slice(0, 8);
       const envTag = env.id.replace(/-/g, "");
       const created: any = await aci.send(
         new CreateCodeInterpreterCommand({
           name: `thinkwork-${stage}-sb-${suffix}-${envTag}`,
-          executionRoleArn: roleArn,
-          networkConfiguration: { networkMode: env.networkMode },
+          executionRoleArn: isCapPriv ? capPrivRoleArn! : roleArn,
+          networkConfiguration: isCapPriv
+            ? {
+                networkMode: env.networkMode,
+                vpcConfig: { subnets, securityGroups },
+              }
+            : { networkMode: env.networkMode },
           description: `Sandbox ${env.id} for tenant ${tenantId}`,
           tags: { Stage: stage, TenantId: tenantId, Environment: env.id },
           clientToken: `${tenantId}-${env.id}`,
@@ -414,15 +553,19 @@ async function provisionTenantSandbox(body: any) {
   }
 
   // --- Persist IDs (whatever we have) so the reconciler can resume later ---
+  // The capability-private column is only written when VPC provisioning is
+  // enabled, so a disabled stack leaves it untouched (NULL).
+  const updateSet: Record<string, string | null> = {
+    sandbox_interpreter_public_id: result.public_id,
+    sandbox_interpreter_internal_id: result.internal_id,
+  };
+  if (vpcEnabled) {
+    updateSet.sandbox_interpreter_capability_private_id =
+      result.capability_private_id;
+  }
   try {
     const db = getDb();
-    await db
-      .update(tenants)
-      .set({
-        sandbox_interpreter_public_id: result.public_id,
-        sandbox_interpreter_internal_id: result.internal_id,
-      })
-      .where(eq(tenants.id, tenantId));
+    await db.update(tenants).set(updateSet).where(eq(tenants.id, tenantId));
   } catch (err: any) {
     console.error(
       `[provisionTenantSandbox] tenants UPDATE failed for ${tenantId}:`,
@@ -439,7 +582,11 @@ async function provisionTenantSandbox(body: any) {
     });
   }
 
-  const ok = !partial && !!result.public_id && !!result.internal_id;
+  const ok =
+    !partial &&
+    !!result.public_id &&
+    !!result.internal_id &&
+    (!vpcEnabled || !!result.capability_private_id);
   return respond(ok ? 200 : 202, {
     ok,
     partial,
@@ -480,6 +627,7 @@ async function deprovisionTenantSandbox(body: any) {
   const interpreters = [
     tenant.sandbox_interpreter_public_id,
     tenant.sandbox_interpreter_internal_id,
+    tenant.sandbox_interpreter_capability_private_id,
   ].filter((x): x is string => typeof x === "string" && x.length > 0);
 
   const failures: string[] = [];
@@ -507,35 +655,46 @@ async function deprovisionTenantSandbox(body: any) {
     .set({
       sandbox_interpreter_public_id: null,
       sandbox_interpreter_internal_id: null,
+      sandbox_interpreter_capability_private_id: null,
     })
     .where(eq(tenants.id, tenantId));
 
-  const roleName = computeRoleName(stage, tenantId);
-  try {
-    await iam.send(
-      new DeleteRolePolicyCommand({
-        RoleName: roleName,
-        PolicyName: "sandbox-execution",
-      }),
-    );
-  } catch (err: any) {
-    if (err?.name !== "NoSuchEntityException") {
-      console.error(
-        `[deprovisionTenantSandbox] DeleteRolePolicy(${roleName}) failed:`,
-        err,
+  // Delete both the shared sandbox role and the capability-private role. Both
+  // are idempotent — a role that was never created (broker disabled) NoSuchEntity's
+  // and is treated as success.
+  for (const [roleName, policyName] of [
+    [computeRoleName(stage, tenantId), "sandbox-execution"] as const,
+    [
+      computeCapabilityPrivateRoleName(stage, tenantId),
+      "capability-private-execution",
+    ] as const,
+  ]) {
+    try {
+      await iam.send(
+        new DeleteRolePolicyCommand({
+          RoleName: roleName,
+          PolicyName: policyName,
+        }),
       );
-      failures.push(`role-policy:${roleName}`);
+    } catch (err: any) {
+      if (err?.name !== "NoSuchEntityException") {
+        console.error(
+          `[deprovisionTenantSandbox] DeleteRolePolicy(${roleName}) failed:`,
+          err,
+        );
+        failures.push(`role-policy:${roleName}`);
+      }
     }
-  }
-  try {
-    await iam.send(new DeleteRoleCommand({ RoleName: roleName }));
-  } catch (err: any) {
-    if (err?.name !== "NoSuchEntityException") {
-      console.error(
-        `[deprovisionTenantSandbox] DeleteRole(${roleName}) failed:`,
-        err,
-      );
-      failures.push(`role:${roleName}`);
+    try {
+      await iam.send(new DeleteRoleCommand({ RoleName: roleName }));
+    } catch (err: any) {
+      if (err?.name !== "NoSuchEntityException") {
+        console.error(
+          `[deprovisionTenantSandbox] DeleteRole(${roleName}) failed:`,
+          err,
+        );
+        failures.push(`role:${roleName}`);
+      }
     }
   }
 
@@ -659,18 +818,24 @@ async function sandboxOrphanGc(body: any) {
     .select({
       pub: tenants.sandbox_interpreter_public_id,
       int: tenants.sandbox_interpreter_internal_id,
+      cap: tenants.sandbox_interpreter_capability_private_id,
     })
     .from(tenants)
     .where(
       or(
         isNotNull(tenants.sandbox_interpreter_public_id),
         isNotNull(tenants.sandbox_interpreter_internal_id),
+        // THINK-280 U4: capability-private interpreters share the same
+        // `thinkwork-{stage}-sb-` name prefix the GC scans, so their live IDs
+        // must be in the keep-set or the GC would reap them.
+        isNotNull(tenants.sandbox_interpreter_capability_private_id),
       ),
     );
   const liveIds = new Set<string>();
   for (const r of rows) {
     if (r.pub) liveIds.add(r.pub);
     if (r.int) liveIds.add(r.int);
+    if (r.cap) liveIds.add(r.cap);
   }
 
   const now = Date.now();

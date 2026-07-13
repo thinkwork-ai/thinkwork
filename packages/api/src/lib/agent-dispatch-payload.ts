@@ -50,6 +50,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "document_plates",
   "withheld_connections",
   "member_spaces",
+  "capability_private_session",
 ] as const;
 
 export type RequiredDispatchField = (typeof REQUIRED_DISPATCH_FIELDS)[number];
@@ -70,6 +71,49 @@ export interface DispatchTurnContext {
 export interface DispatchMemberSpace {
   id: string;
   name: string;
+}
+
+/**
+ * THINK-280 U4 — the capability-private broker session bootstrap the trusted
+ * Pi host writes into a Code Interpreter session (reserved path, chmod 0600).
+ * Mirrors `SessionBootstrap` (capability-contracts/session.ts) plus the
+ * private-DNS-off transport fields (THINK-144). `privateKey` is the
+ * short-lived (<=15 min) Ed25519 session capability — NEVER a provider
+ * credential — and must never appear in logs, stdout, or error strings.
+ */
+export interface DispatchCapabilitySessionBootstrap {
+  sessionId: string;
+  audience: string;
+  /** Endpoint-specific VPCE DNS name (private DNS disabled — THINK-144). */
+  brokerEndpoint: string;
+  /** Private REST API id targeted through the VPCE. */
+  brokerApiId: string;
+  /** Base64 PKCS#8 DER Ed25519 private key (session-scoped, <=15 min). */
+  privateKey: string;
+  /** Next sequence to allocate (starts at 0). */
+  nextSequence: number;
+  expiresAt: string;
+  /** AWS region for the execute-api Host header (SDK derives a default). */
+  region?: string;
+}
+
+/**
+ * THINK-280 U4 — per-invocation capability-private sandbox selection. Rides the
+ * dispatch payload as `capability_private_session`, carrying the capability-
+ * private VPC-mode interpreter id (tenants.sandbox_interpreter_capability_
+ * private_id) plus the opened broker session bootstrap the runtime materializes
+ * into the session.
+ *
+ * INERT by contract: only present when the broker is enabled AND a session was
+ * opened for an executable capability projection. Absent (undefined) on every
+ * normal dispatch, in which case runtime sandbox behavior is exactly as today.
+ * Session-opening lives in U7 — this slice only defines and threads the field.
+ */
+export interface DispatchCapabilityPrivateSession {
+  /** capability-private interpreter id (tenants.sandbox_interpreter_capability_private_id). */
+  interpreterId: string;
+  /** Broker session bootstrap — carries the short-lived session key; never logged. */
+  bootstrap: DispatchCapabilitySessionBootstrap;
 }
 
 export interface AgentDispatchControlFieldArgs {
@@ -156,6 +200,15 @@ export interface AgentDispatchControlFieldArgs {
    * anyway) or when the best-effort lookup failed.
    */
   memberSpaces?: DispatchMemberSpace[];
+  /**
+   * THINK-280 U4 — capability-private sandbox selection + broker session
+   * bootstrap for this invocation. Undefined on every normal dispatch (the
+   * key drops out at JSON serialization); present only when the broker is
+   * enabled and a session was opened (U7). The runtime selects the
+   * capability-private interpreter and writes the SDK + bootstrap into the
+   * session; when absent, single-interpreter behavior is unchanged.
+   */
+  capabilityPrivateSession?: DispatchCapabilityPrivateSession;
 }
 
 export function buildAgentDispatchControlFields(
@@ -203,10 +256,10 @@ export function buildAgentDispatchControlFields(
     // workspace for the routing tree the tool navigates.
     fetch_workspace_source_enabled: Boolean(
       args.thinkworkApiUrl &&
-        args.apiAuthSecret &&
-        args.threadId &&
-        args.threadTurnId &&
-        args.renderedWorkspacePrefix,
+      args.apiAuthSecret &&
+      args.threadId &&
+      args.threadTurnId &&
+      args.renderedWorkspacePrefix,
     ),
     // Finalize-callback opt-in (plan 2026-05-22-006 U3) — chat-path only,
     // see `includeFinalizeCallback`.
@@ -233,5 +286,10 @@ export function buildAgentDispatchControlFields(
       args.memberSpaces && args.memberSpaces.length > 0
         ? args.memberSpaces
         : undefined,
+    // THINK-280 U4 — capability-private selection + broker session bootstrap.
+    // Undefined on normal dispatch (drops out at serialization); the runtime
+    // treats its absence as "no capability-private" and keeps single-
+    // interpreter behavior. Assembled by U7 once a broker session is opened.
+    capability_private_session: args.capabilityPrivateSession ?? undefined,
   };
 }

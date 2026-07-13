@@ -65,6 +65,18 @@ export function validateTemplateSandbox(raw: unknown): SandboxValidationResult {
   if (typeof v.environment !== "string") {
     return { ok: false, error: "sandbox.environment: required string" };
   }
+  // THINK-280 U4: capability-private is NOT a template opt-in — it is selected
+  // per-invocation from a signed capability manifest and never provisioned via
+  // the template `sandbox` block. Reject it explicitly (ahead of the generic
+  // "must be one of" message) so operators get an actionable error instead of
+  // a confusing enum mismatch.
+  if (v.environment === "capability-private") {
+    return {
+      ok: false,
+      error:
+        "sandbox.environment: capability-private is selected per-invocation from a signed capability manifest, not a template opt-in",
+    };
+  }
   if (!SANDBOX_ENVIRONMENTS.includes(v.environment as SandboxEnvironment)) {
     return {
       ok: false,

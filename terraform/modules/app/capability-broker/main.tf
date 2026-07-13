@@ -342,3 +342,45 @@ resource "aws_vpc_endpoint" "broker_execute_api" {
     Purpose = "capability-broker-private-ingress"
   }
 }
+
+# --- Capability-private interpreter SG (no NAT; broker VPCE only) — U4 --------
+#
+# The U4 capability-private VPC-mode Code Interpreter attaches to var.subnet_ids
+# (the no-NAT private egress subnets) under THIS security group. Its ONLY egress
+# is 443 to the broker execute-api VPCE SG plus DNS to the VPC resolver — there
+# is no NAT and no 0.0.0.0/0 route, so direct GitHub / Secrets Manager / internet
+# access does not exist (AE5 negative-egress boundary). The broker_vpce ingress
+# above already admits 443 from the VPC CIDR, which covers these subnets.
+resource "aws_security_group" "capability_private_interpreter" {
+  count       = local.count_enabled
+  name        = "${local.name_prefix}-cappriv-interpreter"
+  description = "Capability-private Code Interpreter egress: broker execute-api VPCE + DNS only"
+  vpc_id      = var.vpc_id
+
+  # execute-api VPCE only (reach the private broker API).
+  egress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.broker_vpce[0].id]
+    description     = "HTTPS to the broker execute-api VPCE"
+  }
+
+  # DNS to the in-VPC resolver so the endpoint-specific VPCE hostname resolves.
+  egress {
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = [var.vpc_cidr_block]
+    description = "DNS (UDP) to the VPC resolver"
+  }
+  egress {
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
+    description = "DNS (TCP) to the VPC resolver"
+  }
+
+  tags = { Name = "${local.name_prefix}-cappriv-interpreter" }
+}

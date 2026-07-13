@@ -169,6 +169,32 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(legacy.capabilities_manifest_fingerprint).toBeUndefined();
   });
 
+  it("carries the capability-private session (interpreter + bootstrap) when present, absent otherwise (THINK-280 U4)", () => {
+    const capabilityPrivateSession = {
+      interpreterId: "ci-cappriv-1",
+      bootstrap: {
+        sessionId: "sess-1",
+        audience: "aud",
+        brokerEndpoint: "vpce-x.execute-api.us-east-1.vpce.amazonaws.com",
+        brokerApiId: "api1",
+        privateKey: "BASE64PKCS8",
+        nextSequence: 0,
+        expiresAt: "2026-07-13T00:15:00.000Z",
+      },
+    };
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({ capabilityPrivateSession }),
+    );
+    expect(fields.capability_private_session).toEqual(capabilityPrivateSession);
+
+    // INERT on normal dispatch: the key drops out at JSON serialization so the
+    // runtime keeps single-interpreter behavior exactly as today.
+    const inert = buildAgentDispatchControlFields(baseArgs());
+    expect(inert.capability_private_session).toBeUndefined();
+    const wire = JSON.parse(JSON.stringify(inert)) as Record<string, unknown>;
+    expect("capability_private_session" in wire).toBe(false);
+  });
+
   it("all three builders pass the tenant plate list into the shared helper (THINK-153 KTD4)", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
     const chatSource = handlerSource("chat-agent-invoke.ts");

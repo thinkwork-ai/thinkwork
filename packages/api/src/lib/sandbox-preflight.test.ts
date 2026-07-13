@@ -100,6 +100,102 @@ describe("classifyPreflight — ready", () => {
   });
 });
 
+describe("classifyPreflight — capability-private selection (THINK-280 U4)", () => {
+  const withCapPrivate = {
+    tenant: {
+      sandboxEnabled: true,
+      interpreterPublicId: "ci-public-1",
+      interpreterInternalId: "ci-internal-1",
+      interpreterCapabilityPrivateId: "ci-cappriv-1",
+    },
+  };
+
+  it("selects capability-private when requested and provisioned", () => {
+    expect(
+      classifyPreflight({
+        ...withCapPrivate,
+        templateSandbox: null,
+        requestedCapabilityPrivate: true,
+      }),
+    ).toEqual({
+      status: "capability-private-ready",
+      interpreterId: "ci-cappriv-1",
+    });
+  });
+
+  it("takes precedence over the template environment", () => {
+    // Even with a valid template env, a capability-private request wins.
+    expect(
+      classifyPreflight({
+        ...withCapPrivate,
+        templateSandbox: { environment: "default-public" },
+        requestedCapabilityPrivate: true,
+      }),
+    ).toEqual({
+      status: "capability-private-ready",
+      interpreterId: "ci-cappriv-1",
+    });
+  });
+
+  it("fails closed (no default-public fallback) when the interpreter is not provisioned", () => {
+    const result = classifyPreflight({
+      tenant: {
+        sandboxEnabled: true,
+        interpreterPublicId: "ci-public-1",
+        interpreterInternalId: "ci-internal-1",
+        interpreterCapabilityPrivateId: null,
+      },
+      templateSandbox: { environment: "default-public" },
+      requestedCapabilityPrivate: true,
+    });
+    expect(result).toEqual({
+      status: "capability-private-unavailable",
+      reason: "interpreter_not_provisioned",
+    });
+  });
+
+  it("fails closed when the tenant sandbox is disabled", () => {
+    expect(
+      classifyPreflight({
+        ...withCapPrivate,
+        tenant: { ...withCapPrivate.tenant, sandboxEnabled: false },
+        templateSandbox: null,
+        requestedCapabilityPrivate: true,
+      }),
+    ).toEqual({
+      status: "capability-private-unavailable",
+      reason: "tenant_sandbox_disabled",
+    });
+  });
+
+  it("fails closed when the tenant row is missing", () => {
+    expect(
+      classifyPreflight({
+        tenant: null,
+        templateSandbox: null,
+        requestedCapabilityPrivate: true,
+      }),
+    ).toEqual({
+      status: "capability-private-unavailable",
+      reason: "tenant_sandbox_disabled",
+    });
+  });
+
+  it("leaves the template-env path untouched when not requested", () => {
+    // requestedCapabilityPrivate falsy → normal template selection.
+    expect(
+      classifyPreflight({
+        ...withCapPrivate,
+        templateSandbox: { environment: "default-public" },
+      }),
+    ).toEqual({
+      status: "ready",
+      environment: "default-public",
+      interpreterId: "ci-public-1",
+    });
+  });
+});
+
 describe("applySandboxPayloadFields", () => {
   it("does nothing when result is not ready", () => {
     const payload: Record<string, unknown> = {};
@@ -129,5 +225,26 @@ describe("applySandboxPayloadFields", () => {
     expect(payload).not.toHaveProperty("sandbox_tenant_id");
     expect(payload).not.toHaveProperty("sandbox_user_id");
     expect(payload).not.toHaveProperty("sandbox_stage");
+  });
+
+  it("no-ops on capability-private results (dispatch field assembled in U7)", () => {
+    // THINK-280 U4: the capability-private interpreter reaches the runtime via
+    // the capability_private_session dispatch field once a broker session is
+    // opened — never through the template sandbox_environment fields here.
+    const ready: Record<string, unknown> = { existing: "keep me" };
+    applySandboxPayloadFields(ready, {
+      status: "capability-private-ready",
+      interpreterId: "ci-cappriv-1",
+      caller: "execute_code",
+    });
+    expect(ready).toEqual({ existing: "keep me" });
+
+    const unavailable: Record<string, unknown> = {};
+    applySandboxPayloadFields(unavailable, {
+      status: "capability-private-unavailable",
+      reason: "interpreter_not_provisioned",
+      caller: "execute_code",
+    });
+    expect(unavailable).toEqual({});
   });
 });

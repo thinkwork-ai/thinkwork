@@ -66,6 +66,15 @@ export const tenants = pgTable(
     // gates on ID-present independently of sandbox_enabled (plan R-Q10).
     sandbox_interpreter_public_id: text("sandbox_interpreter_public_id"),
     sandbox_interpreter_internal_id: text("sandbox_interpreter_internal_id"),
+    // THINK-280 U4: the capability-private VPC-mode interpreter (no NAT; reaches
+    // only the broker's private execute-api VPCE). Provisioned by agentcore-admin
+    // ONLY when the capability broker is enabled; NULL otherwise. This is a
+    // runtime-selected environment (chosen per invocation when an executable
+    // capability projection is requested), not a template-level sandbox opt-in,
+    // so it is deliberately absent from SANDBOX_ENVIRONMENTS above.
+    sandbox_interpreter_capability_private_id: text(
+      "sandbox_interpreter_capability_private_id",
+    ),
     // Set by the stripe-webhook Lambda when a checkout.session.completed event
     // pre-provisions a paid tenant. bootstrapUser later matches this column
     // to a Google-signed-in user's email and claims the tenant (attaches the

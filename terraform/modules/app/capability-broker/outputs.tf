@@ -32,3 +32,18 @@ output "execute_api_vpce_dns_name" {
 output "broker_function_name" {
   value = local.enabled ? aws_lambda_function.broker[0].function_name : ""
 }
+
+# --- U4: capability-private interpreter VPC placement ------------------------
+# Consumed by the agentcore-admin Lambda (CAPABILITY_PRIVATE_SUBNET_IDS /
+# CAPABILITY_PRIVATE_SECURITY_GROUP_IDS). Empty lists when disabled so the
+# Lambda skips capability-private provisioning entirely.
+
+output "capability_private_interpreter_subnet_ids" {
+  description = "No-NAT subnets the capability-private interpreter attaches to (same egress subnets as the broker)."
+  value       = local.enabled ? var.subnet_ids : []
+}
+
+output "capability_private_interpreter_security_group_id" {
+  description = "Egress-only SG (broker execute-api VPCE + DNS only) for the capability-private interpreter. Empty when disabled."
+  value       = local.enabled ? aws_security_group.capability_private_interpreter[0].id : ""
+}

@@ -632,3 +632,17 @@ output "capability_broker_vpce_dns_name" {
   description = "Endpoint-specific execute-api VPCE DNS name (private DNS OFF; CAPABILITY_BROKER_VPCE_DNS). Empty when disabled."
   value       = module.capability_broker.execute_api_vpce_dns_name
 }
+
+# THINK-280 U4 — VPC placement for the capability-private interpreter, threaded
+# to the agentcore-admin Lambda (CAPABILITY_PRIVATE_SUBNET_IDS /
+# CAPABILITY_PRIVATE_SECURITY_GROUP_IDS) when U5/U6 wire that handler. Empty
+# when the broker is disabled, so the Lambda skips capability-private entirely.
+output "capability_private_interpreter_subnet_ids" {
+  description = "No-NAT subnets the capability-private VPC-mode interpreter attaches to. Empty when the broker is disabled."
+  value       = module.capability_broker.capability_private_interpreter_subnet_ids
+}
+
+output "capability_private_interpreter_security_group_id" {
+  description = "Egress-only SG (broker execute-api VPCE + DNS only) for the capability-private interpreter. Empty when the broker is disabled."
+  value       = module.capability_broker.capability_private_interpreter_security_group_id
+}
