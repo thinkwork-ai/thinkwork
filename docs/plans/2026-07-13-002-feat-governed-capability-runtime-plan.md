@@ -239,7 +239,7 @@ fallback), AE3 (contract drift is explicit), AE4 (replay fails before dispatch),
 | Proof of possession               | Ed25519, domain-separated RFC-8785 body, strict next sequence, unique nonce, 60-second clock window, and at most 15-minute session TTL                                                                                                               | Reuses local asymmetric precedent and is implementable in TypeScript and Python without persisting a private key                                                    |
 | Lost-response safety              | Every call has a client request ID unique within the session. The broker records `authorized` before dispatch and the terminal outcome after dispatch; a signed status operation retrieves that outcome and never redispatches                       | Strict sequence consumption makes replay safe but makes blind retry unsafe after an ambiguous network failure, especially for effectful operations                  |
 | Call concurrency                  | The v1 Python SDK serializes broker calls per session and owns sequence allocation; parallel authored tasks queue locally                                                                                                                            | Strict next-sequence, cumulative budgets, and deterministic fixture call order are simpler and safer than speculative concurrent dispatch                           |
-| Private ingress                   | Private REST API Gateway reachable only through a dedicated execute-api VPC endpoint/resource policy; application requests still require PoP. Broker Lambda uses separate egress-enabled subnets                                                     | Code Interpreter needs broker access without SigV4/AWS credentials or general internet; network location alone is not authorization                                 |
+| Private ingress                   | Private REST API Gateway reachable only through a dedicated execute-api VPC endpoint created with private DNS disabled — never added to the app VPC's shared interface-endpoint list (THINK-144 guard in `terraform/modules/thinkwork/main.tf`: execute-api private DNS captures all `*.execute-api` traffic VPC-wide and the stack's HTTP APIs 403 it); the session bootstrap targets the endpoint-specific VPCE DNS name with the private API id. Application requests still require PoP. Broker Lambda uses separate egress-enabled subnets; `terraform/modules/app/capability-broker` owns the VPC/subnet/security-group/VPCE substrate                                                     | Code Interpreter needs broker access without SigV4/AWS credentials or general internet; network location alone is not authorization                                 |
 | Python handoff                    | Trusted host generates the ephemeral keypair, registers only the public key, and injects a session bootstrap into a preinstalled SDK wrapper—not prompts, source, or persisted environment                                                           | The session key is a short-lived bounded capability, never a provider credential; every call is still re-authorized                                                 |
 | Broker results                    | `completed`, `accepted`, or `failed`; typed error category and retryability; inline validated data capped at 64 KiB, larger output becomes an Artifact/S3 durable reference                                                                          | Normalizes authored code without pretending asynchronous/provider durability is synchronous                                                                         |
 | Policy taxonomies                 | Data: `public`, `internal`, `confidential`, `restricted`, `credential`; cost: `free`, `low`, `medium`, `high`, `unknown`; latency: `interactive`, `long_running`, `asynchronous`, `unknown`; output: `inline`, `artifact`, `stream`, `unknown`       | Small closed sets can fail closed. `credential` output and `unknown` automated execution are rejected in v1                                                         |
@@ -284,16 +284,20 @@ execution. No refreshed operation enters an existing grant automatically.
 
 ### Deferred to Implementation
 
-- Exact AWS regional availability and Terraform provider fields for VPC-mode Code
-  Interpreter: verify in the target dev account before the U4 apply; preserve the
+- Exact AWS regional availability and `CreateCodeInterpreter` VPC network-configuration
+  support in the bundled `@aws-sdk/client-bedrock-agentcore-control` version used by
+  `packages/lambda/agentcore-admin.ts` (interpreters are created by that Lambda's SDK
+  call — currently hard-typed to `PUBLIC | SANDBOX` — not by Terraform provider fields):
+  verify with a live call in the target dev account before the U4 apply; preserve the
   topology and stop if the regional API differs rather than weakening isolation.
 - Exact inline/Artifact thresholds below the 64 KiB contract ceiling and provider-
   specific timeout defaults: tune from dev evidence without changing the envelope.
 - Whether the GitHub REST adapter uses direct signed HTTP or an approved generated
   OpenAPI client internally: choose the smaller implementation after validating the
   admitted operation schemas; authored Python cannot observe the choice.
-- Final helper and SQL migration names if concurrent work claims `0246`; preserve the
-  table/contract boundaries and take the next migration number.
+- Final helper and SQL migration names if concurrent work claims `0247`; preserve the
+  table/contract boundaries and take the next migration number (`0246` is already
+  occupied on main by `0246_automation_workflow_ownership.sql`).
 
 ---
 
@@ -316,7 +320,6 @@ packages/lambda/lib/capability-broker/
 └── adapters/
     ├── registry.ts
     ├── http-openapi.ts
-    ├── mcp.ts
     └── platform.ts
 
 packages/agentcore-pi/agent-container/src/runtime/capability-sdk/
@@ -408,6 +411,10 @@ flowchart TB
 
 - **Phase 1 — inert authority:** U1–U3 land contracts, control-plane records, sessions,
   and broker policy before any authored call can reach a provider.
+- **Phase 1 entry gate:** before or in parallel with U1, run a dev spike that creates
+  one VPC-mode Code Interpreter via `CreateCodeInterpreterCommand` and proves
+  execute-api VPCE reachability from its subnet; U3's capability-broker Terraform
+  design is contingent on that spike's evidence, not on documentation.
 - **Phase 2 — governed vertical slice:** U4–U7 add the private path, minimum adapters,
   proposal/promotion, and scheduled GitHub Artifact tracer.
 - **Phase 3 — shared discovery and rollout:** U8 proves Inspector/external parity, then
@@ -444,8 +451,8 @@ live dispatch exists.
 - Modify: `packages/agentcore-pi/agent-container/Dockerfile`
 - Modify: `pnpm-lock.yaml`
 - Create: `packages/database-pg/src/schema/capability-runtime.ts`
-- Create: `packages/database-pg/drizzle/0246_capability_runtime.sql` (or next available
-  migration number)
+- Create: `packages/database-pg/drizzle/0247_capability_runtime.sql` (or next available
+  migration number; `0246` is already taken by `0246_automation_workflow_ownership.sql`)
 - Modify: `packages/database-pg/src/schema/capability-catalog.ts`
 - Modify: `packages/database-pg/src/schema/index.ts`
 - Modify: `packages/database-pg/src/schema/core.ts`
@@ -552,8 +559,10 @@ path.
 - Test: `packages/api/src/lib/capabilities/sidecar-signing.test.ts`
 - Modify: `packages/api/src/lib/tenant-credentials/secret-store.ts`
 - Test: `packages/api/src/lib/tenant-credentials/secret-store.test.ts`
-- Modify: `apps/web/src/routes/_authed/settings.capabilities.tsx`
-- Test: `apps/web/src/routes/_authed/settings.capabilities.test.tsx`
+- Modify: `apps/web/src/components/settings/SettingsCapabilities.tsx` (the live
+  Capabilities surface, rendered from `settings.agents.index.tsx`; the standalone
+  `settings.capabilities.tsx` route is a retired redirect stub — do not edit it)
+- Test: `apps/web/src/components/settings/SettingsCapabilities.test.tsx`
 - Modify: `apps/web/src/lib/connections-api.ts`
 - Create: `packages/agentcore-pi/agent-container/src/runtime/tools/capability-search.ts`
 - Test: `packages/agentcore-pi/agent-container/tests/capability-search.test.ts`
@@ -585,8 +594,11 @@ revoked`. The verifier resolves the secret inside the trusted API path, performs
 - Register two distinct Pi tools backed by one narrow service Lambda invoked
   synchronously (`RequestResponse`) over the existing approved AWS path. This avoids the
   repo's known unreliable public execute-api path from Pi's private VPC. The Pi role can
-  invoke only this function; the handler accepts a closed action union and cross-checks
-  tenant/agent/actor/manifest context. `capability_search` accepts only the invocation
+  invoke only this function; the handler accepts a closed action union and verifies a per-call
+  Ed25519-signed caller context (domain-separated, canonicalized body — the
+  `packages/lambda/analyst-caller-context.ts` pattern) carrying tenant/agent/actor/
+  manifest identity minted by the trusted host, rather than trusting plaintext payload
+  fields asserted over the shared Pi role. `capability_search` accepts only the invocation
   tuple supplied by the trusted host; `connection_research` can search/create proposal
   evidence but cannot sign, bind credentials, or dispatch. Do not expose an HTTP route
   or widen shared GraphQL caller resolution.
@@ -603,6 +615,8 @@ revoked`. The verifier resolves the secret inside the trusted API path, performs
 
 - Operator authorization and audit emission in
   `packages/api/src/graphql/resolvers/capabilities/capabilityAssignment.mutations.ts`.
+- Signed caller-context minting/verification in
+  `packages/lambda/analyst-caller-context.ts`.
 - Signed folder write/definition drift checks in
   `packages/api/src/lib/capabilities/folder-write.ts` and
   `packages/api/src/lib/capabilities/sidecar-signing.ts`.
@@ -668,9 +682,11 @@ envelopes, and durable evidence before enabling any provider adapter.
 - Create: `terraform/modules/app/capability-broker/main.tf`
 - Create: `terraform/modules/app/capability-broker/variables.tf`
 - Create: `terraform/modules/app/capability-broker/outputs.tf`
-- Modify: `terraform/modules/app/main.tf`
-- Modify: `terraform/modules/app/variables.tf`
-- Modify: `terraform/modules/app/outputs.tf`
+- Modify: `terraform/modules/thinkwork/main.tf` (app-tier submodules, including the new
+  capability-broker module, are instantiated from the thinkwork module — `terraform/modules/app`
+  has no root module)
+- Modify: `terraform/modules/thinkwork/variables.tf`
+- Modify: `terraform/modules/thinkwork/outputs.tf`
 
 **Approach:**
 
@@ -778,11 +794,18 @@ creation without exposing provider credentials or ambient AWS authority.
   tenant sandbox secrets. Its
   security group permits DNS, required approved AWS endpoints/internal artifact paths,
   and the execute-api interface endpoint only. The VPCE policy/resource policy permits
-  only the broker API; direct GitHub/internet routes do not exist.
+  only the broker API; direct GitHub/internet routes do not exist. The endpoint is
+  created with private DNS disabled and is never added to the app VPC's shared
+  interface-endpoint list (THINK-144: execute-api private DNS captures all
+  `*.execute-api` traffic VPC-wide and the stack's HTTP APIs reject it with 403); the
+  session bootstrap carries the endpoint-specific VPCE DNS name and private API id.
 - Use a dedicated least-privilege interpreter role with no Secrets Manager, tenant S3,
   database, or provider access beyond explicitly required sandbox bootstrap artifacts.
-- Package the Python SDK/canonicalizer as source assets in the Pi container. The trusted
-  host loads those assets and uses the existing AgentCore `writeFiles` operation to place
+- Package the Python SDK/canonicalizer as source assets in the Pi container. The SDK
+  vendors a dependency-free pure-Python Ed25519 signer and RFC 8785 canonicalizer,
+  importing nothing beyond the Python standard library — the AWS-managed default
+  interpreter image (no NAT, no pip) is not assumed to ship a usable crypto primitive.
+  The trusted host loads those assets and uses the existing AgentCore `writeFiles` operation to place
   them in each new session; current Code Interpreter provisioning does not attach the
   repo's ECR sandbox-base image. Agent-authored code calls the exact `twcap:` reference
   and typed input. The host writes a separate reserved bootstrap path, then `chmod 0600`,
@@ -829,6 +852,8 @@ pass in dev.
   `default-public`.
 - Integration: TypeScript and Python canonicalizers produce identical bytes/signatures
   for shared fixture vectors.
+- Precondition: the capability SDK imports cleanly in a bare default interpreter
+  session with no third-party packages installed.
 - Integration: `writeFiles` places the bootstrap in the same lazily created session used
   by `executeCode`; cleanup deletes/stops that session, and logs/error serialization
   never contain the private key or full bootstrap.
@@ -836,6 +861,8 @@ pass in dev.
   1; neither produces an out-of-order broker rejection or overspends the shared budget.
 - Regression: `default-public` and `internal-only` retain their current network-mode and
   selection tests.
+- Regression: the app VPC's interface-endpoint service list is unchanged by the U4
+  apply; in-VPC callers of the stack's public HTTP APIs still resolve and succeed.
 
 **Verification:** Live dev evidence proves direct provider and secret access fail,
 broker access succeeds, no bootstrap leaks, and existing environments are unchanged.
@@ -846,7 +873,8 @@ broker access succeeds, no bootstrap leaks, and existing environments are unchan
 
 **Goal:** Implement the adapter boundary and the minimum admitted HTTP/OpenAPI and
 ThinkWork platform operations needed for GitHub issue-health input and Artifact output,
-with MCP registration ready but not required by the tracer.
+with the adapter registry MCP-ready; the MCP adapter implementation itself is deferred
+until the first MCP-backed Connection is admitted.
 
 **Requirements:** R5, R7, R8, R9, R10, R15, R19; F2; AE7
 
@@ -856,8 +884,6 @@ with MCP registration ready but not required by the tracer.
 
 - Create: `packages/lambda/lib/capability-broker/adapters/http-openapi.ts`
 - Test: `packages/lambda/__tests__/capability-broker-http-adapter.test.ts`
-- Create: `packages/lambda/lib/capability-broker/adapters/mcp.ts`
-- Test: `packages/lambda/__tests__/capability-broker-mcp-adapter.test.ts`
 - Create: `packages/lambda/lib/capability-broker/adapters/platform.ts`
 - Test: `packages/lambda/__tests__/capability-broker-platform-adapter.test.ts`
 - Modify: `packages/lambda/lib/capability-broker/adapters/registry.ts`
@@ -877,16 +903,23 @@ with MCP registration ready but not required by the tracer.
 - The HTTP adapter enforces declared method/path/host, schema validation, timeout,
   response-size limits, retry/idempotency rules, and credential placement. It cannot
   accept an arbitrary URL from authored input.
-- The MCP adapter preserves tool-level errors, structured content, async/resource
-  semantics, and server tool allowlists; it does not make MCP the common internal model.
+- The adapter registry accepts future MCP registration; the MCP adapter implementation
+  is deferred to the unit that first admits an MCP-backed Connection, per Phase 2's
+  "minimum adapters" commitment. When it ships, it preserves tool-level errors,
+  structured content, async/resource semantics, and server tool allowlists; it does not
+  make MCP the common internal model.
 - The platform adapter calls narrowly registered operations. For the tracer, expose an
   Artifact-create operation with tenant/acting-principal checks and durable result
   identity. Implement service-principal attribution inside this dedicated adapter
   transaction; do not widen existing user resolver authentication and do not grant
   generic GraphQL or database access.
-- Seed/dogfood-admit only GitHub REST repository metadata, issue listing, and issue detail
-  operations needed for the digest. Contracts are `read`, closed-scope to one configured
-  repository, service-principal capable, bounded pagination/output, and low cost.
+- The tracer's GitHub REST definition is admitted as a tenant Connection through the U2
+  research/admission flow during dogfood; `platform-seeds/github-rest.ts` holds
+  reference operation contracts consumed by that admission and by tests — it is not an
+  alternate admission path. Admit only repository metadata, issue listing, and issue
+  detail operations needed for the digest. Contracts are `read`, closed-scope to one
+  configured repository, service-principal capable, bounded pagination/output, and low
+  cost.
 - For effectful adapters without dry-run, hermetic fixtures are the publication gate;
   live verification never repeats the external effect.
 
@@ -913,8 +946,6 @@ with MCP registration ready but not required by the tracer.
   during validation and makes zero provider calls.
 - Integration: platform Artifact creation records tenant, actor/service principal,
   operation reference, source Routine/run, and broker evidence reference.
-- Integration: MCP `isError`, `structuredContent`, resource, and accepted/async shapes map
-  to the common envelope without losing adapter semantics.
 
 **Verification:** Only registered exact operations can dispatch; GitHub credentials stay
 inside the broker; Artifact output is durable/attributable; adapter contract tests prove
@@ -960,8 +991,11 @@ and activate only a clean hermetic-green SHA with current readiness.
 
 - Normalize Python and persist the proposal payload/fingerprint with typed input/output,
   minimized sanitized fixtures, invariants, exact dependency references, minimum grants,
-  principal specs, effect/data/cost summary, and source broker/turn evidence. Creation and
-  edits cannot touch Git or execute.
+  principal specs, effect/data/cost summary, and source broker/turn evidence. Fixture
+  sanitization runs the `packages/lambda/routine-output-redactor.ts` pass (exact-value
+  and known-token-shape scrubbing, fed by the broker's known secret sources) before
+  proposal persistence and any Git commit. Creation and edits cannot touch Git or
+  execute.
 - Expose proposal creation to eligible agent sessions through a narrow trusted-service
   action on the U2 service Lambda and `routine_propose` Pi tool. The handler derives
   tenant, actor, turn, signed manifest, and broker evidence from trusted invocation
@@ -981,7 +1015,12 @@ and activate only a clean hermetic-green SHA with current readiness.
   effects; then separately evaluate current live readiness.
 - Only a hermetic-green SHA with ready dependencies becomes `validated_sha`. Repair may
   auto-publish only when a semantic diff proves dependencies/principals/effects/budgets
-  are unchanged or narrower; every expansion creates a new proposal.
+  are unchanged or narrower; every expansion creates a new proposal. Repair auto-publish
+  is the sole, explicit exception to the R14/AE6 exact-approval rule: repair-published
+  SHAs are recorded as machine-approved with the structured-field diff and green fixture
+  run as evidence, and evidence/UI surfaces distinguish operator-approved from
+  repair-approved SHAs. AE6 covers post-review edits by humans or agents; repair
+  publication is auditable and attributed, never silent.
 
 **Execution note:** Build approval invalidation and no-Git proposal tests before the
 promotion path; reuse the current Git/fixture machinery rather than creating a second
@@ -993,6 +1032,7 @@ Routine publisher.
 - SHA/fixture authority in `packages/database-pg/src/schema/routine-code-cache.ts`.
 - Existing repair constraints in `packages/lambda/routine-repair-dispatch.ts`.
 - Generic human decision linkage in `packages/database-pg/src/schema/inbox-items.ts`.
+- Fixture/output redaction in `packages/lambda/routine-output-redactor.ts`.
 
 **Test scenarios:**
 
@@ -1013,6 +1053,10 @@ Routine publisher.
 - Integration: an eligible Pi session can create a proposal through `routine_propose`;
   forged actor/manifest/evidence references fail, and the service endpoint cannot approve,
   commit, validate, or activate it.
+- UI: the approval detail's new panels (source, dependency contracts, fixtures,
+  invariants, principal/effect expansion) specify loading and error states; a proposal
+  whose fingerprint is invalidated mid-review disables Approve, shows a stale-approval
+  notice, and prompts a refresh.
 - Repair: narrowing a page-size budget may auto-publish after green validation; adding an
   operation, principal, effect, or higher budget always creates a fresh proposal.
 
@@ -1103,11 +1147,17 @@ record the full evidence chain, and block explicitly on revocation or incompatib
   closes the broker/Code Interpreter session.
 - Integration: run detail joins Routine SHA, dependency contracts, principal/binding,
   broker calls, budget/effects, and Artifact; the Artifact links back to the run.
+- UI: ExecutionGraph and the execution detail page distinguish blocked, degraded, and
+  indeterminate outcomes from existing succeeded/failed/running states by icon and
+  label (not color alone); binding-revocation remediation renders adjacent to the run
+  outcome.
 - Operational: enable then tear down the dogfood schedule and assert no subsequent
   invocation/provider call occurs and the binding/service principal is unusable.
 
 **Verification:** At least two consecutive scheduled dev runs produce attributable
-Artifacts without agent turns; revocation and contract-drift drills fail closed; teardown
+Artifacts without agent turns; the dogfood evidence includes the research→admission leg
+(agent-driven discovery plus operator admission of GitHub REST via U2, proving origin
+R19 end to end); revocation and contract-drift drills fail closed; teardown
 is observed rather than assumed.
 
 ---
@@ -1136,8 +1186,8 @@ the tracer, and roll out behind explicit operational gates.
 - Modify: `terraform/modules/app/lambda-api/handlers.tf`
 - Modify: `terraform/modules/app/lambda-api/mcp-oauth.tf`
 - Modify: `scripts/build-lambdas.sh`
-- Modify: `apps/web/src/routes/_authed/settings.capabilities.tsx`
-- Test: `apps/web/src/routes/_authed/settings.capabilities.test.tsx`
+- Modify: `apps/web/src/components/settings/SettingsCapabilities.tsx`
+- Test: `apps/web/src/components/settings/SettingsCapabilities.test.tsx`
 - Create: `docs/src/content/docs/concepts/capability-runtime.mdx`
 - Create: `docs/src/content/docs/guides/capability-connection-admission.mdx`
 - Create: `docs/src/content/docs/runbooks/capability-broker-operations.mdx`
