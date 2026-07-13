@@ -30,7 +30,8 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain('{ to: MEMORY, label: "Memory" }');
     expect(source).toContain('{ to: WIKI, label: "Wiki" }');
     expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
-    expect(source).toContain('{ to: ONTOLOGY, label: "Model" }');
+    expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
+    expect(source).not.toContain('{ to: ONTOLOGY, label: "Model" }');
     expect(source).not.toContain('label: "Knowledge Model"');
     expect(source).not.toContain('label: "Graph"');
   });
@@ -52,8 +53,8 @@ describe("SettingsMemoryHome", () => {
     expect(source).not.toContain("TabsList");
   });
 
-  it("keeps the Model tab on the ontology route", () => {
-    expect(source).toContain('{ to: ONTOLOGY, label: "Model" }');
+  it("keeps the Ontology tab on the ontology route", () => {
+    expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
     expect(source).toContain('activeTab === "ontology"');
     expect(source).not.toContain("ontologyEnabled");
     expect(source).not.toContain("SettingsPluginCatalogQuery");

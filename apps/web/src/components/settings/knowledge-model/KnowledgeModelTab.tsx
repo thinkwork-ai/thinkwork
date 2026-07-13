@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
+import { ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@thinkwork/ui";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { KnowledgeGraphTab } from "@/components/settings/knowledge-graph/KnowledgeGraphTab";
 import { IdentityList } from "./IdentityList";
@@ -27,18 +34,22 @@ const VIEW_TITLES: Record<
   },
 };
 
-// Sized to the longest title ("Resolution Queue") so the badge-slot toggle
-// group doesn't shift horizontally when a shorter title swaps in.
-const TITLE_MIN_WIDTH_CLASS = "min-w-52";
+const VIEW_OPTIONS: ReadonlyArray<{
+  value: KnowledgeModelView;
+  label: string;
+}> = [
+  { value: "definitions", label: "Definitions" },
+  { value: "identity", label: "Identity" },
+  { value: "resolution-queue", label: "Resolution Queue" },
+];
 
 /**
- * Model tab of the unified Memory page (THINK-193 U4). Owns a single title row
- * — the active sub-view's title/description with the view toggle group inline
- * beside it — over three content-only sub-views: term Definitions (the
+ * Ontology tab of the unified Memory page (THINK-193 U4). The active
+ * sub-view's title is also the view selector, keeping the page hierarchy clear
+ * while preserving three content-only views: term Definitions (the
  * pre-existing knowledge-graph tab content), the canonical-entity Identity
- * list, and the entity Resolution Queue. Sub-view selection is component-local
- * state so the existing /settings/memory/ontology route keeps working
- * unchanged.
+ * list, and the entity Resolution Queue. Selection is component-local state so
+ * the existing /settings/memory/ontology route keeps working unchanged.
  */
 export function KnowledgeModelTab() {
   const [view, setView] = useState<KnowledgeModelView>("definitions");
@@ -47,30 +58,44 @@ export function KnowledgeModelTab() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
       <SettingsPageTitle
-        title={title}
-        description={description}
-        titleClassName={TITLE_MIN_WIDTH_CLASS}
-        badge={
-          <ToggleGroup
-            type="single"
-            value={view}
-            onValueChange={(value) =>
-              value && setView(value as KnowledgeModelView)
-            }
-            variant="outline"
-            aria-label="Model view"
-          >
-            <ToggleGroupItem value="definitions" className="px-3 text-xs">
-              Definitions
-            </ToggleGroupItem>
-            <ToggleGroupItem value="identity" className="px-3 text-xs">
-              Identity
-            </ToggleGroupItem>
-            <ToggleGroupItem value="resolution-queue" className="px-3 text-xs">
-              Resolution Queue
-            </ToggleGroupItem>
-          </ToggleGroup>
+        title={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="group -ml-2 inline-flex items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 data-[state=open]:bg-muted/60"
+                aria-label={`Ontology view: ${title}`}
+              >
+                <span>{title}</span>
+                <ChevronDown
+                  className="size-5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
+                  aria-hidden="true"
+                />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-56"
+              aria-label="Ontology views"
+            >
+              <DropdownMenuRadioGroup
+                value={view}
+                onValueChange={(value) => setView(value as KnowledgeModelView)}
+              >
+                {VIEW_OPTIONS.map((option) => (
+                  <DropdownMenuRadioItem
+                    key={option.value}
+                    value={option.value}
+                    className="px-2 py-1.5 pr-8"
+                  >
+                    {option.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
+        description={description}
       />
       <div className="min-h-0 flex-1">
         {view === "definitions" ? <KnowledgeGraphTab /> : null}

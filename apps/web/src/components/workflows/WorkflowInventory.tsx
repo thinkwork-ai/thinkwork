@@ -18,19 +18,22 @@ import {
   Input,
   type DataTableTokenFilterColumn,
 } from "@thinkwork/ui";
-import { CircleDot, GitBranch, Plug, Repeat, Search, X } from "lucide-react";
+import {
+  Check,
+  CircleDot,
+  GitBranch,
+  Repeat,
+  Search,
+  UserRound,
+  X,
+} from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
-import {
-  SettingsDeploymentStatusQuery,
-  SettingsPluginCatalogQuery,
-  SettingsTenantMembersQuery,
-} from "@/lib/settings-queries";
+import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import {
   primaryBinding,
   sourceLabel,
-  SourceBadge,
   titleize,
   type WorkflowBinding,
   WorkflowReadinessBadge,
@@ -75,16 +78,24 @@ type WorkflowOwnerMember = {
 
 type WorkflowMembersData = { tenantMembers?: WorkflowOwnerMember[] };
 
-const N8N_WORKFLOWS_PATH = "/settings/plugins/n8n/workflows";
 const WORKFLOW_FILTER_COLUMNS = {
   search: "workflowSearch",
   readiness: "workflowReadiness",
-  source: "workflowSource",
   trigger: "workflowTrigger",
+  automation: "workflowAutomation",
+  owner: "workflowOwner",
 } as const;
 
-function bindingFilterValue(row: WorkflowRow): string {
-  return primaryBinding(row.bindings)?.bindingType ?? "unknown";
+function workflowAutomationFilterValue(row: WorkflowRow): string {
+  return row.sourceAgentLoopId ? "yes" : "no";
+}
+
+function workflowOwnerFilterValue(
+  row: WorkflowRow,
+  ownerLabels: Map<string, string>,
+): string {
+  if (!row.ownerUserId) return "Unassigned";
+  return ownerLabels.get(row.ownerUserId) ?? row.ownerUserId;
 }
 
 /**
@@ -142,14 +153,6 @@ export function WorkflowInventory({
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
-  const [catalogResult] = useQuery({
-    query: SettingsPluginCatalogQuery,
-    requestPolicy: "cache-and-network",
-  });
-  const [deploymentResult] = useQuery({
-    query: SettingsDeploymentStatusQuery,
-    requestPolicy: "cache-and-network",
-  });
   const [membersResult] = useQuery<WorkflowMembersData>({
     query: SettingsTenantMembersQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -160,15 +163,6 @@ export function WorkflowInventory({
     () => result.data?.workflows ?? [],
     [result.data?.workflows],
   );
-  const n8nCatalogEntry =
-    (catalogResult.data?.pluginCatalog ?? []).find(
-      (candidate) => candidate.pluginKey === "n8n",
-    ) ?? null;
-  const n8nRuntime =
-    deploymentResult.data?.deploymentStatus.managedApplications.find(
-      (candidate) => candidate.key === "n8n",
-    );
-  const n8nLaunchUrl = n8nRuntime?.url ?? n8nCatalogEntry?.launchUrl ?? null;
   const ownerLabels = useMemo(
     () =>
       new Map(
@@ -181,10 +175,13 @@ export function WorkflowInventory({
   );
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const tokenFilterColumns = useMemo(
-    () => buildWorkflowTokenFilterColumns(rows),
-    [rows],
+    () => buildWorkflowTokenFilterColumns(rows, ownerLabels),
+    [ownerLabels, rows],
   );
-  const filterColumns = useMemo(() => buildWorkflowFilterColumns(), []);
+  const filterColumns = useMemo(
+    () => buildWorkflowFilterColumns(ownerLabels),
+    [ownerLabels],
+  );
   const filterTable = useReactTable({
     data: rows,
     columns: filterColumns,
@@ -232,22 +229,6 @@ export function WorkflowInventory({
         ),
       },
       {
-        id: "automation",
-        header: "Automation",
-        meta: {
-          headClassName: "w-px whitespace-nowrap text-center",
-          cellClassName: "w-px whitespace-nowrap text-center",
-        },
-        cell: ({ row }) =>
-          row.original.sourceAgentLoopId ? (
-            <Badge variant="secondary" className="text-xs">
-              Automation
-            </Badge>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          ),
-      },
-      {
         id: "owner",
         header: "Owner",
         meta: {
@@ -265,6 +246,35 @@ export function WorkflowInventory({
         },
       },
       {
+        accessorKey: "primaryTriggerFamily",
+        header: "Trigger",
+        meta: {
+          headClassName: "w-px whitespace-nowrap text-center",
+          cellClassName: "w-px whitespace-nowrap text-center",
+        },
+        cell: ({ row }) => (
+          <Badge variant="outline" className="text-xs">
+            {workflowTriggerLabel(row.original)}
+          </Badge>
+        ),
+      },
+      {
+        id: "automation",
+        header: "Automation",
+        meta: {
+          headClassName: "w-px whitespace-nowrap text-center",
+          cellClassName: "w-px whitespace-nowrap text-center",
+        },
+        cell: ({ row }) =>
+          row.original.sourceAgentLoopId ? (
+            <Check
+              role="img"
+              aria-label="Automation"
+              className="mx-auto size-4 text-foreground"
+            />
+          ) : null,
+      },
+      {
         id: "readinessStatus",
         header: "Status",
         meta: {
@@ -279,47 +289,8 @@ export function WorkflowInventory({
           />
         ),
       },
-      {
-        id: "source",
-        header: "Source",
-        meta: {
-          headClassName: "w-px whitespace-nowrap text-center",
-          cellClassName: "w-px whitespace-nowrap text-center",
-        },
-        cell: ({ row }) => {
-          const binding = primaryBinding(row.original.bindings);
-          const sourceLink = sourceLinkForBinding(n8nLaunchUrl, binding);
-          const badge = <SourceBadge binding={binding} />;
-          return sourceLink ? (
-            <a
-              href={sourceLink.href}
-              target={sourceLink.external ? "_blank" : undefined}
-              rel={sourceLink.external ? "noreferrer" : undefined}
-              className="inline-flex transition-opacity hover:opacity-80"
-              title={sourceLink.title}
-            >
-              {badge}
-            </a>
-          ) : (
-            badge
-          );
-        },
-      },
-      {
-        accessorKey: "primaryTriggerFamily",
-        header: "Trigger",
-        meta: {
-          headClassName: "w-px whitespace-nowrap text-center",
-          cellClassName: "w-px whitespace-nowrap text-center",
-        },
-        cell: ({ row }) => (
-          <Badge variant="outline" className="text-xs">
-            {workflowTriggerLabel(row.original)}
-          </Badge>
-        ),
-      },
     ],
-    [n8nLaunchUrl, ownerLabels],
+    [ownerLabels],
   );
 
   const loading = result.fetching && !result.data;
@@ -364,7 +335,9 @@ export function WorkflowInventory({
   );
 }
 
-function buildWorkflowFilterColumns(): ColumnDef<WorkflowRow>[] {
+function buildWorkflowFilterColumns(
+  ownerLabels: Map<string, string>,
+): ColumnDef<WorkflowRow>[] {
   return [
     {
       id: WORKFLOW_FILTER_COLUMNS.search,
@@ -377,13 +350,18 @@ function buildWorkflowFilterColumns(): ColumnDef<WorkflowRow>[] {
       filterFn: dataTableTokenFilterFns.option,
     },
     {
-      id: WORKFLOW_FILTER_COLUMNS.source,
-      accessorFn: bindingFilterValue,
+      id: WORKFLOW_FILTER_COLUMNS.trigger,
+      accessorFn: workflowTriggerLabel,
       filterFn: dataTableTokenFilterFns.option,
     },
     {
-      id: WORKFLOW_FILTER_COLUMNS.trigger,
-      accessorFn: workflowTriggerLabel,
+      id: WORKFLOW_FILTER_COLUMNS.automation,
+      accessorFn: workflowAutomationFilterValue,
+      filterFn: dataTableTokenFilterFns.option,
+    },
+    {
+      id: WORKFLOW_FILTER_COLUMNS.owner,
+      accessorFn: (row) => workflowOwnerFilterValue(row, ownerLabels),
       filterFn: dataTableTokenFilterFns.option,
     },
   ];
@@ -508,8 +486,28 @@ function WorkflowToolbarSearch({
 
 function buildWorkflowTokenFilterColumns(
   rows: WorkflowRow[],
+  ownerLabels: Map<string, string>,
 ): DataTableTokenFilterColumn[] {
   return [
+    {
+      id: WORKFLOW_FILTER_COLUMNS.automation,
+      label: "Automation",
+      type: "option",
+      icon: <Check className="size-4" />,
+      options: [
+        { value: "yes", label: "Yes" },
+        { value: "no", label: "No" },
+      ],
+    },
+    {
+      id: WORKFLOW_FILTER_COLUMNS.owner,
+      label: "Owner",
+      type: "option",
+      icon: <UserRound className="size-4" />,
+      options: uniqueOptions(rows, (row) =>
+        workflowOwnerFilterValue(row, ownerLabels),
+      ).map((value) => ({ value, label: value })),
+    },
     {
       id: WORKFLOW_FILTER_COLUMNS.readiness,
       label: "Status",
@@ -521,16 +519,6 @@ function buildWorkflowTokenFilterColumns(
           label: titleize(value),
         }),
       ),
-    },
-    {
-      id: WORKFLOW_FILTER_COLUMNS.source,
-      label: "Source",
-      type: "option",
-      icon: <Plug className="size-4" />,
-      options: uniqueOptions(rows, bindingFilterValue).map((value) => ({
-        value,
-        label: sourceLabel({ id: value, bindingType: value }),
-      })),
     },
     {
       id: WORKFLOW_FILTER_COLUMNS.trigger,
@@ -553,45 +541,6 @@ function isTextFilterValue(
     typeof value === "object" &&
     (value as { operator?: unknown }).operator === "contains" &&
     typeof (value as { value?: unknown }).value === "string"
-  );
-}
-
-function sourceLinkForBinding(
-  launchUrl: string | null,
-  binding: WorkflowBinding | null,
-): { href: string; external: boolean; title: string } | null {
-  if (!isN8nBinding(binding)) {
-    return null;
-  }
-
-  if (launchUrl && binding.externalWorkflowId) {
-    try {
-      return {
-        href: new URL(
-          `/workflow/${encodeURIComponent(binding.externalWorkflowId)}`,
-          new URL(launchUrl).origin,
-        ).toString(),
-        external: true,
-        title: "Open n8n workflow",
-      };
-    } catch {
-      // Fall through to the in-app n8n workflow inventory.
-    }
-  }
-
-  return {
-    href: N8N_WORKFLOWS_PATH,
-    external: false,
-    title: "Open n8n workflows",
-  };
-}
-
-function isN8nBinding(
-  binding: WorkflowBinding | null,
-): binding is WorkflowBinding {
-  return (
-    binding?.bindingType === "n8n_bridge" ||
-    binding?.bindingType === "n8n_import"
   );
 }
 

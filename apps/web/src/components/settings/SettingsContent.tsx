@@ -71,7 +71,7 @@ export function SettingsPageTitle({
   actions,
   titleClassName,
 }: {
-  title: string;
+  title: ReactNode;
   description?: string;
   /** Optional element rendered inline beside the title (e.g. a status badge). */
   badge?: ReactNode;

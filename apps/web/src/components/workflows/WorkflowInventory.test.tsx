@@ -1,4 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,21 +61,13 @@ vi.mock("@/context/PageHeaderContext", () => ({
 
 import { WorkflowInventory } from "./WorkflowInventory";
 import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
-import {
-  SettingsDeploymentStatusQuery,
-  SettingsPluginCatalogQuery,
-  SettingsTenantMembersQuery,
-} from "@/lib/settings-queries";
+import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 
 function mockWorkflowInventoryQueries({
   workflows,
-  pluginCatalog = [],
-  managedApplications = [],
   tenantMembers = [],
 }: {
   workflows: unknown[];
-  pluginCatalog?: unknown[];
-  managedApplications?: unknown[];
   tenantMembers?: unknown[];
 }) {
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
@@ -78,28 +76,6 @@ function mockWorkflowInventoryQueries({
         {
           fetching: false,
           data: { workflows },
-        },
-      ];
-    }
-
-    if (query === SettingsPluginCatalogQuery) {
-      return [
-        {
-          fetching: false,
-          data: { pluginCatalog },
-        },
-      ];
-    }
-
-    if (query === SettingsDeploymentStatusQuery) {
-      return [
-        {
-          fetching: false,
-          data: {
-            deploymentStatus: {
-              managedApplications,
-            },
-          },
         },
       ];
     }
@@ -133,7 +109,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("WorkflowInventory", () => {
-  it("shows ready and blocked workflows from multiple sources", () => {
+  it("shows ready and blocked workflows", () => {
     mockWorkflowInventoryQueries({
       workflows: [
         {
@@ -183,8 +159,6 @@ describe("WorkflowInventory", () => {
 
     expect(screen.getByText("Nightly customer sync")).toBeTruthy();
     expect(screen.getByText("Invoice bridge")).toBeTruthy();
-    expect(screen.getAllByText("AWS Step").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("n8n bridge").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Blocked Not Ready").length).toBeGreaterThan(0);
     expect(screen.queryByText("missing_secret")).toBeNull();
     expect(screen.queryByText("Step Functions routine")).toBeNull();
@@ -192,7 +166,7 @@ describe("WorkflowInventory", () => {
     expect(screen.queryByText("Last run")).toBeNull();
   });
 
-  it("shows the Automation flag and owning user in the operator inventory", () => {
+  it("orders the compact columns and marks Automations with a check", () => {
     mockWorkflowInventoryQueries({
       workflows: [
         {
@@ -202,6 +176,16 @@ describe("WorkflowInventory", () => {
           ownerUserId: "user-eric",
           sourceAgentLoopId: "loop-1",
           primaryTriggerFamily: "schedule",
+          readinessState: "ready",
+          readinessReasons: [],
+          bindings: [],
+          triggers: [],
+        },
+        {
+          id: "workflow-manual",
+          name: "Manual workflow",
+          lifecycleStatus: "active",
+          primaryTriggerFamily: "manual",
           readinessState: "ready",
           readinessReasons: [],
           bindings: [],
@@ -222,93 +206,30 @@ describe("WorkflowInventory", () => {
 
     render(<WorkflowInventory />);
 
-    expect(screen.getAllByText("Automation").length).toBeGreaterThan(0);
-    expect(screen.getByText("Eric Odom")).toBeTruthy();
-  });
-
-  it("links n8n bridge source badges to n8n workflows when no direct workflow id exists", () => {
-    mockWorkflowInventoryQueries({
-      workflows: [
-        {
-          id: "workflow-n8n",
-          name: "Webhook bridge",
-          description: "Manually bridged from n8n",
-          lifecycleStatus: "active",
-          primaryTriggerFamily: "webhook",
-          readinessState: "ready",
-          readinessReasons: [],
-          bindings: [
-            {
-              id: "binding-n8n",
-              bindingType: "n8n_bridge",
-              bindingStatus: "ready",
-              externalWorkflowName: "Webhook bridge",
-            },
-          ],
-          triggers: [],
-        },
-      ],
-      pluginCatalog: [
-        {
-          pluginKey: "n8n",
-          launchUrl: "https://n8n.example.test",
-          install: { id: "install-n8n" },
-        },
-      ],
-    });
-
-    render(<WorkflowInventory />);
-
     expect(
-      screen.getByText("n8n bridge").closest("a")?.getAttribute("href"),
-    ).toBe("/settings/plugins/n8n/workflows");
-  });
+      screen
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent?.trim()),
+    ).toEqual(["Workflow", "Owner", "Trigger", "Automation", "Status"]);
+    expect(screen.queryByRole("columnheader", { name: "Source" })).toBeNull();
+    expect(screen.getAllByRole("img", { name: "Automation" })).toHaveLength(1);
+    const manualRow = screen.getByText("Manual workflow").closest("tr");
+    expect(manualRow?.children.item(3)?.textContent).toBe("");
+    expect(screen.getByText("Eric Odom")).toBeTruthy();
 
-  it("deep-links n8n bridge source badges to the configured n8n workflow", () => {
-    mockWorkflowInventoryQueries({
-      workflows: [
-        {
-          id: "workflow-n8n",
-          name: "Invoice bridge",
-          description: "Connected from n8n",
-          lifecycleStatus: "active",
-          primaryTriggerFamily: "n8n",
-          readinessState: "ready",
-          readinessReasons: [],
-          bindings: [
-            {
-              id: "binding-n8n",
-              bindingType: "n8n_bridge",
-              bindingStatus: "ready",
-              externalWorkflowId: "workflow-from-n8n",
-              externalWorkflowName: "Invoice bridge",
-            },
-          ],
-          triggers: [],
-        },
-      ],
-      pluginCatalog: [
-        {
-          pluginKey: "n8n",
-          launchUrl: null,
-          install: { id: "install-n8n" },
-        },
-      ],
-      managedApplications: [
-        {
-          key: "n8n",
-          url: "https://n8n.example.test",
-        },
-      ],
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    expect(
+      within(screen.getByRole("dialog"))
+        .getAllByRole("button")
+        .map((button) => button.textContent?.trim()),
+    ).toEqual(["Automation", "Owner", "Status", "Trigger"]);
+    expect(screen.getByRole("button", { name: /^Automation$/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Owner$/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Source$/ })).toBeNull();
 
-    render(<WorkflowInventory />);
-
-    const link = screen.getByText("n8n bridge").closest("a");
-    expect(link?.getAttribute("href")).toBe(
-      "https://n8n.example.test/workflow/workflow-from-n8n",
-    );
-    expect(link?.getAttribute("target")).toBe("_blank");
+    fireEvent.click(screen.getByRole("button", { name: /^Automation$/ }));
+    expect(screen.getByRole("checkbox", { name: "Yes" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "No" })).toBeTruthy();
   });
 
   it("shows a Looping badge when the current version defines a continuation policy", () => {
