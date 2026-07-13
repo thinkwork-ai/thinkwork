@@ -47,7 +47,12 @@ Conventions:
 - [brain_dream_actions](#brain-dream-actions)
 - [brain_dream_runs](#brain-dream-runs)
 - [budget_policies](#budget-policies)
+- [capability_broker_calls](#capability-broker-calls)
+- [capability_broker_sessions](#capability-broker-sessions)
 - [capability_catalog](#capability-catalog)
+- [capability_connection_proposals](#capability-connection-proposals)
+- [capability_definitions](#capability-definitions)
+- [capability_routine_proposals](#capability-routine-proposals)
 - [connections](#connections)
 - [cost_events](#cost-events)
 - [crm_work_links](#crm-work-links)
@@ -159,6 +164,7 @@ Conventions:
 - [tenant_members](#tenant-members)
 - [tenant_model_catalog](#tenant-model-catalog)
 - [tenant_policy_events](#tenant-policy-events)
+- [tenant_service_principals](#tenant-service-principals)
 - [tenant_settings](#tenant-settings)
 - [tenant_system_users](#tenant-system-users)
 - [tenant_workflow_catalog](#tenant-workflow-catalog)
@@ -374,6 +380,7 @@ Join hints:
 | owner_user_id | uuid |  |
 | owner_agent_id | uuid |  |
 | run_as_user_id | uuid |  |
+| execution_principal | jsonb |  |
 | space_id | uuid |  |
 | primary_trigger_family | text | not null |
 | current_version_id | uuid |  |
@@ -925,6 +932,69 @@ Join hints:
 - `budget_policies.tenant_id` → `tenants.id`
 - `budget_policies.user_id` → `users.id`
 
+## capability_broker_calls
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| broker_session_id | uuid | not null |
+| client_request_id | text | not null |
+| sequence | bigint |  |
+| operation_ref | text |  |
+| contract_hash | text |  |
+| definition_version_id | uuid |  |
+| binding_id | uuid |  |
+| status | text | not null |
+| policy_decisions_json | jsonb | not null |
+| request_digest | text |  |
+| result_digest | text |  |
+| error_category | text |  |
+| effect | text |  |
+| budget_delta_json | jsonb | not null |
+| adapter_kind | text |  |
+| duration_ms | integer |  |
+| durable_ref_json | jsonb |  |
+| routine_execution_id | uuid |  |
+| thread_turn_id | uuid |  |
+| compliance_event_id | uuid |  |
+| authorized_at | timestamp with time zone |  |
+| finalized_at | timestamp with time zone |  |
+| created_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `capability_broker_calls.binding_id` → `capability_credential_bindings.id`
+- `capability_broker_calls.broker_session_id` → `capability_broker_sessions.id`
+- `capability_broker_calls.definition_version_id` → `capability_definition_versions.id`
+- `capability_broker_calls.tenant_id` → `tenants.id`
+
+## capability_broker_sessions
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| session_id | text | not null |
+| audience | text | not null |
+| context_fingerprint | text | not null |
+| principal_mode | text | not null |
+| service_principal_id | uuid |  |
+| subject_user_id | uuid |  |
+| grant_snapshot_json | jsonb | not null |
+| budgets_json | jsonb | not null |
+| routine_execution_id | uuid |  |
+| thread_turn_id | uuid |  |
+| status | text | not null |
+| expires_at | timestamp with time zone | not null |
+| closed_at | timestamp with time zone |  |
+| created_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `capability_broker_sessions.service_principal_id` → `tenant_service_principals.id`
+- `capability_broker_sessions.tenant_id` → `tenants.id`
+
 ## capability_catalog
 
 Note: Platform-global capability reference data — not tenant-scoped. RLS is intentionally not enabled (THINK-234).
@@ -937,8 +1007,83 @@ Note: Platform-global capability reference data — not tenant-scoped. RLS is in
 | source | text | not null |
 | implementation_ref | jsonb |  |
 | spec | jsonb |  |
+| definition_version_id | uuid |  |
 | created_at | timestamp with time zone | not null |
 | updated_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `capability_catalog.definition_version_id` → `capability_definition_versions.id`
+
+## capability_connection_proposals
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| definition_id | uuid |  |
+| payload_json | jsonb | not null |
+| payload_fingerprint | text | not null |
+| provenance_json | jsonb | not null |
+| status | text | not null |
+| inbox_item_id | uuid |  |
+| created_by_actor_type | text |  |
+| created_by_actor_id | uuid |  |
+| decided_at | timestamp with time zone |  |
+| decided_by_user_id | uuid |  |
+| created_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `capability_connection_proposals.decided_by_user_id` → `users.id`
+- `capability_connection_proposals.definition_id` → `capability_definitions.id`
+- `capability_connection_proposals.tenant_id` → `tenants.id`
+
+## capability_definitions
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid |  |
+| namespace | text | not null |
+| class | text | not null |
+| slug | text | not null |
+| display_name | text | not null |
+| status | text | not null |
+| created_by_user_id | uuid |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `capability_definitions.created_by_user_id` → `users.id`
+- `capability_definitions.tenant_id` → `tenants.id`
+
+## capability_routine_proposals
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| routine_id | uuid |  |
+| payload_json | jsonb | not null |
+| payload_fingerprint | text | not null |
+| evidence_refs_json | jsonb | not null |
+| status | text | not null |
+| inbox_item_id | uuid |  |
+| approval_mode | text |  |
+| approval_evidence_json | jsonb | not null |
+| created_by_actor_type | text |  |
+| created_by_actor_id | uuid |  |
+| decided_at | timestamp with time zone |  |
+| decided_by_user_id | uuid |  |
+| promoted_commit_sha | text |  |
+| created_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `capability_routine_proposals.decided_by_user_id` → `users.id`
+- `capability_routine_proposals.tenant_id` → `tenants.id`
 
 ## connections
 
@@ -3126,6 +3271,7 @@ Join hints:
 | s3_key | text | not null |
 | fixture_status | text | not null |
 | fixture_result_json | text |  |
+| capability_dependencies | jsonb |  |
 | fetched_at | timestamp with time zone | not null |
 | validated_at | timestamp with time zone |  |
 | created_at | timestamp with time zone | not null |
@@ -3155,6 +3301,7 @@ Join hints:
 | trigger_source | text | not null |
 | input_json | jsonb |  |
 | output_json | jsonb |  |
+| execution_principal | jsonb |  |
 | status | text | not null |
 | started_at | timestamp with time zone |  |
 | finished_at | timestamp with time zone |  |
@@ -3252,6 +3399,8 @@ Join hints:
 | catalog_slug | text |  |
 | module_path | text |  |
 | fixture_paths | jsonb |  |
+| capability_dependencies | jsonb |  |
+| execution_principal | jsonb |  |
 | validated_sha | text |  |
 | disabled_reason | text |  |
 | last_run_at | timestamp with time zone |  |
@@ -3930,6 +4079,29 @@ Enum values:
 Join hints:
 
 - `tenant_policy_events.tenant_id` → `tenants.id`
+
+## tenant_service_principals
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| slug | text | not null |
+| display_name | text | not null |
+| purpose | text |  |
+| status | text | not null |
+| revoked_at | timestamp with time zone |  |
+| revoked_by_user_id | uuid |  |
+| created_by_user_id | uuid |  |
+| metadata_json | jsonb | not null |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `tenant_service_principals.created_by_user_id` → `users.id`
+- `tenant_service_principals.revoked_by_user_id` → `users.id`
+- `tenant_service_principals.tenant_id` → `tenants.id`
 
 ## tenant_settings
 

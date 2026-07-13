@@ -42,6 +42,12 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "stripe_events", // raw Stripe webhook event ledger — platform-global
   "webhook_idempotency", // platform webhook de-dup ledger — no tenant dimension
   "bootstrap_credential_leases", // secret ARNs + fingerprints
+  // THINK-280 capability runtime: broker/credential control-plane tables.
+  // Bindings carry vault refs, external clients carry secret hashes, and
+  // definition versions carry signature envelopes — none are analytics data.
+  "capability_credential_bindings", // credential_refs_json vault references
+  "capability_definition_versions", // signature_json signing envelopes
+  "capability_external_clients", // client_secret_hash bearer material
   "connect_providers", // OAuth provider config (may embed client secrets)
   "credentials", // encrypted_value — raw encrypted credentials
   "customer_deployment_sessions", // client_token_hash bearer material

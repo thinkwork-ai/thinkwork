@@ -844,6 +844,9 @@ importers:
       '@thinkwork/agent-loops-core':
         specifier: workspace:*
         version: link:../agent-loops-core
+      '@thinkwork/capability-contracts':
+        specifier: workspace:*
+        version: link:../capability-contracts
       '@thinkwork/database-pg':
         specifier: workspace:*
         version: link:../database-pg

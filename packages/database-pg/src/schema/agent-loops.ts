@@ -118,6 +118,10 @@ export const agentLoops = pgTable(
     run_as_user_id: uuid("run_as_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    // THINK-280: explicit execution principal spec — jsonb
+    // { mode: 'requester'|'agent_owner'|'service', subjectId? }. NULL keeps
+    // legacy run_as_user_id semantics unchanged; modes never fall back.
+    execution_principal: jsonb("execution_principal"),
     space_id: uuid("space_id").references(() => spaces.id, {
       onDelete: "set null",
     }),

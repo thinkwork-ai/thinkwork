@@ -33,6 +33,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core.js";
 import { agents } from "./agents.js";
+import { capabilityDefinitionVersions } from "./capability-runtime.js";
 
 // ---------------------------------------------------------------------------
 // capability_catalog — unified skill / tool / MCP registry
@@ -64,6 +65,16 @@ export const capabilityCatalog = pgTable(
      * part 2) reads this and echoes a subset into the per-session manifest.
      */
     spec: jsonb("spec"),
+    /**
+     * THINK-280: signed definition version this catalog row projects, when
+     * the capability is backed by an admitted capability definition. The
+     * catalog stays a compatibility projection — the version row is the
+     * authority. NULL for legacy/non-governed capabilities.
+     */
+    definition_version_id: uuid("definition_version_id").references(
+      () => capabilityDefinitionVersions.id,
+      { onDelete: "set null" },
+    ),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

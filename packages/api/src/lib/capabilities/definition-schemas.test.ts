@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  legacyPrincipalRemediation,
   parseConnectionDefinition,
   parseToolDefinition,
   parseCapabilitySidecar,
@@ -7,6 +8,10 @@ import {
 
 const md = (yaml: string, body = "Prose body.") =>
   `---\n${yaml}\n---\n${body}\n`;
+
+const VALID_TWCAP =
+  "twcap://acme/connection/firecrawl/versions/1/operations/scrape" +
+  `?contract=sha256:${"a".repeat(64)}`;
 
 describe("parseConnectionDefinition", () => {
   it("parses a valid mcp connection", () => {
@@ -94,6 +99,127 @@ describe("parseConnectionDefinition", () => {
         "c/CONNECTION.md",
       ).valid,
     ).toBe(false);
+  });
+
+  it("parses capability_ref into a shadow descriptor identity (THINK-280 U1b)", () => {
+    const mapping = parseConnectionDefinition(
+      md(
+        [
+          "name: firecrawl",
+          "description: Firecrawl API.",
+          "type: api",
+          "capability_ref:",
+          `  twcap: "${VALID_TWCAP}"`,
+          `  descriptor_fingerprint: "${"b".repeat(64)}"`,
+        ].join("\n"),
+      ),
+      "connections/firecrawl/CONNECTION.md",
+    );
+    expect(mapping.valid).toBe(true);
+    if (!mapping.valid) return;
+    expect(mapping.parsed.descriptor_identity).toEqual({
+      twcap: VALID_TWCAP,
+      descriptor_fingerprint: "b".repeat(64),
+    });
+    // capability_ref is a first-class field, not internal passthrough.
+    expect("capability_ref" in mapping.parsed.internal).toBe(false);
+
+    const bare = parseConnectionDefinition(
+      md(
+        [
+          "name: firecrawl",
+          "description: Firecrawl API.",
+          "type: api",
+          `capability_ref: "${VALID_TWCAP}"`,
+        ].join("\n"),
+      ),
+      "connections/firecrawl/CONNECTION.md",
+    );
+    expect(bare.valid && bare.parsed.descriptor_identity?.twcap).toBe(
+      VALID_TWCAP,
+    );
+
+    const absent = parseConnectionDefinition(
+      md("name: firecrawl\ndescription: Firecrawl API.\ntype: api"),
+      "connections/firecrawl/CONNECTION.md",
+    );
+    expect(absent.valid && absent.parsed.descriptor_identity).toBe(undefined);
+  });
+
+  it("fails closed on a malformed capability_ref twcap, accumulating errors", () => {
+    const result = parseConnectionDefinition(
+      md(
+        [
+          "name: firecrawl",
+          "description: Firecrawl API.",
+          "type: grpc",
+          'capability_ref: "twcap://acme/only-two-segments?contract=nope"',
+        ].join("\n"),
+      ),
+      "connections/firecrawl/CONNECTION.md",
+    );
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    // Accumulated alongside the unrelated `type` error — same
+    // CapabilityDefinitionError channel as every other field failure.
+    expect(result.errors.length).toBeGreaterThanOrEqual(2);
+    const twcapError = result.errors.find(
+      (e) => e.details.field === "capability_ref.twcap",
+    );
+    expect(twcapError?.kind).toBe("FieldShape");
+  });
+
+  it("rejects a bad descriptor_fingerprint and an empty capability_ref", () => {
+    expect(
+      parseConnectionDefinition(
+        md(
+          [
+            "name: firecrawl",
+            "description: d",
+            "type: api",
+            "capability_ref:",
+            '  descriptor_fingerprint: "not-hex"',
+          ].join("\n"),
+        ),
+        "c/CONNECTION.md",
+      ).valid,
+    ).toBe(false);
+    expect(
+      parseConnectionDefinition(
+        md(
+          [
+            "name: firecrawl",
+            "description: d",
+            "type: api",
+            "capability_ref: {}",
+          ].join("\n"),
+        ),
+        "c/CONNECTION.md",
+      ).valid,
+    ).toBe(false);
+  });
+
+  it("never maps legacy principalType into the three-mode contract", () => {
+    const result = parseConnectionDefinition(
+      md("name: x\ndescription: d\ntype: mcp\nprincipal_type: user"),
+      "c/CONNECTION.md",
+    );
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    // The parsed value stays the legacy vocabulary verbatim…
+    expect(result.parsed.principalType).toBe("user");
+    expect(["requester", "agent_owner", "service"]).not.toContain(
+      result.parsed.principalType,
+    );
+    // …and the only sanctioned bridge is the remediation marker.
+    expect(legacyPrincipalRemediation(result.parsed.principalType)).toEqual({
+      legacy: "user",
+      remediation: "explicit-principal-migration-required",
+    });
+    expect(legacyPrincipalRemediation("app")).toEqual({
+      legacy: "app",
+      remediation: "explicit-principal-migration-required",
+    });
   });
 
   it("rejects missing frontmatter and bad type", () => {

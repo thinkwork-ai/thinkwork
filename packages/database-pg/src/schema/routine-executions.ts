@@ -70,6 +70,9 @@ export const routineExecutions = pgTable(
     trigger_source: text("trigger_source").notNull(), // manual | schedule | webhook | event | agent_tool | routine_invoke
     input_json: jsonb("input_json"),
     output_json: jsonb("output_json"),
+    // THINK-280: resolved execution principal decision snapshot — jsonb
+    // { mode, subjectId, bindingId? }. NULL for legacy user run-as runs.
+    execution_principal: jsonb("execution_principal"),
     status: text("status").notNull().default("running"), // running | succeeded | failed | cancelled | awaiting_approval | timed_out
     started_at: timestamp("started_at", { withTimezone: true }),
     finished_at: timestamp("finished_at", { withTimezone: true }),

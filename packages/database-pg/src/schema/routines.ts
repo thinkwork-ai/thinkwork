@@ -86,6 +86,14 @@ export const routines = pgTable(
     // The executor resolves ONLY these at invoke time and injects them into
     // the sandbox session — no shared credential pool (R19).
     credential_refs: jsonb("credential_refs"),
+    // THINK-280: exact capability dependencies this routine is pinned to —
+    // jsonb [{ twcap, contractHash, definitionVersionId }]. Legacy routines
+    // keep NULL; nothing infers dependencies from code.
+    capability_dependencies: jsonb("capability_dependencies"),
+    // THINK-280: explicit execution principal spec — jsonb
+    // { mode: 'requester'|'agent_owner'|'service', subjectId? }. NULL keeps
+    // legacy user run-as semantics; there is no fallback across modes.
+    execution_principal: jsonb("execution_principal"),
     // Denormalized fast-path pointer to the last fixture-validated commit
     // SHA. routine_code_cache is authoritative; written only by the
     // fixture gate (KTD-7).

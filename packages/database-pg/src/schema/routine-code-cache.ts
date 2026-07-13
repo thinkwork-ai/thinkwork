@@ -21,6 +21,7 @@ import {
   index,
   uniqueIndex,
   check,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
@@ -49,6 +50,10 @@ export const routineCodeCache = pgTable(
     // Machine-readable gate detail (per-fixture results / diff) for the
     // repair agent and the run UI.
     fixture_result_json: text("fixture_result_json"),
+    // THINK-280: exact capability dependency snapshot at validation time —
+    // jsonb [{ twcap, contractHash, definitionVersionId }]. NULL for
+    // legacy/non-capability routines.
+    capability_dependencies: jsonb("capability_dependencies"),
     fetched_at: timestamp("fetched_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

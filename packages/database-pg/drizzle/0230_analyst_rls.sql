@@ -371,6 +371,51 @@ BEGIN
   ELSE
     missing := missing || 'budget_policies'::text;
   END IF;
+  IF to_regclass('public.capability_broker_calls') IS NOT NULL THEN
+    ALTER TABLE public.capability_broker_calls ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.capability_broker_calls;
+    CREATE POLICY analyst_tenant_isolation ON public.capability_broker_calls
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'capability_broker_calls'::text;
+  END IF;
+  IF to_regclass('public.capability_broker_sessions') IS NOT NULL THEN
+    ALTER TABLE public.capability_broker_sessions ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.capability_broker_sessions;
+    CREATE POLICY analyst_tenant_isolation ON public.capability_broker_sessions
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'capability_broker_sessions'::text;
+  END IF;
+  IF to_regclass('public.capability_connection_proposals') IS NOT NULL THEN
+    ALTER TABLE public.capability_connection_proposals ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.capability_connection_proposals;
+    CREATE POLICY analyst_tenant_isolation ON public.capability_connection_proposals
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'capability_connection_proposals'::text;
+  END IF;
+  IF to_regclass('public.capability_definitions') IS NOT NULL THEN
+    ALTER TABLE public.capability_definitions ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.capability_definitions;
+    CREATE POLICY analyst_tenant_isolation ON public.capability_definitions
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'capability_definitions'::text;
+  END IF;
+  IF to_regclass('public.capability_routine_proposals') IS NOT NULL THEN
+    ALTER TABLE public.capability_routine_proposals ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.capability_routine_proposals;
+    CREATE POLICY analyst_tenant_isolation ON public.capability_routine_proposals
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'capability_routine_proposals'::text;
+  END IF;
   IF to_regclass('public.connections') IS NOT NULL THEN
     ALTER TABLE public.connections ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.connections;
@@ -1360,6 +1405,15 @@ BEGIN
       USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
   ELSE
     missing := missing || 'tenant_policy_events'::text;
+  END IF;
+  IF to_regclass('public.tenant_service_principals') IS NOT NULL THEN
+    ALTER TABLE public.tenant_service_principals ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.tenant_service_principals;
+    CREATE POLICY analyst_tenant_isolation ON public.tenant_service_principals
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'tenant_service_principals'::text;
   END IF;
   IF to_regclass('public.tenant_settings') IS NOT NULL THEN
     ALTER TABLE public.tenant_settings ENABLE ROW LEVEL SECURITY;
