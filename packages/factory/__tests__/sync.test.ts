@@ -140,6 +140,71 @@ describe("syncCandidate", () => {
     expect(slack.posts.filter((p) => p.text.includes("→ In Progress"))).toHaveLength(1);
   });
 
+  it("U5: merged-PR note posts once for the routine settle-then-tick case", async () => {
+    const issue = makeIssue({ identifier: "THINK-2", state: "Verification", labels: ["Claude"] });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    let ghCalls = 0;
+    const sync = createSlackSync({
+      slack,
+      store,
+      gateway,
+      channelId: CHANNEL,
+      operatorUserIds: [OPERATOR],
+      log,
+      github: {
+        prsForBranch: async () => {
+          ghCalls += 1;
+          return [
+            {
+              number: 3712,
+              state: "MERGED" as const,
+              url: "https://github.test/pull/3712",
+              mergedAt: "2026-07-13T00:00:00Z",
+            },
+          ];
+        },
+      },
+    });
+    // A settled (Succeeded) implement attempt with a branch — the routine
+    // path: worker merged its PR, moved the status, exited cleanly. The
+    // pr-merged EVIDENCE kind never fires here; the note must anyway.
+    store.upsertIssue({
+      issueId: issue.id,
+      identifier: issue.identifier,
+      phase: "implement",
+      state: issue.state,
+      lane: "Claude",
+    });
+    store.insertAttempt({
+      issueId: issue.id,
+      phase: "implement",
+      attemptNumber: 1,
+      state: "Succeeded",
+      host: "local",
+      pid: 1,
+      branch: "auto/think-2-implement-a1",
+    });
+
+    const advanceToVerification: EngineAction = {
+      kind: "advance",
+      toStatus: "Verification",
+      evidence: "x",
+    };
+    await sync.syncCandidate(candidateFor(issue), advanceToVerification);
+    const notes = slack.posts.filter((p) => p.text.includes("#3712"));
+    expect(notes).toHaveLength(1);
+    expect(notes[0].text).toContain("merged");
+    // Cut release + Result buttons ride the note.
+    expect(JSON.stringify(notes[0].blocks)).toContain("factory-console:release");
+    expect(JSON.stringify(notes[0].blocks)).toContain("factory-console:result");
+
+    // Second tick: idempotent — one GitHub check per branch, one note.
+    await sync.syncCandidate(candidateFor(issue), advanceToVerification);
+    expect(slack.posts.filter((p) => p.text.includes("#3712"))).toHaveLength(1);
+    expect(ghCalls).toBe(1);
+  });
+
   it("opens NO thread for a noop action (a Done issue the daemon only noops)", async () => {
     const issue = makeIssue({ identifier: "THINK-9", state: "Done", labels: ["Claude"] });
     const gateway = new FakeGateway([issue]);

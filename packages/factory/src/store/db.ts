@@ -95,6 +95,8 @@ export interface SlackThreadRow {
   /** Slack ts of the newest escalation message (chat.update target for button clicks). */
   last_escalated_ts: string | null;
   last_milestone_key: string | null;
+  /** Merged-PR note idempotency: `<branch>=><pr#|none>` after the one check. */
+  last_merged_pr_note: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -160,7 +162,8 @@ export interface FactoryStore {
       | "last_relayed_ts"
       | "last_escalated_key"
       | "last_escalated_ts"
-      | "last_milestone_key",
+      | "last_milestone_key"
+      | "last_merged_pr_note",
     value: string,
   ): void;
   /** Every mapped thread, for the R18 status view. */
@@ -358,6 +361,8 @@ export function openStore(
   // last_escalated_ts existed just gains the (nullable) column — the click
   // handler treats null as "no escalation message to update" and moves on.
   ensureColumn(db, "slack_threads", "last_escalated_ts", "TEXT");
+  // U5 (console merge): merged-PR-note idempotency marker.
+  ensureColumn(db, "slack_threads", "last_merged_pr_note", "TEXT");
   try {
     assertDbTerminalStatesMatch(db);
   } catch (err) {

@@ -42,14 +42,34 @@ export interface GithubGateway {
   prsForBranch(branch: string): Promise<PrInfo[]>;
 }
 
+export interface PrDetail extends PrInfo {
+  title: string;
+  headRefName: string;
+}
+
+/**
+ * Console-facing GitHub operations (U5): the read-only evidence gateway plus
+ * PR inspection and the one write the console performs (squash-merge). The
+ * real gateway implements both; evidence detection keeps depending on the
+ * narrow GithubGateway.
+ */
+export interface GithubOps extends GithubGateway {
+  /** PR detail by number, or null when the PR does not exist. */
+  prView(pr: number): Promise<PrDetail | null>;
+  /** Checks state — `ok: false` means at least one check is failing/pending-failure. */
+  prChecks(pr: number): Promise<{ ok: boolean; summary: string }>;
+  /** `gh pr merge <pr> --squash --auto --delete-branch`. Never throws. */
+  prMerge(pr: number): Promise<{ ok: boolean; output: string }>;
+}
+
 type ExecFileFn = (
   cmd: string,
   args: string[],
   opts?: { cwd?: string },
-) => Promise<{ stdout: string }>;
+) => Promise<{ stdout: string; stderr?: string }>;
 
 const defaultExecFile: ExecFileFn = async (cmd, args, opts) => {
-  const { stdout } = await promisify(execFile)(cmd, args, {
+  const { stdout, stderr } = await promisify(execFile)(cmd, args, {
     cwd: opts?.cwd,
     maxBuffer: 4 * 1024 * 1024,
     // Bound the call: a hung `gh` (auth prompt, network stall, rate limit)
@@ -59,8 +79,15 @@ const defaultExecFile: ExecFileFn = async (cmd, args, opts) => {
     timeout: 20_000,
     killSignal: "SIGKILL",
   });
-  return { stdout };
+  return { stdout, stderr };
 };
+
+/** stdout+stderr off a rejected execFile error (gh writes both on failure). */
+function execErrorOutput(e: unknown): string {
+  const err = e as { stdout?: string; stderr?: string; message?: string };
+  const out = `${err.stdout ?? ""}\n${err.stderr ?? ""}`.trim();
+  return out !== "" ? out : String(err.message ?? e);
+}
 
 export interface GhCliGatewayOptions {
   /** Repo checkout to run `gh` in (resolves the GitHub repo). */
@@ -69,10 +96,71 @@ export interface GhCliGatewayOptions {
   execFileFn?: ExecFileFn;
 }
 
-/** Real GithubGateway backed by the `gh` CLI (read-only `pr list`). */
-export function createGhCliGateway(opts: GhCliGatewayOptions): GithubGateway {
+/** Real gateway backed by the `gh` CLI. */
+export function createGhCliGateway(opts: GhCliGatewayOptions): GithubOps {
   const run = opts.execFileFn ?? defaultExecFile;
   return {
+    async prView(pr) {
+      try {
+        const { stdout } = await run(
+          "gh",
+          [
+            "pr",
+            "view",
+            String(pr),
+            "--json",
+            "number,state,title,headRefName,url,mergedAt",
+          ],
+          { cwd: opts.repoDir },
+        );
+        const p = JSON.parse(stdout) as {
+          number: number;
+          state: string;
+          title: string;
+          headRefName: string;
+          url: string;
+          mergedAt: string | null;
+        };
+        return {
+          number: p.number,
+          state: p.state as PrInfo["state"],
+          title: p.title,
+          headRefName: p.headRefName,
+          url: p.url,
+          mergedAt: p.mergedAt ?? null,
+        };
+      } catch {
+        return null;
+      }
+    },
+
+    async prChecks(pr) {
+      // `gh pr checks` exits non-zero when any check fails — the output is
+      // still the summary we want, so surface it either way.
+      try {
+        const { stdout } = await run("gh", ["pr", "checks", String(pr)], {
+          cwd: opts.repoDir,
+        });
+        return { ok: true, summary: stdout.trim() };
+      } catch (e) {
+        return { ok: false, summary: execErrorOutput(e) };
+      }
+    },
+
+    async prMerge(pr) {
+      try {
+        const { stdout, stderr } = await run(
+          "gh",
+          ["pr", "merge", String(pr), "--squash", "--auto", "--delete-branch"],
+          { cwd: opts.repoDir },
+        );
+        const output = `${stdout}\n${stderr ?? ""}`.trim();
+        return { ok: true, output: output !== "" ? output : "auto-merge armed" };
+      } catch (e) {
+        return { ok: false, output: execErrorOutput(e) };
+      }
+    },
+
     async prsForBranch(branch) {
       const { stdout } = await run(
         "gh",

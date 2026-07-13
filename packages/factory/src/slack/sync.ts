@@ -31,10 +31,12 @@ import type {
   SlackInboundMessage,
 } from "./client.js";
 import { section } from "./blocks.js";
+import type { GithubGateway } from "../phases/evidence.js";
 import {
   CONSOLE_ACTION_PREFIX,
   actionsForState,
   helpText,
+  mergedPrNoteActions,
   parseVerb,
   runConsoleAction,
   type ConsoleButtonValue,
@@ -241,6 +243,8 @@ export interface SlackSyncDeps {
   trust?: CommentTrust;
   /** Console verb executors (U4–U8 fill these); absent verbs ack "not yet". */
   consoleExecutors?: Partial<Record<ConsoleVerb, ConsoleExecutor>>;
+  /** Enables the merged-PR note (U5). Absent → the note never posts. */
+  github?: GithubGateway;
 }
 
 export function createSlackSync(deps: SlackSyncDeps): SlackSync {
@@ -370,6 +374,59 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     );
   }
 
+  /**
+   * U5: the merged-PR note — the routine seam for "a factory PR just merged".
+   * When the issue's NEWEST attempt is terminal-successful and its branch's
+   * PR shows MERGED, post one note offering Cut release + Result. One GitHub
+   * check per attempt branch (marker `<branch>=><pr|none>` on the thread
+   * row): the worker's CI-wait chain guarantees the merge precedes the
+   * status move, so a single check at settlement is the honest window. The
+   * `pr-merged` EVIDENCE kind is not this seam — it only fires for workers
+   * that died before posting their baton.
+   */
+  async function maybeMergedPrNote(
+    candidate: PollCandidate,
+    ref: ThreadRef,
+  ): Promise<void> {
+    if (deps.github === undefined) return;
+    const row = deps.store.getSlackThreadByIssue(candidate.issue.id);
+    if (row === undefined) return;
+    const attempt = deps.store.db
+      .prepare(
+        "SELECT branch, state FROM attempts WHERE issue_id = ? AND branch IS NOT NULL ORDER BY id DESC LIMIT 1",
+      )
+      .get(candidate.issue.id) as { branch: string; state: string } | undefined;
+    if (attempt === undefined || attempt.state !== "Succeeded") return;
+    if (row.last_merged_pr_note?.startsWith(`${attempt.branch}=>`) === true) {
+      return; // this branch was already checked (and noted, when merged)
+    }
+    let merged: { number: number; url: string } | undefined;
+    try {
+      const prs = await deps.github.prsForBranch(attempt.branch);
+      merged = prs.find((p) => p.state === "MERGED");
+    } catch (e) {
+      deps.log.warn("merged-PR note: GitHub check failed — will retry next tick", {
+        issue: candidate.issue.identifier,
+        branch: attempt.branch,
+        error: String(e),
+      });
+      return;
+    }
+    if (merged !== undefined) {
+      const link = issueRef(candidate.issue.identifier, candidate.issue.url);
+      const text = `🔀 <${merged.url}|#${merged.number}> merged for ${link}.`;
+      await postMilestone(ref, text, threadDeps, [
+        section(text),
+        mergedPrNoteActions(),
+      ]);
+    }
+    deps.store.setSlackThreadMarker(
+      candidate.issue.id,
+      "last_merged_pr_note",
+      `${attempt.branch}=>${merged?.number ?? "none"}`,
+    );
+  }
+
   return {
     async syncCandidate(candidate, action) {
       // Enroll (open/track a thread) ONLY when the daemon actually works this
@@ -387,6 +444,7 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
         return;
       }
       await maybeMilestone(candidate, action, ref);
+      await maybeMergedPrNote(candidate, ref);
     },
 
     async closeThread(issueId, text) {
