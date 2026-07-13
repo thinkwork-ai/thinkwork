@@ -109,8 +109,13 @@ export interface LinearGateway {
   setState(issueId: string, stateName: string): Promise<void>;
   /** The authenticated (daemon) user's Linear id, cached after first fetch. */
   viewerId(): Promise<string>;
-  /** True when the issue has at least one child issue (KTD-12 guard). */
-  hasChildIssues(issueId: string): Promise<boolean>;
+  /**
+   * Workflow-state names of the issue's child issues (empty = no children).
+   * Drives the parent-issue rule: children in flight -> parent waits quietly;
+   * all children Done/Canceled -> parent proceeds. Replaces the boolean
+   * hasChildIssues (existence = states.length > 0).
+   */
+  childIssueStates(issueId: string): Promise<string[]>;
   /**
    * Markdown content of the Progress document for this issue, or null when
    * none exists. Implementation choice (documented per U5): @linear/sdk
@@ -421,12 +426,19 @@ export function createLinearGateway(apiKey: string): LinearGateway {
       await client.updateIssue(issueId, { labelIds: remaining });
     },
 
-    async hasChildIssues(issueId) {
+    async childIssueStates(issueId) {
       const issue = await client.issue(issueId);
-      const children = (await issue.children({ first: 1 })) as unknown as {
-        nodes: unknown[];
-      };
-      return children.nodes.length > 0;
+      const children = await drain(
+        (await issue.children()) as unknown as PageOf<{
+          state: Promise<{ name: string } | undefined>;
+        }>,
+      );
+      const states: string[] = [];
+      for (const child of children) {
+        const st = await child.state;
+        states.push(st?.name ?? "");
+      }
+      return states;
     },
 
     async getProgressDocument(issueId, featureTitle) {

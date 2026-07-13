@@ -597,6 +597,7 @@ async function runLaunch(
         comments: freshComments,
         commentIdsAtLaunch,
         ledgerCompounded: freshLedger.ledger.compounded,
+        ledgerBlocker: freshLedger.ledger.blocker,
         branch: plan.branch,
         github: deps.github,
         trust: deps.trust,
@@ -628,7 +629,12 @@ async function runLaunch(
         lane: candidate.lane ?? freshParsed.ledger.lane,
         worker: null,
         attempt: plan.attemptNumber,
-        blocker: null,
+        // A dependency-wait run's whole point is the `waiting-on:` blocker —
+        // clearing it would relaunch immediately and re-hit the gate forever.
+        blocker:
+          completed.kind === "dependency-wait"
+            ? freshParsed.ledger.blocker
+            : null,
         compounded:
           action.phase === "compound" ? true : freshParsed.ledger.compounded,
       };

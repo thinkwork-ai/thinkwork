@@ -603,3 +603,88 @@ describe("runDaemon — Linear rate-limit backoff", () => {
     await done;
   });
 });
+
+describe("buildStoreView — children and dependencies (LFG never-stuck)", () => {
+  it("resolves child states so the engine can wait/resume the parent", async () => {
+    const parent = makeIssue({
+      identifier: "THINK-70",
+      state: "Ready to Work",
+      labels: ["Claude", "LFG"],
+      childStates: ["Done", "In Progress"],
+    });
+    const gateway = new FakeGateway([parent]);
+    const deps = makeDeps(gateway, async () => {});
+    const view = await buildStoreView(deps, {
+      issue: parent,
+      lane: "Claude",
+      hasLfg: true,
+      isVerification: false,
+      blockerLabels: [],
+      ledger: {
+        ledger: { phase: "implement", lane: "Claude", worker: null, attempt: 0, blocker: null, compounded: false },
+        prose: "",
+        synthesized: true,
+        warnings: [],
+      },
+      ledgerCommentId: null,
+      comments: [],
+    });
+    expect(view.hasChildIssues).toBe(true);
+    expect(view.childStates).toEqual(["Done", "In Progress"]);
+    expect(view.dependency).toBeNull();
+  });
+
+  it("resolves a waiting-on dependency's LIVE state", async () => {
+    const dep = makeIssue({ identifier: "THINK-73", state: "Done", labels: ["Claude"] });
+    const issue = makeIssue({
+      identifier: "THINK-74",
+      state: "Ready to Work",
+      labels: ["Claude", "LFG"],
+    });
+    const gateway = new FakeGateway([dep, issue]);
+    const deps = makeDeps(gateway, async () => {});
+    const view = await buildStoreView(deps, {
+      issue,
+      lane: "Claude",
+      hasLfg: true,
+      isVerification: false,
+      blockerLabels: [],
+      ledger: {
+        ledger: { phase: "implement", lane: "Claude", worker: null, attempt: 2, blocker: "waiting-on: THINK-73", compounded: false },
+        prose: "",
+        synthesized: false,
+        warnings: [],
+      },
+      ledgerCommentId: "lc-1",
+      comments: [],
+    });
+    expect(view.dependency).toEqual({ identifier: "THINK-73", state: "Done", done: true });
+  });
+
+  it("an unreachable dependency read keeps WAITING (never a false resume)", async () => {
+    const issue = makeIssue({
+      identifier: "THINK-74",
+      state: "Ready to Work",
+      labels: ["Claude", "LFG"],
+    });
+    const gateway = new FakeGateway([issue]);
+    gateway.failNextListIssues = true;
+    const deps = makeDeps(gateway, async () => {});
+    const view = await buildStoreView(deps, {
+      issue,
+      lane: "Claude",
+      hasLfg: true,
+      isVerification: false,
+      blockerLabels: [],
+      ledger: {
+        ledger: { phase: "implement", lane: "Claude", worker: null, attempt: 2, blocker: "waiting-on: THINK-73", compounded: false },
+        prose: "",
+        synthesized: false,
+        warnings: [],
+      },
+      ledgerCommentId: "lc-1",
+      comments: [],
+    });
+    expect(view.dependency).toEqual({ identifier: "THINK-73", state: "unknown", done: false });
+  });
+});
