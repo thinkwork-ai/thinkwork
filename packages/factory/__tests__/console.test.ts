@@ -23,7 +23,14 @@ import {
 } from "../src/slack/console.js";
 import { decideAction } from "../src/phases/engine.js";
 import type { GithubOps, PrDetail } from "../src/phases/evidence.js";
-import { createInspectionExecutors, createMergeExecutor, newestImages } from "../src/slack/console.js";
+import {
+  createInspectionExecutors,
+  createMergeExecutor,
+  createReleaseExecutors,
+  newestImages,
+  nextCanaryN,
+  RELEASE_OFFER_KEY,
+} from "../src/slack/console.js";
 import { LocalTransport } from "../src/workers/transport.js";
 import { mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { createSteeringExecutors, formatElapsed } from "../src/slack/console.js";
@@ -859,5 +866,245 @@ describe("newestImages", () => {
     expect(imgs[0]).toContain("12-shot.png");
     expect(imgs.every((p) => p.endsWith(".png"))).toBe(true);
     expect(newestImages(join(d, "missing"), 10)).toEqual([]);
+  });
+});
+
+describe("U8: release confirm round-trip", () => {
+  interface GitCall {
+    cmd: string;
+    args: string[];
+  }
+
+  /** Scripted transport: canned tag list + sha; records tag/push calls. */
+  function fakeTransport(opts: { sha?: string; shaAfterConfirm?: string; existingTag?: string } = {}) {
+    const calls: GitCall[] = [];
+    let fetches = 0;
+    return {
+      calls,
+      async exec(cmd: string, args: string[]) {
+        calls.push({ cmd, args });
+        if (cmd === "git" && args[0] === "fetch") {
+          fetches += 1;
+          return { code: 0, stdout: "", stderr: "" };
+        }
+        if (cmd === "git" && args[0] === "tag" && args[1] === "--list" && args[2] === "v0.1.0-canary.*") {
+          return { code: 0, stdout: "v0.1.0-canary.354\nv0.1.0-canary.353\n", stderr: "" };
+        }
+        if (cmd === "git" && args[0] === "tag" && args[1] === "--list") {
+          // collision probe for a specific tag
+          return {
+            code: 0,
+            stdout: opts.existingTag !== undefined && args[2] === opts.existingTag ? opts.existingTag : "",
+            stderr: "",
+          };
+        }
+        if (cmd === "git" && args[0] === "rev-parse") {
+          const sha =
+            fetches >= 2 && opts.shaAfterConfirm !== undefined
+              ? opts.shaAfterConfirm
+              : (opts.sha ?? "abc1234def5678");
+          return { code: 0, stdout: sha + "\n", stderr: "" };
+        }
+        if (cmd === "git" && (args[0] === "tag" || args[0] === "push")) {
+          return { code: 0, stdout: "", stderr: "" };
+        }
+        if (cmd === "gh") {
+          return { code: 0, stdout: JSON.stringify([{ url: "https://github.test/actions/runs/1" }]), stderr: "" };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      },
+    };
+  }
+
+  async function releaseHarness(transport: ReturnType<typeof fakeTransport>) {
+    const issue = makeIssue({ identifier: "THINK-90", state: "Verification", labels: ["Claude"] });
+    const gateway = new FakeGateway([issue]);
+    const slack = new FakeSlackGateway();
+    const sync = createSlackSync({
+      slack,
+      store,
+      gateway,
+      channelId: CHANNEL,
+      operatorUserIds: [OPERATOR],
+      log,
+      consoleExecutors: createReleaseExecutors({
+        store,
+        slack,
+        transport,
+        repoPath: "/fake/repo",
+        channelId: CHANNEL,
+        log,
+      }),
+    });
+    await sync.syncCandidate(candidateFor(issue), {
+      kind: "advance",
+      toStatus: issue.state,
+      evidence: "seed",
+    });
+    const threadTs = store.getSlackThreadByIssue(issue.id)!.thread_ts;
+    return { slack, sync, threadTs };
+  }
+
+  function offerToken(): string {
+    return (JSON.parse(store.getMeta(RELEASE_OFFER_KEY)!) as { token: string }).token;
+  }
+
+  function taggedRefs(t: ReturnType<typeof fakeTransport>): string[] {
+    return t.calls
+      .filter((c) => c.cmd === "git" && c.args[0] === "tag" && c.args[1]?.startsWith("v0.1.0") === false && c.args[1] !== "--list" && c.args[1] !== "-d")
+      .map((c) => c.args[1]);
+  }
+
+  function tagCreates(t: ReturnType<typeof fakeTransport>): string[] {
+    return t.calls
+      .filter((c) => c.cmd === "git" && c.args[0] === "tag" && c.args.length === 3 && c.args[1] !== "--list" && c.args[1] !== "--list" && c.args[1] !== "-d")
+      .map((c) => c.args[1]);
+  }
+
+  it("release derives next N and offers the pair + sha; nothing tags until confirm", async () => {
+    const t = fakeTransport({ sha: "abc1234def5678" });
+    const h = await releaseHarness(t);
+    await h.sync.handleInbound({ channel: CHANNEL, threadTs: h.threadTs, ts: "7.1", userId: OPERATOR, text: "release" });
+    const confirm = h.slack.updates[h.slack.updates.length - 1];
+    expect(confirm.text).toContain("v0.1.0-canary.355");
+    expect(confirm.text).toContain("desktop-v0.1.0-canary.355");
+    expect(confirm.text).toContain("abc1234def");
+    expect(tagCreates(t)).toEqual([]); // offer only — no tag yet
+    // Confirm/Cancel buttons ride the offer, token stored with the message ts.
+    expect(JSON.stringify(confirm.blocks)).toContain("factory-console:release-confirm");
+    const offer = JSON.parse(store.getMeta(RELEASE_OFFER_KEY)!) as { messageTs: string | null };
+    expect(offer.messageTs).toBe(confirm.ts);
+  });
+
+  it("confirm with the matching token tags the STORED sha and pushes the pair", async () => {
+    const t = fakeTransport({ sha: "abc1234def5678" });
+    const h = await releaseHarness(t);
+    await h.sync.handleInbound({ channel: CHANNEL, threadTs: h.threadTs, ts: "7.2", userId: OPERATOR, text: "release" });
+    const token = offerToken();
+    await h.sync.handleAction({
+      channel: CHANNEL, messageTs: "1.1", threadTs: h.threadTs, userId: OPERATOR,
+      actionId: "factory-console:release-confirm",
+      value: JSON.stringify({ v: "release-confirm", arg: token }),
+    });
+    const creates = t.calls.filter((c) => c.cmd === "git" && c.args[0] === "tag" && c.args.length === 3 && c.args[1] !== "--list");
+    expect(creates.map((c) => c.args[1])).toEqual(["v0.1.0-canary.355", "desktop-v0.1.0-canary.355"]);
+    expect(creates.every((c) => c.args[2] === "abc1234def5678")).toBe(true);
+    const push = t.calls.find((c) => c.cmd === "git" && c.args[0] === "push");
+    expect(push!.args).toContain("v0.1.0-canary.355");
+    expect(push!.args).toContain("desktop-v0.1.0-canary.355");
+    // Token consumed; the confirm message's buttons were stripped.
+    expect(store.getMeta(RELEASE_OFFER_KEY)).toBeUndefined();
+    const stripped = h.slack.updates.find((u) => u.text.includes("🚢 Cut"));
+    expect(stripped).toBeDefined();
+  }, 30_000);
+
+  it("AE2: a stale/mismatched token is a polite no-op — nothing tags", async () => {
+    const t = fakeTransport();
+    const h = await releaseHarness(t);
+    await h.sync.handleAction({
+      channel: CHANNEL, messageTs: "1.1", threadTs: h.threadTs, userId: OPERATOR,
+      actionId: "factory-console:release-confirm",
+      value: JSON.stringify({ v: "release-confirm", arg: "no-such-token" }),
+    });
+    expect(
+      t.calls.filter((c) => c.args[0] === "tag" && c.args.length === 3 && c.args[1] !== "--list"),
+    ).toEqual([]);
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(final.text).toContain("no longer live");
+  });
+
+  it("AE2: a non-operator confirm click is refused; nothing executes", async () => {
+    const t = fakeTransport();
+    const h = await releaseHarness(t);
+    await h.sync.handleInbound({ channel: CHANNEL, threadTs: h.threadTs, ts: "7.3", userId: OPERATOR, text: "release" });
+    const token = offerToken();
+    await h.sync.handleAction({
+      channel: CHANNEL, messageTs: "1.1", threadTs: h.threadTs, userId: STRANGER,
+      actionId: "factory-console:release-confirm",
+      value: JSON.stringify({ v: "release-confirm", arg: token }),
+    });
+    expect(
+      t.calls.filter((c) => c.args[0] === "tag" && c.args.length === 3 && c.args[1] !== "--list"),
+    ).toEqual([]);
+    expect(store.getMeta(RELEASE_OFFER_KEY)).toBeDefined(); // offer still live
+  });
+
+  it("confirm after origin/main advanced refuses and never tags the new head", async () => {
+    const t = fakeTransport({ sha: "abc1234def5678", shaAfterConfirm: "fff9999aaa0000" });
+    const h = await releaseHarness(t);
+    await h.sync.handleInbound({ channel: CHANNEL, threadTs: h.threadTs, ts: "7.4", userId: OPERATOR, text: "release" });
+    const token = offerToken();
+    await h.sync.handleAction({
+      channel: CHANNEL, messageTs: "1.1", threadTs: h.threadTs, userId: OPERATOR,
+      actionId: "factory-console:release-confirm",
+      value: JSON.stringify({ v: "release-confirm", arg: token }),
+    });
+    expect(
+      t.calls.filter((c) => c.args[0] === "tag" && c.args.length === 3 && c.args[1] !== "--list"),
+    ).toEqual([]);
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(final.text).toContain("origin/main advanced");
+    expect(store.getMeta(RELEASE_OFFER_KEY)).toBeUndefined(); // consumed
+  });
+
+  it("cancel clears the token and strips the offer's buttons", async () => {
+    const t = fakeTransport();
+    const h = await releaseHarness(t);
+    await h.sync.handleInbound({ channel: CHANNEL, threadTs: h.threadTs, ts: "7.5", userId: OPERATOR, text: "release" });
+    const token = offerToken();
+    const offerTs = (JSON.parse(store.getMeta(RELEASE_OFFER_KEY)!) as { messageTs: string }).messageTs;
+    await h.sync.handleAction({
+      channel: CHANNEL, messageTs: offerTs, threadTs: h.threadTs, userId: OPERATOR,
+      actionId: "factory-console:release-cancel",
+      value: JSON.stringify({ v: "release-cancel", arg: token }),
+    });
+    expect(store.getMeta(RELEASE_OFFER_KEY)).toBeUndefined();
+    const resolved = h.slack.updates.find((u) => u.ts === offerTs && u.text.includes("cancelled"));
+    expect(resolved).toBeDefined();
+    expect(
+      t.calls.filter((c) => c.args[0] === "tag" && c.args.length === 3 && c.args[1] !== "--list"),
+    ).toEqual([]);
+  });
+
+  it("double-confirm is idempotent — the second click finds no token", async () => {
+    const t = fakeTransport({ sha: "abc1234def5678" });
+    const h = await releaseHarness(t);
+    await h.sync.handleInbound({ channel: CHANNEL, threadTs: h.threadTs, ts: "7.6", userId: OPERATOR, text: "release" });
+    const token = offerToken();
+    const click = () =>
+      h.sync.handleAction({
+        channel: CHANNEL, messageTs: "1.1", threadTs: h.threadTs, userId: OPERATOR,
+        actionId: "factory-console:release-confirm",
+        value: JSON.stringify({ v: "release-confirm", arg: token }),
+      });
+    await click();
+    await click();
+    const creates = t.calls.filter((c) => c.cmd === "git" && c.args[0] === "tag" && c.args.length === 3 && c.args[1] !== "--list");
+    expect(creates).toHaveLength(2); // one pair, once
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(final.text).toContain("no longer live");
+  }, 30_000);
+
+  it("a tag collision surfaces in the ack and nothing pushes", async () => {
+    const t = fakeTransport({ sha: "abc1234def5678", existingTag: "v0.1.0-canary.355" });
+    const h = await releaseHarness(t);
+    await h.sync.handleInbound({ channel: CHANNEL, threadTs: h.threadTs, ts: "7.7", userId: OPERATOR, text: "release" });
+    const token = offerToken();
+    await h.sync.handleAction({
+      channel: CHANNEL, messageTs: "1.1", threadTs: h.threadTs, userId: OPERATOR,
+      actionId: "factory-console:release-confirm",
+      value: JSON.stringify({ v: "release-confirm", arg: token }),
+    });
+    expect(t.calls.filter((c) => c.args[0] === "push")).toEqual([]);
+    const final = h.slack.updates[h.slack.updates.length - 1];
+    expect(final.text).toContain("already exists");
+  });
+});
+
+describe("nextCanaryN", () => {
+  it("derives from the newest-first tag list; empty list starts at 1", () => {
+    expect(nextCanaryN("v0.1.0-canary.354\nv0.1.0-canary.353\n")).toBe(355);
+    expect(nextCanaryN("")).toBe(1);
+    expect(nextCanaryN("garbage\nv0.1.0-canary.7")).toBe(8);
   });
 });

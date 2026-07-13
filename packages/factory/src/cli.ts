@@ -33,7 +33,7 @@ import { installFactoryd, uninstallFactoryd } from "./cli-install.js";
 import { createLinearGateway, type CommentTrust } from "./linear/client.js";
 import { createLogger } from "./logger.js";
 import { createSlackGateway, type SlackGateway } from "./slack/client.js";
-import { createInspectionExecutors, createMergeExecutor, createSteeringExecutors } from "./slack/console.js";
+import { createInspectionExecutors, createMergeExecutor, createReleaseExecutors, createSteeringExecutors } from "./slack/console.js";
 import { createSlackSync, type SlackSync } from "./slack/sync.js";
 import { buildStatusView, formatStatusView } from "./slack/status.js";
 import { postNag } from "./slack/threads.js";
@@ -215,6 +215,14 @@ program
               slack: slackGateway,
               transport,
               artifactsDirFor: getArtifactsDir,
+              log: log.child("console"),
+            }),
+            ...createReleaseExecutors({
+              store,
+              slack: slackGateway,
+              transport,
+              repoPath: host.repoPath,
+              channelId: config.slack.channelId as string,
               log: log.child("console"),
             }),
           },

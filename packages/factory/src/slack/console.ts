@@ -196,6 +196,12 @@ export function helpText(
 export interface ConsoleAck {
   text: string;
   blocks?: SlackBlock[];
+  /**
+   * Called with the ack MESSAGE's ts once posted/edited (null when the post
+   * failed) — the release confirm stores it so a later click can strip the
+   * offer's buttons (message state must match token state).
+   */
+  onPosted?(ts: string | null): void;
 }
 
 export interface ConsoleActionContext {
@@ -272,18 +278,19 @@ export async function runConsoleAction(
   deps: ConsoleDeps,
   input: ConsoleActionInput,
 ): Promise<void> {
-  const reply = (text: string, blocks?: SlackBlock[]) =>
+  const reply = (text: string, blocks?: SlackBlock[]): Promise<string | null> =>
     deps.slack
       .postThreadReply(input.channel, input.threadTs, text, {
         blocks: blocks ?? [section(text)],
       })
-      .catch((e: unknown) =>
+      .catch((e: unknown) => {
         deps.log.warn("slack console: reply post failed", {
           issue: input.identifier,
           verb: input.verb,
           error: String(e),
-        }),
-      );
+        });
+        return null;
+      });
 
   // (1) Authorization — R17: EVERY verb, reads included (log tails and
   // screenshots are disclosure), button or typed, gates on the allowlist.
@@ -365,6 +372,7 @@ export async function runConsoleAction(
           ack.text,
           ack.blocks ?? [section(ack.text)],
         );
+        ack.onPosted?.(progressTs);
         return;
       } catch (e) {
         deps.log.warn("slack console: progress edit failed — posting fresh", {
@@ -373,7 +381,8 @@ export async function runConsoleAction(
         });
       }
     }
-    await reply(ack.text, ack.blocks);
+    const ts = await reply(ack.text, ack.blocks);
+    ack.onPosted?.(ts);
   };
 
   // (5) Execute → ack. An executor failure is ACKED (R11), never silent.
@@ -792,4 +801,270 @@ export function createInspectionExecutors(
       };
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Release executors (U8, KTD3): confirm round-trip, sha-pinned
+// ---------------------------------------------------------------------------
+
+/** meta key holding the one-shot release-confirm offer (JSON ReleaseOffer). */
+export const RELEASE_OFFER_KEY = "release-confirm-offer";
+
+/** Confirm offers expire after 10 minutes — main moves while you decide. */
+export const RELEASE_OFFER_TTL_MS = 10 * 60 * 1000;
+
+interface ReleaseOffer {
+  token: string;
+  vTag: string;
+  desktopTag: string;
+  /** The exact origin/main sha shown to the operator — the sha that gets tagged. */
+  sha: string;
+  expiresAtMs: number;
+  /** ts of the confirm MESSAGE (button-strip on resolve). */
+  messageTs: string | null;
+}
+
+export interface ReleaseDeps {
+  store: FactoryStore;
+  slack: SlackGateway;
+  transport: {
+    exec(
+      command: string,
+      args: string[],
+      opts?: { cwd?: string; timeoutMs?: number },
+    ): Promise<{ code: number | null; stdout: string; stderr: string }>;
+  };
+  /** The daemon's repo checkout (tags are refs — no working-tree mutation). */
+  repoPath: string;
+  channelId: string;
+  log: Logger;
+}
+
+async function git(
+  deps: ReleaseDeps,
+  args: string[],
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return deps.transport.exec("git", args, {
+    cwd: deps.repoPath,
+    timeoutMs: 60_000,
+  });
+}
+
+/** Next canary N from `git tag --list` output (newest first). */
+export function nextCanaryN(tagList: string): number {
+  const first = tagList
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => /^v0\.1\.0-canary\.\d+$/.test(l));
+  if (first === undefined) return 1;
+  return Number(first.slice("v0.1.0-canary.".length)) + 1;
+}
+
+function parseOffer(raw: string | undefined): ReleaseOffer | null {
+  if (raw === undefined) return null;
+  try {
+    const o = JSON.parse(raw) as ReleaseOffer;
+    return typeof o.token === "string" && typeof o.sha === "string" ? o : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Strip the confirm message's buttons and state the outcome (best-effort). */
+async function resolveOfferMessage(
+  deps: ReleaseDeps,
+  offer: ReleaseOffer,
+  outcome: string,
+): Promise<void> {
+  if (offer.messageTs === null) return;
+  await deps.slack
+    .updateMessage(deps.channelId, offer.messageTs, outcome, [section(outcome)])
+    .catch((e: unknown) =>
+      deps.log.warn("release: confirm-message update failed — stale buttons remain", {
+        error: String(e),
+      }),
+    );
+}
+
+/**
+ * The release verbs (R10, AE2). `release` posts a confirm offer naming the
+ * exact tag pair AND the resolved origin/main sha; only a confirm click with
+ * the matching one-shot token executes, and it tags THAT stored sha — if
+ * origin/main has advanced, the offer is refused and a fresh one is required
+ * (show-what-you-execute). Cancel and expiry consume the token harmlessly.
+ */
+export function createReleaseExecutors(
+  deps: ReleaseDeps,
+): Partial<Record<ConsoleVerb, ConsoleExecutor>> {
+  return {
+    release: async () => {
+      const fetch = await git(deps, ["fetch", "--tags", "--quiet", "origin"]);
+      if (fetch.code !== 0) {
+        return {
+          text: `❌ release: git fetch failed:\n\`\`\`\n${(fetch.stderr || fetch.stdout).slice(0, 800)}\n\`\`\``,
+        };
+      }
+      const tags = await git(deps, [
+        "tag",
+        "--list",
+        "v0.1.0-canary.*",
+        "--sort=-version:refname",
+      ]);
+      const n = nextCanaryN(tags.stdout);
+      const vTag = `v0.1.0-canary.${n}`;
+      const desktopTag = `desktop-v0.1.0-canary.${n}`;
+      const sha = (await git(deps, ["rev-parse", "origin/main"])).stdout.trim();
+      if (!/^[0-9a-f]{7,40}$/.test(sha)) {
+        return { text: `❌ release: couldn't resolve origin/main (${sha.slice(0, 120)}).` };
+      }
+      const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      const offer: ReleaseOffer = {
+        token,
+        vTag,
+        desktopTag,
+        sha,
+        expiresAtMs: Date.now() + RELEASE_OFFER_TTL_MS,
+        messageTs: null,
+      };
+      deps.store.setMeta(RELEASE_OFFER_KEY, JSON.stringify(offer));
+      const text = `Confirm cut \`${vTag}\` + \`${desktopTag}\` at origin/main \`${sha.slice(0, 10)}\`? (expires in 10 min)`;
+      return {
+        text,
+        blocks: [
+          section(text),
+          actions([
+            consoleButton("release-confirm", {
+              arg: token,
+              label: "🚢 Confirm cut",
+              style: "primary",
+            }),
+            consoleButton("release-cancel", { arg: token, label: "Cancel" }),
+          ]),
+        ],
+        onPosted: (ts) => {
+          if (ts === null) return;
+          const stored = parseOffer(deps.store.getMeta(RELEASE_OFFER_KEY));
+          if (stored !== null && stored.token === token) {
+            deps.store.setMeta(
+              RELEASE_OFFER_KEY,
+              JSON.stringify({ ...stored, messageTs: ts }),
+            );
+          }
+        },
+      };
+    },
+
+    "release-confirm": async (ctx) => {
+      const offer = parseOffer(deps.store.getMeta(RELEASE_OFFER_KEY));
+      if (offer === null || offer.token !== ctx.arg) {
+        return {
+          text: "That release offer is no longer live (already used or superseded) — run `release` for a fresh one.",
+        };
+      }
+      // One-shot: consume BEFORE executing — a double-tap must not double-tag.
+      deps.store.deleteMeta(RELEASE_OFFER_KEY);
+      if (Date.now() > offer.expiresAtMs) {
+        await resolveOfferMessage(deps, offer, `⏰ Release offer for \`${offer.vTag}\` expired — run \`release\` again.`);
+        return { text: `⏰ That offer expired — run \`release\` for a fresh one.` };
+      }
+      // Show-what-you-execute: refuse if origin/main advanced past the sha
+      // the operator confirmed.
+      await git(deps, ["fetch", "--quiet", "origin", "main"]);
+      const head = (await git(deps, ["rev-parse", "origin/main"])).stdout.trim();
+      if (head !== offer.sha) {
+        await resolveOfferMessage(
+          deps,
+          offer,
+          `⚠️ Offer for \`${offer.vTag}\` withdrawn — origin/main moved past \`${offer.sha.slice(0, 10)}\`.`,
+        );
+        return {
+          text: `⚠️ origin/main advanced (\`${offer.sha.slice(0, 10)}\` → \`${head.slice(0, 10)}\`) since that offer — not tagging the new head silently. Run \`release\` again to confirm the current sha.`,
+        };
+      }
+      // Collision guard, then tag THE STORED SHA and push both tags.
+      for (const tag of [offer.vTag, offer.desktopTag]) {
+        const exists = await git(deps, ["tag", "--list", tag]);
+        if (exists.stdout.trim() !== "") {
+          await resolveOfferMessage(deps, offer, `❌ Tag \`${tag}\` already exists — nothing cut.`);
+          return { text: `❌ Tag \`${tag}\` already exists — nothing was cut. Run \`release\` to derive a fresh N.` };
+        }
+      }
+      for (const tag of [offer.vTag, offer.desktopTag]) {
+        const t = await git(deps, ["tag", tag, offer.sha]);
+        if (t.code !== 0) {
+          await resolveOfferMessage(deps, offer, `❌ \`git tag ${tag}\` failed — nothing pushed.`);
+          return {
+            text: `❌ \`git tag ${tag}\` failed:\n\`\`\`\n${(t.stderr || t.stdout).slice(0, 600)}\n\`\`\``,
+          };
+        }
+      }
+      const push = await git(deps, ["push", "origin", offer.vTag, offer.desktopTag]);
+      if (push.code !== 0) {
+        // Clean up the local tags so a retry can re-derive cleanly.
+        await git(deps, ["tag", "-d", offer.vTag]);
+        await git(deps, ["tag", "-d", offer.desktopTag]);
+        await resolveOfferMessage(deps, offer, `❌ Tag push failed — nothing cut.`);
+        return {
+          text: `❌ tag push failed (local tags cleaned up):\n\`\`\`\n${(push.stderr || push.stdout).slice(0, 800)}\n\`\`\``,
+        };
+      }
+      await resolveOfferMessage(
+        deps,
+        offer,
+        `🚢 Cut \`${offer.vTag}\` + \`${offer.desktopTag}\` at \`${offer.sha.slice(0, 10)}\` by <@${ctx.userId}>.`,
+      );
+      // Actions run URLs appear a few seconds after the push — short retry.
+      const runLinks = await findRunLinks(deps, [offer.vTag, offer.desktopTag]);
+      const runsNote =
+        runLinks.length > 0
+          ? `\nRuns: ${runLinks.join(" · ")}`
+          : "\nRuns: not visible yet — check the Actions tab in a minute.";
+      return {
+        text: `🚢 Cut \`${offer.vTag}\` + \`${offer.desktopTag}\` at \`${offer.sha.slice(0, 10)}\`. The desktop tag deploys apps/web to dev.${runsNote}`,
+      };
+    },
+
+    "release-cancel": async (ctx) => {
+      const offer = parseOffer(deps.store.getMeta(RELEASE_OFFER_KEY));
+      if (offer === null || offer.token !== ctx.arg) {
+        return { text: "That offer is already resolved — nothing to cancel." };
+      }
+      deps.store.deleteMeta(RELEASE_OFFER_KEY);
+      await resolveOfferMessage(
+        deps,
+        offer,
+        `🚫 Release offer for \`${offer.vTag}\` cancelled by <@${ctx.userId}>.`,
+      );
+      return { text: `🚫 Cancelled — no tag was cut.` };
+    },
+  };
+}
+
+/** Best-effort Actions run URLs for freshly pushed tags (3 tries, 4s apart). */
+async function findRunLinks(
+  deps: ReleaseDeps,
+  tags: string[],
+): Promise<string[]> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await new Promise((r) => setTimeout(r, 4000));
+    const links: string[] = [];
+    for (const tag of tags) {
+      const res = await deps.transport.exec(
+        "gh",
+        ["run", "list", "--branch", tag, "--limit", "1", "--json", "url"],
+        { cwd: deps.repoPath, timeoutMs: 20_000 },
+      );
+      if (res.code === 0) {
+        try {
+          const parsed = JSON.parse(res.stdout) as { url?: string }[];
+          if (parsed[0]?.url !== undefined) links.push(`<${parsed[0].url}|${tag}>`);
+        } catch {
+          // ignore — retry
+        }
+      }
+    }
+    if (links.length === tags.length) return links;
+    if (attempt === 2 && links.length > 0) return links;
+  }
+  return [];
 }

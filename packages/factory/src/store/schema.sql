@@ -158,3 +158,12 @@ CREATE TABLE IF NOT EXISTS slack_threads (
 
 CREATE INDEX IF NOT EXISTS idx_slack_threads_thread
   ON slack_threads (channel_id, thread_ts);
+
+-- Singleton key/value metadata (U8/U9): pinned-board message channel/ts,
+-- release-confirm one-shot tokens, done-today board memory. Small, unindexed
+-- beyond the PK — a handful of rows, read per tick.
+CREATE TABLE IF NOT EXISTS meta (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);

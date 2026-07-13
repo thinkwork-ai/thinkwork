@@ -38,6 +38,9 @@ export class FakeSlackGateway implements SlackGateway {
   posts: SlackPost[] = [];
   updates: SlackUpdate[] = [];
   uploads: { channel: string; threadTs: string; paths: string[] }[] = [];
+  pins: { channel: string; ts: string }[] = [];
+  /** When set, updateMessage throws for these ts values (board self-heal). */
+  updateFailsFor = new Set<string>();
   /** When set, uploadFiles throws (missing files:write scope, etc.). */
   uploadError: Error | null = null;
   started = false;
@@ -70,7 +73,16 @@ export class FakeSlackGateway implements SlackGateway {
     text: string,
     blocks?: unknown[],
   ): Promise<void> {
+    if (this.updateFailsFor.has(ts)) throw new Error("message_not_found");
     this.updates.push({ channel, ts, text, blocks });
+  }
+
+  async pinMessage(channel: string, ts: string): Promise<void> {
+    this.pins.push({ channel, ts });
+  }
+
+  async getPermalink(channel: string, ts: string): Promise<string | null> {
+    return `https://slack.test/archives/${channel}/p${ts.replace(".", "")}`;
   }
 
   postThreadReply(

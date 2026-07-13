@@ -508,6 +508,18 @@ export async function runTick(
   // nothing left to compound). Isolated so a failure never crashes the tick.
   await runUnenrollIsolated(deps, candidates);
 
+  // Pinned live board (U9, KTD4): once per tick, AFTER un-enroll (done-today
+  // is recorded there). Best-effort — a Slack outage never fails the tick.
+  if (deps.slack !== undefined) {
+    try {
+      await deps.slack.updateBoard(candidates);
+    } catch (e) {
+      deps.log.warn("board update failed — continuing (Slack is never load-bearing)", {
+        error: String(e),
+      });
+    }
+  }
+
   return { decisions, stopped: false };
 }
 
