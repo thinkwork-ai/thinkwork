@@ -7,7 +7,12 @@
     "./github-workspace": "./github-workspace.ts",
     "./analyst-caller-context": "./analyst-caller-context.ts",
     "./capability-caller-context": "./capability-caller-context.ts",
-    "./analyst-reader-db": "./analyst-reader-db.ts"
+    "./analyst-reader-db": "./analyst-reader-db.ts",
+    "./capability-broker/sessions": "./lib/capability-broker/sessions.ts",
+    "./capability-broker/dynamo-port": "./lib/capability-broker/dynamo-port.ts",
+    "./capability-broker/policy": "./lib/capability-broker/policy.ts",
+    "./capability-broker/evidence": "./lib/capability-broker/evidence.ts",
+    "./capability-broker/adapters/registry": "./lib/capability-broker/adapters/registry.ts"
   },
   "scripts": {
     "build": "tsc --build",
@@ -22,6 +27,7 @@
     "@octokit/rest": "^22.0.1",
     "@thinkwork/admin-ops": "workspace:*",
     "@thinkwork/agent-loops-core": "workspace:*",
+    "@thinkwork/capability-contracts": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/runtime-config": "workspace:*",
     "drizzle-orm": "^0.39.0",
@@ -33,6 +39,7 @@
   "devDependencies": {
     "@aws-sdk/client-bedrock-agentcore": "^3.1028.0",
     "@aws-sdk/client-bedrock-agentcore-control": "^3.917.0",
+    "@aws-sdk/client-dynamodb": "^3.1024.0",
     "@aws-sdk/client-cloudwatch": "^3.917.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.917.0",
     "@aws-sdk/client-iam": "^3.917.0",

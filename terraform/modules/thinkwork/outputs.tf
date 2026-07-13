@@ -604,3 +604,31 @@ output "compliance_anchor_lambda_role_arn" {
   description = "ARN of the IAM role the anchor Lambda (U8a/U8b) will assume. Inert in U7 — no Lambda function references this yet."
   value       = module.compliance_anchors.lambda_role_arn
 }
+
+# Capability broker (THINK-280 U3) — ship-inert; all empty until
+# var.enable_capability_broker flips on. The API-side session opener reads
+# these to build the sandbox SessionBootstrap.
+output "capability_broker_enabled" {
+  description = "Whether the governed capability broker infra is provisioned."
+  value       = module.capability_broker.enabled
+}
+
+output "capability_broker_session_table_name" {
+  description = "DynamoDB session table (CAPABILITY_BROKER_SESSION_TABLE). Empty when disabled."
+  value       = module.capability_broker.session_table_name
+}
+
+output "capability_broker_audience" {
+  description = "PoP session audience (CAPABILITY_BROKER_AUDIENCE). Empty when disabled."
+  value       = module.capability_broker.broker_audience
+}
+
+output "capability_broker_private_api_id" {
+  description = "Private REST API id the sandbox targets through the VPCE (CAPABILITY_BROKER_API_ID). Empty when disabled."
+  value       = module.capability_broker.private_api_id
+}
+
+output "capability_broker_vpce_dns_name" {
+  description = "Endpoint-specific execute-api VPCE DNS name (private DNS OFF; CAPABILITY_BROKER_VPCE_DNS). Empty when disabled."
+  value       = module.capability_broker.execute_api_vpce_dns_name
+}

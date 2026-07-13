@@ -623,6 +623,13 @@ build_handler "admin-ops-mcp" \
 build_handler "analyst-query-broker" \
   "$REPO_ROOT/packages/lambda/analyst-query-broker.ts"
 
+# Capability broker (THINK-280 U3) — action-time policy + replay-safe PoP
+# sessions behind a private REST API. Ship-inert: deployed only when the
+# capability-broker terraform module is enabled; standard externalized
+# @aws-sdk/* build (@aws-sdk/client-dynamodb ships in the Node 22 runtime).
+build_handler "capability-broker" \
+  "$REPO_ROOT/packages/lambda/capability-broker.ts"
+
 build_handler "mcp-admin-keys" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-admin-keys.ts"
 
