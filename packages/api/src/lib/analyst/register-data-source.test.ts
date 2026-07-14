@@ -139,10 +139,17 @@ describe("probeAndModelExternalSource (THINK-239)", () => {
       openClient: async () => client,
     });
     expect(model).toEqual({
-      version: 1,
+      // THINK-283: writers emit model v2 with schema on every table; the
+      // pre-schema-scoping probe surface is public.
+      version: 2,
       tables: [
-        { name: "customers", columns: [{ name: "id", pgType: "uuid" }] },
         {
+          schema: "public",
+          name: "customers",
+          columns: [{ name: "id", pgType: "uuid" }],
+        },
+        {
+          schema: "public",
           name: "orders",
           columns: [
             { name: "id", pgType: "bigint" },

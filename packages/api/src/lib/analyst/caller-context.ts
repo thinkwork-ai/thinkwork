@@ -13,6 +13,7 @@
 
 import {
   ANALYST_CALLER_CONTEXT_KIND,
+  ANALYST_DEFAULT_SOURCE_SCHEMA,
   ANALYST_REQUEST_CONTEXT_TTL_MS,
   ANALYST_SESSION_CONTEXT_TTL_MS,
   encodeAnalystCallerContextHeader,
@@ -23,6 +24,7 @@ import {
 } from "@thinkwork/lambda/analyst-caller-context";
 
 export type { AnalystSourceClaims } from "@thinkwork/lambda/analyst-caller-context";
+export { ANALYST_DEFAULT_SOURCE_SCHEMA } from "@thinkwork/lambda/analyst-caller-context";
 
 import {
   resolveConfiguredCapabilitySigner,
@@ -147,6 +149,11 @@ export function analystBrokerSourceSlug(url: string): string | null {
  * `runtime_metadata.analyst_source` block plus its slug (THINK-239). The
  * stored block is the sourceClaims shape MINUS the slug; returns null when the
  * block is absent or malformed (builtin rows, or a corrupt row).
+ *
+ * THINK-283: claims are always minted with an explicit schema — legacy rows
+ * that predate schema scoping mint `public`. A stored generation rides into
+ * the claim so the broker can require generation equality after a refresh;
+ * legacy rows without one mint no generation (the broker's legacy fallback).
  */
 export function sourceClaimsFromRuntimeMetadata(
   slug: string,
@@ -167,6 +174,20 @@ export function sourceClaimsFromRuntimeMetadata(
   ) {
     return null;
   }
+  // Present-but-malformed schema/generation values mean a corrupt row, not a
+  // legacy row — refuse to mint rather than silently defaulting them.
+  if (
+    m.schema !== undefined &&
+    (typeof m.schema !== "string" || m.schema.length === 0)
+  ) {
+    return null;
+  }
+  if (
+    m.sourceGeneration !== undefined &&
+    (typeof m.sourceGeneration !== "string" || m.sourceGeneration.length === 0)
+  ) {
+    return null;
+  }
   return {
     slug,
     host: m.host,
@@ -176,5 +197,10 @@ export function sourceClaimsFromRuntimeMetadata(
     tls,
     credentialSecretArn: m.credentialSecretArn,
     tenantScoped: m.tenantScoped === true,
+    schema:
+      typeof m.schema === "string" ? m.schema : ANALYST_DEFAULT_SOURCE_SCHEMA,
+    ...(typeof m.sourceGeneration === "string"
+      ? { sourceGeneration: m.sourceGeneration }
+      : {}),
   };
 }
