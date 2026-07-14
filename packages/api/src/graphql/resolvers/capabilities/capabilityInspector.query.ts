@@ -64,8 +64,24 @@ import {
 } from "../../../lib/mcp/assignment-state.js";
 import { spaceTriggerServiceIdentity } from "../../../lib/workspace-renderer/space-membership-check.js";
 import type { EffectiveWorkspacePolicy } from "../../../lib/workspace-renderer/effective-policy-composer.js";
+import { getConfig } from "@thinkwork/runtime-config";
+import { projectCapabilityOperationItems } from "./capabilityInspectorOperations.js";
 
 const LOG_PREFIX = "[capability-inspector]";
+
+/**
+ * The governed-runtime operation layer is projected into the Inspector only
+ * once the capability broker / external-search rollout gate is on. Until then
+ * the Inspector renders exactly as before (inert by default).
+ */
+function capabilityOperationLayerEnabled(): boolean {
+  const value = (
+    getConfig("CAPABILITY_EXTERNAL_SEARCH_ENABLED") ||
+    getConfig("ENABLE_CAPABILITY_BROKER") ||
+    ""
+  ).toLowerCase();
+  return value === "true" || value === "1" || value === "yes";
+}
 
 export interface CapabilityInspectorArgs {
   tenantId: string;
@@ -84,6 +100,28 @@ interface CapabilityItemOut {
   reason?: string | null;
   detail?: string | null;
   tokenStatus?: string | null;
+  // THINK-280 U8: governed-runtime operation identity + annotations, present
+  // only on `capability_operation` items. All optional so existing item
+  // construction is unchanged and the same canonical composer feeds every
+  // surface.
+  operationTwcap?: string | null;
+  contractHash?: string | null;
+  definitionVersionId?: string | null;
+  effect?: string | null;
+  principalModes?: string[] | null;
+  approvalPolicy?: string | null;
+  inputDataClass?: string | null;
+  outputDataClass?: string | null;
+  costClass?: string | null;
+  latencyClass?: string | null;
+  outputClass?: string | null;
+  executable?: boolean | null;
+  withheldReasons?: string[] | null;
+  readiness?: string | null;
+  remediation?: string | null;
+  routineDependentCount?: number | null;
+  latestBrokerCallStatus?: string | null;
+  latestBrokerCallAt?: string | null;
 }
 
 interface CapabilityInspectionOut {
@@ -768,6 +806,14 @@ export async function capabilityInspector(
             : "approved and enabled but excluded from this agent's resolution (agent assignment disabled?)",
       });
     }
+  }
+
+  // ── Governed-runtime operation layer (U8) — inert until the rollout gate.
+  // Projected through the SAME canonical composer as internal/external search
+  // so the twcap + contract hash agree across every surface (parity).
+  if (!activeProfile && !selectedProfile && capabilityOperationLayerEnabled()) {
+    const operationItems = await projectCapabilityOperationItems(args.tenantId);
+    for (const op of operationItems) push(op);
   }
 
   items.sort((a, b) =>

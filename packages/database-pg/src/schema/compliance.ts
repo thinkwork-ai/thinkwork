@@ -398,6 +398,11 @@ export const COMPLIANCE_EVENT_TYPES = [
   "agent.capability_broker_session_cancelled",
   "agent.capability_broker_call_authorized",
   "agent.capability_broker_call_rejected",
+  // Governed capability runtime external MCP search (THINK-280 U8): operator-
+  // provisioned confidential M2M clients for the /mcp/capabilities facade.
+  "agent.external_capability_client_created",
+  "agent.external_capability_client_rotated",
+  "agent.external_capability_client_revoked",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

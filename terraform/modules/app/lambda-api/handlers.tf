@@ -77,6 +77,11 @@ locals {
     DATABASE_SECRET_ARN            = var.graphql_db_secret_arn
     DATABASE_HOST                  = var.db_cluster_endpoint
     DATABASE_NAME                  = var.database_name
+    # THINK-280 U8: the LAST rollout gate. External capability search + the
+    # Inspector governed-runtime operation layer stay inert until the broker is
+    # enabled for the stage. Off by default — read via getConfig() (env-wins).
+    CAPABILITY_EXTERNAL_SEARCH_ENABLED = var.enable_capability_broker ? "true" : "false"
+    ENABLE_CAPABILITY_BROKER           = var.enable_capability_broker ? "true" : "false"
     # BUCKET_NAME and USER_POOL_ID were duplicate aliases of WORKSPACE_BUCKET
     # and COGNITO_USER_POOL_ID; GRAPHQL_API_KEY duplicated APPSYNC_API_KEY;
     # THINKWORK_API_SECRET and EMAIL_HMAC_SECRET duplicated API_AUTH_SECRET
@@ -637,6 +642,8 @@ resource "aws_lambda_function" "handler" {
     "mcp-user-memory",
     "mcp-context-engine",
     "mcp-open-engine",
+    # THINK-280 U8: scoped external capability search MCP facade.
+    "mcp-capability-search",
     "activity",
     "routines",
     "budgets",
@@ -1508,6 +1515,11 @@ locals {
       "ANY /mcp/user-memory"                               = "mcp-user-memory"
       "ANY /mcp/context-engine"                            = "mcp-context-engine"
       "ANY /mcp/open-engine"                               = "mcp-open-engine"
+      # THINK-280 U8: scoped external capability search facade. The handler is
+      # inert unless CAPABILITY_EXTERNAL_SEARCH_ENABLED (gated on
+      # enable_capability_broker) is on — routing it while disabled returns an
+      # empty, no-data projection.
+      "ANY /mcp/capabilities" = "mcp-capability-search"
 
       # Brain v0 service-auth writeback.
       "POST /api/brain/agent-write"    = "brain-agent-write"

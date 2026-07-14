@@ -1389,13 +1389,31 @@ export type CapabilityInspection = {
 export type CapabilityItem = {
   __typename?: 'CapabilityItem';
   active: Scalars['Boolean']['output'];
+  approvalPolicy?: Maybe<Scalars['String']['output']>;
   capabilityClass: Scalars['String']['output'];
   capabilityId: Scalars['String']['output'];
+  contractHash?: Maybe<Scalars['String']['output']>;
+  costClass?: Maybe<Scalars['String']['output']>;
+  definitionVersionId?: Maybe<Scalars['ID']['output']>;
   detail?: Maybe<Scalars['String']['output']>;
   displayName?: Maybe<Scalars['String']['output']>;
+  effect?: Maybe<Scalars['String']['output']>;
+  executable?: Maybe<Scalars['Boolean']['output']>;
+  inputDataClass?: Maybe<Scalars['String']['output']>;
+  latencyClass?: Maybe<Scalars['String']['output']>;
+  latestBrokerCallAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  latestBrokerCallStatus?: Maybe<Scalars['String']['output']>;
+  operationTwcap?: Maybe<Scalars['String']['output']>;
+  outputClass?: Maybe<Scalars['String']['output']>;
+  outputDataClass?: Maybe<Scalars['String']['output']>;
+  principalModes?: Maybe<Array<Scalars['String']['output']>>;
   provenance?: Maybe<Scalars['String']['output']>;
+  readiness?: Maybe<Scalars['String']['output']>;
   reason?: Maybe<Scalars['String']['output']>;
+  remediation?: Maybe<Scalars['String']['output']>;
+  routineDependentCount?: Maybe<Scalars['Int']['output']>;
   tokenStatus?: Maybe<Scalars['String']['output']>;
+  withheldReasons?: Maybe<Array<Scalars['String']['output']>>;
 };
 
 export type CapabilityMutationResult = {
@@ -1445,6 +1463,7 @@ export type CapabilityRoutineProposal = {
 export type CapabilityRuntimeMutationResult = {
   __typename?: 'CapabilityRuntimeMutationResult';
   binding?: Maybe<CapabilityCredentialBinding>;
+  client?: Maybe<ExternalCapabilityClient>;
   definition?: Maybe<CapabilityDefinition>;
   outcome: Scalars['String']['output'];
   proposal?: Maybe<CapabilityConnectionProposal>;
@@ -1553,6 +1572,9 @@ export enum ComplianceEventType {
   AgentDeleted = 'AGENT_DELETED',
   AgentExtensionDetached = 'AGENT_EXTENSION_DETACHED',
   AgentExtensionGranted = 'AGENT_EXTENSION_GRANTED',
+  AgentExternalCapabilityClientCreated = 'AGENT_EXTERNAL_CAPABILITY_CLIENT_CREATED',
+  AgentExternalCapabilityClientRevoked = 'AGENT_EXTERNAL_CAPABILITY_CLIENT_REVOKED',
+  AgentExternalCapabilityClientRotated = 'AGENT_EXTERNAL_CAPABILITY_CLIENT_ROTATED',
   AgentMigrated = 'AGENT_MIGRATED',
   AgentServicePrincipalCreated = 'AGENT_SERVICE_PRINCIPAL_CREATED',
   AgentServicePrincipalRevoked = 'AGENT_SERVICE_PRINCIPAL_REVOKED',
@@ -1829,6 +1851,11 @@ export type CreateEvalTestCaseInput = {
   query: Scalars['String']['input'];
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type CreateExternalCapabilityClientInput = {
+  servicePrincipalId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 export type CreateInboxItemInput = {
@@ -2908,6 +2935,21 @@ export type EvalTimeSeriesPoint = {
   passRate?: Maybe<Scalars['Float']['output']>;
   passed: Scalars['Int']['output'];
   runCount: Scalars['Int']['output'];
+};
+
+export type ExternalCapabilityClient = {
+  __typename?: 'ExternalCapabilityClient';
+  allowedResource: Scalars['String']['output'];
+  allowedScopes: Array<Scalars['String']['output']>;
+  clientId: Scalars['String']['output'];
+  clientSecret?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  revokedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  rotatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  servicePrincipalId: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
 };
 
 export type FlagThreadForEvalInput = {
@@ -4401,6 +4443,7 @@ export type Mutation = {
   createEvalDataset: EvalDataset;
   createEvalProfile: EvalProfile;
   createEvalTestCase: EvalTestCase;
+  createExternalCapabilityClient: CapabilityRuntimeMutationResult;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
   createQuickAction: UserQuickAction;
@@ -4651,6 +4694,7 @@ export type Mutation = {
   reviewGoal: ReviewGoalPayload;
   revokeArtifactShareLink: Scalars['Boolean']['output'];
   revokeCredentialBinding: CapabilityRuntimeMutationResult;
+  revokeExternalCapabilityClient: CapabilityRuntimeMutationResult;
   revokeMemorySourceAuthorization: Scalars['Boolean']['output'];
   /**
    * ThinkWork-operator-only: revoke an issued premium plugin install key before
@@ -4659,6 +4703,7 @@ export type Mutation = {
   revokePremiumPluginInstallKey: RevokePremiumPluginInstallKeyResult;
   revokeServicePrincipal: CapabilityRuntimeMutationResult;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
+  rotateExternalCapabilityClient: CapabilityRuntimeMutationResult;
   rotateTenantCredential: TenantCredential;
   routeOpenEngineWorkItem: WorkItemEvent;
   runEmailReadinessProbe: Array<EmailReadinessCheck>;
@@ -5133,6 +5178,11 @@ export type MutationCreateEvalProfileArgs = {
 export type MutationCreateEvalTestCaseArgs = {
   input: CreateEvalTestCaseInput;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationCreateExternalCapabilityClientArgs = {
+  input: CreateExternalCapabilityClientInput;
 };
 
 
@@ -5964,6 +6014,12 @@ export type MutationRevokeCredentialBindingArgs = {
 };
 
 
+export type MutationRevokeExternalCapabilityClientArgs = {
+  clientId: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type MutationRevokeMemorySourceAuthorizationArgs = {
   authorizationId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -5985,6 +6041,12 @@ export type MutationRollbackThreadIdleLearningRunArgs = {
   runId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationRotateExternalCapabilityClientArgs = {
+  clientId: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -7446,6 +7508,7 @@ export type Query = {
   evalTestCaseHistory: Array<EvalResult>;
   evalTestCases: Array<EvalTestCase>;
   evalTimeSeries: Array<EvalTimeSeriesPoint>;
+  externalCapabilityClients: Array<ExternalCapabilityClient>;
   flaggedTurnSkillCandidates: SkillAttributionCandidates;
   inboxItem?: Maybe<InboxItem>;
   inboxItems: Array<InboxItem>;
@@ -8150,6 +8213,11 @@ export type QueryEvalTestCasesArgs = {
 
 export type QueryEvalTimeSeriesArgs = {
   days?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryExternalCapabilityClientsArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -13266,6 +13334,36 @@ export type RevokeCredentialBindingMutationVariables = Exact<{
 
 export type RevokeCredentialBindingMutation = { __typename?: 'Mutation', revokeCredentialBinding: { __typename?: 'CapabilityRuntimeMutationResult', outcome: string, reason?: string | null, binding?: { __typename?: 'CapabilityCredentialBinding', id: string, readiness: string, revokedAt?: any | null } | null } };
 
+export type ExternalCapabilityClientsQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+}>;
+
+
+export type ExternalCapabilityClientsQuery = { __typename?: 'Query', externalCapabilityClients: Array<{ __typename?: 'ExternalCapabilityClient', id: string, clientId: string, servicePrincipalId: string, allowedResource: string, allowedScopes: Array<string>, status: string, createdAt: any, rotatedAt?: any | null, revokedAt?: any | null }> };
+
+export type CreateExternalCapabilityClientMutationVariables = Exact<{
+  input: CreateExternalCapabilityClientInput;
+}>;
+
+
+export type CreateExternalCapabilityClientMutation = { __typename?: 'Mutation', createExternalCapabilityClient: { __typename?: 'CapabilityRuntimeMutationResult', outcome: string, reason?: string | null, client?: { __typename?: 'ExternalCapabilityClient', id: string, clientId: string, servicePrincipalId: string, allowedScopes: Array<string>, status: string, clientSecret?: string | null } | null } };
+
+export type RotateExternalCapabilityClientMutationVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+  clientId: Scalars['String']['input'];
+}>;
+
+
+export type RotateExternalCapabilityClientMutation = { __typename?: 'Mutation', rotateExternalCapabilityClient: { __typename?: 'CapabilityRuntimeMutationResult', outcome: string, reason?: string | null, client?: { __typename?: 'ExternalCapabilityClient', id: string, clientId: string, status: string, clientSecret?: string | null } | null } };
+
+export type RevokeExternalCapabilityClientMutationVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+  clientId: Scalars['String']['input'];
+}>;
+
+
+export type RevokeExternalCapabilityClientMutation = { __typename?: 'Mutation', revokeExternalCapabilityClient: { __typename?: 'CapabilityRuntimeMutationResult', outcome: string, reason?: string | null, client?: { __typename?: 'ExternalCapabilityClient', id: string, clientId: string, status: string } | null } };
+
 export type EvalSummaryQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
 }>;
@@ -14708,6 +14806,10 @@ export const RevokeServicePrincipalDocument = {"kind":"Document","definitions":[
 export const CreateCredentialBindingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateCredentialBinding"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateCredentialBindingInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createCredentialBinding"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"outcome"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"binding"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"readiness"}}]}}]}}]}}]} as unknown as DocumentNode<CreateCredentialBindingMutation, CreateCredentialBindingMutationVariables>;
 export const VerifyCredentialBindingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"VerifyCredentialBinding"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bindingId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"verifyCredentialBinding"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"bindingId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bindingId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"outcome"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"binding"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"readiness"}},{"kind":"Field","name":{"kind":"Name","value":"lastVerifiedAt"}}]}}]}}]}}]} as unknown as DocumentNode<VerifyCredentialBindingMutation, VerifyCredentialBindingMutationVariables>;
 export const RevokeCredentialBindingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeCredentialBinding"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"bindingId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"revokeCredentialBinding"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"bindingId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"bindingId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"outcome"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"binding"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"readiness"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]}}]} as unknown as DocumentNode<RevokeCredentialBindingMutation, RevokeCredentialBindingMutationVariables>;
+export const ExternalCapabilityClientsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ExternalCapabilityClients"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"externalCapabilityClients"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"clientId"}},{"kind":"Field","name":{"kind":"Name","value":"servicePrincipalId"}},{"kind":"Field","name":{"kind":"Name","value":"allowedResource"}},{"kind":"Field","name":{"kind":"Name","value":"allowedScopes"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"rotatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]} as unknown as DocumentNode<ExternalCapabilityClientsQuery, ExternalCapabilityClientsQueryVariables>;
+export const CreateExternalCapabilityClientDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateExternalCapabilityClient"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateExternalCapabilityClientInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createExternalCapabilityClient"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"outcome"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"client"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"clientId"}},{"kind":"Field","name":{"kind":"Name","value":"servicePrincipalId"}},{"kind":"Field","name":{"kind":"Name","value":"allowedScopes"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientSecret"}}]}}]}}]}}]} as unknown as DocumentNode<CreateExternalCapabilityClientMutation, CreateExternalCapabilityClientMutationVariables>;
+export const RotateExternalCapabilityClientDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RotateExternalCapabilityClient"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"clientId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rotateExternalCapabilityClient"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"clientId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"clientId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"outcome"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"client"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"clientId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"clientSecret"}}]}}]}}]}}]} as unknown as DocumentNode<RotateExternalCapabilityClientMutation, RotateExternalCapabilityClientMutationVariables>;
+export const RevokeExternalCapabilityClientDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeExternalCapabilityClient"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"clientId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"revokeExternalCapabilityClient"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"clientId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"clientId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"outcome"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"client"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"clientId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]}}]} as unknown as DocumentNode<RevokeExternalCapabilityClientMutation, RevokeExternalCapabilityClientMutationVariables>;
 export const EvalSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EvalSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalRuns"}},{"kind":"Field","name":{"kind":"Name","value":"latestPassRate"}},{"kind":"Field","name":{"kind":"Name","value":"avgPassRate"}},{"kind":"Field","name":{"kind":"Name","value":"regressionCount"}}]}}]}}]} as unknown as DocumentNode<EvalSummaryQuery, EvalSummaryQueryVariables>;
 export const EvalRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EvalRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"errored"}},{"kind":"Field","name":{"kind":"Name","value":"unstable"}},{"kind":"Field","name":{"kind":"Name","value":"scoringVersion"}},{"kind":"Field","name":{"kind":"Name","value":"isLegacyScoring"}},{"kind":"Field","name":{"kind":"Name","value":"datasetId"}},{"kind":"Field","name":{"kind":"Name","value":"datasetVersion"}},{"kind":"Field","name":{"kind":"Name","value":"profileId"}},{"kind":"Field","name":{"kind":"Name","value":"profileName"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"costPartial"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"scheduledJobId"}},{"kind":"Field","name":{"kind":"Name","value":"executionTarget"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeHost"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"totalCount"}}]}}]}}]} as unknown as DocumentNode<EvalRunsQuery, EvalRunsQueryVariables>;
 export const EvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"errored"}},{"kind":"Field","name":{"kind":"Name","value":"unstable"}},{"kind":"Field","name":{"kind":"Name","value":"scoringVersion"}},{"kind":"Field","name":{"kind":"Name","value":"isLegacyScoring"}},{"kind":"Field","name":{"kind":"Name","value":"datasetId"}},{"kind":"Field","name":{"kind":"Name","value":"datasetVersion"}},{"kind":"Field","name":{"kind":"Name","value":"profileId"}},{"kind":"Field","name":{"kind":"Name","value":"profileName"}},{"kind":"Field","name":{"kind":"Name","value":"profileSnapshot"}},{"kind":"Field","name":{"kind":"Name","value":"expectedResultRows"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"costPartial"}},{"kind":"Field","name":{"kind":"Name","value":"latencyP50Ms"}},{"kind":"Field","name":{"kind":"Name","value":"latencyP95Ms"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"scheduledJobId"}},{"kind":"Field","name":{"kind":"Name","value":"executionTarget"}},{"kind":"Field","name":{"kind":"Name","value":"runtimeHost"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<EvalRunQuery, EvalRunQueryVariables>;

@@ -47,6 +47,7 @@ import {
 } from "@/lib/capability-runtime-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { parseAwsJson } from "@/components/settings/capability-runtime-shared";
+import { ExternalCapabilityClientsView } from "@/components/settings/ExternalCapabilityClientsView";
 
 const PRINCIPAL_MODES = ["requester", "agent_owner", "service"] as const;
 const NONE_VALUE = "__none__";
@@ -903,6 +904,13 @@ export function CapabilityBindingsView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* THINK-280 U8: external confidential clients for the scoped
+          /mcp/capabilities search facade. */}
+      <ExternalCapabilityClientsView
+        tenantId={tenantId}
+        canManage={canManage}
+      />
     </div>
   );
 }

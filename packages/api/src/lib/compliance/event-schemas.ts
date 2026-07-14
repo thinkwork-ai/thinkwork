@@ -68,6 +68,16 @@ const CAPABILITY_RUNTIME_FIELDS: ReadonlySet<string> = new Set([
   "after",
 ]);
 
+// External confidential capability client evidence (THINK-280 U8). The
+// client_secret and its slow hash are structurally excluded.
+const EXTERNAL_CAPABILITY_CLIENT_FIELDS: ReadonlySet<string> = new Set([
+  "clientId",
+  "servicePrincipalId",
+  "allowedScopes",
+  "status",
+  "reason",
+]);
+
 // Governed capability runtime broker events (THINK-280 U3). Safe digests and
 // policy-decision codes only — the broker's fine-grained per-call evidence
 // (request/result bodies, credential decisions) stays in capability_broker_calls
@@ -614,6 +624,18 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   },
   "agent.capability_broker_call_rejected": {
     allowedFields: CAPABILITY_BROKER_FIELDS,
+  },
+  // ── Governed capability runtime external MCP search (THINK-280 U8) ──
+  // Confidential-client lifecycle. Only the client_id, its bound service
+  // principal, and its permitted scopes — never the secret or its hash.
+  "agent.external_capability_client_created": {
+    allowedFields: EXTERNAL_CAPABILITY_CLIENT_FIELDS,
+  },
+  "agent.external_capability_client_rotated": {
+    allowedFields: EXTERNAL_CAPABILITY_CLIENT_FIELDS,
+  },
+  "agent.external_capability_client_revoked": {
+    allowedFields: EXTERNAL_CAPABILITY_CLIENT_FIELDS,
   },
 };
 

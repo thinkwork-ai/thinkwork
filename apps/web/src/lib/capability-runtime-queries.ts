@@ -336,3 +336,73 @@ export const RevokeCredentialBindingMutation = graphql(`
     }
   }
 `);
+
+// ─── External confidential capability clients (THINK-280 U8) ─────────────
+// Operator-only confidential M2M clients for the scoped /mcp/capabilities
+// external search facade. Each maps one-to-one to an active service principal
+// and is permitted EXACTLY the capabilities resource + capabilities:search.
+// The clientSecret is revealed ONCE (create/rotate) and is null on list reads.
+
+export const ExternalCapabilityClientsQuery = graphql(`
+  query ExternalCapabilityClients($tenantId: ID!) {
+    externalCapabilityClients(tenantId: $tenantId) {
+      id
+      clientId
+      servicePrincipalId
+      allowedResource
+      allowedScopes
+      status
+      createdAt
+      rotatedAt
+      revokedAt
+    }
+  }
+`);
+
+export const CreateExternalCapabilityClientMutation = graphql(`
+  mutation CreateExternalCapabilityClient(
+    $input: CreateExternalCapabilityClientInput!
+  ) {
+    createExternalCapabilityClient(input: $input) {
+      outcome
+      reason
+      client {
+        id
+        clientId
+        servicePrincipalId
+        allowedScopes
+        status
+        clientSecret
+      }
+    }
+  }
+`);
+
+export const RotateExternalCapabilityClientMutation = graphql(`
+  mutation RotateExternalCapabilityClient($tenantId: ID!, $clientId: String!) {
+    rotateExternalCapabilityClient(tenantId: $tenantId, clientId: $clientId) {
+      outcome
+      reason
+      client {
+        id
+        clientId
+        status
+        clientSecret
+      }
+    }
+  }
+`);
+
+export const RevokeExternalCapabilityClientMutation = graphql(`
+  mutation RevokeExternalCapabilityClient($tenantId: ID!, $clientId: String!) {
+    revokeExternalCapabilityClient(tenantId: $tenantId, clientId: $clientId) {
+      outcome
+      reason
+      client {
+        id
+        clientId
+        status
+      }
+    }
+  }
+`);

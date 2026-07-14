@@ -369,6 +369,10 @@ build_handler "mcp-context-engine" \
 build_handler "mcp-open-engine" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-open-engine.ts"
 
+# THINK-280 U8: the scoped external capability search MCP facade (/mcp/capabilities).
+build_handler "mcp-capability-search" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-capability-search.ts"
+
 build_handler "brain-agent-write" \
   "$REPO_ROOT/packages/api/src/handlers/brain-agent-write.ts"
 
