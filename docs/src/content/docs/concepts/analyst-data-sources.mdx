@@ -23,8 +23,16 @@ Operator registers a data source (internal browse or external form)
 
 Each registered source is an ordinary MCP server row — it appears on the
 **Datasource MCPs** tab of Settings → MCP Servers, shows its source type
-(Internal or External), cluster instance, and database, and can be enabled or
-disabled like any other server.
+(Internal or External), cluster instance, database, and schema, and can be
+enabled or disabled like any other server.
+
+<Aside type="caution">
+  **The schema is a security boundary, not a label.** Every PostgreSQL source is
+  scoped to exactly ONE schema, and the source's read surface is that schema's
+  tables **as they existed at registration (or the last refresh)**. Tables
+  created afterwards are not readable and not modeled until an operator
+  explicitly refreshes the source — there are no automatic future-table grants.
+</Aside>
 
 ## Registering a data source
 
@@ -38,31 +46,44 @@ two-dropdown flow with **zero credential entry**:
 
 1. **Cluster** — ThinkWork enumerates the environment's RDS clusters. When
    there is exactly one, it is pre-selected.
-2. **Database** — the cluster's databases are listed live. Databases that are
-   already registered are marked and disabled. The workspace database itself
-   appears as "Workspace database (built-in)" and routes to the built-in
-   connector provisioning.
-3. Pick a database, accept or edit the suggested display name and slug, and
+2. **Database** — the cluster's databases are listed live. The workspace
+   database itself appears as "Workspace database (built-in)" and routes to
+   the built-in connector provisioning.
+3. **Schema** — the database's user schemas are listed with their current
+   table counts. Exactly one schema is selected per source; empty schemas are
+   shown but not selectable (so an empty `public` is explained rather than
+   hidden), and a schema that is already registered is disabled while other
+   schemas in the same database remain available. Two schemas of one
+   database can be registered as two independent sources.
+4. Pick a schema, accept or edit the suggested display name and slug, and
    register.
 
 Behind the scenes ThinkWork provisions a hardened read-only role on that
 database automatically: `LOGIN` only, no superuser/createdb/createrole
 attributes, `default_transaction_read_only = on`, a 15-second statement
-timeout, a 30-second idle-transaction timeout, and `SELECT` as its only
-privilege — scoped strictly to the `public` schema. The generated password
-goes directly to the platform's secret store and is never displayed or logged.
+timeout, a 30-second idle-transaction timeout, and `SELECT` granted on the
+**current ordinary tables of the selected schema only** — never `ALL TABLES`
+and never default privileges for future objects. `search_path` is narrowed to
+the selected schema, and the role's access to every other user schema is
+revoked. The generated password goes directly to the platform's secret store
+and is never displayed or logged.
 
 ### External — databases outside the environment
 
 For customer- or team-owned PostgreSQL that ThinkWork does not administer,
-choose **External** and fill in host, port, database, DB user, password
-(write-only), and TLS mode (Verify full is the default; Required is available
-for hosts without a verifiable certificate chain).
+choose **External** and fill in host, port, database, **schema** (prefilled
+`public`; exact catalog case), DB user, password (write-only), and TLS mode
+(Verify full is the default; Required is available for hosts without a
+verifiable certificate chain).
 
 The credential you supply must be a **read-only role provisioned by your
-DBA**. Registration connects as that role and refuses to proceed if the role
-holds any non-SELECT privilege — the write barrier is enforced in the
-database, not in application code.
+DBA**, scoped to exactly the selected schema's ordinary tables. Registration
+connects as that role and refuses to proceed if the role's _effective_
+surface (including role membership and `PUBLIC` grants) holds any write
+privilege, can create schemas, can read another user schema, or can read
+views/materialized/foreign tables — ThinkWork never expands or narrows an
+external role's grants, so remediation is always a DBA change. The write
+barrier is enforced in the database, not in application code.
 
 <Aside type="tip">
   The role's grant surface is also the agent's visible surface: registration
@@ -86,29 +107,63 @@ database, not in application code.
 
 ## Safety posture
 
-| Layer | Enforcement |
-| ----- | ----------- |
-| Database role | SELECT-only grants; read-only transactions; statement and idle timeouts set at role level |
-| Broker auth | Every call carries a signed, per-invocation caller context bound to the tenant and delegation — sourced routes reject anything else |
-| Tenant isolation | On the workspace database, row-level security scopes analyst queries to the calling tenant's rows |
-| Budgets | Signed per-source budgets (queries per day, rows, bytes). Exceeding one blocks further queries and the agent reports the block instead of inventing numbers |
-| Audit | Every executed or rejected statement writes a `data.query_executed` compliance event with the source, row counts, and outcome |
-| Drift | A scheduled reconciler probes each source (reachability, credential validity, read-only posture, schema drift). A failing probe withholds only that source, with a visible reason |
+| Layer            | Enforcement                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Database role    | SELECT-only grants; read-only transactions; statement and idle timeouts set at role level                                                                                         |
+| Broker auth      | Every call carries a signed, per-invocation caller context bound to the tenant and delegation — sourced routes reject anything else                                               |
+| Tenant isolation | On the workspace database, row-level security scopes analyst queries to the calling tenant's rows                                                                                 |
+| Budgets          | Signed per-source budgets (queries per day, rows, bytes). Exceeding one blocks further queries and the agent reports the block instead of inventing numbers                       |
+| Audit            | Every executed or rejected statement writes a `data.query_executed` compliance event with the source, row counts, and outcome                                                     |
+| Drift            | A scheduled reconciler probes each source (reachability, credential validity, read-only posture, schema drift). A failing probe withholds only that source, with a visible reason |
 
 <Aside type="note">
-  When a budget blocks a query mid-report, the agent renders the affected
-  items as "could not query (budget exceeded)" rather than estimating.
-  Budgets are operator-editable per source.
+  When a budget blocks a query mid-report, the agent renders the affected items
+  as "could not query (budget exceeded)" rather than estimating. Budgets are
+  operator-editable per source.
+</Aside>
+
+## Refreshing a source after schema changes
+
+New tables never become readable on their own. When tables are added to (or
+dropped from) the source's schema, an operator runs **Refresh source** on the
+source's detail page:
+
+1. The source is **withheld from the agent for the duration** — dispatch stops
+   offering it, and even already-issued broker access is re-authorized against
+   the source's current state, so a session that started before the refresh
+   cannot keep querying through it.
+2. For internal sources, ThinkWork reconciles the reader role's grants to the
+   schema's _current_ tables (the credential itself is never rotated). For
+   external sources, ThinkWork models whatever the DBA has granted — the
+   supported sequence is **DBA grant first, operator refresh immediately
+   after**.
+3. The schema reference regenerates, connection folders rematerialize, and an
+   immediate health probe must pass before availability is restored. The
+   confirmation reports exactly which qualified tables were added and removed.
+
+If any step fails, the source **stays withheld** with a visible, durable
+failure reason on the detail page (it survives reloads); retrying the refresh
+converges from where the source identity is stored — no manual artifact
+cleanup or credential rotation is ever needed.
+
+<Aside type="note">
+  The scheduled drift probe also detects out-of-band changes: a table granted
+  but not yet modeled (or access reaching outside the source's schema) withholds
+  the source with an actionable reason until an operator refresh — or a DBA fix
+  — resolves it.
 </Aside>
 
 ## Managing sources
 
 Open a source from the Datasource MCPs list to see its detail page:
 
-- **Source type, cluster, and database** for at-a-glance identification.
+- **Source type, cluster, database, and schema** for at-a-glance
+  identification.
+- **Refresh source** — adopt schema changes (registered sources only; see
+  above).
 - **Re-approve connection** — restamps the approval and re-pins the
   configuration hash after a deliberate change; optionally rotates the broker
-  token.
+  token (built-in connector).
 - **Enable/disable** — withdrawal from the agent without deleting the
   registration.
 

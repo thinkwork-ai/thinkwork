@@ -2425,6 +2425,33 @@ export const SettingsRegisterInternalAnalystDataSourceMutation = graphql(`
   }
 `);
 
+// THINK-283: schemas of ONE internal database, fetched only after cluster +
+// database selection. Zero-count schemas come back so an empty `public` is
+// explained; exact host/database/schema registrations are marked.
+export const SettingsAnalystInternalSchemasQuery = graphql(`
+  query SettingsAnalystInternalSchemas($clusterId: ID!, $database: String!) {
+    analystInternalSchemas(clusterId: $clusterId, database: $database) {
+      name
+      eligibleTableCount
+      alreadyRegistered
+    }
+  }
+`);
+
+// THINK-283: explicit fail-closed refresh of a sourced analyst connector —
+// the ONLY way newly created tables become part of the source's surface.
+export const SettingsRefreshAnalystDataSourceMutation = graphql(`
+  mutation SettingsRefreshAnalystDataSource($serverId: ID!) {
+    refreshAnalystDataSource(serverId: $serverId) {
+      serverId
+      slug
+      addedTables
+      removedTables
+      tables
+    }
+  }
+`);
+
 // ─── Knowledge Model (THINK-193 U4) ─────────────────────────────────────
 
 export const SettingsCanonicalEntitiesQuery = graphql(`

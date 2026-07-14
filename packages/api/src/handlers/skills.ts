@@ -1292,13 +1292,19 @@ async function saveSkillCredentials(
  * clusters are named `thinkwork-<stage>-*`, everything else is external.
  * Non-analyst rows return null.
  */
-function analystDataSourceForRow(row: {
+export function analystDataSourceForRow(row: {
   slug: string | null;
   runtime_metadata: unknown;
 }): {
   kind: "internal" | "external";
   host: string | null;
   database: string;
+  schema: string;
+  refresh: {
+    status: string;
+    detail: string | null;
+    updatedAt: string | null;
+  } | null;
 } | null {
   const meta =
     row.runtime_metadata && typeof row.runtime_metadata === "object"
@@ -1313,16 +1319,50 @@ function analystDataSourceForRow(row: {
     typeof source.host === "string" &&
     typeof source.database === "string"
   ) {
+    // THINK-283: stored kind wins; legacy rows keep the host inference.
+    const kind =
+      source.kind === "internal" || source.kind === "external"
+        ? source.kind
+        : source.host.startsWith(`thinkwork-${STAGE}-`)
+          ? "internal"
+          : "external";
+    const rawRefresh =
+      meta && typeof meta.analyst_refresh === "object" && meta.analyst_refresh
+        ? (meta.analyst_refresh as Record<string, unknown>)
+        : null;
     return {
-      kind: source.host.startsWith(`thinkwork-${STAGE}-`)
-        ? "internal"
-        : "external",
+      kind,
       host: source.host,
       database: source.database,
+      // THINK-283: legacy rows without a stored schema project "public".
+      schema:
+        typeof source.schema === "string" && source.schema.length > 0
+          ? source.schema
+          : "public",
+      refresh: rawRefresh
+        ? {
+            status:
+              typeof rawRefresh.status === "string"
+                ? rawRefresh.status
+                : "failed",
+            detail:
+              typeof rawRefresh.detail === "string" ? rawRefresh.detail : null,
+            updatedAt:
+              typeof rawRefresh.updatedAt === "string"
+                ? rawRefresh.updatedAt
+                : null,
+          }
+        : null,
     };
   }
   if (row.slug === "postgres-dev") {
-    return { kind: "internal", host: null, database: "thinkwork" };
+    return {
+      kind: "internal",
+      host: null,
+      database: "thinkwork",
+      schema: "public",
+      refresh: null,
+    };
   }
   return null;
 }

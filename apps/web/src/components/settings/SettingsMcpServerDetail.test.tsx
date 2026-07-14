@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   setHeader: vi.fn(),
   useQuery: vi.fn(),
   provisionAnalyst: vi.fn(),
+  refreshDataSource: vi.fn(),
   listMcpServers: vi.fn(),
   listUserMcpServers: vi.fn(),
   listRuntimeMcpTools: vi.fn(),
@@ -56,7 +57,16 @@ vi.mock("@/context/AuthContext", () => ({
 
 vi.mock("urql", () => ({
   useQuery: mocks.useQuery,
-  useMutation: () => [{ fetching: false }, mocks.provisionAnalyst],
+  // Two mutations live on this page; route by operation name (THINK-283).
+  useMutation: (document: {
+    definitions?: { name?: { value?: string } }[];
+  }) => {
+    const opName = document?.definitions?.[0]?.name?.value;
+    if (opName === "SettingsRefreshAnalystDataSource") {
+      return [{ fetching: false }, mocks.refreshDataSource];
+    }
+    return [{ fetching: false }, mocks.provisionAnalyst];
+  },
 }));
 
 vi.mock("@/lib/mcp-api", async (importOriginal) => {
@@ -84,6 +94,7 @@ beforeEach(() => {
   mocks.setHeader.mockReset();
   mocks.useQuery.mockReset();
   mocks.provisionAnalyst.mockReset();
+  mocks.refreshDataSource.mockReset();
   mocks.listMcpServers.mockReset();
   mocks.listUserMcpServers.mockReset();
   mocks.listRuntimeMcpTools.mockReset();
@@ -505,7 +516,139 @@ describe("SettingsMcpServerDetail", () => {
     expect(await screen.findByText("Twenty CRM")).toBeTruthy();
     expect(screen.queryByText("Analyst connection")).toBeNull();
   });
+
+  it("THINK-283: shows the schema and a refresh action ONLY on sourced analyst connectors", async () => {
+    mockSourcedAnalyst();
+
+    render(<SettingsMcpServerDetail />);
+
+    expect(await screen.findByText("Warehouse")).toBeTruthy();
+    expect(screen.getByText("raw_jde")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /refresh source/i }),
+    ).toBeTruthy();
+
+    cleanup();
+    // A non-sourced server never renders the refresh section.
+    mockServerState("active");
+    render(<SettingsMcpServerDetail />);
+    expect(await screen.findByText("Twenty CRM")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /refresh source/i }),
+    ).toBeNull();
+  });
+
+  it("THINK-283: refresh flows through a confirmation, calls the mutation once, and reports added/removed", async () => {
+    mockSourcedAnalyst();
+    mocks.refreshDataSource.mockResolvedValue({
+      data: {
+        refreshAnalystDataSource: {
+          serverId: "server-1",
+          slug: "warehouse",
+          addedTables: ["raw_jde.shipments"],
+          removedTables: ["raw_jde.legacy"],
+          tables: 12,
+        },
+      },
+    });
+
+    render(<SettingsMcpServerDetail />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /refresh source/i }),
+    );
+    // Confirmation names the exact database/schema before anything runs.
+    expect(
+      await screen.findByText(/thinkwork_warehouse\/raw_jde/),
+    ).toBeTruthy();
+    expect(mocks.refreshDataSource).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm refresh/i }));
+    await waitFor(() =>
+      expect(mocks.refreshDataSource).toHaveBeenCalledExactlyOnceWith({
+        serverId: "server-1",
+      }),
+    );
+    expect(await screen.findByText(/added raw_jde\.shipments/)).toBeTruthy();
+    expect(screen.getByText(/removed raw_jde\.legacy/)).toBeTruthy();
+  });
+
+  it("THINK-283: a persisted refresh failure is visible after load and offers Retry", async () => {
+    mockSourcedAnalyst({
+      dataSource: {
+        refresh: {
+          status: "failed",
+          detail:
+            'refresh failed at step "artifacts": upload failed — retry the refresh; the source stays withheld until a retry succeeds',
+          updatedAt: "2026-07-13T12:00:00.000Z",
+        },
+      },
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    // The durable failure (from runtime metadata, i.e. survives reloads)
+    // renders as an alert with the retry action.
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/step "artifacts"/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /retry refresh/i })).toBeTruthy();
+  });
+
+  it("THINK-283: a running refresh announces the withhold and disables the action", async () => {
+    mockSourcedAnalyst({
+      dataSource: {
+        refresh: { status: "running", updatedAt: "2026-07-13T12:00:00.000Z" },
+      },
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    expect(await screen.findByRole("status")).toBeTruthy();
+    expect(screen.getByText(/refresh is in progress/i)).toBeTruthy();
+    const button = screen.getByRole("button", {
+      name: /refresh source/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("THINK-283: a refresh mutation error surfaces verbatim and is retryable", async () => {
+    mockSourcedAnalyst();
+    mocks.refreshDataSource.mockResolvedValue({
+      error: {
+        message: "[GraphQL] a refresh for this source is already running",
+        graphQLErrors: [
+          { message: "a refresh for this source is already running" },
+        ],
+      },
+    });
+
+    render(<SettingsMcpServerDetail />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /refresh source/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /confirm refresh/i }));
+
+    expect(await screen.findByText(/already running/)).toBeTruthy();
+  });
 });
+
+// THINK-283: a SOURCED analyst connector row (route /mcp/analyst/<slug>).
+function mockSourcedAnalyst(overrides: Record<string, unknown> = {}) {
+  mockServerState("active", {
+    name: "Warehouse",
+    slug: "warehouse",
+    url: "https://api.example.com/mcp/analyst/warehouse",
+    authType: "service_credential",
+    dataSource: {
+      kind: "internal",
+      host: "thinkwork-dev-db.cluster-x.us-east-1.rds.amazonaws.com",
+      database: "thinkwork_warehouse",
+      schema: "raw_jde",
+      refresh: null,
+      ...((overrides.dataSource as Record<string, unknown>) ?? {}),
+    },
+    ...overrides,
+  });
+}
 
 function mockServerState(
   authStatus: "active" | "not_connected" | "expired",

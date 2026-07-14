@@ -32,6 +32,7 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsAnalystInternalClustersQuery,
+  SettingsAnalystInternalSchemasQuery,
   SettingsProvisionAnalystConnectorMutation,
   SettingsRegisterAnalystDataSourceMutation,
   SettingsRegisterInternalAnalystDataSourceMutation,
@@ -470,6 +471,13 @@ type AnalystInternalCluster = {
   databases: AnalystInternalDatabase[];
 };
 
+// THINK-283: one selectable schema of an internal database.
+type AnalystInternalSchema = {
+  name: string;
+  eligibleTableCount: number;
+  alreadyRegistered: boolean;
+};
+
 type AnalystProvisionOutcome = {
   connectorId: string;
   connectorOutcome: string;
@@ -584,6 +592,7 @@ function InternalDataSourceForm({
 }) {
   const [clusterId, setClusterId] = useState("");
   const [database, setDatabase] = useState("");
+  const [schema, setSchema] = useState("");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEdited, setSlugEdited] = useState(false);
@@ -604,11 +613,52 @@ function InternalDataSourceForm({
     [data],
   );
 
+  // THINK-283: schemas load only AFTER a non-workspace database is selected —
+  // never during cluster listing.
+  const [
+    { data: schemasData, fetching: schemasFetching, error: schemasError },
+    refetchSchemas,
+  ] = useQuery({
+    query: SettingsAnalystInternalSchemasQuery,
+    variables: { clusterId, database },
+    pause:
+      !dialogOpen ||
+      !active ||
+      !clusterId ||
+      !database ||
+      database === WORKSPACE_DATABASE,
+  });
+  const schemas: AnalystInternalSchema[] = useMemo(
+    () =>
+      (schemasData?.analystInternalSchemas as AnalystInternalSchema[]) ?? [],
+    [schemasData],
+  );
+  const selectedSchema = useMemo(
+    () => schemas.find((s) => s.name === schema) ?? null,
+    [schemas, schema],
+  );
+
+  // Preselect `public` only when it is actually suitable (has eligible
+  // tables and is not already registered); an empty/registered `public`
+  // forces an explicit non-public choice.
+  useEffect(() => {
+    if (schema || schemas.length === 0) return;
+    const publicSchema = schemas.find((s) => s.name === "public");
+    if (
+      publicSchema &&
+      publicSchema.eligibleTableCount > 0 &&
+      !publicSchema.alreadyRegistered
+    ) {
+      setSchema("public");
+    }
+  }, [schemas, schema]);
+
   // Reset when the dialog reopens or the caller switches to this tab.
   useEffect(() => {
     if (dialogOpen && active) {
       setClusterId("");
       setDatabase("");
+      setSchema("");
       setName("");
       setSlug("");
       setSlugEdited(false);
@@ -629,10 +679,6 @@ function InternalDataSourceForm({
     () => clusters.find((c) => c.clusterId === clusterId) ?? null,
     [clusters, clusterId],
   );
-  const selectedDatabase = useMemo(
-    () => selectedCluster?.databases.find((d) => d.name === database) ?? null,
-    [selectedCluster, database],
-  );
   const isWorkspaceDatabase = database === WORKSPACE_DATABASE;
 
   const trimmedSlug = slug.trim();
@@ -650,6 +696,11 @@ function InternalDataSourceForm({
     !!selectedCluster &&
     !!database &&
     !isWorkspaceDatabase &&
+    // THINK-283: an explicit, currently eligible, unregistered schema is
+    // required — empty/loading/error schema results cannot submit.
+    !!selectedSchema &&
+    selectedSchema.eligibleTableCount > 0 &&
+    !selectedSchema.alreadyRegistered &&
     name.trim().length > 0 &&
     trimmedSlug.length > 0 &&
     slugFormatValid &&
@@ -659,6 +710,7 @@ function InternalDataSourceForm({
   function onClusterChange(value: string) {
     setClusterId(value);
     setDatabase("");
+    setSchema("");
     setName("");
     setSlug("");
     setSlugEdited(false);
@@ -667,6 +719,8 @@ function InternalDataSourceForm({
 
   function onDatabaseChange(value: string) {
     setDatabase(value);
+    // A stale schema from the previous database must never survive.
+    setSchema("");
     setErrorMsg(null);
     if (value && value !== WORKSPACE_DATABASE) {
       const suggested = prettifyDatabaseName(value);
@@ -689,6 +743,7 @@ function InternalDataSourceForm({
         input: {
           clusterId: selectedCluster.clusterId,
           database,
+          schema,
           name: name.trim(),
           slug: trimmedSlug,
         },
@@ -816,23 +871,92 @@ function InternalDataSourceForm({
                         Workspace database (built-in)
                       </SelectItem>
                     ) : (
-                      <SelectItem
-                        key={db.name}
-                        value={db.name}
-                        disabled={db.alreadyRegistered}
-                      >
+                      // THINK-283: registration coverage is per-SCHEMA now,
+                      // so a database with one registered schema stays
+                      // selectable — the schema list below marks the exact
+                      // registered entries.
+                      <SelectItem key={db.name} value={db.name}>
                         {db.name}
-                        {db.alreadyRegistered ? " (registered)" : ""}
+                        {db.alreadyRegistered ? " (has registered source)" : ""}
                       </SelectItem>
                     ),
                   )}
                 </SelectContent>
               </Select>
-              {selectedDatabase?.alreadyRegistered ? (
-                <p className="text-xs text-muted-foreground">
-                  This database is already registered for the analyst.
+            </div>
+          ) : null}
+
+          {/* THINK-283: exactly ONE schema per source, selected explicitly. */}
+          {selectedCluster && database && !isWorkspaceDatabase ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="int-schema">Schema</Label>
+              {schemasFetching ? (
+                <p
+                  className="text-sm text-muted-foreground"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Loading schemas…
                 </p>
-              ) : null}
+              ) : schemasError ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-destructive" role="alert">
+                    Failed to load schemas:{" "}
+                    {schemasError.message.replace(/^\[[^\]]*\]\s*/, "")}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      refetchSchemas({ requestPolicy: "network-only" })
+                    }
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : schemas.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No schemas were found in this database.
+                </p>
+              ) : (
+                <>
+                  <Select
+                    value={schema}
+                    onValueChange={(value) => {
+                      setSchema(value);
+                      setErrorMsg(null);
+                    }}
+                    aria-label="Schema"
+                  >
+                    <SelectTrigger id="int-schema">
+                      <SelectValue placeholder="Select a schema" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {schemas.map((s) => (
+                        <SelectItem
+                          key={s.name}
+                          value={s.name}
+                          disabled={
+                            s.alreadyRegistered || s.eligibleTableCount === 0
+                          }
+                        >
+                          {s.name}
+                          {s.alreadyRegistered
+                            ? " (registered)"
+                            : s.eligibleTableCount === 0
+                              ? " (no eligible tables)"
+                              : ` — ${s.eligibleTableCount} table${s.eligibleTableCount === 1 ? "" : "s"}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    The source is scoped to exactly this schema&apos;s current
+                    tables. Tables created later stay unavailable until you
+                    refresh the source.
+                  </p>
+                </>
+              )}
             </div>
           ) : null}
 
@@ -1059,6 +1183,8 @@ function ExternalDataSourceForm({
   const [host, setHost] = useState("");
   const [port, setPort] = useState("5432");
   const [database, setDatabase] = useState("");
+  // THINK-283: exactly one schema per source; `public` is the legacy default.
+  const [schema, setSchema] = useState("public");
   const [dbUser, setDbUser] = useState("");
   const [password, setPassword] = useState("");
   const [tls, setTls] = useState<AnalystDataSourceTls>(
@@ -1080,6 +1206,7 @@ function ExternalDataSourceForm({
       setHost("");
       setPort("5432");
       setDatabase("");
+      setSchema("public");
       setDbUser("");
       setPassword("");
       setTls(AnalystDataSourceTls.VerifyFull);
@@ -1111,6 +1238,7 @@ function ExternalDataSourceForm({
     host.trim().length > 0 &&
     portValid &&
     database.trim().length > 0 &&
+    schema.trim().length > 0 &&
     dbUser.trim().length > 0 &&
     password.length > 0 &&
     !submitting;
@@ -1133,6 +1261,7 @@ function ExternalDataSourceForm({
           host: host.trim(),
           port: portNumber,
           database: database.trim(),
+          schema: schema.trim(),
           dbUser: dbUser.trim(),
           password,
           tls,
@@ -1251,6 +1380,20 @@ function ExternalDataSourceForm({
             onChange={(e) => setDatabase(e.target.value)}
             placeholder="sales"
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ext-schema">Schema</Label>
+          <Input
+            id="ext-schema"
+            value={schema}
+            onChange={(e) => setSchema(e.target.value)}
+            placeholder="public"
+          />
+          <p className="text-xs text-muted-foreground">
+            The source is scoped to exactly this schema&apos;s current tables
+            (exact case). The credential is validated against it on
+            registration.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ext-dbuser">DB user</Label>

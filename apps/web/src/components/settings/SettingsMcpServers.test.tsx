@@ -26,6 +26,13 @@ const mocks = vi.hoisted(() => ({
     fetching: boolean;
     error: { message: string } | undefined;
   },
+  // THINK-283: the analystInternalSchemas query result (per database).
+  schemasQuery: { data: undefined, fetching: false, error: undefined } as {
+    data: unknown;
+    fetching: boolean;
+    error: { message: string } | undefined;
+  },
+  reexecuteSchemas: vi.fn(),
   tenantContext: {
     tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
     tenantId: "tenant-1",
@@ -79,8 +86,17 @@ vi.mock("urql", () => ({
     }
     return [{ fetching: false }, mocks.provisionAnalyst];
   },
-  // The Internal tab reads analystInternalClusters via useQuery.
-  useQuery: () => [mocks.clustersQuery, mocks.reexecuteClusters],
+  // The Internal tab reads analystInternalClusters and (THINK-283)
+  // analystInternalSchemas via useQuery — route by operation name.
+  useQuery: (args: {
+    query?: { definitions?: { name?: { value?: string } }[] };
+  }) => {
+    const opName = args?.query?.definitions?.[0]?.name?.value;
+    if (opName === "SettingsAnalystInternalSchemas") {
+      return [mocks.schemasQuery, mocks.reexecuteSchemas];
+    }
+    return [mocks.clustersQuery, mocks.reexecuteClusters];
+  },
 }));
 
 // Render the @thinkwork/ui Select as a native <select> keyed by aria-label so
@@ -173,6 +189,20 @@ function selectInternalDatabase(name: string) {
   });
 }
 
+// THINK-283: default schema enumeration — an empty public (explained, not
+// hidden), a rich candidate, and an exact already-registered schema.
+const DEFAULT_SCHEMAS = [
+  { name: "public", eligibleTableCount: 0, alreadyRegistered: false },
+  { name: "raw_jde", eligibleTableCount: 12, alreadyRegistered: false },
+  { name: "platform", eligibleTableCount: 3, alreadyRegistered: true },
+];
+
+function selectInternalSchema(name: string) {
+  fireEvent.change(screen.getByRole("combobox", { name: "Schema" }), {
+    target: { value: name },
+  });
+}
+
 // The dialog-opening actions live in the page header (TooltipIconButtons
 // passed to usePageHeaderActions) — render the latest captured action node
 // and click the named icon button.
@@ -194,6 +224,12 @@ beforeEach(() => {
   mocks.reexecuteClusters.mockReset();
   mocks.clustersQuery = {
     data: { analystInternalClusters: DEFAULT_CLUSTERS },
+    fetching: false,
+    error: undefined,
+  };
+  mocks.reexecuteSchemas.mockReset();
+  mocks.schemasQuery = {
+    data: { analystInternalSchemas: DEFAULT_SCHEMAS },
     fetching: false,
     error: undefined,
   };
@@ -815,6 +851,14 @@ describe("SettingsMcpServers", () => {
     fireEvent.change(screen.getByLabelText("Database"), {
       target: { value: "sales" },
     });
+    // THINK-283: the schema field begins prefilled with "public" and can be
+    // replaced with an explicit schema.
+    expect((screen.getByLabelText("Schema") as HTMLInputElement).value).toBe(
+      "public",
+    );
+    fireEvent.change(screen.getByLabelText("Schema"), {
+      target: { value: "sales_mart" },
+    });
     fireEvent.change(screen.getByLabelText("DB user"), {
       target: { value: "analyst_reader" },
     });
@@ -834,6 +878,7 @@ describe("SettingsMcpServers", () => {
           host: "db.internal.example.com",
           port: 5432,
           database: "sales",
+          schema: "sales_mart",
           dbUser: "analyst_reader",
           password: "s3cret",
           tls: "VERIFY_FULL",
@@ -950,6 +995,9 @@ describe("SettingsMcpServers", () => {
     clickHeaderAction("Register data source");
     // The single cluster auto-selects; pick an unregistered database.
     selectInternalDatabase("thinkwork_hindsight");
+    // THINK-283: with an empty `public`, an explicit schema choice is
+    // required before the form can submit.
+    selectInternalSchema("raw_jde");
 
     // Name and slug are auto-suggested from the database name.
     expect(
@@ -968,6 +1016,7 @@ describe("SettingsMcpServers", () => {
         input: {
           clusterId: "thinkwork-dev-db",
           database: "thinkwork_hindsight",
+          schema: "raw_jde",
           name: "Thinkwork Hindsight",
           slug: "thinkwork-hindsight",
         },
@@ -978,7 +1027,7 @@ describe("SettingsMcpServers", () => {
     expect(screen.getByText("9")).toBeTruthy();
   });
 
-  it("disables already-registered databases in the internal browser", async () => {
+  it("THINK-283: schema-level coverage \u2014 registered/empty schemas disabled, database stays selectable", async () => {
     mocks.listMcpServers.mockResolvedValue({ servers: [] });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
 
@@ -987,14 +1036,67 @@ describe("SettingsMcpServers", () => {
     await screen.findByPlaceholderText("Search servers\u2026");
     clickHeaderAction("Register data source");
 
+    // A database with a registered source is still selectable (coverage is
+    // per-schema now), just labeled.
+    const withSource = screen.getByRole("option", {
+      name: "analytics_demo (has registered source)",
+    }) as HTMLOptionElement;
+    expect(withSource.disabled).toBe(false);
+
+    selectInternalDatabase("thinkwork_hindsight");
+
+    // Empty public is EXPLAINED (visible, disabled) \u2014 never silently hidden.
+    const emptyPublic = screen.getByRole("option", {
+      name: "public (no eligible tables)",
+    }) as HTMLOptionElement;
+    expect(emptyPublic.disabled).toBe(true);
+    // The exact registered schema is disabled; a different schema in the
+    // same database remains selectable with its live table count.
     const registered = screen.getByRole("option", {
-      name: "analytics_demo (registered)",
+      name: "platform (registered)",
     }) as HTMLOptionElement;
     expect(registered.disabled).toBe(true);
-    const available = screen.getByRole("option", {
-      name: "thinkwork_hindsight",
+    const candidate = screen.getByRole("option", {
+      name: "raw_jde \u2014 12 tables",
     }) as HTMLOptionElement;
-    expect(available.disabled).toBe(false);
+    expect(candidate.disabled).toBe(false);
+  });
+
+  it("THINK-283: changing the database clears a stale schema; loading/error states cannot submit", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    render(<SettingsMcpServers />);
+    await screen.findByPlaceholderText("Search servers\u2026");
+    clickHeaderAction("Register data source");
+
+    selectInternalDatabase("thinkwork_hindsight");
+    selectInternalSchema("raw_jde");
+    // Switching databases resets the schema selection: with everything else
+    // auto-filled, submit stays disabled until a NEW schema is chosen (a
+    // stale schema surviving the switch would have left it enabled).
+    selectInternalDatabase("analytics_demo");
+    const submit = screen.getByRole("button", {
+      name: "Register data source",
+    }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    selectInternalSchema("raw_jde");
+    expect(submit.disabled).toBe(false);
+
+    // Loading and error schema states surface accessibly and block submit.
+    mocks.schemasQuery = { data: undefined, fetching: true, error: undefined };
+    selectInternalDatabase("thinkwork_hindsight");
+    expect(await screen.findByRole("status")).toBeTruthy();
+
+    mocks.schemasQuery = {
+      data: undefined,
+      fetching: false,
+      error: { message: "[GraphQL] catalog unreachable" },
+    };
+    selectInternalDatabase("analytics_demo");
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.reexecuteSchemas).toHaveBeenCalled();
   });
 
   it("surfaces an internal registration error verbatim", async () => {
@@ -1014,6 +1116,7 @@ describe("SettingsMcpServers", () => {
     await screen.findByPlaceholderText("Search servers\u2026");
     clickHeaderAction("Register data source");
     selectInternalDatabase("thinkwork_hindsight");
+    selectInternalSchema("raw_jde");
     fireEvent.click(
       screen.getByRole("button", { name: "Register data source" }),
     );
