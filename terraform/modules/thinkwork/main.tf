@@ -1229,8 +1229,9 @@ module "capability_broker" {
   vpc_cidr_block = module.vpc.vpc_cidr_block
   subnet_ids     = local.okf_wiki_subnet_ids
 
-  db_cluster_arn = module.database.db_cluster_arn
-  db_secret_arn  = module.database.graphql_db_secret_arn
+  db_cluster_arn      = module.database.db_cluster_arn
+  db_secret_arn       = module.database.graphql_db_secret_arn
+  db_cluster_endpoint = module.database.cluster_endpoint
 
   lambda_zips_dir        = var.lambda_zips_dir
   lambda_artifact_bucket = var.lambda_artifact_bucket

@@ -44,6 +44,12 @@ variable "db_secret_arn" {
   default = ""
 }
 
+variable "db_cluster_endpoint" {
+  description = "Aurora writer endpoint hostname — DATABASE_HOST for getDb() (evidence store + authorization loader)."
+  type        = string
+  default     = ""
+}
+
 # --- Lambda artifact source (mirrors lambda-api's dual local/remote pattern) -
 
 variable "lambda_zips_dir" {
