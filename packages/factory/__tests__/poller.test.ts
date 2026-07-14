@@ -67,6 +67,41 @@ describe("candidate filter", () => {
     expect(result.laneConflicts).toEqual([]);
   });
 
+  it("inherits LFG from the direct parent so sub-issues never stall the tree at review gates", async () => {
+    const gateway = new FakeGateway([
+      // Sub-issue of an LFG parent, no LFG label of its own (the plan phase
+      // creates children without copying the label — live THINK-284 stalled
+      // its LFG parent THINK-282 at Requirements Review):
+      makeIssue({
+        identifier: "T-1",
+        state: "Requirements Review",
+        labels: ["Claude"],
+        parentLabels: ["LFG"],
+      }),
+      // Parent without LFG → child does NOT inherit:
+      makeIssue({
+        identifier: "T-2",
+        state: "Plan Review",
+        labels: ["Claude"],
+        parentLabels: ["Codex"],
+      }),
+      // No parent at all → own labels decide:
+      makeIssue({
+        identifier: "T-3",
+        state: "In Progress",
+        labels: ["Claude"],
+      }),
+    ]);
+
+    const result = await pollTick(gateway, TEAM);
+    const byId = Object.fromEntries(
+      result.candidates.map((c) => [c.issue.identifier, c]),
+    );
+    expect(byId["T-1"].hasLfg).toBe(true);
+    expect(byId["T-2"].hasLfg).toBe(false);
+    expect(byId["T-3"].hasLfg).toBe(false);
+  });
+
   it("parses existing ledger comments and synthesizes for issues without one", async () => {
     const withLedger = makeIssue({
       identifier: "T-1",

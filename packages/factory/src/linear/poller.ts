@@ -59,6 +59,12 @@ export interface PollCandidate {
   issue: LinearIssueSnapshot;
   /** The single lane label, or null (verification issue with no lane). */
   lane: LaneLabel | null;
+  /**
+   * LFG on the issue itself OR inherited from its direct parent. A plan-phase
+   * sub-issue of an LFG parent must never stall at a review gate waiting for
+   * human approval — that stops the whole tree (live THINK-282: parent stuck
+   * because sub-issue THINK-284 sat at a gate).
+   */
   hasLfg: boolean;
   /** True when the issue is in a Verification-family status. */
   isVerification: boolean;
@@ -120,7 +126,9 @@ function toCandidate(
   return {
     issue,
     lane: lanes.length === 1 ? lanes[0] : null,
-    hasLfg: issue.labels.includes(LFG_LABEL),
+    hasLfg:
+      issue.labels.includes(LFG_LABEL) ||
+      (issue.parentLabels ?? []).includes(LFG_LABEL),
     isVerification: (VERIFICATION_STATES as readonly string[]).includes(
       issue.state,
     ),
