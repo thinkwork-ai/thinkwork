@@ -162,8 +162,13 @@ vi.mock("../../../lib/analyst/register-data-source.js", () => ({
     h.calls.push("s3");
     return { modelKey: "k1", schemaKey: "k2" };
   },
-  insertExternalSourceRow: async () => {
-    h.calls.push("row");
+  insertExternalSourceRow: async (opts: {
+    input?: { schema?: string };
+    source?: { kind?: string; clusterId?: string };
+  }) => {
+    h.calls.push(
+      `row:kind=${opts.source?.kind},cluster=${opts.source?.clusterId},schema=${opts.input?.schema}`,
+    );
     return { id: "srv-9" };
   },
   appendSourceToAnalystProfile: async () => {
@@ -316,7 +321,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
       "tenantSlug",
       "render",
       "s3",
-      "row",
+      "row:kind=internal,cluster=thinkwork-dev-aurora,schema=public",
       "profile",
       "materialize:signedBy=operator:op@example.com",
     ]);

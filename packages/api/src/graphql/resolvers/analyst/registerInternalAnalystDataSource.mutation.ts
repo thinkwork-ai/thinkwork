@@ -207,6 +207,7 @@ export const registerInternalAnalystDataSource = async (
     dbUser: roleName,
     password,
     tls: "required",
+    schema: input.schema,
   };
 
   // 5. Connect AS the reader, verify read-only posture, introspect the surface.
@@ -250,13 +251,17 @@ export const registerInternalAnalystDataSource = async (
     schemaMarkdown,
   });
 
-  // 8. Born-approved registry row.
+  // 8. Born-approved registry row. Internal routing metadata (kind +
+  //    clusterId) and the initial source generation ride in
+  //    runtime_metadata.analyst_source so refresh can find its way back to
+  //    the control plane (THINK-283).
   const { id: serverId } = await insertExternalSourceRow({
     tenantId,
     input: normalized,
     apiBase: apiBase!,
     brokerSecretRef: brokerSecretRef!,
     credentialSecretArn,
+    source: { kind: "internal", clusterId: input.clusterId },
   });
 
   // 9. Union the slug into the analyst profile's tool policy.
