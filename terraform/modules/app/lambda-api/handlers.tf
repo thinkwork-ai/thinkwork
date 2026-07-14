@@ -314,6 +314,17 @@ locals {
       THINKWORK_RELEASE_VERSION         = var.deployment_release_version
       THINKWORK_RELEASE_MANIFEST_URL    = var.deployment_release_manifest_url
       THINKWORK_RELEASE_MANIFEST_SHA256 = var.deployment_release_manifest_sha256
+      # THINK-280 — createTenant RequestResponse-invokes agentcore-admin to
+      # provision the per-tenant sandbox. sandbox-provisioning.ts reads both
+      # from process.env directly (the token is a secret → env, never the SSM
+      # String doc). Broker-session build reads the three broker values below
+      # (broker-session.ts); all EMPTY when the broker is disabled → inert.
+      AGENTCORE_ADMIN_LAMBDA_ARN      = var.agentcore_admin_lambda_arn
+      AGENTCORE_ADMIN_TOKEN           = var.agentcore_admin_token
+      CAPABILITY_BROKER_AUDIENCE      = var.capability_broker_audience
+      CAPABILITY_BROKER_API_ID        = var.capability_broker_api_id
+      CAPABILITY_BROKER_VPCE_DNS      = var.capability_broker_vpce_dns
+      CAPABILITY_BROKER_SESSION_TABLE = var.capability_broker_session_table
     }
     # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
     # model works; the planner + section-writer cap themselves at ~500
@@ -448,6 +459,14 @@ locals {
     "routine-exec-git" = {
       SANDBOX_INTERPRETER_ID = var.agentcore_code_interpreter_id
       ROUTINE_OUTPUT_BUCKET  = "thinkwork-${var.stage}-routine-output"
+      # THINK-280 U7 — the headless capability executor runs inside
+      # routine-exec-git and mints broker sessions. routine-exec-git.ts +
+      # capability-headless-executor.ts read all four from process.env; all
+      # EMPTY when the broker is disabled → the executor stays inert.
+      CAPABILITY_BROKER_SESSION_TABLE = var.capability_broker_session_table
+      CAPABILITY_BROKER_AUDIENCE      = var.capability_broker_audience
+      CAPABILITY_BROKER_API_ID        = var.capability_broker_api_id
+      CAPABILITY_BROKER_VPCE_DNS      = var.capability_broker_vpce_dns
     }
     # graphql-http hosts the createRoutine / publishRoutineVersion / etc.
     # resolvers (Phase B U7) AND the routine-approval-bridge (Phase B

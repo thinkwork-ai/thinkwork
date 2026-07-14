@@ -15,6 +15,10 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0"
+    }
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
@@ -1130,6 +1134,17 @@ module "api" {
   mcp_custom_domain       = var.mcp_custom_domain
   mcp_custom_domain_ready = var.mcp_custom_domain_ready
 
+  # THINK-280 — sandbox provisioning + capability broker wiring. The admin ARN
+  # + token let graphql-http (createTenant) RequestResponse-invoke the
+  # agentcore-admin Lambda. The four CAPABILITY_BROKER_* values are EMPTY when
+  # the broker is disabled (default), so the broker-session path stays inert.
+  agentcore_admin_lambda_arn      = module.agentcore_admin.lambda_arn
+  agentcore_admin_token           = module.agentcore_admin.admin_token
+  capability_broker_session_table = module.capability_broker.session_table_name
+  capability_broker_audience      = module.capability_broker.broker_audience
+  capability_broker_api_id        = module.capability_broker.private_api_id
+  capability_broker_vpce_dns      = module.capability_broker.execute_api_vpce_dns_name
+
   depends_on = [module.cognito]
 }
 
@@ -1219,6 +1234,49 @@ module "capability_broker" {
   lambda_zips_dir        = var.lambda_zips_dir
   lambda_artifact_bucket = var.lambda_artifact_bucket
   lambda_artifact_prefix = var.lambda_artifact_prefix
+}
+
+# AgentCore Code Interpreter substrate (THINK-280). Stage-level ECR repo +
+# per-tenant IAM policy templates the agentcore-admin Lambda consumes. The
+# capability-private VPC placement passes through from the broker outputs —
+# EMPTY lists when the broker is disabled, so the capability-private path stays
+# inert while the regular public/internal sandbox substrate deploys.
+module "agentcore_code_interpreter" {
+  source = "../app/agentcore-code-interpreter"
+
+  stage      = var.stage
+  region     = var.region
+  account_id = var.account_id
+
+  capability_private_subnet_ids         = module.capability_broker.capability_private_interpreter_subnet_ids
+  capability_private_security_group_ids = module.capability_broker.capability_private_interpreter_security_group_id != "" ? [module.capability_broker.capability_private_interpreter_security_group_id] : []
+}
+
+# AgentCore Admin control-plane Lambda (THINK-280). Regular sandbox provisioning
+# (createTenant → invokeProvisionTenantSandbox) depends on this Lambda; it was
+# previously instantiated nowhere. Dedicated least-privilege role. The
+# capability-private env is EMPTY when the broker is disabled → the handler
+# skips capability-private provisioning (ship-inert).
+module "agentcore_admin" {
+  source = "../app/agentcore-admin"
+
+  stage      = var.stage
+  region     = var.region
+  account_id = var.account_id
+
+  lambda_zips_dir        = var.lambda_zips_dir
+  lambda_artifact_bucket = var.lambda_artifact_bucket
+  lambda_artifact_prefix = var.lambda_artifact_prefix
+
+  # db_username defaults to the aurora-postgres master username
+  # ("thinkwork_admin") — same default lambda-api relies on.
+  db_password           = var.db_password
+  db_cluster_endpoint   = module.database.cluster_endpoint
+  database_name         = var.database_name
+  graphql_db_secret_arn = module.database.graphql_db_secret_arn
+
+  capability_private_subnet_ids         = module.agentcore_code_interpreter.capability_private_subnet_ids
+  capability_private_security_group_ids = module.agentcore_code_interpreter.capability_private_security_group_ids
 }
 
 # Runtime identity rename: the former dedicated Flue module is now the Pi
