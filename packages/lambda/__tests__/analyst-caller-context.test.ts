@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ANALYST_CALLER_CONTEXT_KIND,
+  analystSourceClaimsSchema,
   canonicalizeCallerContextPayload,
   encodeAnalystCallerContextHeader,
   hashAnalystRequestBody,
@@ -204,6 +205,79 @@ describe("analyst caller context (THINK-229 U2)", () => {
     const result = verify(headerFor(sessionPayload({ sourceClaims })));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.payload.sourceClaims).toEqual(sourceClaims);
+  });
+
+  it("THINK-283: characterization — a legacy claim without schema/generation still verifies", () => {
+    // Claims minted before schema scoping are in flight during deploy; they
+    // must keep verifying and read as schema "public" via the helper.
+    const legacyClaims = {
+      slug: "sales-pg",
+      host: "sales.example.rds.amazonaws.com",
+      port: 5432,
+      database: "sales",
+      dbUser: "analyst_ro",
+      tls: "verify-full" as const,
+      credentialSecretArn:
+        "thinkwork/dev/analyst/t1/sales-pg-reader-credential",
+      tenantScoped: true,
+    };
+    const result = verify(
+      headerFor(sessionPayload({ sourceClaims: legacyClaims })),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.sourceClaims?.schema).toBeUndefined();
+      expect(analystSourceClaimsSchema(result.payload.sourceClaims!)).toBe(
+        "public",
+      );
+    }
+  });
+
+  it("THINK-283: schema + sourceGeneration round-trip verbatim under the signature", () => {
+    const sourceClaims = {
+      slug: "warehouse",
+      host: "wh.example.rds.amazonaws.com",
+      port: 5432,
+      database: "thinkwork_warehouse",
+      dbUser: "analyst_ro",
+      tls: "verify-full" as const,
+      credentialSecretArn:
+        "thinkwork/dev/analyst/t1/warehouse-reader-credential",
+      tenantScoped: true,
+      schema: "raw_jde",
+      sourceGeneration: "gen-01HZX",
+    };
+    const result = verify(headerFor(sessionPayload({ sourceClaims })));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.sourceClaims).toEqual(sourceClaims);
+      expect(analystSourceClaimsSchema(result.payload.sourceClaims!)).toBe(
+        "raw_jde",
+      );
+    }
+  });
+
+  it("THINK-283: a non-string or empty schema/generation in claims rejects as malformed", () => {
+    const base = {
+      slug: "warehouse",
+      host: "h",
+      port: 5432,
+      database: "d",
+      dbUser: "u",
+      tls: "verify-full" as const,
+      credentialSecretArn: "arn",
+      tenantScoped: true,
+    };
+    for (const bad of [
+      { ...base, schema: "" },
+      { ...base, schema: 7 },
+      { ...base, sourceGeneration: "" },
+      { ...base, sourceGeneration: { v: 1 } },
+    ]) {
+      expect(
+        verify(headerFor(sessionPayload({ sourceClaims: bad as never }))),
+      ).toEqual({ ok: false, reason: "malformed_source_claims" });
+    }
   });
 
   it("THINK-239: a malformed sourceClaims block rejects (typed reason)", () => {

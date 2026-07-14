@@ -9156,6 +9156,12 @@ export type RegisterAnalystDataSourceInput = {
   /** Password for the read-only role. Stored in Secrets Manager, never returned. */
   password: Scalars['String']['input'];
   port: Scalars['Int']['input'];
+  /**
+   * PostgreSQL schema to register (THINK-283). Exactly one schema per source;
+   * exact catalog case is preserved. Omitted defaults to "public". The supplied
+   * credential is validated against this schema's current base tables.
+   */
+  schema?: InputMaybe<Scalars['String']['input']>;
   /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
   slug: Scalars['String']['input'];
   /** TLS posture (default VERIFY_FULL). */
@@ -9175,6 +9181,13 @@ export type RegisterInternalAnalystDataSourceInput = {
   database: Scalars['String']['input'];
   /** Human-readable display name. */
   name: Scalars['String']['input'];
+  /**
+   * PostgreSQL schema to register (THINK-283). Exactly one schema per source;
+   * exact catalog case is preserved; must be an eligible non-system schema on
+   * the selected database. Omitted defaults to "public" (legacy contract — the
+   * operator UI always submits an explicit discovered schema).
+   */
+  schema?: InputMaybe<Scalars['String']['input']>;
   /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
   slug: Scalars['String']['input'];
 };

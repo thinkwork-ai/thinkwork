@@ -26,7 +26,10 @@ const h = vi.hoisted(() => {
     validateError: null as Error | null,
     slugError: null as Error | null,
     probeError: null as Error | null,
-    model: { version: 1 as const, tables: [{ name: "orders", columns: [] }] },
+    model: {
+      version: 2 as const,
+      tables: [{ schema: "public", name: "orders", columns: [] }],
+    },
     folder: { agents: 2, files: [], skipped: [] as unknown[] },
   };
   return {
@@ -149,7 +152,10 @@ describe("registerAnalystDataSource (THINK-239)", () => {
     h.state.validateError = null;
     h.state.slugError = null;
     h.state.probeError = null;
-    h.state.model = { version: 1, tables: [{ name: "orders", columns: [] }] };
+    h.state.model = {
+      version: 2,
+      tables: [{ schema: "public", name: "orders", columns: [] }],
+    };
     h.state.folder = { agents: 2, files: [], skipped: [] };
   });
 
@@ -215,10 +221,10 @@ describe("registerAnalystDataSource (THINK-239)", () => {
 
   it("runs the full ceremony in order and returns the result", async () => {
     h.state.model = {
-      version: 1,
+      version: 2,
       tables: [
-        { name: "orders", columns: [] },
-        { name: "customers", columns: [] },
+        { schema: "public", name: "orders", columns: [] },
+        { schema: "public", name: "customers", columns: [] },
       ],
     };
     h.state.folder = { agents: 3, files: [], skipped: [{}] };

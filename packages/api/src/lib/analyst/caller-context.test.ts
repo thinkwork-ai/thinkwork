@@ -209,6 +209,8 @@ describe("analyst caller-context minting (THINK-229 U2)", () => {
       credentialSecretArn:
         "thinkwork/dev/analyst/t1/sales-pg-reader-credential",
       tenantScoped: true,
+      // THINK-283: legacy rows without a stored schema always mint public.
+      schema: "public",
     });
     // Builtin rows (no analyst_source) → null.
     expect(sourceClaimsFromRuntimeMetadata("sales-pg", {})).toBeNull();
@@ -216,6 +218,45 @@ describe("analyst caller-context minting (THINK-229 U2)", () => {
     expect(
       sourceClaimsFromRuntimeMetadata("sales-pg", {
         analyst_source: { host: "h" },
+      }),
+    ).toBeNull();
+  });
+
+  it("THINK-283: stored schema and generation ride into minted claims", () => {
+    const base = {
+      host: "wh.example.rds.amazonaws.com",
+      port: 5432,
+      database: "thinkwork_warehouse",
+      dbUser: "analyst_ro",
+      tls: "verify-full",
+      credentialSecretArn:
+        "thinkwork/dev/analyst/t1/warehouse-reader-credential",
+      tenantScoped: true,
+    };
+    expect(
+      sourceClaimsFromRuntimeMetadata("warehouse", {
+        analyst_source: {
+          ...base,
+          schema: "raw_jde",
+          sourceGeneration: "gen-01HZX",
+        },
+      }),
+    ).toMatchObject({ schema: "raw_jde", sourceGeneration: "gen-01HZX" });
+    // Legacy row with no generation mints no generation (broker fallback).
+    const legacy = sourceClaimsFromRuntimeMetadata("warehouse", {
+      analyst_source: base,
+    });
+    expect(legacy?.schema).toBe("public");
+    expect(legacy?.sourceGeneration).toBeUndefined();
+    // Present-but-malformed values are a corrupt row, not a default.
+    expect(
+      sourceClaimsFromRuntimeMetadata("warehouse", {
+        analyst_source: { ...base, schema: "" },
+      }),
+    ).toBeNull();
+    expect(
+      sourceClaimsFromRuntimeMetadata("warehouse", {
+        analyst_source: { ...base, sourceGeneration: 42 },
       }),
     ).toBeNull();
   });
