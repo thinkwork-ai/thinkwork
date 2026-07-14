@@ -28,6 +28,34 @@ import {
   type AnalystCallerContextPayload,
 } from "../analyst-caller-context.js";
 
+// THINK-283 U7: the sourced path now re-authorizes against current control
+// state before anything else. Default allow so the THINK-239 auth-seam tests
+// keep exercising their own layer; individual tests flip it to deny.
+const { mockAuthorize, mockConnectExternalSource, mockGetReaderClient } =
+  vi.hoisted(() => ({
+    mockAuthorize: vi.fn(async () => ({ ok: true as const })),
+    mockConnectExternalSource: vi.fn(async () => {
+      throw new Error("source connection must not be opened in these tests");
+    }),
+    mockGetReaderClient: vi.fn(async () => {
+      throw new Error("platform reader must not be opened in these tests");
+    }),
+  }));
+
+vi.mock("../analyst-source-authorization.js", () => ({
+  authorizeAnalystSourceCall: mockAuthorize,
+}));
+
+vi.mock("../analyst-reader-db.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../analyst-reader-db.js")>();
+  return {
+    ...actual,
+    connectExternalSource: mockConnectExternalSource,
+    getAnalystReaderClient: mockGetReaderClient,
+  };
+});
+
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const { privateKey: wrongKey } = generateKeyPairSync("ed25519");
 const PUBLIC_PEM = publicKey.export({ type: "spki", format: "pem" }) as string;
@@ -274,6 +302,75 @@ describe("analyst-query-broker caller-context auth (THINK-229 U2)", () => {
         outcome: "ok",
         source: "sales-pg",
         tenant: TEST_TENANT,
+      }),
+    ]);
+  });
+
+  it("THINK-283 U7: sourced authorization denial → 401 BEFORE any credential or source access", async () => {
+    mockAuthorize.mockResolvedValueOnce({
+      ok: false,
+      reason: "refresh_gate",
+    } as never);
+    const response = await handler(
+      makeSourcedEvent({
+        sourceSlug: "sales-pg",
+        // tools/call — the request that WOULD resolve the credential and
+        // open the source connection if authorization fell through.
+        body: {
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "query", arguments: { sql: "SELECT 1" } },
+        },
+        contextHeader: signedHeader(
+          contextPayload({ sourceClaims: sourceClaimsFor("sales-pg") }),
+        ),
+      }),
+    );
+    expect(response.statusCode).toBe(401);
+    expect(authLogs()).toEqual([
+      expect.objectContaining({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: "source_authz_refresh_gate",
+        source: "sales-pg",
+      }),
+    ]);
+    // Denial happened before Secrets Manager / the source database.
+    expect(mockConnectExternalSource).not.toHaveBeenCalled();
+    // The authorizer received the VERIFIED identity, never raw headers.
+    expect(mockAuthorize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TEST_TENANT,
+        slug: "sales-pg",
+        claims: expect.objectContaining({ slug: "sales-pg" }),
+      }),
+    );
+  });
+
+  it("THINK-283 U7: a stale-generation claim is denied at action time", async () => {
+    mockAuthorize.mockResolvedValueOnce({
+      ok: false,
+      reason: "generation_mismatch",
+    } as never);
+    const response = await handler(
+      makeSourcedEvent({
+        sourceSlug: "sales-pg",
+        body: LIST_BODY,
+        contextHeader: signedHeader(
+          contextPayload({
+            sourceClaims: {
+              ...sourceClaimsFor("sales-pg"),
+              sourceGeneration: "gen-stale",
+            },
+          }),
+        ),
+      }),
+    );
+    expect(response.statusCode).toBe(401);
+    expect(authLogs()).toEqual([
+      expect.objectContaining({
+        reason: "source_authz_generation_mismatch",
       }),
     ]);
   });
