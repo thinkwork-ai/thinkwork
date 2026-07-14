@@ -44,6 +44,9 @@ BUNDLED_AGENTCORE_ESBUILD_FLAGS=(
   --format=esm
   --minify
   --sourcemap
+  # THINK-280: routine-exec-git materializes the capability-sdk Python source
+  # into the sandbox at run time — the .py files are imported as text strings.
+  --loader:.py=text
   --external:@aws-sdk/client-bedrock
   --external:@aws-sdk/client-cloudwatch-logs
   --external:@aws-sdk/client-lambda
