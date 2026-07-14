@@ -1492,6 +1492,18 @@ jobs:
               -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_lambda_invoke
               -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_states
             )
+            # THINK-280: the capability-broker + agentcore-admin Lambdas live in
+            # their OWN app modules, NOT the api `handler` for_each above — so a
+            # code-only change to either (no terraform edited) was never applied
+            # on a no-tf deploy and shipped stale forever (the broker's
+            # denyingAuthorizationLoader stayed live even after the real loader
+            # merged). Target both function resources so their code self-heals on
+            # every no-tf deploy. When the broker is disabled (count 0) the
+            # address matches no instance and is a harmless no-op.
+            TF_TARGET_ARGS+=(
+              -target=module.thinkwork.module.capability_broker.aws_lambda_function.broker
+              -target=module.thinkwork.module.agentcore_admin.aws_lambda_function.admin
+            )
           fi
           # -refresh=false skips ~30s of "Refreshing state…" against ~700
           # resources on every push. Out-of-band drift is caught by the
