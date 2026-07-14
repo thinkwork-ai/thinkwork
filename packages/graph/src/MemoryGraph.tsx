@@ -310,14 +310,39 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       }
     }, [allNodes, onTypesLoaded]);
 
-    // Report the distinct banks present (id + human label) for a Bank facet.
+    // Report banks for the Bank facet. The authoritative list comes from the
+    // query's `banks` field (tenant-enumerated server-side), so every bank is
+    // filterable even when none of its entities survive the graph's per-bank
+    // cap — the facet must never depend on which nodes happened to render.
+    // Node-derived banks remain the fallback for the multi-agent path and
+    // older servers that don't return `banks`.
     const prevBanksRef = useRef<string>("");
     useEffect(() => {
-      if (!onBanksLoaded || allNodes.length === 0) return;
+      if (!onBanksLoaded) return;
       const banks = new Map<string, string>();
-      for (const n of allNodes) {
-        if (n.bankId && !banks.has(n.bankId)) {
-          banks.set(n.bankId, n.bankName ?? n.bankId);
+      if (isMultiAgent) {
+        for (const graph of Object.values(multiResults)) {
+          for (const b of ((graph as any)?.banks ?? []) as Array<{
+            id: string;
+            name: string;
+          }>) {
+            if (b?.id && !banks.has(b.id)) banks.set(b.id, b.name ?? b.id);
+          }
+        }
+      } else {
+        for (const b of (singleResult.data?.memoryGraph?.banks ?? []) as Array<{
+          id: string;
+          name: string;
+        }>) {
+          if (b?.id && !banks.has(b.id)) banks.set(b.id, b.name ?? b.id);
+        }
+      }
+      if (banks.size === 0) {
+        if (allNodes.length === 0) return;
+        for (const n of allNodes) {
+          if (n.bankId && !banks.has(n.bankId)) {
+            banks.set(n.bankId, n.bankName ?? n.bankId);
+          }
         }
       }
       const list = Array.from(banks, ([id, name]) => ({ id, name })).sort(
@@ -328,7 +353,13 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         prevBanksRef.current = key;
         onBanksLoaded(list);
       }
-    }, [allNodes, onBanksLoaded]);
+    }, [
+      allNodes,
+      onBanksLoaded,
+      isMultiAgent,
+      multiResults,
+      singleResult.data,
+    ]);
 
     // Determine which nodes match filters
     const hasFilter =

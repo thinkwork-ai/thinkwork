@@ -36,6 +36,8 @@ const TERMINAL_STATUSES = new Set([
   "failed",
   "cancelled",
   "timed_out",
+  "blocked",
+  "degraded",
 ]);
 
 export function SettingsRoutineExecutionDetail() {

@@ -52,6 +52,13 @@ export type AnalystCallerActor = "agent" | "delegation" | "system_refresh";
 export type AnalystSourceTls = "verify-full" | "required";
 
 /**
+ * Every PostgreSQL analyst source is scoped to exactly ONE schema
+ * (THINK-283). Legacy claims and rows predate schema scoping and omit the
+ * field; they are always read as `public`.
+ */
+export const ANALYST_DEFAULT_SOURCE_SCHEMA = "public";
+
+/**
  * Source claims (THINK-239) — the signed description of the EXTERNAL Postgres
  * data source a sourced broker request (`POST /mcp/analyst/{sourceSlug}`) must
  * connect to. Absent on builtin (`POST /mcp/analyst`) requests, which keep
@@ -75,6 +82,27 @@ export interface AnalystSourceClaims {
   credentialSecretArn: string;
   /** Whether the source is scoped to a single tenant (informational). */
   tenantScoped: boolean;
+  /**
+   * Selected PostgreSQL schema, raw catalog case (THINK-283). Legacy
+   * in-flight claims omit it; readers use
+   * {@link analystSourceClaimsSchema} instead of touching this directly.
+   */
+  schema?: string;
+  /**
+   * Opaque source generation stamped at registration and advanced by every
+   * successful explicit refresh (THINK-283). Legacy claims omit it and stay
+   * valid only while the source row itself has no generation; once a row is
+   * refreshed, the broker requires exact generation equality.
+   */
+  sourceGeneration?: string;
+}
+
+/**
+ * Effective schema of a source claim: legacy claims that predate schema
+ * scoping resolve to `public` (THINK-283).
+ */
+export function analystSourceClaimsSchema(claims: AnalystSourceClaims): string {
+  return claims.schema ?? ANALYST_DEFAULT_SOURCE_SCHEMA;
 }
 
 export interface AnalystCallerContextPayload {
@@ -304,7 +332,14 @@ export function isValidSourceClaims(
     (c.tls === "verify-full" || c.tls === "required") &&
     typeof c.credentialSecretArn === "string" &&
     c.credentialSecretArn.length > 0 &&
-    typeof c.tenantScoped === "boolean"
+    typeof c.tenantScoped === "boolean" &&
+    // THINK-283: schema/generation are optional (legacy claims omit them),
+    // but a present value must be a non-empty string — a claim carrying a
+    // non-string or empty schema is malformed, never coerced.
+    (c.schema === undefined ||
+      (typeof c.schema === "string" && c.schema.length > 0)) &&
+    (c.sourceGeneration === undefined ||
+      (typeof c.sourceGeneration === "string" && c.sourceGeneration.length > 0))
   );
 }
 

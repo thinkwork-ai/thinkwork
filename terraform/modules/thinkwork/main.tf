@@ -717,11 +717,17 @@ module "cognito" {
   saml_identity_providers    = var.saml_identity_providers
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
   custom_auth_lambda_zip     = var.cognito_custom_auth_lambda_zip
-  api_auth_secret            = var.api_auth_secret
-  email_source_arn           = var.cognito_email_source_arn
-  from_email_address         = var.cognito_from_email_address
-  reply_to_email_address     = var.cognito_reply_to_email_address
-  invite_email_subject       = var.cognito_invite_email_subject
+  # Remote custom auth is part of the pinned enterprise release bundle. Keep
+  # the shared artifact bucket inert for direct module consumers that have not
+  # opted into required release artifacts; local zip configuration remains an
+  # independent explicit opt-in below.
+  custom_auth_lambda_s3_bucket = var.require_lambda_artifacts ? var.lambda_artifact_bucket : ""
+  custom_auth_lambda_s3_key    = var.require_lambda_artifacts && var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-custom-auth.zip" : ""
+  api_auth_secret              = var.api_auth_secret
+  email_source_arn             = var.cognito_email_source_arn
+  from_email_address           = var.cognito_from_email_address
+  reply_to_email_address       = var.cognito_reply_to_email_address
+  invite_email_subject         = var.cognito_invite_email_subject
   invite_email_message = (
     var.cognito_invite_email_message != ""
     ? var.cognito_invite_email_message

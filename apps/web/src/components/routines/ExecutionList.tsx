@@ -42,6 +42,8 @@ const TERMINAL_STATUSES = new Set<string>([
   "failed",
   "cancelled",
   "timed_out",
+  "blocked",
+  "degraded",
 ]);
 
 /** UI-side status filter id. `all` disables the GraphQL `status` arg;

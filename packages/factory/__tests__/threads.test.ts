@@ -110,3 +110,32 @@ describe("outbound posts", () => {
     expect(slack.posts[0].mentionUserIds).toEqual(OPERATORS);
   });
 });
+
+describe("root-message console buttons (gate-enrolled issues)", () => {
+  it("carries the state's buttons when state is provided — a Verification enrollment is tappable from message one", async () => {
+    await openThreadForIssue(
+      {
+        issueId: "uuid-1",
+        identifier: "THINK-276",
+        title: "console",
+        url: "https://linear.test/THINK-276",
+        state: "Verification",
+        labels: [],
+      },
+      deps,
+    );
+    const root = slack.posts[0];
+    const body = JSON.stringify(root.blocks);
+    expect(body).toContain("factory-console:approve");
+    expect(body).toContain("factory-console:result");
+  });
+
+  it("omits buttons when state is unknown (legacy callers unchanged)", async () => {
+    await openThreadForIssue(
+      { issueId: "uuid-2", identifier: "THINK-1", title: "t" },
+      deps,
+    );
+    const root = slack.posts[0];
+    expect(JSON.stringify(root.blocks ?? [])).not.toContain("factory-console:");
+  });
+});

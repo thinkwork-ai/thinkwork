@@ -555,38 +555,186 @@ export interface StoredAnalystColumn {
   pgType: string;
 }
 
-export interface StoredAnalystTable {
+/** Legacy v1 stored table — predates schema scoping, implicitly `public`. */
+export interface StoredAnalystTableV1 {
   name: string;
   columns: StoredAnalystColumn[];
 }
 
-export interface StoredAnalystModel {
+/** Legacy v1 stored model (THINK-239). Normalized to v2 on read. */
+export interface StoredAnalystModelV1 {
   version: 1;
-  tables: StoredAnalystTable[];
+  tables: StoredAnalystTableV1[];
+}
+
+export interface StoredAnalystTable {
+  /** Raw catalog schema name, exact case (THINK-283). */
+  schema: string;
+  name: string;
+  columns: StoredAnalystColumn[];
 }
 
 /**
- * Build a deterministic stored model from introspected `(table, column,
- * pgType)` rows (information_schema.columns of the reader-granted surface).
- * Tables and columns are sorted so the same live schema always yields a
- * byte-identical model.json — the drift check hashes it.
+ * Stored analyst model v2 (THINK-283): every table carries its schema so
+ * qualified identities like `raw_jde.orders` survive persistence. All
+ * writers emit v2; readers accept v1 artifacts via
+ * {@link normalizeStoredAnalystModel}, which supplies `public`.
+ */
+export interface StoredAnalystModel {
+  version: 2;
+  tables: StoredAnalystTable[];
+}
+
+/** Every stored-model shape a reader may encounter (S3 artifacts persist). */
+export type AnyStoredAnalystModel = StoredAnalystModel | StoredAnalystModelV1;
+
+/** Sources that predate schema scoping are always `public` (THINK-283). */
+export const ANALYST_DEFAULT_SOURCE_SCHEMA = "public";
+
+/**
+ * Bare PostgreSQL identifiers that need no quoting: unquoted identifiers
+ * fold to lowercase, so anything with uppercase, punctuation, or a leading
+ * digit must be double-quoted to keep its exact catalog identity.
+ */
+const BARE_PG_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
+
+/**
+ * Render one catalog identifier as SQL-safe text: bare when possible,
+ * double-quoted (embedded quotes doubled) otherwise. Raw catalog identity is
+ * never altered — `RawJde` renders as `"RawJde"`, not `rawjde`.
+ */
+export function quotePgIdentifier(name: string): string {
+  if (BARE_PG_IDENTIFIER.test(name)) return name;
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/**
+ * SQL-safe qualified table reference (`raw_jde.orders`,
+ * `"RawJde"."Order Items"`) — what guidance renders wherever the text is
+ * meant to be copied into a query.
+ */
+export function qualifiedPgTableRef(schema: string, name: string): string {
+  return `${quotePgIdentifier(schema)}.${quotePgIdentifier(name)}`;
+}
+
+/**
+ * Stable qualified descriptor over RAW catalog identity (`schema.table`,
+ * no quoting) — the key drift checks and grant records use so same-named
+ * tables in different schemas can never collide (THINK-283).
+ */
+export function storedTableDescriptor(table: {
+  schema: string;
+  name: string;
+}): string {
+  return `${table.schema}.${table.name}`;
+}
+
+/**
+ * Normalize any persisted model artifact to v2. v1 tables get
+ * `schema: "public"`; v2 passes through with its schemas validated. A
+ * malformed artifact (unknown version, non-array tables, empty/non-string
+ * schema or table names) throws — readers must fail closed on corrupt
+ * artifacts, never guess.
+ */
+export function normalizeStoredAnalystModel(raw: unknown): StoredAnalystModel {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("analyst stored model: artifact is not an object");
+  }
+  const model = raw as Record<string, unknown>;
+  if (model.version !== 1 && model.version !== 2) {
+    throw new Error(
+      `analyst stored model: unsupported version ${JSON.stringify(model.version)}`,
+    );
+  }
+  if (!Array.isArray(model.tables)) {
+    throw new Error("analyst stored model: tables is not an array");
+  }
+  const tables = model.tables.map((entry, index): StoredAnalystTable => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`analyst stored model: tables[${index}] is malformed`);
+    }
+    const t = entry as Record<string, unknown>;
+    if (typeof t.name !== "string" || t.name.length === 0) {
+      throw new Error(
+        `analyst stored model: tables[${index}] has no table name`,
+      );
+    }
+    const schema =
+      model.version === 1 ? ANALYST_DEFAULT_SOURCE_SCHEMA : t.schema;
+    if (typeof schema !== "string" || schema.length === 0) {
+      throw new Error(
+        `analyst stored model: tables[${index}] ("${t.name}") has an invalid schema`,
+      );
+    }
+    if (!Array.isArray(t.columns)) {
+      throw new Error(
+        `analyst stored model: tables[${index}] ("${t.name}") columns is not an array`,
+      );
+    }
+    const columns = t.columns.map((col, colIndex): StoredAnalystColumn => {
+      if (!col || typeof col !== "object" || Array.isArray(col)) {
+        throw new Error(
+          `analyst stored model: tables[${index}].columns[${colIndex}] is malformed`,
+        );
+      }
+      const c = col as Record<string, unknown>;
+      if (
+        typeof c.name !== "string" ||
+        c.name.length === 0 ||
+        typeof c.pgType !== "string"
+      ) {
+        throw new Error(
+          `analyst stored model: tables[${index}].columns[${colIndex}] is malformed`,
+        );
+      }
+      return { name: c.name, pgType: c.pgType };
+    });
+    return { schema, name: t.name, columns };
+  });
+  return { version: 2, tables };
+}
+
+/**
+ * Build a deterministic stored model from introspected `(schema, table,
+ * column, pgType)` rows (information_schema.columns of the reader-granted
+ * surface). Rows without a schema default to `public` (pre-THINK-283
+ * callers). Tables and columns are sorted so the same live schema always
+ * yields a byte-identical model.json — the drift check hashes it.
  */
 export function storedModelFromColumns(
-  rows: Array<{ table: string; column: string; pgType: string }>,
+  rows: Array<{
+    schema?: string;
+    table: string;
+    column: string;
+    pgType: string;
+  }>,
 ): StoredAnalystModel {
-  const byTable = new Map<string, StoredAnalystColumn[]>();
+  const byTable = new Map<
+    string,
+    { schema: string; name: string; columns: StoredAnalystColumn[] }
+  >();
   for (const row of rows) {
-    const cols = byTable.get(row.table) ?? [];
-    cols.push({ name: row.column, pgType: row.pgType });
-    byTable.set(row.table, cols);
+    const schema = row.schema ?? ANALYST_DEFAULT_SOURCE_SCHEMA;
+    const key = `${schema} ${row.table}`;
+    const entry = byTable.get(key) ?? {
+      schema,
+      name: row.table,
+      columns: [],
+    };
+    entry.columns.push({ name: row.column, pgType: row.pgType });
+    byTable.set(key, entry);
   }
-  const tables: StoredAnalystTable[] = [...byTable.entries()]
-    .map(([name, columns]) => ({
-      name,
-      columns: [...columns].sort((a, b) => a.name.localeCompare(b.name)),
+  const tables: StoredAnalystTable[] = [...byTable.values()]
+    .map((entry) => ({
+      schema: entry.schema,
+      name: entry.name,
+      columns: [...entry.columns].sort((a, b) => a.name.localeCompare(b.name)),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  return { version: 1, tables };
+    .sort(
+      (a, b) =>
+        a.schema.localeCompare(b.schema) || a.name.localeCompare(b.name),
+    );
+  return { version: 2, tables };
 }
 
 /**
@@ -594,30 +742,42 @@ export function storedModelFromColumns(
  * counterpart of {@link generateAnalystSchemaMarkdown}. Same table/column
  * layout so the analyst's SQL-authoring guidance is identical across builtin
  * and registered sources.
+ *
+ * THINK-283: accepts v1 or v2 artifacts (v1 normalizes to `public`) and
+ * renders SQL-safe qualified references (`raw_jde.orders`) so copied names
+ * always resolve against the source's actual schema.
  */
 export function renderStoredAnalystSchemaMarkdown(
-  model: StoredAnalystModel,
+  model: AnyStoredAnalystModel,
   opts: { sourceName: string },
 ): string {
-  const tables = [...model.tables].sort((a, b) => a.name.localeCompare(b.name));
+  const normalized = normalizeStoredAnalystModel(model);
+  const tables = [...normalized.tables].sort(
+    (a, b) => a.schema.localeCompare(b.schema) || a.name.localeCompare(b.name),
+  );
+  const sqlRef = (t: StoredAnalystTable) =>
+    qualifiedPgTableRef(t.schema, t.name);
+  const anchor = (t: StoredAnalystTable) =>
+    storedTableDescriptor(t).replace(/[^a-zA-Z0-9]+/g, "-");
   const lines: string[] = [
     `# ${opts.sourceName} — semantic model`,
     "",
     "<!-- GENERATED FILE — do not edit by hand. -->",
-    "<!-- Regenerate by re-registering this data source. -->",
+    "<!-- Regenerate by re-registering or refreshing this data source. -->",
     "",
     "This document describes every table you are permitted to query on this",
     "data source. It was introspected from the source's granted reader surface;",
     "tables and columns not listed here are not granted to your database role,",
     "so do not query them (and avoid `SELECT *` — name the columns you need).",
+    "Always use the schema-qualified table names exactly as written below.",
     "",
     "## Tables",
     "",
-    ...tables.map((t) => `- [${t.name}](#${t.name.replace(/_/g, "-")})`),
+    ...tables.map((t) => `- [${sqlRef(t)}](#${anchor(t)})`),
     "",
   ];
   for (const table of tables) {
-    lines.push(`## ${table.name}`, "");
+    lines.push(`## ${sqlRef(table)}`, "");
     lines.push("| column | type |");
     lines.push("| --- | --- |");
     for (const column of [...table.columns].sort((a, b) =>

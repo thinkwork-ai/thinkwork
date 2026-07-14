@@ -20,6 +20,7 @@ import type { Logger } from "../logger.js";
 import type { FactoryStore, SlackThreadRow } from "../store/db.js";
 import { context, section } from "./blocks.js";
 import type { SlackGateway } from "./client.js";
+import { actionsForState } from "./console.js";
 
 export interface ThreadRef {
   channel: string;
@@ -42,6 +43,15 @@ export interface IssueThreadTarget {
   title: string;
   /** Issue web URL — the root message links the identifier when set. */
   url?: string | null;
+  /**
+   * Current workflow state + labels, when known: the root message carries the
+   * state's console buttons (R5). An issue that enrolls directly AT a review
+   * gate posts no milestone, so without this its thread starts button-less
+   * and the operator has to discover typed verbs (live paper cut, THINK-276's
+   * own approval).
+   */
+  state?: string;
+  labels?: readonly string[];
 }
 
 function toRef(row: SlackThreadRow): ThreadRef {
@@ -65,11 +75,16 @@ export async function openThreadForIssue(
     ? `<${target.url}|${target.identifier}>`
     : `*${target.identifier}*`;
   const rootText = `:factory: ${ref} — ${target.title}`;
+  const rootBlocks = [
+    section(rootText),
+    context("Progress lands in this thread — reply here to steer."),
+  ];
+  if (target.state !== undefined) {
+    const stateActions = actionsForState(target.state, target.labels ?? []);
+    if (stateActions !== null) rootBlocks.push(stateActions);
+  }
   const rootTs = await deps.slack.postMessage(deps.channelId, rootText, {
-    blocks: [
-      section(rootText),
-      context("Progress lands in this thread — reply here to steer."),
-    ],
+    blocks: rootBlocks,
   });
   const row = deps.store.upsertSlackThread({
     issueId: target.issueId,

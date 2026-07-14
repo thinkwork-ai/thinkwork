@@ -29,6 +29,10 @@ export const MemoryGraphQuery = gql`
         label
         weight
       }
+      banks {
+        id
+        name
+      }
     }
   }
 `;
