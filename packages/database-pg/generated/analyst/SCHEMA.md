@@ -3311,6 +3311,11 @@ Join hints:
 | commit_sha | text |  |
 | validated_sha | text |  |
 | cache_served | boolean |  |
+| capability_dependencies_json | jsonb |  |
+| config_fingerprint | text |  |
+| readiness_outcome | text |  |
+| remediation_json | jsonb |  |
+| broker_session_id | uuid |  |
 | created_at | timestamp with time zone | not null |
 
 Join hints:
@@ -3369,6 +3374,8 @@ Join hints:
 | stderr_s3_uri | text |  |
 | stdout_preview | text |  |
 | truncated | boolean | not null |
+| broker_call_id | uuid |  |
+| artifact_id | uuid |  |
 | created_at | timestamp with time zone | not null |
 
 Join hints:

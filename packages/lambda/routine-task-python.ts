@@ -35,6 +35,7 @@
  */
 
 import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
+import type { SessionBootstrap } from "@thinkwork/capability-contracts";
 import {
   BedrockAgentCoreClient,
   type CodeInterpreterStreamOutput,
@@ -80,6 +81,20 @@ export interface PythonTaskInput {
   environment?: Record<string, string>;
   /** Tenant credential handles to expose to user code as `credentials`. */
   credentialBindings?: CredentialBindingInput[];
+  /**
+   * THINK-280 U7 — capability-private broker session selection. When present,
+   * the sandbox runs in the capability-private interpreter and the short-lived
+   * session bootstrap is written into user code as the reserved global
+   * `_twcap_session`, which the in-sandbox broker client reads to sign
+   * proof-of-possession calls. The bootstrap's `privateKey` is a <=15-minute
+   * session capability (NEVER a provider credential); it is added to the output
+   * redactor so it can never appear in stdout/stderr/error text. This is the
+   * SOLE capability the sandbox holds — provider credentials stay broker-side.
+   */
+  capabilityPrivateSession?: {
+    interpreterId: string;
+    bootstrap: SessionBootstrap;
+  };
   /** Optional override for the 4KB preview cap; tests only. */
   previewCapBytes?: number;
   /** Hard timeout for the user code, in seconds. AgentCore enforces; the
@@ -233,6 +248,9 @@ export async function invokePythonTask(
   const redactor = createRoutineOutputRedactor([
     resolvedCredentials.credentials,
     resolvedCredentials.redactionValues,
+    // The session capability is short-lived, but it is still a signing key —
+    // scrub it from all offloaded output as defense in depth.
+    input.capabilityPrivateSession?.bootstrap.privateKey,
   ]);
 
   // ---- 1. Start session ------------------------------------------------
@@ -287,6 +305,7 @@ export async function invokePythonTask(
       language,
       resolvedCredentials.credentials,
       input.input,
+      input.capabilityPrivateSession?.bootstrap,
     );
     const invoke = await agentCore.send(
       new InvokeCodeInterpreterCommand({
@@ -599,6 +618,7 @@ function buildCodeWithEnvPrelude(
   language: "python" | "typescript" = "python",
   credentials: Record<string, Record<string, unknown>> = {},
   executionInput?: unknown,
+  capabilitySession?: SessionBootstrap,
 ): string {
   const allowed = new Set(allowlist);
   const filtered: Record<string, string> = {};
@@ -606,10 +626,12 @@ function buildCodeWithEnvPrelude(
     if (allowed.has(k)) filtered[k] = v;
   }
   const hasExecutionInput = executionInput !== undefined;
+  const hasSession = capabilitySession !== undefined;
   if (
     Object.keys(filtered).length === 0 &&
     Object.keys(credentials).length === 0 &&
-    !hasExecutionInput
+    !hasExecutionInput &&
+    !hasSession
   ) {
     return code;
   }
@@ -617,9 +639,11 @@ function buildCodeWithEnvPrelude(
     const envLiteral = JSON.stringify(filtered);
     const credentialsLiteral = JSON.stringify(credentials);
     const inputLiteral = JSON.stringify(executionInput ?? null);
+    const sessionLiteral = JSON.stringify(capabilitySession ?? null);
     const prelude =
       `const credentials = ${credentialsLiteral};\n` +
       `const input = ${inputLiteral};\n` +
+      `const _twcap_session = ${sessionLiteral};\n` +
       `const __thinkworkEnv = ${envLiteral};\n` +
       `if (typeof process !== "undefined" && process.env) Object.assign(process.env, __thinkworkEnv);\n`;
     return prelude + code;
@@ -627,7 +651,10 @@ function buildCodeWithEnvPrelude(
   const envLiteral = JSON.stringify(JSON.stringify(filtered));
   const credentialsLiteral = JSON.stringify(JSON.stringify(credentials));
   const inputLiteral = JSON.stringify(JSON.stringify(executionInput ?? null));
-  const prelude = `import json\nimport os\ncredentials = json.loads(${credentialsLiteral})\ninput = json.loads(${inputLiteral})\nos.environ.update(json.loads(${envLiteral}))\n`;
+  const sessionLiteral = JSON.stringify(
+    JSON.stringify(capabilitySession ?? null),
+  );
+  const prelude = `import json\nimport os\ncredentials = json.loads(${credentialsLiteral})\ninput = json.loads(${inputLiteral})\n_twcap_session = json.loads(${sessionLiteral})\nos.environ.update(json.loads(${envLiteral}))\n`;
 
   // Skip past any leading `from __future__ import ...` lines (and
   // surrounding blank lines / comments). Future imports MUST be first.

@@ -67,6 +67,14 @@ export const routineStepEvents = pgTable(
     stderr_s3_uri: text("stderr_s3_uri"),
     stdout_preview: text("stdout_preview"),
     truncated: boolean("truncated").notNull().default(false),
+    // ---- THINK-280 U7: per-step capability evidence linkage ----
+    // A capability-headless step that dispatched a governed provider/platform
+    // operation links back to the append-only broker-call evidence row and,
+    // for a durable Artifact effect, the produced artifact. Both NULL on every
+    // ordinary recipe step. Loose linkage (not FKs — evidence is append-only).
+    // See migration 0249.
+    broker_call_id: uuid("broker_call_id"),
+    artifact_id: uuid("artifact_id"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

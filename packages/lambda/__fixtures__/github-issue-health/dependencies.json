@@ -1,0 +1,36 @@
+{
+  "_comment": "Exact pinned capability dependency manifest for the THINK-280 U7 issue-health tracer. Each entry is a { twcap, contractHash, definitionVersionId } the trusted executor validates at preflight (contract drift + service-binding readiness) before opening a broker session. contractHash values are placeholders resolved at gate time from the admitted definition version's contract_hashes_json — the tracer uses ONLY these read operations plus the platform Artifact write. namespace is templated per tenant at admission.",
+  "namespace_template": "<tenant-slug>",
+  "dependencies": [
+    {
+      "twcap": "twcap:<tenant-slug>/connection/github-rest@1#repos.get",
+      "operationId": "repos.get",
+      "contractHash": "<contract-hash:repos.get>",
+      "definitionVersionId": "<github-rest-definition-version-id>",
+      "effect": "read"
+    },
+    {
+      "twcap": "twcap:<tenant-slug>/connection/github-rest@1#issues.list",
+      "operationId": "issues.list",
+      "contractHash": "<contract-hash:issues.list>",
+      "definitionVersionId": "<github-rest-definition-version-id>",
+      "effect": "read"
+    },
+    {
+      "twcap": "twcap:<tenant-slug>/connection/github-rest@1#issues.get",
+      "operationId": "issues.get",
+      "contractHash": "<contract-hash:issues.get>",
+      "definitionVersionId": "<github-rest-definition-version-id>",
+      "effect": "read"
+    },
+    {
+      "twcap": "twcap:platform/platform/core@1#artifact.create",
+      "operationId": "artifact.create",
+      "contractHash": "<contract-hash:artifact.create>",
+      "definitionVersionId": "<platform-core-definition-version-id>",
+      "effect": "write"
+    }
+  ],
+  "principal": { "mode": "service" },
+  "effect_summary": { "reads": 3, "writes": 1, "external_hosts": ["api.github.com"] }
+}

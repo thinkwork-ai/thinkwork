@@ -308,6 +308,7 @@ export type AgentLoop = {
   currentVersionNumber?: Maybe<Scalars['Int']['output']>;
   description?: Maybe<Scalars['String']['output']>;
   enabled: Scalars['Boolean']['output'];
+  executionPrincipal?: Maybe<Scalars['AWSJSON']['output']>;
   id: Scalars['ID']['output'];
   kind: AgentLoopKind;
   lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
@@ -1248,6 +1249,33 @@ export type CanvasWritableSpace = {
   __typename?: 'CanvasWritableSpace';
   name: Scalars['String']['output'];
   spaceId: Scalars['ID']['output'];
+};
+
+export type CapabilityBrokerCall = {
+  __typename?: 'CapabilityBrokerCall';
+  adapterKind?: Maybe<Scalars['String']['output']>;
+  authorizedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  bindingId?: Maybe<Scalars['ID']['output']>;
+  brokerSessionId: Scalars['ID']['output'];
+  budgetDelta?: Maybe<Scalars['AWSJSON']['output']>;
+  clientRequestId: Scalars['String']['output'];
+  contractHash?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  definitionVersionId?: Maybe<Scalars['ID']['output']>;
+  durableRef?: Maybe<Scalars['AWSJSON']['output']>;
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  effect?: Maybe<Scalars['String']['output']>;
+  errorCategory?: Maybe<Scalars['String']['output']>;
+  finalizedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  operationRef?: Maybe<Scalars['String']['output']>;
+  requestDigest?: Maybe<Scalars['String']['output']>;
+  resultDigest?: Maybe<Scalars['String']['output']>;
+  routineExecutionId?: Maybe<Scalars['ID']['output']>;
+  sequence?: Maybe<Scalars['Int']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  threadTurnId?: Maybe<Scalars['ID']['output']>;
 };
 
 export type CapabilityConnectionProposal = {
@@ -9449,15 +9477,22 @@ export type RoutineExecution = {
   __typename?: 'RoutineExecution';
   aliasArn?: Maybe<Scalars['String']['output']>;
   aslVersion?: Maybe<RoutineAslVersion>;
+  brokerCalls: Array<CapabilityBrokerCall>;
+  brokerSessionId?: Maybe<Scalars['ID']['output']>;
   cacheServed?: Maybe<Scalars['Boolean']['output']>;
+  capabilityDependencies?: Maybe<Scalars['AWSJSON']['output']>;
   commitSha?: Maybe<Scalars['String']['output']>;
+  configFingerprint?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   errorCode?: Maybe<Scalars['String']['output']>;
   errorMessage?: Maybe<Scalars['String']['output']>;
+  executionPrincipal?: Maybe<Scalars['AWSJSON']['output']>;
   finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   inputJson?: Maybe<Scalars['AWSJSON']['output']>;
   outputJson?: Maybe<Scalars['AWSJSON']['output']>;
+  readinessOutcome?: Maybe<Scalars['String']['output']>;
+  remediation?: Maybe<Scalars['AWSJSON']['output']>;
   routine?: Maybe<Routine>;
   routineId: Scalars['ID']['output'];
   sfnExecutionArn?: Maybe<Scalars['String']['output']>;
@@ -9476,7 +9511,9 @@ export type RoutineExecution = {
 
 export enum RoutineExecutionStatus {
   AwaitingApproval = 'AWAITING_APPROVAL',
+  Blocked = 'BLOCKED',
   Cancelled = 'CANCELLED',
+  Degraded = 'DEGRADED',
   Failed = 'FAILED',
   Running = 'RUNNING',
   Succeeded = 'SUCCEEDED',
@@ -9569,6 +9606,8 @@ export enum RoutineStatus {
 
 export type RoutineStepEvent = {
   __typename?: 'RoutineStepEvent';
+  artifactId?: Maybe<Scalars['ID']['output']>;
+  brokerCallId?: Maybe<Scalars['ID']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   errorJson?: Maybe<Scalars['AWSJSON']['output']>;
   executionId: Scalars['ID']['output'];
