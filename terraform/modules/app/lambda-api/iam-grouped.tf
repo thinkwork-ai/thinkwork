@@ -562,6 +562,12 @@ locals {
           # triggers), and job-trigger's canvas_refresh branch RequestResponse-
           # invokes it (scheduled trigger). Both run on this shared role.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-canvas-refresh",
+          # agentcore-admin (THINK-280): graphql-http's createTenant
+          # RequestResponse-invokes it to provision per-tenant sandbox
+          # resources; routine-exec-git (same shared role) reaches it for the
+          # capability-private provisioning path. Deployed by the dedicated
+          # agentcore-admin module with its own least-privilege role.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-agentcore-admin",
         ]
       },
       # (was standalone managed policy "workspace_renderer_invoke")

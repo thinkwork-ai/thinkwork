@@ -813,3 +813,41 @@ variable "enable_capability_broker" {
   type        = bool
   default     = false
 }
+
+# THINK-280 — sandbox provisioning + capability broker wiring. -----------------
+variable "agentcore_admin_lambda_arn" {
+  description = "ARN of the agentcore-admin Lambda (AGENTCORE_ADMIN_LAMBDA_ARN on graphql-http). createTenant RequestResponse-invokes it. Empty when the Lambda is not deployed."
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_admin_token" {
+  description = "Bearer token graphql-http presents when invoking agentcore-admin (AGENTCORE_ADMIN_TOKEN). Must match the token the admin Lambda validates. Empty when not deployed."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "capability_broker_session_table" {
+  description = "DynamoDB broker session table name (CAPABILITY_BROKER_SESSION_TABLE). Empty when the broker is disabled."
+  type        = string
+  default     = ""
+}
+
+variable "capability_broker_audience" {
+  description = "Capability broker PoP audience (CAPABILITY_BROKER_AUDIENCE). Empty when the broker is disabled."
+  type        = string
+  default     = ""
+}
+
+variable "capability_broker_api_id" {
+  description = "Capability broker private REST API id (CAPABILITY_BROKER_API_ID). Empty when the broker is disabled."
+  type        = string
+  default     = ""
+}
+
+variable "capability_broker_vpce_dns" {
+  description = "Capability broker execute-api VPCE DNS name (CAPABILITY_BROKER_VPCE_DNS). Empty when the broker is disabled."
+  type        = string
+  default     = ""
+}
