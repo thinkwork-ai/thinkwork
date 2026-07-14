@@ -327,7 +327,7 @@ export function decideAction(
     return {
       kind: "block",
       label: "Needs User",
-      reason: `${id} carries BOTH lane labels — Eric must pick a lane`,
+      reason: `${id} carries BOTH lane labels — the operator must pick a lane`,
     };
   }
 

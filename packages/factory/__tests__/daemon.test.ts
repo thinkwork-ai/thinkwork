@@ -11,7 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { heartbeatPath, readHeartbeatAgeMs } from "../src/heartbeat.js";
 
-import { DEFAULT_PHASES, type FactoryConfig, type HostConfig } from "../src/config.js";
+import { DEFAULT_PHASES, DEFAULT_PROJECT, type FactoryConfig, type HostConfig } from "../src/config.js";
+import { DEFAULT_RELEASE } from "../src/domain/release.js";
 import {
   buildStoreView,
   createDaemonController,
@@ -94,6 +95,8 @@ const host: HostConfig = {
 
 const config: FactoryConfig = {
   linear: { apiKey: "k", teamKey: "THINK" },
+  project: DEFAULT_PROJECT,
+  release: DEFAULT_RELEASE,
   slack: {},
   hosts: [host],
   phases: DEFAULT_PHASES,

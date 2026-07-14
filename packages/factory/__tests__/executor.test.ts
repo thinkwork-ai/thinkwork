@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { FactoryConfig, HostConfig } from "../src/config.js";
+import { DEFAULT_PROJECT, type FactoryConfig, type HostConfig } from "../src/config.js";
+import { DEFAULT_RELEASE } from "../src/domain/release.js";
 import { DEFAULT_PHASES } from "../src/config.js";
 import { createLogger, type Logger } from "../src/logger.js";
 import { pollTick, type PollCandidate } from "../src/linear/poller.js";
@@ -69,6 +70,8 @@ const host: HostConfig = {
 
 const config: FactoryConfig = {
   linear: { apiKey: "k", teamKey: "THINK" },
+  project: DEFAULT_PROJECT,
+  release: DEFAULT_RELEASE,
   slack: {},
   hosts: [host],
   phases: DEFAULT_PHASES,

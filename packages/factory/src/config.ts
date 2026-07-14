@@ -14,6 +14,31 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { DEFAULT_RELEASE, type ReleaseConfig } from "./domain/release.js";
+
+export type { ReleaseConfig };
+
+/**
+ * Project identity substituted into worker prompts (THINK-287 genericize) —
+ * the factory itself is project-agnostic; everything project-specific a
+ * worker needs to hear lives here.
+ */
+export interface ProjectConfig {
+  /** Human project name, e.g. "ThinkWork". */
+  name: string;
+  /** Operator's name for prose ("route questions to <name>"). */
+  operatorName: string;
+  /** Operator's Linear handle for @mentions in blocker comments (no @). */
+  operatorLinearHandle: string;
+}
+
+/** Fallbacks preserve pre-THINK-287 behavior for a config without `project`. */
+export const DEFAULT_PROJECT: ProjectConfig = {
+  name: "ThinkWork",
+  operatorName: "Eric",
+  operatorLinearHandle: "eric1",
+};
+
 export interface LinearConfig {
   apiKey: string;
   teamKey: string;
@@ -111,6 +136,10 @@ export interface PhaseConfig {
 export interface FactoryConfig {
   linear: LinearConfig;
   slack: SlackConfig;
+  /** Project identity for worker prompts; defaults preserve prior behavior. */
+  project: ProjectConfig;
+  /** Release tag scheme for the Slack console `release` verb. */
+  release: ReleaseConfig;
   hosts: HostConfig[];
   /** Per-phase model + SLA table, defaults merged in. */
   phases: Record<string, PhaseConfig>;
@@ -409,6 +438,39 @@ export function loadConfig(): FactoryConfig {
     if (Object.keys(deployTargets).length === 0) deployTargets = undefined;
   }
 
+  // project + release (THINK-287): tolerant parse with behavior-preserving
+  // defaults — a config without these sections runs exactly as before.
+  const projectRaw = (raw.project ?? {}) as Record<string, unknown>;
+  const project: ProjectConfig = {
+    name: isNonEmptyString(projectRaw.name)
+      ? projectRaw.name
+      : DEFAULT_PROJECT.name,
+    operatorName: isNonEmptyString(projectRaw.operatorName)
+      ? projectRaw.operatorName
+      : DEFAULT_PROJECT.operatorName,
+    operatorLinearHandle: isNonEmptyString(projectRaw.operatorLinearHandle)
+      ? projectRaw.operatorLinearHandle
+      : DEFAULT_PROJECT.operatorLinearHandle,
+  };
+  const releaseRaw = (raw.release ?? {}) as Record<string, unknown>;
+  const release: ReleaseConfig = {
+    tagTemplate:
+      isNonEmptyString(releaseRaw.tagTemplate) &&
+      releaseRaw.tagTemplate.includes("<N>")
+        ? releaseRaw.tagTemplate
+        : DEFAULT_RELEASE.tagTemplate,
+    extraTagTemplates: Array.isArray(releaseRaw.extraTagTemplates)
+      ? (releaseRaw.extraTagTemplates as unknown[])
+          .map(String)
+          .filter((t) => t.includes("<N>"))
+      : [...DEFAULT_RELEASE.extraTagTemplates],
+    ...(isNonEmptyString(releaseRaw.note)
+      ? { note: releaseRaw.note }
+      : releaseRaw.note === undefined && raw.release === undefined
+        ? { note: DEFAULT_RELEASE.note }
+        : {}),
+  };
+
   return {
     linear: {
       apiKey: linearRaw.apiKey as string,
@@ -416,6 +478,8 @@ export function loadConfig(): FactoryConfig {
       ...(trustedUserIds !== undefined ? { trustedUserIds } : {}),
     },
     slack,
+    project,
+    release,
     hosts,
     phases: mergePhases(raw.phases),
     pollIntervalSeconds,

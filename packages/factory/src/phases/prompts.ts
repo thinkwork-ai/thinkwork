@@ -11,7 +11,11 @@
  * Linear BEFORE launching the worker.
  */
 
-import { getArtifactsDir } from "../config.js";
+import {
+  DEFAULT_PROJECT,
+  getArtifactsDir,
+  type ProjectConfig,
+} from "../config.js";
 import {
   isTrustedComment,
   type CommentTrust,
@@ -138,13 +142,13 @@ export function synthesizeBaton(input: SynthesizeBatonInput): string {
  * protocol, goal discipline, and the exact CI wait chain (mandated verbatim —
  * workers died on paraphrases; see the History note in launch-prompts.md).
  */
-export const WORKER_COMMON_RULES = `You are a headless Claude Code worker launched by the ThinkWork factory daemon.
+export const WORKER_COMMON_RULES = `You are a headless Claude Code worker launched by the <PROJECT_NAME> factory daemon.
 Read AGENTS.md first, preserve unrelated changes, use Conventional Commits,
 target main, and update the rolling Linear ledger plus the attached
 \`Progress: <feature title>\` Linear document.
 
 Question protocol: when a material question blocks progress, post one comment
-@mentioning eric1 with numbered questions and a recommended answer for each,
+@mentioning <OPERATOR_HANDLE> with numbered questions and a recommended answer for each,
 add Needs User, record the questions in the Progress document, and stop. Make
 trivial reversible choices autonomously and record them.
 
@@ -260,7 +264,7 @@ to Brainstorming when the diagnosis reveals a product-framing question that
 requirements work must settle, otherwise Ready to Work for LFG or Plan Review
 for human review. Stop.`;
 
-const IMPLEMENT_TEMPLATE = `Autopilot Mode. You are the implementation worker for ThinkWork Linear issue
+const IMPLEMENT_TEMPLATE = `Autopilot Mode. You are the implementation worker for <PROJECT_NAME> Linear issue
 <ISSUE_ID>.
 
 Goal: Implement <ISSUE_ID> <SHORT_TITLE> end to end from the approved
@@ -319,7 +323,7 @@ Done, and compounding. Stop only for hard blockers, following the question
 protocol.`;
 
 const VERIFY_TEMPLATE = `Dogfood Verification. You are the verification worker — a judge, not a
-mechanic — for ThinkWork Linear issue <ISSUE_ID>. Do not change product code.
+mechanic — for <PROJECT_NAME> Linear issue <ISSUE_ID>. Do not change product code.
 Do not mutate production or perform destructive cloud deletion without
 explicit action-time authorization.
 
@@ -366,7 +370,7 @@ Verdict policy (fix-loop governor — never fix product code yourself):
   preserve the lane label and LFG, and require the repair worker to add a
   regression test that is red before and green after the fix.
 - Failure that is large, risky, or ambiguous: post options with trade-offs
-  and a recommendation, @mention eric1, add Needs User, and stop.
+  and a recommendation, @mention <OPERATOR_HANDLE>, add Needs User, and stop.
 - Flow that automation cannot prove: add Blocked: Auth for auth blockers or
   Needs User for needs-human-verify, state exactly what a human must check,
   and stop.
@@ -390,7 +394,7 @@ dogfood report, then apply the verdict-policy labels and status moves. Stop.`;
 
 const COMPOUND_TEMPLATE = `Autopilot Mode. Use the Compound Engineering ce-compound workflow for Linear
 issue <ISSUE_ID>. Read AGENTS.md first. Use Full mode automatically. Do not ask
-Eric any ce-compound mode, recommendation, preference, or approval questions.
+<OPERATOR_NAME> any ce-compound mode, recommendation, preference, or approval questions.
 Start repo work from fresh origin/main in an isolated docs-only worktree/branch.
 Read the newest handoff:<ISSUE_ID>:Done comment and the dogfood report for
 durable-learning candidates (including paper-cut patterns). Run the
@@ -436,6 +440,11 @@ export interface AssemblePromptInput {
    * launched prompt.
    */
   artifactsDir?: string;
+  /**
+   * Project identity substituted into <PROJECT_NAME> / <OPERATOR_NAME> /
+   * <OPERATOR_HANDLE> (THINK-287 genericize). Defaults preserve prior prose.
+   */
+  project?: ProjectConfig;
 }
 
 export interface AssembledPrompt {
@@ -503,8 +512,20 @@ export function assemblePrompt(input: AssemblePromptInput): AssembledPrompt {
   }
   parts.push("---", "Handoff from previous phase:", "", baton);
 
+  // Project-identity substitution runs over the JOINED prompt so the shared
+  // rules block is covered too, but NEVER over the baton (worker-authored
+  // text is quoted verbatim; a literal "<PROJECT_NAME>" in a handoff must
+  // survive round-trips untouched). The baton is appended after.
+  const project = input.project ?? DEFAULT_PROJECT;
+  const head = parts
+    .slice(0, -1)
+    .join("\n\n")
+    .replaceAll("<PROJECT_NAME>", project.name)
+    .replaceAll("<OPERATOR_NAME>", project.operatorName)
+    .replaceAll("<OPERATOR_HANDLE>", project.operatorLinearHandle);
+
   return {
-    prompt: parts.join("\n\n"),
+    prompt: `${head}\n\n${baton}`,
     baton,
     batonToPost: existing === null ? baton : null,
   };

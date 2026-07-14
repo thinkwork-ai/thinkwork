@@ -12,7 +12,9 @@ import {
   slackConfigWarnings,
   DEFAULT_POLL_INTERVAL_SECONDS,
   DEFAULT_PHASES,
+  DEFAULT_PROJECT,
 } from "../src/config.js";
+import { DEFAULT_RELEASE } from "../src/domain/release.js";
 
 let dir: string;
 
@@ -218,5 +220,46 @@ describe("loadConfig", () => {
     expect(err).toBeInstanceOf(ConfigError);
     const ce = err as ConfigError;
     expect(ce.missing.some((m) => m.startsWith("hosts[0]"))).toBe(true);
+  });
+});
+
+describe("project + release config (THINK-287)", () => {
+  it("defaults preserve prior behavior when the sections are absent", () => {
+    writeConfig(minimalConfig);
+    const config = loadConfig();
+    expect(config.project).toEqual(DEFAULT_PROJECT);
+    expect(config.release).toEqual(DEFAULT_RELEASE);
+  });
+
+  it("parses custom project + release; an explicit release section does NOT inherit the default note", () => {
+    writeConfig({
+      ...minimalConfig,
+      project: { name: "Acme", operatorName: "Jo", operatorLinearHandle: "jo.acme" },
+      release: { tagTemplate: "r<N>", extraTagTemplates: [] },
+    });
+    const config = loadConfig();
+    expect(config.project).toEqual({
+      name: "Acme",
+      operatorName: "Jo",
+      operatorLinearHandle: "jo.acme",
+    });
+    expect(config.release.tagTemplate).toBe("r<N>");
+    expect(config.release.extraTagTemplates).toEqual([]);
+    expect(config.release.note).toBeUndefined();
+  });
+
+  it("rejects templates without <N> (falls back) and keeps a custom note", () => {
+    writeConfig({
+      ...minimalConfig,
+      release: {
+        tagTemplate: "no-placeholder",
+        extraTagTemplates: ["also-bad", "ok-<N>"],
+        note: "Ships the site.",
+      },
+    });
+    const config = loadConfig();
+    expect(config.release.tagTemplate).toBe(DEFAULT_RELEASE.tagTemplate);
+    expect(config.release.extraTagTemplates).toEqual(["ok-<N>"]);
+    expect(config.release.note).toBe("Ships the site.");
   });
 });
