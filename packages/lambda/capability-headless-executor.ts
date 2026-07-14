@@ -902,6 +902,7 @@ export async function mintBrokerSession(input: {
   brokerEndpoint: string;
   brokerApiId: string;
   region?: string;
+  invokePath?: string;
   ttlSeconds?: number;
   now?: () => number;
   sessionId?: string;
@@ -959,6 +960,7 @@ export async function mintBrokerSession(input: {
     privateKey: privateKeyB64,
     nextSequence: 0,
     expiresAt,
+    invokePath: input.invokePath ?? getBrokerInvokePath(),
     ...(input.region ? { region: input.region } : {}),
   };
   return {
@@ -976,6 +978,16 @@ export async function mintBrokerSession(input: {
 
 export function getBrokerVpceEndpoint(): string {
   return process.env.CAPABILITY_BROKER_VPCE_DNS ?? "";
+}
+/**
+ * Path the sandbox POSTs to. The broker REST API's proxy resource is
+ * `/{stage}/{proxy+}`, so the path MUST include the stage (a bare `/` is
+ * unmatched → API Gateway 403). The `invoke` segment is arbitrary — the broker
+ * Lambda proxies every path — but keeps the stage prefix explicit.
+ */
+export function getBrokerInvokePath(): string {
+  const stage = process.env.STAGE ?? "";
+  return stage ? `/${stage}/invoke` : "/invoke";
 }
 export function getBrokerApiId(): string {
   return process.env.CAPABILITY_BROKER_API_ID ?? "";
