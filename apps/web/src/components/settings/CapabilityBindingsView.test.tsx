@@ -69,6 +69,10 @@ const {
     CreateServicePrincipalMutation: Symbol("createPrincipal"),
     RevokeServicePrincipalMutation: Symbol("revokePrincipal"),
     CreateCredentialBindingMutation: Symbol("createBinding"),
+    ExternalCapabilityClientsQuery: Symbol("externalClients"),
+    CreateExternalCapabilityClientMutation: Symbol("createExternalClient"),
+    RotateExternalCapabilityClientMutation: Symbol("rotateExternalClient"),
+    RevokeExternalCapabilityClientMutation: Symbol("revokeExternalClient"),
   },
   settingsQueryDocs: {
     SettingsTenantMembersQuery: Symbol("tenantMembers"),
@@ -88,6 +92,12 @@ vi.mock("urql", () => ({
     }
     if (query === settingsQueryDocs.SettingsTenantMembersQuery) {
       return [queryState.members, vi.fn()];
+    }
+    if (query === queryDocs.ExternalCapabilityClientsQuery) {
+      return [
+        { data: { externalCapabilityClients: [] }, fetching: false },
+        vi.fn(),
+      ];
     }
     throw new Error("unexpected query");
   },
