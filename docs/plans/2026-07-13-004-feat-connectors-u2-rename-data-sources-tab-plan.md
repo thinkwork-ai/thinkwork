@@ -4,10 +4,11 @@ type: feat
 date: 2026-07-13
 topic: connectors-u2-rename-data-sources-tab
 artifact_contract: ce-unified-plan/v1
-artifact_readiness: requirements-only
+artifact_readiness: implementation-ready
 product_contract_source: ce-brainstorm
 execution: code
 issue: THINK-285
+planned: 2026-07-13
 ---
 
 # Connectors U2 Rename and Data Sources Tab - Plan
@@ -66,3 +67,91 @@ The page titled "Connections" at `/settings/mcp-servers` becomes "Connectors" (s
 - Redirect stub to revive: `apps/web/src/routes/_authed/settings.mcp-servers.data-sources.tsx`.
 - Tab-label test fixtures: `apps/web/src/components/settings/SettingsMcpServers.test.tsx`.
 - Parent contract: `docs/plans/2026-07-13-003-feat-connectors-page-restructure-plan.md`.
+
+---
+
+## Planning Contract
+
+**Product Contract preservation:** unchanged — planning added no product-scope changes; R1–R4 and AE1–AE2 stand exactly as merged in PR #3728 (R4, the header-action pinning, was added at brainstorm time, upstream of this planning pass). The Planning Contract below reconciles with the parent plan's implementation-ready U2 section (KTD3–KTD5 there); no conflicts were found, so the parent's technical decisions are adopted verbatim and grounded against the current source.
+
+### Approach Summary
+
+All work lands in `apps/web`; no GraphQL, backend, or mobile changes. `SettingsMcpServers.tsx` already computes the `dataSourceServers` partition, builds `dataSourceColumns` via `makeColumns("data-sources")`, and derives the active tab from the pathname (`ConnectionsTab` union + `tabForPath`). This unit is therefore a routing-and-render change: extend the tab union with a third `data-sources` value, register the tab in `usePageHeaderActions`, render the datasource table as that tab's body, remove the Datasource MCPs section from the servers tab, convert the `data-sources` redirect stub into a component route, and change three display strings (sidebar label, page title, breadcrumb) to "Connectors".
+
+**Baseline note:** this plan describes edits relative to the post-U1 (THINK-284) file — after U1 the servers tab renders one merged tenant+plugin table and the Datasource MCPs section is the only remaining titled section. The mechanics below do not depend on U1's merge details; only the exact surrounding code differs. Coding starts from fresh `main` after THINK-284 merges.
+
+### Key Technical Decisions
+
+Adopted from the parent plan (its KTD3–KTD5), grounded in the current source:
+
+- **KTD1 — Tab state stays path-derived (parent KTD3).** `ConnectionsTab` becomes `"connections" | "servers" | "data-sources"`; `tabForPath` gains a `data-sources` branch checked before the `servers` prefix match (the paths don't overlap — `/settings/mcp-servers/data-sources` does not start with `/settings/mcp-servers/servers` — but explicit ordering keeps it obviously correct). Add a `DATA_SOURCES_ROUTE` constant beside the existing `CONNECTIONS_ROUTE` / `MCP_SERVERS_ROUTE`. The route file `settings.mcp-servers.data-sources.tsx` swaps its `beforeLoad` redirect for the `OperatorGuard`-wrapped `SettingsMcpServers` component, mirroring `settings.mcp-servers.servers.tsx`. The `plugins` redirect stub is untouched.
+- **KTD2 — Header actions split by tab (parent KTD4).** In the `usePageHeaderActions` call: title and breadcrumb become "Connectors"; the `tabs` array gains `{ to: DATA_SOURCES_ROUTE, label: "Data Sources" }`; the `action` becomes tab-conditional — the Register-data-source `TooltipIconButton` renders when `activeTab === "data-sources"`, the New-MCP-Server button when `activeTab === "servers"`, nothing on the Connections tab. The existing `actionKey: mcp-servers:${activeTab}` already varies by tab and needs no change.
+- **KTD3 — Per-tab panes with per-tab empty states (parent KTD5).** The data-sources tab renders the existing datasource table (`dataSourceColumns`, `fitContent`, empty state "No data sources registered.") inside its own `SettingsTablePane`; the Datasource MCPs section (and its heading) is removed from the servers tab, whose pane description drops the "analyst data sources" mention. Any remaining all-empty collapse logic for datasources on the servers tab goes away — each tab owns its empty state. The new pane mirrors the servers pane's fetch wiring — `loading={!servers && !error}` and the error-message toolbar branch — so a direct load of the bookmark path shows a loading pane, not a false "No data sources registered." flash, and surfaces fetch failures. The data-sources tab gets its own search state (independent of the servers tab's `search`) so a filter typed on one tab doesn't silently hide rows on the other.
+
+### Sequencing and PR Boundaries
+
+Single unit, single PR (factory default) — the rename, the tab, and the action split are one coherent presentation change; splitting them would ship a "Connectors" title over a page whose datasources are still misplaced, or a tab with the wrong header action. No child issues: THINK-285 is itself the shippable unit under parent THINK-282.
+
+Coding is gated on THINK-284 (U1) merging first — same file regions in `SettingsMcpServers.tsx` and its test file; sequencing-only, no functional dependency.
+
+---
+
+## Implementation Units
+
+### U1. Connectors rename + Data Sources tab (parent plan unit U2)
+
+**Goal:** The surface is titled "Connectors" (sidebar, page title, breadcrumb) and gains a third "Data Sources" tab at `/settings/mcp-servers/data-sources` that owns the datasource table; the MCP Servers tab no longer shows datasources; header actions split per tab.
+
+**Requirements:** R1, R2, R3, R4 (AE1, AE2). **Child issue:** THINK-285 (this issue). **PR boundary:** one PR.
+
+**Dependencies:** THINK-284 (U1 of the parent plan) merged to `main` — sequencing-only.
+
+**Files:**
+
+- `apps/web/src/components/settings/SettingsMcpServers.tsx` — modify (tab union, `tabForPath`, header actions, data-sources pane, remove datasource section from servers tab)
+- `apps/web/src/components/settings/settings-nav.tsx` — modify (label only: "Connections" → "Connectors")
+- `apps/web/src/routes/_authed/settings.mcp-servers.data-sources.tsx` — modify (redirect → `OperatorGuard` + component route)
+- `apps/web/src/components/settings/SettingsMcpServers.test.tsx` — modify (update tab/heading/action assertions; add data-sources-tab scenarios)
+- `apps/web/src/components/settings/settings-nav.test.ts` — modify (add a "Connectors" label assertion for the sidebar entry)
+
+**Approach:** Per KTD1–KTD3 above. Concretely: add `DATA_SOURCES_ROUTE`; extend `ConnectionsTab` and `tabForPath`; in `usePageHeaderActions` set title/breadcrumb to "Connectors", add the third tab, and make each header `TooltipIconButton` conditional on its owning tab; add an `activeTab === "data-sources"` branch returning a `SettingsTablePane` (title "Data Sources", datasource-appropriate description, its own search state and toolbar, the servers pane's `loading`/error wiring, `McpServerSection` with `dataSourceColumns` + `fitContent` + empty text "No data sources registered."); delete the Datasource MCPs section (and `dataSourceServers` usage) from the servers-tab body and trim that pane's description; keep the `RegisterDataSourceDialog` and `NewMcpServerDialog` mounted so either tab's action can open its dialog. Swap the route stub's `beforeLoad` redirect for a component route mirroring `settings.mcp-servers.servers.tsx`. Change the sidebar label in `settings-nav.tsx`. The existing test that exercises datasource rows ("lists analyst connectors…") moves its rendered path to `/settings/mcp-servers/data-sources`.
+
+**Patterns to follow:** `settings.mcp-servers.servers.tsx` for the component-route shape; existing `SettingsTablePane` usage in the same file for the new tab body; existing tab-conditional `action` rendering in `usePageHeaderActions`.
+
+**Test scenarios** (update the existing suite in place):
+
+- Header contract: title and breadcrumb are "Connectors"; tabs are exactly `[Connections → /settings/mcp-servers, MCP Servers → /settings/mcp-servers/servers, Data Sources → /settings/mcp-servers/data-sources]`.
+- Covers AE1. Rendering at pathname `/settings/mcp-servers/data-sources` shows the datasource table (Name / Source / Instance / Database / Status / Enabled columns, cluster · database values) and none of the tenant/plugin rows.
+- The servers tab no longer renders the "Datasource MCPs" heading or datasource rows.
+- Covers AE2. Header actions: Register-data-source action present only on the data-sources tab (and opens the Register dialog); New-MCP-Server action present only on the servers tab (and opens its dialog); neither on the Connections tab.
+- Data Sources empty state: no datasource rows → "No data sources registered."
+- Data Sources loading/error: while the server list is unresolved the pane renders its loading state (no premature empty text); a fetch failure surfaces the error message.
+- Search on the data-sources tab filters datasource rows by name and is independent of the servers tab's filter; row click navigates to the server detail route.
+- Sidebar nav item renders "Connectors" (settings-nav fixture).
+- Existing register/provision dialog tests (internal, external, builtin) keep passing — the dialog now opens from the data-sources tab.
+
+**Verification (browser contract, deployed dev):** Sign in as an operator. (1) Sidebar shows "Connectors"; opening it lands on the Connections tab with title/breadcrumb "Connectors" and three tabs. (2) Open `/settings/mcp-servers/data-sources` directly (old bookmark): page loads with the Data Sources tab active showing the datasource table; the register-data-source header action is present and opens the Register dialog. (3) MCP Servers tab shows the merged table only — no datasource rows — and the New MCP Server action opens its dialog. (4) `/settings/mcp-servers/servers` still renders the merged tab (R3). These four flows are the complete end-to-end proof; the Verification phase drives them in a real browser against deployed dev after the PR merges and deploys.
+
+---
+
+## Verification Contract
+
+- Pre-PR gates: `pnpm --filter @thinkwork/web test` (full package suite), `pnpm --filter @thinkwork/web typecheck`, `pnpm lint`, `pnpm format:check` — green before the PR.
+- Browser proof: the four numbered flows in U1's Verification block, driven against deployed dev after merge + deploy (factory Verification phase owns the drive). AE1 is proven by flow (2)+(3); AE2 by the action split observed across flows (2) and (3).
+
+## Definition of Done
+
+- The unit PR squash-merged to `main` with green checks; deploy pipeline completed.
+- On deployed dev: sidebar/title/breadcrumb read "Connectors"; Data Sources tab live at `/settings/mcp-servers/data-sources` with the datasource table and the Register action; MCP Servers tab free of datasource rows with the New MCP Server action; `/settings/mcp-servers/servers` still renders.
+
+## Risks
+
+- **Low.** Presentation-layer only. The main regression surface is the existing test suite's structural assertions (tab arrays, section headings, action presence) — update them deliberately, not by deletion; the datasource-table column and dialog assertions carry real behavior and must survive the tab move.
+- Baseline drift: this plan is written against pre-U1 source with a post-U1 baseline assumed. If U1's merge reshapes the servers-tab body beyond the parent plan's description, the mechanics here (tab union, header actions, route swap, nav label) are unaffected; only the exact deletion site for the Datasource section moves.
+- Existing register/provision dialog tests anchor on `findByPlaceholderText("Search servers…")` before clicking the Register header action. After the split those tests must render at the data-sources path and re-anchor (the new pane's search placeholder should read "Search data sources…", so the anchors change deliberately).
+- `@thinkwork/ui` test mocks lack `cn` — if new shared-component usage is added, join class strings rather than importing `cn` in components under the mock allowlist (known repo gotcha).
+
+## Deferred to Follow-Up Work
+
+- Route-slug rename (`mcp-servers` → `connectors`) — explicitly out of scope (Product Contract).
+- Server-detail breadcrumb still says "MCP Servers" — acceptable per scope; revisit only if Eric flags it.
