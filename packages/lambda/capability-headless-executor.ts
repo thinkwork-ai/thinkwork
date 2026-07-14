@@ -36,6 +36,7 @@ import { getDb, schema } from "@thinkwork/database-pg";
 import {
   SESSION_MAX_TTL_SECONDS,
   canonicalSha256Hex,
+  formatTwcapRef,
   type SessionBootstrap,
 } from "@thinkwork/capability-contracts";
 import {
@@ -313,6 +314,7 @@ export async function executeCapabilityHeadlessRoutine(
       contextFingerprint: decision.configFingerprint,
       principal: { mode: "service", subjectId: principal.servicePrincipalId },
       grantSnapshot: { dependencies: decision.dependencies },
+      operations: buildOperationsMap(decision.dependencies),
       budgets: {},
       brokerSessionRowId,
       routineExecutionId: executionId,
@@ -903,6 +905,8 @@ export async function mintBrokerSession(input: {
   brokerApiId: string;
   region?: string;
   invokePath?: string;
+  /** operationId → canonical twcap map the sandbox SDK expands friendly ids with. */
+  operations?: Record<string, string>;
   ttlSeconds?: number;
   now?: () => number;
   sessionId?: string;
@@ -962,6 +966,9 @@ export async function mintBrokerSession(input: {
     expiresAt,
     invokePath: input.invokePath ?? getBrokerInvokePath(),
     ...(input.region ? { region: input.region } : {}),
+    ...(input.operations && Object.keys(input.operations).length
+      ? { operations: input.operations }
+      : {}),
   };
   return {
     sessionId,
@@ -1023,6 +1030,72 @@ function normalizeDependencies(raw: unknown): CapabilityDependency[] {
 function operationIdFromTwcap(twcap: string): string | null {
   const hash = twcap.lastIndexOf("#");
   return hash === -1 ? null : twcap.slice(hash + 1);
+}
+
+/**
+ * Parse the compact dependency reference the Routine manifest pins
+ * (`twcap:<ns>/<class>/<slug>@<version>#<operationId>`) into its segments. The
+ * compact form is the STORED shape; the broker wire form is the canonical
+ * `twcap://…` (`formatTwcapRef`). Returns null on any shape it does not fully
+ * recognize — the caller then omits that operation from the binding map rather
+ * than emitting a half-parsed reference.
+ */
+function parseCompactTwcap(twcap: string): {
+  namespace: string;
+  class: string;
+  slug: string;
+  version: string;
+  operationId: string;
+} | null {
+  if (!twcap.startsWith("twcap:")) return null;
+  const body = twcap.slice("twcap:".length);
+  const hashAt = body.lastIndexOf("#");
+  if (hashAt === -1) return null;
+  const operationId = body.slice(hashAt + 1);
+  const beforeHash = body.slice(0, hashAt);
+  const atAt = beforeHash.lastIndexOf("@");
+  if (atAt === -1) return null;
+  const version = beforeHash.slice(atAt + 1);
+  const path = beforeHash.slice(0, atAt);
+  const segments = path.split("/").filter((s) => s.length > 0);
+  if (segments.length !== 3) return null;
+  const [namespace, cls, slug] = segments;
+  if (!namespace || !cls || !slug || !version || !operationId) return null;
+  return { namespace, class: cls, slug, version, operationId };
+}
+
+/**
+ * Build the session `operations` binding map: friendly `operationId` → canonical
+ * `twcap://…` reference the broker's `parseTwcapRef` accepts. Derived from the
+ * exact pinned dependency manifest so the reference the sandbox signs is the
+ * SAME identity every parity surface reproduces. Malformed entries are dropped
+ * (fail closed) — an operation absent from the map is passed through verbatim by
+ * the SDK and the broker fails it as a malformed reference.
+ */
+export function buildOperationsMap(
+  dependencies: CapabilityDependency[],
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const dep of dependencies) {
+    const parsed = parseCompactTwcap(dep.twcap);
+    const operationId =
+      dep.operationId ?? parsed?.operationId ?? operationIdFromTwcap(dep.twcap);
+    if (!parsed || !operationId) continue;
+    try {
+      map[operationId] = formatTwcapRef({
+        namespace: parsed.namespace,
+        class: parsed.class,
+        slug: parsed.slug,
+        version: parsed.version,
+        operationId,
+        contractHash: dep.contractHash,
+      });
+    } catch {
+      // formatTwcapRef rejected a segment — drop this operation from the map.
+      continue;
+    }
+  }
+  return map;
 }
 
 /** Input surfaced to the tracer as `input`: repo/as-of metadata + caller input. */
