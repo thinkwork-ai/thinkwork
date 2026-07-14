@@ -1079,6 +1079,10 @@ export function SettingsEvalRunDetail() {
           setEditingTestCaseId(null);
           silentRefetch();
         }}
+        onDeleted={() => {
+          setEditingTestCaseId(null);
+          silentRefetch();
+        }}
       />
       {runDetail.datasetId && tenantId && (
         <RunComparisonSheet
@@ -1744,11 +1748,13 @@ function EditEvalTestCaseSheet({
   open,
   onOpenChange,
   onSaved,
+  onDeleted,
 }: {
   testCaseId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  onDeleted: () => void;
 }) {
   const [actions, setActions] = useState<ReactNode>(null);
   const handleCancel = useCallback(() => {
@@ -1803,6 +1809,7 @@ function EditEvalTestCaseSheet({
               onActions={setActions}
               onCancel={handleCancel}
               onSaved={onSaved}
+              onDeleted={onDeleted}
             />
           )}
         </div>
