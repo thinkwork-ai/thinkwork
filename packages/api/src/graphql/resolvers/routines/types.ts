@@ -8,15 +8,33 @@
  * original `state_machine_arn` + `version_arn` pair.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import {
+  capabilityBrokerCalls,
   routineAslVersions,
   routineStepEvents,
   routines,
   scheduledJobs,
 } from "@thinkwork/database-pg/schema";
+
+/**
+ * THINK-280 U7: project one capability_broker_calls row onto the
+ * CapabilityBrokerCall GraphQL type. The two jsonb columns whose GraphQL names
+ * drop the `_json` suffix (`budget_delta_json` → `budgetDelta`,
+ * `durable_ref_json` → `durableRef`) are mapped explicitly; snakeToCamel would
+ * otherwise leave them as `budgetDeltaJson`/`durableRefJson` and the fields
+ * would resolve null. Secret material never reaches this row — only bounded
+ * digests + policy/budget/effect metadata are persisted upstream.
+ */
+export function brokerCallRowToGraphql(row: Record<string, unknown>): unknown {
+  return {
+    ...(snakeToCamel(row) as Record<string, unknown>),
+    budgetDelta: row.budget_delta_json ?? null,
+    durableRef: row.durable_ref_json ?? null,
+  };
+}
 
 export const routineExecutionTypeResolvers = {
   routine: async (
@@ -60,6 +78,25 @@ export const routineExecutionTypeResolvers = {
       .orderBy(routineStepEvents.started_at, routineStepEvents.created_at)
       .limit(1_000);
     return rows.map(snakeToCamel);
+  },
+
+  // THINK-280 U7: append-only broker-call evidence for a capability-headless
+  // run, joined from capability_broker_calls by routine execution id. Newest
+  // first; empty for ordinary runs. The row is already tenant-scoped through
+  // the RoutineExecution parent's read authorization.
+  brokerCalls: async (
+    execution: { id?: string },
+    _args: unknown,
+    _ctx: GraphQLContext,
+  ) => {
+    if (!execution.id) return [];
+    const rows = await db
+      .select()
+      .from(capabilityBrokerCalls)
+      .where(eq(capabilityBrokerCalls.routine_execution_id, execution.id))
+      .orderBy(desc(capabilityBrokerCalls.created_at))
+      .limit(500);
+    return rows.map(brokerCallRowToGraphql);
   },
 
   aslVersion: async (

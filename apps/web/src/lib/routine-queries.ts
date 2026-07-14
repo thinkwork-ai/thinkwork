@@ -224,6 +224,25 @@ export const RoutineExecutionDetailQuery = graphql(`
       commitSha
       validatedSha
       cacheServed
+      executionPrincipal
+      capabilityDependencies
+      configFingerprint
+      readinessOutcome
+      remediation
+      brokerSessionId
+      brokerCalls {
+        id
+        clientRequestId
+        operationRef
+        contractHash
+        status
+        errorCategory
+        effect
+        adapterKind
+        durationMs
+        durableRef
+        createdAt
+      }
       stepEvents {
         id
         nodeId
@@ -240,6 +259,8 @@ export const RoutineExecutionDetailQuery = graphql(`
         stderrS3Uri
         stdoutPreview
         truncated
+        brokerCallId
+        artifactId
         createdAt
       }
       routine {

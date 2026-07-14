@@ -90,6 +90,10 @@ type AgentLoop {
   ownerAgentId: ID
   # THINK-137 U3 (R1): the user identity a run acts as. Defaults to the creator.
   runAsUserId: ID
+  # THINK-280 U7: explicit execution principal spec for governed capability
+  # runs: { mode: 'requester'|'agent_owner'|'service', subjectId? }. NULL keeps
+  # legacy runAsUserId semantics unchanged; modes never fall back.
+  executionPrincipal: AWSJSON
   spaceId: ID
   primaryTriggerFamily: AgentLoopTriggerFamily!
   currentVersionId: ID

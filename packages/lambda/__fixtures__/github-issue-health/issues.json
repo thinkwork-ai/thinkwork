@@ -1,0 +1,116 @@
+{
+  "_comment": "Frozen representative fixtures for the THINK-280 U7 issue-health tracer. `repo` + `as_of` anchor the deterministic digest. `pages` freezes real pagination shape (a full 2-item page here stands in for a full PER_PAGE=50 page in schema terms; the digest logic keys on `state`, `created_at`, `labels`, `assignees`, `number`). `edge_cases` freezes the boundary inputs the digest must handle without a provider call. `provider_failures` freezes the broker error envelopes a run must surface (never a silent live fallthrough).",
+  "repo": "thinkwork-ai/thinkwork",
+  "as_of": "2026-07-13T00:00:00+00:00",
+  "pages": [
+    [
+      {
+        "number": 101,
+        "title": "Login flow drops the session on refresh",
+        "state": "open",
+        "html_url": "https://github.com/thinkwork-ai/thinkwork/issues/101",
+        "created_at": "2026-07-10T00:00:00Z",
+        "updated_at": "2026-07-12T00:00:00Z",
+        "comments": 3,
+        "user": { "login": "alice" },
+        "labels": [{ "name": "bug" }, { "name": "auth" }],
+        "assignees": [{ "login": "bob" }]
+      },
+      {
+        "number": 102,
+        "title": "Docs: document the broker session bootstrap",
+        "state": "open",
+        "html_url": "https://github.com/thinkwork-ai/thinkwork/issues/102",
+        "created_at": "2026-05-01T00:00:00Z",
+        "updated_at": "2026-05-02T00:00:00Z",
+        "comments": 0,
+        "user": { "login": "carol" },
+        "labels": [{ "name": "docs" }],
+        "assignees": []
+      }
+    ],
+    [
+      {
+        "number": 103,
+        "title": "No-label, no-assignee orphan issue",
+        "state": "open",
+        "html_url": "https://github.com/thinkwork-ai/thinkwork/issues/103",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "comments": 1,
+        "user": { "login": "dave" },
+        "labels": [],
+        "assignees": []
+      },
+      {
+        "number": 104,
+        "title": "Closed issue that must be excluded from the digest",
+        "state": "closed",
+        "html_url": "https://github.com/thinkwork-ai/thinkwork/issues/104",
+        "created_at": "2026-06-01T00:00:00Z",
+        "updated_at": "2026-06-15T00:00:00Z",
+        "comments": 5,
+        "user": { "login": "alice" },
+        "labels": [{ "name": "bug" }],
+        "assignees": [{ "login": "alice" }]
+      },
+      {
+        "number": 105,
+        "title": "Pull request masquerading as an issue (must be excluded)",
+        "state": "open",
+        "html_url": "https://github.com/thinkwork-ai/thinkwork/pull/105",
+        "created_at": "2026-07-01T00:00:00Z",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "comments": 2,
+        "user": { "login": "bob" },
+        "labels": [{ "name": "enhancement" }],
+        "assignees": [{ "login": "bob" }],
+        "pull_request": { "url": "https://api.github.com/.../pulls/105" }
+      }
+    ]
+  ],
+  "edge_cases": {
+    "zero_open_issues": [],
+    "duplicate_pages": [
+      [
+        {
+          "number": 201,
+          "title": "Duplicated across two pages",
+          "state": "open",
+          "created_at": "2026-07-11T00:00:00Z",
+          "labels": [{ "name": "bug" }],
+          "assignees": [{ "login": "erin" }]
+        }
+      ],
+      [
+        {
+          "number": 201,
+          "title": "Duplicated across two pages",
+          "state": "open",
+          "created_at": "2026-07-11T00:00:00Z",
+          "labels": [{ "name": "bug" }],
+          "assignees": [{ "login": "erin" }]
+        }
+      ]
+    ],
+    "missing_fields": [
+      {
+        "number": 301,
+        "title": "Missing created_at, labels, assignees",
+        "state": "open"
+      }
+    ]
+  },
+  "provider_failures": {
+    "rate_limited": {
+      "status": "failed",
+      "category": "provider_unavailable",
+      "message": "GitHub API rate limit exceeded"
+    },
+    "not_found": {
+      "status": "failed",
+      "category": "invalid_request",
+      "message": "repository not found or not in scope"
+    }
+  }
+}

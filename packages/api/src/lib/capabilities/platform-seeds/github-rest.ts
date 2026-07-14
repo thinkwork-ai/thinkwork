@@ -71,6 +71,27 @@ const ISSUE_OUTPUT_SCHEMA: CanonicalJson = {
       additionalProperties: false,
       properties: { login: { type: "string", maxLength: 256 } },
     },
+    // Public, bounded projections the issue-health digest groups by (THINK-280
+    // U7). Labels + assignees are public metadata; capped array lengths keep
+    // the response bounded.
+    labels: {
+      type: "array",
+      maxItems: 50,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: { name: { type: "string", maxLength: 256 } },
+      },
+    },
+    assignees: {
+      type: "array",
+      maxItems: 50,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: { login: { type: "string", maxLength: 256 } },
+      },
+    },
   },
 };
 

@@ -63,6 +63,15 @@ import {
   GetSecretValueCommand,
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
+import {
+  executeCapabilityHeadlessRoutine,
+  resolveCapabilityPrivateInterpreterId,
+  type ExecutionPrincipalSpec,
+} from "./capability-headless-executor.js";
+import {
+  createDynamoPort,
+  DynamoDBClient,
+} from "./lib/capability-broker/dynamo-port.js";
 
 const {
   routines,
@@ -262,6 +271,16 @@ export async function executeGitRoutine(
         ? `routine is ${routine.status}: ${routine.disabled_reason}`
         : `routine is ${routine.status}`,
     );
+  }
+
+  // THINK-280 U7: governed capability-headless runs take a distinct path — an
+  // explicit service principal, a minted broker session, and the full evidence
+  // chain. Selected ONLY when the routine pins capability dependencies AND
+  // carries an explicit 'service' execution principal; never inferred and never
+  // a fallback for an ordinary git run. Delegates to the capability executor,
+  // which owns its own ledger/session lifecycle.
+  if (mode === "execute" && isCapabilityHeadlessRoutine(routine)) {
+    return await runCapabilityHeadless(routine, event, options, db, now);
   }
 
   // ---- Per-routine serialization + stale sweep (KTD-3) ------------------
@@ -1322,6 +1341,136 @@ function failResult(
   errorMessage: string,
 ): RoutineExecGitResult {
   return { status: "failed", errorClass, errorMessage };
+}
+
+// ---------------------------------------------------------------------------
+// THINK-280 U7 — governed capability-headless delegation
+// ---------------------------------------------------------------------------
+
+/** Broker session table name (vitest env-capture rule — never at module load). */
+function getBrokerSessionTable(): string {
+  return process.env.CAPABILITY_BROKER_SESSION_TABLE ?? "";
+}
+
+/** A routine is capability-headless when it pins capability dependencies AND
+ * carries an explicit 'service' execution principal. Both are required — no
+ * inference, no fallback across principal modes (R6). */
+export function isCapabilityHeadlessRoutine(routine: {
+  execution_principal?: unknown;
+  capability_dependencies?: unknown;
+}): boolean {
+  const principal = routine.execution_principal as { mode?: string } | null;
+  return (
+    !!principal &&
+    principal.mode === "service" &&
+    Array.isArray(routine.capability_dependencies) &&
+    routine.capability_dependencies.length > 0
+  );
+}
+
+/**
+ * Resolve the deps the capability executor needs (capability-private
+ * interpreter, repo credential for the S3-cached module loader, DynamoDB
+ * session store) and delegate. A blocked/degraded outcome maps back to the
+ * git-run result shape the dispatcher understands; the routine_executions row
+ * carries the true terminal status + evidence chain.
+ */
+async function runCapabilityHeadless(
+  routine: Record<string, unknown> & {
+    id: string;
+    tenant_id: string;
+    module_path: string | null;
+    validated_sha: string | null;
+    execution_principal: unknown;
+  },
+  event: RoutineExecGitInput,
+  options: RoutineExecGitOptions,
+  db: ReturnType<typeof getDb>,
+  now: () => Date,
+): Promise<RoutineExecGitResult> {
+  const interpreterId = await resolveCapabilityPrivateInterpreterId(
+    db,
+    routine.tenant_id,
+  );
+  if (!interpreterId) {
+    return await recordInfraFailureRun(db, routine, event, now, {
+      errorClass: "infra_no_capability_interpreter",
+      errorMessage:
+        "tenant has no capability-private interpreter — the broker must be enabled before a governed run",
+    });
+  }
+  const sessionTable = getBrokerSessionTable();
+  if (!sessionTable) {
+    return await recordInfraFailureRun(db, routine, event, now, {
+      errorClass: "infra_broker_not_configured",
+      errorMessage: "CAPABILITY_BROKER_SESSION_TABLE is not set",
+    });
+  }
+
+  // Module loader: resolve the repo credential once, load the validated SHA's
+  // module from the S3 read-through cache (GitHub only on a cache miss).
+  let credential: RepoCredential | null = null;
+  const loadModuleCodeForSha = async (sha: string): Promise<string> => {
+    if (!credential) {
+      credential = await resolveRepoCredential(routine.tenant_id, db, options);
+    }
+    const octokit = (options.octokitFactory ?? defaultOctokitFactory)(
+      credential.token,
+    );
+    return loadModuleCode({
+      routine: {
+        tenant_id: routine.tenant_id,
+        id: routine.id,
+        module_path: routine.module_path,
+      },
+      sha,
+      credential,
+      octokit,
+      db,
+      options,
+    });
+  };
+
+  const store = createDynamoPort(new DynamoDBClient({}), sessionTable);
+
+  const result = await executeCapabilityHeadlessRoutine(
+    {
+      routineId: routine.id,
+      input: event.input,
+      triggerSource: event.triggerSource ?? "automation",
+      triggerId: event.triggerId ?? null,
+      executionPrincipal:
+        (routine.execution_principal as ExecutionPrincipalSpec | null) ??
+        undefined,
+    },
+    {
+      interpreterId,
+      bucket: options.bucket,
+      database: db,
+      now,
+      sessionStore: store,
+      sessionTableName: sessionTable,
+      loadModuleCode: loadModuleCodeForSha,
+    },
+  );
+
+  // Map the capability outcome onto the git-run result shape. blocked → failed
+  // (with the remediation kind as error class); degraded/succeeded → succeeded.
+  const succeeded =
+    result.status === "succeeded" || result.status === "degraded";
+  return {
+    status: succeeded ? "succeeded" : "failed",
+    executionId: result.executionId,
+    commitSha: result.commitSha ?? null,
+    validatedSha: routine.validated_sha,
+    outputJson: undefined,
+    ...(succeeded
+      ? {}
+      : {
+          errorClass: result.errorClass ?? "capability_run_blocked",
+          errorMessage: result.errorMessage,
+        }),
+  };
 }
 
 // ---------------------------------------------------------------------------

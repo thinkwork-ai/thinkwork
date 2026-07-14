@@ -35,6 +35,14 @@ enum RoutineExecutionStatus {
   CANCELLED
   AWAITING_APPROVAL
   TIMED_OUT
+  # THINK-280 U7: governed capability-headless outcomes. BLOCKED — preflight
+  # readiness failed closed (contract drift, config fingerprint mismatch, stale
+  # approval, or a missing/revoked service binding) and no provider session was
+  # ever opened. DEGRADED — the run proceeded on a degraded (but not revoked)
+  # binding and is attributable but reduced. These are distinguished from
+  # FAILED by icon + label on the run surfaces, not by color alone.
+  BLOCKED
+  DEGRADED
 }
 
 # Routine visibility model (schema follow-up bundle).
@@ -145,6 +153,32 @@ type RoutineExecution {
   # True when git was unreachable and the S3-cached last-validated SHA
   # served the run (R6).
   cacheServed: Boolean
+  # ---- THINK-280 U7: governed capability-headless execution evidence ----
+  # The resolved execution principal decision for this run:
+  # { mode: 'requester'|'agent_owner'|'service', subjectId?, bindingId? }. NULL
+  # on legacy user run-as runs (never inferred or fallen back across modes).
+  executionPrincipal: AWSJSON
+  # Exact resolved dependency manifest checked at preflight:
+  # [{ twcap, contractHash, definitionVersionId }]. NULL on non-capability runs.
+  capabilityDependencies: AWSJSON
+  # Resolved-config / manifest fingerprint validated at preflight against the
+  # pinned dependency snapshot (R15). NULL on non-capability runs.
+  configFingerprint: String
+  # Preflight readiness verdict: 'ready' | 'blocked' | 'degraded'. Only 'ready'
+  # opens a broker session; blocked/degraded record a terminal run with
+  # remediation and ZERO provider work (AE2/AE8). NULL on non-capability runs.
+  readinessOutcome: String
+  # Operator-readable remediation for a blocked/degraded run:
+  # { kind, detail, servicePrincipalId?, bindingId?, definitionVersionId? }.
+  # Rendered adjacent to the run outcome. NULL when the run needed none.
+  remediation: AWSJSON
+  # The minted broker-session evidence row id (capability_broker_sessions.id)
+  # for this run. NULL when no session was opened (blocked runs, legacy runs).
+  brokerSessionId: ID
+  # Append-only broker-call evidence for this run (bounded provider/platform
+  # operations dispatched under the minted session), newest first. Empty on
+  # non-capability runs. Joined from capability_broker_calls by execution id.
+  brokerCalls: [CapabilityBrokerCall!]!
   stepEvents: [RoutineStepEvent!]!
   # Pointer to the routine_asl_versions row that backed this specific
   # execution. Resolved by (state_machine_arn, version_arn) — the same
@@ -174,6 +208,46 @@ type RoutineStepEvent {
   stderrS3Uri: String
   stdoutPreview: String
   truncated: Boolean!
+  # THINK-280 U7: when this step dispatched a governed provider/platform
+  # operation, the append-only broker-call evidence row id; and for a durable
+  # Artifact effect, the produced artifact id. Both NULL on ordinary recipe
+  # steps.
+  brokerCallId: ID
+  artifactId: ID
+  createdAt: AWSDateTime!
+}
+
+# THINK-280 U7: append-only broker-call evidence (capability_broker_calls),
+# projected for the execution-detail UI. Never carries secret material or
+# unbounded provider bodies — only bounded digests + policy/budget/effect
+# metadata and durable output references.
+type CapabilityBrokerCall {
+  id: ID!
+  tenantId: ID!
+  brokerSessionId: ID!
+  clientRequestId: String!
+  sequence: Int
+  # Exact twcap operation reference (e.g. "twcap:<ns>/connection/github-rest@1#issues.list").
+  operationRef: String
+  contractHash: String
+  definitionVersionId: ID
+  bindingId: ID
+  # rejected | authorized | completed | accepted | failed | indeterminate
+  status: String!
+  effect: String
+  errorCategory: String
+  adapterKind: String
+  durationMs: Int
+  requestDigest: String
+  resultDigest: String
+  budgetDelta: AWSJSON
+  # Durable output reference when the result exceeded the inline cap:
+  # { kind: 'artifact'|'s3', ref }.
+  durableRef: AWSJSON
+  routineExecutionId: ID
+  threadTurnId: ID
+  authorizedAt: AWSDateTime
+  finalizedAt: AWSDateTime
   createdAt: AWSDateTime!
 }
 

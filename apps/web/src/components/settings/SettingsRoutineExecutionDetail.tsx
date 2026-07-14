@@ -29,6 +29,7 @@ import {
   parseAwsJson,
 } from "@/components/routines/routineExecutionManifest";
 import { GitRoutineRunPanel } from "@/components/routines/GitRoutineRunPanel";
+import { CapabilityRunEvidence } from "@/components/routines/CapabilityRunEvidence";
 
 const TERMINAL_STATUSES = new Set([
   "succeeded",
@@ -160,6 +161,17 @@ export function RoutineExecutionDetailView({
             status={execution.status}
           />
         ) : null}
+        <div className="px-6 pt-4">
+          <CapabilityRunEvidence
+            readinessOutcome={execution.readinessOutcome}
+            executionPrincipal={execution.executionPrincipal}
+            capabilityDependencies={execution.capabilityDependencies}
+            configFingerprint={execution.configFingerprint}
+            brokerSessionId={execution.brokerSessionId}
+            remediation={execution.remediation}
+            brokerCalls={execution.brokerCalls}
+          />
+        </div>
         <GitRoutineRunPanel
           execution={execution}
           routine={routine as never}

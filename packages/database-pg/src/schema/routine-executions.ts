@@ -94,6 +94,33 @@ export const routineExecutions = pgTable(
     // True when git was unreachable and the S3-cached last-validated SHA
     // served the run (R6 / AE5).
     cache_served: boolean("cache_served"),
+    // ---- THINK-280 U7: capability-headless execution evidence chain ----
+    // Populated only on governed capability-headless runs (service-principal
+    // mode; NULL on every legacy git_python / user run-as / SFN run). The
+    // execution-detail UI is the named reader (R10/R15/R16). See migration
+    // 0249.
+    //
+    // Exact resolved dependency manifest at run time:
+    // [{ twcap, contractHash, definitionVersionId }] — the same shape pinned
+    // on routine_code_cache.capability_dependencies when the SHA was gated.
+    // The evidence answers "which exact contracts backed this run?".
+    capability_dependencies_json: jsonb("capability_dependencies_json"),
+    // Resolved-config / manifest fingerprint checked at preflight against the
+    // pinned dependency snapshot. A mismatch fails the run closed (blocked)
+    // before any provider session is opened (AE2/AE8, R15).
+    config_fingerprint: text("config_fingerprint"),
+    // Preflight readiness verdict: 'ready' | 'blocked' | 'degraded'. 'ready'
+    // is the only outcome that opens a broker session; the others record a
+    // terminal blocked/degraded run with remediation and ZERO provider work.
+    readiness_outcome: text("readiness_outcome"),
+    // Operator-readable remediation payload for a blocked/degraded run:
+    // { kind, detail, servicePrincipalId?, bindingId?, definitionVersionId? }.
+    // Rendered adjacent to the run outcome; also drives an Inbox item.
+    remediation_json: jsonb("remediation_json"),
+    // Minted broker-session evidence row (capability_broker_sessions.id) for
+    // this run. Loose linkage (not an FK — evidence is append-only and may
+    // outlive the run row's edit window). NULL when no session was opened.
+    broker_session_id: uuid("broker_session_id"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
