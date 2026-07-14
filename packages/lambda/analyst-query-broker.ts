@@ -62,6 +62,7 @@ import {
   type AnalystCallerContextPayload,
   type AnalystSourceClaims,
 } from "./analyst-caller-context.js";
+import { authorizeAnalystSourceCall } from "./analyst-source-authorization.js";
 import type { Client as PgClientType } from "pg";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
@@ -919,6 +920,28 @@ export async function handler(
       });
       return httpJson(401, { error: "Unauthorized" });
     }
+
+    // THINK-283 U7: action-time authorization against CURRENT tenant-scoped
+    // control state — a claim minted before a refresh/disable/drift withhold
+    // must not keep working. Runs BEFORE the source credential is resolved
+    // or the source connection opened; a control-database outage denies
+    // (fail closed), never falls through to the source.
+    const authz = await authorizeAnalystSourceCall({
+      tenantId: verified.payload.tenantId,
+      slug: sourceSlug,
+      claims,
+    });
+    if (!authz.ok) {
+      logAuth({
+        mode: "sourced",
+        outcome: "rejected",
+        reason: `source_authz_${authz.reason}`,
+        source: sourceSlug,
+        tenant: verified.payload.tenantId,
+      });
+      return httpJson(401, { error: "Unauthorized" });
+    }
+
     caller = callerIdentityFromContext(verified.payload);
     source = sourceFromClaims(claims);
     logAuth({
