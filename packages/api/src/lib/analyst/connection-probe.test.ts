@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   evaluateAnalystProbeGate,
+  evaluateAnalystRefreshGate,
   normalizePgType,
   probeAnalystConnection,
   PROBE_STALE_AFTER_MS,
@@ -36,6 +37,7 @@ describe("normalizePgType", () => {
 
 const GRANTED: AnalystTableDescriptor[] = [
   {
+    schema: "public",
     name: "threads",
     columns: [
       { name: "id", type: "uuid" },
@@ -45,6 +47,7 @@ const GRANTED: AnalystTableDescriptor[] = [
     ],
   },
   {
+    schema: "public",
     name: "messages",
     columns: [
       { name: "id", type: "uuid" },
@@ -60,6 +63,7 @@ function healthyColumns(): Record<string, unknown>[] {
   for (const table of GRANTED) {
     for (const column of table.columns) {
       rows.push({
+        table_schema: table.schema,
         table_name: table.name,
         column_name: column.name,
         // information_schema spells timestamptz out in full — the probe's
@@ -81,14 +85,21 @@ interface FakeResponses {
   columns?: Record<string, unknown>[];
   /** Tables in the manifest that do NOT exist on the live DB (dev drift). */
   absentTables?: string[];
+  /** THINK-283 (sourceSchema set): every SELECT-able relation of the role. */
+  readableSurface?: Record<string, unknown>[];
+  /** THINK-283 (sourceSchema set): effective write surface. */
+  effectiveWrite?: Record<string, unknown>[];
+  /** THINK-283 (sourceSchema set): schemas the role can CREATE in. */
+  schemaCreate?: Record<string, unknown>[];
 }
 
 function fakeClient(responses: FakeResponses = {}): ProbePgClient {
   return {
     async query(text: string, params?: unknown[]) {
       if (text.includes("has_column_privilege")) {
-        const tables = (params?.[1] as string[]) ?? [];
-        const cols = (params?.[2] as string[]) ?? [];
+        const schemas = (params?.[1] as string[]) ?? [];
+        const tables = (params?.[2] as string[]) ?? [];
+        const cols = (params?.[3] as string[]) ?? [];
         return {
           rows: tables.map((tbl, i) => {
             const col = cols[i];
@@ -97,6 +108,7 @@ function fakeClient(responses: FakeResponses = {}): ProbePgClient {
             const columnMissing =
               absent || responses.missingColumns?.includes(key) === true;
             return {
+              sch: schemas[i],
               tbl,
               col,
               table_exists: !absent,
@@ -109,6 +121,16 @@ function fakeClient(responses: FakeResponses = {}): ProbePgClient {
             };
           }),
         };
+      }
+      // THINK-283 sourced exact-surface checks (sourceSchema set).
+      if (text.includes("'INSERT, UPDATE, DELETE, TRUNCATE'")) {
+        return { rows: responses.effectiveWrite ?? [] };
+      }
+      if (text.includes("has_table_privilege($1, c.oid, 'SELECT')")) {
+        return { rows: responses.readableSurface ?? [] };
+      }
+      if (text.includes("has_schema_privilege")) {
+        return { rows: responses.schemaCreate ?? [] };
       }
       if (text.includes("role_table_grants")) {
         return { rows: responses.writeGrants ?? [] };
@@ -252,6 +274,7 @@ describe("probeAnalystConnection", () => {
     // on dev 2026-07-09.
     const granted: AnalystTableDescriptor[] = [
       {
+        schema: "public",
         name: "events",
         columns: [
           { name: "id", type: "bigserial" },
@@ -352,5 +375,182 @@ describe("evaluateAnalystProbeGate", () => {
       },
     };
     expect(evaluateAnalystProbeGate(meta, OTHER_URL, NOW)).toBeNull();
+  });
+});
+
+describe("THINK-283 exact-surface checks (sourceSchema set)", () => {
+  const sourcedGranted: AnalystTableDescriptor[] = [
+    {
+      schema: "raw_jde",
+      name: "orders",
+      columns: [{ name: "id", type: "uuid" }],
+    },
+  ];
+  const sourcedColumns = [
+    {
+      table_schema: "raw_jde",
+      table_name: "orders",
+      column_name: "id",
+      data_type: "uuid",
+    },
+  ];
+  const expectedSurface = [{ schema: "raw_jde", name: "orders", relkind: "r" }];
+  const sourcedDeps = (responses: FakeResponses) => ({
+    grantedTables: sourcedGranted,
+    now: () => new Date("2026-07-13T12:00:00.000Z"),
+    role: "warehouse_reader",
+    sourceSchema: "raw_jde",
+    getClient: async () =>
+      fakeClient({
+        columns: sourcedColumns,
+        readableSurface: expectedSurface,
+        ...responses,
+      }),
+  });
+
+  it("expected qualified surface with no extras → ok", async () => {
+    const verdict = await probeAnalystConnection(sourcedDeps({}));
+    expect(verdict.status).toBe("ok");
+  });
+
+  it("covers AE3: a newly granted UNMODELED table withholds the source instead of expanding the model", async () => {
+    const verdict = await probeAnalystConnection(
+      sourcedDeps({
+        readableSurface: [
+          ...expectedSurface,
+          { schema: "raw_jde", name: "new_orders", relkind: "r" },
+        ],
+      }),
+    );
+    expect(verdict.status).toBe("fail");
+    expect(verdict.reason).toBe("unexpected_surface");
+    expect(verdict.detail).toContain("raw_jde.new_orders");
+    expect(verdict.detail).toContain("refresh");
+  });
+
+  it("access to another user schema is an isolation failure with a qualified reason", async () => {
+    const verdict = await probeAnalystConnection(
+      sourcedDeps({
+        readableSurface: [
+          ...expectedSurface,
+          { schema: "platform", name: "mirror_batch", relkind: "r" },
+        ],
+      }),
+    );
+    expect(verdict.status).toBe("fail");
+    expect(verdict.reason).toBe("unexpected_surface");
+    expect(verdict.detail).toContain("platform.mirror_batch");
+  });
+
+  it("a newly selectable VIEW (owner-privilege bypass) is detected even with no direct grant row", async () => {
+    const verdict = await probeAnalystConnection(
+      sourcedDeps({
+        readableSurface: [
+          ...expectedSurface,
+          { schema: "raw_jde", name: "orders_view", relkind: "v" },
+        ],
+      }),
+    );
+    expect(verdict.status).toBe("fail");
+    expect(verdict.reason).toBe("unexpected_surface");
+    expect(verdict.detail).toContain("orders_view (v)");
+  });
+
+  it("effective write privileges and schema-creation rights withhold", async () => {
+    const writable = await probeAnalystConnection(
+      sourcedDeps({
+        effectiveWrite: [{ schema: "raw_jde", name: "orders" }],
+      }),
+    );
+    expect(writable.status).toBe("fail");
+    expect(writable.reason).toBe("write_privilege");
+
+    const creatable = await probeAnalystConnection(
+      sourcedDeps({ schemaCreate: [{ schema: "raw_jde" }] }),
+    );
+    expect(creatable.status).toBe("fail");
+    expect(creatable.reason).toBe("unexpected_surface");
+    expect(creatable.detail).toContain("CREATE");
+  });
+});
+
+describe("THINK-283 refresh gate (evaluateAnalystRefreshGate)", () => {
+  const ANALYST_SOURCED_URL = "https://api.test/mcp/analyst/warehouse";
+
+  it("absent key → served (never-refreshed sources keep working)", () => {
+    expect(evaluateAnalystRefreshGate({}, ANALYST_SOURCED_URL)).toBeNull();
+    expect(
+      evaluateAnalystRefreshGate(
+        { analyst_probe: { status: "ok", checkedAt: "x" } },
+        ANALYST_SOURCED_URL,
+      ),
+    ).toBeNull();
+  });
+
+  it("running and failed refresh states withhold with operator detail", () => {
+    const running = evaluateAnalystRefreshGate(
+      { analyst_refresh: { status: "running", attemptId: "a1" } },
+      ANALYST_SOURCED_URL,
+    );
+    expect(running).not.toBeNull();
+    expect(running!.detail).toContain("in progress");
+
+    const failed = evaluateAnalystRefreshGate(
+      {
+        analyst_refresh: {
+          status: "failed",
+          detail: "model upload failed — retry the refresh",
+        },
+      },
+      ANALYST_SOURCED_URL,
+    );
+    expect(failed).not.toBeNull();
+    expect(failed!.detail).toContain("model upload failed");
+  });
+
+  it("a completed (ok) refresh serves; a malformed blob fails closed", () => {
+    expect(
+      evaluateAnalystRefreshGate(
+        { analyst_refresh: { status: "ok", attemptId: "a1" } },
+        ANALYST_SOURCED_URL,
+      ),
+    ).toBeNull();
+    const malformed = evaluateAnalystRefreshGate(
+      { analyst_refresh: { status: "??" } },
+      ANALYST_SOURCED_URL,
+    );
+    expect(malformed).not.toBeNull();
+    expect(malformed!.detail).toContain("malformed");
+  });
+
+  it("state isolation: a fresh OK probe verdict does NOT clear a refresh withhold", () => {
+    const meta = {
+      analyst_probe: {
+        status: "ok",
+        checkedAt: new Date("2026-07-13T12:00:00.000Z").toISOString(),
+      },
+      analyst_refresh: { status: "running", attemptId: "a1" },
+    };
+    // The probe gate passes...
+    expect(
+      evaluateAnalystProbeGate(
+        meta,
+        ANALYST_SOURCED_URL,
+        Date.parse("2026-07-13T12:01:00.000Z"),
+      ),
+    ).toBeNull();
+    // ...but the refresh gate still withholds — the two states are separate.
+    expect(
+      evaluateAnalystRefreshGate(meta, ANALYST_SOURCED_URL),
+    ).not.toBeNull();
+  });
+
+  it("refresh state on a non-analyst URL → not gated (mislabel guard)", () => {
+    expect(
+      evaluateAnalystRefreshGate(
+        { analyst_refresh: { status: "failed" } },
+        "https://api.test/mcp/other",
+      ),
+    ).toBeNull();
   });
 });

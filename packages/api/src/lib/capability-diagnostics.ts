@@ -81,6 +81,14 @@ export const CAPABILITY_DROP_REASONS = [
    * context (R8).
    */
   "connection_probe_failed",
+  /**
+   * THINK-283: an explicit source refresh is running or its last attempt
+   * failed. The source is withheld — independently of the scheduled probe —
+   * until the refresh mutation's own commit clears the durable
+   * `analyst_refresh` state; `detail` carries the operator-facing step or
+   * remediation.
+   */
+  "source_refresh_pending",
 ] as const;
 
 export type CapabilityDropReason = (typeof CAPABILITY_DROP_REASONS)[number];

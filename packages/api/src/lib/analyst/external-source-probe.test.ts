@@ -25,6 +25,7 @@ const STORED = storedModelFromColumns([
 ]);
 
 const GRANTED: AnalystTableDescriptor[] = STORED.tables.map((t) => ({
+  schema: t.schema,
   name: t.name,
   columns: t.columns.map((c) => ({ name: c.name, type: c.pgType })),
 }));
@@ -42,10 +43,12 @@ function probeClient(opts: {
   return {
     query: async (text: string, params?: unknown[]) => {
       if (/has_column_privilege/.test(text)) {
-        const tbls = (params?.[1] as string[]) ?? [];
-        const cols = (params?.[2] as string[]) ?? [];
+        const schemas = (params?.[1] as string[]) ?? [];
+        const tbls = (params?.[2] as string[]) ?? [];
+        const cols = (params?.[3] as string[]) ?? [];
         return {
           rows: tbls.map((t, i) => ({
+            sch: schemas[i],
             tbl: t,
             col: cols[i],
             table_exists: true,
@@ -60,6 +63,7 @@ function probeClient(opts: {
       // information_schema.columns
       return {
         rows: opts.live.map((c) => ({
+          table_schema: "public",
           table_name: c.table,
           column_name: c.column,
           data_type: c.dataType,
@@ -87,6 +91,17 @@ describe("external analyst source probe (THINK-239)", () => {
     const verdict = await probeAnalystConnection(
       deps(probeClient({ live: CLEAN_LIVE })),
     );
+    expect(verdict.status).toBe("ok");
+  });
+
+  it("THINK-283: a v1 legacy model normalizes to public and probes ok", async () => {
+    // Simulates the reconciler path for a pre-schema-scoping artifact: the
+    // normalized descriptors are public-qualified and match a public-scoped
+    // live surface, so nothing drifts.
+    const verdict = await probeAnalystConnection({
+      ...deps(probeClient({ live: CLEAN_LIVE })),
+      grantedTables: GRANTED.map((t) => ({ ...t, schema: "public" })),
+    });
     expect(verdict.status).toBe("ok");
   });
 

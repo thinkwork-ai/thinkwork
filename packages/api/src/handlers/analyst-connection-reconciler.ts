@@ -25,7 +25,14 @@
 
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getConfig } from "@thinkwork/runtime-config";
-import type { StoredAnalystModel } from "@thinkwork/database-pg/analyst";
+import {
+  normalizeStoredAnalystModel,
+  type StoredAnalystModel,
+} from "@thinkwork/database-pg/analyst";
+import {
+  analystSourceClaimsSchema,
+  type AnalystSourceClaims,
+} from "@thinkwork/lambda/analyst-caller-context";
 import { connectExternalSource } from "@thinkwork/lambda/analyst-reader-db";
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@thinkwork/database-pg";
@@ -67,6 +74,12 @@ export interface ReconcilerResult {
   sourced_probed: number;
 }
 
+/**
+ * Fetch + NORMALIZE the stored model (THINK-283): legacy v1 artifacts read
+ * as `public`, v2 keeps qualified identity, and a malformed artifact is a
+ * fail-closed null (the caller stamps a retryable probe failure) rather
+ * than a trusted cast.
+ */
 async function fetchStoredModel(
   bucket: string,
   tenantSlug: string,
@@ -80,7 +93,7 @@ async function fetchStoredModel(
     )) as { Body?: { transformToString?: () => Promise<string> } };
     const body = await result.Body?.transformToString?.();
     if (!body) return null;
-    return JSON.parse(body) as StoredAnalystModel;
+    return normalizeStoredAnalystModel(JSON.parse(body));
   } catch {
     return null;
   }
@@ -130,11 +143,12 @@ async function defaultProbeSourcedRow(
     return {
       status: "fail",
       reason: "schema_drift",
-      detail: `stored model for analyst source "${slug}" is missing from S3 — re-register the source`,
+      detail: `stored model for analyst source "${slug}" is missing or malformed in S3 — refresh or re-register the source`,
       checkedAt,
     };
   }
   const grantedTables = model.tables.map((t) => ({
+    schema: t.schema,
     name: t.name,
     columns: t.columns.map((c) => ({ name: c.name, type: c.pgType })),
   }));
@@ -143,6 +157,9 @@ async function defaultProbeSourcedRow(
       connectExternalSource(claims) as unknown as Promise<ProbePgClient>,
     grantedTables,
     role: claims.dbUser,
+    // THINK-283: enable the exact-surface checks against the source's ONE
+    // selected schema (legacy claims resolve to public).
+    sourceSchema: analystSourceClaimsSchema(claims as AnalystSourceClaims),
   });
 }
 
@@ -219,10 +236,22 @@ export async function handler(
     }
   }
 
-  // Sourced: probe each row independently.
+  // Sourced: probe each row independently. A thrown per-row failure stamps
+  // a retryable probe_error on THAT row only — one broken warehouse must
+  // never stop the batch (THINK-283).
   const probeSourced = deps.probeSourcedRow ?? defaultProbeSourcedRow;
   for (const row of sourcedRows) {
-    const verdict = await probeSourced(row);
+    let verdict: ConnectionProbeVerdict;
+    try {
+      verdict = await probeSourced(row);
+    } catch (err) {
+      verdict = {
+        status: "fail",
+        reason: "probe_error",
+        detail: `analyst source probe errored: ${err instanceof Error ? err.message : String(err)}`,
+        checkedAt: new Date().toISOString(),
+      };
+    }
     await stamp(row, verdict);
     updated++;
   }
