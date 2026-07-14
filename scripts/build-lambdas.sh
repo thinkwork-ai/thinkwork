@@ -24,6 +24,11 @@ ESBUILD_FLAGS=(
   --format=esm
   --minify
   --sourcemap
+  # THINK-280: the capability-broker lib imports the capability-sdk Python
+  # source as text (see packages/lambda/py-assets.d.ts); any handler pulling
+  # that lib in (admin-ops-mcp and friends) needs the loader on the base
+  # flags too, not just the bundled-AgentCore set.
+  --loader:.py=text
   --external:@aws-sdk/*
   --external:aws-sdk
 )
