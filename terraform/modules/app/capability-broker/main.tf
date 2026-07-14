@@ -195,8 +195,12 @@ resource "aws_lambda_function" "broker" {
     variables = {
       CAPABILITY_BROKER_SESSION_TABLE = aws_dynamodb_table.sessions[0].name
       CAPABILITY_BROKER_AUDIENCE      = local.broker_audience
-      DB_CLUSTER_ARN                  = var.db_cluster_arn
-      DB_SECRET_ARN                   = var.db_secret_arn
+      # getDb() (@thinkwork/database-pg) resolves the pg pool from
+      # DATABASE_SECRET_ARN + DATABASE_HOST — the DB_* names were never read.
+      # Both the evidence store AND the authorization loader query Aurora, so
+      # these are load-bearing now that the real loader is wired.
+      DATABASE_SECRET_ARN = var.db_secret_arn
+      DATABASE_HOST       = var.db_cluster_endpoint
     }
   }
 
