@@ -48,7 +48,15 @@ export function createDefaultRoutineProposalPromoter(): RoutineProposalPromoter 
           dependencies: bundle.dependencies,
           principal: {
             mode: bundle.principal.mode,
-            subjectId: bundle.principal.servicePrincipalId ?? null,
+            // The capability-headless executor requires the pinned principal
+            // under `servicePrincipalId` for service mode (it fails closed with
+            // "service principal mode requires servicePrincipalId" otherwise).
+            // Writing it as `subjectId` — which the executor treats as a user
+            // subject, never the service principal — made every service-mode
+            // headless run fail. Verified live during the THINK-280 dogfood.
+            ...(bundle.principal.servicePrincipalId
+              ? { servicePrincipalId: bundle.principal.servicePrincipalId }
+              : {}),
           },
           provenance: { evidence: bundle.evidence },
           approvedFingerprint: proposal.payload_fingerprint,
