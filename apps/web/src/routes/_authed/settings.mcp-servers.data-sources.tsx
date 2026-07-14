@@ -1,11 +1,15 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { OperatorGuard } from "@/components/settings/OperatorGuard";
+import { SettingsMcpServers } from "@/components/settings/SettingsMcpServers";
 
-// The standalone Datasource MCPs tab merged into the unified MCP Servers tab —
-// old bookmarks keep working via this redirect.
+// The Data Sources tab of the Connectors surface (THINK-285) — analyst data
+// sources on their own tab. Old bookmarks to this path land here directly.
 export const Route = createFileRoute(
   "/_authed/settings/mcp-servers/data-sources",
 )({
-  beforeLoad: () => {
-    throw redirect({ to: "/settings/mcp-servers/servers", replace: true });
-  },
+  component: () => (
+    <OperatorGuard>
+      <SettingsMcpServers />
+    </OperatorGuard>
+  ),
 });

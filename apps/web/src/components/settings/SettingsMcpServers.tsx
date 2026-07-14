@@ -51,13 +51,16 @@ import { SettingsConnections } from "@/components/settings/SettingsConnections";
 
 const CONNECTIONS_ROUTE = "/settings/mcp-servers";
 const MCP_SERVERS_ROUTE = "/settings/mcp-servers/servers";
+const DATA_SOURCES_ROUTE = "/settings/mcp-servers/data-sources";
 
-type ConnectionsTab = "connections" | "servers";
+type ConnectionsTab = "connections" | "servers" | "data-sources";
 
 function tabForPath(pathname: string): ConnectionsTab {
-  // The merged MCP list lives at /servers; the retired /plugins and
-  // /data-sources paths redirect there at the route level. The section index
-  // is the Connections tab (per-user integrations).
+  // The merged MCP list lives at /servers; analyst data sources live at
+  // /data-sources (checked first for explicit ordering — the paths don't
+  // overlap). The retired /plugins path redirects at the route level. The
+  // section index is the Connections tab (per-user integrations).
+  if (pathname.startsWith(DATA_SOURCES_ROUTE)) return "data-sources";
   if (pathname.startsWith(MCP_SERVERS_ROUTE)) return "servers";
   return "connections";
 }
@@ -81,6 +84,9 @@ export function SettingsMcpServers() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
+  // THINK-285: the Data Sources tab filters independently of the servers tab
+  // so a filter typed on one tab never silently hides rows on the other.
+  const [dataSourceSearch, setDataSourceSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const pluginServers = useMemo(
@@ -91,8 +97,8 @@ export function SettingsMcpServers() {
     () => new Set(pluginServers.map((server) => normalizeMcpServerUrl(server))),
     [pluginServers],
   );
-  // THINK-239: analyst connector rows (builtin + registered sources) live on
-  // their own Datasource MCPs tab.
+  // THINK-239/THINK-285: analyst connector rows (builtin + registered
+  // sources) live on their own Data Sources tab.
   const dataSourceServers = useMemo(
     () => sortMcpServers((servers ?? []).filter(isAnalystDataSourceServer)),
     [servers],
@@ -326,30 +332,33 @@ export function SettingsMcpServers() {
   );
 
   usePageHeaderActions({
-    title: "Connections",
-    breadcrumbs: [{ label: "Connections" }],
+    title: "Connectors",
+    breadcrumbs: [{ label: "Connectors" }],
     tabs: [
       { to: CONNECTIONS_ROUTE, label: "Connections" },
       { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
+      { to: DATA_SOURCES_ROUTE, label: "Data Sources" },
     ],
+    // THINK-285: each tab shows only the action that creates the thing it
+    // lists — New MCP Server on the servers tab, Register data source on the
+    // Data Sources tab, nothing on the per-user Connections tab.
     action:
       activeTab === "servers" ? (
-        <div className="flex items-center gap-1">
-          <TooltipIconButton
-            label="Register data source — give the analyst a Postgres database to query with a read-only, brokered credential."
-            aria-label="Register data source"
-            onClick={() => setRegisterOpen(true)}
-          >
-            <Database className="size-4" />
-          </TooltipIconButton>
-          <TooltipIconButton
-            label="New MCP Server — register an MCP server for the tenant."
-            aria-label="New MCP Server"
-            onClick={() => setAddOpen(true)}
-          >
-            <Plus className="size-4" />
-          </TooltipIconButton>
-        </div>
+        <TooltipIconButton
+          label="New MCP Server — register an MCP server for the tenant."
+          aria-label="New MCP Server"
+          onClick={() => setAddOpen(true)}
+        >
+          <Plus className="size-4" />
+        </TooltipIconButton>
+      ) : activeTab === "data-sources" ? (
+        <TooltipIconButton
+          label="Register data source — give the analyst a Postgres database to query with a read-only, brokered credential."
+          aria-label="Register data source"
+          onClick={() => setRegisterOpen(true)}
+        >
+          <Database className="size-4" />
+        </TooltipIconButton>
       ) : undefined,
     actionKey: `mcp-servers:${activeTab}`,
   });
@@ -375,28 +384,56 @@ export function SettingsMcpServers() {
 
   return (
     <>
-      <SettingsTablePane
-        embedded
-        title="MCP Servers"
-        description="The tenant MCP server registry — registered servers, plugin-installed servers, and analyst data sources. Register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
-        loading={!servers && !error}
-        toolbar={
-          error ? (
-            <p className="text-sm text-destructive">{error}</p>
-          ) : (
-            <Input
-              placeholder="Search servers…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
-          )
-        }
-      >
-        <div className="space-y-8">
+      {activeTab === "data-sources" ? (
+        <SettingsTablePane
+          embedded
+          title="Data Sources"
+          description="Postgres data sources the analyst queries with read-only, brokered credentials. Register this environment's own cluster databases or an external database."
+          loading={!servers && !error}
+          toolbar={
+            error ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : (
+              <Input
+                placeholder="Search data sources…"
+                value={dataSourceSearch}
+                onChange={(e) => setDataSourceSearch(e.target.value)}
+                className="max-w-sm"
+              />
+            )
+          }
+        >
+          <McpServerSection
+            columns={dataSourceColumns}
+            servers={dataSourceServers}
+            search={dataSourceSearch}
+            fitContent
+            emptyText="No data sources registered."
+            onOpen={openServer}
+          />
+        </SettingsTablePane>
+      ) : (
+        <SettingsTablePane
+          embedded
+          title="MCP Servers"
+          description="The tenant MCP server registry — registered servers and plugin-installed servers. Register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
+          loading={!servers && !error}
+          toolbar={
+            error ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : (
+              <Input
+                placeholder="Search servers…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-sm"
+              />
+            )
+          }
+        >
           {/* One merged table: tenant-registered and plugin-managed servers
-              together, typed per row (THINK-284). Analyst data sources keep
-              their own section until the Data Sources tab lands (U2). */}
+              together, typed per row (THINK-284). Analyst data sources live
+              on the Data Sources tab (THINK-285). */}
           <McpServerSection
             columns={serverColumns}
             servers={mergedServers}
@@ -404,19 +441,8 @@ export function SettingsMcpServers() {
             emptyText="No MCP servers configured."
             onOpen={openServer}
           />
-          {dataSourceServers.length > 0 ? (
-            <McpServerSection
-              title="Datasource MCPs"
-              columns={dataSourceColumns}
-              servers={dataSourceServers}
-              search={search}
-              fitContent
-              emptyText="No data sources registered."
-              onOpen={openServer}
-            />
-          ) : null}
-        </div>
-      </SettingsTablePane>
+        </SettingsTablePane>
+      )}
       <NewMcpServerDialog
         open={addOpen}
         onOpenChange={setAddOpen}
