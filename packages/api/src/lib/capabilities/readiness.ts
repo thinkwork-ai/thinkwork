@@ -74,13 +74,132 @@ export interface BindingProbeRunner {
   }): Promise<ProbeOutcome>;
 }
 
+/** Bounded probe budget — a readiness check never blocks the verify mutation. */
+const PROBE_TIMEOUT_MS = 8_000;
+
+interface ProbeSelector {
+  method: string;
+  host: string;
+  path: string;
+  fixedQuery?: Record<string, string>;
+  credential?: {
+    name?: string;
+    field?: string;
+    placement?: string;
+    param?: string;
+    scheme?: string;
+  };
+}
+
 /**
- * Deliberate stub (U2a ships no execution path): the service wiring
- * slice supplies the real read-only HTTP probe implementation.
+ * Pick the cheapest read-only, idempotent, GET operation with a fully-resolved
+ * path (no `{placeholder}` path params — the probe carries no operation input).
+ * The probe NEVER touches a write/effectful operation.
+ */
+function pickProbeOperation(descriptor: unknown): ProbeSelector | null {
+  const ops =
+    descriptor && typeof descriptor === "object"
+      ? (descriptor as { operations?: unknown }).operations
+      : undefined;
+  if (!Array.isArray(ops)) return null;
+  for (const op of ops) {
+    if (!op || typeof op !== "object") continue;
+    const o = op as {
+      effect?: unknown;
+      idempotency?: unknown;
+      targetScope?: { resourceSelector?: unknown };
+    };
+    if (o.effect !== "read" || o.idempotency !== "idempotent") continue;
+    const sel = o.targetScope?.resourceSelector as ProbeSelector | undefined;
+    if (!sel || sel.method !== "GET" || typeof sel.host !== "string") continue;
+    if (typeof sel.path !== "string" || sel.path.includes("{")) continue;
+    return sel;
+  }
+  return null;
+}
+
+function buildProbeUrl(sel: ProbeSelector): URL {
+  const url = new URL(`https://${sel.host}${sel.path}`);
+  for (const [k, v] of Object.entries(sel.fixedQuery ?? {})) {
+    url.searchParams.set(k, String(v));
+  }
+  return url;
+}
+
+function applyProbeCredential(
+  sel: ProbeSelector,
+  credential: Record<string, Record<string, unknown>>,
+  url: URL,
+  headers: Headers,
+): void {
+  const cred = sel.credential;
+  if (!cred?.name || !cred.field || !cred.param) return;
+  const secret = credential[cred.name]?.[cred.field];
+  if (typeof secret !== "string" || secret.length === 0) return;
+  if (cred.placement === "query") {
+    url.searchParams.set(cred.param, secret);
+  } else {
+    headers.set(cred.param, cred.scheme ? `${cred.scheme} ${secret}` : secret);
+  }
+}
+
+/**
+ * Real read-only HTTP probe (THINK-280 execution-wiring slice). Verifies a
+ * binding by issuing exactly ONE bounded, read-only GET against the descriptor's
+ * cheapest idempotent operation — applying the resolved credential the same way
+ * the adapter would. A 2xx is ready; a 4xx/5xx is a degraded binding with an
+ * actionable `http_<status>`; an unreachable target degrades (retryable) rather
+ * than throwing. Response bodies are cancelled unread — never inspected or
+ * stored (readiness_evidence_json keeps only status/duration/failureKind).
  */
 export const readOnlyHttpProbeRunner: BindingProbeRunner = {
-  async probe(): Promise<ProbeOutcome> {
-    throw new Error("not-implemented-in-U2a");
+  async probe(input): Promise<ProbeOutcome> {
+    const started = Date.now();
+    const sel = pickProbeOperation(input.descriptor);
+    if (!sel) {
+      return {
+        ok: false,
+        failureKind: "no_read_only_probe_operation",
+        durationMs: Date.now() - started,
+      };
+    }
+    const url = buildProbeUrl(sel);
+    const headers = new Headers({
+      Accept: "application/json",
+      "User-Agent": "thinkwork-capability-readiness-probe",
+    });
+    applyProbeCredential(sel, input.credential ?? {}, url, headers);
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers,
+        redirect: "error",
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      });
+    } catch {
+      return {
+        ok: false,
+        failureKind: "probe_unreachable",
+        durationMs: Date.now() - started,
+      };
+    }
+    // Close the socket without reading/storing the body.
+    try {
+      await res.body?.cancel();
+    } catch {
+      /* body already consumed/closed — ignore */
+    }
+    const durationMs = Date.now() - started;
+    return res.ok
+      ? { ok: true, statusCode: res.status, durationMs }
+      : {
+          ok: false,
+          statusCode: res.status,
+          durationMs,
+          failureKind: `http_${res.status}`,
+        };
   },
 };
 
