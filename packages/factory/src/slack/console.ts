@@ -20,6 +20,12 @@ import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import type { GithubOps } from "../phases/evidence.js";
+import {
+  nextN,
+  releaseTags,
+  tagGlob,
+  type ReleaseConfig,
+} from "../domain/release.js";
 import type { HostTransport } from "../workers/transport.js";
 import type { Logger } from "../logger.js";
 import { findNewestBaton } from "../phases/prompts.js";
@@ -960,8 +966,8 @@ export const RELEASE_OFFER_TTL_MS = 10 * 60 * 1000;
 
 interface ReleaseOffer {
   token: string;
-  vTag: string;
-  desktopTag: string;
+  /** Every tag this cut mints (primary first), per the release scheme. */
+  tags: string[];
   /** The exact origin/main sha shown to the operator — the sha that gets tagged. */
   sha: string;
   expiresAtMs: number;
@@ -982,7 +988,14 @@ export interface ReleaseDeps {
   /** The daemon's repo checkout (tags are refs — no working-tree mutation). */
   repoPath: string;
   channelId: string;
+  /** Tag scheme (templates with `<N>`), from config `release`. */
+  release: ReleaseConfig;
   log: Logger;
+}
+
+/** Display form of a tag list: `` `a` + `b` ``. */
+function fmtTags(tags: string[]): string {
+  return tags.map((t) => `\`${t}\``).join(" + ");
 }
 
 async function git(
@@ -995,21 +1008,16 @@ async function git(
   });
 }
 
-/** Next canary N from `git tag --list` output (newest first). */
-export function nextCanaryN(tagList: string): number {
-  const first = tagList
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => /^v0\.1\.0-canary\.\d+$/.test(l));
-  if (first === undefined) return 1;
-  return Number(first.slice("v0.1.0-canary.".length)) + 1;
-}
-
 function parseOffer(raw: string | undefined): ReleaseOffer | null {
   if (raw === undefined) return null;
   try {
     const o = JSON.parse(raw) as ReleaseOffer;
-    return typeof o.token === "string" && typeof o.sha === "string" ? o : null;
+    return typeof o.token === "string" &&
+      typeof o.sha === "string" &&
+      Array.isArray(o.tags) &&
+      o.tags.length > 0
+      ? o
+      : null;
   } catch {
     return null;
   }
@@ -1049,15 +1057,14 @@ export function createReleaseExecutors(
           text: `❌ release: git fetch failed:\n\`\`\`\n${(fetch.stderr || fetch.stdout).slice(0, 800)}\n\`\`\``,
         };
       }
-      const tags = await git(deps, [
+      const tagList = await git(deps, [
         "tag",
         "--list",
-        "v0.1.0-canary.*",
+        tagGlob(deps.release.tagTemplate),
         "--sort=-version:refname",
       ]);
-      const n = nextCanaryN(tags.stdout);
-      const vTag = `v0.1.0-canary.${n}`;
-      const desktopTag = `desktop-v0.1.0-canary.${n}`;
+      const n = nextN(deps.release.tagTemplate, tagList.stdout);
+      const cutTags = releaseTags(deps.release, n);
       const sha = (await git(deps, ["rev-parse", "origin/main"])).stdout.trim();
       if (!/^[0-9a-f]{7,40}$/.test(sha)) {
         return { text: `❌ release: couldn't resolve origin/main (${sha.slice(0, 120)}).` };
@@ -1065,14 +1072,13 @@ export function createReleaseExecutors(
       const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       const offer: ReleaseOffer = {
         token,
-        vTag,
-        desktopTag,
+        tags: cutTags,
         sha,
         expiresAtMs: Date.now() + RELEASE_OFFER_TTL_MS,
         messageTs: null,
       };
       deps.store.setMeta(RELEASE_OFFER_KEY, JSON.stringify(offer));
-      const text = `Confirm cut \`${vTag}\` + \`${desktopTag}\` at origin/main \`${sha.slice(0, 10)}\`? (expires in 10 min)`;
+      const text = `Confirm cut ${fmtTags(cutTags)} at origin/main \`${sha.slice(0, 10)}\`? (expires in 10 min)`;
       return {
         text,
         blocks: [
@@ -1109,7 +1115,7 @@ export function createReleaseExecutors(
       // One-shot: consume BEFORE executing — a double-tap must not double-tag.
       deps.store.deleteMeta(RELEASE_OFFER_KEY);
       if (Date.now() > offer.expiresAtMs) {
-        await resolveOfferMessage(deps, offer, `⏰ Release offer for \`${offer.vTag}\` expired — run \`release\` again.`);
+        await resolveOfferMessage(deps, offer, `⏰ Release offer for \`${offer.tags[0]}\` expired — run \`release\` again.`);
         return { text: `⏰ That offer expired — run \`release\` for a fresh one.` };
       }
       // Show-what-you-execute: refuse if origin/main advanced past the sha
@@ -1120,21 +1126,21 @@ export function createReleaseExecutors(
         await resolveOfferMessage(
           deps,
           offer,
-          `⚠️ Offer for \`${offer.vTag}\` withdrawn — origin/main moved past \`${offer.sha.slice(0, 10)}\`.`,
+          `⚠️ Offer for \`${offer.tags[0]}\` withdrawn — origin/main moved past \`${offer.sha.slice(0, 10)}\`.`,
         );
         return {
           text: `⚠️ origin/main advanced (\`${offer.sha.slice(0, 10)}\` → \`${head.slice(0, 10)}\`) since that offer — not tagging the new head silently. Run \`release\` again to confirm the current sha.`,
         };
       }
-      // Collision guard, then tag THE STORED SHA and push both tags.
-      for (const tag of [offer.vTag, offer.desktopTag]) {
+      // Collision guard, then tag THE STORED SHA and push every tag.
+      for (const tag of offer.tags) {
         const exists = await git(deps, ["tag", "--list", tag]);
         if (exists.stdout.trim() !== "") {
           await resolveOfferMessage(deps, offer, `❌ Tag \`${tag}\` already exists — nothing cut.`);
           return { text: `❌ Tag \`${tag}\` already exists — nothing was cut. Run \`release\` to derive a fresh N.` };
         }
       }
-      for (const tag of [offer.vTag, offer.desktopTag]) {
+      for (const tag of offer.tags) {
         const t = await git(deps, ["tag", tag, offer.sha]);
         if (t.code !== 0) {
           await resolveOfferMessage(deps, offer, `❌ \`git tag ${tag}\` failed — nothing pushed.`);
@@ -1143,11 +1149,10 @@ export function createReleaseExecutors(
           };
         }
       }
-      const push = await git(deps, ["push", "origin", offer.vTag, offer.desktopTag]);
+      const push = await git(deps, ["push", "origin", ...offer.tags]);
       if (push.code !== 0) {
         // Clean up the local tags so a retry can re-derive cleanly.
-        await git(deps, ["tag", "-d", offer.vTag]);
-        await git(deps, ["tag", "-d", offer.desktopTag]);
+        for (const tag of offer.tags) await git(deps, ["tag", "-d", tag]);
         await resolveOfferMessage(deps, offer, `❌ Tag push failed — nothing cut.`);
         return {
           text: `❌ tag push failed (local tags cleaned up):\n\`\`\`\n${(push.stderr || push.stdout).slice(0, 800)}\n\`\`\``,
@@ -1156,16 +1161,18 @@ export function createReleaseExecutors(
       await resolveOfferMessage(
         deps,
         offer,
-        `🚢 Cut \`${offer.vTag}\` + \`${offer.desktopTag}\` at \`${offer.sha.slice(0, 10)}\` by <@${ctx.userId}>.`,
+        `🚢 Cut ${fmtTags(offer.tags)} at \`${offer.sha.slice(0, 10)}\` by <@${ctx.userId}>.`,
       );
       // Actions run URLs appear a few seconds after the push — short retry.
-      const runLinks = await findRunLinks(deps, [offer.vTag, offer.desktopTag]);
+      const runLinks = await findRunLinks(deps, offer.tags);
       const runsNote =
         runLinks.length > 0
           ? `\nRuns: ${runLinks.join(" · ")}`
           : "\nRuns: not visible yet — check the Actions tab in a minute.";
+      const schemeNote =
+        deps.release.note !== undefined ? ` ${deps.release.note}` : "";
       return {
-        text: `🚢 Cut \`${offer.vTag}\` + \`${offer.desktopTag}\` at \`${offer.sha.slice(0, 10)}\`. The desktop tag deploys apps/web to dev.${runsNote}`,
+        text: `🚢 Cut ${fmtTags(offer.tags)} at \`${offer.sha.slice(0, 10)}\`.${schemeNote}${runsNote}`,
       };
     },
 
@@ -1178,7 +1185,7 @@ export function createReleaseExecutors(
       await resolveOfferMessage(
         deps,
         offer,
-        `🚫 Release offer for \`${offer.vTag}\` cancelled by <@${ctx.userId}>.`,
+        `🚫 Release offer for \`${offer.tags[0]}\` cancelled by <@${ctx.userId}>.`,
       );
       return { text: `🚫 Cancelled — no tag was cut.` };
     },

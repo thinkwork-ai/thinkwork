@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { DEFAULT_RELEASE, nextN } from "../src/domain/release.js";
 import { createLogger, type Logger } from "../src/logger.js";
 import type { PollCandidate } from "../src/linear/poller.js";
 import {
@@ -28,7 +29,6 @@ import {
   createMergeExecutor,
   createReleaseExecutors,
   newestImages,
-  nextCanaryN,
   RELEASE_OFFER_KEY,
 } from "../src/slack/console.js";
 import { LocalTransport } from "../src/workers/transport.js";
@@ -934,6 +934,7 @@ describe("U8: release confirm round-trip", () => {
         transport,
         repoPath: "/fake/repo",
         channelId: CHANNEL,
+        release: DEFAULT_RELEASE,
         log,
       }),
     });
@@ -1102,11 +1103,11 @@ describe("U8: release confirm round-trip", () => {
   });
 });
 
-describe("nextCanaryN", () => {
+describe("nextN (release scheme)", () => {
   it("derives from the newest-first tag list; empty list starts at 1", () => {
-    expect(nextCanaryN("v0.1.0-canary.354\nv0.1.0-canary.353\n")).toBe(355);
-    expect(nextCanaryN("")).toBe(1);
-    expect(nextCanaryN("garbage\nv0.1.0-canary.7")).toBe(8);
+    expect(nextN("v0.1.0-canary.<N>", "v0.1.0-canary.354\nv0.1.0-canary.353\n")).toBe(355);
+    expect(nextN("v0.1.0-canary.<N>", "")).toBe(1);
+    expect(nextN("v0.1.0-canary.<N>", "garbage\nv0.1.0-canary.7")).toBe(8);
   });
 });
 

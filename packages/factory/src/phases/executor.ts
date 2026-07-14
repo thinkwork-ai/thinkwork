@@ -481,6 +481,7 @@ async function runLaunch(
       repair: action.repair,
       trust: deps.trust,
       artifactsDir,
+      project: deps.config.project,
     });
   } catch (e) {
     return failBeforeSpawn(`prompt assembly failed: ${String(e)}`);

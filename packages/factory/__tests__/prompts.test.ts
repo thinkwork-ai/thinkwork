@@ -37,7 +37,32 @@ describe("phase templates", () => {
       expect(prompt, phase).not.toContain("<ISSUE_ID>");
       expect(prompt, phase).not.toContain("<SHORT_TITLE>");
       expect(prompt, phase).not.toContain("<ARTIFACTS_DIR>");
+      expect(prompt, phase).not.toContain("<PROJECT_NAME>");
+      expect(prompt, phase).not.toContain("<OPERATOR_NAME>");
+      expect(prompt, phase).not.toContain("<OPERATOR_HANDLE>");
+      // Defaults preserve prior prose.
+      expect(prompt, phase).toContain("ThinkWork factory daemon");
+      expect(prompt, phase).toContain("@mentioning eric1");
     }
+  });
+
+  it("THINK-287: a custom project identity is substituted; the baton stays verbatim", () => {
+    const { prompt } = assemblePrompt({
+      phase: "implement",
+      issueId: ID,
+      title: TITLE,
+      comments: [],
+      progressDoc: "Progress body",
+      project: {
+        name: "Acme",
+        operatorName: "Jo",
+        operatorLinearHandle: "jo.acme",
+      },
+    });
+    expect(prompt).toContain("Acme factory daemon");
+    expect(prompt).toContain("@mentioning jo.acme");
+    expect(prompt).not.toContain("ThinkWork");
+    expect(prompt).not.toContain("eric1");
   });
 
   it("U7: the verify prompt carries the injected absolute artifacts path", () => {

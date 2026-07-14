@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeployTargetConfig } from "../src/config.js";
+import { DEFAULT_RELEASE } from "../src/domain/release.js";
 import { createLogger, type Logger } from "../src/logger.js";
 import type { PollCandidate } from "../src/linear/poller.js";
 import {
@@ -103,6 +104,7 @@ function makeDeps(transport: FakeTransport, slack: FakeSlackGateway): DeployDeps
     store,
     slack,
     transport,
+    release: DEFAULT_RELEASE,
     repoPath: "/fake/repo",
     stateDir: dir,
     channelId: CHANNEL,
@@ -142,10 +144,10 @@ describe("parseVerb / parseDeployArg", () => {
       verb: "deploy",
       arg: "mcpherson v0.1.0-canary.356",
     });
-    expect(parseDeployArg("tei")).toEqual({ target: "tei" });
-    expect(parseDeployArg("tei v0.1.0-canary.356")).toEqual({ target: "tei", version: "v0.1.0-canary.356" });
-    expect(parseDeployArg("tei not-a-version")).toBeNull();
-    expect(parseDeployArg(undefined)).toBeNull();
+    expect(parseDeployArg("tei", DEFAULT_RELEASE)).toEqual({ target: "tei" });
+    expect(parseDeployArg("tei v0.1.0-canary.356", DEFAULT_RELEASE)).toEqual({ target: "tei", version: "v0.1.0-canary.356" });
+    expect(parseDeployArg("tei not-a-version", DEFAULT_RELEASE)).toBeNull();
+    expect(parseDeployArg(undefined, DEFAULT_RELEASE)).toBeNull();
   });
 });
 

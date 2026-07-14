@@ -197,6 +197,7 @@ program
           stateDir: getStateDir(),
           channelId: config.slack.channelId as string,
           targets: config.deployTargets ?? {},
+          release: config.release,
           log: log.child("deploy"),
         };
         slackSync = createSlackSync({
@@ -236,6 +237,7 @@ program
               transport,
               repoPath: host.repoPath,
               channelId: config.slack.channelId as string,
+              release: config.release,
               log: log.child("console"),
             }),
             ...createDeployExecutors(deployDeps),

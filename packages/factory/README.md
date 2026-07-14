@@ -285,7 +285,7 @@ verbs — including the read-only ones — are gated on `operatorUserIds`.
 | `merge <pr#>` | squash-merge a factory PR | refuses PRs not associated with the thread's issue; shows checks first |
 | `retry` | relaunch the current phase from its newest baton | no-op while a worker is running |
 | `pause` / `resume` | suspend / restore automation on the issue | flips the `Paused` Linear label |
-| `release` | cut a web canary (paired tags) | confirm round-trip: shows the exact tags + origin/main sha; only the confirm tap executes, and only at that sha |
+| `release` | cut a release (tags per the configured scheme) | confirm round-trip: shows the exact tags + origin/main sha; only the confirm tap executes, and only at that sha |
 | `status` | in a thread: that issue; at channel root: the board snapshot | |
 | `question` | re-show the open question without answering it | |
 | `help` | list the commands valid for the issue's state | any unrecognized message shows this too |
@@ -305,9 +305,9 @@ re-posts and re-pins it on the next tick.
 **any thread and from the channel root** (plain channel message). Both are
 gated behind a confirm round-trip that shows exactly what will run.
 
-`deploy <target> [vX.Y.Z-canary.N]` targets come from `deployTargets` in the
+`deploy <target> [<version-tag>]` targets come from `deployTargets` in the
 factory config — per-target argv/env/cwd with a `<VERSION>` placeholder
-resolved to the newest canary tag (or the version you typed):
+resolved to the newest release tag (or the version you typed):
 
 ```jsonc
 "deployTargets": {
@@ -330,6 +330,24 @@ outcome to the channel when the process exits (log tail on failure). One
 deploy per target at a time. Customer stages use the `release deploy` flow —
 see `docs/solutions/workflow-issues/customer-updates-use-release-deploy-not-deploy-controller-2026-07-12.md`
 for the failure families to expect.
+
+**Release scheme + project identity (THINK-287):** the `release` verb's tags
+and the worker prompts' project prose are config, not code:
+
+```jsonc
+"release": {
+  "tagTemplate": "v0.1.0-canary.<N>",                    // <N> = next release number
+  "extraTagTemplates": ["desktop-v0.1.0-canary.<N>"],    // minted alongside, same N
+  "note": "The desktop tag deploys apps/web to dev."     // appended to the cut ack
+},
+"project": {
+  "name": "ThinkWork",            // <PROJECT_NAME> in worker prompts
+  "operatorName": "Eric",         // <OPERATOR_NAME> (prose)
+  "operatorLinearHandle": "eric1" // <OPERATOR_HANDLE> (@mention in blocker comments)
+}
+```
+
+Both sections are optional; omitting them preserves the values above.
 
 ---
 

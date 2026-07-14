@@ -26,11 +26,16 @@ import { actions, context, section } from "./blocks.js";
 import type { SlackGateway } from "./client.js";
 import {
   consoleButton,
-  nextCanaryN,
   type ConsoleAck,
   type ConsoleVerb,
   type RepoExecutor,
 } from "./console.js";
+import {
+  latestTag,
+  tagGlob,
+  tagRegex,
+  type ReleaseConfig,
+} from "../domain/release.js";
 
 /** meta key: the one live deploy-confirm offer (JSON DeployOffer). */
 export const DEPLOY_OFFER_KEY = "deploy-confirm-offer";
@@ -86,6 +91,8 @@ export interface DeployDeps {
   stateDir: string;
   channelId: string;
   targets: Record<string, DeployTargetConfig>;
+  /** Tag scheme — `<VERSION>` resolution + typed-version validation. */
+  release: ReleaseConfig;
   log: Logger;
   /** Watcher poll interval — injectable for tests. */
   watchIntervalMs?: number;
@@ -114,12 +121,13 @@ function parseRun(raw: string | undefined): DeployRun | null {
 /** `deploy tei` / `deploy tei v0.1.0-canary.356` → target + optional version. */
 export function parseDeployArg(
   arg: string | undefined,
+  release: ReleaseConfig,
 ): { target: string; version?: string } | null {
   if (arg === undefined || arg.trim() === "") return null;
   const parts = arg.trim().split(/\s+/);
   const target = parts[0];
   const version = parts[1];
-  if (version !== undefined && !/^v\d+\.\d+\.\d+-canary\.\d+$/.test(version)) {
+  if (version !== undefined && !tagRegex(release.tagTemplate).test(version)) {
     return null;
   }
   return { target, ...(version !== undefined ? { version } : {}) };
@@ -150,8 +158,8 @@ async function resolveOfferMessage(
     );
 }
 
-/** Newest `v0.1.0-canary.*` tag after a fetch, or null. */
-async function latestCanaryVersion(deps: DeployDeps): Promise<string | null> {
+/** Newest release tag (per the scheme) after a fetch, or null. */
+async function latestReleaseVersion(deps: DeployDeps): Promise<string | null> {
   const fetch = await deps.transport.exec(
     "git",
     ["fetch", "--tags", "--quiet", "origin"],
@@ -160,11 +168,10 @@ async function latestCanaryVersion(deps: DeployDeps): Promise<string | null> {
   if (fetch.code !== 0) return null;
   const tags = await deps.transport.exec(
     "git",
-    ["tag", "--list", "v0.1.0-canary.*", "--sort=-version:refname"],
+    ["tag", "--list", tagGlob(deps.release.tagTemplate), "--sort=-version:refname"],
     { cwd: deps.repoPath, timeoutMs: 30_000 },
   );
-  const n = nextCanaryN(tags.stdout) - 1;
-  return n >= 1 ? `v0.1.0-canary.${n}` : null;
+  return latestTag(deps.release.tagTemplate, tags.stdout);
 }
 
 /**
@@ -253,10 +260,10 @@ export function createDeployExecutors(
 ): Partial<Record<ConsoleVerb, RepoExecutor>> {
   return {
     deploy: async (ctx): Promise<ConsoleAck> => {
-      const parsed = parseDeployArg(ctx.arg);
+      const parsed = parseDeployArg(ctx.arg, deps.release);
       if (parsed === null) {
         return {
-          text: `Usage: \`deploy <target> [vX.Y.Z-canary.N]\`\n${targetList(deps.targets)}`,
+          text: `Usage: \`deploy <target> [${deps.release.tagTemplate}]\`\n${targetList(deps.targets)}`,
         };
       }
       const target = deps.targets[parsed.target];
@@ -274,10 +281,10 @@ export function createDeployExecutors(
           text: `\`deploy ${parsed.target}\` is already running (${running.version}, since ${running.startedAt}) — log: \`${running.logPath}\``,
         };
       }
-      const version = parsed.version ?? (await latestCanaryVersion(deps));
+      const version = parsed.version ?? (await latestReleaseVersion(deps));
       if (version === null) {
         return {
-          text: "❌ couldn't resolve the latest canary tag (git fetch failed?) — pass a version explicitly: `deploy " + parsed.target + " v0.1.0-canary.N`",
+          text: `❌ couldn't resolve the latest release tag (git fetch failed, or no \`${tagGlob(deps.release.tagTemplate)}\` tags?) — pass a version explicitly: \`deploy ${parsed.target} ${deps.release.tagTemplate}\``,
         };
       }
       const argv = target.argv.map((a) => a.replaceAll("<VERSION>", version));
