@@ -47,6 +47,8 @@ export type ConnectionProbeReason =
   | "select_revoked"
   | "write_privilege"
   | "schema_drift"
+  /** THINK-283: the credential can reach objects outside its one-schema contract. */
+  | "unexpected_surface"
   | "probe_error";
 
 export interface ConnectionProbeVerdict {
@@ -67,6 +69,8 @@ export interface ProbePgClient {
 
 /** A granted table + its granted columns, for the privilege + drift checks. */
 export interface AnalystTableDescriptor {
+  /** Raw catalog schema name (THINK-283). Builtin manifest is `public`. */
+  schema: string;
   name: string;
   columns: { name: string; type: string }[];
 }
@@ -80,6 +84,16 @@ export interface ConnectionProbeDeps {
   now?: () => Date;
   /** Role name override (default env ANALYST_DB_USER or analyst_reader). */
   role?: string;
+  /**
+   * THINK-283 sourced rows only: the source's ONE selected schema. Enables
+   * the exact-surface checks (unexpected SELECT-capable relations, effective
+   * write privileges, schema-creation rights via privilege functions — direct
+   * grant catalogs miss inherited and PUBLIC privileges). The builtin
+   * cluster-global probe never sets this: its surface is governed by the
+   * committed grants migration, and the postgres-dev connector is explicitly
+   * out of THINK-283's scope.
+   */
+  sourceSchema?: string;
 }
 
 /**
@@ -91,6 +105,7 @@ export interface ConnectionProbeDeps {
  */
 export function grantedTablesFromModel(): AnalystTableDescriptor[] {
   return listAnalystTables().map((t) => ({
+    schema: "public",
     name: t.name,
     columns: t.columns.map((c) => ({ name: c.name, type: c.pgType })),
   }));
@@ -147,6 +162,20 @@ function descriptorHash(perTable: Map<string, Map<string, string>>): string {
   return createHash("sha256").update(parts.join("\n")).digest("hex");
 }
 
+/**
+ * Stable qualified key for descriptor maps (THINK-283): `schema\ttable`
+ * over raw catalog identity, so same-named tables in different schemas can
+ * never collide in the drift hash.
+ */
+function qualifiedKey(schema: string, table: string): string {
+  return `${schema}\t${table}`;
+}
+
+/** Human rendering of a qualified key for drift/detail messages. */
+function qualifiedLabel(key: string): string {
+  return key.replace("\t", ".");
+}
+
 function expectedDescriptors(
   granted: AnalystTableDescriptor[],
 ): Map<string, Map<string, string>> {
@@ -156,7 +185,7 @@ function expectedDescriptors(
     for (const column of table.columns) {
       cols.set(column.name, normalizePgType(column.type));
     }
-    out.set(table.name, cols);
+    out.set(qualifiedKey(table.schema, table.name), cols);
   }
   return out;
 }
@@ -208,28 +237,29 @@ export async function probeAnalystConnection(
     //    schema-drift check below rather than reading as a revocation. The
     //    pg_attribute join resolves (attrelid, attnum) so the privilege call
     //    can never throw on a nonexistent relation or column.
-    const tableNames = granted.map((t) => t.name);
+    const pairSchemas: string[] = [];
     const pairTables: string[] = [];
     const pairColumns: string[] = [];
     for (const table of granted) {
       for (const column of table.columns) {
+        pairSchemas.push(table.schema);
         pairTables.push(table.name);
         pairColumns.push(column.name);
       }
     }
     if (pairTables.length > 0) {
       const privResult = await client.query(
-        `SELECT u.t AS tbl, u.c AS col,
-                to_regclass(format('public.%I', u.t)) IS NOT NULL AS table_exists,
+        `SELECT u.s AS sch, u.t AS tbl, u.c AS col,
+                to_regclass(format('%I.%I', u.s, u.t)) IS NOT NULL AS table_exists,
                 a.attnum IS NOT NULL AS column_exists,
                 CASE WHEN a.attnum IS NOT NULL
                      THEN has_column_privilege($1, a.attrelid, a.attnum, 'SELECT')
                      ELSE NULL END AS can_select
-         FROM unnest($2::text[], $3::text[]) AS u(t, c)
+         FROM unnest($2::text[], $3::text[], $4::text[]) AS u(s, t, c)
          LEFT JOIN pg_attribute a
-           ON a.attrelid = to_regclass(format('public.%I', u.t))
+           ON a.attrelid = to_regclass(format('%I.%I', u.s, u.t))
           AND a.attname = u.c AND a.attnum > 0 AND NOT a.attisdropped`,
-        [role, pairTables, pairColumns],
+        [role, pairSchemas, pairTables, pairColumns],
       );
       const revoked = privResult.rows.find(
         (r) =>
@@ -240,28 +270,124 @@ export async function probeAnalystConnection(
       if (revoked) {
         return fail(
           "select_revoked",
-          `analyst_reader lost SELECT on granted column "${String(revoked.tbl)}.${String(revoked.col)}" — connection withheld until the grant is restored`,
+          `reader role lost SELECT on granted column "${String(revoked.sch)}.${String(revoked.tbl)}.${String(revoked.col)}" — connection withheld until the grant is restored`,
         );
       }
     }
 
-    // 3. Zero write-privilege assertion. ANY non-SELECT grant on the reader
-    //    role is a grant-surface breach → withhold, not warn.
-    const writeResult = await client.query(
-      `SELECT table_name, privilege_type
-       FROM information_schema.role_table_grants
-       WHERE grantee = $1 AND privilege_type <> 'SELECT'`,
-      [role],
-    );
-    if (writeResult.rows.length > 0) {
-      const breach = writeResult.rows
-        .slice(0, 5)
-        .map((r) => `${String(r.table_name)}:${String(r.privilege_type)}`)
-        .join(", ");
-      return fail(
-        "write_privilege",
-        `analyst_reader holds unexpected write privileges (${breach}) — connection withheld (grant-surface breach)`,
+    // 3. Zero write-privilege assertion.
+    if (deps.sourceSchema) {
+      // THINK-283 sourced rows: check the EFFECTIVE surface via privilege
+      // functions — role membership and PUBLIC grants are invisible to
+      // role_table_grants but real at query time.
+      const writable = await client.query(
+        `SELECT n.nspname AS schema, c.relname AS name
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname <> 'information_schema'
+            AND n.nspname NOT LIKE 'pg\\_%'
+            AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+            AND has_table_privilege($1, c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE')
+          ORDER BY n.nspname, c.relname
+          LIMIT 20`,
+        [role],
       );
+      if (writable.rows.length > 0) {
+        const breach = writable.rows
+          .slice(0, 5)
+          .map((r) => `${String(r.schema)}.${String(r.name)}`)
+          .join(", ");
+        return fail(
+          "write_privilege",
+          `reader role holds effective write privileges (${breach}) — connection withheld (grant-surface breach)`,
+        );
+      }
+    } else {
+      // Builtin cluster-global reader: preserve the established
+      // direct-grant check (its surface is governed by the committed grants
+      // migration; postgres-dev is out of THINK-283's scope).
+      const writeResult = await client.query(
+        `SELECT table_name, privilege_type
+         FROM information_schema.role_table_grants
+         WHERE grantee = $1 AND privilege_type <> 'SELECT'`,
+        [role],
+      );
+      if (writeResult.rows.length > 0) {
+        const breach = writeResult.rows
+          .slice(0, 5)
+          .map((r) => `${String(r.table_name)}:${String(r.privilege_type)}`)
+          .join(", ");
+        return fail(
+          "write_privilege",
+          `analyst_reader holds unexpected write privileges (${breach}) — connection withheld (grant-surface breach)`,
+        );
+      }
+    }
+
+    // 3b. THINK-283 exact-surface checks (sourced rows only): the credential
+    //     must not reach anything beyond the MODELED base tables of its one
+    //     selected schema — an unexpected new table, a readable view/matview/
+    //     foreign table, another user schema, or schema-creation rights all
+    //     withhold the source until an operator refresh (or DBA fix).
+    if (deps.sourceSchema) {
+      const expectedNames = new Set(
+        granted
+          .filter((t) => t.schema === deps.sourceSchema)
+          .map((t) => t.name),
+      );
+      const readable = await client.query(
+        `SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS relkind
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname <> 'information_schema'
+            AND n.nspname NOT LIKE 'pg\\_%'
+            AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+            AND has_table_privilege($1, c.oid, 'SELECT')
+          ORDER BY n.nspname, c.relname`,
+        [role],
+      );
+      const unexpected = readable.rows.filter((r) => {
+        const schema = String(r.schema);
+        const name = String(r.name);
+        const kind = String(r.relkind);
+        if (schema !== deps.sourceSchema) return true;
+        if (kind !== "r" && kind !== "p") return true;
+        return !expectedNames.has(name);
+      });
+      if (unexpected.length > 0) {
+        const sample = unexpected
+          .slice(0, 5)
+          .map(
+            (r) =>
+              `${String(r.schema)}.${String(r.name)} (${String(r.relkind)})`,
+          )
+          .join(", ");
+        return fail(
+          "unexpected_surface",
+          `reader role can read objects outside the modeled surface of schema "${deps.sourceSchema}" (${sample}) — ` +
+            "source withheld; run an operator refresh to adopt intended new tables, or have a DBA revoke unintended grants",
+        );
+      }
+      const creatable = await client.query(
+        `SELECT n.nspname AS schema
+           FROM pg_namespace n
+          WHERE n.nspname <> 'information_schema'
+            AND n.nspname NOT LIKE 'pg\\_%'
+            AND has_schema_privilege($1, n.oid, 'CREATE')
+          ORDER BY n.nspname
+          LIMIT 20`,
+        [role],
+      );
+      if (creatable.rows.length > 0) {
+        const sample = creatable.rows
+          .slice(0, 5)
+          .map((r) => String(r.schema))
+          .join(", ");
+        return fail(
+          "unexpected_surface",
+          `reader role can CREATE in schema(s) ${sample} — source withheld until a DBA revokes CREATE`,
+        );
+      }
     }
 
     // 4. Schema drift: hash live column descriptors against the committed
@@ -273,23 +399,29 @@ export async function probeAnalystConnection(
     // Resolve it here so the model's 'text[]' spelling and the live catalog
     // normalize to the same descriptor (dev, 2026-07-09: eval_runs.categories
     // — model text[], live ARRAY).
+    const grantedSchemas = granted.map((t) => t.schema);
+    const grantedNames = granted.map((t) => t.name);
     const columnsResult = await client.query(
-      `SELECT table_name, column_name,
-              CASE WHEN data_type = 'ARRAY'
-                   THEN ltrim(udt_name, '_') || ' array'
-                   ELSE data_type END AS data_type
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = ANY($1::text[])`,
-      [tableNames],
+      `SELECT col.table_schema, col.table_name, col.column_name,
+              CASE WHEN col.data_type = 'ARRAY'
+                   THEN ltrim(col.udt_name, '_') || ' array'
+                   ELSE col.data_type END AS data_type
+       FROM information_schema.columns col
+       JOIN unnest($1::text[], $2::text[]) AS g(s, t)
+         ON g.s = col.table_schema AND g.t = col.table_name`,
+      [grantedSchemas, grantedNames],
     );
     const liveByTable = new Map<string, Map<string, string>>();
     for (const rawRow of columnsResult.rows) {
-      const table = String(rawRow.table_name);
+      const key = qualifiedKey(
+        String(rawRow.table_schema),
+        String(rawRow.table_name),
+      );
       const column = String(rawRow.column_name);
       const type = normalizePgType(String(rawRow.data_type));
-      const cols = liveByTable.get(table) ?? new Map<string, string>();
+      const cols = liveByTable.get(key) ?? new Map<string, string>();
       cols.set(column, type);
-      liveByTable.set(table, cols);
+      liveByTable.set(key, cols);
     }
     // Restrict the live descriptor to the granted (table, column) surface —
     // column-denied columns are ungranted and out of the drift contract.
@@ -340,10 +472,10 @@ function firstDriftDetail(
       const want = expectedCols.get(column)!;
       const got = liveCols.get(column);
       if (got === undefined) {
-        return `analyst schema drift: granted column "${table}.${column}" is missing on the live database — connection withheld`;
+        return `analyst schema drift: granted column "${qualifiedLabel(table)}.${column}" is missing on the live database — connection withheld`;
       }
       if (got !== want) {
-        return `analyst schema drift: "${table}.${column}" type changed (model expects ${want}, live is ${got}) — connection withheld`;
+        return `analyst schema drift: "${qualifiedLabel(table)}.${column}" type changed (model expects ${want}, live is ${got}) — connection withheld`;
       }
     }
   }
@@ -414,6 +546,85 @@ export interface AnalystProbeGateResult {
  * check is an extra guard so a mislabeled verdict on a foreign row can never
  * withhold it.
  */
+/**
+ * Explicit-refresh state (THINK-283 U5 writes it; this module only reads).
+ * Stored at `runtime_metadata.analyst_refresh`. `running`/`failed` withhold
+ * dispatch; `ok` (a completed refresh) and absence do not. The scheduled
+ * reconciler updates `analyst_probe` only and can NEVER clear this key —
+ * refresh state is owned exclusively by the refresh mutation.
+ */
+export interface AnalystRefreshState {
+  status: "running" | "failed" | "ok";
+  /** Opaque attempt id owning the current/last refresh. */
+  attemptId?: string;
+  /** Sanitized failure step/remediation for the operator. */
+  detail?: string;
+  /** ISO 8601 of the last state transition. */
+  updatedAt?: string;
+}
+
+/** Read the refresh state out of a row's runtime_metadata, if present. */
+export function readAnalystRefreshState(
+  runtimeMetadata: unknown,
+): AnalystRefreshState | null {
+  if (!runtimeMetadata || typeof runtimeMetadata !== "object") return null;
+  const raw = (runtimeMetadata as Record<string, unknown>).analyst_refresh;
+  if (!raw || typeof raw !== "object") return null;
+  const state = raw as Record<string, unknown>;
+  if (
+    state.status !== "running" &&
+    state.status !== "failed" &&
+    state.status !== "ok"
+  ) {
+    // A malformed refresh blob is fail-closed: treat as a failed refresh
+    // rather than serving a source whose refresh state is unreadable.
+    return {
+      status: "failed",
+      detail:
+        "analyst source refresh state is malformed — retry the refresh to restore this source",
+    };
+  }
+  return {
+    status: state.status,
+    attemptId:
+      typeof state.attemptId === "string" ? state.attemptId : undefined,
+    detail: typeof state.detail === "string" ? state.detail : undefined,
+    updatedAt:
+      typeof state.updatedAt === "string" ? state.updatedAt : undefined,
+  };
+}
+
+/**
+ * Decide whether dispatch must withhold this row on explicit-refresh state
+ * (THINK-283). Absent key → served (sources that have never been refreshed).
+ * `running` or `failed` → withheld with operator-facing detail. `ok` →
+ * served. Independent of — and evaluated alongside — the probe gate: a
+ * successful scheduled probe must never make a mid-refresh source
+ * dispatchable.
+ */
+export function evaluateAnalystRefreshGate(
+  runtimeMetadata: unknown,
+  url: string,
+): AnalystProbeGateResult | null {
+  if (!isAnalystBrokerUrl(url)) return null;
+  const state = readAnalystRefreshState(runtimeMetadata);
+  if (!state) return null;
+  if (state.status === "running") {
+    return {
+      detail:
+        "analyst source refresh is in progress — the source is withheld until the refresh completes",
+    };
+  }
+  if (state.status === "failed") {
+    return {
+      detail:
+        state.detail ??
+        "the last analyst source refresh failed — the source is withheld until a retry succeeds",
+    };
+  }
+  return null;
+}
+
 export function evaluateAnalystProbeGate(
   runtimeMetadata: unknown,
   url: string,

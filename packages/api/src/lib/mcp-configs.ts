@@ -74,7 +74,10 @@ import {
   parseConnectionPolicyBlock,
   resolveAnalystPolicySource,
 } from "./capabilities/connection-policy.js";
-import { evaluateAnalystProbeGate } from "./analyst/connection-probe.js";
+import {
+  evaluateAnalystProbeGate,
+  evaluateAnalystRefreshGate,
+} from "./analyst/connection-probe.js";
 import type { CapabilitiesManifest } from "./capabilities/manifest-compile.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
 import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
@@ -479,6 +482,22 @@ export async function buildMcpConfigs(
     if (probeGate) {
       console.warn(`${logPrefix} withholding ${mcp.slug}: ${probeGate.detail}`);
       dropDiag(mcp, "connection_probe_failed", probeGate.detail);
+      continue;
+    }
+
+    // THINK-283: explicit source-refresh state is a SEPARATE fail-closed
+    // gate. A running or failed refresh withholds the source regardless of
+    // the (possibly fresh-ok) scheduled probe — only the refresh mutation's
+    // own commit clears it.
+    const refreshGate = evaluateAnalystRefreshGate(
+      mcp.runtime_metadata,
+      mcp.url,
+    );
+    if (refreshGate) {
+      console.warn(
+        `${logPrefix} withholding ${mcp.slug}: ${refreshGate.detail}`,
+      );
+      dropDiag(mcp, "source_refresh_pending", refreshGate.detail);
       continue;
     }
 
