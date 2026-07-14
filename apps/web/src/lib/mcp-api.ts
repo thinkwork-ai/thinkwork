@@ -30,6 +30,14 @@ export type McpServer = {
     kind: "internal" | "external";
     host: string | null;
     database: string;
+    /** THINK-283: the source's ONE schema (legacy rows project "public"). */
+    schema: string;
+    /** THINK-283: durable explicit-refresh state; null = never refreshed. */
+    refresh: {
+      status: "running" | "failed" | "ok";
+      detail?: string | null;
+      updatedAt?: string | null;
+    } | null;
   } | null;
 };
 

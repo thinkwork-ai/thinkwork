@@ -39,6 +39,7 @@ import {
 } from "@/lib/mcp-api";
 import {
   SettingsProvisionAnalystConnectorMutation,
+  SettingsRefreshAnalystDataSourceMutation,
   SettingsTenantAgentQuery,
 } from "@/lib/settings-queries";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
@@ -97,6 +98,14 @@ export function SettingsMcpServerDetail() {
   const [reApproving, setReApproving] = useState(false);
   const [, provisionAnalystConnector] = useMutation(
     SettingsProvisionAnalystConnectorMutation,
+  );
+  // THINK-283: sourced connector explicit refresh.
+  const [refreshConfirming, setRefreshConfirming] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [, refreshAnalystDataSource] = useMutation(
+    SettingsRefreshAnalystDataSourceMutation,
   );
 
   const [{ data: agentData }] = useQuery({
@@ -371,6 +380,45 @@ export function SettingsMcpServerDetail() {
     }
   }
 
+  // THINK-283: explicit fail-closed refresh of a SOURCED analyst connector.
+  async function runSourceRefresh() {
+    if (refreshing || !server) return;
+    setRefreshing(true);
+    setRefreshError(null);
+    setRefreshNotice(null);
+    try {
+      const response = await refreshAnalystDataSource({ serverId: server.id });
+      if (response.error) {
+        setRefreshError(
+          response.error.graphQLErrors[0]?.message ??
+            response.error.message.replace(/^\[[^\]]*\]\s*/, ""),
+        );
+        return;
+      }
+      const outcome = response.data?.refreshAnalystDataSource;
+      setRefreshNotice(
+        outcome
+          ? `Refreshed — ${outcome.tables} table(s) modeled` +
+              (outcome.addedTables.length
+                ? `; added ${outcome.addedTables.join(", ")}`
+                : "") +
+              (outcome.removedTables.length
+                ? `; removed ${outcome.removedTables.join(", ")}`
+                : "") +
+              "."
+          : "Source refreshed.",
+      );
+      setRefreshConfirming(false);
+      load();
+    } catch (e) {
+      setRefreshError(
+        e instanceof Error ? e.message : "Failed to refresh the source",
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function reApproveAnalyst() {
     if (reApproving) return;
     setReApproving(true);
@@ -442,6 +490,10 @@ export function SettingsMcpServerDetail() {
   const hasMoreTools = filteredTools.length > visibleTools.length;
   const managed = isPluginInstalledMcpServer(server);
   const isAnalystConnector = isAnalystServer(server);
+  // THINK-283: refresh applies ONLY to sourced connectors — the built-in
+  // connector keeps its own provisioning action below.
+  const isSourcedAnalyst = isSourcedAnalystServer(server);
+  const refreshState = server.dataSource?.refresh ?? null;
   const authUnavailableReason = !tenantId
     ? "Tenant identity is still loading."
     : !oauthUserId
@@ -495,6 +547,11 @@ export function SettingsMcpServerDetail() {
               <SettingsRow label="Database">
                 <span className="font-mono text-xs">
                   {server.dataSource.database}
+                </span>
+              </SettingsRow>
+              <SettingsRow label="Schema">
+                <span className="font-mono text-xs">
+                  {server.dataSource.schema}
                 </span>
               </SettingsRow>
             </>
@@ -659,6 +716,99 @@ export function SettingsMcpServerDetail() {
                     Save token
                   </Button>
                 </div>
+              </div>
+            </SettingsRow>
+          </SettingsSection>
+        ) : null}
+
+        {isSourcedAnalyst ? (
+          <SettingsSection label="Data source">
+            <SettingsRow
+              label="Refresh source"
+              description="Adopt tables created since registration (and drop removed ones) into the source's read surface. The source is unavailable while the refresh runs."
+              layout="stacked"
+            >
+              <div className="w-full space-y-3">
+                {refreshState?.status === "running" ? (
+                  <p className="text-sm text-amber-500" role="status">
+                    A refresh is in progress — the source is withheld until it
+                    completes.
+                  </p>
+                ) : null}
+                {refreshState?.status === "failed" ? (
+                  <p className="text-sm text-destructive" role="alert">
+                    {refreshState.detail ??
+                      "The last refresh failed — the source is withheld until a retry succeeds."}
+                  </p>
+                ) : null}
+                {refreshError ? (
+                  <p className="text-sm text-destructive" role="alert">
+                    {refreshError}
+                  </p>
+                ) : null}
+                {refreshNotice ? (
+                  <p className="text-sm text-emerald-500" role="status">
+                    {refreshNotice}
+                  </p>
+                ) : null}
+                {refreshConfirming ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Refresh{" "}
+                      <span className="font-mono">
+                        {server.dataSource?.database}/
+                        {server.dataSource?.schema}
+                      </span>
+                      ? The source is withheld from the agent while grants,
+                      model, and folders reconcile, and previously issued access
+                      is re-authorized against the new surface.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        disabled={refreshing}
+                        onClick={() => void runSourceRefresh()}
+                        className="gap-2"
+                      >
+                        {refreshing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Confirm refresh
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={refreshing}
+                        onClick={() => setRefreshConfirming(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-start">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        refreshing || refreshState?.status === "running"
+                      }
+                      onClick={() => {
+                        setRefreshError(null);
+                        setRefreshNotice(null);
+                        setRefreshConfirming(true);
+                      }}
+                      className="gap-2"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      {refreshState?.status === "failed"
+                        ? "Retry refresh"
+                        : "Refresh source"}
+                    </Button>
+                  </div>
+                )}
               </div>
             </SettingsRow>
           </SettingsSection>
@@ -829,6 +979,17 @@ function isAnalystServer(server: McpServer): boolean {
     return pathname.endsWith("/mcp/analyst");
   } catch {
     return server.url.replace(/\/+$/, "").endsWith("/mcp/analyst");
+  }
+}
+
+// THINK-283: a SOURCED analyst connector rides `/mcp/analyst/<slug>` — the
+// bare `/mcp/analyst` builtin is excluded (it has its own provisioning flow).
+function isSourcedAnalystServer(server: McpServer): boolean {
+  try {
+    const pathname = new URL(server.url).pathname.replace(/\/+$/, "");
+    return /^\/mcp\/analyst\/[a-z0-9][a-z0-9-]{1,38}$/.test(pathname);
+  } catch {
+    return false;
   }
 }
 
