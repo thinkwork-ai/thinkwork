@@ -6,17 +6,22 @@
  * credential is auto-provisioned, never entered.
  */
 
+import { ANALYST_DEFAULT_SOURCE_SCHEMA } from "@thinkwork/database-pg/analyst";
+
 import {
   ANALYST_SOURCE_SLUG_PATTERN,
   AnalystRegistrationInputError,
   RESERVED_ANALYST_SOURCE_SLUGS,
 } from "./register-data-source.js";
+import { isSystemPgSchema } from "./provision-reader-role.js";
 
 export interface RegisterInternalAnalystDataSourceInput {
   clusterId: string;
   database: string;
   name: string;
   slug: string;
+  /** Selected schema (THINK-283). Omitted/null defaults to `public`. */
+  schema?: string | null;
 }
 
 export interface NormalizedInternalRegisterInput {
@@ -24,6 +29,38 @@ export interface NormalizedInternalRegisterInput {
   database: string;
   name: string;
   slug: string;
+  /** Always present after normalization; raw catalog case preserved. */
+  schema: string;
+}
+
+/**
+ * Normalize a caller-supplied schema (THINK-283): omitted/null → `public`
+ * (legacy contract), everything else trimmed with exact catalog case
+ * preserved — NEVER lowercased or silently replaced. An explicitly supplied
+ * empty/whitespace/NUL-bearing or PostgreSQL-system value is an input error,
+ * not a fallback to `public`.
+ */
+export function normalizeAnalystSourceSchema(
+  raw: string | null | undefined,
+): string {
+  if (raw === undefined || raw === null) return ANALYST_DEFAULT_SOURCE_SCHEMA;
+  const schema = raw.trim();
+  if (!schema) {
+    throw new AnalystRegistrationInputError(
+      "schema, when supplied, must be a non-empty PostgreSQL schema name",
+    );
+  }
+  if (schema.includes("\0")) {
+    throw new AnalystRegistrationInputError(
+      "schema contains invalid characters",
+    );
+  }
+  if (isSystemPgSchema(schema)) {
+    throw new AnalystRegistrationInputError(
+      `schema "${schema}" is a PostgreSQL system schema and cannot be registered as an analyst source`,
+    );
+  }
+  return schema;
 }
 
 /** The built-in `thinkwork` app database stays on the built-in connector path. */
@@ -62,5 +99,7 @@ export function validateInternalRegisterInput(
     );
   }
 
-  return { clusterId, database, name, slug };
+  const schema = normalizeAnalystSourceSchema(input.schema);
+
+  return { clusterId, database, name, slug, schema };
 }

@@ -190,14 +190,27 @@ export async function enumerateDatabases(
   }
 }
 
-/** Which (endpoint, database) pairs the tenant already has an analyst row for. */
+/**
+ * Which (endpoint, database) pairs — and exact (endpoint, database, schema)
+ * triples (THINK-283) — the tenant already has an analyst row for. Legacy
+ * sourced rows without a stored schema count as `public`.
+ */
 interface RegisteredCoverage {
   builtinExists: boolean;
   sourcedPairs: Set<string>;
+  sourcedTriples: Set<string>;
 }
 
 function coverageKey(host: string, database: string): string {
   return `${host}::${database}`;
+}
+
+function schemaCoverageKey(
+  host: string,
+  database: string,
+  schema: string,
+): string {
+  return `${host}::${database}::${schema}`;
 }
 
 async function resolveRegisteredCoverage(
@@ -214,6 +227,7 @@ async function resolveRegisteredCoverage(
 
   let builtinExists = false;
   const sourcedPairs = new Set<string>();
+  const sourcedTriples = new Set<string>();
   for (const row of rows) {
     if (row.slug === "postgres-dev") builtinExists = true;
     const meta =
@@ -230,9 +244,16 @@ async function resolveRegisteredCoverage(
       typeof source.database === "string"
     ) {
       sourcedPairs.add(coverageKey(source.host, source.database));
+      const schema =
+        typeof source.schema === "string" && source.schema.length > 0
+          ? source.schema
+          : "public";
+      sourcedTriples.add(
+        schemaCoverageKey(source.host, source.database, schema),
+      );
     }
   }
-  return { builtinExists, sourcedPairs };
+  return { builtinExists, sourcedPairs, sourcedTriples };
 }
 
 export interface ListInternalClustersDeps {
@@ -289,4 +310,137 @@ export async function listInternalClusters(
     });
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Schema discovery (THINK-283)
+// ---------------------------------------------------------------------------
+
+export interface InternalSchema {
+  /** Raw catalog schema name, exact case. */
+  name: string;
+  /** Current count of ordinary base tables (relkind r/p) in the schema. */
+  eligibleTableCount: number;
+  /** True when this exact endpoint/database/schema is already registered. */
+  alreadyRegistered: boolean;
+}
+
+/** Raised for operator-correctable discovery failures (maps to BAD_USER_INPUT). */
+export class InternalSchemaDiscoveryError extends Error {}
+
+/**
+ * Non-system schemas with their current eligible-object counts. Zero-count
+ * user schemas are INCLUDED so an empty `public` is explained to the
+ * operator rather than silently omitted (THINK-283 R2). Base tables only —
+ * views/matviews/foreign tables are not analyst surface.
+ */
+const DISCOVER_SCHEMAS_SQL = `SELECT n.nspname AS name,
+        count(c.oid) FILTER (WHERE c.relkind IN ('r', 'p')) AS eligible
+   FROM pg_namespace n
+   LEFT JOIN pg_class c ON c.relnamespace = n.oid AND c.relkind IN ('r', 'p')
+  WHERE n.nspname <> 'information_schema'
+    AND n.nspname NOT LIKE 'pg\\_%'
+  GROUP BY n.nspname
+  ORDER BY n.nspname`;
+
+export interface ListInternalSchemasDeps extends ListInternalClustersDeps {
+  openClient?: typeof openAdminClient;
+}
+
+/**
+ * Discover the selectable schemas of ONE internal database (THINK-283).
+ * Invoked after cluster + database selection — never during cluster listing,
+ * so enumeration stays cheap. Unlike the fail-soft cluster list, discovery
+ * failures here are explicit operator errors: an unknown cluster/database or
+ * an unreachable catalog throws {@link InternalSchemaDiscoveryError} and
+ * performs no writes of any kind.
+ */
+export async function listInternalSchemas(
+  opts: {
+    tenantId: string;
+    clusterId: string;
+    database: string;
+  } & ListInternalSchemasDeps,
+): Promise<InternalSchema[]> {
+  const db = opts.db ?? defaultDb;
+  const stage = opts.stage ?? resolveStage();
+  const describeClusters = opts.describeClusters ?? describeInternalClusters;
+  const resolveAdmin = opts.resolveAdmin ?? resolveAdminCredential;
+  const enumerate = opts.enumerate ?? enumerateDatabases;
+  const openClient = opts.openClient ?? openAdminClient;
+
+  const [clusters, coverage, admin] = await Promise.all([
+    describeClusters(stage),
+    resolveRegisteredCoverage(opts.tenantId, db),
+    resolveAdmin(stage),
+  ]);
+
+  const cluster = clusters.find((c) => c.clusterId === opts.clusterId);
+  if (!cluster) {
+    throw new InternalSchemaDiscoveryError(
+      `internal cluster "${opts.clusterId}" was not found in this environment`,
+    );
+  }
+  if (!admin) {
+    throw new InternalSchemaDiscoveryError(
+      `no admin credential is available for cluster "${opts.clusterId}"`,
+    );
+  }
+
+  let databases: string[];
+  try {
+    databases = await enumerate(cluster, admin);
+  } catch (err) {
+    throw new InternalSchemaDiscoveryError(
+      `could not enumerate databases on cluster "${opts.clusterId}": ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  if (!databases.includes(opts.database)) {
+    throw new InternalSchemaDiscoveryError(
+      `database "${opts.database}" was not found on cluster "${opts.clusterId}"`,
+    );
+  }
+
+  let rows: Record<string, unknown>[];
+  const client = await openClient({
+    host: cluster.endpoint,
+    port: cluster.port,
+    database: opts.database,
+    credential: admin,
+  }).catch((err: unknown) => {
+    throw new InternalSchemaDiscoveryError(
+      `could not connect to database "${opts.database}" on cluster "${opts.clusterId}": ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  });
+  try {
+    const res = await client.query(DISCOVER_SCHEMAS_SQL);
+    rows = res.rows as Record<string, unknown>[];
+  } catch (err) {
+    throw new InternalSchemaDiscoveryError(
+      `could not read the schema catalog of database "${opts.database}": ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  } finally {
+    try {
+      await client.end();
+    } catch {
+      // best-effort close
+    }
+  }
+
+  return rows.map((row) => {
+    const name = String(row.name);
+    return {
+      name,
+      eligibleTableCount: Number(row.eligible ?? 0),
+      alreadyRegistered: coverage.sourcedTriples.has(
+        schemaCoverageKey(cluster.endpoint, opts.database, name),
+      ),
+    };
+  });
 }

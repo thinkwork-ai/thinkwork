@@ -511,6 +511,20 @@ input RegisterInternalAnalystDataSourceInput {
   schema: String
 }
 
+"""
+One schema on an internal database (THINK-283). Zero-count user schemas are
+returned so an empty `public` is explained rather than silently omitted; the
+UI disables them. System schemas (pg_*, information_schema) are excluded.
+"""
+type AnalystInternalSchema {
+  "Raw catalog schema name (exact case)."
+  name: String!
+  "Current count of ordinary base tables eligible for registration."
+  eligibleTableCount: Int!
+  "True when this exact cluster/database/schema is already registered by the tenant."
+  alreadyRegistered: Boolean!
+}
+
 extend type Query {
   """
   List the environment's own RDS clusters and their databases so an operator
@@ -518,6 +532,16 @@ extend type Query {
   (THINK-239). Requires tenant owner/admin.
   """
   analystInternalClusters: [AnalystInternalCluster!]!
+  """
+  List the selectable (non-system) schemas of ONE internal database with
+  current eligible-object counts and exact registration coverage, so an
+  operator can select exactly one schema to register (THINK-283). Invoked
+  after cluster + database selection. Requires tenant owner/admin.
+  """
+  analystInternalSchemas(
+    clusterId: ID!
+    database: String!
+  ): [AnalystInternalSchema!]!
 }
 
 extend type Mutation {

@@ -38,6 +38,7 @@ const h = vi.hoisted(() => {
     databases: ["sales", "thinkwork"],
     slugError: null as Error | null,
     probeError: null as Error | null,
+    provisionError: null as Error | null,
     model: {
       version: 2 as const,
       tables: [{ schema: "public", name: "orders", columns: [] }],
@@ -98,6 +99,8 @@ vi.mock("../../../lib/analyst/register-internal-data-source.js", () => ({
       database: input.database,
       name: input.name,
       slug: input.slug,
+      // THINK-283: the real validator always emits a normalized schema.
+      schema: (input as { schema?: string | null }).schema?.trim() || "public",
     };
   },
 }));
@@ -125,8 +128,10 @@ vi.mock("../../../lib/analyst/internal-clusters.js", () => ({
 vi.mock("../../../lib/analyst/provision-reader-role.js", () => ({
   readerRoleName: (slug: string) => `${slug.replace(/-/g, "_")}_reader`,
   generateReaderPassword: () => "generated-pw",
-  provisionReaderRole: async () => {
-    h.calls.push("provision");
+  provisionReaderRole: async (params: { schema?: string }) => {
+    h.calls.push(`provision:schema=${params.schema}`);
+    if (h.state.provisionError) throw h.state.provisionError;
+    return { grantedTables: ["orders"] };
   },
 }));
 
@@ -201,6 +206,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
     h.state.databases = ["sales", "thinkwork"];
     h.state.slugError = null;
     h.state.probeError = null;
+    h.state.provisionError = null;
     h.state.model = {
       version: 2,
       tables: [{ schema: "public", name: "orders", columns: [] }],
@@ -278,7 +284,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
       "enumerate",
       "assertSlug",
       "openAdmin",
-      "provision",
+      "provision:schema=public",
       "closeAdmin",
       "probe",
     ]);
@@ -303,7 +309,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
       "enumerate",
       "assertSlug",
       "openAdmin",
-      "provision",
+      "provision:schema=public",
       "closeAdmin",
       "probe",
       "secret",
@@ -330,5 +336,38 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
       /WORKSPACE_BUCKET/,
     );
     expect(h.calls).toEqual(["requireAdmin", "validate"]);
+  });
+
+  it("THINK-283: passes the selected schema through to the provisioner", async () => {
+    const resolver = await load();
+    await resolver(undefined, { input: { ...INPUT, schema: "raw_jde" } }, ctx);
+    expect(h.calls).toContain("provision:schema=raw_jde");
+  });
+
+  it("THINK-283: a schema validation failure in provisioning maps to BAD_USER_INPUT and stops the ceremony", async () => {
+    h.state.provisionError = new h.AnalystRegistrationInputError(
+      'schema "raw_jde" in database "sales" contains no eligible base tables',
+    );
+    const resolver = await load();
+    const err = await resolver(
+      undefined,
+      { input: { ...INPUT, schema: "raw_jde" } },
+      ctx,
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GraphQLError);
+    expect((err as GraphQLError).extensions.code).toBe("BAD_USER_INPUT");
+    expect((err as GraphQLError).message).toMatch(/no eligible base tables/);
+    // Admin connection closed; nothing written after the failure.
+    expect(h.calls).toEqual([
+      "requireAdmin",
+      "validate",
+      "describe",
+      "resolveAdmin",
+      "enumerate",
+      "assertSlug",
+      "openAdmin",
+      "provision:schema=raw_jde",
+      "closeAdmin",
+    ]);
   });
 });
