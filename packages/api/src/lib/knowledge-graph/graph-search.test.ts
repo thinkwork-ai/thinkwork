@@ -81,13 +81,13 @@ function assertNoSnippetKey(value: unknown, path = "$"): void {
 describe("searchKnowledgeGraph", () => {
   it("matches by alias and returns entities, 1-hop relationships, and observation ids", async () => {
     const { db } = routeDb([
-      { match: "FROM knowledge_graph_entities", rows: [entityRow()] },
+      { match: "FROM kg.entities", rows: [entityRow()] },
       {
-        match: "FROM knowledge_graph_relationships",
+        match: "FROM kg.relationships",
         rows: [relationshipRow()],
       },
       {
-        match: "FROM knowledge_graph_evidence",
+        match: "FROM kg.evidence",
         rows: [
           {
             entity_id: "11111111-1111-1111-1111-111111111111",
@@ -131,9 +131,7 @@ describe("searchKnowledgeGraph", () => {
   });
 
   it("returns an empty result (not an error) for an unknown entity and skips expansion", async () => {
-    const { db, execute } = routeDb([
-      { match: "FROM knowledge_graph_entities", rows: [] },
-    ]);
+    const { db, execute } = routeDb([{ match: "FROM kg.entities", rows: [] }]);
 
     const result = await searchKnowledgeGraph({
       db,
@@ -159,9 +157,9 @@ describe("searchKnowledgeGraph", () => {
 
   it("scopes every query to the caller tenant (tenant A never sees tenant B rows)", async () => {
     const { db, calls } = routeDb([
-      { match: "FROM knowledge_graph_entities", rows: [entityRow()] },
-      { match: "FROM knowledge_graph_relationships", rows: [] },
-      { match: "FROM knowledge_graph_evidence", rows: [] },
+      { match: "FROM kg.entities", rows: [entityRow()] },
+      { match: "FROM kg.relationships", rows: [] },
+      { match: "FROM kg.evidence", rows: [] },
     ]);
 
     await searchKnowledgeGraph({ db, tenantId: TENANT_A, query: "Acme" });
@@ -178,7 +176,7 @@ describe("searchKnowledgeGraph", () => {
   it("filters to source_kind=observations + grounded in SQL and drops brain/thread/wiki rows defensively", async () => {
     const { db, calls } = routeDb([
       {
-        match: "FROM knowledge_graph_entities",
+        match: "FROM kg.entities",
         rows: [
           entityRow(),
           entityRow({
@@ -199,7 +197,7 @@ describe("searchKnowledgeGraph", () => {
         ],
       },
       {
-        match: "FROM knowledge_graph_relationships",
+        match: "FROM kg.relationships",
         rows: [
           relationshipRow(),
           relationshipRow({
@@ -209,7 +207,7 @@ describe("searchKnowledgeGraph", () => {
           }),
         ],
       },
-      { match: "FROM knowledge_graph_evidence", rows: [] },
+      { match: "FROM kg.evidence", rows: [] },
     ]);
 
     const result = await searchKnowledgeGraph({
@@ -247,9 +245,9 @@ describe("searchKnowledgeGraph", () => {
       }),
     );
     const { db, calls } = routeDb([
-      { match: "FROM knowledge_graph_entities", rows: manyEntities },
-      { match: "FROM knowledge_graph_relationships", rows: manyRelationships },
-      { match: "FROM knowledge_graph_evidence", rows: [] },
+      { match: "FROM kg.entities", rows: manyEntities },
+      { match: "FROM kg.relationships", rows: manyRelationships },
+      { match: "FROM kg.evidence", rows: [] },
     ]);
 
     const result = await searchKnowledgeGraph({
@@ -270,13 +268,13 @@ describe("searchKnowledgeGraph", () => {
 
   it("never includes a snippet field anywhere in the result shape", async () => {
     const { db, calls } = routeDb([
-      { match: "FROM knowledge_graph_entities", rows: [entityRow()] },
+      { match: "FROM kg.entities", rows: [entityRow()] },
       {
-        match: "FROM knowledge_graph_relationships",
+        match: "FROM kg.relationships",
         rows: [relationshipRow()],
       },
       {
-        match: "FROM knowledge_graph_evidence",
+        match: "FROM kg.evidence",
         rows: [
           {
             entity_id: "11111111-1111-1111-1111-111111111111",

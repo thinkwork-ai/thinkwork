@@ -183,7 +183,7 @@ export async function loadObservationCursors(
 ): Promise<Map<string, ObservationCursor>> {
   const result = await db.execute(sql`
 		SELECT bank_id, last_record_updated_at, last_record_id
-		FROM knowledge_graph_observation_cursors
+		FROM kg.observation_cursors
 		WHERE tenant_id = ${tenantId}
 	`);
   const cursors = new Map<string, ObservationCursor>();

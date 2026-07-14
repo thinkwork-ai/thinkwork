@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  knowledgeGraphEntities,
-  knowledgeGraphEvidence,
-  knowledgeGraphIngestRuns,
-  knowledgeGraphRelationships,
+  kgEntities,
+  kgEvidence,
+  kgIngestRuns,
+  kgRelationships,
 } from "@thinkwork/database-pg/schema";
 
 import { mergeKnowledgeGraphSnapshot } from "./repository.js";
@@ -79,9 +79,9 @@ function makeTx(opts: {
     update: vi.fn((table: unknown) => ({
       set: vi.fn((values: Record<string, unknown>) => ({
         where: vi.fn(async () => {
-          if (table === knowledgeGraphEntities) {
+          if (table === kgEntities) {
             calls.entityUpdates.push(String(values.normalized_label));
-          } else if (table === knowledgeGraphIngestRuns) {
+          } else if (table === kgIngestRuns) {
             calls.runUpdate = values;
           }
           return undefined;
@@ -92,7 +92,7 @@ function makeTx(opts: {
       values: vi.fn((values: Record<string, unknown>) => ({
         returning: vi.fn(async () => {
           insertSeq += 1;
-          if (table === knowledgeGraphEntities) {
+          if (table === kgEntities) {
             calls.entityInserts.push(String(values.normalized_label));
           }
           return [{ id: `new-${insertSeq}` }];
@@ -101,10 +101,9 @@ function makeTx(opts: {
     })),
     delete: vi.fn((table: unknown) => ({
       where: vi.fn(async () => {
-        if (table === knowledgeGraphEvidence) calls.evidenceDeletes += 1;
-        else if (table === knowledgeGraphRelationships)
-          calls.relationshipDeletes += 1;
-        else if (table === knowledgeGraphEntities) calls.entityDeletes += 1;
+        if (table === kgEvidence) calls.evidenceDeletes += 1;
+        else if (table === kgRelationships) calls.relationshipDeletes += 1;
+        else if (table === kgEntities) calls.entityDeletes += 1;
         return undefined;
       }),
     })),

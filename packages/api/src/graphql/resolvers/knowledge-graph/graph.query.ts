@@ -61,7 +61,7 @@ export async function knowledgeGraphGraph(
 
   const result = await ctx.db.execute(sql`
     SELECT *
-      FROM knowledge_graph_relationships
+      FROM kg.relationships
      WHERE ${sql.join(conditions, sql` AND `)}
      ORDER BY evidence_count DESC, label ASC
   `);
@@ -135,7 +135,7 @@ async function loadCanonicalTenantGraph(
   const result = await ctx.db.execute(sql`
     WITH filtered_entities AS (
       SELECT *
-        FROM knowledge_graph_entities
+        FROM kg.entities
        WHERE ${sql.join(conditions, sql` AND `)}
     ),
     canonical_entities AS (
@@ -151,7 +151,7 @@ async function loadCanonicalTenantGraph(
         r.*,
         source_canonical.id AS canonical_source_entity_id,
         target_canonical.id AS canonical_target_entity_id
-      FROM knowledge_graph_relationships r
+      FROM kg.relationships r
       JOIN filtered_entities source_entity
         ON source_entity.id = r.source_entity_id
       JOIN filtered_entities target_entity

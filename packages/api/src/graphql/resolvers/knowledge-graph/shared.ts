@@ -88,7 +88,7 @@ export async function loadFilteredEntities(
     const result = await ctx.db.execute(sql`
       WITH filtered_entities AS (
         SELECT *
-          FROM knowledge_graph_entities
+          FROM kg.entities
          WHERE ${sql.join(conditions, sql` AND `)}
       )
       SELECT
@@ -134,7 +134,7 @@ export async function loadFilteredEntities(
 
   const result = await ctx.db.execute(sql`
     SELECT *
-      FROM knowledge_graph_entities
+      FROM kg.entities
      WHERE ${sql.join(conditions, sql` AND `)}
      ORDER BY relationship_count DESC, evidence_count DESC, label ASC
      LIMIT ${limit}

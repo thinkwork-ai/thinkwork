@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   type KnowledgeGraphSourceKind,
-  knowledgeGraphIngestRuns,
+  kgIngestRuns,
   messages,
   wikiPages,
 } from "@thinkwork/database-pg/schema";
@@ -89,15 +89,15 @@ export async function reapStaleObservationIngestRuns(args: {
   const cutoff = new Date(Date.now() - ceilingMinutes * 60_000);
   const now = new Date();
   const predicates = [
-    eq(knowledgeGraphIngestRuns.source_kind, "observations"),
-    sql`${knowledgeGraphIngestRuns.status} IN ('queued','running')`,
-    lt(knowledgeGraphIngestRuns.created_at, cutoff),
+    eq(kgIngestRuns.source_kind, "observations"),
+    sql`${kgIngestRuns.status} IN ('queued','running')`,
+    lt(kgIngestRuns.created_at, cutoff),
   ];
   if (args.tenantId) {
-    predicates.push(eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId));
+    predicates.push(eq(kgIngestRuns.tenant_id, args.tenantId));
   }
   const reaped = await args.db
-    .update(knowledgeGraphIngestRuns)
+    .update(kgIngestRuns)
     .set({
       status: "failed",
       finished_at: now,
@@ -105,7 +105,7 @@ export async function reapStaleObservationIngestRuns(args: {
       updated_at: now,
     })
     .where(and(...predicates))
-    .returning({ id: knowledgeGraphIngestRuns.id });
+    .returning({ id: kgIngestRuns.id });
   return reaped.length;
 }
 
@@ -124,7 +124,7 @@ export async function createKnowledgeGraphObservationsIngestRun(
 
   const sourceRef = buildObservationsSourceRef(args.tenantId);
   const [inserted] = await args.db
-    .insert(knowledgeGraphIngestRuns)
+    .insert(kgIngestRuns)
     .values({
       id: randomUUID(),
       tenant_id: args.tenantId,
@@ -147,9 +147,9 @@ export async function createKnowledgeGraphObservationsIngestRun(
     })
     .onConflictDoNothing({
       target: [
-        knowledgeGraphIngestRuns.tenant_id,
-        knowledgeGraphIngestRuns.source_kind,
-        knowledgeGraphIngestRuns.source_ref,
+        kgIngestRuns.tenant_id,
+        kgIngestRuns.source_kind,
+        kgIngestRuns.source_ref,
       ],
       where: sql`status IN ('queued','running')`,
     })
@@ -203,7 +203,7 @@ export async function createKnowledgeGraphIngestRun(
   const messageCount = await countThreadMessages(args);
   const runId = randomUUID();
   const [inserted] = await args.db
-    .insert(knowledgeGraphIngestRuns)
+    .insert(kgIngestRuns)
     .values({
       id: runId,
       tenant_id: args.tenantId,
@@ -236,9 +236,9 @@ export async function createKnowledgeGraphIngestRun(
     })
     .onConflictDoNothing({
       target: [
-        knowledgeGraphIngestRuns.tenant_id,
-        knowledgeGraphIngestRuns.source_kind,
-        knowledgeGraphIngestRuns.source_ref,
+        kgIngestRuns.tenant_id,
+        kgIngestRuns.source_kind,
+        kgIngestRuns.source_ref,
       ],
       where: sql`status IN ('queued','running')`,
     })
@@ -271,16 +271,16 @@ async function loadActiveRun(
 ): Promise<KnowledgeGraphIngestRunRow | null> {
   const [existing] = await db
     .select()
-    .from(knowledgeGraphIngestRuns)
+    .from(kgIngestRuns)
     .where(
       and(
-        eq(knowledgeGraphIngestRuns.tenant_id, tenantId),
-        eq(knowledgeGraphIngestRuns.source_kind, sourceKind),
-        eq(knowledgeGraphIngestRuns.source_ref, sourceRef),
-        sql`${knowledgeGraphIngestRuns.status} IN ('queued','running')`,
+        eq(kgIngestRuns.tenant_id, tenantId),
+        eq(kgIngestRuns.source_kind, sourceKind),
+        eq(kgIngestRuns.source_ref, sourceRef),
+        sql`${kgIngestRuns.status} IN ('queued','running')`,
       ),
     )
-    .orderBy(knowledgeGraphIngestRuns.created_at)
+    .orderBy(kgIngestRuns.created_at)
     .limit(1);
   return (existing as KnowledgeGraphIngestRunRow | undefined) ?? null;
 }
@@ -291,14 +291,14 @@ export async function markKnowledgeGraphRunInvokeFailed(args: {
   error: string;
 }): Promise<KnowledgeGraphIngestRunRow | null> {
   const [row] = await args.db
-    .update(knowledgeGraphIngestRuns)
+    .update(kgIngestRuns)
     .set({
       status: "failed",
       finished_at: new Date(),
       error: args.error.slice(0, 4000),
       updated_at: new Date(),
     })
-    .where(eq(knowledgeGraphIngestRuns.id, args.runId))
+    .where(eq(kgIngestRuns.id, args.runId))
     .returning();
   return (row as KnowledgeGraphIngestRunRow | undefined) ?? null;
 }

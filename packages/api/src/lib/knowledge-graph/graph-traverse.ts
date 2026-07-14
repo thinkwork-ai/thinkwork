@@ -96,7 +96,7 @@ async function loadEntitiesByIds(
   const result = await db.execute(sql`
     SELECT id, source_kind, label, ontology_type_slug, summary, aliases,
            relationship_count, evidence_count
-      FROM knowledge_graph_entities
+      FROM kg.entities
      WHERE tenant_id = ${tenantId}
        AND source_kind = ${AGENT_SOURCE_KIND}
        AND grounding_status = 'grounded'
@@ -122,7 +122,7 @@ async function loadObservationIds(
   // Observation-ID refs only — never selects `snippet` (R17).
   const result = await db.execute(sql`
     SELECT entity_id, evidence_source_ref
-      FROM knowledge_graph_evidence
+      FROM kg.evidence
      WHERE tenant_id = ${tenantId}
        AND source_kind = ${AGENT_SOURCE_KIND}
        AND evidence_source_kind = 'hindsight_observation'
@@ -167,9 +167,9 @@ export async function getKnowledgeGraphEntityDetail(args: {
     SELECT r.id, r.source_kind, r.label, r.ontology_type_slug,
            r.source_entity_id, r.target_entity_id,
            se.label AS from_label, te.label AS to_label
-      FROM knowledge_graph_relationships r
-      JOIN knowledge_graph_entities se ON se.id = r.source_entity_id
-      JOIN knowledge_graph_entities te ON te.id = r.target_entity_id
+      FROM kg.relationships r
+      JOIN kg.entities se ON se.id = r.source_entity_id
+      JOIN kg.entities te ON te.id = r.target_entity_id
      WHERE r.tenant_id = ${args.tenantId}
        AND r.source_kind = ${AGENT_SOURCE_KIND}
        AND r.grounding_status = 'grounded'
@@ -218,7 +218,7 @@ export async function getKnowledgeGraphNeighbors(args: {
                ELSE r.source_entity_id
              END,
              walk.hop + 1
-        FROM knowledge_graph_relationships r
+        FROM kg.relationships r
         JOIN walk ON walk.hop < ${depth}
          AND (r.source_entity_id = walk.entity_id OR r.target_entity_id = walk.entity_id)
        WHERE r.tenant_id = ${args.tenantId}
@@ -228,9 +228,9 @@ export async function getKnowledgeGraphNeighbors(args: {
     SELECT DISTINCT r.id, r.source_kind, r.label, r.ontology_type_slug,
            r.source_entity_id, r.target_entity_id,
            se.label AS from_label, te.label AS to_label
-      FROM knowledge_graph_relationships r
-      JOIN knowledge_graph_entities se ON se.id = r.source_entity_id
-      JOIN knowledge_graph_entities te ON te.id = r.target_entity_id
+      FROM kg.relationships r
+      JOIN kg.entities se ON se.id = r.source_entity_id
+      JOIN kg.entities te ON te.id = r.target_entity_id
      WHERE r.tenant_id = ${args.tenantId}
        AND r.source_kind = ${AGENT_SOURCE_KIND}
        AND r.grounding_status = 'grounded'

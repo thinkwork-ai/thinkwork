@@ -13,8 +13,8 @@
 
 import { eq, sql } from "drizzle-orm";
 import {
-  knowledgeGraphIngestRuns,
-  knowledgeGraphObservationCursors,
+  kgIngestRuns,
+  kgObservationCursors,
   tenants,
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../lib/db.js";
@@ -293,8 +293,8 @@ async function processTenantObservationsIngest(
       // from empty (the merge path is additive and never deletes on absence,
       // so a rebuild must purge explicitly).
       await database
-        .delete(knowledgeGraphObservationCursors)
-        .where(eq(knowledgeGraphObservationCursors.tenant_id, args.tenantId));
+        .delete(kgObservationCursors)
+        .where(eq(kgObservationCursors.tenant_id, args.tenantId));
       await purgeKnowledgeGraphSource({
         db: database,
         tenantId: run.tenant_id,
@@ -568,11 +568,11 @@ async function patchRunMetrics(
 ): Promise<void> {
   try {
     await db
-      .update(knowledgeGraphIngestRuns)
+      .update(kgIngestRuns)
       .set({
-        metrics: sql`COALESCE(${knowledgeGraphIngestRuns.metrics}, '{}'::jsonb) || ${JSON.stringify(fragment)}::jsonb`,
+        metrics: sql`COALESCE(${kgIngestRuns.metrics}, '{}'::jsonb) || ${JSON.stringify(fragment)}::jsonb`,
       })
-      .where(eq(knowledgeGraphIngestRuns.id, runId));
+      .where(eq(kgIngestRuns.id, runId));
   } catch (err) {
     console.warn("[knowledge-graph-observations-ingest] metrics patch failed", {
       runId,
@@ -589,7 +589,7 @@ async function upsertObservationCursors(
   const now = new Date();
   for (const [bankId, cursor] of nextCursors) {
     await tx
-      .insert(knowledgeGraphObservationCursors)
+      .insert(kgObservationCursors)
       .values({
         tenant_id: tenantId,
         bank_id: bankId,
@@ -598,10 +598,7 @@ async function upsertObservationCursors(
         updated_at: now,
       })
       .onConflictDoUpdate({
-        target: [
-          knowledgeGraphObservationCursors.tenant_id,
-          knowledgeGraphObservationCursors.bank_id,
-        ],
+        target: [kgObservationCursors.tenant_id, kgObservationCursors.bank_id],
         set: {
           last_record_updated_at: cursor.updatedAt,
           last_record_id: cursor.recordId,

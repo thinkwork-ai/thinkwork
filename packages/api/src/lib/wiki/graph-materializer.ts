@@ -15,7 +15,7 @@
  *   - `wiki.page_links` between co-materialized entity pages;
  *   - section provenance rows with source_kind 'hindsight_observation' and
  *     source_ref = the backing observation id
- *     (knowledge_graph_evidence.evidence_source_ref where
+ *     (kg.evidence.evidence_source_ref where
  *     evidence_source_kind='hindsight_observation') — observation IDs only,
  *     never snippet text (R17).
  *
@@ -234,7 +234,7 @@ export async function materializeTenantWikiFromGraph(
     await db.execute(sql`
 			SELECT id, label, normalized_label, ontology_type_slug,
 			       canonical_entity_id, summary, aliases
-			FROM knowledge_graph_entities
+			FROM kg.entities
 			WHERE tenant_id = ${args.tenantId}
 			  AND source_kind = ${GRAPH_SOURCE_KIND}
 			  AND grounding_status = 'grounded'${scopeFilter}
@@ -247,9 +247,9 @@ export async function materializeTenantWikiFromGraph(
     await db.execute(sql`
 			SELECT r.id, r.label, r.source_entity_id, r.target_entity_id,
 			       se.label AS from_label, te.label AS to_label
-			FROM knowledge_graph_relationships r
-			JOIN knowledge_graph_entities se ON se.id = r.source_entity_id
-			JOIN knowledge_graph_entities te ON te.id = r.target_entity_id
+			FROM kg.relationships r
+			JOIN kg.entities se ON se.id = r.source_entity_id
+			JOIN kg.entities te ON te.id = r.target_entity_id
 			WHERE r.tenant_id = ${args.tenantId}
 			  AND r.source_kind = ${GRAPH_SOURCE_KIND}
 			  AND r.grounding_status = 'grounded'
@@ -261,7 +261,7 @@ export async function materializeTenantWikiFromGraph(
   const evidenceRows = rowsOf<MirrorEvidenceRow>(
     await db.execute(sql`
 			SELECT entity_id, relationship_id, evidence_source_ref, thread_id, metadata
-			FROM knowledge_graph_evidence
+			FROM kg.evidence
 			WHERE tenant_id = ${args.tenantId}
 			  AND source_kind = ${GRAPH_SOURCE_KIND}
 			  AND evidence_source_kind = 'hindsight_observation'

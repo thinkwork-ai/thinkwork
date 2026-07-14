@@ -1,13 +1,20 @@
 /**
  * Knowledge Graph tables.
  *
+ * Lives in the `kg.*` Postgres schema (extracted from `public.knowledge_graph_*`
+ * in 2026-07 — see docs/solutions/database-issues/feature-schema-extraction-pattern.md
+ * and packages/database-pg/drizzle/0250_kg_schema_extraction.sql). Unlike the
+ * wiki/brain extraction, TS export identifiers were renamed with the tables
+ * (`knowledgeGraphEntities` → `kgEntities`, etc.) so DB names and code names
+ * match.
+ *
  * Stores normalized, tenant-scoped graph snapshots in Aurora. Rows are scoped
  * by source kind/ref so thread transcripts, wiki pages, and Brain pages can
  * share the same ontology-gated normalization pipeline.
  */
 
 import {
-  pgTable,
+  pgSchema,
   uuid,
   text,
   integer,
@@ -25,6 +32,8 @@ import { threads } from "./threads";
 import { messages } from "./messages";
 import { ontologyEntityTypes, ontologyRelationshipTypes } from "./ontology";
 import { canonicalEntities } from "./entity-identity";
+
+export const kg = pgSchema("kg");
 
 export const KNOWLEDGE_GRAPH_INGEST_STATUSES = [
   "queued",
@@ -77,8 +86,8 @@ export const KNOWLEDGE_GRAPH_EVIDENCE_SOURCE_KINDS = [
 export type KnowledgeGraphEvidenceSourceKind =
   (typeof KNOWLEDGE_GRAPH_EVIDENCE_SOURCE_KINDS)[number];
 
-export const knowledgeGraphIngestRuns = pgTable(
-  "knowledge_graph_ingest_runs",
+export const kgIngestRuns = kg.table(
+  "ingest_runs",
   {
     id: uuid("id")
       .primaryKey()
@@ -146,26 +155,26 @@ export const knowledgeGraphIngestRuns = pgTable(
       .on(table.tenant_id, table.source_kind, table.source_ref)
       .where(sql`${table.status} IN ('queued','running')`),
     check(
-      "knowledge_graph_ingest_runs_status_allowed",
+      "ingest_runs_status_allowed",
       sql`${table.status} IN ('queued','running','succeeded','failed','canceled','stale_noop')`,
     ),
     check(
-      "knowledge_graph_ingest_runs_trigger_allowed",
+      "ingest_runs_trigger_allowed",
       sql`${table.trigger} IN ('manual','scheduled')`,
     ),
     check(
-      "knowledge_graph_ingest_runs_source_kind_allowed",
+      "ingest_runs_source_kind_allowed",
       sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
     check(
-      "knowledge_graph_ingest_runs_thread_scope_required",
+      "ingest_runs_thread_scope_required",
       sql`${table.source_kind} != 'thread' OR ${table.thread_id} IS NOT NULL`,
     ),
   ],
 );
 
-export const knowledgeGraphEntities = pgTable(
-  "knowledge_graph_entities",
+export const kgEntities = kg.table(
+  "entities",
   {
     id: uuid("id")
       .primaryKey()
@@ -179,7 +188,7 @@ export const knowledgeGraphEntities = pgTable(
     source_kind: text("source_kind").notNull().default("thread"),
     source_ref: text("source_ref").notNull(),
     ingest_run_id: uuid("ingest_run_id")
-      .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
+      .references(() => kgIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
     graph_node_id: text("graph_node_id").notNull(),
     label: text("label").notNull(),
@@ -252,29 +261,29 @@ export const knowledgeGraphEntities = pgTable(
       sql`${table.normalized_label} gin_trgm_ops`,
     ),
     check(
-      "knowledge_graph_entities_grounding_allowed",
+      "entities_grounding_allowed",
       sql`${table.grounding_status} IN ('grounded','unapproved_type','ungrounded','conflict','unknown')`,
     ),
     check(
-      "knowledge_graph_entities_provenance_allowed",
+      "entities_provenance_allowed",
       sql`${table.provenance_status} IN ('strong','weak','missing')`,
     ),
     check(
-      "knowledge_graph_entities_source_kind_allowed",
+      "entities_source_kind_allowed",
       sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
     index("idx_kg_entities_tenant_canonical")
       .on(table.tenant_id, table.canonical_entity_id)
       .where(sql`${table.canonical_entity_id} IS NOT NULL`),
     check(
-      "knowledge_graph_entities_resolution_state_allowed",
+      "entities_resolution_state_allowed",
       sql`${table.resolution_state} IN ('resolved','deferred','private','legacy')`,
     ),
   ],
 );
 
-export const knowledgeGraphRelationships = pgTable(
-  "knowledge_graph_relationships",
+export const kgRelationships = kg.table(
+  "relationships",
   {
     id: uuid("id")
       .primaryKey()
@@ -288,16 +297,16 @@ export const knowledgeGraphRelationships = pgTable(
     source_kind: text("source_kind").notNull().default("thread"),
     source_ref: text("source_ref").notNull(),
     ingest_run_id: uuid("ingest_run_id")
-      .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
+      .references(() => kgIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
     graph_edge_id: text("graph_edge_id"),
     source_entity_id: uuid("source_entity_id")
-      .references((): AnyPgColumn => knowledgeGraphEntities.id, {
+      .references((): AnyPgColumn => kgEntities.id, {
         onDelete: "cascade",
       })
       .notNull(),
     target_entity_id: uuid("target_entity_id")
-      .references((): AnyPgColumn => knowledgeGraphEntities.id, {
+      .references((): AnyPgColumn => kgEntities.id, {
         onDelete: "cascade",
       })
       .notNull(),
@@ -352,22 +361,22 @@ export const knowledgeGraphRelationships = pgTable(
       table.provenance_status,
     ),
     check(
-      "knowledge_graph_relationships_grounding_allowed",
+      "relationships_grounding_allowed",
       sql`${table.grounding_status} IN ('grounded','unapproved_type','ungrounded','conflict','unknown')`,
     ),
     check(
-      "knowledge_graph_relationships_provenance_allowed",
+      "relationships_provenance_allowed",
       sql`${table.provenance_status} IN ('strong','weak','missing')`,
     ),
     check(
-      "knowledge_graph_relationships_source_kind_allowed",
+      "relationships_source_kind_allowed",
       sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
   ],
 );
 
-export const knowledgeGraphEvidence = pgTable(
-  "knowledge_graph_evidence",
+export const kgEvidence = kg.table(
+  "evidence",
   {
     id: uuid("id")
       .primaryKey()
@@ -381,14 +390,13 @@ export const knowledgeGraphEvidence = pgTable(
     source_kind: text("source_kind").notNull().default("thread"),
     source_ref: text("source_ref").notNull(),
     ingest_run_id: uuid("ingest_run_id")
-      .references(() => knowledgeGraphIngestRuns.id, { onDelete: "cascade" })
+      .references(() => kgIngestRuns.id, { onDelete: "cascade" })
       .notNull(),
-    entity_id: uuid("entity_id").references(
-      (): AnyPgColumn => knowledgeGraphEntities.id,
-      { onDelete: "cascade" },
-    ),
+    entity_id: uuid("entity_id").references((): AnyPgColumn => kgEntities.id, {
+      onDelete: "cascade",
+    }),
     relationship_id: uuid("relationship_id").references(
-      (): AnyPgColumn => knowledgeGraphRelationships.id,
+      (): AnyPgColumn => kgRelationships.id,
       { onDelete: "cascade" },
     ),
     message_id: uuid("message_id").references(() => messages.id, {
@@ -426,132 +434,126 @@ export const knowledgeGraphEvidence = pgTable(
     index("idx_kg_evidence_entity").on(table.entity_id),
     index("idx_kg_evidence_relationship").on(table.relationship_id),
     check(
-      "knowledge_graph_evidence_source_kind_allowed",
+      "evidence_source_kind_allowed",
       sql`${table.source_kind} IN ('thread','wiki','brain','observations')`,
     ),
     check(
-      "knowledge_graph_evidence_evidence_source_kind_allowed",
+      "evidence_evidence_source_kind_allowed",
       sql`${table.evidence_source_kind} IN ('thread_message','wiki_page','wiki_section','brain_page','brain_section','hindsight_observation','graph_payload','normalizer')`,
     ),
     check(
-      "knowledge_graph_evidence_subject_required",
+      "evidence_subject_required",
       sql`${table.entity_id} IS NOT NULL OR ${table.relationship_id} IS NOT NULL`,
     ),
   ],
 );
 
-export const knowledgeGraphIngestRunsRelations = relations(
-  knowledgeGraphIngestRuns,
+export const kgIngestRunsRelations = relations(
+  kgIngestRuns,
   ({ one, many }) => ({
     tenant: one(tenants, {
-      fields: [knowledgeGraphIngestRuns.tenant_id],
+      fields: [kgIngestRuns.tenant_id],
       references: [tenants.id],
     }),
     thread: one(threads, {
-      fields: [knowledgeGraphIngestRuns.thread_id],
+      fields: [kgIngestRuns.thread_id],
       references: [threads.id],
     }),
     requestedBy: one(users, {
-      fields: [knowledgeGraphIngestRuns.requested_by_user_id],
+      fields: [kgIngestRuns.requested_by_user_id],
       references: [users.id],
     }),
-    entities: many(knowledgeGraphEntities),
-    relationships: many(knowledgeGraphRelationships),
-    evidence: many(knowledgeGraphEvidence),
+    entities: many(kgEntities),
+    relationships: many(kgRelationships),
+    evidence: many(kgEvidence),
   }),
 );
 
-export const knowledgeGraphEntitiesRelations = relations(
-  knowledgeGraphEntities,
-  ({ one, many }) => ({
-    tenant: one(tenants, {
-      fields: [knowledgeGraphEntities.tenant_id],
-      references: [tenants.id],
-    }),
-    thread: one(threads, {
-      fields: [knowledgeGraphEntities.thread_id],
-      references: [threads.id],
-    }),
-    ingestRun: one(knowledgeGraphIngestRuns, {
-      fields: [knowledgeGraphEntities.ingest_run_id],
-      references: [knowledgeGraphIngestRuns.id],
-    }),
-    ontologyEntityType: one(ontologyEntityTypes, {
-      fields: [knowledgeGraphEntities.ontology_entity_type_id],
-      references: [ontologyEntityTypes.id],
-    }),
-    sourceRelationships: many(knowledgeGraphRelationships, {
-      relationName: "kgSourceEntity",
-    }),
-    targetRelationships: many(knowledgeGraphRelationships, {
-      relationName: "kgTargetEntity",
-    }),
-    evidence: many(knowledgeGraphEvidence),
+export const kgEntitiesRelations = relations(kgEntities, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [kgEntities.tenant_id],
+    references: [tenants.id],
   }),
-);
+  thread: one(threads, {
+    fields: [kgEntities.thread_id],
+    references: [threads.id],
+  }),
+  ingestRun: one(kgIngestRuns, {
+    fields: [kgEntities.ingest_run_id],
+    references: [kgIngestRuns.id],
+  }),
+  ontologyEntityType: one(ontologyEntityTypes, {
+    fields: [kgEntities.ontology_entity_type_id],
+    references: [ontologyEntityTypes.id],
+  }),
+  sourceRelationships: many(kgRelationships, {
+    relationName: "kgSourceEntity",
+  }),
+  targetRelationships: many(kgRelationships, {
+    relationName: "kgTargetEntity",
+  }),
+  evidence: many(kgEvidence),
+}));
 
-export const knowledgeGraphRelationshipsRelations = relations(
-  knowledgeGraphRelationships,
+export const kgRelationshipsRelations = relations(
+  kgRelationships,
   ({ one, many }) => ({
     tenant: one(tenants, {
-      fields: [knowledgeGraphRelationships.tenant_id],
+      fields: [kgRelationships.tenant_id],
       references: [tenants.id],
     }),
     thread: one(threads, {
-      fields: [knowledgeGraphRelationships.thread_id],
+      fields: [kgRelationships.thread_id],
       references: [threads.id],
     }),
-    ingestRun: one(knowledgeGraphIngestRuns, {
-      fields: [knowledgeGraphRelationships.ingest_run_id],
-      references: [knowledgeGraphIngestRuns.id],
+    ingestRun: one(kgIngestRuns, {
+      fields: [kgRelationships.ingest_run_id],
+      references: [kgIngestRuns.id],
     }),
-    sourceEntity: one(knowledgeGraphEntities, {
-      fields: [knowledgeGraphRelationships.source_entity_id],
-      references: [knowledgeGraphEntities.id],
+    sourceEntity: one(kgEntities, {
+      fields: [kgRelationships.source_entity_id],
+      references: [kgEntities.id],
       relationName: "kgSourceEntity",
     }),
-    targetEntity: one(knowledgeGraphEntities, {
-      fields: [knowledgeGraphRelationships.target_entity_id],
-      references: [knowledgeGraphEntities.id],
+    targetEntity: one(kgEntities, {
+      fields: [kgRelationships.target_entity_id],
+      references: [kgEntities.id],
       relationName: "kgTargetEntity",
     }),
     ontologyRelationshipType: one(ontologyRelationshipTypes, {
-      fields: [knowledgeGraphRelationships.ontology_relationship_type_id],
+      fields: [kgRelationships.ontology_relationship_type_id],
       references: [ontologyRelationshipTypes.id],
     }),
-    evidence: many(knowledgeGraphEvidence),
+    evidence: many(kgEvidence),
   }),
 );
 
-export const knowledgeGraphEvidenceRelations = relations(
-  knowledgeGraphEvidence,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [knowledgeGraphEvidence.tenant_id],
-      references: [tenants.id],
-    }),
-    thread: one(threads, {
-      fields: [knowledgeGraphEvidence.thread_id],
-      references: [threads.id],
-    }),
-    ingestRun: one(knowledgeGraphIngestRuns, {
-      fields: [knowledgeGraphEvidence.ingest_run_id],
-      references: [knowledgeGraphIngestRuns.id],
-    }),
-    entity: one(knowledgeGraphEntities, {
-      fields: [knowledgeGraphEvidence.entity_id],
-      references: [knowledgeGraphEntities.id],
-    }),
-    relationship: one(knowledgeGraphRelationships, {
-      fields: [knowledgeGraphEvidence.relationship_id],
-      references: [knowledgeGraphRelationships.id],
-    }),
-    message: one(messages, {
-      fields: [knowledgeGraphEvidence.message_id],
-      references: [messages.id],
-    }),
+export const kgEvidenceRelations = relations(kgEvidence, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [kgEvidence.tenant_id],
+    references: [tenants.id],
   }),
-);
+  thread: one(threads, {
+    fields: [kgEvidence.thread_id],
+    references: [threads.id],
+  }),
+  ingestRun: one(kgIngestRuns, {
+    fields: [kgEvidence.ingest_run_id],
+    references: [kgIngestRuns.id],
+  }),
+  entity: one(kgEntities, {
+    fields: [kgEvidence.entity_id],
+    references: [kgEntities.id],
+  }),
+  relationship: one(kgRelationships, {
+    fields: [kgEvidence.relationship_id],
+    references: [kgRelationships.id],
+  }),
+  message: one(messages, {
+    fields: [kgEvidence.message_id],
+    references: [messages.id],
+  }),
+}));
 
 /**
  * Per-(tenant, bank) incremental cursors for the observations ingest source.
@@ -564,8 +566,8 @@ export const knowledgeGraphEvidenceRelations = relations(
  * run succeeded (crash between extraction and snapshot leaves cursors put,
  * and the idempotent per-observation dataset identity absorbs the re-read).
  */
-export const knowledgeGraphObservationCursors = pgTable(
-  "knowledge_graph_observation_cursors",
+export const kgObservationCursors = kg.table(
+  "observation_cursors",
   {
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
