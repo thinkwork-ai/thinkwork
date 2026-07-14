@@ -58,10 +58,11 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: Wrench,
     operatorOnly: true,
   },
-  // Renamed from "MCP Servers": the section now carries the per-user
-  // Connections tab (OAuth integrations) plus the merged MCP Servers tab.
+  // Renamed to "Connectors" (THINK-285): the section carries the per-user
+  // Connections tab (OAuth integrations), the merged MCP Servers tab, and the
+  // Data Sources tab.
   {
-    label: "Connections",
+    label: "Connectors",
     to: "/settings/mcp-servers",
     icon: ModelContextProtocol,
     operatorOnly: true,

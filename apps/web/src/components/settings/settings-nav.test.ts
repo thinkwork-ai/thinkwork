@@ -100,6 +100,23 @@ describe("visibleSettingsNavItems", () => {
     expect(memberWeb.some((i) => i.to === AGENTS)).toBe(false);
   });
 
+  it("labels the MCP-servers section Connectors (THINK-285)", () => {
+    const item = SETTINGS_NAV_ITEMS.find(
+      (i) => i.to === "/settings/mcp-servers",
+    );
+    expect(item).toBeDefined();
+    expect(item?.label).toBe("Connectors");
+    expect(item?.operatorOnly).toBe(true);
+    // The old sidebar label is gone; only the per-user tab inside the page
+    // keeps the "Connections" name.
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Connections")).toBe(
+      false,
+    );
+    expect(settingsCrumbForPath("/settings/mcp-servers/data-sources")).toEqual([
+      { label: "Connectors" },
+    ]);
+  });
+
   it("no longer lists a standalone Webhooks nav entry (THINK-137 U8)", () => {
     // Every webhook is now an Automation with a `webhook` trigger, managed
     // under Automations. The /settings/webhooks routes remain as redirects.

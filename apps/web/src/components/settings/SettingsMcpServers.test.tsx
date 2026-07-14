@@ -167,6 +167,10 @@ vi.mock("@/lib/mcp-api", async (importOriginal) => {
 
 import { SettingsMcpServers } from "./SettingsMcpServers";
 
+// THINK-285: the Data Sources tab path — the old redirect stub is a live
+// component route now.
+const DATA_SOURCES_PATH = "/settings/mcp-servers/data-sources";
+
 // Default internal-cluster enumeration: one cluster with the workspace
 // database, an unregistered candidate, and an already-registered source.
 const DEFAULT_CLUSTERS = [
@@ -408,12 +412,15 @@ describe("SettingsMcpServers", () => {
       ).disabled,
     ).toBe(false);
 
-    // Header carries the two-tab strip (Connections + merged MCP Servers).
+    // Header carries the Connectors title and the three-tab strip
+    // (Connections + merged MCP Servers + Data Sources, THINK-285).
     const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
-    expect(headerConfig?.title).toBe("Connections");
+    expect(headerConfig?.title).toBe("Connectors");
+    expect(headerConfig?.breadcrumbs).toEqual([{ label: "Connectors" }]);
     expect(headerConfig?.tabs).toEqual([
       { to: "/settings/mcp-servers", label: "Connections" },
       { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
+      { to: "/settings/mcp-servers/data-sources", label: "Data Sources" },
     ]);
   });
 
@@ -440,8 +447,9 @@ describe("SettingsMcpServers", () => {
     // No server table, no search box on the Connections tab.
     expect(screen.queryByPlaceholderText("Search servers…")).toBeNull();
     const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
-    expect(headerConfig?.title).toBe("Connections");
-    // The Register/New-server header actions belong to the MCP Servers tab.
+    expect(headerConfig?.title).toBe("Connectors");
+    // The New-server / Register actions belong to the MCP Servers and Data
+    // Sources tabs respectively; the Connections tab has none.
     expect(headerConfig?.action).toBeUndefined();
   });
 
@@ -526,61 +534,64 @@ describe("SettingsMcpServers", () => {
     );
   });
 
-  it("lists analyst connectors on the Datasource MCPs tab with cluster · database", async () => {
-    mocks.listMcpServers.mockResolvedValue({
-      servers: [
-        {
-          id: "postgres-dev",
-          name: "Postgres (dev)",
-          slug: "postgres-dev",
-          url: "https://api.thinkwork.test/mcp/analyst",
-          enabled: true,
-          authType: "service_credential",
-          status: "approved",
-          managementSource: "manual",
-          managedApplicationKey: null,
-          dataSource: { kind: "internal", host: null, database: "thinkwork" },
+  // Shared fixture: two analyst datasource rows plus one plain tenant server.
+  const DATA_SOURCE_SERVERS = {
+    servers: [
+      {
+        id: "postgres-dev",
+        name: "Postgres (dev)",
+        slug: "postgres-dev",
+        url: "https://api.thinkwork.test/mcp/analyst",
+        enabled: true,
+        authType: "service_credential",
+        status: "approved",
+        managementSource: "manual",
+        managedApplicationKey: null,
+        dataSource: { kind: "internal", host: null, database: "thinkwork" },
+      },
+      {
+        id: "analytics-demo",
+        name: "Analytics Demo",
+        slug: "analytics-demo",
+        url: "https://api.thinkwork.test/mcp/analyst/analytics-demo",
+        enabled: true,
+        authType: "service_credential",
+        status: "approved",
+        managementSource: "manual",
+        managedApplicationKey: null,
+        dataSource: {
+          kind: "internal",
+          host: "thinkwork-dev-db.cluster-x.us-east-1.rds.amazonaws.com",
+          database: "analytics_demo",
         },
-        {
-          id: "analytics-demo",
-          name: "Analytics Demo",
-          slug: "analytics-demo",
-          url: "https://api.thinkwork.test/mcp/analyst/analytics-demo",
-          enabled: true,
-          authType: "service_credential",
-          status: "approved",
-          managementSource: "manual",
-          managedApplicationKey: null,
-          dataSource: {
-            kind: "internal",
-            host: "thinkwork-dev-db.cluster-x.us-east-1.rds.amazonaws.com",
-            database: "analytics_demo",
-          },
-        },
-        {
-          id: "manual",
-          name: "Manual CRM",
-          slug: "manual-crm",
-          url: "https://manual.example/mcp",
-          enabled: true,
-          authType: "none",
-          status: "approved",
-          managementSource: "manual",
-          managedApplicationKey: null,
-        },
-      ],
-    });
-    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+      },
+      {
+        id: "manual",
+        name: "Manual CRM",
+        slug: "manual-crm",
+        url: "https://manual.example/mcp",
+        enabled: true,
+        authType: "none",
+        status: "approved",
+        managementSource: "manual",
+        managedApplicationKey: null,
+      },
+    ],
+  };
 
-    // Datasource rows are excluded from the tenant group and listed with
-    // Source / Instance / Database columns in the Datasource MCPs group.
+  it("lists analyst connectors on the Data Sources tab with cluster · database", async () => {
+    mocks.listMcpServers.mockResolvedValue(DATA_SOURCE_SERVERS);
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.pathname = DATA_SOURCES_PATH;
+
+    // AE1 (THINK-285): the old /data-sources bookmark renders the datasource
+    // table — Source / Instance / Database columns — without tenant rows.
     render(<SettingsMcpServers />);
-    expect(await screen.findByText("Manual CRM")).toBeTruthy();
-    expect(screen.getByText("Datasource MCPs")).toBeTruthy();
-    expect(screen.getByText("Analytics Demo")).toBeTruthy();
+    expect(await screen.findByText("Analytics Demo")).toBeTruthy();
     expect(screen.getByText("Postgres (dev)")).toBeTruthy();
-    // The tenant group renders before the datasource group.
-    expect(textAppearsBefore("Manual CRM", "Analytics Demo")).toBe(true);
+    expect(screen.queryByText("Manual CRM")).toBeNull();
+    expect(screen.queryByText("Datasource MCPs")).toBeNull();
+    expect(screen.getByText("Source")).toBeTruthy();
     expect(screen.getByText("Instance")).toBeTruthy();
     expect(screen.getByText("Database")).toBeTruthy();
     expect(screen.getByText("thinkwork-dev-db")).toBeTruthy();
@@ -589,6 +600,110 @@ describe("SettingsMcpServers", () => {
     expect(screen.getByText("thinkwork")).toBeTruthy();
     // Each row carries its Internal/External badge.
     expect(screen.getAllByText("internal")).toHaveLength(2);
+
+    // Row click opens the server detail route.
+    fireEvent.click(screen.getByText("Analytics Demo"));
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/settings/mcp-servers/$serverId",
+      params: { serverId: "analytics-demo" },
+    });
+  });
+
+  it("keeps datasource rows and the Datasource MCPs section off the servers tab", async () => {
+    mocks.listMcpServers.mockResolvedValue(DATA_SOURCE_SERVERS);
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    render(<SettingsMcpServers />);
+    expect(await screen.findByText("Manual CRM")).toBeTruthy();
+    expect(screen.queryByText("Datasource MCPs")).toBeNull();
+    expect(screen.queryByText("Analytics Demo")).toBeNull();
+    expect(screen.queryByText("Postgres (dev)")).toBeNull();
+  });
+
+  it("renders the Data Sources empty state when none are registered", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    mocks.pathname = DATA_SOURCES_PATH;
+
+    render(<SettingsMcpServers />);
+    expect(await screen.findByText("No data sources registered.")).toBeTruthy();
+    expect(screen.queryByText("No MCP servers configured.")).toBeNull();
+  });
+
+  it("shows a loading pane, then surfaces fetch errors, on the Data Sources tab", async () => {
+    mocks.pathname = DATA_SOURCES_PATH;
+    // While the server list is unresolved the pane renders its loading state,
+    // never a premature empty message.
+    mocks.listMcpServers.mockReturnValue(new Promise(() => {}));
+    mocks.listUserMcpServers.mockReturnValue(new Promise(() => {}));
+    render(<SettingsMcpServers />);
+    expect(screen.queryByText("No data sources registered.")).toBeNull();
+    cleanup();
+
+    mocks.listMcpServers.mockRejectedValue(new Error("catalog unreachable"));
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+    render(<SettingsMcpServers />);
+    expect(await screen.findByText("catalog unreachable")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("Search data sources…")).toBeNull();
+  });
+
+  it("filters Data Sources independently of the servers tab's search", async () => {
+    mocks.listMcpServers.mockResolvedValue(DATA_SOURCE_SERVERS);
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    const { rerender } = render(<SettingsMcpServers />);
+    expect(await screen.findByText("Manual CRM")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("Search servers…"), {
+      target: { value: "zzz-no-match" },
+    });
+    expect(screen.queryByText("Manual CRM")).toBeNull();
+
+    // Switching to the Data Sources tab: the servers-tab filter does not
+    // leak — datasource rows render and the tab's own search box is empty.
+    mocks.pathname = DATA_SOURCES_PATH;
+    rerender(<SettingsMcpServers />);
+    expect(await screen.findByText("Analytics Demo")).toBeTruthy();
+    const dataSourceSearch = screen.getByPlaceholderText(
+      "Search data sources…",
+    ) as HTMLInputElement;
+    expect(dataSourceSearch.value).toBe("");
+    fireEvent.change(dataSourceSearch, { target: { value: "postgres" } });
+    expect(screen.queryByText("Analytics Demo")).toBeNull();
+    expect(screen.getByText("Postgres (dev)")).toBeTruthy();
+  });
+
+  it("shows only the tab-owning header action on each tab", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    // Servers tab: New MCP Server only (AE2, THINK-285).
+    render(<SettingsMcpServers />);
+    await screen.findByPlaceholderText("Search servers…");
+    const serversAction = render(
+      <>{mocks.setHeader.mock.calls.at(-1)?.[0]?.action}</>,
+    );
+    expect(
+      serversAction.getByRole("button", { name: "New MCP Server" }),
+    ).toBeTruthy();
+    expect(
+      serversAction.queryByRole("button", { name: "Register data source" }),
+    ).toBeNull();
+    cleanup();
+
+    // Data Sources tab: Register data source only.
+    mocks.setHeader.mockClear();
+    mocks.pathname = DATA_SOURCES_PATH;
+    render(<SettingsMcpServers />);
+    await screen.findByPlaceholderText("Search data sources…");
+    const dataSourcesAction = render(
+      <>{mocks.setHeader.mock.calls.at(-1)?.[0]?.action}</>,
+    );
+    expect(
+      dataSourcesAction.getByRole("button", { name: "Register data source" }),
+    ).toBeTruthy();
+    expect(
+      dataSourcesAction.queryByRole("button", { name: "New MCP Server" }),
+    ).toBeNull();
   });
 
   it("adds a server through the New MCP Server dialog", async () => {
@@ -672,9 +787,10 @@ describe("SettingsMcpServers", () => {
       },
     });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     expect(
       await screen.findByRole("heading", { name: "Register data source" }),
@@ -702,9 +818,10 @@ describe("SettingsMcpServers", () => {
     mocks.listMcpServers.mockResolvedValue({ servers: [] });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     expect(
       await screen.findByRole("heading", { name: "Register data source" }),
@@ -736,9 +853,10 @@ describe("SettingsMcpServers", () => {
     });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     selectInternalDatabase("thinkwork");
 
@@ -754,9 +872,10 @@ describe("SettingsMcpServers", () => {
     mocks.listMcpServers.mockResolvedValue({ servers: [] });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     const externalTab = screen.getByRole("tab", {
       name: "External",
@@ -827,9 +946,10 @@ describe("SettingsMcpServers", () => {
       },
     });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     const externalTab = screen.getByRole("tab", {
       name: "External",
@@ -911,9 +1031,10 @@ describe("SettingsMcpServers", () => {
       },
     });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     const externalTab = screen.getByRole("tab", {
       name: "External",
@@ -960,9 +1081,10 @@ describe("SettingsMcpServers", () => {
       },
     });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     selectInternalDatabase("thinkwork");
     fireEvent.click(
@@ -989,9 +1111,10 @@ describe("SettingsMcpServers", () => {
       },
     });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     // The single cluster auto-selects; pick an unregistered database.
     selectInternalDatabase("thinkwork_hindsight");
@@ -1031,9 +1154,10 @@ describe("SettingsMcpServers", () => {
     mocks.listMcpServers.mockResolvedValue({ servers: [] });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
 
     // A database with a registered source is still selectable (coverage is
@@ -1066,8 +1190,9 @@ describe("SettingsMcpServers", () => {
     mocks.listMcpServers.mockResolvedValue({ servers: [] });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
 
     selectInternalDatabase("thinkwork_hindsight");
@@ -1111,9 +1236,10 @@ describe("SettingsMcpServers", () => {
       },
     });
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
     selectInternalDatabase("thinkwork_hindsight");
     selectInternalSchema("raw_jde");
@@ -1137,9 +1263,10 @@ describe("SettingsMcpServers", () => {
       error: { message: "[GraphQL] RDS describe failed" },
     };
 
+    mocks.pathname = DATA_SOURCES_PATH;
     render(<SettingsMcpServers />);
 
-    await screen.findByPlaceholderText("Search servers\u2026");
+    await screen.findByPlaceholderText("Search data sources\u2026");
     clickHeaderAction("Register data source");
 
     expect(
