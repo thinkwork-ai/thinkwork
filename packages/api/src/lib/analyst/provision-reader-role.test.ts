@@ -265,6 +265,40 @@ describe("provisionReaderRole (THINK-283 schema-scoped)", () => {
     ).toBe(false);
   });
 
+  it("THINK-283 U5 refresh mode (password null): reconciles grants WITHOUT touching the credential", async () => {
+    const { client, queries } = fakeClient({ ...WAREHOUSE, roleExists: true });
+    const surface = await provisionReaderRole({
+      client,
+      database: "thinkwork_warehouse",
+      roleName: "warehouse_reader",
+      password: null,
+      schema: "raw_jde",
+    });
+    expect(surface.grantedTables).toEqual(["orders"]);
+    const texts = queries.map((q) => q.text);
+    // No CREATE ROLE, no password rotation — the stored credential stays valid.
+    expect(texts.some((t) => t.startsWith("CREATE ROLE"))).toBe(false);
+    expect(texts.some((t) => t.includes("PASSWORD"))).toBe(false);
+    // Grants still fully reconciled.
+    expect(texts).toContain(
+      'GRANT SELECT ON raw_jde.orders TO "warehouse_reader"',
+    );
+  });
+
+  it("THINK-283 U5 refresh mode: a MISSING role fails with re-register remediation, no writes", async () => {
+    const { client, queries } = fakeClient({ ...WAREHOUSE, roleExists: false });
+    await expect(
+      provisionReaderRole({
+        client,
+        database: "thinkwork_warehouse",
+        roleName: "warehouse_reader",
+        password: null,
+        schema: "raw_jde",
+      }),
+    ).rejects.toThrow(/does not exist .* re-register/);
+    expect(queries.every((q) => q.text.startsWith("SELECT"))).toBe(true);
+  });
+
   it("rotates the password (no attribute re-set) when the role already exists", async () => {
     const { client, queries } = fakeClient({ ...WAREHOUSE, roleExists: true });
     await provisionReaderRole({

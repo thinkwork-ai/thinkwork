@@ -90,7 +90,12 @@ export interface ProvisionReaderRoleParams {
   /** Target database (already the client's connected database). */
   database: string;
   roleName: string;
-  password: string;
+  /**
+   * Password for role creation/rotation. NULL = refresh mode (THINK-283 U5):
+   * the role must already exist and its password is NOT rotated — refresh
+   * reconciles grants only, so the stored per-source credential stays valid.
+   */
+  password: string | null;
   /** The ONE selected schema, raw catalog case (THINK-283). */
   schema: string;
 }
@@ -206,18 +211,26 @@ export async function provisionReaderRole(
     );
   }
 
-  // Step 1 — role creation with attribute hardening, OR password rotation on a
-  // re-run (attributes are pinned at creation and must not be re-set on RDS).
+  // Step 1 — role creation with attribute hardening, OR password rotation on
+  // a re-run (attributes are pinned at creation and must not be re-set on
+  // RDS). Refresh mode (password null) touches neither: the role must exist
+  // and keeps its credential.
   const existing = await client.query(
     "SELECT 1 FROM pg_roles WHERE rolname = $1",
     [roleName],
   );
   if (existing.rows.length === 0) {
+    if (password === null) {
+      throw new AnalystRegistrationInputError(
+        `reader role "${roleName}" does not exist on database "${database}" — ` +
+          "re-register the source before refreshing it",
+      );
+    }
     await client.query(
       `CREATE ROLE ${r} WITH LOGIN PASSWORD '${password}' ` +
         "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS NOREPLICATION",
     );
-  } else {
+  } else if (password !== null) {
     await client.query(`ALTER ROLE ${r} WITH PASSWORD '${password}'`);
   }
 

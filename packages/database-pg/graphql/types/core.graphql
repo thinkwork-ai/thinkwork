@@ -512,6 +512,23 @@ input RegisterInternalAnalystDataSourceInput {
 }
 
 """
+Outcome of refreshAnalystDataSource (THINK-283) — the ONLY product flow that
+adopts newly eligible tables into a registered source's grant and model
+surface (and removes dropped ones). Never returns secrets or raw PostgreSQL
+errors.
+"""
+type AnalystDataSourceRefreshResult {
+  serverId: ID!
+  slug: String!
+  "Schema-qualified table names this refresh added to the model."
+  addedTables: [String!]!
+  "Schema-qualified table names this refresh removed from the model."
+  removedTables: [String!]!
+  "Modeled table count after the refresh."
+  tables: Int!
+}
+
+"""
 One schema on an internal database (THINK-283). Zero-count user schemas are
 returned so an empty `public` is explained rather than silently omitted; the
 UI disables them. System schemas (pg_*, information_schema) are excluded.
@@ -598,6 +615,16 @@ extend type Mutation {
   registerInternalAnalystDataSource(
     input: RegisterInternalAnalystDataSourceInput!
   ): AnalystDataSourceResult!
+  """
+  Explicit fail-closed refresh of a registered (sourced) analyst data source
+  (THINK-283). Requires tenant owner/admin. Withholds the source while
+  PostgreSQL grants (internal sources only), model artifacts, connection
+  folders, and health are reconciled; availability is restored only after an
+  immediate exact-surface probe passes, and a NEW source generation
+  invalidates previously minted broker claims. On failure the source stays
+  withheld with a durable, retryable failure state.
+  """
+  refreshAnalystDataSource(serverId: ID!): AnalystDataSourceRefreshResult!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   addManualUser(tenantId: ID!, input: AddManualUserInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!

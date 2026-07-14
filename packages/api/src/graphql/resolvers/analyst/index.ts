@@ -1,6 +1,7 @@
 import { analystInternalClusters } from "./analystInternalClusters.query.js";
 import { analystInternalSchemas } from "./analystInternalSchemas.query.js";
 import { provisionAnalystConnector } from "./provisionAnalystConnector.mutation.js";
+import { refreshAnalystDataSource } from "./refreshAnalystDataSource.mutation.js";
 import { registerAnalystDataSource } from "./registerAnalystDataSource.mutation.js";
 import { registerInternalAnalystDataSource } from "./registerInternalAnalystDataSource.mutation.js";
 
@@ -11,6 +12,7 @@ export const analystQueries = {
 
 export const analystMutations = {
   provisionAnalystConnector,
+  refreshAnalystDataSource,
   registerAnalystDataSource,
   registerInternalAnalystDataSource,
 };
