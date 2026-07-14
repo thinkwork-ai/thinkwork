@@ -8,8 +8,17 @@ import {
 } from "react";
 import { useMutation, useQuery } from "urql";
 import { Plus, Save, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Button,
   Input,
   Label,
@@ -24,6 +33,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateEvalTestCaseMutation,
+  DeleteEvalTestCaseMutation,
   EvalTestCasesQuery,
   UpdateEvalTestCaseMutation,
 } from "@/lib/evaluation-queries";
@@ -102,6 +112,8 @@ interface Props {
   onSaved?: () => void;
   /** Override the default cancel navigation when embedded in a sheet. */
   onCancel?: () => void;
+  /** Override the default post-delete navigation when embedded in a sheet. */
+  onDeleted?: () => void;
   /**
    * Hoist the Cancel/Save action buttons to the parent so they can render
    * inside the settings header (right of the breadcrumb) instead of above
@@ -121,11 +133,25 @@ export function completeEvalTestCaseFormSubmit({
   else navigateToStudio();
 }
 
+/** Mirrors the submit exit: sheet embeddings close in place, the full-page
+ * edit route falls back to the Studio (R5). */
+export function completeEvalTestCaseFormDelete({
+  onDeleted,
+  navigateToStudio,
+}: {
+  onDeleted?: () => void;
+  navigateToStudio: () => void;
+}) {
+  if (onDeleted) onDeleted();
+  else navigateToStudio();
+}
+
 export function EvalTestCaseForm({
   initial,
   isEdit,
   onSaved,
   onCancel,
+  onDeleted,
   onActions,
 }: Props) {
   const { tenantId } = useTenant();
@@ -179,6 +205,24 @@ export function EvalTestCaseForm({
 
   const [, createCase] = useMutation(CreateEvalTestCaseMutation);
   const [, updateCase] = useMutation(UpdateEvalTestCaseMutation);
+  const [deleteState, deleteCase] = useMutation(DeleteEvalTestCaseMutation);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  async function handleConfirmDelete() {
+    if (!initial?.id) return;
+    const res = await deleteCase({ id: initial.id });
+    setConfirmingDelete(false);
+    if (res.error) {
+      toast.error("Delete failed: " + res.error.message);
+    } else {
+      toast.success("Test case deleted");
+      completeEvalTestCaseFormDelete({
+        onDeleted,
+        navigateToStudio: () =>
+          navigate({ to: "/settings/evaluations/studio" }),
+      });
+    }
+  }
 
   // Re-hydrate when initial flips from undefined → loaded (edit page).
   useEffect(() => {
@@ -391,7 +435,10 @@ export function EvalTestCaseForm({
             variant="outline"
             size="sm"
             onClick={() =>
-              setAssertions((cur) => [...cur, { type: "llm-rubric", value: "" }])
+              setAssertions((cur) => [
+                ...cur,
+                { type: "llm-rubric", value: "" },
+              ])
             }
           >
             <Plus className="mr-1 h-4 w-4" /> Add Assertion
@@ -403,7 +450,10 @@ export function EvalTestCaseForm({
         </p>
         <div className="flex flex-col gap-3">
           {assertions.map((a, idx) => (
-            <div key={idx} className="rounded-lg border p-4 flex flex-col gap-3">
+            <div
+              key={idx}
+              className="rounded-lg border p-4 flex flex-col gap-3"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Assertion {idx + 1}</span>
                 {assertions.length > 1 && (
@@ -452,7 +502,9 @@ export function EvalTestCaseForm({
                       : "expected substring or pattern"
                   }
                   value={a.value ?? ""}
-                  onChange={(e) => updateAssertion(idx, { value: e.target.value })}
+                  onChange={(e) =>
+                    updateAssertion(idx, { value: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -482,6 +534,63 @@ export function EvalTestCaseForm({
           ))}
         </div>
       </section>
+
+      {/* Danger Zone — edit mode only; the create form never shows it. */}
+      {isEdit && initial?.id && (
+        <section className="flex flex-col gap-4">
+          <h3 className="text-base font-semibold text-destructive">
+            Danger Zone
+          </h3>
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/50 p-4">
+            <p className="text-xs text-muted-foreground">
+              Permanently delete this test case. Historical run results are kept
+              but unlinked from it. This cannot be undone.
+            </p>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="shrink-0"
+              disabled={submitting || deleteState.fetching}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 className="mr-1 h-4 w-4" /> Delete test case
+            </Button>
+          </div>
+          <AlertDialog
+            open={confirmingDelete}
+            onOpenChange={(open) => {
+              if (!open) setConfirmingDelete(false);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete test case?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete "{initial?.name ?? name}" and
+                  cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteState.fetching}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deleteState.fetching}
+                  onClick={(event) => {
+                    // Keep the dialog open (confirm disabled) until the
+                    // mutation resolves, then close and toast the outcome.
+                    event.preventDefault();
+                    void handleConfirmDelete();
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </section>
+      )}
     </div>
   );
 }
