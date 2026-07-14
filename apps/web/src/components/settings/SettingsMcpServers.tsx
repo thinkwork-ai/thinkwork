@@ -633,6 +633,8 @@ function InternalDataSourceForm({
   const [{ data, fetching, error }, refetchClusters] = useQuery({
     query: SettingsAnalystInternalClustersQuery,
     pause: !dialogOpen || !active,
+    // Registration coverage changes between opens — never trust a cached list.
+    requestPolicy: "cache-and-network",
   });
   const clusters: AnalystInternalCluster[] = useMemo(
     () => (data?.analystInternalClusters as AnalystInternalCluster[]) ?? [],
@@ -653,6 +655,9 @@ function InternalDataSourceForm({
       !clusterId ||
       !database ||
       database === WORKSPACE_DATABASE,
+    // `alreadyRegistered` flips as sources are registered — a cached schema
+    // list would show a just-registered schema as still available.
+    requestPolicy: "cache-and-network",
   });
   const schemas: AnalystInternalSchema[] = useMemo(
     () =>
@@ -743,15 +748,23 @@ function InternalDataSourceForm({
     setErrorMsg(null);
   }
 
+  // Suggest name + slug from the database AND the selected schema — sources
+  // are schema-scoped (THINK-283), so two schemas of the same database must
+  // not default to the same slug. `public` keeps the database-only suggestion.
+  function applySuggestion(db: string, schemaName: string) {
+    const base =
+      schemaName && schemaName !== "public" ? `${db} ${schemaName}` : db;
+    setName(prettifyDatabaseName(base));
+    if (!slugEdited) setSlug(suggestAnalystSlug(base));
+  }
+
   function onDatabaseChange(value: string) {
     setDatabase(value);
     // A stale schema from the previous database must never survive.
     setSchema("");
     setErrorMsg(null);
     if (value && value !== WORKSPACE_DATABASE) {
-      const suggested = prettifyDatabaseName(value);
-      setName(suggested);
-      if (!slugEdited) setSlug(suggestAnalystSlug(value));
+      applySuggestion(value, "");
     } else {
       setName("");
       setSlug("");
@@ -950,6 +963,7 @@ function InternalDataSourceForm({
                     value={schema}
                     onValueChange={(value) => {
                       setSchema(value);
+                      applySuggestion(database, value);
                       setErrorMsg(null);
                     }}
                     aria-label="Schema"

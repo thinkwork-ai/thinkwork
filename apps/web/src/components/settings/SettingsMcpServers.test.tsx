@@ -1122,12 +1122,13 @@ describe("SettingsMcpServers", () => {
     // required before the form can submit.
     selectInternalSchema("raw_jde");
 
-    // Name and slug are auto-suggested from the database name.
+    // Name and slug are auto-suggested from the database AND the schema —
+    // two schemas of the same database must not collide on the default slug.
     expect(
       (screen.getByLabelText("Display name") as HTMLInputElement).value,
-    ).toBe("Thinkwork Hindsight");
+    ).toBe("Thinkwork Hindsight Raw Jde");
     expect((screen.getByLabelText("Slug") as HTMLInputElement).value).toBe(
-      "thinkwork-hindsight",
+      "thinkwork-hindsight-raw-jde",
     );
 
     fireEvent.click(
@@ -1140,8 +1141,8 @@ describe("SettingsMcpServers", () => {
           clusterId: "thinkwork-dev-db",
           database: "thinkwork_hindsight",
           schema: "raw_jde",
-          name: "Thinkwork Hindsight",
-          slug: "thinkwork-hindsight",
+          name: "Thinkwork Hindsight Raw Jde",
+          slug: "thinkwork-hindsight-raw-jde",
         },
       }),
     );
