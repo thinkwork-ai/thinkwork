@@ -1372,6 +1372,15 @@ jobs:
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}"
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
             -var "analyst_policy_source=${{ vars.ANALYST_POLICY_SOURCE || 'row' }}"
+            # THINK-280 — capability governed runtime dogfood. deploy.yml is
+            # dev-only (STAGE: dev, line ~83); prod/customers deploy via
+            # deploy-harness.yml / release.yml where this var is absent (→ false).
+            # Brings up the broker (DynamoDB session table, private REST API,
+            # DEDICATED execute-api VPCE with private DNS OFF — THINK-144 — never
+            # in okf_wiki_interface_endpoint_services, no-NAT interpreter SG) and
+            # populates CAPABILITY_PRIVATE_* so agentcore-admin provisions
+            # capability-private interpreters. One-line revert disables it.
+            -var "enable_capability_broker=true"
           )
 
           resolve_existing_api_id() {
