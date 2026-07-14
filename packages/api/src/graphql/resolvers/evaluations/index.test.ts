@@ -12,8 +12,12 @@ const {
   updateSets,
   updateResults,
   deleteWheres,
+  deleteFailureQueue,
   executeCalls,
   executeResults,
+  mockDatasetDeps,
+  mockDatasetContext,
+  mockRemoveCaseInStore,
   mockFetchSpansForSession,
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
@@ -41,6 +45,7 @@ const {
   const updateSets: unknown[] = [];
   const updateResults: unknown[][] = [];
   const deleteWheres: unknown[] = [];
+  const deleteFailureQueue: unknown[] = [];
   const executeCalls: unknown[] = [];
   const executeResults: unknown[][] = [];
   return {
@@ -52,8 +57,12 @@ const {
     updateSets,
     updateResults,
     deleteWheres,
+    deleteFailureQueue,
     executeCalls,
     executeResults,
+    mockDatasetDeps: vi.fn(),
+    mockDatasetContext: vi.fn(),
+    mockRemoveCaseInStore: vi.fn(),
     mockFetchSpansForSession: vi.fn(),
     mockResolveCallerTenantId: vi.fn(),
     mockResolveCallerUserId: vi.fn(),
@@ -83,6 +92,7 @@ const {
       updateSets.length = 0;
       updateResults.length = 0;
       deleteWheres.length = 0;
+      deleteFailureQueue.length = 0;
       executeCalls.length = 0;
       executeResults.length = 0;
     },
@@ -168,7 +178,8 @@ vi.mock("../../utils.js", () => {
     delete: () => ({
       where: (clause: unknown) => {
         deleteWheres.push(clause);
-        return Promise.resolve();
+        const failure = deleteFailureQueue.shift();
+        return failure ? Promise.reject(failure) : Promise.resolve();
       },
     }),
     execute: (query: unknown) => {
@@ -195,6 +206,19 @@ vi.mock("../../utils.js", () => {
 
 vi.mock("../../../lib/agentcore-spans.js", () => ({
   fetchSpansForSession: mockFetchSpansForSession,
+}));
+
+// deleteEvalTestCase dynamic-imports the dataset resolver wiring and the
+// store's tombstone helper for dataset-backed rows (THINK-289). Neither
+// module is statically imported by index.ts, so wholesale mocks are safe;
+// the tombstone S3/index behavior is unit-tested in dataset-store.test.ts.
+vi.mock("./datasets.js", () => ({
+  datasetDeps: mockDatasetDeps,
+  datasetContext: mockDatasetContext,
+}));
+
+vi.mock("../../../lib/evals/dataset-store.js", () => ({
+  removeEvalDatasetCase: mockRemoveCaseInStore,
 }));
 
 vi.mock("../core/resolve-auth-user.js", () => ({
@@ -2549,5 +2573,141 @@ describe("evalRunTypeResolvers (run latency percentiles, U5)", () => {
     expect(await evalRunTypeResolvers.latencyP50Ms(idless)).toBeNull();
     expect(await evalRunTypeResolvers.latencyP95Ms(idless)).toBeNull();
     expect(executeCalls.length).toBe(before);
+  });
+});
+
+describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
+  const manualRow = {
+    tenantId: "tenant-1",
+    datasetId: null,
+    datasetCaseId: null,
+  };
+  const datasetRow = {
+    tenantId: "tenant-1",
+    datasetId: "dataset-1",
+    datasetCaseId: "case-baseline-1",
+  };
+
+  it("unlinks eval_results, deletes overrides, then the case — never S3 for a manual case", async () => {
+    selectQueue.push([manualRow]);
+
+    const result = await evaluationsMutations.deleteEvalTestCase(
+      {},
+      { id: "case-1" },
+      adminCtx,
+    );
+
+    expect(result).toBe(true);
+    // SET NULL on eval_results.test_case_id inside the transaction.
+    expect(updateSets).toEqual([{ test_case_id: null }]);
+    // Two deletes: eval_case_overrides, then the case row.
+    expect(deleteWheres).toHaveLength(2);
+    expect(mockRemoveCaseInStore).not.toHaveBeenCalled();
+    expect(mockDatasetDeps).not.toHaveBeenCalled();
+  });
+
+  it("missing row stays an idempotent no-op — no gate, no writes", async () => {
+    const result = await evaluationsMutations.deleteEvalTestCase(
+      {},
+      { id: "gone" },
+      adminCtx,
+    );
+
+    expect(result).toBe(true);
+    expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+    expect(updateSets).toHaveLength(0);
+    expect(deleteWheres).toHaveLength(0);
+  });
+
+  it("dataset-backed case tombstones the manifest before the DB delete", async () => {
+    selectQueue.push([datasetRow]);
+    // Second select resolves the dataset slug from eval_datasets.
+    selectQueue.push([{ slug: "baseline" }]);
+    const dctx = {
+      tenantId: "tenant-1",
+      tenantSlug: "tenant-one",
+      slug: "baseline",
+    };
+    const storage = { kind: "storage" };
+    const store = { kind: "store" };
+    mockDatasetContext.mockResolvedValue(dctx);
+    mockDatasetDeps.mockReturnValue({ storage, store });
+    mockRemoveCaseInStore.mockResolvedValue({});
+
+    const result = await evaluationsMutations.deleteEvalTestCase(
+      {},
+      { id: "case-1" },
+      adminCtx,
+    );
+
+    expect(result).toBe(true);
+    expect(mockDatasetContext).toHaveBeenCalledWith("tenant-1", "baseline");
+    expect(mockRemoveCaseInStore).toHaveBeenCalledWith(
+      dctx,
+      "case-baseline-1",
+      storage,
+      store,
+    );
+    expect(updateSets).toEqual([{ test_case_id: null }]);
+    expect(deleteWheres).toHaveLength(2);
+  });
+
+  it("a tombstone-step failure does not abort the DB delete", async () => {
+    selectQueue.push([datasetRow]);
+    selectQueue.push([{ slug: "baseline" }]);
+    mockDatasetContext.mockResolvedValue({
+      tenantId: "tenant-1",
+      tenantSlug: "tenant-one",
+      slug: "baseline",
+    });
+    mockDatasetDeps.mockReturnValue({ storage: {}, store: {} });
+    mockRemoveCaseInStore.mockRejectedValue(
+      new Error("Case case-baseline-1 not found in dataset baseline."),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await evaluationsMutations.deleteEvalTestCase(
+      {},
+      { id: "case-1" },
+      adminCtx,
+    );
+
+    expect(result).toBe(true);
+    expect(updateSets).toEqual([{ test_case_id: null }]);
+    expect(deleteWheres).toHaveLength(2);
+    warn.mockRestore();
+  });
+
+  it("an FK violation mid-transaction surfaces the in-flight-run message", async () => {
+    selectQueue.push([manualRow]);
+    deleteFailureQueue.push({ code: "23503" });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      evaluationsMutations.deleteEvalTestCase({}, { id: "case-1" }, adminCtx),
+    ).rejects.toThrow(/in-flight eval run/);
+    error.mockRestore();
+  });
+
+  it("an unrecognized transaction failure falls back to the generic message, not raw driver text", async () => {
+    selectQueue.push([manualRow]);
+    deleteFailureQueue.push(
+      new Error('relation "internal_secret_table" does not exist'),
+    );
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      evaluationsMutations.deleteEvalTestCase({}, { id: "case-1" }, adminCtx),
+    ).rejects.toThrow("Failed to delete test case");
+    await expect(async () => {
+      selectQueue.push([manualRow]);
+      deleteFailureQueue.push(new Error("internal_secret_table"));
+      await evaluationsMutations.deleteEvalTestCase(
+        {},
+        { id: "case-1" },
+        adminCtx,
+      );
+    }).rejects.not.toThrow(/internal_secret_table/);
+    error.mockRestore();
   });
 });
