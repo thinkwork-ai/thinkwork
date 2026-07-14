@@ -39,6 +39,118 @@ export function SettingsHeaderBar() {
         .find((t) => pathname === t.to || pathname.startsWith(`${t.to}/`))
         ?.to ?? "");
 
+  const breadcrumbNav = (
+    <nav
+      aria-label="Breadcrumb"
+      className="col-start-1 flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium"
+    >
+      {crumbs.map((crumb, index) => {
+        const isLast = index === crumbs.length - 1;
+        return (
+          <span
+            key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
+            className={cn(
+              "flex items-center gap-1",
+              isLast ? "min-w-0 flex-1" : "shrink-0",
+            )}
+          >
+            {index > 0 ? (
+              <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
+            ) : null}
+            {isLast || !crumb.href ? (
+              <span
+                className={
+                  isLast
+                    ? "truncate text-foreground"
+                    : "shrink-0 truncate text-muted-foreground"
+                }
+              >
+                {crumb.label}
+              </span>
+            ) : (
+              <Link
+                to={crumb.href}
+                search={crumb.search}
+                className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {crumb.label}
+              </Link>
+            )}
+          </span>
+        );
+      })}
+      {actions?.subtitle ? (
+        <span className="ml-1 shrink-0 truncate text-xs font-normal text-muted-foreground">
+          {actions.subtitle}
+        </span>
+      ) : null}
+    </nav>
+  );
+
+  const tabStrip =
+    tabs.length > 0 ? (
+      <Tabs value={activeTab}>
+        <TabsList>
+          {tabs.map((tab) => (
+            <TabsTrigger
+              key={tabValue(tab)}
+              value={tabValue(tab)}
+              asChild
+              className="px-3"
+            >
+              <Link to={tab.to} search={tab.search}>
+                {tab.label}
+              </Link>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+    ) : null;
+
+  const actionSlot = actions?.action ? (
+    <div
+      className={cn(
+        "col-start-3 ml-auto flex min-w-0 shrink-0 items-center gap-1",
+      )}
+    >
+      {actions.action}
+    </div>
+  ) : null;
+
+  // THINK-285 repair: on narrow (mobile-width) viewports the three-tab
+  // strip's intrinsic width exceeds the row, which squeezed the action slot
+  // off-screen with no scroll path. Stack the tab strip on its own
+  // horizontally-scrollable row below the breadcrumb/action row instead of
+  // sharing one grid row.
+  if (isMobile && tabStrip) {
+    return (
+      <header
+        className={cn(
+          "flex shrink-0 flex-col border-b border-border bg-background text-foreground",
+          isDesktop && "desktop-app-header",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            isDesktop
+              ? "h-[var(--desktop-app-header-height)] pl-28 pr-3"
+              : "h-12 pl-14 pr-4",
+          )}
+        >
+          {breadcrumbNav}
+          {actionSlot}
+        </div>
+        <div className="flex overflow-x-auto px-3 pb-2">
+          {/* mx-auto centers the strip when it fits and (unlike
+              justify-center) keeps the left edge reachable when it
+              overflows into a scroll. */}
+          <div className="mx-auto">{tabStrip}</div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header
       className={cn(
@@ -51,82 +163,12 @@ export function SettingsHeaderBar() {
         isMobile ? (isDesktop ? "pl-28" : "pl-14") : "pl-4",
       )}
     >
-      <nav
-        aria-label="Breadcrumb"
-        className="col-start-1 flex min-w-0 items-center gap-1 overflow-hidden text-sm font-medium"
-      >
-        {crumbs.map((crumb, index) => {
-          const isLast = index === crumbs.length - 1;
-          return (
-            <span
-              key={`${crumb.href ?? "current"}:${crumb.label}:${index}`}
-              className={cn(
-                "flex items-center gap-1",
-                isLast ? "min-w-0 flex-1" : "shrink-0",
-              )}
-            >
-              {index > 0 ? (
-                <ChevronRight className="size-3 shrink-0 text-muted-foreground/60" />
-              ) : null}
-              {isLast || !crumb.href ? (
-                <span
-                  className={
-                    isLast
-                      ? "truncate text-foreground"
-                      : "shrink-0 truncate text-muted-foreground"
-                  }
-                >
-                  {crumb.label}
-                </span>
-              ) : (
-                <Link
-                  to={crumb.href}
-                  search={crumb.search}
-                  className="shrink-0 truncate text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {crumb.label}
-                </Link>
-              )}
-            </span>
-          );
-        })}
-        {actions?.subtitle ? (
-          <span className="ml-1 shrink-0 truncate text-xs font-normal text-muted-foreground">
-            {actions.subtitle}
-          </span>
-        ) : null}
-      </nav>
-      {tabs.length > 0 ? (
-        <div className="col-start-2 flex justify-center">
-          <Tabs value={activeTab}>
-            <TabsList>
-              {tabs.map((tab) => (
-                <TabsTrigger
-                  key={tabValue(tab)}
-                  value={tabValue(tab)}
-                  asChild
-                  className="px-3"
-                >
-                  <Link to={tab.to} search={tab.search}>
-                    {tab.label}
-                  </Link>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
+      {breadcrumbNav}
+      {tabStrip ? (
+        <div className="col-start-2 flex justify-center">{tabStrip}</div>
       ) : null}
-      {actions?.action ? (
-        <div
-          className={cn(
-            "col-start-3 ml-auto flex min-w-0 shrink-0 items-center gap-1",
-          )}
-        >
-          {actions.action}
-        </div>
-      ) : tabs.length > 0 ? (
-        <div className="col-start-3" aria-hidden />
-      ) : null}
+      {actionSlot ??
+        (tabStrip ? <div className="col-start-3" aria-hidden /> : null)}
     </header>
   );
 }
