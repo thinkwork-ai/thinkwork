@@ -216,7 +216,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsMcpServers", () => {
-  it("splits individual MCP servers from plugin-installed servers", async () => {
+  it("renders one merged table of tenant and plugin servers with Type cells", async () => {
     mocks.listMcpServers.mockResolvedValue({
       servers: [
         {
@@ -276,10 +276,32 @@ describe("SettingsMcpServers", () => {
           managedApplicationKey: null,
         },
         {
+          id: "aardvark",
+          name: "Aardvark Tools",
+          slug: "aardvark-tools",
+          url: "https://aardvark.example/mcp",
+          enabled: true,
+          authType: "none",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+        },
+        {
           id: "manual",
           name: "Manual CRM",
           slug: "manual-crm",
           url: "https://manual.example/mcp",
+          enabled: true,
+          authType: "none",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
+        },
+        {
+          id: "zeta",
+          name: "Zeta Ops",
+          slug: "zeta-ops",
+          url: "https://zeta.example/mcp",
           enabled: true,
           authType: "none",
           status: "approved",
@@ -294,34 +316,61 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    // The merged MCP Servers tab shows the tenant rows AND the plugin rows,
-    // grouped under section headings.
+    // AE1: one merged table shows the 3 tenant rows AND the 4 plugin rows;
+    // the titled sections are gone.
     expect(await screen.findByText("Manual CRM")).toBeTruthy();
-    expect(screen.getByText("Tenant servers")).toBeTruthy();
-    expect(screen.getByText("Plugin MCPs")).toBeTruthy();
+    expect(screen.queryByText("Tenant servers")).toBeNull();
+    expect(screen.queryByText("Plugin MCPs")).toBeNull();
+    expect(screen.getByText("Aardvark Tools")).toBeTruthy();
+    expect(screen.getByText("Zeta Ops")).toBeTruthy();
     expect(screen.getByText("Twenty CRM")).toBeTruthy();
     expect(screen.getByText("LastMile Tasks")).toBeTruthy();
-    // The manual duplicate of a plugin URL stays filtered out of the tenant
-    // group, so LastMile CRM appears exactly once (in the plugin group).
+    expect(screen.getByText("n8n workflow management")).toBeTruthy();
+    // The manual duplicate of a plugin URL stays deduped, so LastMile CRM
+    // appears exactly once (as the plugin row).
     expect(screen.getAllByText("LastMile CRM")).toHaveLength(1);
-    expect(screen.getAllByText("plugin")).toHaveLength(4);
+    // Type column: 3 tenant rows, 4 plugin rows (managed-application counts
+    // as Plugin). The inline lowercase "plugin" name badge is retired.
+    expect(screen.getAllByText("Tenant")).toHaveLength(3);
+    expect(screen.getAllByText("Plugin")).toHaveLength(4);
+    expect(screen.queryByText("plugin")).toBeNull();
     expect(screen.queryByText("Rows per page")).toBeNull();
     expect(screen.queryByText(/Page\s+1\s+of/i)).toBeNull();
     // The inline Remove/System column is gone — removal lives in the detail view.
     expect(screen.queryByText("System")).toBeNull();
     expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
 
-    // The tenant group renders before the plugin group; plugin rows sort.
-    expect(textAppearsBefore("Manual CRM", "LastMile CRM")).toBe(true);
+    // Rows sort by name in one interleaved order across the tenant/plugin
+    // boundary: Aardvark(T) < LastMile CRM(P) < LastMile Tasks(P) <
+    // Manual CRM(T) < n8n(P) < Twenty CRM(P) < Zeta(T).
+    expect(textAppearsBefore("Aardvark Tools", "LastMile CRM")).toBe(true);
     expect(textAppearsBefore("LastMile CRM", "LastMile Tasks")).toBe(true);
-    expect(textAppearsBefore("LastMile Tasks", "n8n workflow management")).toBe(
+    expect(textAppearsBefore("LastMile Tasks", "Manual CRM")).toBe(true);
+    expect(textAppearsBefore("Manual CRM", "n8n workflow management")).toBe(
       true,
     );
     expect(textAppearsBefore("n8n workflow management", "Twenty CRM")).toBe(
       true,
     );
+    expect(textAppearsBefore("Twenty CRM", "Zeta Ops")).toBe(true);
     expect(screen.getByText("not connected")).toBeTruthy();
     expect(screen.getByText("connected")).toBeTruthy();
+
+    // Enabled toggle stays disabled for plugin rows, active for tenant rows.
+    expect(
+      (
+        screen.getByRole("switch", {
+          name: "Toggle Twenty CRM",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("switch", {
+          name: "Toggle Manual CRM",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
 
     // Header carries the two-tab strip (Connections + merged MCP Servers).
     const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
@@ -330,6 +379,18 @@ describe("SettingsMcpServers", () => {
       { to: "/settings/mcp-servers", label: "Connections" },
       { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
     ]);
+  });
+
+  it("renders the merged empty state when no servers are configured", async () => {
+    mocks.listMcpServers.mockResolvedValue({ servers: [] });
+    mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
+
+    render(<SettingsMcpServers />);
+
+    expect(await screen.findByText("No MCP servers configured.")).toBeTruthy();
+    expect(screen.queryByText("Tenant servers")).toBeNull();
+    expect(screen.queryByText("Plugin MCPs")).toBeNull();
+    expect(screen.queryByText("Datasource MCPs")).toBeNull();
   });
 
   it("renders the Connections pane on the section index without server actions", async () => {
@@ -348,7 +409,7 @@ describe("SettingsMcpServers", () => {
     expect(headerConfig?.action).toBeUndefined();
   });
 
-  it("filters all groups through the shared search box", async () => {
+  it("filters the merged table through the search box and navigates on row click", async () => {
     mocks.listMcpServers.mockResolvedValue({
       servers: [
         {
@@ -386,6 +447,13 @@ describe("SettingsMcpServers", () => {
     });
     expect(screen.queryByText("Manual CRM")).toBeNull();
     expect(screen.getByText("Twenty CRM")).toBeTruthy();
+
+    // Clicking a row opens the server detail route.
+    fireEvent.click(screen.getByText("Twenty CRM"));
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/settings/mcp-servers/$serverId",
+      params: { serverId: "twenty" },
+    });
   });
 
   it("toggles a server's enabled switch from the merged list", async () => {
@@ -984,6 +1052,6 @@ function textAppearsBefore(left: string, right: string): boolean {
   const rightElement = screen.getByText(right);
   return Boolean(
     leftElement.compareDocumentPosition(rightElement) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
+    Node.DOCUMENT_POSITION_FOLLOWING,
   );
 }

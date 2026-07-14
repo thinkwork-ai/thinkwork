@@ -108,6 +108,12 @@ export function SettingsMcpServers() {
       ),
     [pluginServerUrls, servers],
   );
+  // THINK-284: tenant-registered and plugin-managed servers render as one
+  // merged table; the Type column carries the classification per row.
+  const mergedServers = useMemo(
+    () => sortMcpServers([...individualServers, ...pluginServers]),
+    [individualServers, pluginServers],
+  );
   // THINK-239: the built-in `postgres-dev` connector, if already provisioned,
   // flips the built-in path's primary action to "Refresh data source".
   const builtinAnalystExists = useMemo(
@@ -169,19 +175,11 @@ export function SettingsMcpServers() {
         accessorKey: "name",
         header: "Name",
         size: 200,
-        cell: ({ row }) => {
-          const server = row.original;
-          return (
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-medium">{server.name}</span>
-              {isPluginInstalledMcpServer(server) ? (
-                <Badge variant="outline" className="shrink-0">
-                  plugin
-                </Badge>
-              ) : null}
-            </div>
-          );
-        },
+        cell: ({ row }) => (
+          <span className="block truncate font-medium">
+            {row.original.name}
+          </span>
+        ),
       },
       // Datasource MCPs: no URL column — Source / Instance / Database render
       // as separate content-fit columns instead.
@@ -234,6 +232,20 @@ export function SettingsMcpServers() {
             },
           ] satisfies ColumnDef<McpServer>[])
         : [
+            // The servers table's fixed layout sizes columns from explicit
+            // sizes; the w-px content-fit meta only works under table-auto.
+            {
+              id: "type",
+              header: "Type",
+              size: 90,
+              cell: ({ row }) => (
+                <Badge variant="outline">
+                  {isPluginInstalledMcpServer(row.original)
+                    ? "Plugin"
+                    : "Tenant"}
+                </Badge>
+              ),
+            } satisfies ColumnDef<McpServer>,
             {
               accessorKey: "url",
               header: "URL",
@@ -359,10 +371,6 @@ export function SettingsMcpServers() {
       to: "/settings/mcp-servers/$serverId",
       params: { serverId },
     });
-  const allEmpty =
-    individualServers.length === 0 &&
-    pluginServers.length === 0 &&
-    dataSourceServers.length === 0;
 
   return (
     <>
@@ -385,53 +393,27 @@ export function SettingsMcpServers() {
         }
       >
         <div className="space-y-8">
-          {/* One surface, grouped sections: tenant-registered servers first,
-              then plugin-managed servers, then analyst data sources. Empty
-              groups collapse; a single empty state renders when nothing is
-              configured at all. */}
-          {allEmpty ? (
+          {/* One merged table: tenant-registered and plugin-managed servers
+              together, typed per row (THINK-284). Analyst data sources keep
+              their own section until the Data Sources tab lands (U2). */}
+          <McpServerSection
+            columns={serverColumns}
+            servers={mergedServers}
+            search={search}
+            emptyText="No MCP servers configured."
+            onOpen={openServer}
+          />
+          {dataSourceServers.length > 0 ? (
             <McpServerSection
-              columns={serverColumns}
-              servers={individualServers}
+              title="Datasource MCPs"
+              columns={dataSourceColumns}
+              servers={dataSourceServers}
               search={search}
-              emptyText="No MCP servers configured."
+              fitContent
+              emptyText="No data sources registered."
               onOpen={openServer}
             />
-          ) : (
-            <>
-              {individualServers.length > 0 ? (
-                <McpServerSection
-                  title="Tenant servers"
-                  columns={serverColumns}
-                  servers={individualServers}
-                  search={search}
-                  emptyText="No individual MCP servers configured."
-                  onOpen={openServer}
-                />
-              ) : null}
-              {pluginServers.length > 0 ? (
-                <McpServerSection
-                  title="Plugin MCPs"
-                  columns={serverColumns}
-                  servers={pluginServers}
-                  search={search}
-                  emptyText="No MCP servers installed by plugins."
-                  onOpen={openServer}
-                />
-              ) : null}
-              {dataSourceServers.length > 0 ? (
-                <McpServerSection
-                  title="Datasource MCPs"
-                  columns={dataSourceColumns}
-                  servers={dataSourceServers}
-                  search={search}
-                  fitContent
-                  emptyText="No data sources registered."
-                  onOpen={openServer}
-                />
-              ) : null}
-            </>
-          )}
+          ) : null}
         </div>
       </SettingsTablePane>
       <NewMcpServerDialog
