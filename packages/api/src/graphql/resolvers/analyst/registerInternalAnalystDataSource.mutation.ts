@@ -159,7 +159,10 @@ export const registerInternalAnalystDataSource = async (
     throw err;
   }
 
-  // 4. Auto-provision the hardened read-only role on cluster+database.
+  // 4. Auto-provision the hardened read-only role on cluster+database, scoped
+  //    to the ONE selected schema (THINK-283). The provisioner validates the
+  //    schema against the live catalog before any role mutation, so a
+  //    missing/empty schema fails here with nothing written anywhere.
   const roleName = readerRoleName(input.slug);
   const password = generateReaderPassword();
   const adminClient = await openAdminClient({
@@ -174,7 +177,18 @@ export const registerInternalAnalystDataSource = async (
       database: input.database,
       roleName,
       password,
+      schema: input.schema,
     });
+  } catch (err) {
+    if (
+      err instanceof AnalystRegistrationInputError ||
+      err instanceof AnalystRegistrationPostureError
+    ) {
+      throw new GraphQLError(err.message, {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+    throw err;
   } finally {
     try {
       await adminClient.end();

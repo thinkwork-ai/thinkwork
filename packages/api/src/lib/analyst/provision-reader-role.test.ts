@@ -1,32 +1,94 @@
 /**
- * provisionReaderRole tests (THINK-239) — the runbook posture applied
- * programmatically. Asserts the create-vs-rotate branch, the exact hardening
- * statements, SELECT-only grants, PUBLIC revokes, and identifier safety.
+ * provisionReaderRole tests (THINK-239, schema-scoped by THINK-283) — the
+ * runbook posture applied programmatically. Asserts the schema-first
+ * validation order, the create-vs-rotate branch, exact hardening statements,
+ * per-current-table SELECT grants (never ALL TABLES, never default
+ * privileges), the legacy default-ACL repair, out-of-selection revokes,
+ * effective-surface verification, and identifier safety.
  */
 
 import { describe, expect, it, vi } from "vitest";
 
 import {
   assertSafeIdentifier,
+  assertSelectableSchemaName,
   generateReaderPassword,
+  isSystemPgSchema,
   provisionReaderRole,
   readerRoleName,
   type ProvisionClient,
 } from "./provision-reader-role.js";
 
-function fakeClient(roleExists: boolean) {
+interface FakeDb {
+  /** Schemas present in pg_namespace (user + selected). */
+  schemas: string[];
+  /** Base tables per schema (relkind r/p only — views never appear here). */
+  tables: Record<string, string[]>;
+  roleExists: boolean;
+  /** Rows returned by the unexpected-SELECT verification query. */
+  unexpectedSelect?: Record<string, unknown>[];
+  /** Rows returned by the effective-write verification query. */
+  effectiveWrite?: Record<string, unknown>[];
+  /** Rows returned by the schema-CREATE verification query. */
+  schemaCreate?: Record<string, unknown>[];
+}
+
+function fakeClient(db: FakeDb) {
   const queries: { text: string; params?: unknown[] }[] = [];
   const client: ProvisionClient = {
     query: vi.fn(async (text: string, params?: unknown[]) => {
       queries.push({ text, params });
+      if (text.startsWith("SELECT 1 FROM pg_namespace")) {
+        return {
+          rows: db.schemas.includes(String(params?.[0])) ? [{ ok: 1 }] : [],
+        };
+      }
+      // Privilege-verification matchers FIRST — their SQL also contains the
+      // catalog fragments the discovery matchers key on.
+      if (text.includes("has_table_privilege($1, c.oid, 'SELECT')")) {
+        return { rows: db.unexpectedSelect ?? [] };
+      }
+      if (text.includes("'INSERT, UPDATE, DELETE, TRUNCATE'")) {
+        return { rows: db.effectiveWrite ?? [] };
+      }
+      if (text.includes("has_schema_privilege")) {
+        return { rows: db.schemaCreate ?? [] };
+      }
+      if (
+        text.includes("c.relkind IN ('r', 'p')") &&
+        text.includes("relname AS name")
+      ) {
+        const tables = db.tables[String(params?.[0])] ?? [];
+        return { rows: tables.map((name) => ({ name })) };
+      }
       if (text.startsWith("SELECT 1 FROM pg_roles")) {
-        return { rows: roleExists ? [{ "?column?": 1 }] : [] };
+        return { rows: db.roleExists ? [{ "?column?": 1 }] : [] };
+      }
+      if (
+        text.includes("FROM pg_namespace n") &&
+        text.includes("n.nspname <> $1")
+      ) {
+        return {
+          rows: db.schemas
+            .filter((s) => s !== String(params?.[0]))
+            .map((name) => ({ name })),
+        };
       }
       return { rows: [] };
     }),
   };
   return { client, queries };
 }
+
+const WAREHOUSE: FakeDb = {
+  schemas: ["public", "raw_jde", "platform"],
+  tables: {
+    public: [],
+    raw_jde: ["orders"],
+    platform: ["mirror_batch"],
+  },
+  roleExists: false,
+};
 
 describe("readerRoleName", () => {
   it("underscores hyphens and truncates to 63 chars", () => {
@@ -54,106 +116,266 @@ describe("assertSafeIdentifier", () => {
   });
 });
 
-describe("provisionReaderRole", () => {
-  it("CREATEs the role with pinned attributes when absent, then hardens + grants", async () => {
-    const { client, queries } = fakeClient(false);
-    await provisionReaderRole({
+describe("schema name gates (THINK-283)", () => {
+  it("isSystemPgSchema covers pg_* and information_schema", () => {
+    expect(isSystemPgSchema("pg_catalog")).toBe(true);
+    expect(isSystemPgSchema("pg_toast")).toBe(true);
+    expect(isSystemPgSchema("pg_temp_3")).toBe(true);
+    expect(isSystemPgSchema("information_schema")).toBe(true);
+    expect(isSystemPgSchema("public")).toBe(false);
+    expect(isSystemPgSchema("raw_jde")).toBe(false);
+  });
+
+  it("assertSelectableSchemaName rejects empty, NUL, and system schemas", () => {
+    expect(() => assertSelectableSchemaName("raw_jde")).not.toThrow();
+    expect(() => assertSelectableSchemaName("")).toThrow(/empty or contains/);
+    expect(() => assertSelectableSchemaName("bad\0name")).toThrow(
+      /empty or contains/,
+    );
+    expect(() => assertSelectableSchemaName("pg_catalog")).toThrow(
+      /system schema/,
+    );
+  });
+});
+
+describe("provisionReaderRole (THINK-283 schema-scoped)", () => {
+  it("covers AE1: provisions raw_jde with per-table grants and no platform access", async () => {
+    const { client, queries } = fakeClient({ ...WAREHOUSE });
+    const surface = await provisionReaderRole({
       client,
-      database: "sales",
-      roleName: "sales_pg_reader",
+      database: "thinkwork_warehouse",
+      roleName: "warehouse_reader",
       password: "pw-Abc_123",
+      schema: "raw_jde",
     });
+    expect(surface.grantedTables).toEqual(["orders"]);
     const texts = queries.map((q) => q.text);
 
-    // Existence check is parameterized (never interpolated).
-    expect(queries[0]!.text).toContain("SELECT 1 FROM pg_roles");
-    expect(queries[0]!.params).toEqual(["sales_pg_reader"]);
-
+    // Role creation with pinned attributes.
     const create = texts.find((t) => t.startsWith("CREATE ROLE"))!;
-    expect(create).toContain('CREATE ROLE "sales_pg_reader" WITH LOGIN');
-    expect(create).toContain("PASSWORD 'pw-Abc_123'");
+    expect(create).toContain('CREATE ROLE "warehouse_reader" WITH LOGIN');
     expect(create).toContain(
       "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS NOREPLICATION",
     );
-    expect(texts.some((t) => t.startsWith("ALTER ROLE"))).toBe(true);
 
-    // Session defaults.
-    expect(
-      texts.some((t) => t.includes("SET default_transaction_read_only = on")),
-    ).toBe(true);
-    expect(texts.some((t) => t.includes("SET statement_timeout = '15s'"))).toBe(
-      true,
-    );
-    expect(
-      texts.some((t) =>
-        t.includes("SET idle_in_transaction_session_timeout = '30s'"),
-      ),
-    ).toBe(true);
-    expect(texts.some((t) => t.includes("SET search_path = public"))).toBe(
-      true,
+    // search_path narrows to the selected schema, not public.
+    expect(texts).toContain(
+      'ALTER ROLE "warehouse_reader" SET search_path = raw_jde',
     );
 
-    // SELECT-only grant surface on public only.
-    expect(
-      texts.some((t) =>
-        t.includes('GRANT CONNECT ON DATABASE "sales" TO "sales_pg_reader"'),
-      ),
-    ).toBe(true);
-    expect(
-      texts.some((t) => t.includes("GRANT USAGE ON SCHEMA public")),
-    ).toBe(true);
-    expect(
-      texts.some((t) => t.includes("GRANT SELECT ON ALL TABLES IN SCHEMA public")),
-    ).toBe(true);
-    expect(
-      texts.some((t) =>
-        t.includes("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT"),
-      ),
-    ).toBe(true);
+    // Grants: CONNECT + selected-schema USAGE + per-CURRENT-table SELECT.
+    expect(texts).toContain(
+      'GRANT CONNECT ON DATABASE "thinkwork_warehouse" TO "warehouse_reader"',
+    );
+    expect(texts).toContain(
+      'GRANT USAGE ON SCHEMA raw_jde TO "warehouse_reader"',
+    );
+    expect(texts).toContain(
+      'GRANT SELECT ON raw_jde.orders TO "warehouse_reader"',
+    );
 
-    // PUBLIC revokes.
+    // Covers AE3: NO bulk grant and NO future-object grant anywhere.
     expect(
-      texts.some((t) => t === "REVOKE CREATE ON SCHEMA public FROM PUBLIC"),
-    ).toBe(true);
+      texts.some((t) => t.startsWith("GRANT") && t.includes("ON ALL TABLES")),
+    ).toBe(false);
     expect(
-      texts.some((t) => t.includes('REVOKE TEMP ON DATABASE "sales" FROM PUBLIC')),
-    ).toBe(true);
+      texts.some(
+        (t) => t.includes("ALTER DEFAULT PRIVILEGES") && t.includes("GRANT"),
+      ),
+    ).toBe(false);
 
-    // Never a CREATE ROLE when re-running; here it's the fresh path so no ALTER PASSWORD-only.
-    expect(texts.filter((t) => t.startsWith("CREATE ROLE")).length).toBe(1);
+    // Legacy default-ACL repair runs on every provisioning.
+    expect(texts).toContain(
+      'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM "warehouse_reader"',
+    );
+
+    // Out-of-selection revokes hit the OTHER user schemas only.
+    expect(texts).toContain(
+      'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA platform FROM "warehouse_reader"',
+    );
+    expect(texts).toContain(
+      'REVOKE ALL ON SCHEMA platform FROM "warehouse_reader"',
+    );
+    expect(texts).toContain(
+      'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM "warehouse_reader"',
+    );
+    // PUBLIC-wide statements stay limited to the CREATE/TEMP hardening.
+    expect(
+      texts
+        .filter((t) => t.endsWith("FROM PUBLIC"))
+        .every(
+          (t) =>
+            t === "REVOKE CREATE ON SCHEMA public FROM PUBLIC" ||
+            t.startsWith("REVOKE TEMP ON DATABASE"),
+        ),
+    ).toBe(true);
+  });
+
+  it("fails BEFORE any role mutation when the schema is missing", async () => {
+    const { client, queries } = fakeClient({ ...WAREHOUSE });
+    await expect(
+      provisionReaderRole({
+        client,
+        database: "thinkwork_warehouse",
+        roleName: "warehouse_reader",
+        password: "pw",
+        schema: "nope",
+      }),
+    ).rejects.toThrow(/schema "nope" does not exist/);
+    expect(queries.every((q) => q.text.startsWith("SELECT"))).toBe(true);
+  });
+
+  it("covers AE2: an empty selected schema fails with the schema named and no writes", async () => {
+    const { client, queries } = fakeClient({ ...WAREHOUSE });
+    await expect(
+      provisionReaderRole({
+        client,
+        database: "thinkwork_warehouse",
+        roleName: "warehouse_reader",
+        password: "pw",
+        schema: "public",
+      }),
+    ).rejects.toThrow(/schema "public" .* no eligible base tables/);
+    expect(queries.every((q) => q.text.startsWith("SELECT"))).toBe(true);
+  });
+
+  it("quotes mixed-case/punctuation schema and table names as single identifiers", async () => {
+    const { client, queries } = fakeClient({
+      schemas: ["public", "RawJde"],
+      tables: { public: [], RawJde: ["Order Items"] },
+      roleExists: false,
+    });
+    await provisionReaderRole({
+      client,
+      database: "warehouse",
+      roleName: "warehouse_reader",
+      password: "pw",
+      schema: "RawJde",
+    });
+    const texts = queries.map((q) => q.text);
+    expect(texts).toContain(
+      'ALTER ROLE "warehouse_reader" SET search_path = "RawJde"',
+    );
+    expect(texts).toContain(
+      'GRANT SELECT ON "RawJde"."Order Items" TO "warehouse_reader"',
+    );
+    // The raw names never appear unquoted in ACL statements.
+    expect(
+      texts.some((t) => t.startsWith("GRANT") && t.includes("RawJde.Order")),
+    ).toBe(false);
   });
 
   it("rotates the password (no attribute re-set) when the role already exists", async () => {
-    const { client, queries } = fakeClient(true);
+    const { client, queries } = fakeClient({ ...WAREHOUSE, roleExists: true });
     await provisionReaderRole({
       client,
-      database: "sales",
-      roleName: "sales_pg_reader",
+      database: "thinkwork_warehouse",
+      roleName: "warehouse_reader",
       password: "new-Pw_9",
+      schema: "raw_jde",
     });
     const texts = queries.map((q) => q.text);
     expect(texts.some((t) => t.startsWith("CREATE ROLE"))).toBe(false);
-    expect(
-      texts.some(
-        (t) => t === `ALTER ROLE "sales_pg_reader" WITH PASSWORD 'new-Pw_9'`,
-      ),
-    ).toBe(true);
+    expect(texts).toContain(
+      `ALTER ROLE "warehouse_reader" WITH PASSWORD 'new-Pw_9'`,
+    );
     // Grants are still re-applied on the retry path.
-    expect(
-      texts.some((t) => t.includes("GRANT SELECT ON ALL TABLES IN SCHEMA public")),
-    ).toBe(true);
+    expect(texts).toContain(
+      'GRANT SELECT ON raw_jde.orders TO "warehouse_reader"',
+    );
+  });
+
+  it("fails on residual effective SELECT outside the selection (inherited/PUBLIC grants)", async () => {
+    const { client } = fakeClient({
+      ...WAREHOUSE,
+      unexpectedSelect: [
+        { schema: "platform", name: "mirror_batch", relkind: "r" },
+      ],
+    });
+    await expect(
+      provisionReaderRole({
+        client,
+        database: "thinkwork_warehouse",
+        roleName: "warehouse_reader",
+        password: "pw",
+        schema: "raw_jde",
+      }),
+    ).rejects.toThrow(/platform\.mirror_batch/);
+  });
+
+  it("fails when a selected-schema VIEW is effectively readable (unsupported surface)", async () => {
+    const { client } = fakeClient({
+      ...WAREHOUSE,
+      unexpectedSelect: [
+        { schema: "raw_jde", name: "orders_view", relkind: "v" },
+      ],
+    });
+    await expect(
+      provisionReaderRole({
+        client,
+        database: "thinkwork_warehouse",
+        roleName: "warehouse_reader",
+        password: "pw",
+        schema: "raw_jde",
+      }),
+    ).rejects.toThrow(/orders_view \(v\)/);
+  });
+
+  it("fails on effective write privileges or schema-creation rights", async () => {
+    const writable = fakeClient({
+      ...WAREHOUSE,
+      effectiveWrite: [{ schema: "raw_jde", name: "orders" }],
+    });
+    await expect(
+      provisionReaderRole({
+        client: writable.client,
+        database: "thinkwork_warehouse",
+        roleName: "warehouse_reader",
+        password: "pw",
+        schema: "raw_jde",
+      }),
+    ).rejects.toThrow(/effective write privileges/);
+
+    const creatable = fakeClient({
+      ...WAREHOUSE,
+      schemaCreate: [{ schema: "raw_jde" }],
+    });
+    await expect(
+      provisionReaderRole({
+        client: creatable.client,
+        database: "thinkwork_warehouse",
+        roleName: "warehouse_reader",
+        password: "pw",
+        schema: "raw_jde",
+      }),
+    ).rejects.toThrow(/can CREATE in schema/);
   });
 
   it("refuses an unsafe database identifier before any statement", async () => {
-    const { client, queries } = fakeClient(false);
+    const { client, queries } = fakeClient({ ...WAREHOUSE });
     await expect(
       provisionReaderRole({
         client,
         database: 'sales"; DROP DATABASE x; --',
         roleName: "sales_pg_reader",
         password: "pw_123456789012345678901234567890",
+        schema: "public",
       }),
     ).rejects.toThrow(/not a safe SQL identifier/);
+    expect(queries.length).toBe(0);
+  });
+
+  it("refuses a system schema before any statement", async () => {
+    const { client, queries } = fakeClient({ ...WAREHOUSE });
+    await expect(
+      provisionReaderRole({
+        client,
+        database: "warehouse",
+        roleName: "warehouse_reader",
+        password: "pw",
+        schema: "pg_catalog",
+      }),
+    ).rejects.toThrow(/system schema/);
     expect(queries.length).toBe(0);
   });
 });

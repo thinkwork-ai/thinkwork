@@ -800,6 +800,21 @@ export type AnalystInternalDatabase = {
 };
 
 /**
+ * One schema on an internal database (THINK-283). Zero-count user schemas are
+ * returned so an empty `public` is explained rather than silently omitted; the
+ * UI disables them. System schemas (pg_*, information_schema) are excluded.
+ */
+export type AnalystInternalSchema = {
+  __typename?: 'AnalystInternalSchema';
+  /** True when this exact cluster/database/schema is already registered by the tenant. */
+  alreadyRegistered: Scalars['Boolean']['output'];
+  /** Current count of ordinary base tables eligible for registration. */
+  eligibleTableCount: Scalars['Int']['output'];
+  /** Raw catalog schema name (exact case). */
+  name: Scalars['String']['output'];
+};
+
+/**
  * Outcome of running the analyst connector provisioning ceremony (THINK-230):
  * the operator-facing equivalent of scripts/provision-analyst-connector.mts.
  * Reproduces the script's born-approved + re-approve semantics (KTD4 / SI-5
@@ -7402,6 +7417,13 @@ export type Query = {
    * (THINK-239). Requires tenant owner/admin.
    */
   analystInternalClusters: Array<AnalystInternalCluster>;
+  /**
+   * List the selectable (non-system) schemas of ONE internal database with
+   * current eligible-object counts and exact registration coverage, so an
+   * operator can select exactly one schema to register (THINK-283). Invoked
+   * after cluster + database selection. Requires tenant owner/admin.
+   */
+  analystInternalSchemas: Array<AnalystInternalSchema>;
   applet?: Maybe<AppletPayload>;
   appletState?: Maybe<AppletState>;
   applets: AppletConnection;
@@ -7887,6 +7909,12 @@ export type QueryAgentWorkspaceRunsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   targetPath?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryAnalystInternalSchemasArgs = {
+  clusterId: Scalars['ID']['input'];
+  database: Scalars['String']['input'];
 };
 
 
