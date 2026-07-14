@@ -176,6 +176,18 @@ variable "custom_auth_lambda_zip" {
   default     = ""
 }
 
+variable "custom_auth_lambda_s3_bucket" {
+  description = "S3 bucket containing the Cognito custom-auth challenge Lambda release artifact"
+  type        = string
+  default     = ""
+}
+
+variable "custom_auth_lambda_s3_key" {
+  description = "S3 key for the Cognito custom-auth challenge Lambda release artifact"
+  type        = string
+  default     = ""
+}
+
 variable "api_auth_secret" {
   description = "Shared signing secret used by the custom-auth challenge Lambda"
   type        = string
