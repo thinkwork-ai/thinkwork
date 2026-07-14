@@ -67,6 +67,12 @@ interface HttpBinding {
   fixedQuery: Record<string, string>;
   /** Names of query params the authored input MAY supply (nothing else is read). */
   allowedQuery: string[];
+  /**
+   * Credential injection descriptor, or `null` for a credential-less PUBLIC
+   * binding (e.g. an unauthenticated read-only GitHub REST endpoint). A public
+   * operation admitted with no `credential` in its resourceSelector dispatches
+   * with no auth header/param — never a placeholder or empty secret.
+   */
   credential: {
     name: string;
     field: string;
@@ -75,7 +81,7 @@ interface HttpBinding {
     param: string;
     /** Optional scheme prefix, e.g. "Bearer". */
     scheme?: string;
-  };
+  } | null;
   /** Max bytes of the projected inline result before a durable ref/failure. */
   maxResponseBytes: number;
   onExceed: "durable" | "fail";
@@ -142,15 +148,21 @@ export function createHttpOpenapiAdapter(
         );
       }
 
-      // 3. Resolve the credential handle (already resolved by the broker).
-      const cred = (ctx.credentials ?? {})[binding.credential.name];
-      const secret = cred ? cred[binding.credential.field] : undefined;
-      if (typeof secret !== "string" || secret.length === 0) {
-        return failed(
-          "readiness_blocked",
-          scrub("bound credential is unavailable"),
-          false,
-        );
+      // 3. Resolve the credential handle (already resolved by the broker). A
+      //    public credential-less binding skips this — no secret is required or
+      //    injected.
+      let secret: string | undefined;
+      if (binding.credential) {
+        const cred = (ctx.credentials ?? {})[binding.credential.name];
+        const raw = cred ? cred[binding.credential.field] : undefined;
+        if (typeof raw !== "string" || raw.length === 0) {
+          return failed(
+            "readiness_blocked",
+            scrub("bound credential is unavailable"),
+            false,
+          );
+        }
+        secret = raw;
       }
 
       // 4. Build the request URL from the CONTRACT binding + allowed input query
@@ -211,14 +223,16 @@ export function createHttpOpenapiAdapter(
         if (v !== undefined) url.searchParams.set(key, String(v));
       }
 
-      // 5. Credential placement.
+      // 5. Credential placement (skipped entirely for a public binding).
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (binding.credential.placement === "header") {
-        headers[binding.credential.param] = binding.credential.scheme
-          ? `${binding.credential.scheme} ${secret}`
-          : secret;
-      } else {
-        url.searchParams.set(binding.credential.param, secret);
+      if (binding.credential && secret) {
+        if (binding.credential.placement === "header") {
+          headers[binding.credential.param] = binding.credential.scheme
+            ? `${binding.credential.scheme} ${secret}`
+            : secret;
+        } else {
+          url.searchParams.set(binding.credential.param, secret);
+        }
       }
 
       // 6. Idempotency governs retry: non-idempotent operations run exactly once.
@@ -488,18 +502,33 @@ function parseHttpBinding(contract: OperationContract): HttpBinding | null {
     }
   }
 
-  const c = s.credential as Record<string, unknown> | undefined;
-  if (!c || typeof c !== "object") return null;
-  const placement = c.placement;
-  if (placement !== "header" && placement !== "query") return null;
-  if (
-    typeof c.name !== "string" ||
-    typeof c.field !== "string" ||
-    typeof c.param !== "string"
-  ) {
-    return null;
+  // Credential is OPTIONAL: absent → a public, credential-less binding. Present
+  // → fully validated (a partial credential descriptor is fail-closed, never a
+  // silent public downgrade).
+  let credential: HttpBinding["credential"] = null;
+  if (s.credential !== undefined) {
+    const c = s.credential as Record<string, unknown> | undefined;
+    if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+    const placement = c.placement;
+    const name = c.name;
+    const field = c.field;
+    const param = c.param;
+    if (placement !== "header" && placement !== "query") return null;
+    if (
+      typeof name !== "string" ||
+      typeof field !== "string" ||
+      typeof param !== "string"
+    ) {
+      return null;
+    }
+    credential = {
+      name,
+      field,
+      placement,
+      param,
+      scheme: typeof c.scheme === "string" ? c.scheme : undefined,
+    };
   }
-  const scheme = typeof c.scheme === "string" ? c.scheme : undefined;
 
   const maxResponseBytes =
     typeof s.maxResponseBytes === "number" && s.maxResponseBytes > 0
@@ -514,13 +543,7 @@ function parseHttpBinding(contract: OperationContract): HttpBinding | null {
     pathParams,
     fixedQuery,
     allowedQuery,
-    credential: {
-      name: c.name,
-      field: c.field,
-      placement,
-      param: c.param,
-      scheme,
-    },
+    credential,
     maxResponseBytes,
     onExceed,
   };

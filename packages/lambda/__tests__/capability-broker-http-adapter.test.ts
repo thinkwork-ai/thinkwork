@@ -158,6 +158,55 @@ describe("http-openapi adapter", () => {
     expect(seen.auth).toBe("Bearer ghp_secrettokenvalue0123456789");
   });
 
+  it("dispatches a PUBLIC credential-less binding with no auth injected", async () => {
+    const seen: { url: string; authHeader?: string; hasCredParam: boolean } = {
+      url: "",
+      hasCredParam: false,
+    };
+    const fetchImpl = (async (input: string, init?: RequestInit) => {
+      seen.url = String(input);
+      seen.authHeader = (
+        init?.headers as Record<string, string>
+      )?.Authorization;
+      seen.hasCredParam = new URL(String(input)).searchParams.has("token");
+      return jsonResponse(200, [
+        {
+          number: 7,
+          title: "public",
+          state: "open",
+          user: { login: "octocat" },
+        },
+      ]);
+    }) as unknown as typeof fetch;
+
+    // Public operation: resourceSelector carries NO credential block.
+    const publicContract = issuesListContract();
+    (
+      publicContract.targetScope as {
+        resourceSelector: Record<string, unknown>;
+      }
+    ).resourceSelector = {
+      method: "GET",
+      host: "api.github.com",
+      path: "/repos/facebook/react/issues",
+      fixedQuery: { per_page: "50" },
+      allowedQuery: ["state", "page"],
+      maxResponseBytes: 64 * 1024,
+      onExceed: "durable",
+    };
+
+    const adapter = createHttpOpenapiAdapter({ fetchImpl });
+    const out = await adapter.dispatch(
+      // No resolved credentials at all — a public binding needs none.
+      ctx(publicContract, { state: "open", page: 1 }, { credentials: {} }),
+    );
+
+    expect(out.status).toBe("completed");
+    expect(seen.authHeader).toBeUndefined();
+    expect(seen.hasCredParam).toBe(false);
+    expect(new URL(seen.url).pathname).toBe("/repos/facebook/react/issues");
+  });
+
   it("cannot be steered to a different host/path/method via authored input", async () => {
     let called = false;
     const fetchImpl = (async () => {
