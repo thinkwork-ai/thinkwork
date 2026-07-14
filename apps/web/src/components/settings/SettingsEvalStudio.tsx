@@ -3,7 +3,16 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { Database, Download, Loader2, Plus, Trash2 } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
+import { toast } from "sonner";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Badge,
   Button,
   DataTable,
@@ -72,14 +81,28 @@ export function SettingsEvalStudio() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] =
+    useState<EvalStudioTestCaseRow | null>(null);
 
   const [cases, refetch] = useQuery({
     query: EvalTestCasesQuery,
     variables: { tenantId: tenantId ?? "", search: search || null },
     pause: !tenantId,
   });
-  const [, deleteCase] = useMutation(DeleteEvalTestCaseMutation);
+  const [deleteState, deleteCase] = useMutation(DeleteEvalTestCaseMutation);
   const [seedState, seedCases] = useMutation(SeedEvalTestCasesMutation);
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    const res = await deleteCase({ id: pendingDelete.id });
+    setPendingDelete(null);
+    if (res.error) {
+      toast.error("Delete failed: " + res.error.message);
+    } else {
+      toast.success("Test case deleted");
+      refetch({ requestPolicy: "network-only" });
+    }
+  }
 
   const items = (cases.data?.evalTestCases ??
     []) as unknown as EvalStudioTestCaseRow[];
@@ -165,12 +188,11 @@ export function SettingsEvalStudio() {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Delete test case"
             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={async (event) => {
+            onClick={(event) => {
               event.stopPropagation();
-              if (!confirm(`Delete "${row.original.name}"?`)) return;
-              await deleteCase({ id: row.original.id });
-              refetch({ requestPolicy: "network-only" });
+              setPendingDelete(row.original);
             }}
           >
             <Trash2 className="h-4 w-4" />
@@ -178,7 +200,7 @@ export function SettingsEvalStudio() {
         ),
       },
     ],
-    [deleteCase, refetch],
+    [],
   );
 
   usePageHeaderActions({
@@ -309,6 +331,39 @@ export function SettingsEvalStudio() {
           />
         )}
       </div>
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete test case?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{pendingDelete?.name}" and cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteState.fetching}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteState.fetching}
+              onClick={(event) => {
+                // Keep the dialog open (confirm disabled) until the
+                // mutation resolves, then close and toast the outcome.
+                event.preventDefault();
+                void handleConfirmDelete();
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
