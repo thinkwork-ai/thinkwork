@@ -374,6 +374,12 @@ describe("provisionTenantSandbox capability-private gate", () => {
       TENANT,
     )}`;
     expect(capPriv.input.executionRoleArn).toBe(capRoleArn);
+    // Every interpreter name must satisfy the AgentCore constraint
+    // [a-zA-Z][a-zA-Z0-9_]{0,47} — hyphens are rejected with a
+    // ValidationException (regression guard: names previously used hyphens).
+    for (const c of created) {
+      expect(c.input.name).toMatch(/^[a-zA-Z][a-zA-Z0-9_]{0,47}$/);
+    }
     const publicCi = created.find(
       (c) => c.input.tags.Environment === "default-public",
     )!;

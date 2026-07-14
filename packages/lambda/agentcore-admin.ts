@@ -525,9 +525,16 @@ async function provisionTenantSandbox(body: any) {
     try {
       const suffix = tenantId.replace(/-/g, "").slice(0, 8);
       const envTag = env.id.replace(/-/g, "");
+      // AgentCore CodeInterpreter names must match [a-zA-Z][a-zA-Z0-9_]{0,47}
+      // (letters/digits/underscore, start with a letter, ≤48 chars). Hyphens
+      // are rejected with a ValidationException, so underscore-join, sanitize
+      // any stage that carries hyphens, and cap length. Verified empirically.
+      const name = `tw_${stage}_sb_${suffix}_${envTag}`
+        .replace(/[^a-zA-Z0-9_]/g, "_")
+        .slice(0, 48);
       const created: any = await aci.send(
         new CreateCodeInterpreterCommand({
-          name: `thinkwork-${stage}-sb-${suffix}-${envTag}`,
+          name,
           executionRoleArn: isCapPriv ? capPrivRoleArn! : roleArn,
           networkConfiguration: isCapPriv
             ? {
