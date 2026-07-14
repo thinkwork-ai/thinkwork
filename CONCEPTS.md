@@ -447,7 +447,7 @@ The three-grade contract classifying every push type by interrupt weight: Code (
 
 ### Factory Daemon
 
-The single dispatch authority for the autonomous delivery loop: a deterministic, launchd-managed process (Mac mini) that polls Linear for lane-labeled issues, launches disposable per-phase workers (`claude -p` or `codex exec`) in isolated worktrees on registered worker hosts, and recovers stalled or dead attempts from Linear-held state. It replaces the earlier two-lane dispatcher pair (Claude `/loop` session + cloud Codex scheduled task). The daemon schedules and reconciles; workers write all business state to Linear.
+The single dispatch authority for the autonomous delivery loop: a deterministic, launchd-managed process (Mac mini) that polls Linear for lane-labeled issues, launches disposable per-phase workers (`claude -p` or `codex exec`) in isolated worktrees on registered worker hosts, and recovers stalled or dead attempts from Linear-held state. It replaces the earlier two-lane dispatcher pair (Claude `/loop` session + cloud Codex scheduled task). The daemon schedules and reconciles; workers write all business state to Linear. The daemon is a separate, project-agnostic product — it lives at [thinkwork-ai/code-factory](https://github.com/thinkwork-ai/code-factory) (extracted from this repo's former `packages/factory`, THINK-287); thinkwork is one configured project.
 
 ### Handoff Baton
 
