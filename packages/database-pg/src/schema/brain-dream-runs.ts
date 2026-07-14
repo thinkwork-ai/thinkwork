@@ -2,7 +2,7 @@
  * Dream-state audit ledger (THINK-133 U4, KTD-2).
  *
  * Every dream run stages a per-bank plan (what will merge / forget /
- * quarantine) into `brain_dream_actions` BEFORE mutating Hindsight, applies
+ * quarantine) into `brain.dream_actions` BEFORE mutating Hindsight, applies
  * the staged actions atomically per action, and marks them applied. The
  * plan→apply split is the crash-safety boundary: staging is re-runnable,
  * apply is guarded by per-action ledger state, so a crashed or retried run
@@ -20,7 +20,6 @@ import {
   index,
   integer,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uniqueIndex,
@@ -28,6 +27,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { tenants } from "./core";
+import { brain } from "./brain";
 
 export const brainDreamRunStatuses = [
   "planned",
@@ -52,10 +52,12 @@ export const brainDreamActionStatuses = [
 ] as const;
 export type BrainDreamActionStatus = (typeof brainDreamActionStatuses)[number];
 
-export const brainDreamRuns = pgTable(
-  "brain_dream_runs",
+export const brainDreamRuns = brain.table(
+  "dream_runs",
   {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
@@ -77,27 +79,26 @@ export const brainDreamRuns = pgTable(
       .default(sql`now()`),
   },
   (table) => [
-    uniqueIndex("brain_dream_runs_dedupe_key_uidx").on(table.dedupe_key),
-    index("brain_dream_runs_tenant_bank_idx").on(
+    uniqueIndex("dream_runs_dedupe_key_uidx").on(table.dedupe_key),
+    index("dream_runs_tenant_bank_idx").on(
       table.tenant_id,
       table.bank_id,
       table.created_at,
     ),
-    index("brain_dream_runs_tenant_status_idx").on(
-      table.tenant_id,
-      table.status,
-    ),
+    index("dream_runs_tenant_status_idx").on(table.tenant_id, table.status),
     check(
-      "brain_dream_runs_status_check",
+      "dream_runs_status_check",
       sql`status IN ('planned', 'applying', 'applied', 'failed', 'skipped')`,
     ),
   ],
 );
 
-export const brainDreamActions = pgTable(
-  "brain_dream_actions",
+export const brainDreamActions = brain.table(
+  "dream_actions",
   {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
     run_id: uuid("run_id")
       .references(() => brainDreamRuns.id, { onDelete: "cascade" })
       .notNull(),
@@ -116,17 +117,17 @@ export const brainDreamActions = pgTable(
       .default(sql`now()`),
   },
   (table) => [
-    uniqueIndex("brain_dream_actions_run_ordinal_uidx").on(
+    uniqueIndex("dream_actions_run_ordinal_uidx").on(
       table.run_id,
       table.ordinal,
     ),
-    index("brain_dream_actions_run_status_idx").on(table.run_id, table.status),
+    index("dream_actions_run_status_idx").on(table.run_id, table.status),
     check(
-      "brain_dream_actions_type_check",
+      "dream_actions_type_check",
       sql`action_type IN ('quarantine', 'forget', 'consolidate')`,
     ),
     check(
-      "brain_dream_actions_status_check",
+      "dream_actions_status_check",
       sql`status IN ('staged', 'applied', 'skipped')`,
     ),
   ],

@@ -3,10 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getTableColumns, getTableName } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
-  memoryRetainAttempts,
+  brainRetainAttempts,
   memoryRetainAttemptStatuses,
 } from "../src/schema";
 
@@ -18,9 +19,10 @@ const migration0194 = readFileSync(
 
 describe("memory retain attempts schema", () => {
   it("models durable retain attempt identity and retry state", () => {
-    expect(getTableName(memoryRetainAttempts)).toBe("memory_retain_attempts");
+    expect(getTableName(brainRetainAttempts)).toBe("retain_attempts");
+    expect(getTableConfig(brainRetainAttempts).schema).toBe("brain");
 
-    const columns = getTableColumns(memoryRetainAttempts);
+    const columns = getTableColumns(brainRetainAttempts);
     expect(columns.tenant_id.notNull).toBe(true);
     expect(columns.user_id.notNull).toBe(false);
     expect(columns.space_id.notNull).toBe(false);

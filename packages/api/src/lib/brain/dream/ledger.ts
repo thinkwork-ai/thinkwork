@@ -92,7 +92,7 @@ export async function loadLatestRun(
 ): Promise<DreamRunRow | null> {
   const result = await db.execute(sql`
     SELECT id, tenant_id, bank_id, dedupe_key, status
-    FROM brain_dream_runs
+    FROM brain.dream_runs
     WHERE tenant_id = ${tenantId} AND bank_id = ${bankId}
     ORDER BY created_at DESC
     LIMIT 1
@@ -111,7 +111,7 @@ export async function findResumableRun(
 ): Promise<DreamRunRow | null> {
   const result = await db.execute(sql`
     SELECT id, tenant_id, bank_id, dedupe_key, status
-    FROM brain_dream_runs
+    FROM brain.dream_runs
     WHERE tenant_id = ${tenantId}
       AND bank_id = ${bankId}
       AND status IN ('planned', 'applying')
@@ -136,7 +136,7 @@ export async function createDreamRun(args: {
   const bucket = nextDreamBucket(latest?.dedupe_key ?? null, now);
   const dedupeKey = buildDreamDedupeKey(args.tenantId, args.bankId, bucket);
   const result = await args.db.execute(sql`
-    INSERT INTO brain_dream_runs (tenant_id, bank_id, dedupe_key, status, started_at)
+    INSERT INTO brain.dream_runs (tenant_id, bank_id, dedupe_key, status, started_at)
     VALUES (${args.tenantId}, ${args.bankId}, ${dedupeKey}, 'planned', ${now})
     ON CONFLICT (dedupe_key) DO NOTHING
     RETURNING id, tenant_id, bank_id, dedupe_key, status
@@ -159,7 +159,7 @@ export async function stageDreamActions(
 ): Promise<void> {
   for (const action of actions) {
     await db.execute(sql`
-      INSERT INTO brain_dream_actions (run_id, ordinal, action_type, status, target, reason)
+      INSERT INTO brain.dream_actions (run_id, ordinal, action_type, status, target, reason)
       VALUES (
         ${runId},
         ${action.ordinal},
@@ -172,12 +172,12 @@ export async function stageDreamActions(
     `);
   }
   await db.execute(sql`
-    UPDATE brain_dream_runs
+    UPDATE brain.dream_runs
     SET planned_counts = (
       SELECT COALESCE(jsonb_object_agg(action_type, n), '{}'::jsonb)
       FROM (
         SELECT action_type, count(*)::int AS n
-        FROM brain_dream_actions
+        FROM brain.dream_actions
         WHERE run_id = ${runId}
         GROUP BY action_type
       ) counts
@@ -194,7 +194,7 @@ export async function loadStagedActions(
 ): Promise<StagedActionRow[]> {
   const result = await db.execute(sql`
     SELECT id, ordinal, action_type, target, reason
-    FROM brain_dream_actions
+    FROM brain.dream_actions
     WHERE run_id = ${runId} AND status = 'staged'
     ORDER BY ordinal ASC
   `);
@@ -206,7 +206,7 @@ export async function markRunApplying(
   runId: string,
 ): Promise<void> {
   await db.execute(sql`
-    UPDATE brain_dream_runs
+    UPDATE brain.dream_runs
     SET status = 'applying', updated_at = now()
     WHERE id = ${runId}
   `);
@@ -217,7 +217,7 @@ export async function markActionApplied(
   actionId: string,
 ): Promise<void> {
   await db.execute(sql`
-    UPDATE brain_dream_actions
+    UPDATE brain.dream_actions
     SET status = 'applied', applied_at = now()
     WHERE id = ${actionId} AND status = 'staged'
   `);
@@ -229,7 +229,7 @@ export async function markActionSkipped(
   errorMessage?: string,
 ): Promise<void> {
   await db.execute(sql`
-    UPDATE brain_dream_actions
+    UPDATE brain.dream_actions
     SET status = 'skipped', error_message = ${errorMessage ?? null}
     WHERE id = ${actionId} AND status = 'staged'
   `);
@@ -240,14 +240,14 @@ export async function completeDreamRun(
   runId: string,
 ): Promise<void> {
   await db.execute(sql`
-    UPDATE brain_dream_runs
+    UPDATE brain.dream_runs
     SET status = 'applied',
         finished_at = now(),
         applied_counts = (
           SELECT COALESCE(jsonb_object_agg(action_type, n), '{}'::jsonb)
           FROM (
             SELECT action_type, count(*)::int AS n
-            FROM brain_dream_actions
+            FROM brain.dream_actions
             WHERE run_id = ${runId} AND status = 'applied'
             GROUP BY action_type
           ) counts
@@ -263,7 +263,7 @@ export async function failDreamRun(
   errorMessage: string,
 ): Promise<void> {
   await db.execute(sql`
-    UPDATE brain_dream_runs
+    UPDATE brain.dream_runs
     SET status = 'failed',
         error_message = ${errorMessage.slice(0, 500)},
         finished_at = now(),

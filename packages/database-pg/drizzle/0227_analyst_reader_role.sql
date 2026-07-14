@@ -325,16 +325,6 @@ BEGIN
   ELSE
     missing := missing || 'billing_export_line_items'::text;
   END IF;
-  IF to_regclass('public.brain_dream_actions') IS NOT NULL THEN
-    GRANT SELECT ON public.brain_dream_actions TO analyst_reader;
-  ELSE
-    missing := missing || 'brain_dream_actions'::text;
-  END IF;
-  IF to_regclass('public.brain_dream_runs') IS NOT NULL THEN
-    GRANT SELECT ON public.brain_dream_runs TO analyst_reader;
-  ELSE
-    missing := missing || 'brain_dream_runs'::text;
-  END IF;
   IF to_regclass('public.budget_policies') IS NOT NULL THEN
     GRANT SELECT ON public.budget_policies TO analyst_reader;
   ELSE
@@ -621,11 +611,6 @@ BEGIN
     GRANT SELECT ON public.memory_processor_configs TO analyst_reader;
   ELSE
     missing := missing || 'memory_processor_configs'::text;
-  END IF;
-  IF to_regclass('public.memory_retain_attempts') IS NOT NULL THEN
-    GRANT SELECT ON public.memory_retain_attempts TO analyst_reader;
-  ELSE
-    missing := missing || 'memory_retain_attempts'::text;
   END IF;
   IF to_regclass('public.memory_retraction_attempts') IS NOT NULL THEN
     GRANT SELECT ON public.memory_retraction_attempts TO analyst_reader;

@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-  memoryRetainAttempts,
+  brainRetainAttempts,
   type MemoryRetainAttemptStatus,
 } from "@thinkwork/database-pg/schema";
 
-export type RetainAttemptRow = typeof memoryRetainAttempts.$inferSelect;
+export type RetainAttemptRow = typeof brainRetainAttempts.$inferSelect;
 
 export type UpsertRetainAttemptInput = {
   tenantId: string;
@@ -155,7 +155,7 @@ export async function upsertRetainAttempt(
 ): Promise<RetainAttemptRow> {
   const now = new Date();
   const rows = await getDb()
-    .insert(memoryRetainAttempts)
+    .insert(brainRetainAttempts)
     .values({
       tenant_id: input.tenantId,
       user_id: input.userId || null,
@@ -173,9 +173,9 @@ export async function upsertRetainAttempt(
     })
     .onConflictDoUpdate({
       target: [
-        memoryRetainAttempts.tenant_id,
-        memoryRetainAttempts.thread_id,
-        memoryRetainAttempts.source_event_key,
+        brainRetainAttempts.tenant_id,
+        brainRetainAttempts.thread_id,
+        brainRetainAttempts.source_event_key,
       ],
       set: {
         user_id: input.userId || null,
@@ -202,32 +202,32 @@ export async function claimRetainAttempt(
     options.staleAfterMs,
   );
   const rows = await getDb()
-    .update(memoryRetainAttempts)
+    .update(brainRetainAttempts)
     .set({
       status: "running",
-      attempt_count: sql`${memoryRetainAttempts.attempt_count} + 1`,
+      attempt_count: sql`${brainRetainAttempts.attempt_count} + 1`,
       locked_at: now,
       locked_by: options.lockedBy || "memory-retain",
-      started_at: sql`COALESCE(${memoryRetainAttempts.started_at}, ${now})`,
+      started_at: sql`COALESCE(${brainRetainAttempts.started_at}, ${now})`,
       updated_at: now,
     })
     .where(
       and(
-        eq(memoryRetainAttempts.id, attemptId),
+        eq(brainRetainAttempts.id, attemptId),
         or(
           and(
-            inArray(memoryRetainAttempts.status, [...RETRYABLE_STATUSES]),
+            inArray(brainRetainAttempts.status, [...RETRYABLE_STATUSES]),
             or(
-              isNull(memoryRetainAttempts.next_retry_at),
-              lte(memoryRetainAttempts.next_retry_at, now),
+              isNull(brainRetainAttempts.next_retry_at),
+              lte(brainRetainAttempts.next_retry_at, now),
             ),
           ),
           and(
-            eq(memoryRetainAttempts.status, "running"),
-            lte(memoryRetainAttempts.locked_at, staleRunningBefore),
+            eq(brainRetainAttempts.status, "running"),
+            lte(brainRetainAttempts.locked_at, staleRunningBefore),
           ),
         ),
-        sql`${memoryRetainAttempts.attempt_count} < ${memoryRetainAttempts.max_attempts}`,
+        sql`${brainRetainAttempts.attempt_count} < ${brainRetainAttempts.max_attempts}`,
       ),
     )
     .returning();
@@ -245,26 +245,26 @@ export async function listDueRetainAttempts(
   );
   return getDb()
     .select()
-    .from(memoryRetainAttempts)
+    .from(brainRetainAttempts)
     .where(
       and(
         or(
           and(
-            inArray(memoryRetainAttempts.status, [...RETRYABLE_STATUSES]),
+            inArray(brainRetainAttempts.status, [...RETRYABLE_STATUSES]),
             or(
-              isNull(memoryRetainAttempts.next_retry_at),
-              lte(memoryRetainAttempts.next_retry_at, now),
+              isNull(brainRetainAttempts.next_retry_at),
+              lte(brainRetainAttempts.next_retry_at, now),
             ),
           ),
           and(
-            eq(memoryRetainAttempts.status, "running"),
-            lte(memoryRetainAttempts.locked_at, staleRunningBefore),
+            eq(brainRetainAttempts.status, "running"),
+            lte(brainRetainAttempts.locked_at, staleRunningBefore),
           ),
         ),
-        sql`${memoryRetainAttempts.attempt_count} < ${memoryRetainAttempts.max_attempts}`,
+        sql`${brainRetainAttempts.attempt_count} < ${brainRetainAttempts.max_attempts}`,
       ),
     )
-    .orderBy(asc(memoryRetainAttempts.next_retry_at))
+    .orderBy(asc(brainRetainAttempts.next_retry_at))
     .limit(options.limit ?? 25);
 }
 
@@ -284,25 +284,25 @@ export async function sweepExhaustedRunningAttempts(
     options.staleAfterMs,
   );
   const rows = await getDb()
-    .update(memoryRetainAttempts)
+    .update(brainRetainAttempts)
     .set({
       status: "dead_lettered",
       next_retry_at: null,
       locked_at: null,
       locked_by: null,
       finished_at: now,
-      error_class: sql`COALESCE(${memoryRetainAttempts.error_class}, 'stale_running_exhausted')`,
-      error_message: sql`COALESCE(${memoryRetainAttempts.error_message}, 'final attempt died before recording an outcome (stale running sweep)')`,
+      error_class: sql`COALESCE(${brainRetainAttempts.error_class}, 'stale_running_exhausted')`,
+      error_message: sql`COALESCE(${brainRetainAttempts.error_message}, 'final attempt died before recording an outcome (stale running sweep)')`,
       updated_at: now,
     })
     .where(
       and(
-        eq(memoryRetainAttempts.status, "running"),
-        lte(memoryRetainAttempts.locked_at, staleRunningBefore),
-        sql`${memoryRetainAttempts.attempt_count} >= ${memoryRetainAttempts.max_attempts}`,
+        eq(brainRetainAttempts.status, "running"),
+        lte(brainRetainAttempts.locked_at, staleRunningBefore),
+        sql`${brainRetainAttempts.attempt_count} >= ${brainRetainAttempts.max_attempts}`,
       ),
     )
-    .returning({ id: memoryRetainAttempts.id });
+    .returning({ id: brainRetainAttempts.id });
   return rows.length;
 }
 
@@ -325,7 +325,7 @@ export async function markRetainAttemptRetained(
 ): Promise<void> {
   const now = input.now ?? new Date();
   await getDb()
-    .update(memoryRetainAttempts)
+    .update(brainRetainAttempts)
     .set({
       status: "retained",
       next_retry_at: null,
@@ -340,7 +340,7 @@ export async function markRetainAttemptRetained(
       metadata: input.metadata || null,
       updated_at: now,
     })
-    .where(eq(memoryRetainAttempts.id, attemptId));
+    .where(eq(brainRetainAttempts.id, attemptId));
 }
 
 export async function markRetainAttemptFailed(
@@ -360,7 +360,7 @@ export async function markRetainAttemptFailed(
       : "dead_lettered";
 
   await getDb()
-    .update(memoryRetainAttempts)
+    .update(brainRetainAttempts)
     .set({
       status,
       next_retry_at:
@@ -376,7 +376,7 @@ export async function markRetainAttemptFailed(
       metadata: input.metadata || null,
       updated_at: now,
     })
-    .where(eq(memoryRetainAttempts.id, attempt.id));
+    .where(eq(brainRetainAttempts.id, attempt.id));
 
   return status;
 }

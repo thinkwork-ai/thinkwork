@@ -3,7 +3,7 @@
  *
  * Recurring background consolidation over each tenant's Hindsight banks:
  * quarantines eval residue, forgets junk meta-memories, and drives
- * Hindsight-native consolidation — all through the brain_dream_runs audit
+ * Hindsight-native consolidation — all through the brain.dream_runs audit
  * ledger (staged plan → atomic apply → applied markers), so a crashed or
  * retried invocation resumes without double-deleting (KTD-2).
  *
