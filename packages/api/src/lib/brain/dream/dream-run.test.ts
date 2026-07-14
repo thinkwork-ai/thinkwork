@@ -37,7 +37,9 @@ describe("planner patterns", () => {
     expect(junkRe.test("No new information was retained.")).toBe(true);
     // Real memories that merely mention contradictions survive.
     expect(
-      junkRe.test("Eric said the Q3 report contradictions were resolved by finance."),
+      junkRe.test(
+        "Eric said the Q3 report contradictions were resolved by finance.",
+      ),
     ).toBe(false);
     expect(junkRe.test("Birdie's favorite toy is Orbit.")).toBe(false);
   });
@@ -125,10 +127,16 @@ describe("applyDreamRun", () => {
         (t) => t.includes("DELETE FROM") && t.includes("memory_units"),
       ),
     ).toHaveLength(1);
-    expect(texts.filter((t) => t.includes("status = 'applied', applied_at"))).toHaveLength(2);
+    expect(
+      texts.filter((t) => t.includes("status = 'applied', applied_at")),
+    ).toHaveLength(2);
     expect(texts.filter((t) => t.includes("documents"))).toHaveLength(0);
     // Run completes.
-    expect(texts.some((t) => t.includes("status = 'applied',") && t.includes("finished_at"))).toBe(true);
+    expect(
+      texts.some(
+        (t) => t.includes("status = 'applied',") && t.includes("finished_at"),
+      ),
+    ).toBe(true);
   });
 
   it("fails the run when consolidation fails, after recording earlier applies", async () => {
@@ -270,7 +278,9 @@ describe("runBrainDreamState", () => {
     const texts = execute.mock.calls.map((call) =>
       JSON.stringify(call[0]?.queryChunks ?? call[0]),
     );
-    expect(texts.some((t) => t.includes("INSERT INTO brain_dream_runs"))).toBe(false);
+    expect(texts.some((t) => t.includes("INSERT INTO brain.dream_runs"))).toBe(
+      false,
+    );
   });
 
   it("dry run plans without staging or mutating", async () => {
@@ -316,13 +326,17 @@ describe("enumerateDreamBanks (THINK-220 two-step split)", () => {
       JSON.stringify(call[0]?.queryChunks ?? call[0]),
     );
     // The two halves stay separate statements — no cross-schema JOIN/EXISTS.
-    expect(texts.some((t) => t.includes("FROM users") && t.includes("memory_units"))).toBe(false);
+    expect(
+      texts.some((t) => t.includes("FROM users") && t.includes("memory_units")),
+    ).toBe(false);
     // Render the Hindsight filter query for real: a drizzle array param
     // expands to a record and Postgres rejects ANY($1::text[]) with "cannot
     // cast type record to text[]" — the query must build ARRAY[...].
     const { PgDialect } = await import("drizzle-orm/pg-core");
     const unitsCall = execute.mock.calls.find((call) =>
-      JSON.stringify(call[0]?.queryChunks ?? "").includes("SELECT DISTINCT bank_id"),
+      JSON.stringify(call[0]?.queryChunks ?? "").includes(
+        "SELECT DISTINCT bank_id",
+      ),
     );
     const rendered = new PgDialect().sqlToQuery(unitsCall![0]);
     expect(rendered.sql).toContain("ANY(ARRAY[");

@@ -220,11 +220,6 @@ describe("analyst row-level security (THINK-234)", () => {
       parent: "agents",
       parentKey: "id",
     },
-    brain_dream_actions: {
-      via: "run_id",
-      parent: "brain_dream_runs",
-      parentKey: "id",
-    },
     eval_case_overrides: {
       via: "run_id",
       parent: "eval_runs",

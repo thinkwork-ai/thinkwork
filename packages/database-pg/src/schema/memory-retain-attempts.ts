@@ -7,7 +7,6 @@
  */
 
 import {
-  pgTable,
   uuid,
   text,
   integer,
@@ -19,6 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
+import { brain } from "./brain";
 import { threads } from "./threads";
 import { threadTurns } from "./scheduled-jobs";
 import { spaces } from "./spaces";
@@ -35,8 +35,8 @@ export const memoryRetainAttemptStatuses = [
 export type MemoryRetainAttemptStatus =
   (typeof memoryRetainAttemptStatuses)[number];
 
-export const memoryRetainAttempts = pgTable(
-  "memory_retain_attempts",
+export const brainRetainAttempts = brain.table(
+  "retain_attempts",
   {
     id: uuid("id")
       .primaryKey()
@@ -83,73 +83,73 @@ export const memoryRetainAttempts = pgTable(
       .default(sql`now()`),
   },
   (table) => [
-    uniqueIndex("memory_retain_attempts_source_event_uidx").on(
+    uniqueIndex("retain_attempts_source_event_uidx").on(
       table.tenant_id,
       table.thread_id,
       table.source_event_key,
     ),
-    index("memory_retain_attempts_due_idx").on(
+    index("retain_attempts_due_idx").on(
       table.status,
       table.next_retry_at,
       table.created_at,
     ),
-    index("memory_retain_attempts_tenant_status_idx").on(
+    index("retain_attempts_tenant_status_idx").on(
       table.tenant_id,
       table.status,
       table.created_at,
     ),
-    index("memory_retain_attempts_thread_idx").on(
+    index("retain_attempts_thread_idx").on(
       table.tenant_id,
       table.thread_id,
       table.created_at,
     ),
-    index("memory_retain_attempts_user_idx").on(
+    index("retain_attempts_user_idx").on(
       table.tenant_id,
       table.user_id,
       table.created_at,
     ),
-    index("memory_retain_attempts_space_idx").on(
+    index("retain_attempts_space_idx").on(
       table.tenant_id,
       table.space_id,
       table.created_at,
     ),
-    index("memory_retain_attempts_turn_idx").on(table.thread_turn_id),
+    index("retain_attempts_turn_idx").on(table.thread_turn_id),
     check(
-      "memory_retain_attempts_status_allowed",
+      "retain_attempts_status_allowed",
       sql`${table.status} IN ('queued','running','retained','failed_timeout','failed_backend','dead_lettered')`,
     ),
     check(
-      "memory_retain_attempts_attempt_count_nonnegative",
+      "retain_attempts_attempt_count_nonnegative",
       sql`${table.attempt_count} >= 0`,
     ),
     check(
-      "memory_retain_attempts_max_attempts_positive",
+      "retain_attempts_max_attempts_positive",
       sql`${table.max_attempts} > 0`,
     ),
   ],
 );
 
-export const memoryRetainAttemptsRelations = relations(
-  memoryRetainAttempts,
+export const brainRetainAttemptsRelations = relations(
+  brainRetainAttempts,
   ({ one }) => ({
     tenant: one(tenants, {
-      fields: [memoryRetainAttempts.tenant_id],
+      fields: [brainRetainAttempts.tenant_id],
       references: [tenants.id],
     }),
     user: one(users, {
-      fields: [memoryRetainAttempts.user_id],
+      fields: [brainRetainAttempts.user_id],
       references: [users.id],
     }),
     space: one(spaces, {
-      fields: [memoryRetainAttempts.space_id],
+      fields: [brainRetainAttempts.space_id],
       references: [spaces.id],
     }),
     thread: one(threads, {
-      fields: [memoryRetainAttempts.thread_id],
+      fields: [brainRetainAttempts.thread_id],
       references: [threads.id],
     }),
     threadTurn: one(threadTurns, {
-      fields: [memoryRetainAttempts.thread_turn_id],
+      fields: [brainRetainAttempts.thread_turn_id],
       references: [threadTurns.id],
     }),
   }),

@@ -64,10 +64,18 @@ describe("createDreamRun", () => {
     const { db } = routeDb([
       {
         match: "ORDER BY created_at DESC",
-        rows: [[{ id: "r0", dedupe_key: `${TENANT}:${BANK}:100`, status: "applied" }]],
+        rows: [
+          [
+            {
+              id: "r0",
+              dedupe_key: `${TENANT}:${BANK}:100`,
+              status: "applied",
+            },
+          ],
+        ],
       },
       // INSERT ... ON CONFLICT DO NOTHING returns no rows on collision.
-      { match: "INSERT INTO brain_dream_runs", rows: [[]] },
+      { match: "INSERT INTO brain.dream_runs", rows: [[]] },
     ]);
     const run = await createDreamRun({
       db,
@@ -97,7 +105,7 @@ describe("createDreamRun", () => {
         ],
       },
       {
-        match: "INSERT INTO brain_dream_runs",
+        match: "INSERT INTO brain.dream_runs",
         rows: [
           [
             {
@@ -111,11 +119,16 @@ describe("createDreamRun", () => {
         ],
       },
     ]);
-    const run = await createDreamRun({ db, tenantId: TENANT, bankId: BANK, now });
+    const run = await createDreamRun({
+      db,
+      tenantId: TENANT,
+      bankId: BANK,
+      now,
+    });
     expect(run?.id).toBe("r1");
     const insertCall = execute.mock.calls
       .map((call) => JSON.stringify(call[0]?.queryChunks ?? call[0]))
-      .find((text) => text.includes("INSERT INTO brain_dream_runs"));
+      .find((text) => text.includes("INSERT INTO brain.dream_runs"));
     expect(insertCall).toContain(String(wallBucket + 1));
   });
 });
@@ -134,7 +147,7 @@ describe("stageDreamActions", () => {
     ]);
     const inserts = execute.mock.calls
       .map((call) => JSON.stringify(call[0]?.queryChunks ?? call[0]))
-      .filter((text) => text.includes("INSERT INTO brain_dream_actions"));
+      .filter((text) => text.includes("INSERT INTO brain.dream_actions"));
     expect(inserts).toHaveLength(2);
     for (const insert of inserts) {
       expect(insert).toContain("ON CONFLICT");

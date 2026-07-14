@@ -344,24 +344,6 @@ BEGIN
   ELSE
     missing := missing || 'billing_export_line_items'::text;
   END IF;
-  IF to_regclass('public.brain_dream_actions') IS NOT NULL THEN
-    ALTER TABLE public.brain_dream_actions ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.brain_dream_actions;
-    CREATE POLICY analyst_tenant_isolation ON public.brain_dream_actions
-      FOR SELECT TO analyst_reader
-      USING (EXISTS (SELECT 1 FROM public.brain_dream_runs p WHERE p.id = public.brain_dream_actions.run_id AND p.tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid));
-  ELSE
-    missing := missing || 'brain_dream_actions'::text;
-  END IF;
-  IF to_regclass('public.brain_dream_runs') IS NOT NULL THEN
-    ALTER TABLE public.brain_dream_runs ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.brain_dream_runs;
-    CREATE POLICY analyst_tenant_isolation ON public.brain_dream_runs
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'brain_dream_runs'::text;
-  END IF;
   IF to_regclass('public.budget_policies') IS NOT NULL THEN
     ALTER TABLE public.budget_policies ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.budget_policies;
@@ -820,15 +802,6 @@ BEGIN
       USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
   ELSE
     missing := missing || 'memory_processor_configs'::text;
-  END IF;
-  IF to_regclass('public.memory_retain_attempts') IS NOT NULL THEN
-    ALTER TABLE public.memory_retain_attempts ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.memory_retain_attempts;
-    CREATE POLICY analyst_tenant_isolation ON public.memory_retain_attempts
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'memory_retain_attempts'::text;
   END IF;
   IF to_regclass('public.memory_retraction_attempts') IS NOT NULL THEN
     ALTER TABLE public.memory_retraction_attempts ENABLE ROW LEVEL SECURITY;

@@ -143,15 +143,6 @@ export const ANALYST_SCHEMA_ANNOTATIONS: AnalystSchemaAnnotations = {
       join: { via: "agent_id", parentTable: "agents", parentColumn: "id" },
     },
   },
-  brain_dream_actions: {
-    tenantScope: {
-      join: {
-        via: "run_id",
-        parentTable: "brain_dream_runs",
-        parentColumn: "id",
-      },
-    },
-  },
   eval_case_overrides: {
     tenantScope: {
       join: { via: "run_id", parentTable: "eval_runs", parentColumn: "id" },

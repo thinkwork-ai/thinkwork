@@ -1,4 +1,4 @@
-import { memoryRetainAttempts as memoryRetainAttemptsTable } from "@thinkwork/database-pg/schema";
+import { brainRetainAttempts as memoryRetainAttemptsTable } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { and, desc, eq } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
