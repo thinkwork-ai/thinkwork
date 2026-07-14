@@ -14,6 +14,11 @@
  * SDK's flat-import fallback (`import canonical, ed25519`). Source is base64'd
  * to avoid any Python/JS string-escaping hazard.
  */
+// The `*.py` text-module declaration lives in packages/lambda/py-assets.d.ts.
+// This reference makes it travel with this file, so any tsc project that
+// compiles it (e.g. packages/api, which pulls in the broker lib) resolves the
+// .py imports — its own `include` globs wouldn't otherwise pick the .d.ts up.
+/// <reference path="../../py-assets.d.ts" />
 import canonicalPy from "../../../agentcore-pi/agent-container/src/runtime/capability-sdk/canonical.py";
 import ed25519Py from "../../../agentcore-pi/agent-container/src/runtime/capability-sdk/ed25519.py";
 import clientPy from "../../../agentcore-pi/agent-container/src/runtime/capability-sdk/client.py";
