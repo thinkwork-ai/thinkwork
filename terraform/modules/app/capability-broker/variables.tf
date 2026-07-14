@@ -50,6 +50,25 @@ variable "db_cluster_endpoint" {
   default     = ""
 }
 
+variable "db_username" {
+  description = "Aurora master username for the broker's DATABASE_URL."
+  type        = string
+  default     = "thinkwork_admin"
+}
+
+variable "db_password" {
+  description = "Aurora master password for the broker's DATABASE_URL (synchronous getDb() path)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "database_name" {
+  description = "Aurora database name for the broker's DATABASE_URL."
+  type        = string
+  default     = "thinkwork"
+}
+
 # --- Lambda artifact source (mirrors lambda-api's dual local/remote pattern) -
 
 variable "lambda_zips_dir" {
