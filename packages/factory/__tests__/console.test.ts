@@ -928,7 +928,7 @@ describe("U8: release confirm round-trip", () => {
       channelId: CHANNEL,
       operatorUserIds: [OPERATOR],
       log,
-      consoleExecutors: createReleaseExecutors({
+      repoExecutors: createReleaseExecutors({
         store,
         slack,
         transport,
