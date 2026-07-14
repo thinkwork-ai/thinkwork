@@ -105,6 +105,7 @@ One PR per unit (factory default). U1 ships the merged table (page structure oth
 **Dependencies:** none.
 
 **Files:**
+
 - `apps/web/src/components/settings/SettingsMcpServers.tsx` — modify
 - `apps/web/src/components/settings/SettingsMcpServers.test.tsx` — modify
 
@@ -113,6 +114,7 @@ One PR per unit (factory default). U1 ships the merged table (page structure oth
 **Patterns to follow:** existing `FIT_CONTENT_COLUMN` meta for content-fit columns; existing Badge usage in the Source column; existing `McpServerSection` props.
 
 **Test scenarios** (update the existing suite in place):
+
 - Covers AE1. Given 3 tenant servers and 4 plugin servers (including one managed-application server), the tab renders one table with all 7 rows; the "Tenant servers" and "Plugin MCPs" headings are gone; Type cells read "Tenant" ×3 and "Plugin" ×4.
 - Rows render in a single name-ascending order interleaving tenant and plugin rows (assert row order across the merge boundary).
 - The inline "plugin" name badge no longer renders (`screen.queryAllByText("plugin")` scoped to name cells is empty; Type-column "Plugin" text is asserted separately).
@@ -132,6 +134,7 @@ One PR per unit (factory default). U1 ships the merged table (page structure oth
 **Dependencies:** U1 / THINK-284 (same file regions; avoids rebase conflict — no functional dependency).
 
 **Files:**
+
 - `apps/web/src/components/settings/SettingsMcpServers.tsx` — modify
 - `apps/web/src/components/settings/settings-nav.tsx` — modify (label only)
 - `apps/web/src/routes/_authed/settings.mcp-servers.data-sources.tsx` — modify (redirect → component route)
@@ -140,6 +143,7 @@ One PR per unit (factory default). U1 ships the merged table (page structure oth
 **Approach:** Extend `ConnectionsTab` to `"connections" | "servers" | "data-sources"` and add the `data-sources` branch to `tabForPath` (KTD3). In `usePageHeaderActions`: title and breadcrumb become "Connectors"; tabs become Connections / MCP Servers / Data Sources; header actions split per KTD4 (Register data source → data-sources tab, New MCP Server → servers tab; update `actionKey` accordingly). Render the datasource table (existing `dataSourceColumns`, `fitContent`) as the data-sources tab body inside its own `SettingsTablePane` with the search toolbar and empty state "No data sources registered."; remove the Datasource MCPs section from the servers tab. Swap the route stub's `beforeLoad` redirect for the `OperatorGuard` + `SettingsMcpServers` component (mirror `settings.mcp-servers.servers.tsx`). Change the sidebar label in `settings-nav.tsx` to "Connectors". The server-detail breadcrumb ("MCP Servers" → `/settings/mcp-servers/servers`) is out of scope per the Product Contract.
 
 **Test scenarios:**
+
 - Header contract: title and breadcrumb are "Connectors"; tabs are exactly `[Connections → /settings/mcp-servers, MCP Servers → /settings/mcp-servers/servers, Data Sources → /settings/mcp-servers/data-sources]`.
 - Covers AE2. Rendering at pathname `/settings/mcp-servers/data-sources` shows the datasource table (Name / Source / Instance / Database / Status / Enabled columns, cluster · database values) and none of the tenant/plugin rows.
 - The servers tab no longer renders the "Datasource MCPs" heading or datasource rows.
