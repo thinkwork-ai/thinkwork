@@ -200,6 +200,7 @@ export type Agent = {
   humanPair?: Maybe<User>;
   humanPairId?: Maybe<Scalars['ID']['output']>;
   id: Scalars['ID']['output'];
+  jsonRenderUi?: Maybe<Scalars['AWSJSON']['output']>;
   knowledgeBases: Array<AgentKnowledgeBase>;
   lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
   model?: Maybe<Scalars['String']['output']>;
@@ -11879,6 +11880,7 @@ export type UpdateTenantAgentInput = {
   budgetPaused?: InputMaybe<Scalars['Boolean']['input']>;
   contextEngine?: InputMaybe<Scalars['AWSJSON']['input']>;
   guardrailId?: InputMaybe<Scalars['ID']['input']>;
+  jsonRenderUi?: InputMaybe<Scalars['AWSJSON']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;

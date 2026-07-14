@@ -697,6 +697,7 @@ Join hints:
 | web_extract | jsonb |  |
 | send_email | jsonb |  |
 | context_engine | jsonb |  |
+| json_render_ui | jsonb |  |
 | is_platform_default | boolean | not null |
 | capability_folder_dispatch | boolean | not null |
 | budget_monthly_cents | integer |  |

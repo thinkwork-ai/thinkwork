@@ -74,11 +74,18 @@ export const PLATFORM_TOOL_NAMES = [
   "web_extract",
   "browser_automation",
   "execute_code",
+  "emit_json_render_ui",
 ] as const;
 
 /** Tool Library reclassification map: agent jsonb column → declaration. */
 const PLATFORM_TOOL_DECLARATIONS: ReadonlyArray<{
-  column: "send_email" | "web_search" | "web_extract" | "browser" | "sandbox";
+  column:
+    | "send_email"
+    | "web_search"
+    | "web_extract"
+    | "browser"
+    | "sandbox"
+    | "json_render_ui";
   slug: string;
   platformTool: (typeof PLATFORM_TOOL_NAMES)[number];
   description: string;
@@ -112,6 +119,13 @@ const PLATFORM_TOOL_DECLARATIONS: ReadonlyArray<{
     slug: "code-sandbox",
     platformTool: "execute_code",
     description: "Run code in the platform sandbox built-in.",
+  },
+  {
+    column: "json_render_ui",
+    slug: "json-render-ui",
+    platformTool: "emit_json_render_ui",
+    description:
+      "Answer with generated UI (charts, tables, rich result chunks) rendered in the thread.",
   },
 ];
 
@@ -283,6 +297,7 @@ export async function runCapabilityFolderBackfill(
       web_extract: agents.web_extract,
       browser: agents.browser,
       sandbox: agents.sandbox,
+      json_render_ui: agents.json_render_ui,
     })
     .from(agents)
     .where(eq(agents.tenant_id, options.tenantId));

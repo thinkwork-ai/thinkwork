@@ -69,6 +69,7 @@ type AgentToolConfig = {
   webExtract: unknown;
   sendEmail: unknown;
   contextEngine: unknown;
+  jsonRenderUi: unknown;
 };
 
 type ToolAccess = {
@@ -112,6 +113,15 @@ const CATALOG: CatalogEntry[] = [
     providers: [],
     kind: "policy-gated" as const,
     fixedProvider: "thinkwork-email",
+  },
+  {
+    slug: "json-render-ui",
+    name: "Generated UI",
+    description:
+      "Answer with rendered charts, tables, and rich result chunks in the thread instead of prose.",
+    providers: [],
+    kind: "policy-gated" as const,
+    fixedProvider: "thinkwork",
   },
   {
     slug: "context-engine",
@@ -160,6 +170,8 @@ function toolNameFor(slug: string): string | null {
       return "send_email";
     case "context-engine":
       return "query_context";
+    case "json-render-ui":
+      return "emit_json_render_ui";
     case "browser_automation":
       return "browser_automation";
     case "web-search":
@@ -180,6 +192,8 @@ function agentConfigFor(slug: string, agent: AgentToolConfig | null): unknown {
       return agent.sendEmail;
     case "context-engine":
       return agent.contextEngine;
+    case "json-render-ui":
+      return agent.jsonRenderUi;
     case "browser_automation":
       return agent.browser;
     case "web-search":
@@ -314,6 +328,7 @@ export function SettingsTools() {
         webExtract: agentData.agent.webExtract,
         sendEmail: agentData.agent.sendEmail,
         contextEngine: agentData.agent.contextEngine,
+        jsonRenderUi: agentData.agent.jsonRenderUi,
       }
     : null;
 

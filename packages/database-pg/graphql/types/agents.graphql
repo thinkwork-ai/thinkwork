@@ -47,6 +47,7 @@ type Agent {
   webExtract: AWSJSON
   sendEmail: AWSJSON
   contextEngine: AWSJSON
+  jsonRenderUi: AWSJSON
   budgetMonthlyCents: Int
   lastHeartbeatAt: AWSDateTime
   avatarUrl: String
@@ -99,6 +100,7 @@ input UpdateTenantAgentInput {
   webExtract: AWSJSON
   sendEmail: AWSJSON
   contextEngine: AWSJSON
+  jsonRenderUi: AWSJSON
   budgetMonthlyCents: Int
   budgetPaused: Boolean
   avatarUrl: String

@@ -74,6 +74,15 @@ export const agents = pgTable(
     context_engine: jsonb("context_engine").default(
       sql`'{"enabled": true}'::jsonb`,
     ),
+    /**
+     * Agent generated-UI (emit_json_render_ui) opt-in metadata (THINK-291).
+     * Default-on: charts and rich result chunks work out of the box; the
+     * legacy hidden agent_capabilities 'thread-json-render-ui' row this
+     * replaces was unseeded and invisible.
+     */
+    json_render_ui: jsonb("json_render_ui").default(
+      sql`'{"enabled": true}'::jsonb`,
+    ),
     is_platform_default: boolean("is_platform_default")
       .notNull()
       .default(false),
