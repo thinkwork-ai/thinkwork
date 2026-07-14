@@ -46,6 +46,7 @@ import {
   ANALYST_CONNECTOR_SLUG,
   analystConnectorAuthConfig,
   analystConnectorRowValues,
+  ensureAnalystBrokerSecretValue,
   provisionAnalystConnector,
   resolveAnalystProvisionConfig,
 } from "./provision-connector.js";
@@ -178,5 +179,86 @@ describe("analyst connector provisioning (U4)", () => {
       ANALYST_BROKER_SECRET_ARN: INPUT.secretRef,
     });
     expect(resolved.brokerUrl).toBe("https://api.dev.example.com/mcp/analyst");
+  });
+});
+
+describe("ensureAnalystBrokerSecretValue (register-ceremony mint-if-empty)", () => {
+  function fakeSm(behavior: { getError?: Error; secretString?: string }): {
+    send: (command: unknown) => Promise<{ SecretString?: string }>;
+    puts: string[];
+  } {
+    const puts: string[] = [];
+    return {
+      puts,
+      send: async (command: unknown) => {
+        const name = (command as { constructor: { name: string } }).constructor
+          .name;
+        if (name === "GetSecretValueCommand") {
+          if (behavior.getError) throw behavior.getError;
+          return { SecretString: behavior.secretString };
+        }
+        puts.push(
+          (command as { input: { SecretString: string } }).input.SecretString,
+        );
+        return {};
+      },
+    };
+  }
+
+  it("leaves an existing token untouched — even for a different tenant", async () => {
+    const sm = fakeSm({
+      secretString: JSON.stringify({ token: "t0", tenantId: "other-tenant" }),
+    });
+    const outcome = await ensureAnalystBrokerSecretValue({
+      secretRef: INPUT.secretRef,
+      tenantId: INPUT.tenantId,
+      sm,
+    });
+    expect(outcome).toBe("unchanged");
+    expect(sm.puts).toHaveLength(0);
+  });
+
+  it("mints {token, tenantId} when the secret shell has no value", async () => {
+    const err = new Error("no AWSCURRENT");
+    err.name = "ResourceNotFoundException";
+    const sm = fakeSm({ getError: err });
+    const outcome = await ensureAnalystBrokerSecretValue({
+      secretRef: INPUT.secretRef,
+      tenantId: INPUT.tenantId,
+      sm,
+    });
+    expect(outcome).toBe("created");
+    expect(sm.puts).toHaveLength(1);
+    const written = JSON.parse(sm.puts[0]!) as {
+      token: string;
+      tenantId: string;
+    };
+    expect(written.tenantId).toBe(INPUT.tenantId);
+    expect(written.token).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("mints when a value exists but carries no token", async () => {
+    const sm = fakeSm({ secretString: "{}" });
+    const outcome = await ensureAnalystBrokerSecretValue({
+      secretRef: INPUT.secretRef,
+      tenantId: INPUT.tenantId,
+      sm,
+    });
+    expect(outcome).toBe("created");
+    expect(sm.puts).toHaveLength(1);
+  });
+
+  it("rethrows non-mintable read failures (denied/throttled) instead of writing", async () => {
+    const err = new Error("denied");
+    err.name = "AccessDeniedException";
+    const sm = fakeSm({ getError: err });
+    await expect(
+      ensureAnalystBrokerSecretValue({
+        secretRef: INPUT.secretRef,
+        tenantId: INPUT.tenantId,
+        sm,
+      }),
+    ).rejects.toThrow("denied");
+    expect(sm.puts).toHaveLength(0);
   });
 });
