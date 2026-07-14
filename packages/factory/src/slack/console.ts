@@ -45,9 +45,26 @@ export type ConsoleVerb =
   | "release"
   | "release-confirm"
   | "release-cancel"
+  | "deploy"
+  | "deploy-confirm"
+  | "deploy-cancel"
   | "result"
   | "logs"
   | "help";
+
+/**
+ * Repo-scoped verbs (THINK-286): they act on the repo/stacks, not an issue,
+ * so they work from ANY thread and from the channel root — no thread mapping
+ * required. Everything else needs a live issue thread.
+ */
+export const REPO_VERBS: ReadonlySet<ConsoleVerb> = new Set([
+  "release",
+  "release-confirm",
+  "release-cancel",
+  "deploy",
+  "deploy-confirm",
+  "deploy-cancel",
+]);
 
 /** JSON payload carried in a console button's `value` (KTD1: minimal). */
 export interface ConsoleButtonValue {
@@ -80,6 +97,10 @@ export function parseVerb(text: string): ParsedVerb | null {
   if (/^pause$/.test(t)) return { verb: "pause" };
   if (/^resume$/.test(t)) return { verb: "resume" };
   if (/^release$/.test(t)) return { verb: "release" };
+  const deploy = /^deploy(?:\s+(.+))?$/.exec(t);
+  if (deploy) {
+    return { verb: "deploy", ...(deploy[1] ? { arg: deploy[1].trim() } : {}) };
+  }
   if (/^(help|commands)\??$/.test(t)) return { verb: "help" };
   return null;
 }
@@ -229,7 +250,27 @@ export type ConsoleExecutor = (
  * an immediate `⏳ <verb>…` line before executing and edits it into the final
  * ack — a silent button on a phone reads as dead and invites a double-tap.
  */
-const SLOW_VERBS = new Set<ConsoleVerb>(["merge", "result", "release", "release-confirm"]);
+const SLOW_VERBS = new Set<ConsoleVerb>([
+  "merge",
+  "result",
+  "release",
+  "release-confirm",
+  "deploy",
+  "deploy-confirm",
+]);
+
+/** Context for a repo-scoped verb — no issue, maybe no thread. */
+export interface RepoActionContext {
+  channel: string;
+  /** Present when invoked from inside a thread; null at the channel root. */
+  threadTs: string | null;
+  userId: string;
+  arg?: string;
+  /** Post an intermediate reply (same surface the ack lands on). */
+  post(text: string, blocks?: SlackBlock[]): Promise<void>;
+}
+
+export type RepoExecutor = (ctx: RepoActionContext) => Promise<ConsoleAck>;
 
 export interface ConsoleDeps {
   gateway: LinearGateway;
@@ -239,6 +280,110 @@ export interface ConsoleDeps {
   log: Logger;
   /** Per-verb executors — later units fill these in. */
   executors: Partial<Record<ConsoleVerb, ConsoleExecutor>>;
+  /** Repo-scoped executors (release/deploy) — usable without an issue. */
+  repoExecutors?: Partial<Record<ConsoleVerb, RepoExecutor>>;
+}
+
+export interface RepoActionInput {
+  channel: string;
+  threadTs: string | null;
+  userId: string;
+  verb: ConsoleVerb;
+  arg?: string;
+}
+
+/**
+ * The repo-scoped pipeline (THINK-286): authorize → execute → ack. No Linear
+ * re-check (there is no issue), same allowlist gate, same interim ⏳ line for
+ * slow verbs, same never-silent acks. Replies land in the invoking thread
+ * when there is one, else the channel root.
+ */
+export async function runRepoAction(
+  deps: ConsoleDeps,
+  input: RepoActionInput,
+): Promise<void> {
+  const post = (text: string, blocks?: SlackBlock[]): Promise<string | null> =>
+    (input.threadTs !== null
+      ? deps.slack.postThreadReply(input.channel, input.threadTs, text, {
+          blocks: blocks ?? [section(text)],
+        })
+      : deps.slack.postMessage(input.channel, text, {
+          blocks: blocks ?? [section(text)],
+        })
+    ).catch((e: unknown) => {
+      deps.log.warn("slack console: repo reply failed", {
+        verb: input.verb,
+        error: String(e),
+      });
+      return null;
+    });
+
+  if (!deps.operatorUserIds.includes(input.userId)) {
+    deps.log.warn("slack console: non-operator refused (repo verb)", {
+      verb: input.verb,
+      userId: input.userId,
+    });
+    await post(
+      `Thanks <@${input.userId}> — only an authorized operator can use the console. Ask an operator to run this.`,
+    );
+    return;
+  }
+
+  const executor = deps.repoExecutors?.[input.verb];
+  if (executor === undefined) {
+    await post(`\`${input.verb}\` isn't available yet — coming in a later factory update.`);
+    return;
+  }
+
+  let progressTs: string | null = null;
+  if (SLOW_VERBS.has(input.verb)) {
+    progressTs = await post(`⏳ running ${input.verb}…`);
+  }
+  const finalAck = async (ack: ConsoleAck): Promise<void> => {
+    if (progressTs !== null) {
+      try {
+        await deps.slack.updateMessage(
+          input.channel,
+          progressTs,
+          ack.text,
+          ack.blocks ?? [section(ack.text)],
+        );
+        ack.onPosted?.(progressTs);
+        return;
+      } catch (e) {
+        deps.log.warn("slack console: repo progress edit failed — posting fresh", {
+          error: String(e),
+        });
+      }
+    }
+    const ts = await post(ack.text, ack.blocks);
+    ack.onPosted?.(ts);
+  };
+
+  try {
+    const ack = await executor({
+      channel: input.channel,
+      threadTs: input.threadTs,
+      userId: input.userId,
+      arg: input.arg,
+      post: async (text, blocks) => {
+        await post(text, blocks);
+      },
+    });
+    await finalAck(ack);
+    deps.log.info("slack console: repo verb executed", {
+      verb: input.verb,
+      userId: input.userId,
+    });
+  } catch (e) {
+    deps.log.warn("slack console: repo executor failed", {
+      verb: input.verb,
+      error: String(e),
+    });
+    await finalAck({
+      text: `❌ \`${input.verb}\` failed: ${String(e).slice(0, 400)}`,
+    });
+  }
 }
 
 export interface ConsoleActionInput {
@@ -895,7 +1040,7 @@ async function resolveOfferMessage(
  */
 export function createReleaseExecutors(
   deps: ReleaseDeps,
-): Partial<Record<ConsoleVerb, ConsoleExecutor>> {
+): Partial<Record<ConsoleVerb, RepoExecutor>> {
   return {
     release: async () => {
       const fetch = await git(deps, ["fetch", "--tags", "--quiet", "origin"]);

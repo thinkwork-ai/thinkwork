@@ -35,15 +35,18 @@ import type { GithubGateway } from "../phases/evidence.js";
 import { createBoardUpdater, BOARD_RENDER_KEY } from "./board.js";
 import {
   CONSOLE_ACTION_PREFIX,
+  REPO_VERBS,
   actionsForState,
   helpText,
   mergedPrNoteActions,
   parseVerb,
   runConsoleAction,
+  runRepoAction,
   type ConsoleButtonValue,
   type ConsoleDeps,
   type ConsoleExecutor,
   type ConsoleVerb,
+  type RepoExecutor,
 } from "./console.js";
 import {
   buildQuestionBlocks,
@@ -252,6 +255,8 @@ export interface SlackSyncDeps {
   consoleExecutors?: Partial<Record<ConsoleVerb, ConsoleExecutor>>;
   /** Enables the merged-PR note (U5). Absent → the note never posts. */
   github?: GithubGateway;
+  /** Repo-scoped executors (release/deploy) — usable without an issue. */
+  repoExecutors?: Partial<Record<ConsoleVerb, RepoExecutor>>;
 }
 
 export function createSlackSync(deps: SlackSyncDeps): SlackSync {
@@ -283,6 +288,7 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     operatorUserIds: deps.operatorUserIds,
     log: deps.log,
     executors: deps.consoleExecutors ?? {},
+    repoExecutors: deps.repoExecutors ?? {},
   };
 
   async function ensureThread(
@@ -477,6 +483,22 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     },
 
     async handleInbound(message) {
+      // THINK-286: repo-scoped verbs (`release`, `deploy <target>`) work at
+      // the channel root and from ANY thread — they act on the repo/stacks,
+      // not an issue, so no thread mapping is required.
+      {
+        const parsed = parseVerb(message.text);
+        if (parsed !== null && REPO_VERBS.has(parsed.verb)) {
+          await runRepoAction(consoleDeps, {
+            channel: message.channel,
+            threadTs: message.threadTs,
+            userId: message.userId,
+            verb: parsed.verb,
+            arg: parsed.arg,
+          });
+          return;
+        }
+      }
       // R16: `status` at the CHANNEL ROOT re-posts a fresh board snapshot
       // (the last tick's render, persisted in meta). Thread `status` keeps
       // its per-issue live behavior below.
@@ -609,6 +631,22 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
             });
             return;
           }
+          // THINK-286: an ISSUE verb in an unmapped thread must not die
+          // silently — this is usually a just-closed (un-enrolled) thread
+          // (hit live: `release` typed into THINK-270's thread seconds after
+          // it finished). Repo verbs were already routed above.
+          await deps.slack
+            .postThreadReply(
+              message.channel,
+              message.threadTs,
+              `This thread isn't tracking an issue anymore (finished issues un-enroll). Issue verbs like \`${parsed.verb}\` need a live issue thread — \`release\`/\`deploy\` work right here or at the channel root.`,
+            )
+            .catch((e: unknown) =>
+              deps.log.warn("slack console: closed-thread reply failed", {
+                error: String(e),
+              }),
+            );
+          return;
         }
       }
       // Otherwise: the answer round-trip. When there is no open question the
@@ -625,6 +663,35 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
     },
 
     async handleAction(action) {
+      // THINK-286: repo-scoped console buttons (release/deploy confirm rounds)
+      // need no thread mapping — they may sit on channel-root messages or in
+      // threads that un-enrolled mid-round. Route them FIRST.
+      if (action.actionId.startsWith(CONSOLE_ACTION_PREFIX)) {
+        let cv: ConsoleButtonValue | null = null;
+        try {
+          const parsed: unknown = JSON.parse(action.value);
+          if (
+            typeof parsed === "object" &&
+            parsed !== null &&
+            typeof (parsed as { v?: unknown }).v === "string"
+          ) {
+            cv = parsed as ConsoleButtonValue;
+          }
+        } catch {
+          // handled below with the issue-path malformed log
+        }
+        if (cv !== null && REPO_VERBS.has(cv.v)) {
+          await runRepoAction(consoleDeps, {
+            channel: action.channel,
+            threadTs: action.threadTs,
+            userId: action.userId,
+            verb: cv.v,
+            arg: cv.arg,
+          });
+          return;
+        }
+      }
+
       // A click on an escalation is always inside a mapped thread (escalations
       // are thread replies). No thread ts / no row → some other message; ignore.
       if (action.threadTs === null) {

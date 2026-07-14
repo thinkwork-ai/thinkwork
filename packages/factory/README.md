@@ -300,6 +300,37 @@ working states drop Approve; Done shows Result only; a paused issue shows
 link to their Slack threads. If it gets unpinned or deleted, the daemon
 re-posts and re-pins it on the next tick.
 
+**Repo-scoped verbs — release and deploy (THINK-286):** `release` and
+`deploy <target>` act on the repo/stacks, not an issue, so they work from
+**any thread and from the channel root** (plain channel message). Both are
+gated behind a confirm round-trip that shows exactly what will run.
+
+`deploy <target> [vX.Y.Z-canary.N]` targets come from `deployTargets` in the
+factory config — per-target argv/env/cwd with a `<VERSION>` placeholder
+resolved to the newest canary tag (or the version you typed):
+
+```jsonc
+"deployTargets": {
+  "tei": {
+    "argv": ["pnpm", "--dir", "apps/cli", "dev", "release", "deploy", "<VERSION>", "--stage", "tei-e2e", "--yes"],
+    "env": { "AWS_PROFILE": "tei", "AWS_REGION": "us-east-1" },
+    "note": "TEI customer stage"
+  },
+  "mcpherson": {
+    "argv": ["pnpm", "--dir", "apps/cli", "dev", "release", "deploy", "<VERSION>", "--stage", "mcpherson", "--yes"],
+    "env": { "AWS_PROFILE": "mcpherson", "AWS_REGION": "us-east-1" },
+    "note": "McPherson customer stage"
+  }
+}
+```
+
+Confirmed deploys run **detached** (they outlive daemon restarts) with output
+at `~/.thinkwork-factory/logs/deploy-<target>-<ts>.log`; the daemon posts the
+outcome to the channel when the process exits (log tail on failure). One
+deploy per target at a time. Customer stages use the `release deploy` flow —
+see `docs/solutions/workflow-issues/customer-updates-use-release-deploy-not-deploy-controller-2026-07-12.md`
+for the failure families to expect.
+
 ---
 
 ## Operating the daemon

@@ -34,6 +34,7 @@ import { createLinearGateway, type CommentTrust } from "./linear/client.js";
 import { createLogger } from "./logger.js";
 import { createSlackGateway, type SlackGateway } from "./slack/client.js";
 import { createInspectionExecutors, createMergeExecutor, createReleaseExecutors, createSteeringExecutors } from "./slack/console.js";
+import { createDeployExecutors, resumeDeployWatches } from "./slack/deploy.js";
 import { createSlackSync, type SlackSync } from "./slack/sync.js";
 import { buildStatusView, formatStatusView } from "./slack/status.js";
 import { postNag } from "./slack/threads.js";
@@ -188,6 +189,16 @@ program
           appToken: config.slack.appToken as string,
           channelId: config.slack.channelId as string,
         });
+        const deployDeps = {
+          store,
+          slack: slackGateway,
+          transport,
+          repoPath: host.repoPath,
+          stateDir: getStateDir(),
+          channelId: config.slack.channelId as string,
+          targets: config.deployTargets ?? {},
+          log: log.child("deploy"),
+        };
         slackSync = createSlackSync({
           slack: slackGateway,
           store,
@@ -217,6 +228,8 @@ program
               artifactsDirFor: getArtifactsDir,
               log: log.child("console"),
             }),
+          },
+          repoExecutors: {
             ...createReleaseExecutors({
               store,
               slack: slackGateway,
@@ -225,9 +238,12 @@ program
               channelId: config.slack.channelId as string,
               log: log.child("console"),
             }),
+            ...createDeployExecutors(deployDeps),
           },
           github,
         });
+        // Re-arm outcome watchers for deploys that survived a daemon restart.
+        resumeDeployWatches(deployDeps);
         slackGateway.onMessage((message) => slackSync!.handleInbound(message));
         // Answer-form button clicks (block_actions) ride the same socket.
         slackGateway.onAction((action) => slackSync!.handleAction(action));

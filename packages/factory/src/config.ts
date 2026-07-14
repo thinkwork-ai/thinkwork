@@ -25,6 +25,21 @@ export interface LinearConfig {
   trustedUserIds?: string[];
 }
 
+/**
+ * One `deploy <name>` target (THINK-286): the exact command the confirm
+ * round-trip shows and the daemon runs detached. `<VERSION>` anywhere in argv
+ * is replaced with the resolved latest `v0.1.0-canary.*` tag (or the version
+ * the operator typed). Env is ADDITIVE over PATH/HOME (never process.env).
+ */
+export interface DeployTargetConfig {
+  argv: string[];
+  env?: Record<string, string>;
+  /** Defaults to the daemon host's repoPath. */
+  cwd?: string;
+  /** Shown in the confirm offer, e.g. "prod — app.thinkwork.ai". */
+  note?: string;
+}
+
 export interface SlackConfig {
   botToken?: string;
   appToken?: string;
@@ -100,6 +115,8 @@ export interface FactoryConfig {
   /** Per-phase model + SLA table, defaults merged in. */
   phases: Record<string, PhaseConfig>;
   pollIntervalSeconds: number;
+  /** `deploy <name>` targets for the Slack console (THINK-286). */
+  deployTargets?: Record<string, DeployTargetConfig>;
   /**
    * Pass each phase's `budgetUsd` to the worker as `--max-budget-usd`. Default
    * false: subscription workers are governed by wall-clock SLA + stall
@@ -356,6 +373,42 @@ export function loadConfig(): FactoryConfig {
     ? (linearRaw.trustedUserIds as unknown[]).map(String)
     : undefined;
 
+  // deploy targets (THINK-286): tolerant parse — a malformed target is
+  // DROPPED with the others kept, never a fatal config error (the daemon
+  // must come up even if one target entry is fat-fingered).
+  let deployTargets: Record<string, DeployTargetConfig> | undefined;
+  if (typeof raw.deployTargets === "object" && raw.deployTargets !== null) {
+    deployTargets = {};
+    for (const [name, t] of Object.entries(
+      raw.deployTargets as Record<string, unknown>,
+    )) {
+      if (typeof t !== "object" || t === null) continue;
+      const tt = t as Record<string, unknown>;
+      if (
+        !Array.isArray(tt.argv) ||
+        tt.argv.length === 0 ||
+        !tt.argv.every((a) => typeof a === "string" && a.trim() !== "")
+      ) {
+        continue;
+      }
+      deployTargets[name] = {
+        argv: tt.argv as string[],
+        ...(typeof tt.env === "object" && tt.env !== null
+          ? {
+              env: Object.fromEntries(
+                Object.entries(tt.env as Record<string, unknown>).map(
+                  ([k, v]) => [k, String(v)],
+                ),
+              ),
+            }
+          : {}),
+        ...(isNonEmptyString(tt.cwd) ? { cwd: tt.cwd } : {}),
+        ...(isNonEmptyString(tt.note) ? { note: tt.note } : {}),
+      };
+    }
+    if (Object.keys(deployTargets).length === 0) deployTargets = undefined;
+  }
+
   return {
     linear: {
       apiKey: linearRaw.apiKey as string,
@@ -366,6 +419,7 @@ export function loadConfig(): FactoryConfig {
     hosts,
     phases: mergePhases(raw.phases),
     pollIntervalSeconds,
+    ...(deployTargets !== undefined ? { deployTargets } : {}),
     enforceBudgetUsd: raw.enforceBudgetUsd === true,
   };
 }
