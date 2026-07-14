@@ -275,6 +275,12 @@ resource "aws_iam_role_policy" "admin" {
           "bedrock-agentcore:DeleteCodeInterpreter",
           "bedrock-agentcore:ListCodeInterpreters",
           "bedrock-agentcore:GetCodeInterpreter",
+          # CreateCodeInterpreter passes inline `tags`, which AgentCore
+          # authorizes as a separate bedrock-agentcore:TagResource action on
+          # code-interpreter-custom/* — verified empirically (first provision
+          # returned AccessDenied on TagResource). UntagResource covers teardown.
+          "bedrock-agentcore:TagResource",
+          "bedrock-agentcore:UntagResource",
         ]
         Resource = "*"
       },
