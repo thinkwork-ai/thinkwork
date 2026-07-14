@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "urql";
+import { useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import {
   PAGE_TYPE_BADGE_CLASSES,
@@ -7,7 +8,10 @@ import {
   type WikiPageType,
 } from "@thinkwork/graph";
 import { Badge } from "@thinkwork/ui";
-import { ComputerWikiPageQuery } from "@/lib/graphql-queries";
+import {
+  ComputerWikiPageLinksQuery,
+  ComputerWikiPageQuery,
+} from "@/lib/graphql-queries";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   NodeBadge,
@@ -36,6 +40,14 @@ interface WikiPageDetail {
   updatedAt?: string | null;
   aliases?: string[] | null;
   sections?: WikiPageSection[] | null;
+}
+
+interface WikiLinkedPage {
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title?: string | null;
+  aliases?: string[] | null;
 }
 
 /** `Source — relationship — Target` lines from a compiled Relationships section. */
@@ -99,6 +111,50 @@ export function WikiPageView({
   const page = data?.wikiPage ?? null;
   const loading = fetching && !data;
   const headerTitle = page?.title ?? title ?? slug;
+  const navigate = useNavigate();
+
+  // Connected + backlink pages resolve relationship-badge labels into real
+  // wiki navigation targets (THINK-270 repair) — the graph tab supplies its
+  // sheet with edges directly, but the full-page reader must look them up.
+  const [{ data: linksData }] = useQuery<{
+    wikiConnectedPages?: WikiLinkedPage[] | null;
+    wikiBacklinks?: WikiLinkedPage[] | null;
+  }>({
+    query: ComputerWikiPageLinksQuery,
+    variables: { pageId: page?.id ?? "" },
+    pause: !page?.id,
+  });
+
+  // Normalized title/alias → linked page. The current page stays out of the
+  // map so its own badge remains inert, matching WikiPageDetailSheet.
+  const linkedPagesByLabel = useMemo(() => {
+    const map = new Map<string, WikiLinkedPage>();
+    const pages = [
+      ...(linksData?.wikiConnectedPages ?? []),
+      ...(linksData?.wikiBacklinks ?? []),
+    ];
+    for (const linked of pages) {
+      if (linked.id === page?.id) continue;
+      for (const label of [linked.title, ...(linked.aliases ?? [])]) {
+        const normalized = label?.trim().toLowerCase();
+        if (normalized && !map.has(normalized)) map.set(normalized, linked);
+      }
+    }
+    return map;
+  }, [linksData, page?.id]);
+
+  // Clicking a relationship badge SPA-navigates to the matching linked page;
+  // the current page and unknown labels are inert.
+  const navigateFor = (label: string): (() => void) | undefined => {
+    const linked = linkedPagesByLabel.get(label.trim().toLowerCase());
+    if (!linked) return undefined;
+    return () => {
+      void navigate({
+        to: "/wiki/$type/$slug",
+        params: { type: linked.type.toLowerCase(), slug: linked.slug },
+      });
+    };
+  };
 
   usePageHeaderActions({
     title: headerTitle,
@@ -215,6 +271,7 @@ export function WikiPageView({
                                 <NodeBadge
                                   label={row.source}
                                   color={hashColor(row.source)}
+                                  onClick={navigateFor(row.source)}
                                 />
                                 <RelationshipConnector
                                   label={row.relationship}
@@ -222,6 +279,7 @@ export function WikiPageView({
                                 <NodeBadge
                                   label={row.target}
                                   color={hashColor(row.target)}
+                                  onClick={navigateFor(row.target)}
                                 />
                               </div>
                             ),

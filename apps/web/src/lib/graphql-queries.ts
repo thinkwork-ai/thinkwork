@@ -2793,6 +2793,30 @@ export const ComputerWikiBacklinksQuery = gql`
   }
 `;
 
+/**
+ * Pages linked to/from one page, in one round-trip — the full-page reader
+ * matches relationship-badge labels against these titles/aliases to turn
+ * badges into wiki navigation (THINK-270 repair).
+ */
+export const ComputerWikiPageLinksQuery = gql`
+  query ComputerWikiPageLinks($pageId: ID!) {
+    wikiConnectedPages(pageId: $pageId) {
+      id
+      type
+      slug
+      title
+      aliases
+    }
+    wikiBacklinks(pageId: $pageId) {
+      id
+      type
+      slug
+      title
+      aliases
+    }
+  }
+`;
+
 export const ComputerKnowledgeBasesQuery = gql`
   query ComputerKnowledgeBases($tenantId: ID!) {
     knowledgeBases(tenantId: $tenantId) {
