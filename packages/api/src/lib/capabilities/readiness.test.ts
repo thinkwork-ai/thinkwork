@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("drizzle-orm", () => ({
   and: (...args: unknown[]) => ({ _and: args }),
@@ -559,13 +559,101 @@ describe("revokeCredentialBinding", () => {
 });
 
 describe("readOnlyHttpProbeRunner", () => {
-  it("is a stub that cannot dispatch in this slice", async () => {
-    await expect(
-      readOnlyHttpProbeRunner.probe({
-        descriptor: {},
-        probeConfig: { readOnly: true },
-        credential: {},
+  const readOnlyGetDescriptor = (credential?: unknown) => ({
+    operations: [
+      {
+        operationId: "issues.list",
+        effect: "read",
+        idempotency: "idempotent",
+        targetScope: {
+          resourceSelector: {
+            method: "GET",
+            host: "api.github.com",
+            path: "/repos/facebook/react/issues",
+            fixedQuery: { per_page: "1" },
+            ...(credential ? { credential } : {}),
+          },
+        },
+      },
+    ],
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns ok on a 2xx read-only GET and never stores the body", async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({ ok: true, status: 200, body: { cancel } } as never);
+    const out = await readOnlyHttpProbeRunner.probe({
+      descriptor: readOnlyGetDescriptor(),
+      probeConfig: { readOnly: true },
+      credential: {},
+    });
+    expect(out.ok).toBe(true);
+    expect(out.statusCode).toBe(200);
+    const url = fetchSpy.mock.calls[0]![0] as URL;
+    expect(url.toString()).toBe(
+      "https://api.github.com/repos/facebook/react/issues?per_page=1",
+    );
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("degrades with http_<status> on a 4xx", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 403,
+      body: null,
+    } as never);
+    const out = await readOnlyHttpProbeRunner.probe({
+      descriptor: readOnlyGetDescriptor(),
+      probeConfig: { readOnly: true },
+      credential: {},
+    });
+    expect(out.ok).toBe(false);
+    expect(out.failureKind).toBe("http_403");
+  });
+
+  it("applies a declared bearer credential as the Authorization header", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: null,
+    } as never);
+    await readOnlyHttpProbeRunner.probe({
+      descriptor: readOnlyGetDescriptor({
+        name: "github",
+        field: "token",
+        placement: "header",
+        param: "Authorization",
+        scheme: "Bearer",
       }),
-    ).rejects.toThrow("not-implemented-in-U2a");
+      probeConfig: { readOnly: true },
+      credential: { github: { token: "ghp_secret" } },
+    });
+    const headers = (fetchSpy.mock.calls[0]![1] as RequestInit)
+      .headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer ghp_secret");
+  });
+
+  it("degrades (never throws) when the descriptor has no read-only GET op", async () => {
+    const out = await readOnlyHttpProbeRunner.probe({
+      descriptor: { operations: [{ effect: "write", idempotency: "unsafe" }] },
+      probeConfig: { readOnly: true },
+      credential: {},
+    });
+    expect(out.ok).toBe(false);
+    expect(out.failureKind).toBe("no_read_only_probe_operation");
+  });
+
+  it("degrades (never throws) when the target is unreachable", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("ECONNREFUSED"));
+    const out = await readOnlyHttpProbeRunner.probe({
+      descriptor: readOnlyGetDescriptor(),
+      probeConfig: { readOnly: true },
+      credential: {},
+    });
+    expect(out.ok).toBe(false);
+    expect(out.failureKind).toBe("probe_unreachable");
   });
 });
