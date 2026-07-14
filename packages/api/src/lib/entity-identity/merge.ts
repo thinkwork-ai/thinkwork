@@ -6,7 +6,7 @@
  *
  *   - entity_source_mappings + entity_identity_claims repoint to the survivor;
  *   - memory_claims.canonical_subject_id repoints;
- *   - knowledge_graph_entities.canonical_entity_id repoints;
+ *   - kg.entities.canonical_entity_id repoints;
  *   - the loser's tenant Entity wiki page archives; its slug + title become
  *     survivor-page aliases (the partial unique on (tenant, canonical) means
  *     the survivor keeps at most one live page);
@@ -24,7 +24,7 @@ import {
   canonicalEntities,
   entityIdentityClaims,
   entitySourceMappings,
-  knowledgeGraphEntities,
+  kgEntities,
   memoryClaims,
   wikiPageAliases,
   wikiPages,
@@ -188,8 +188,8 @@ export async function computeMergeImpact(
   const graphEntityCount = await countOf(
     db
       .select({ count: sql<number>`count(*)::int` })
-      .from(knowledgeGraphEntities)
-      .where(eq(knowledgeGraphEntities.canonical_entity_id, args.loserId)),
+      .from(kgEntities)
+      .where(eq(kgEntities.canonical_entity_id, args.loserId)),
   );
   const loserPage = await findTenantEntityPage(db, args.tenantId, args.loserId);
   const survivorPage = await findTenantEntityPage(
@@ -254,9 +254,9 @@ export async function mergeCanonicalEntities(
       .where(eq(memoryClaims.canonical_subject_id, args.loserId));
 
     await tx
-      .update(knowledgeGraphEntities)
+      .update(kgEntities)
       .set({ canonical_entity_id: args.survivorId, updated_at: now })
-      .where(eq(knowledgeGraphEntities.canonical_entity_id, args.loserId));
+      .where(eq(kgEntities.canonical_entity_id, args.loserId));
 
     // Wiki convergence: archive the loser's tenant Entity page; its slug and
     // title live on as survivor aliases so links keep resolving. The loser

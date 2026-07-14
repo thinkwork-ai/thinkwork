@@ -47,7 +47,7 @@ export async function knowledgeGraphIngestRuns(
     : sql``;
   const result = await ctx.db.execute(sql`
     SELECT *
-      FROM knowledge_graph_ingest_runs
+      FROM kg.ingest_runs
      WHERE tenant_id = ${scope.tenantId}
        ${threadFilter}
        ${sourceKindFilter}
@@ -115,7 +115,10 @@ async function loadArtifactManifestsByRunId(
   const rows =
     (result as unknown as { rows?: KnowledgeGraphArtifactManifestRow[] })
       .rows ?? [];
-  const manifestsByRunId = new Map<string, KnowledgeGraphArtifactManifestRow[]>();
+  const manifestsByRunId = new Map<
+    string,
+    KnowledgeGraphArtifactManifestRow[]
+  >();
   for (const row of rows) {
     if (!row.ingest_run_id) continue;
     const bucket = manifestsByRunId.get(row.ingest_run_id) ?? [];

@@ -25,7 +25,7 @@ export async function knowledgeGraphEntity(
   );
   const entityResult = await ctx.db.execute(sql`
     SELECT *
-      FROM knowledge_graph_entities
+      FROM kg.entities
      WHERE tenant_id = ${scope.tenantId}
        AND id = ${args.entityId}
      LIMIT 1
@@ -43,7 +43,7 @@ export async function knowledgeGraphEntity(
 
   const relationshipsResult = await ctx.db.execute(sql`
     SELECT *
-      FROM knowledge_graph_relationships
+      FROM kg.relationships
      WHERE tenant_id = ${scope.tenantId}
        AND source_kind = ${entity.source_kind}
        AND source_ref = ${entity.source_ref}
@@ -64,7 +64,7 @@ export async function knowledgeGraphEntity(
 
   const evidenceResult = await ctx.db.execute(sql`
     SELECT *
-      FROM knowledge_graph_evidence
+      FROM kg.evidence
      WHERE tenant_id = ${scope.tenantId}
        AND source_kind = ${entity.source_kind}
        AND source_ref = ${entity.source_ref}

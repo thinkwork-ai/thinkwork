@@ -56,15 +56,15 @@ describe("getKnowledgeGraphEntityDetail", () => {
   it("returns the entity with its edges and observation refs, never snippets", async () => {
     const { db, execute } = routeDb([
       {
-        match: "FROM knowledge_graph_entities",
+        match: "FROM kg.entities",
         rows: [[entityRow(ENTITY, "Acme Corp")]],
       },
       {
-        match: "FROM knowledge_graph_relationships",
+        match: "FROM kg.relationships",
         rows: [[edgeRow("r1", ENTITY, "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee")]],
       },
       {
-        match: "knowledge_graph_evidence",
+        match: "kg.evidence",
         rows: [[{ entity_id: ENTITY, evidence_source_ref: "obs-1" }]],
       },
     ]);
@@ -109,7 +109,7 @@ describe("getKnowledgeGraphNeighbors", () => {
         rows: [[edgeRow("r1", ENTITY, neighborId)]],
       },
       {
-        match: "FROM knowledge_graph_entities",
+        match: "FROM kg.entities",
         rows: [
           [entityRow(ENTITY, "Acme Corp"), entityRow(neighborId, "Phoenix")],
         ],
@@ -141,7 +141,11 @@ describe("getKnowledgeGraphNeighbors", () => {
 
   it("caps returned edges in JS even if SQL over-returns (defense in depth)", async () => {
     const edges = Array.from({ length: MAX_NEIGHBOR_EDGES + 10 }, (_, i) =>
-      edgeRow(`r${i}`, ENTITY, `cccccccc-bbbb-4ccc-8ddd-${String(i).padStart(12, "0")}`),
+      edgeRow(
+        `r${i}`,
+        ENTITY,
+        `cccccccc-bbbb-4ccc-8ddd-${String(i).padStart(12, "0")}`,
+      ),
     );
     const { db } = routeDb([
       { match: "WITH RECURSIVE", rows: [edges] as never },

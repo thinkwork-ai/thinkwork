@@ -545,31 +545,6 @@ BEGIN
   ELSE
     missing := missing || 'knowledge_bases'::text;
   END IF;
-  IF to_regclass('public.knowledge_graph_entities') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_graph_entities TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_graph_entities'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_evidence') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_graph_evidence TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_graph_evidence'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_ingest_runs') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_graph_ingest_runs TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_graph_ingest_runs'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_observation_cursors') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_graph_observation_cursors TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_graph_observation_cursors'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_relationships') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_graph_relationships TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_graph_relationships'::text;
-  END IF;
   IF to_regclass('public.linked_task_events') IS NOT NULL THEN
     GRANT SELECT ON public.linked_task_events TO analyst_reader;
   ELSE

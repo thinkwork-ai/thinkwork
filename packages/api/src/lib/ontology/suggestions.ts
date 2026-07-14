@@ -2,7 +2,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
-  knowledgeGraphIngestRuns,
+  kgIngestRuns,
   ontologyChangeSetItems,
   ontologyChangeSets,
   ontologyEvidenceExamples,
@@ -68,7 +68,10 @@ export interface OntologySuggestionFeature {
 
 export interface OntologySuggestionItemProposal {
   itemType:
-    "entity_type" | "relationship_type" | "facet_template" | "external_mapping";
+    | "entity_type"
+    | "relationship_type"
+    | "facet_template"
+    | "external_mapping";
   action: "create" | "update" | "deprecate" | "reject";
   targetKind: string;
   targetSlug: string;
@@ -414,23 +417,21 @@ export async function collectOntologySuggestionSources(args: {
   // should anchor on.
   const observationRunRows = await db
     .select({
-      id: knowledgeGraphIngestRuns.id,
-      status: knowledgeGraphIngestRuns.status,
-      metrics: knowledgeGraphIngestRuns.metrics,
-      finishedAt: knowledgeGraphIngestRuns.finished_at,
-      createdAt: knowledgeGraphIngestRuns.created_at,
+      id: kgIngestRuns.id,
+      status: kgIngestRuns.status,
+      metrics: kgIngestRuns.metrics,
+      finishedAt: kgIngestRuns.finished_at,
+      createdAt: kgIngestRuns.created_at,
     })
-    .from(knowledgeGraphIngestRuns)
+    .from(kgIngestRuns)
     .where(
       and(
-        eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId),
-        eq(knowledgeGraphIngestRuns.source_kind, "observations"),
-        inArray(knowledgeGraphIngestRuns.status, [
-          ...TERMINAL_OBSERVATION_RUN_STATUSES,
-        ]),
+        eq(kgIngestRuns.tenant_id, args.tenantId),
+        eq(kgIngestRuns.source_kind, "observations"),
+        inArray(kgIngestRuns.status, [...TERMINAL_OBSERVATION_RUN_STATUSES]),
       ),
     )
-    .orderBy(desc(knowledgeGraphIngestRuns.created_at))
+    .orderBy(desc(kgIngestRuns.created_at))
     .limit(OBSERVATION_RUN_SCAN_LIMIT);
 
   let observationRunEvidenceCount = 0;

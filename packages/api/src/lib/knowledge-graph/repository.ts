@@ -1,9 +1,9 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import {
-  knowledgeGraphEntities,
-  knowledgeGraphEvidence,
-  knowledgeGraphIngestRuns,
-  knowledgeGraphRelationships,
+  kgEntities,
+  kgEvidence,
+  kgIngestRuns,
+  kgRelationships,
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../db.js";
 import type { KnowledgeGraphIngestRunRow } from "../../graphql/resolvers/knowledge-graph/mappers.js";
@@ -21,21 +21,21 @@ export async function loadKnowledgeGraphIngestRun(args: {
   sourceRef?: string | null;
 }): Promise<KnowledgeGraphIngestRunRow | null> {
   const predicates = [
-    eq(knowledgeGraphIngestRuns.id, args.runId),
-    eq(knowledgeGraphIngestRuns.tenant_id, args.tenantId),
+    eq(kgIngestRuns.id, args.runId),
+    eq(kgIngestRuns.tenant_id, args.tenantId),
   ];
   if (args.threadId) {
-    predicates.push(eq(knowledgeGraphIngestRuns.thread_id, args.threadId));
+    predicates.push(eq(kgIngestRuns.thread_id, args.threadId));
   }
   if (args.sourceKind) {
-    predicates.push(eq(knowledgeGraphIngestRuns.source_kind, args.sourceKind));
+    predicates.push(eq(kgIngestRuns.source_kind, args.sourceKind));
   }
   if (args.sourceRef) {
-    predicates.push(eq(knowledgeGraphIngestRuns.source_ref, args.sourceRef));
+    predicates.push(eq(kgIngestRuns.source_ref, args.sourceRef));
   }
   const [row] = await args.db
     .select()
-    .from(knowledgeGraphIngestRuns)
+    .from(kgIngestRuns)
     .where(and(...predicates))
     .limit(1);
   return (row as KnowledgeGraphIngestRunRow | undefined) ?? null;
@@ -46,7 +46,7 @@ export async function markKnowledgeGraphRunRunning(args: {
   runId: string;
 }): Promise<void> {
   await args.db
-    .update(knowledgeGraphIngestRuns)
+    .update(kgIngestRuns)
     .set({
       status: "running",
       started_at: new Date(),
@@ -55,8 +55,8 @@ export async function markKnowledgeGraphRunRunning(args: {
     })
     .where(
       and(
-        eq(knowledgeGraphIngestRuns.id, args.runId),
-        sql`${knowledgeGraphIngestRuns.status} IN ('queued','running')`,
+        eq(kgIngestRuns.id, args.runId),
+        sql`${kgIngestRuns.status} IN ('queued','running')`,
       ),
     );
 }
@@ -70,7 +70,7 @@ export async function markKnowledgeGraphRunStaleNoop(args: {
 }): Promise<void> {
   const finishedAt = new Date();
   await args.db
-    .update(knowledgeGraphIngestRuns)
+    .update(kgIngestRuns)
     .set({
       status: "stale_noop",
       finished_at: finishedAt,
@@ -78,7 +78,7 @@ export async function markKnowledgeGraphRunStaleNoop(args: {
       metrics: args.metrics ?? {},
       updated_at: finishedAt,
     })
-    .where(eq(knowledgeGraphIngestRuns.id, args.runId));
+    .where(eq(kgIngestRuns.id, args.runId));
 }
 
 export async function countKnowledgeGraphEntitiesForSource(args: {
@@ -89,12 +89,12 @@ export async function countKnowledgeGraphEntitiesForSource(args: {
 }): Promise<number> {
   const [row] = await args.db
     .select({ count: sql<number>`COUNT(*)::int` })
-    .from(knowledgeGraphEntities)
+    .from(kgEntities)
     .where(
       and(
-        eq(knowledgeGraphEntities.tenant_id, args.tenantId),
-        eq(knowledgeGraphEntities.source_kind, args.sourceKind),
-        eq(knowledgeGraphEntities.source_ref, args.sourceRef),
+        eq(kgEntities.tenant_id, args.tenantId),
+        eq(kgEntities.source_kind, args.sourceKind),
+        eq(kgEntities.source_ref, args.sourceRef),
       ),
     );
   return Number(row?.count ?? 0);
@@ -109,7 +109,7 @@ export async function markKnowledgeGraphRunFailed(args: {
 }): Promise<void> {
   const finishedAt = new Date();
   await args.db
-    .update(knowledgeGraphIngestRuns)
+    .update(kgIngestRuns)
     .set({
       status: "failed",
       finished_at: finishedAt,
@@ -118,7 +118,7 @@ export async function markKnowledgeGraphRunFailed(args: {
       metrics: args.metrics ?? {},
       updated_at: finishedAt,
     })
-    .where(eq(knowledgeGraphIngestRuns.id, args.runId));
+    .where(eq(kgIngestRuns.id, args.runId));
 }
 
 /** Drizzle transaction handle as passed to `db.transaction` callbacks. */
@@ -147,36 +147,36 @@ export async function replaceKnowledgeGraphSnapshot(args: {
   const finishedAt = new Date();
   await args.db.transaction(async (tx) => {
     await tx
-      .delete(knowledgeGraphEvidence)
+      .delete(kgEvidence)
       .where(
         and(
-          eq(knowledgeGraphEvidence.tenant_id, args.run.tenant_id),
-          eq(knowledgeGraphEvidence.source_kind, args.run.source_kind),
-          eq(knowledgeGraphEvidence.source_ref, args.run.source_ref),
+          eq(kgEvidence.tenant_id, args.run.tenant_id),
+          eq(kgEvidence.source_kind, args.run.source_kind),
+          eq(kgEvidence.source_ref, args.run.source_ref),
         ),
       );
     await tx
-      .delete(knowledgeGraphRelationships)
+      .delete(kgRelationships)
       .where(
         and(
-          eq(knowledgeGraphRelationships.tenant_id, args.run.tenant_id),
-          eq(knowledgeGraphRelationships.source_kind, args.run.source_kind),
-          eq(knowledgeGraphRelationships.source_ref, args.run.source_ref),
+          eq(kgRelationships.tenant_id, args.run.tenant_id),
+          eq(kgRelationships.source_kind, args.run.source_kind),
+          eq(kgRelationships.source_ref, args.run.source_ref),
         ),
       );
     await tx
-      .delete(knowledgeGraphEntities)
+      .delete(kgEntities)
       .where(
         and(
-          eq(knowledgeGraphEntities.tenant_id, args.run.tenant_id),
-          eq(knowledgeGraphEntities.source_kind, args.run.source_kind),
-          eq(knowledgeGraphEntities.source_ref, args.run.source_ref),
+          eq(kgEntities.tenant_id, args.run.tenant_id),
+          eq(kgEntities.source_kind, args.run.source_kind),
+          eq(kgEntities.source_ref, args.run.source_ref),
         ),
       );
 
     const insertedEntities = args.snapshot.entities.length
       ? await tx
-          .insert(knowledgeGraphEntities)
+          .insert(kgEntities)
           .values(
             args.snapshot.entities.map((entity) => ({
               tenant_id: args.run.tenant_id,
@@ -220,7 +220,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
 
     const insertedRelationships = args.snapshot.relationships.length
       ? await tx
-          .insert(knowledgeGraphRelationships)
+          .insert(kgRelationships)
           .values(
             args.snapshot.relationships.map((relationship) => ({
               tenant_id: args.run.tenant_id,
@@ -274,7 +274,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
       )
       .filter((row) => row.entity_id || row.relationship_id);
     if (evidenceRows.length) {
-      await tx.insert(knowledgeGraphEvidence).values(evidenceRows);
+      await tx.insert(kgEvidence).values(evidenceRows);
     }
 
     const diagnosticCount =
@@ -290,7 +290,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
       ).length;
 
     await tx
-      .update(knowledgeGraphIngestRuns)
+      .update(kgIngestRuns)
       .set({
         status: "succeeded",
         source_dataset_id: args.sourceDatasetId,
@@ -316,7 +316,7 @@ export async function replaceKnowledgeGraphSnapshot(args: {
           : {}),
         updated_at: finishedAt,
       })
-      .where(eq(knowledgeGraphIngestRuns.id, args.run.id));
+      .where(eq(kgIngestRuns.id, args.run.id));
 
     if (args.extraWork) {
       await args.extraWork(tx);
@@ -374,11 +374,7 @@ export async function purgeKnowledgeGraphSource(args: {
   sourceRef: string;
 }): Promise<void> {
   await args.db.transaction(async (tx) => {
-    for (const table of [
-      knowledgeGraphEvidence,
-      knowledgeGraphRelationships,
-      knowledgeGraphEntities,
-    ]) {
+    for (const table of [kgEvidence, kgRelationships, kgEntities]) {
       await tx
         .delete(table)
         .where(
@@ -456,17 +452,17 @@ export async function mergeKnowledgeGraphSnapshot(args: {
     // label+type exactly as before.
     const existingEntities = await tx
       .select({
-        id: knowledgeGraphEntities.id,
-        normalized_label: knowledgeGraphEntities.normalized_label,
-        ontology_type_slug: knowledgeGraphEntities.ontology_type_slug,
-        canonical_entity_id: knowledgeGraphEntities.canonical_entity_id,
+        id: kgEntities.id,
+        normalized_label: kgEntities.normalized_label,
+        ontology_type_slug: kgEntities.ontology_type_slug,
+        canonical_entity_id: kgEntities.canonical_entity_id,
       })
-      .from(knowledgeGraphEntities)
+      .from(kgEntities)
       .where(
         and(
-          eq(knowledgeGraphEntities.tenant_id, run.tenant_id),
-          eq(knowledgeGraphEntities.source_kind, run.source_kind),
-          eq(knowledgeGraphEntities.source_ref, run.source_ref),
+          eq(kgEntities.tenant_id, run.tenant_id),
+          eq(kgEntities.source_kind, run.source_kind),
+          eq(kgEntities.source_ref, run.source_ref),
         ),
       );
     const entityIdByCanonical = new Map<string, string>();
@@ -517,9 +513,9 @@ export async function mergeKnowledgeGraphSnapshot(args: {
           legacyEntityIdByKey.get(key);
       if (existingId) {
         await tx
-          .update(knowledgeGraphEntities)
+          .update(kgEntities)
           .set({ ...values, updated_at: finishedAt })
-          .where(eq(knowledgeGraphEntities.id, existingId));
+          .where(eq(kgEntities.id, existingId));
         entityIdByTempId.set(entity.tempId, existingId);
         touchedEntityIds.add(existingId);
         if (entity.canonicalEntityId) {
@@ -528,9 +524,9 @@ export async function mergeKnowledgeGraphSnapshot(args: {
         }
       } else {
         const [inserted] = await tx
-          .insert(knowledgeGraphEntities)
+          .insert(kgEntities)
           .values(values)
-          .returning({ id: knowledgeGraphEntities.id });
+          .returning({ id: kgEntities.id });
         const newId = inserted!.id;
         // Intra-run duplicates fold together via the canonical/legacy maps.
         if (entity.canonicalEntityId) {
@@ -546,18 +542,18 @@ export async function mergeKnowledgeGraphSnapshot(args: {
     // -- Relationships: same merge, keyed on resolved endpoints + type -----
     const existingRelationships = await tx
       .select({
-        id: knowledgeGraphRelationships.id,
-        source_entity_id: knowledgeGraphRelationships.source_entity_id,
-        target_entity_id: knowledgeGraphRelationships.target_entity_id,
-        ontology_type_slug: knowledgeGraphRelationships.ontology_type_slug,
-        label: knowledgeGraphRelationships.label,
+        id: kgRelationships.id,
+        source_entity_id: kgRelationships.source_entity_id,
+        target_entity_id: kgRelationships.target_entity_id,
+        ontology_type_slug: kgRelationships.ontology_type_slug,
+        label: kgRelationships.label,
       })
-      .from(knowledgeGraphRelationships)
+      .from(kgRelationships)
       .where(
         and(
-          eq(knowledgeGraphRelationships.tenant_id, run.tenant_id),
-          eq(knowledgeGraphRelationships.source_kind, run.source_kind),
-          eq(knowledgeGraphRelationships.source_ref, run.source_ref),
+          eq(kgRelationships.tenant_id, run.tenant_id),
+          eq(kgRelationships.source_kind, run.source_kind),
+          eq(kgRelationships.source_ref, run.source_ref),
         ),
       );
     const relationshipIdByKey = new Map<string, string>();
@@ -608,16 +604,16 @@ export async function mergeKnowledgeGraphSnapshot(args: {
       const existingId = relationshipIdByKey.get(key);
       if (existingId) {
         await tx
-          .update(knowledgeGraphRelationships)
+          .update(kgRelationships)
           .set({ ...values, updated_at: finishedAt })
-          .where(eq(knowledgeGraphRelationships.id, existingId));
+          .where(eq(kgRelationships.id, existingId));
         relationshipIdByTempId.set(relationship.tempId, existingId);
         touchedRelationshipIds.add(existingId);
       } else {
         const [inserted] = await tx
-          .insert(knowledgeGraphRelationships)
+          .insert(kgRelationships)
           .values(values)
-          .returning({ id: knowledgeGraphRelationships.id });
+          .returning({ id: kgRelationships.id });
         const newId = inserted!.id;
         relationshipIdByKey.set(key, newId);
         relationshipIdByTempId.set(relationship.tempId, newId);
@@ -631,25 +627,22 @@ export async function mergeKnowledgeGraphSnapshot(args: {
     const evidenceScopePredicates = [];
     if (touchedEntityIdList.length > 0) {
       evidenceScopePredicates.push(
-        inArray(knowledgeGraphEvidence.entity_id, touchedEntityIdList),
+        inArray(kgEvidence.entity_id, touchedEntityIdList),
       );
     }
     if (touchedRelationshipIdList.length > 0) {
       evidenceScopePredicates.push(
-        inArray(
-          knowledgeGraphEvidence.relationship_id,
-          touchedRelationshipIdList,
-        ),
+        inArray(kgEvidence.relationship_id, touchedRelationshipIdList),
       );
     }
     if (evidenceScopePredicates.length > 0) {
       await tx
-        .delete(knowledgeGraphEvidence)
+        .delete(kgEvidence)
         .where(
           and(
-            eq(knowledgeGraphEvidence.tenant_id, run.tenant_id),
-            eq(knowledgeGraphEvidence.source_kind, run.source_kind),
-            eq(knowledgeGraphEvidence.source_ref, run.source_ref),
+            eq(kgEvidence.tenant_id, run.tenant_id),
+            eq(kgEvidence.source_kind, run.source_kind),
+            eq(kgEvidence.source_ref, run.source_ref),
             or(...evidenceScopePredicates),
           ),
         );
@@ -665,19 +658,19 @@ export async function mergeKnowledgeGraphSnapshot(args: {
       )
       .filter((row) => row.entity_id || row.relationship_id);
     if (evidenceRows.length) {
-      await tx.insert(knowledgeGraphEvidence).values(evidenceRows);
+      await tx.insert(kgEvidence).values(evidenceRows);
     }
 
     // -- Recompute denormalized counts over the source scope ---------------
     // (display/ranking hints — the promotion gate counts live from rows).
     await tx.execute(sql`
-      UPDATE knowledge_graph_entities e SET
+      UPDATE kg.entities e SET
         relationship_count = (
-          SELECT count(*) FROM knowledge_graph_relationships r
+          SELECT count(*) FROM kg.relationships r
           WHERE r.source_entity_id = e.id OR r.target_entity_id = e.id
         ),
         evidence_count = (
-          SELECT count(*) FROM knowledge_graph_evidence ev
+          SELECT count(*) FROM kg.evidence ev
           WHERE ev.entity_id = e.id
         ),
         updated_at = ${finishedAt}
@@ -700,7 +693,7 @@ export async function mergeKnowledgeGraphSnapshot(args: {
       ).length;
 
     await tx
-      .update(knowledgeGraphIngestRuns)
+      .update(kgIngestRuns)
       .set({
         status: "succeeded",
         source_dataset_id: null,
@@ -729,7 +722,7 @@ export async function mergeKnowledgeGraphSnapshot(args: {
           : {}),
         updated_at: finishedAt,
       })
-      .where(eq(knowledgeGraphIngestRuns.id, run.id));
+      .where(eq(kgIngestRuns.id, run.id));
 
     if (args.extraWork) {
       await args.extraWork(tx);

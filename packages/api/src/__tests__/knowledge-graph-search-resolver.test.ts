@@ -86,9 +86,9 @@ describe("knowledgeGraphSearch — turn-bound service auth (R15)", () => {
       headers: { "x-thread-turn-id": TURN_ID },
       routes: [
         { match: "FROM thread_turns", rows: [{ tenant_id: TENANT_A }] },
-        { match: "FROM knowledge_graph_entities", rows: entityRows },
-        { match: "FROM knowledge_graph_relationships", rows: [] },
-        { match: "FROM knowledge_graph_evidence", rows: [] },
+        { match: "FROM kg.entities", rows: entityRows },
+        { match: "FROM kg.relationships", rows: [] },
+        { match: "FROM kg.evidence", rows: [] },
       ],
     });
 
@@ -157,7 +157,7 @@ describe("knowledgeGraphSearch — turn-bound service auth (R15)", () => {
       headers: { "x-thread-id": THREAD_ID },
       routes: [
         { match: "FROM threads", rows: [{ tenant_id: TENANT_A }] },
-        { match: "FROM knowledge_graph_entities", rows: [] },
+        { match: "FROM kg.entities", rows: [] },
       ],
     });
 
@@ -170,7 +170,7 @@ describe("knowledgeGraphSearch — turn-bound service auth (R15)", () => {
       headers: { "x-thread-turn-id": TURN_ID },
       routes: [
         { match: "FROM thread_turns", rows: [{ tenant_id: TENANT_A }] },
-        { match: "FROM knowledge_graph_entities", rows: [] },
+        { match: "FROM kg.entities", rows: [] },
       ],
     });
     await knowledgeGraphSearch(null, { query: "Acme" }, ctx);
@@ -191,9 +191,7 @@ describe("knowledgeGraphSearch — cognito/apikey callers", () => {
       callerUserId: "user-1",
       requiresUserThreadVisibility: true,
     });
-    const { execute } = routeDb([
-      { match: "FROM knowledge_graph_entities", rows: [] },
-    ]);
+    const { execute } = routeDb([{ match: "FROM kg.entities", rows: [] }]);
     const ctx = {
       auth: { authType: "cognito", tenantId: TENANT_A },
       db: { execute },

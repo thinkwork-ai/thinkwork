@@ -731,51 +731,6 @@ BEGIN
   ELSE
     missing := missing || 'knowledge_bases'::text;
   END IF;
-  IF to_regclass('public.knowledge_graph_entities') IS NOT NULL THEN
-    ALTER TABLE public.knowledge_graph_entities ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.knowledge_graph_entities;
-    CREATE POLICY analyst_tenant_isolation ON public.knowledge_graph_entities
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'knowledge_graph_entities'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_evidence') IS NOT NULL THEN
-    ALTER TABLE public.knowledge_graph_evidence ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.knowledge_graph_evidence;
-    CREATE POLICY analyst_tenant_isolation ON public.knowledge_graph_evidence
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'knowledge_graph_evidence'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_ingest_runs') IS NOT NULL THEN
-    ALTER TABLE public.knowledge_graph_ingest_runs ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.knowledge_graph_ingest_runs;
-    CREATE POLICY analyst_tenant_isolation ON public.knowledge_graph_ingest_runs
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'knowledge_graph_ingest_runs'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_observation_cursors') IS NOT NULL THEN
-    ALTER TABLE public.knowledge_graph_observation_cursors ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.knowledge_graph_observation_cursors;
-    CREATE POLICY analyst_tenant_isolation ON public.knowledge_graph_observation_cursors
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'knowledge_graph_observation_cursors'::text;
-  END IF;
-  IF to_regclass('public.knowledge_graph_relationships') IS NOT NULL THEN
-    ALTER TABLE public.knowledge_graph_relationships ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.knowledge_graph_relationships;
-    CREATE POLICY analyst_tenant_isolation ON public.knowledge_graph_relationships
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'knowledge_graph_relationships'::text;
-  END IF;
   IF to_regclass('public.linked_task_events') IS NOT NULL THEN
     ALTER TABLE public.linked_task_events ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.linked_task_events;

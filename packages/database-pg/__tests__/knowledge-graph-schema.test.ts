@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getTableColumns, getTableName } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,10 +12,10 @@ import {
   KNOWLEDGE_GRAPH_INGEST_STATUSES,
   KNOWLEDGE_GRAPH_PROVENANCE_STATUSES,
   KNOWLEDGE_GRAPH_SOURCE_KINDS,
-  knowledgeGraphEntities,
-  knowledgeGraphEvidence,
-  knowledgeGraphIngestRuns,
-  knowledgeGraphRelationships,
+  kgEntities,
+  kgEvidence,
+  kgIngestRuns,
+  kgRelationships,
 } from "../src/schema/knowledge-graph";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -29,11 +30,10 @@ const migration0146 = readFileSync(
 
 describe("Knowledge Graph schema", () => {
   it("defines tenant-scoped ingest runs with the manual run ledger fields", () => {
-    expect(getTableName(knowledgeGraphIngestRuns)).toBe(
-      "knowledge_graph_ingest_runs",
-    );
+    expect(getTableName(kgIngestRuns)).toBe("ingest_runs");
+    expect(getTableConfig(kgIngestRuns).schema).toBe("kg");
 
-    const columns = getTableColumns(knowledgeGraphIngestRuns);
+    const columns = getTableColumns(kgIngestRuns);
     expect(columns.tenant_id.notNull).toBe(true);
     expect(columns.thread_id.notNull).toBe(false);
     expect(columns.source_kind.notNull).toBe(true);
@@ -61,17 +61,14 @@ describe("Knowledge Graph schema", () => {
   });
 
   it("separates normalized entities, relationships, and evidence", () => {
-    expect(getTableName(knowledgeGraphEntities)).toBe(
-      "knowledge_graph_entities",
-    );
-    expect(getTableName(knowledgeGraphRelationships)).toBe(
-      "knowledge_graph_relationships",
-    );
-    expect(getTableName(knowledgeGraphEvidence)).toBe(
-      "knowledge_graph_evidence",
-    );
+    expect(getTableName(kgEntities)).toBe("entities");
+    expect(getTableName(kgRelationships)).toBe("relationships");
+    expect(getTableName(kgEvidence)).toBe("evidence");
+    expect(getTableConfig(kgEntities).schema).toBe("kg");
+    expect(getTableConfig(kgRelationships).schema).toBe("kg");
+    expect(getTableConfig(kgEvidence).schema).toBe("kg");
 
-    const entityColumns = getTableColumns(knowledgeGraphEntities);
+    const entityColumns = getTableColumns(kgEntities);
     expect(entityColumns.ingest_run_id.notNull).toBe(true);
     expect(entityColumns.thread_id.notNull).toBe(false);
     expect(entityColumns.source_kind.default).toBe("thread");
@@ -82,7 +79,7 @@ describe("Knowledge Graph schema", () => {
     expect(entityColumns.grounding_status.default).toBe("unknown");
     expect(entityColumns.provenance_status.default).toBe("missing");
 
-    const relationshipColumns = getTableColumns(knowledgeGraphRelationships);
+    const relationshipColumns = getTableColumns(kgRelationships);
     expect(relationshipColumns.thread_id.notNull).toBe(false);
     expect(relationshipColumns.source_kind.default).toBe("thread");
     expect(relationshipColumns.source_ref.notNull).toBe(true);
@@ -90,7 +87,7 @@ describe("Knowledge Graph schema", () => {
     expect(relationshipColumns.target_entity_id.notNull).toBe(true);
     expect(relationshipColumns.confidence.notNull).toBe(false);
 
-    const evidenceColumns = getTableColumns(knowledgeGraphEvidence);
+    const evidenceColumns = getTableColumns(kgEvidence);
     expect(evidenceColumns.thread_id.notNull).toBe(false);
     expect(evidenceColumns.source_kind.default).toBe("thread");
     expect(evidenceColumns.source_ref.notNull).toBe(true);

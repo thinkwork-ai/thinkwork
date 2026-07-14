@@ -44,7 +44,7 @@ import {
   managedApplicationDeploymentJobs,
   managedApplications,
 } from "./deployments";
-import { knowledgeGraphIngestRuns } from "./knowledge-graph";
+import { kgIngestRuns } from "./knowledge-graph";
 
 // ---------------------------------------------------------------------------
 // Schema handle
@@ -511,7 +511,7 @@ export const brainArtifactManifests = brain.table(
     foreignKey({
       name: "artifact_manifests_ingest_run_id_fk",
       columns: [table.ingest_run_id],
-      foreignColumns: [knowledgeGraphIngestRuns.id],
+      foreignColumns: [kgIngestRuns.id],
     }).onDelete("set null"),
     uniqueIndex("brain_artifact_manifests_manifest_uri_uidx").on(
       table.manifest_uri,

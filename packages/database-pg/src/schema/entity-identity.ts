@@ -80,7 +80,7 @@ export const ENTITY_RESOLUTION_DECISIONS = [
 export type EntityResolutionDecision =
   (typeof ENTITY_RESOLUTION_DECISIONS)[number];
 
-/** Resolution state stamped on knowledge_graph_entities rows (U4). */
+/** Resolution state stamped on kg.entities rows (U4). */
 export const KNOWLEDGE_GRAPH_RESOLUTION_STATES = [
   "resolved",
   "deferred",

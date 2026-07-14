@@ -115,7 +115,7 @@ export async function searchKnowledgeGraph(args: {
   const entityResult = await args.db.execute(sql`
     SELECT id, source_kind, label, ontology_type_slug, summary, aliases,
            relationship_count, evidence_count
-      FROM knowledge_graph_entities
+      FROM kg.entities
      WHERE tenant_id = ${args.tenantId}
        AND source_kind = ${AGENT_SOURCE_KIND}
        AND grounding_status = 'grounded'
@@ -150,9 +150,9 @@ export async function searchKnowledgeGraph(args: {
   const relationshipResult = await args.db.execute(sql`
     SELECT r.id, r.source_kind, r.label, r.ontology_type_slug,
            se.label AS from_label, te.label AS to_label
-      FROM knowledge_graph_relationships r
-      JOIN knowledge_graph_entities se ON se.id = r.source_entity_id
-      JOIN knowledge_graph_entities te ON te.id = r.target_entity_id
+      FROM kg.relationships r
+      JOIN kg.entities se ON se.id = r.source_entity_id
+      JOIN kg.entities te ON te.id = r.target_entity_id
      WHERE r.tenant_id = ${args.tenantId}
        AND r.source_kind = ${AGENT_SOURCE_KIND}
        AND r.grounding_status = 'grounded'
@@ -171,7 +171,7 @@ export async function searchKnowledgeGraph(args: {
   // (and every other evidence-text column).
   const observationResult = await args.db.execute(sql`
     SELECT entity_id, evidence_source_ref
-      FROM knowledge_graph_evidence
+      FROM kg.evidence
      WHERE tenant_id = ${args.tenantId}
        AND source_kind = ${AGENT_SOURCE_KIND}
        AND evidence_source_kind = 'hindsight_observation'

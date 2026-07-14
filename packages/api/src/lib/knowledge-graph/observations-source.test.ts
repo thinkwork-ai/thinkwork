@@ -142,7 +142,7 @@ describe("collectTenantObservationCandidates", () => {
 describe("loadObservationsKnowledgeGraphSource", () => {
   it("builds a bundle from promoted observations with audit diagnostics", async () => {
     const { db } = routeDb([
-      { match: "knowledge_graph_observation_cursors", rows: [[]] },
+      { match: "kg.observation_cursors", rows: [[]] },
       { match: "FROM users", rows: [[{ id: USER_A }]] },
       {
         match: "memory_units",
@@ -185,7 +185,7 @@ describe("loadObservationsKnowledgeGraphSource", () => {
 
   it("produces an empty bundle when no new observations exist", async () => {
     const { db } = routeDb([
-      { match: "knowledge_graph_observation_cursors", rows: [[]] },
+      { match: "kg.observation_cursors", rows: [[]] },
       { match: "FROM users", rows: [[{ id: USER_A }]] },
       { match: "memory_units", rows: [[]] },
     ]);

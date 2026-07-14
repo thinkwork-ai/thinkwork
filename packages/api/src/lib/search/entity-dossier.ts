@@ -26,11 +26,7 @@
  */
 
 import { and, eq, inArray, sql } from "drizzle-orm";
-import {
-  artifacts,
-  knowledgeGraphEntities,
-  threads,
-} from "@thinkwork/database-pg/schema";
+import { artifacts, kgEntities, threads } from "@thinkwork/database-pg/schema";
 
 import type { Database } from "../db.js";
 import { getMemoryServices } from "../memory/index.js";
@@ -284,7 +280,7 @@ async function fetchGroundedEntityById(
   const result = await db.execute(sql`
     SELECT id, label, ontology_type_slug, summary, aliases,
            relationship_count, evidence_count
-      FROM ${knowledgeGraphEntities}
+      FROM ${kgEntities}
      WHERE id = ${entityId}
        AND tenant_id = ${tenantId}
        AND grounding_status = 'grounded'
@@ -321,7 +317,7 @@ async function fetchCanonicalIdentity(
 } | null> {
   const result = await db.execute(sql`
     SELECT canonical_entity_id, resolution_state
-      FROM ${knowledgeGraphEntities}
+      FROM ${kgEntities}
      WHERE id = ${entityId}
        AND tenant_id = ${tenantId}
      LIMIT 1
@@ -341,7 +337,7 @@ async function fetchMirrorEntityIds(
 ): Promise<string[]> {
   const result = await db.execute(sql`
     SELECT id
-      FROM ${knowledgeGraphEntities}
+      FROM ${kgEntities}
      WHERE tenant_id = ${tenantId}
        AND canonical_entity_id = ${canonicalEntityId}
   `);
@@ -362,7 +358,7 @@ async function fetchEvidenceThreadIds(
   // past the promotion gate and is admin-only (Explorer).
   const result = await db.execute(sql`
     SELECT DISTINCT thread_id
-      FROM knowledge_graph_evidence
+      FROM kg.evidence
      WHERE tenant_id = ${tenantId}
        AND entity_id IN (${idList})
        AND thread_id IS NOT NULL
