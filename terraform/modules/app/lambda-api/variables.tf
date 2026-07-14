@@ -834,6 +834,12 @@ variable "capability_broker_session_table" {
   default     = ""
 }
 
+variable "capability_broker_session_table_arn" {
+  description = "ARN of the broker session table — grants routine-exec-git DynamoDB access to mint/advance PoP sessions. Empty when the broker is disabled (no grant)."
+  type        = string
+  default     = ""
+}
+
 variable "capability_broker_audience" {
   description = "Capability broker PoP audience (CAPABILITY_BROKER_AUDIENCE). Empty when the broker is disabled."
   type        = string
