@@ -1232,6 +1232,8 @@ module "capability_broker" {
   db_cluster_arn      = module.database.db_cluster_arn
   db_secret_arn       = module.database.graphql_db_secret_arn
   db_cluster_endpoint = module.database.cluster_endpoint
+  db_password         = var.db_password
+  database_name       = var.database_name
 
   lambda_zips_dir        = var.lambda_zips_dir
   lambda_artifact_bucket = var.lambda_artifact_bucket

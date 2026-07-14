@@ -195,10 +195,13 @@ resource "aws_lambda_function" "broker" {
     variables = {
       CAPABILITY_BROKER_SESSION_TABLE = aws_dynamodb_table.sessions[0].name
       CAPABILITY_BROKER_AUDIENCE      = local.broker_audience
-      # getDb() (@thinkwork/database-pg) resolves the pg pool from
-      # DATABASE_SECRET_ARN + DATABASE_HOST — the DB_* names were never read.
-      # Both the evidence store AND the authorization loader query Aurora, so
-      # these are load-bearing now that the real loader is wired.
+      # getDb() (@thinkwork/database-pg) MUST get DATABASE_URL, not just
+      # DATABASE_SECRET_ARN: the secret-only path returns an async Proxy whose
+      # `db.select()` resolves to a Promise, which breaks Drizzle's fluent
+      # `.select().from().where()` chaining (`.from is not a function`) — the
+      # cause of the loader's `authorization reload failed`. DATABASE_URL takes
+      # the synchronous pool path, matching every api handler's common_env.
+      DATABASE_URL        = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
       DATABASE_SECRET_ARN = var.db_secret_arn
       DATABASE_HOST       = var.db_cluster_endpoint
     }

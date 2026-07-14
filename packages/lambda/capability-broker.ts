@@ -399,7 +399,15 @@ export function createBroker(deps: BrokerDeps) {
         operationRef: opRef,
         rawOperation: request.operation,
       });
-    } catch {
+    } catch (err) {
+      // A reload failure with no server-side signal is undebuggable — log the
+      // exception (never the request input, which may carry provider data) so
+      // an operator can tell a DB/network fault from a code fault.
+      console.error(
+        `[capability-broker] authorization reload threw for operation=${request.operation}: ${
+          err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+        }`,
+      );
       await recordRejection(row, "policy_blocked", {
         authorization: "reload_failed",
       });
