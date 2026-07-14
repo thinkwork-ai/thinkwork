@@ -1,0 +1,75 @@
+---
+title: Capability Broker Operations
+description: "Operator runbook: the staged rollout of the governed capability runtime, the alarms that watch it, and the fail-closed disable path that preserves evidence."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+This runbook covers operating the governed capability runtime once it is
+deployed: how the rollout is gated, what to watch, and how to disable it safely.
+
+## Rollout stages
+
+The runtime rolls out through explicit, ordered gates. Advance one stage at a
+time and only after the previous stage is proven for the stage:
+
+1. **Shadow descriptor projection** — admitted definitions project into the
+   Inspector; nothing dispatches.
+2. **Internal working search** — the agent's `capability_search` resolves
+   admitted operations to their exact identity.
+3. **Private broker dogfood** — invocation through the private broker, evidence
+   in `capability_broker_calls`.
+4. **Promotion / headless tracer** — the GitHub issue-health tracer exercises
+   the end-to-end path.
+5. **External search (last)** — the `/mcp/capabilities` facade.
+
+The stage gate is the Terraform variable **`enable_capability_broker`** (default
+`false`), which sets `CAPABILITY_EXTERNAL_SEARCH_ENABLED` /
+`ENABLE_CAPABILITY_BROKER` in the shared runtime-config document. While it is
+`false` every U8 surface is **inert** — the handler and route still deploy, but
+the external search returns an empty, no-data projection and the Inspector's
+governed-runtime operation layer is hidden.
+
+## Alarms
+
+`terraform/modules/app/lambda-api/capability-search-alarms.tf` defines, gated on
+`enable_capability_broker`:
+
+- **mcp-capability-search Lambda errors** — the external facade crashed. On
+  error it exposes no capability data (fail closed); investigate before
+  continuing the external-search rollout.
+- **mcp-oauth Lambda errors** — includes the confidential `client_credentials`
+  token leg. A bad secret is expected to return `401` (not a Lambda error), so a
+  spike here means credential/DB reachability, not auth failures.
+
+<Aside type="note">
+Replay / policy / readiness / adapter / provider failure **codes** live in the
+broker's structured logs and the `capability_broker_calls` evidence table.
+Log-metric-filter alarms over those codes need the `/aws/lambda/<function>` log
+groups (created only on first invocation) and are a coordinated follow-up —
+until then, query the evidence table.
+</Aside>
+
+## Disable path (fail closed, evidence preserved)
+
+To stop all new external access and dispatch during an incident:
+
+1. Set `enable_capability_broker = false` (or, per env, override
+   `CAPABILITY_EXTERNAL_SEARCH_ENABLED`).
+2. Apply.
+
+The handler and route stay deployed but return an empty projection, so **no new
+external access is granted**. Revocation of an external client or its service
+principal is independent and also fails closed at the read path immediately.
+
+All historical `capability_broker_calls` and compliance evidence remains
+**queryable** — disabling the runtime never deletes or hides evidence.
+
+## Verifying identity parity
+
+If you suspect a surface is reporting the wrong operation, the invariant to
+check is identity parity: the `twcap` reference and contract hash for an
+operation must match across the Inspector, internal search, broker evidence,
+Routine dependency, execution detail, Artifact lineage, and external search. The
+`assertOperationIdentityParity` helper encodes this; a mismatch is a projection
+bug, not an operator action.

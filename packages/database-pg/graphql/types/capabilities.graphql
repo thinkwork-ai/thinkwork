@@ -28,6 +28,33 @@ type CapabilityItem {
   detail: String
   # MCP servers only, probe mode: stored token status (active | expired | configured).
   tokenStatus: String
+  # ── Governed capability runtime operation layer (THINK-280 U8) ──
+  # Present only on `capability_operation` items. The twcap reference +
+  # contract hash are the EXACT compatibility identity shared with internal
+  # search, external search, broker/Routine/execution/Artifact evidence.
+  operationTwcap: String
+  contractHash: String
+  definitionVersionId: ID
+  # none | read | create | update | delete | execute
+  effect: String
+  principalModes: [String!]
+  approvalPolicy: String
+  inputDataClass: String
+  outputDataClass: String
+  costClass: String
+  latencyClass: String
+  outputClass: String
+  executable: Boolean
+  withheldReasons: [String!]
+  # pending_setup | verifying | ready | degraded | revoked
+  readiness: String
+  # Redacted operator remediation hint; never credential detail.
+  remediation: String
+  # Number of Routine proposals depending on this operation identity.
+  routineDependentCount: Int
+  # Latest broker call evidence for this contract hash.
+  latestBrokerCallStatus: String
+  latestBrokerCallAt: AWSDateTime
 }
 
 type EffectiveCapabilitySet {

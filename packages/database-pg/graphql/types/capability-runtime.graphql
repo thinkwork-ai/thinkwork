@@ -179,6 +179,33 @@ input CreateCredentialBindingInput {
   credentialRefs: AWSJSON!
 }
 
+# External confidential capability client (THINK-280 U8). Maps one-to-one to
+# an active service principal; permitted EXACTLY the capabilities resource +
+# capabilities:search scope. The plaintext secret is present ONLY on the
+# create/rotate response (revealed once) and null on every list read; the at-
+# rest slow hash never crosses this boundary.
+type ExternalCapabilityClient {
+  id: ID!
+  tenantId: ID!
+  clientId: String!
+  servicePrincipalId: ID!
+  allowedResource: String!
+  allowedScopes: [String!]!
+  # active | revoked
+  status: String!
+  createdAt: AWSDateTime!
+  rotatedAt: AWSDateTime
+  revokedAt: AWSDateTime
+  # Revealed exactly once (create/rotate); null on every subsequent read.
+  clientSecret: String
+}
+
+input CreateExternalCapabilityClientInput {
+  tenantId: ID!
+  # The active service principal this client acts as (one-to-one).
+  servicePrincipalId: ID!
+}
+
 type CapabilityRuntimeMutationResult {
   # applied | rejected | noop
   outcome: String!
@@ -189,6 +216,7 @@ type CapabilityRuntimeMutationResult {
   proposal: CapabilityConnectionProposal
   servicePrincipal: TenantServicePrincipal
   binding: CapabilityCredentialBinding
+  client: ExternalCapabilityClient
 }
 
 extend type Query {
@@ -209,6 +237,9 @@ extend type Query {
     definitionVersionId: ID
   ): [CapabilityCredentialBinding!]!
   tenantServicePrincipals(tenantId: ID!): [TenantServicePrincipal!]!
+  # Operator view of external confidential capability clients (never exposes
+  # the secret hash or the plaintext secret).
+  externalCapabilityClients(tenantId: ID!): [ExternalCapabilityClient!]!
 }
 
 extend type Mutation {
@@ -248,5 +279,21 @@ extend type Mutation {
   revokeCredentialBinding(
     tenantId: ID!
     bindingId: ID!
+  ): CapabilityRuntimeMutationResult!
+  # Operator-only: mint a confidential external capability client bound to one
+  # active service principal. Reveals the generated secret ONCE; stores only
+  # its slow hash; permits ONLY the capabilities resource + capabilities:search.
+  createExternalCapabilityClient(
+    input: CreateExternalCapabilityClientInput!
+  ): CapabilityRuntimeMutationResult!
+  # Regenerate the secret (revealed once); previous secret stops working.
+  rotateExternalCapabilityClient(
+    tenantId: ID!
+    clientId: String!
+  ): CapabilityRuntimeMutationResult!
+  # Terminal + idempotent; revocation fails closed at the read path immediately.
+  revokeExternalCapabilityClient(
+    tenantId: ID!
+    clientId: String!
   ): CapabilityRuntimeMutationResult!
 }

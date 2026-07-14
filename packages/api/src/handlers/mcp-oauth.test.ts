@@ -460,3 +460,186 @@ function signedAccessToken(
     ttlSeconds,
   );
 }
+
+// ── THINK-280 U8: client_credentials confidential capability clients ─────────
+
+import {
+  handler as oauthHandler,
+  __setExternalCapabilityClientLoaderForTest,
+  type ExternalCapabilityClientRecord,
+} from "./mcp-oauth.js";
+import {
+  generateClientSecret,
+  hashClientSecret,
+} from "../lib/mcp-oauth/client-secret.js";
+
+const capabilitiesResource = `https://${host}/mcp/capabilities`;
+
+function formEvent(path: string, form: Record<string, string>) {
+  return event(
+    "POST",
+    path,
+    new URLSearchParams(form).toString(),
+    undefined,
+    "application/x-www-form-urlencoded",
+  );
+}
+
+function activeClientRecord(
+  secretHash: string,
+  overrides: Partial<ExternalCapabilityClientRecord> = {},
+): ExternalCapabilityClientRecord {
+  return {
+    client_id: "twcap-client-1",
+    client_secret_hash: secretHash,
+    service_principal_id: "sp-1",
+    service_principal_status: "active",
+    tenant_id: "tenant-a",
+    allowed_resource: capabilitiesResource,
+    allowed_scopes: ["capabilities:search"],
+    status: "active",
+    ...overrides,
+  };
+}
+
+describe("mcp-oauth client_credentials (THINK-280 U8)", () => {
+  beforeEach(() => {
+    process.env.API_AUTH_SECRET = "test-secret";
+    __setExternalCapabilityClientLoaderForTest(null);
+  });
+
+  it("issues an audience-bound token mapped to the service principal", async () => {
+    const secret = generateClientSecret();
+    const hash = hashClientSecret(secret);
+    __setExternalCapabilityClientLoaderForTest(async () =>
+      activeClientRecord(hash),
+    );
+    const response = await oauthHandler(
+      formEvent("/mcp/oauth/token", {
+        grant_type: "client_credentials",
+        client_id: "twcap-client-1",
+        client_secret: secret,
+        resource: capabilitiesResource,
+        scope: "capabilities:search",
+      }),
+    );
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body || "{}");
+    expect(body.scope).toBe("capabilities:search");
+    const claims = verifyJwt(body.access_token, "test-secret");
+    expect(claims.aud).toBe(capabilitiesResource);
+    expect(claims.service_principal_id).toBe("sp-1");
+    expect(claims.tenant_id).toBe("tenant-a");
+    expect(claims.client_id).toBe("twcap-client-1");
+    expect(claims.scope).toBe("capabilities:search");
+  });
+
+  it("fails closed on a wrong secret", async () => {
+    const hash = hashClientSecret(generateClientSecret());
+    __setExternalCapabilityClientLoaderForTest(async () =>
+      activeClientRecord(hash),
+    );
+    const response = await oauthHandler(
+      formEvent("/mcp/oauth/token", {
+        grant_type: "client_credentials",
+        client_id: "twcap-client-1",
+        client_secret: "twcs_wrong",
+        resource: capabilitiesResource,
+      }),
+    );
+    expect(response.statusCode).toBe(401);
+    expect(JSON.parse(response.body || "{}").error).toBe("invalid_client");
+  });
+
+  it("fails closed on a revoked client and a revoked service principal", async () => {
+    const secret = generateClientSecret();
+    const hash = hashClientSecret(secret);
+    __setExternalCapabilityClientLoaderForTest(async () =>
+      activeClientRecord(hash, { status: "revoked" }),
+    );
+    const revokedClient = await oauthHandler(
+      formEvent("/mcp/oauth/token", {
+        grant_type: "client_credentials",
+        client_id: "twcap-client-1",
+        client_secret: secret,
+        resource: capabilitiesResource,
+      }),
+    );
+    expect(revokedClient.statusCode).toBe(401);
+
+    __setExternalCapabilityClientLoaderForTest(async () =>
+      activeClientRecord(hash, { service_principal_status: "revoked" }),
+    );
+    const revokedPrincipal = await oauthHandler(
+      formEvent("/mcp/oauth/token", {
+        grant_type: "client_credentials",
+        client_id: "twcap-client-1",
+        client_secret: secret,
+        resource: capabilitiesResource,
+      }),
+    );
+    expect(revokedPrincipal.statusCode).toBe(401);
+  });
+
+  it("rejects a scope outside the client's allowlist", async () => {
+    const secret = generateClientSecret();
+    const hash = hashClientSecret(secret);
+    __setExternalCapabilityClientLoaderForTest(async () =>
+      activeClientRecord(hash),
+    );
+    const response = await oauthHandler(
+      formEvent("/mcp/oauth/token", {
+        grant_type: "client_credentials",
+        client_id: "twcap-client-1",
+        client_secret: secret,
+        resource: capabilitiesResource,
+        scope: "memory:read",
+      }),
+    );
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body || "{}").error).toBe("invalid_scope");
+  });
+
+  it("rejects a wrong resource audience for the client", async () => {
+    const secret = generateClientSecret();
+    const hash = hashClientSecret(secret);
+    __setExternalCapabilityClientLoaderForTest(async () =>
+      activeClientRecord(hash),
+    );
+    const response = await oauthHandler(
+      formEvent("/mcp/oauth/token", {
+        grant_type: "client_credentials",
+        client_id: "twcap-client-1",
+        client_secret: secret,
+        resource: `https://${host}/mcp/user-memory`,
+      }),
+    );
+    // user-memory is a valid MCP resource but not this client's allowed one.
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body || "{}").error).toBe("invalid_target");
+  });
+
+  it("public dynamic registration cannot request client_credentials", async () => {
+    const response = await oauthHandler(
+      event("POST", "/mcp/oauth/register", {
+        client_name: "sneaky",
+        redirect_uris: ["http://127.0.0.1:43210/callback"],
+        grant_types: ["authorization_code", "client_credentials"],
+        token_endpoint_auth_method: "none",
+      }),
+    );
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body || "{}").error).toBe(
+      "invalid_client_metadata",
+    );
+  });
+
+  it("advertises capabilities:search + client_credentials in metadata", async () => {
+    const response = await oauthHandler(
+      event("GET", "/.well-known/oauth-authorization-server"),
+    );
+    const body = JSON.parse(response.body || "{}");
+    expect(body.scopes_supported).toContain("capabilities:search");
+    expect(body.grant_types_supported).toContain("client_credentials");
+  });
+});

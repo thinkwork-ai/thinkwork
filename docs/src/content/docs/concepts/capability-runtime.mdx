@@ -1,0 +1,75 @@
+---
+title: Governed Capability Runtime
+description: "How ThinkWork admits, binds, and governs external and platform capabilities — signed operation contracts, one canonical identity across every surface, and a read-only external search facade."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The governed capability runtime is how ThinkWork turns an external provider
+operation (a GitHub REST call, a platform action) into something an agent can
+invoke **only** through signed, admitted, credential-bound contracts — never as
+raw, ungoverned HTTP.
+
+## The identity of an operation
+
+Every operation an agent can reach is described by an immutable, signed
+**operation contract**. Two derived values are the operation's stable identity:
+
+- a **`twcap://` reference** —
+  `twcap://<namespace>/<class>/<slug>/versions/<version>/operations/<id>?contract=sha256:<hex>`
+- a **contract hash** — the SHA-256 of the signed operation contract itself.
+
+These come from `@thinkwork/capability-contracts` and are computed **one way**.
+The single most important invariant of the runtime is that this identity is
+**identical across every surface** that ever names the operation:
+
+1. the capability **Inspector**,
+2. the agent's **internal working search**,
+3. **broker call** evidence,
+4. **Routine** dependency references,
+5. **execution** detail,
+6. **Artifact** lineage, and
+7. the external **MCP search** facade.
+
+A parity assertion (`assertOperationIdentityParity`) follows one operation
+through all seven surfaces and fails on any projection drift, so the platform
+can never disagree with itself about what an operation is.
+
+<Aside type="note">
+  Everything projects through the same canonical composer
+  (`projectOperationIdentities`). No surface queries a second registry, and a
+  stored contract hash that has drifted from the signed contract is dropped
+  (fail closed) rather than emitted with a wrong identity.
+</Aside>
+
+## Lifecycle
+
+1. **Research** produces a non-executable proposal from official provider
+   sources.
+2. **Admission** verifies the sources, signs the canonical descriptor, and
+   writes an immutable **admitted version**. A refresh never mutates an
+   admitted version — it creates a new candidate.
+3. **Binding** attaches credentials for exactly one principal mode
+   (`requester`, `agent_owner`, or `service`) and tracks readiness. Credential
+   material never leaves the server: bindings expose readiness + redacted probe
+   evidence only.
+4. **Invocation** happens through the private broker, which records append-only
+   evidence in `capability_broker_calls`.
+
+## Principals
+
+- **requester** / **agent_owner** resolve a human user at action time.
+- **service** resolves a stable, revocable **service principal**.
+
+Resolution never falls back across modes: the requested mode must have its own
+`ready` binding.
+
+## External search facade
+
+`/mcp/capabilities` is a scoped, streamable-HTTP MCP resource exposing exactly
+one read-only tool: `search`. It returns permitted descriptor fields, the exact
+compatibility identity, safe annotations, and a redacted readiness/remediation
+summary for the caller's own principal — and nothing else. See the
+[capability broker operations runbook](/runbooks/capability-broker-operations/)
+for the rollout gates and the [admission guide](/guides/capability-connection-admission/)
+for how operations get admitted in the first place.

@@ -26,6 +26,7 @@ import {
   verifyPkce,
 } from "../lib/mcp-oauth/state.js";
 import { handleCors, json, error } from "../lib/response.js";
+import { verifyClientSecret } from "../lib/mcp-oauth/client-secret.js";
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const AUTH_CODE_TTL_SECONDS = 5 * 60;
@@ -41,11 +42,26 @@ const SUPPORTED_SCOPES = new Set([
   "wiki:read",
   "context:read",
   "open_engine:work_items",
+  // THINK-280 U8: read-only external capability search facade.
+  "capabilities:search",
 ]);
+const SCOPES_SUPPORTED_LIST = [
+  "openid",
+  "email",
+  "profile",
+  "memory:read",
+  "memory:write",
+  "wiki:read",
+  "context:read",
+  "open_engine:work_items",
+  "capabilities:search",
+];
 const MCP_RESOURCE_PATHS = new Set([
   "/mcp/user-memory",
   "/mcp/context-engine",
   "/mcp/open-engine",
+  // THINK-280 U8: the scoped external capability search resource.
+  "/mcp/capabilities",
 ]);
 
 const secrets = new SecretsManagerClient({
@@ -162,16 +178,7 @@ function protectedResourceMetadata(event: APIGatewayProxyEventV2) {
     resource,
     authorization_servers: [issuerUrl(event)],
     bearer_methods_supported: ["header"],
-    scopes_supported: [
-      "openid",
-      "email",
-      "profile",
-      "memory:read",
-      "memory:write",
-      "wiki:read",
-      "context:read",
-      "open_engine:work_items",
-    ],
+    scopes_supported: SCOPES_SUPPORTED_LIST,
     resource_documentation: `${issuerUrl(event)}/docs/mcp`,
   });
 }
@@ -185,19 +192,17 @@ function authorizationServerMetadata(event: APIGatewayProxyEventV2) {
     revocation_endpoint: `${issuer}/mcp/oauth/revoke`,
     registration_endpoint: `${issuer}/mcp/oauth/register`,
     response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
+    // Public dynamic-registration clients use authorization_code + PKCE.
+    // client_credentials is reserved for operator-provisioned confidential
+    // capability clients (THINK-280 U8) — never obtainable via /register.
+    grant_types_supported: ["authorization_code", "client_credentials"],
     code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: [
-      "openid",
-      "email",
-      "profile",
-      "memory:read",
-      "memory:write",
-      "wiki:read",
-      "context:read",
-      "open_engine:work_items",
+    token_endpoint_auth_methods_supported: [
+      "none",
+      "client_secret_post",
+      "client_secret_basic",
     ],
+    scopes_supported: SCOPES_SUPPORTED_LIST,
   });
 }
 
@@ -231,6 +236,17 @@ async function registerClient(event: APIGatewayProxyEventV2) {
     return oauthError(
       "invalid_client_metadata",
       "Only authorization_code grant is supported",
+      400,
+    );
+  }
+  // Public dynamic registration is a public authorization_code + PKCE client
+  // ONLY. A confidential client_credentials client can never be minted here —
+  // those are operator-provisioned confidential capability clients
+  // (THINK-280 U8, security AE): reject the grant outright at registration.
+  if (body.grant_types && body.grant_types.includes("client_credentials")) {
+    return oauthError(
+      "invalid_client_metadata",
+      "client_credentials is not available via dynamic registration",
       400,
     );
   }
@@ -396,10 +412,13 @@ async function callback(event: APIGatewayProxyEventV2) {
 async function token(event: APIGatewayProxyEventV2) {
   const form = parseFormBody(event);
   const grantType = required(form.grant_type, "grant_type");
+  if (grantType === "client_credentials") {
+    return await clientCredentialsToken(event, form);
+  }
   if (grantType !== "authorization_code") {
     return oauthError(
       "unsupported_grant_type",
-      "Only authorization_code is supported",
+      "Only authorization_code and client_credentials are supported",
       400,
     );
   }
@@ -449,6 +468,181 @@ async function token(event: APIGatewayProxyEventV2) {
     token_type: "Bearer",
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
     scope: code.scope,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// client_credentials — operator-provisioned confidential capability clients
+// ---------------------------------------------------------------------------
+
+/**
+ * Confidential capability client + its service principal, loaded at token
+ * time. `service_principal_status` is joined so a revoked principal fails the
+ * grant closed even before the read path re-checks it.
+ */
+export interface ExternalCapabilityClientRecord {
+  client_id: string;
+  client_secret_hash: string;
+  service_principal_id: string;
+  service_principal_status: string;
+  tenant_id: string;
+  allowed_resource: string;
+  allowed_scopes: string[];
+  status: string;
+}
+
+export type ExternalCapabilityClientLoader = (
+  clientId: string,
+) => Promise<ExternalCapabilityClientRecord | null>;
+
+let externalClientLoaderOverride: ExternalCapabilityClientLoader | null = null;
+
+/** Test seam — inject a confidential-client loader without a live DB. */
+export function __setExternalCapabilityClientLoaderForTest(
+  loader: ExternalCapabilityClientLoader | null,
+): void {
+  externalClientLoaderOverride = loader;
+}
+
+async function defaultExternalClientLoader(
+  clientId: string,
+): Promise<ExternalCapabilityClientRecord | null> {
+  const { getDb } = await import("@thinkwork/database-pg");
+  const { capabilityExternalClients, tenantServicePrincipals } =
+    await import("@thinkwork/database-pg/schema");
+  const { eq } = await import("drizzle-orm");
+  const db = getDb();
+  const [client] = (await db
+    .select()
+    .from(capabilityExternalClients)
+    .where(eq(capabilityExternalClients.client_id, clientId))
+    .limit(1)) as Array<typeof capabilityExternalClients.$inferSelect>;
+  if (!client) return null;
+  const [principal] = (await db
+    .select()
+    .from(tenantServicePrincipals)
+    .where(eq(tenantServicePrincipals.id, client.service_principal_id))
+    .limit(1)) as Array<typeof tenantServicePrincipals.$inferSelect>;
+  const allowedScopes = Array.isArray(client.allowed_scopes_json)
+    ? (client.allowed_scopes_json as unknown[]).filter(
+        (s): s is string => typeof s === "string",
+      )
+    : [];
+  return {
+    client_id: client.client_id,
+    client_secret_hash: client.client_secret_hash,
+    service_principal_id: client.service_principal_id,
+    service_principal_status: principal?.status ?? "revoked",
+    tenant_id: client.tenant_id,
+    allowed_resource: client.allowed_resource,
+    allowed_scopes: allowedScopes,
+    status: client.status,
+  };
+}
+
+function clientCredentials(
+  event: APIGatewayProxyEventV2,
+  form: Record<string, string>,
+): { clientId: string; clientSecret: string } | null {
+  // client_secret_post (form fields) or client_secret_basic (Authorization).
+  if (form.client_id && form.client_secret) {
+    return { clientId: form.client_id, clientSecret: form.client_secret };
+  }
+  const header = event.headers.authorization || event.headers.Authorization;
+  const match = header?.match(/^Basic\s+(.+)$/i);
+  if (match) {
+    try {
+      const decoded = Buffer.from(match[1], "base64").toString("utf8");
+      const idx = decoded.indexOf(":");
+      if (idx > 0) {
+        return {
+          clientId: decodeURIComponent(decoded.slice(0, idx)),
+          clientSecret: decodeURIComponent(decoded.slice(idx + 1)),
+        };
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function clientCredentialsToken(
+  event: APIGatewayProxyEventV2,
+  form: Record<string, string>,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const creds = clientCredentials(event, form);
+  if (!creds) {
+    return oauthError(
+      "invalid_client",
+      "client authentication is required",
+      401,
+    );
+  }
+  const resource = required(form.resource, "resource");
+  if (!isAllowedMcpResource(event, resource)) {
+    return oauthError(
+      "invalid_target",
+      "resource does not match this MCP server",
+      400,
+    );
+  }
+
+  const loader = externalClientLoaderOverride ?? defaultExternalClientLoader;
+  const record = await loader(creds.clientId);
+  // Uniform fail-closed: unknown client, revoked client, revoked principal,
+  // and wrong secret all return the same invalid_client — never distinguish.
+  if (
+    !record ||
+    record.status !== "active" ||
+    record.service_principal_status !== "active" ||
+    !verifyClientSecret(creds.clientSecret, record.client_secret_hash)
+  ) {
+    return oauthError("invalid_client", "client authentication failed", 401);
+  }
+  if (!sameResource(resource, record.allowed_resource)) {
+    return oauthError(
+      "invalid_target",
+      "resource is not permitted for this client",
+      400,
+    );
+  }
+
+  const requested = (form.scope ?? record.allowed_scopes.join(" "))
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const invalid = requested.filter(
+    (part) => !record.allowed_scopes.includes(part),
+  );
+  if (invalid.length > 0) {
+    return oauthError(
+      "invalid_scope",
+      `scope not permitted: ${invalid.join(" ")}`,
+      400,
+    );
+  }
+  const scope = Array.from(new Set(requested)).join(" ");
+
+  const accessToken = encodeJwt(
+    {
+      iss: issuerUrl(event),
+      aud: resource,
+      jti: randomBytes(32).toString("base64url"),
+      sub: record.client_id,
+      client_id: record.client_id,
+      tenant_id: record.tenant_id,
+      service_principal_id: record.service_principal_id,
+      scope,
+    },
+    signingSecret(),
+    ACCESS_TOKEN_TTL_SECONDS,
+  );
+  return json({
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    scope,
   });
 }
 

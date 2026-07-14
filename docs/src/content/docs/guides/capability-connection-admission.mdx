@@ -1,0 +1,65 @@
+---
+title: Admitting a Capability Connection
+description: "Operator guide: research a provider operation, verify its official sources, admit a signed contract version, and bind credentials so agents can use it."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Admission is how an operator turns a researched provider operation into a
+signed, invocable capability. It happens in the web operator console under
+**Settings → Capabilities**, and every step is audited.
+
+## 1. Research
+
+Open the **Research** sheet and search for the connection you want (for
+example, GitHub REST). Research returns:
+
+- **admitted / platform definitions** — working knowledge already usable, and
+- **proposals** — non-executable research evidence with a payload fingerprint.
+
+Research availability never gates admission: if external discovery is
+unavailable the state degrades to `degraded` while admitted results still show.
+
+## 2. Admit
+
+From a proposal, review the descriptor and the official source URLs backing
+every material claim, then admit it. Admission is **exact and single-use**: you
+approve the precise `payloadFingerprint` you reviewed. If the payload changed
+since review, admission is rejected — re-review the new fingerprint.
+
+Admission signs the canonical descriptor, writes an immutable admitted version,
+and materializes the folder projection. A refresh later creates a **new
+candidate version** — the admitted one is never mutated.
+
+<Aside type="caution">
+  A newer candidate version appears to operators as an upgrade/remediation, but
+  internal and external working search keep returning the **pinned admitted
+  version** until you separately admit and grant the new one (AE3).
+</Aside>
+
+## 3. Service principals and bindings
+
+In the **Bindings** sheet:
+
+1. Create a **service principal** — a stable, revocable non-human identity — if
+   you need `service`-mode access.
+2. Create a **credential binding** for exactly one principal mode. Provide only
+   vault references; raw secrets are rejected.
+3. **Verify** the binding. Verification runs the declared cheap read-only probe
+   and moves only that binding to `ready` or `degraded`, storing redacted
+   evidence.
+
+An operation resolves for a principal only when it is executable **and** that
+principal has a `ready` binding.
+
+## 4. External search clients (optional)
+
+To let an external host search your admitted capabilities, create a confidential
+**external client** bound to one active service principal (Bindings sheet →
+_External search clients_). The generated secret is shown **once** — copy it
+immediately. The client is permitted exactly the capabilities resource and the
+`capabilities:search` scope; it can never invoke, bind, propose, or admit.
+
+Rotation issues a new secret (old one stops working). Revocation — of the client
+or its service principal — fails closed immediately: outstanding tokens stop
+resolving on their next request.

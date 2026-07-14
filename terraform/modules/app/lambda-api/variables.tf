@@ -807,3 +807,9 @@ variable "artifact_delivery_from_email" {
   type        = string
   default     = ""
 }
+
+variable "enable_capability_broker" {
+  description = "THINK-280 U8 rollout gate (default off). When true, the governed capability runtime's external MCP search facade (/mcp/capabilities) and the Inspector governed-runtime operation layer are enabled for the stage. The external-search leg is the LAST rollout stage (shadow → internal search → private broker dogfood → promotion/tracer → external search): keep this false until the earlier stages are proven for the stage. When false every U8 surface is inert and returns no data — the handler and route still deploy, but read nothing."
+  type        = bool
+  default     = false
+}

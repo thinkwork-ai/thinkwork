@@ -27,6 +27,12 @@ import {
   verifyCredentialBinding,
   revokeCredentialBinding,
 } from "./credentialBinding.mutations.js";
+import {
+  externalCapabilityClients,
+  createExternalCapabilityClient,
+  rotateExternalCapabilityClient,
+  revokeExternalCapabilityClient,
+} from "./externalCapabilityClient.mutations.js";
 
 export const capabilityQueries = {
   capabilityInspector,
@@ -37,6 +43,8 @@ export const capabilityQueries = {
   capabilityRuntimeCatalog,
   capabilityCredentialBindings,
   tenantServicePrincipals,
+  // Governed capability runtime — external MCP search (THINK-280 U8)
+  externalCapabilityClients,
 };
 
 export const capabilityMutations = {
@@ -51,4 +59,8 @@ export const capabilityMutations = {
   createCredentialBinding,
   verifyCredentialBinding,
   revokeCredentialBinding,
+  // Governed capability runtime — external MCP search (THINK-280 U8)
+  createExternalCapabilityClient,
+  rotateExternalCapabilityClient,
+  revokeExternalCapabilityClient,
 };
