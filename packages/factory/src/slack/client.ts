@@ -264,6 +264,13 @@ export async function createSlackGateway(
     const res = (await web.chat.postMessage({
       channel,
       text: withMentions(text, options?.mentionUserIds),
+      // Never unfurl: a permalink in an operational message (board rows link
+      // to their threads) otherwise becomes a quoted-message attachment that
+      // sticks to the message even after edits remove the link — a ghost of a
+      // long-gone board row (live: THINK-270's enrollment quote stayed glued
+      // to the board a day after the issue was Done).
+      unfurl_links: false,
+      unfurl_media: false,
       ...(options?.threadTs !== undefined
         ? { thread_ts: options.threadTs }
         : {}),
@@ -291,6 +298,10 @@ export async function createSlackGateway(
         channel,
         ts,
         text,
+        // Strip unfurl attachments accumulated before unfurling was disabled
+        // (chat.update leaves existing attachments in place unless the field
+        // is sent) — heals already-haunted messages on their next edit.
+        attachments: [],
         ...(blocks !== undefined ? { blocks: blocks as never } : {}),
       });
     },
