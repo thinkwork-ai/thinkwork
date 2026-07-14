@@ -40,6 +40,15 @@ export interface LinearIssueSnapshot {
   labels: string[];
   /** Web URL of the issue (for operator-facing links, e.g. Slack). */
   url?: string;
+  /**
+   * Label names on the DIRECT parent issue, or undefined when the issue has
+   * no parent (or the gateway predates this field). Drives LFG inheritance:
+   * a sub-issue of an LFG parent auto-advances through review gates so it
+   * never stalls the parent (the factory created the children itself —
+   * gating them on a human violates the LFG never-stuck doctrine). One level
+   * only: the factory's plan phase creates a single tier of sub-issues.
+   */
+  parentLabels?: string[];
 }
 
 export interface LinearCommentSnapshot {
@@ -171,6 +180,7 @@ query FactoryTeamIssues($filter: IssueFilter, $after: String) {
       url
       state { name }
       labels { nodes { name } }
+      parent { labels { nodes { name } } }
     }
     pageInfo { hasNextPage endCursor }
   }
@@ -184,6 +194,7 @@ interface RawIssueNode {
   url: string | null;
   state: { name: string } | null;
   labels: { nodes: { name: string }[] };
+  parent: { labels: { nodes: { name: string }[] } } | null;
 }
 
 interface RawIssuesResponse {
@@ -322,6 +333,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
             state: n.state?.name ?? "",
             labels: n.labels.nodes.map((l) => l.name),
             url: n.url ?? undefined,
+            parentLabels: n.parent?.labels.nodes.map((l) => l.name),
           });
         }
         if (!page.pageInfo.hasNextPage) break;
@@ -346,6 +358,21 @@ export function createLinearGateway(apiKey: string): LinearGateway {
         const labels = await drain(
           (await issue.labels()) as unknown as PageOf<{ name: string }>,
         );
+        // Parent labels for LFG inheritance. Scoped runs only (tracer /
+        // safe rollout), so the extra round trips per issue are acceptable.
+        let parentLabels: string[] | undefined;
+        try {
+          const parent = await issue.parent;
+          if (parent) {
+            const pl = await drain(
+              (await parent.labels()) as unknown as PageOf<{ name: string }>,
+            );
+            parentLabels = pl.map((l) => l.name);
+          }
+        } catch {
+          // Fetch failure → no inheritance (fail-closed: gates still gate).
+          parentLabels = undefined;
+        }
         snapshots.push({
           id: issue.id,
           identifier: issue.identifier,
@@ -354,6 +381,7 @@ export function createLinearGateway(apiKey: string): LinearGateway {
           state: state?.name ?? "",
           labels: labels.map((l) => l.name),
           url: issue.url,
+          parentLabels,
         });
       }
       return snapshots;
