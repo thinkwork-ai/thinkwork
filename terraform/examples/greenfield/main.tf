@@ -105,6 +105,12 @@ variable "enable_hindsight" {
   default     = true
 }
 
+variable "enable_capability_broker" {
+  description = "THINK-280 governed capability runtime. When true, brings up the capability broker (PoP session table, private REST API, dedicated execute-api VPCE with private DNS off, no-NAT interpreter SG) and enables capability-private interpreter provisioning. Default false — currently flipped on only for the dev dogfood via deploy.yml."
+  type        = bool
+  default     = false
+}
+
 variable "memory_engine" {
   description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments."
   type        = string
@@ -749,6 +755,7 @@ module "thinkwork" {
   db_password                       = var.db_password
   database_engine                   = var.database_engine
   enable_hindsight                  = var.enable_hindsight
+  enable_capability_broker          = var.enable_capability_broker
   hindsight_database_name           = var.hindsight_database_name
   memory_engine                     = var.memory_engine
   twenty_provisioned                = var.twenty_provisioned
