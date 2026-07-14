@@ -166,13 +166,15 @@ export const registerAnalystDataSource = async (
     schemaMarkdown,
   });
 
-  // 6. Born-approved registry row.
+  // 6. Born-approved registry row (schema/kind/generation ride in
+  //    runtime_metadata.analyst_source — THINK-283).
   const { id: serverId } = await insertExternalSourceRow({
     tenantId,
     input,
     apiBase: apiBase!,
     brokerSecretRef: brokerSecretRef!,
     credentialSecretArn,
+    source: { kind: "external" },
   });
 
   // 7. Union the slug into the analyst profile's tool policy.

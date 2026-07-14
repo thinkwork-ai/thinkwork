@@ -37,7 +37,10 @@ import { quotePgIdentifier } from "@thinkwork/database-pg/analyst";
 import {
   AnalystRegistrationInputError,
   AnalystRegistrationPostureError,
+  isSystemPgSchema,
 } from "./register-data-source.js";
+
+export { isSystemPgSchema } from "./register-data-source.js";
 
 /** Safe unquoted identifier body — validated before interpolation. */
 export const READER_IDENTIFIER_PATTERN = /^[a-z0-9_]+$/;
@@ -58,14 +61,6 @@ export function assertSafeIdentifier(name: string, label: string): void {
       `${label} "${name}" is not a safe SQL identifier (expected ${READER_IDENTIFIER_PATTERN.source})`,
     );
   }
-}
-
-/**
- * PostgreSQL-owned schemas are never selectable analyst surfaces
- * (THINK-283). `pg_temp_*`/`pg_toast*` fall under the `pg_` prefix.
- */
-export function isSystemPgSchema(schema: string): boolean {
-  return schema === "information_schema" || schema.startsWith("pg_");
 }
 
 /** Reject NUL bytes, empty names, and system schemas before any SQL renders. */

@@ -113,8 +113,8 @@ vi.mock("../../../lib/analyst/register-data-source.js", () => ({
     h.calls.push("s3");
     return { modelKey: "k1", schemaKey: "k2" };
   },
-  insertExternalSourceRow: async () => {
-    h.calls.push("row");
+  insertExternalSourceRow: async (opts: { source?: { kind?: string } }) => {
+    h.calls.push(`row:kind=${opts.source?.kind}`);
     return { id: "srv-9" };
   },
   appendSourceToAnalystProfile: async () => {
@@ -239,7 +239,7 @@ describe("registerAnalystDataSource (THINK-239)", () => {
       "tenantSlug",
       "render",
       "s3",
-      "row",
+      "row:kind=external",
       "profile",
       "materialize:signedBy=operator:op@example.com",
     ]);
