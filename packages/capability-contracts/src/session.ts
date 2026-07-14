@@ -127,4 +127,11 @@ export interface SessionBootstrap {
   /** Next sequence to allocate (starts at 0). */
   nextSequence: number;
   expiresAt: string;
+  /**
+   * Path the sandbox POSTs to, INCLUDING the API Gateway stage — the broker is
+   * a REST API whose proxy resource lives at `/{stage}/{proxy+}`, so a bare `/`
+   * (the SDK default) is an unmatched route and API Gateway answers 403. Omit
+   * only in tests that stub the transport.
+   */
+  invokePath?: string;
 }
