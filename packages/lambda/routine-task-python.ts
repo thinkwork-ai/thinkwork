@@ -36,6 +36,7 @@
 
 import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import type { SessionBootstrap } from "@thinkwork/capability-contracts";
+import { buildSdkMaterializationPreamble } from "./lib/capability-broker/sandbox-sdk.js";
 import {
   BedrockAgentCoreClient,
   type CodeInterpreterStreamOutput,
@@ -654,7 +655,12 @@ function buildCodeWithEnvPrelude(
   const sessionLiteral = JSON.stringify(
     JSON.stringify(capabilitySession ?? null),
   );
-  const prelude = `import json\nimport os\ncredentials = json.loads(${credentialsLiteral})\ninput = json.loads(${inputLiteral})\n_twcap_session = json.loads(${sessionLiteral})\nos.environ.update(json.loads(${envLiteral}))\n`;
+  // Capability-headless runs carry a session bootstrap; materialize the
+  // proof-of-possession SDK on sys.path so the routine can import it and drive
+  // the broker with `_twcap_session`. Regular runs get neither the SDK nor the
+  // broker client.
+  const sdkPreamble = hasSession ? buildSdkMaterializationPreamble() : "";
+  const prelude = `${sdkPreamble}import json\nimport os\ncredentials = json.loads(${credentialsLiteral})\ninput = json.loads(${inputLiteral})\n_twcap_session = json.loads(${sessionLiteral})\nos.environ.update(json.loads(${envLiteral}))\n`;
 
   // Skip past any leading `from __future__ import ...` lines (and
   // surrounding blank lines / comments). Future imports MUST be first.
