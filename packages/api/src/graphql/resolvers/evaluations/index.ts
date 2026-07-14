@@ -11,6 +11,7 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, asc, desc, inArray, sql } from "../../utils.js";
 import {
   evalCaseOverrides,
+  evalDatasets,
   evalRuns,
   evalResults,
   evalTestCases,
@@ -1427,13 +1428,81 @@ const deleteEvalTestCase = async (
   ctx: GraphQLContext,
 ) => {
   const [existing] = await db
-    .select({ tenantId: evalTestCases.tenant_id })
+    .select({
+      tenantId: evalTestCases.tenant_id,
+      datasetId: evalTestCases.dataset_id,
+      datasetCaseId: evalTestCases.dataset_case_id,
+    })
     .from(evalTestCases)
     .where(eq(evalTestCases.id, args.id));
   // Deleting a missing row stays an idempotent no-op (prior behavior).
   if (!existing) return true;
   await requireTenantAdmin(ctx, existing.tenantId);
-  await db.delete(evalTestCases).where(eq(evalTestCases.id, args.id));
+
+  // Dataset-backed rows must tombstone the S3 manifest entry first, or the
+  // baseline seeder re-inserts the row on the next dataset version bump.
+  // The tombstone step is best-effort: manifest state failures (case not in
+  // manifest, manifest missing/unreadable) must not block the DB delete.
+  if (existing.datasetId && existing.datasetCaseId) {
+    try {
+      const [dataset] = await db
+        .select({ slug: evalDatasets.slug })
+        .from(evalDatasets)
+        .where(eq(evalDatasets.id, existing.datasetId));
+      if (dataset?.slug) {
+        const { datasetDeps, datasetContext } = await import("./datasets.js");
+        const { removeEvalDatasetCase: removeCaseInStore } =
+          await import("../../../lib/evals/dataset-store.js");
+        const dctx = await datasetContext(existing.tenantId, dataset.slug);
+        const { storage, store } = datasetDeps();
+        await removeCaseInStore(dctx, existing.datasetCaseId, storage, store);
+      }
+    } catch (err) {
+      console.warn(
+        `deleteEvalTestCase: dataset tombstone for case ${args.id} failed, continuing with DB delete:`,
+        err,
+      );
+    }
+  }
+
+  // eval_results.test_case_id and eval_case_overrides.test_case_id both FK
+  // this row with NO ACTION, so a bare delete throws for any case that has
+  // ever been run. Unlink results (rows are self-contained snapshots; run
+  // views render unlinked rows), drop the case's overrides, then the case —
+  // one transaction, everything on the tx handle (a getDb() query inside a
+  // held tx deadlocks the max-2 pool).
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(evalResults)
+        .set({ test_case_id: null })
+        .where(eq(evalResults.test_case_id, args.id));
+      await tx
+        .delete(evalCaseOverrides)
+        .where(eq(evalCaseOverrides.test_case_id, args.id));
+      await tx.delete(evalTestCases).where(eq(evalTestCases.id, args.id));
+    });
+  } catch (err) {
+    console.error(
+      `deleteEvalTestCase: delete for case ${args.id} failed:`,
+      err,
+    );
+    // 23503 = foreign_key_violation: a result insert landed mid-delete
+    // (eval run in flight). Anything else gets the generic message — raw
+    // driver text can name internal schema objects and ends up in a toast.
+    const pgCode =
+      (err as { code?: string })?.code ??
+      (err as { cause?: { code?: string } })?.cause?.code;
+    if (pgCode === "23503") {
+      throw new GraphQLError(
+        "Test case is still referenced by an in-flight eval run. Wait for the run to finish and try again.",
+        { extensions: { code: "CONFLICT" } },
+      );
+    }
+    throw new GraphQLError("Failed to delete test case", {
+      extensions: { code: "INTERNAL_SERVER_ERROR" },
+    });
+  }
   return true;
 };
 
