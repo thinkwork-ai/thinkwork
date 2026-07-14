@@ -2449,6 +2449,53 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
             throw sfnErr;
           }
         }
+      } else if (routine.engine === "git_python") {
+        // git_python (THINK-280 U7: capability-headless + plain git routines) —
+        // RequestResponse-invoke the routine-exec-git executor, the same path a
+        // user- or agent-dispatched git routine takes. Never fire-and-forget a
+        // schedule-initiated run: surface executor errors to the logs. The
+        // capability-headless executor owns its own routine_executions + broker
+        // evidence, so no thread_turns row is created here.
+        try {
+          const { LambdaClient, InvokeCommand } =
+            await import("@aws-sdk/client-lambda");
+          const lambda = new LambdaClient({});
+          const fnName = runtimeFunctionName(
+            "ROUTINE_EXEC_GIT_FUNCTION_NAME",
+            "routine-exec-git",
+          );
+          const response = await lambda.send(
+            new InvokeCommand({
+              FunctionName: fnName,
+              InvocationType: "RequestResponse",
+              Payload: new TextEncoder().encode(
+                JSON.stringify({
+                  routineId,
+                  input: {},
+                  triggerSource: "schedule",
+                  triggerId,
+                }),
+              ),
+            }),
+          );
+          if (response.FunctionError) {
+            console.error(
+              `[job-trigger] git_python routine ${routineId} executor error: ${response.FunctionError}`,
+            );
+          } else {
+            const text = response.Payload
+              ? new TextDecoder().decode(response.Payload)
+              : "";
+            console.log(
+              `[job-trigger] git_python routine ${routineId} schedule fire → ${text.slice(0, 300)}`,
+            );
+          }
+        } catch (invokeErr) {
+          console.error(
+            `[job-trigger] git_python routine ${routineId} invoke failed:`,
+            invokeErr,
+          );
+        }
       } else {
         // legacy_python — keep the original thread_turns insert. The
         // legacy ROUTINE_RUNNER_URL POST is removed; the Phase E sweep
