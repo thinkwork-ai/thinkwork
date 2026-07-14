@@ -126,6 +126,57 @@ export async function ensureAnalystBrokerSecret(input: {
 }
 
 /**
+ * Mint the broker credential ONLY when the secret has no value yet.
+ *
+ * The sourced register ceremonies depend on this credential resolving at
+ * dispatch (`resolveServiceCredentialAuth` on the row's secretRef) — on a
+ * stage where the built-in connector was never provisioned, the Terraform
+ * shell secret has zero versions and every registered source is silently
+ * withheld as `credential_missing` (observed live on McPherson 2026-07-14).
+ * Unlike `ensureAnalystBrokerSecret`, an existing value is NEVER touched:
+ * overwriting would re-scope `tenantId` to the caller on multi-tenant
+ * stages, breaking the other tenant's legacy-bearer builtin traffic.
+ */
+export async function ensureAnalystBrokerSecretValue(input: {
+  secretRef: string;
+  tenantId: string;
+  sm?: { send: (command: unknown) => Promise<{ SecretString?: string }> };
+}): Promise<"unchanged" | "created"> {
+  const { randomBytes } = await import("node:crypto");
+  const { SecretsManagerClient, GetSecretValueCommand, PutSecretValueCommand } =
+    await import("@aws-sdk/client-secrets-manager");
+  const sm =
+    input.sm ??
+    new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
+  try {
+    const current = await sm.send(
+      new GetSecretValueCommand({ SecretId: input.secretRef }),
+    );
+    const existing = JSON.parse(current.SecretString || "{}") as {
+      token?: string;
+    };
+    if (existing.token) return "unchanged";
+  } catch (err) {
+    // Only "no value yet" is mintable; anything else (denied, missing
+    // secret shell, throttle) must fail the registration loudly instead
+    // of shipping a source that can never authenticate.
+    if ((err as { name?: string })?.name !== "ResourceNotFoundException") {
+      throw err;
+    }
+  }
+  await sm.send(
+    new PutSecretValueCommand({
+      SecretId: input.secretRef,
+      SecretString: JSON.stringify({
+        token: randomBytes(32).toString("hex"),
+        tenantId: input.tenantId,
+      }),
+    }),
+  );
+  return "created";
+}
+
+/**
  * Refresh the tenant's seeded analyst profile from the current built-in
  * seed (THINK-228 U6): instructions, execution controls (incl. the R9
  * maxQueriesPerRun cap), and the tool_policy union of the existing policy

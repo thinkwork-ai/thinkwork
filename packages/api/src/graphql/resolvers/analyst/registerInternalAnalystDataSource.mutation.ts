@@ -29,6 +29,7 @@ import type { GraphQLContext } from "../../context.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
 import { materializeAnalystConnectionFolder } from "../../../lib/analyst/connection-folder.js";
+import { ensureAnalystBrokerSecretValue } from "../../../lib/analyst/provision-connector.js";
 import {
   AnalystRegistrationConflictError,
   AnalystRegistrationInputError,
@@ -118,6 +119,22 @@ export const registerInternalAnalystDataSource = async (
   if (missing.length > 0) {
     throw new GraphQLError(
       `registerInternalAnalystDataSource: missing platform config: ${missing.join(", ")}. Nothing was written.`,
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
+  }
+
+  // The broker credential must HOLD A VALUE, not merely exist — Terraform
+  // only creates the empty shell, and a source registered against a
+  // version-less secret is silently withheld at every dispatch
+  // (credential_missing). Mint on first use; never touch an existing value.
+  try {
+    await ensureAnalystBrokerSecretValue({
+      secretRef: brokerSecretRef!,
+      tenantId,
+    });
+  } catch (err) {
+    throw new GraphQLError(
+      `registerInternalAnalystDataSource: the analyst broker credential (${brokerSecretRef}) is unusable: ${err instanceof Error ? err.message : String(err)}. Nothing was written.`,
       { extensions: { code: "BAD_USER_INPUT" } },
     );
   }

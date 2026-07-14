@@ -39,6 +39,7 @@ const h = vi.hoisted(() => {
     slugError: null as Error | null,
     probeError: null as Error | null,
     provisionError: null as Error | null,
+    brokerSecretError: null as Error | null,
     model: {
       version: 2 as const,
       tables: [{ schema: "public", name: "orders", columns: [] }],
@@ -82,6 +83,17 @@ vi.mock("../../../lib/analyst/connection-folder.js", () => ({
   materializeAnalystConnectionFolder: async (input: { signedBy?: string }) => {
     h.calls.push(`materialize:signedBy=${input.signedBy}`);
     return h.state.folder;
+  },
+}));
+
+vi.mock("../../../lib/analyst/provision-connector.js", () => ({
+  ensureAnalystBrokerSecretValue: async (input: {
+    secretRef: string;
+    tenantId: string;
+  }) => {
+    h.calls.push(`brokerSecret:${input.secretRef}:${input.tenantId}`);
+    if (h.state.brokerSecretError) throw h.state.brokerSecretError;
+    return "unchanged";
   },
 }));
 
@@ -212,6 +224,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
     h.state.slugError = null;
     h.state.probeError = null;
     h.state.provisionError = null;
+    h.state.brokerSecretError = null;
     h.state.model = {
       version: 2,
       tables: [{ schema: "public", name: "orders", columns: [] }],
@@ -255,7 +268,12 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
     await expect(
       resolver(undefined, { input: { ...INPUT, clusterId: "nope" } }, ctx),
     ).rejects.toThrow(/was not found/);
-    expect(h.calls).toEqual(["requireAdmin", "validate", "describe"]);
+    expect(h.calls).toEqual([
+      "requireAdmin",
+      "validate",
+      "brokerSecret:arn:broker:tenant-1",
+      "describe",
+    ]);
   });
 
   it("rejects a database not present on the cluster", async () => {
@@ -267,6 +285,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
     expect(h.calls).toEqual([
       "requireAdmin",
       "validate",
+      "brokerSecret:arn:broker:tenant-1",
       "describe",
       "resolveAdmin",
       "enumerate",
@@ -284,6 +303,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
     expect(h.calls).toEqual([
       "requireAdmin",
       "validate",
+      "brokerSecret:arn:broker:tenant-1",
       "describe",
       "resolveAdmin",
       "enumerate",
@@ -309,6 +329,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
     expect(h.calls).toEqual([
       "requireAdmin",
       "validate",
+      "brokerSecret:arn:broker:tenant-1",
       "describe",
       "resolveAdmin",
       "enumerate",
@@ -332,6 +353,25 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
       foldersWritten: 3,
       foldersSkipped: 1,
     });
+  });
+
+  it("aborts with BAD_USER_INPUT when the broker credential cannot hold a value", async () => {
+    h.state.brokerSecretError = new Error("AccessDeniedException: nope");
+    const resolver = await load();
+    const err = await resolver(undefined, { input: INPUT }, ctx).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(GraphQLError);
+    expect((err as GraphQLError).extensions.code).toBe("BAD_USER_INPUT");
+    expect((err as GraphQLError).message).toMatch(
+      /broker credential .*arn:broker.* is unusable/,
+    );
+    // Fails before any cluster or write step.
+    expect(h.calls).toEqual([
+      "requireAdmin",
+      "validate",
+      "brokerSecret:arn:broker:tenant-1",
+    ]);
   });
 
   it("fails fast when platform config is missing", async () => {
@@ -366,6 +406,7 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
     expect(h.calls).toEqual([
       "requireAdmin",
       "validate",
+      "brokerSecret:arn:broker:tenant-1",
       "describe",
       "resolveAdmin",
       "enumerate",
