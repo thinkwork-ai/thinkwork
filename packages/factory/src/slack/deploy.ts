@@ -177,14 +177,27 @@ export function watchDeploy(deps: DeployDeps, target: string): void {
   const key = `${DEPLOY_RUNNING_KEY_PREFIX}${target}`;
   const timer = setInterval(() => {
     void (async () => {
-      const run = parseRun(deps.store.getMeta(key));
+      let raw: string | undefined;
+      try {
+        raw = deps.store.getMeta(key);
+      } catch {
+        // Store closed (daemon shutting down / test teardown) — the deploy
+        // itself is detached and unaffected; just stop watching.
+        clearInterval(timer);
+        return;
+      }
+      const run = parseRun(raw);
       if (run === null) {
         clearInterval(timer);
         return;
       }
       if (await deps.transport.pidAlive(run.pid)) return; // still going
       clearInterval(timer);
-      deps.store.deleteMeta(key);
+      try {
+        deps.store.deleteMeta(key);
+      } catch {
+        return; // store closed mid-poll — same shutdown race as above
+      }
       const tail = await deps.transport
         .readTail(run.logPath, 40)
         .catch(() => "");
