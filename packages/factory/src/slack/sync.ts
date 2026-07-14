@@ -294,6 +294,8 @@ export function createSlackSync(deps: SlackSyncDeps): SlackSync {
         identifier: candidate.issue.identifier,
         title: candidate.issue.title,
         url: candidate.issue.url,
+        state: candidate.issue.state,
+        labels: candidate.issue.labels,
       },
       threadDeps,
     );
