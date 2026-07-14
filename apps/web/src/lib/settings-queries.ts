@@ -960,6 +960,7 @@ export const SettingsTenantAgentQuery = graphql(`
       webExtract
       sendEmail
       contextEngine
+      jsonRenderUi
     }
   }
 `);

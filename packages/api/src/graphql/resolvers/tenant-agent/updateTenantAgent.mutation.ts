@@ -25,6 +25,7 @@ interface UpdateTenantAgentInput {
   webExtract?: unknown;
   sendEmail?: unknown;
   contextEngine?: unknown;
+  jsonRenderUi?: unknown;
   budgetMonthlyCents?: number | null;
   budgetPaused?: boolean | null;
   avatarUrl?: string | null;
@@ -64,6 +65,8 @@ export async function updateTenantAgent(
     updates.send_email = parseJsonInput(i.sendEmail);
   if (i.contextEngine !== undefined)
     updates.context_engine = parseJsonInput(i.contextEngine);
+  if (i.jsonRenderUi !== undefined)
+    updates.json_render_ui = parseJsonInput(i.jsonRenderUi);
   if (i.budgetMonthlyCents !== undefined) {
     updates.budget_monthly_cents = i.budgetMonthlyCents;
   }

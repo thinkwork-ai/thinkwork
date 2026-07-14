@@ -150,7 +150,7 @@ import { projectWorkflowStepFinalizeSafely } from "../lib/workflows/workflow-ste
 import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   THREAD_JSON_RENDER_UI_CAPABILITY,
-  threadJsonRenderUiEnabledFromCapabilities,
+  threadJsonRenderUiEnabledFromAgentConfig,
 } from "../lib/thread-json-render/capability.js";
 
 // Config-class values are read at call time via getConfig (env-wins merge
@@ -716,6 +716,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       web_extract: agentTemplates.web_extract,
       send_email: agentTemplates.send_email,
       context_engine: agentTemplates.context_engine,
+      json_render_ui: agents.json_render_ui,
     })
     .from(agents)
     .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
@@ -1105,8 +1106,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     (browserCapability
       ? browserCapability.enabled === true
       : templateBrowserEnabled);
-  const threadJsonRenderUiEnabled = threadJsonRenderUiEnabledFromCapabilities(
-    capabilityRows,
+  // THINK-291: generated UI is a standard platform-tool opt-in column on the
+  // agent (default-on), not an agent_capabilities row.
+  const threadJsonRenderUiEnabled = threadJsonRenderUiEnabledFromAgentConfig(
+    agent.json_render_ui,
     blockedTools,
   );
   const sendEmailConfig =

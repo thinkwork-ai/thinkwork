@@ -101,7 +101,7 @@ import {
   applyRuntimeOverrides,
   type SpaceRuntimeOverrides,
 } from "./workspace-renderer/runtime-overrides-applier.js";
-import { threadJsonRenderUiEnabledFromCapabilities } from "./thread-json-render/capability.js";
+import { threadJsonRenderUiEnabledFromAgentConfig } from "./thread-json-render/capability.js";
 import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 import {
@@ -486,6 +486,7 @@ export async function resolveAgentRuntimeConfig(
       web_extract: agents.web_extract,
       send_email: agents.send_email,
       context_engine: agents.context_engine,
+      json_render_ui: agents.json_render_ui,
     })
     .from(agents)
     .where(
@@ -848,8 +849,10 @@ export async function resolveAgentRuntimeConfig(
     (browserCapability
       ? browserCapability.enabled === true
       : templateBrowserEnabled);
-  const threadJsonRenderUiEnabled = threadJsonRenderUiEnabledFromCapabilities(
-    capabilityRows,
+  // THINK-291: generated UI is a standard platform-tool opt-in column on the
+  // agent (default-on), not an agent_capabilities row.
+  const threadJsonRenderUiEnabled = threadJsonRenderUiEnabledFromAgentConfig(
+    agent.json_render_ui,
     blockedTools,
   );
   const sendEmailConfig =

@@ -343,6 +343,7 @@ function stageAgentRow(overrides?: Record<string, unknown>) {
       web_extract: null,
       send_email: { enabled: true },
       context_engine: { enabled: true },
+      json_render_ui: null,
       ...overrides,
     },
   ]);
@@ -545,7 +546,8 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.guardrailId).toBeNull();
     expect(cfg.guardrailConfig).toBeUndefined();
     expect(cfg.browserAutomationEnabled).toBe(false);
-    expect(cfg.threadJsonRenderUiEnabled).toBe(false);
+    // THINK-291: generated UI is a default-on platform-tool column.
+    expect(cfg.threadJsonRenderUiEnabled).toBe(true);
     expect(cfg.contextEngineEnabled).toBe(false);
     expect(cfg.contextEngineConfig).toBeUndefined();
     expect(cfg.knowledgeBasesConfig).toBeUndefined();
@@ -1023,14 +1025,14 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.browserAutomationEnabled).toBe(false);
   });
 
-  it("enables Thread json-render UI only from an explicit agent capability", async () => {
-    stageAgentRow();
+  it("THINK-291: Thread json-render UI follows the agent json_render_ui column", async () => {
+    stageAgentRow({ json_render_ui: { enabled: true } });
     stageTemplateRow();
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
-    rowsQueue.push([{ capability: "thread-json-render-ui", enabled: true }]); // agent_capabilities
+    rowsQueue.push([]); // agent_capabilities
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1040,19 +1042,39 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.threadJsonRenderUiEnabled).toBe(true);
   });
 
+  it("THINK-291: an explicitly disabled json_render_ui column turns generated UI off", async () => {
+    stageAgentRow({ json_render_ui: { enabled: false } });
+    stageTemplateRow();
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // agent_capabilities
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.threadJsonRenderUiEnabled).toBe(false);
+  });
+
   it("keeps Thread json-render UI disabled when the capability or tool is blocked", async () => {
     for (const blockedTool of [
       "thread-json-render-ui",
       "emit_json_render_ui",
     ]) {
       rowsQueue.length = 0;
-      stageAgentRow({ blocked_tools: [blockedTool] });
+      stageAgentRow({
+        blocked_tools: [blockedTool],
+        json_render_ui: { enabled: true },
+      });
       stageTemplateRow();
       stageTenantSlug();
       rowsQueue.push([]); // default guardrail
       stageTrustedRuntimeSkillRows();
       rowsQueue.push([]); // kbs
-      rowsQueue.push([{ capability: "thread-json-render-ui", enabled: true }]); // agent_capabilities
+      rowsQueue.push([]); // agent_capabilities
 
       const cfg = await resolveAgentRuntimeConfig({
         tenantId: TENANT_ID,
