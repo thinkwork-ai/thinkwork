@@ -175,7 +175,11 @@ export const readOnlyHttpProbeRunner: BindingProbeRunner = {
       res = await fetch(url, {
         method: "GET",
         headers,
-        redirect: "error",
+        // Do NOT auto-follow (a redirect could target another host) — but a
+        // redirect must not be treated as a failure either: it proves the
+        // endpoint is reachable and the credential was not rejected. `manual`
+        // surfaces the 3xx as a normal response instead of throwing.
+        redirect: "manual",
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       });
     } catch {
@@ -192,7 +196,13 @@ export const readOnlyHttpProbeRunner: BindingProbeRunner = {
       /* body already consumed/closed — ignore */
     }
     const durationMs = Date.now() - started;
-    return res.ok
+    // A 2xx or a 3xx (opaqueredirect → status 0) both mean reachable +
+    // not-auth-rejected → ready. Only a 4xx/5xx degrades the binding.
+    const reachable =
+      res.type === "opaqueredirect" ||
+      res.status === 0 ||
+      (res.status >= 200 && res.status < 400);
+    return reachable
       ? { ok: true, statusCode: res.status, durationMs }
       : {
           ok: false,
