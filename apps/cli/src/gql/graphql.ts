@@ -749,6 +749,24 @@ export type AgentWorkspaceWait = {
   waitingRunId: Scalars['ID']['output'];
 };
 
+/**
+ * Outcome of refreshAnalystDataSource (THINK-283) — the ONLY product flow that
+ * adopts newly eligible tables into a registered source's grant and model
+ * surface (and removes dropped ones). Never returns secrets or raw PostgreSQL
+ * errors.
+ */
+export type AnalystDataSourceRefreshResult = {
+  __typename?: 'AnalystDataSourceRefreshResult';
+  /** Schema-qualified table names this refresh added to the model. */
+  addedTables: Array<Scalars['String']['output']>;
+  /** Schema-qualified table names this refresh removed from the model. */
+  removedTables: Array<Scalars['String']['output']>;
+  serverId: Scalars['ID']['output'];
+  slug: Scalars['String']['output'];
+  /** Modeled table count after the refresh. */
+  tables: Scalars['Int']['output'];
+};
+
 /** Outcome of registering an external analyst data source (THINK-239). */
 export type AnalystDataSourceResult = {
   __typename?: 'AnalystDataSourceResult';
@@ -4623,6 +4641,16 @@ export type Mutation = {
    * persistent tenant entitlement.
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
+  /**
+   * Explicit fail-closed refresh of a registered (sourced) analyst data source
+   * (THINK-283). Requires tenant owner/admin. Withholds the source while
+   * PostgreSQL grants (internal sources only), model artifacts, connection
+   * folders, and health are reconciled; availability is restored only after an
+   * immediate exact-surface probe passes, and a NEW source generation
+   * invalidates previously minted broker claims. On failure the source stays
+   * withheld with a durable, retryable failure state.
+   */
+  refreshAnalystDataSource: AnalystDataSourceRefreshResult;
   refreshCanvasData: CanvasRefreshResult;
   /**
    * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
@@ -5782,6 +5810,11 @@ export type MutationRecordOpenEngineWorkItemReceiptArgs = {
 
 export type MutationRedeemPremiumPluginInstallKeyArgs = {
   input: RedeemPremiumPluginInstallKeyInput;
+};
+
+
+export type MutationRefreshAnalystDataSourceArgs = {
+  serverId: Scalars['ID']['input'];
 };
 
 
