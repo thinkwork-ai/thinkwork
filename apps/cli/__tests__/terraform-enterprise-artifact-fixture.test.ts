@@ -127,10 +127,10 @@ describe("enterprise Terraform release artifacts", () => {
       /s3_key\s*=\s*local\.use_remote_custom_auth_artifact \? var\.custom_auth_lambda_s3_key : null/,
     );
     expect(thinkwork).toMatch(
-      /custom_auth_lambda_s3_bucket\s*=\s*var\.lambda_artifact_bucket/,
+      /custom_auth_lambda_s3_bucket\s*=\s*var\.require_lambda_artifacts \? var\.lambda_artifact_bucket : ""/,
     );
     expect(thinkwork).toMatch(
-      /custom_auth_lambda_s3_key\s*=\s*var\.lambda_artifact_bucket != "" \? "\$\{trim\(trimspace\(var\.lambda_artifact_prefix\), "\/"\)\}\/cognito-custom-auth\.zip" : ""/,
+      /custom_auth_lambda_s3_key\s*=\s*var\.require_lambda_artifacts && var\.lambda_artifact_bucket != "" \? "\$\{trim\(trimspace\(var\.lambda_artifact_prefix\), "\/"\)\}\/cognito-custom-auth\.zip" : ""/,
     );
   });
 

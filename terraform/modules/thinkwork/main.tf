@@ -711,14 +711,18 @@ module "cognito" {
   existing_mobile_client_id = var.existing_mobile_client_id
   existing_identity_pool_id = var.existing_identity_pool_id
 
-  google_oauth_client_id       = var.google_oauth_client_id
-  google_oauth_client_secret   = var.google_oauth_client_secret
-  oidc_identity_providers      = var.oidc_identity_providers
-  saml_identity_providers      = var.saml_identity_providers
-  pre_signup_lambda_zip        = var.pre_signup_lambda_zip
-  custom_auth_lambda_zip       = var.cognito_custom_auth_lambda_zip
-  custom_auth_lambda_s3_bucket = var.lambda_artifact_bucket
-  custom_auth_lambda_s3_key    = var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-custom-auth.zip" : ""
+  google_oauth_client_id     = var.google_oauth_client_id
+  google_oauth_client_secret = var.google_oauth_client_secret
+  oidc_identity_providers    = var.oidc_identity_providers
+  saml_identity_providers    = var.saml_identity_providers
+  pre_signup_lambda_zip      = var.pre_signup_lambda_zip
+  custom_auth_lambda_zip     = var.cognito_custom_auth_lambda_zip
+  # Remote custom auth is part of the pinned enterprise release bundle. Keep
+  # the shared artifact bucket inert for direct module consumers that have not
+  # opted into required release artifacts; local zip configuration remains an
+  # independent explicit opt-in below.
+  custom_auth_lambda_s3_bucket = var.require_lambda_artifacts ? var.lambda_artifact_bucket : ""
+  custom_auth_lambda_s3_key    = var.require_lambda_artifacts && var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-custom-auth.zip" : ""
   api_auth_secret              = var.api_auth_secret
   email_source_arn             = var.cognito_email_source_arn
   from_email_address           = var.cognito_from_email_address
