@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let queryResult: {
@@ -7,8 +7,24 @@ let queryResult: {
   error?: { message: string };
 } = { fetching: true };
 
+// Result of the page-links query (connected pages + backlinks) — keyed off
+// its `pageId` variable in the urql mock below.
+let linksResult: {
+  data?: unknown;
+  fetching?: boolean;
+} = { fetching: false, data: { wikiConnectedPages: [], wikiBacklinks: [] } };
+
 vi.mock("urql", () => ({
-  useQuery: () => [queryResult, vi.fn()],
+  useQuery: (args: { variables?: Record<string, unknown> }) => [
+    args.variables && "pageId" in args.variables ? linksResult : queryResult,
+    vi.fn(),
+  ],
+}));
+
+const navigateMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => navigateMock,
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
@@ -35,6 +51,11 @@ function renderView() {
 describe("WikiPageView", () => {
   beforeEach(() => {
     queryResult = { fetching: true };
+    linksResult = {
+      fetching: false,
+      data: { wikiConnectedPages: [], wikiBacklinks: [] },
+    };
+    navigateMock.mockClear();
   });
   afterEach(cleanup);
 
@@ -197,5 +218,129 @@ describe("WikiPageView", () => {
     expect(screen.getByText("A key customer.")).toBeTruthy();
     expect(screen.getByText("Acme")).toBeTruthy();
     expect(screen.getByTestId("related-memories")).toBeTruthy();
+  });
+
+  // THINK-270 repair regression: a relationship badge whose label matches a
+  // known connected/backlink page must SPA-navigate to that page. On the
+  // pre-repair reader every badge was a disabled dead end.
+  describe("relationship navigation", () => {
+    const pageWithRelationship = (relationshipLine: string) => ({
+      fetching: false,
+      data: {
+        wikiPage: {
+          id: "w1",
+          type: "ENTITY",
+          slug: "restaurant-les-pecheurs",
+          title: "Restaurant Les Pêcheurs",
+          sections: [
+            {
+              id: "s1",
+              heading: "Relationships",
+              bodyMd: relationshipLine,
+              position: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    it("navigates to a known connected-page target on click", () => {
+      queryResult = pageWithRelationship(
+        "- Restaurant Les Pêcheurs — head chef — Chef Nicolas Rondelli",
+      );
+      linksResult = {
+        fetching: false,
+        data: {
+          wikiConnectedPages: [
+            {
+              id: "w2",
+              type: "ENTITY",
+              slug: "chef-nicolas-rondelli",
+              title: "Chef Nicolas Rondelli",
+              aliases: [],
+            },
+          ],
+          wikiBacklinks: [],
+        },
+      };
+      renderView();
+
+      const badge = screen
+        .getByText("Chef Nicolas Rondelli")
+        .closest("button")!;
+      expect(badge.disabled).toBe(false);
+      fireEvent.click(badge);
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/wiki/$type/$slug",
+        params: { type: "entity", slug: "chef-nicolas-rondelli" },
+      });
+    });
+
+    it("matches backlink pages by alias", () => {
+      queryResult = pageWithRelationship(
+        "- Restaurant Les Pêcheurs — reviewed by — The Michelin Guide",
+      );
+      linksResult = {
+        fetching: false,
+        data: {
+          wikiConnectedPages: [],
+          wikiBacklinks: [
+            {
+              id: "w3",
+              type: "TOPIC",
+              slug: "michelin-guide",
+              title: "Michelin Guide",
+              aliases: ["The Michelin Guide"],
+            },
+          ],
+        },
+      };
+      renderView();
+
+      const badge = screen.getByText("The Michelin Guide").closest("button")!;
+      expect(badge.disabled).toBe(false);
+      fireEvent.click(badge);
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: "/wiki/$type/$slug",
+        params: { type: "topic", slug: "michelin-guide" },
+      });
+    });
+
+    it("keeps the current page and unknown labels inert", () => {
+      queryResult = pageWithRelationship(
+        "- Restaurant Les Pêcheurs — head chef — Somebody Unknown",
+      );
+      linksResult = {
+        fetching: false,
+        data: {
+          wikiConnectedPages: [
+            // The current page itself must stay inert even though it appears
+            // in the link results.
+            {
+              id: "w1",
+              type: "ENTITY",
+              slug: "restaurant-les-pecheurs",
+              title: "Restaurant Les Pêcheurs",
+              aliases: [],
+            },
+          ],
+          wikiBacklinks: [],
+        },
+      };
+      renderView();
+
+      // The page title renders in both the <h1> and the source badge; pick
+      // the badge (the only match inside a button).
+      const source = screen
+        .getAllByText("Restaurant Les Pêcheurs")
+        .map((el) => el.closest("button"))
+        .find(Boolean)!;
+      const target = screen.getByText("Somebody Unknown").closest("button")!;
+      expect(source.disabled).toBe(true);
+      expect(target.disabled).toBe(true);
+      fireEvent.click(source);
+      fireEvent.click(target);
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
   });
 });
