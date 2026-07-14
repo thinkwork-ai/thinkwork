@@ -599,6 +599,25 @@ describe("readOnlyHttpProbeRunner", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  it("treats a 3xx redirect as reachable → ready (does not auto-follow)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 301,
+      type: "basic",
+      body: null,
+    } as never);
+    const out = await readOnlyHttpProbeRunner.probe({
+      descriptor: readOnlyGetDescriptor(),
+      probeConfig: { readOnly: true },
+      credential: {},
+    });
+    expect(out.ok).toBe(true);
+    expect(out.statusCode).toBe(301);
+    expect(
+      (fetchSpy.mock.calls[0]![1] as RequestInit).redirect,
+    ).toBe("manual");
+  });
+
   it("degrades with http_<status> on a 4xx", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: false,
