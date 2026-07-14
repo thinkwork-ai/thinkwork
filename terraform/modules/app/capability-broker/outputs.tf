@@ -10,6 +10,11 @@ output "session_table_name" {
   value       = local.enabled ? aws_dynamodb_table.sessions[0].name : ""
 }
 
+output "session_table_arn" {
+  description = "ARN of the broker session table — granted to the lambda-api role so routine-exec-git can mint/advance PoP sessions. Empty when disabled."
+  value       = local.enabled ? aws_dynamodb_table.sessions[0].arn : ""
+}
+
 output "broker_audience" {
   description = "Audience the PoP session signatures are bound to (CAPABILITY_BROKER_AUDIENCE)."
   value       = local.enabled ? local.broker_audience : ""

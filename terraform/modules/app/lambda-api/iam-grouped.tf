@@ -419,6 +419,22 @@ locals {
         }
       },
     ] : [],
+    # THINK-280 — the headless capability executor (routine-exec-git) mints and
+    # advances the broker PoP session by conditional reads/writes on the broker's
+    # DynamoDB session table. Empty (→ no grant) when the broker is disabled.
+    var.capability_broker_session_table_arn != "" ? [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+        ]
+        Resource = var.capability_broker_session_table_arn
+      },
+    ] : [],
   )
 
   # ---------------------------------------------------------------------------

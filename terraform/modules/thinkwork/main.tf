@@ -1138,12 +1138,13 @@ module "api" {
   # + token let graphql-http (createTenant) RequestResponse-invoke the
   # agentcore-admin Lambda. The four CAPABILITY_BROKER_* values are EMPTY when
   # the broker is disabled (default), so the broker-session path stays inert.
-  agentcore_admin_lambda_arn      = module.agentcore_admin.lambda_arn
-  agentcore_admin_token           = module.agentcore_admin.admin_token
-  capability_broker_session_table = module.capability_broker.session_table_name
-  capability_broker_audience      = module.capability_broker.broker_audience
-  capability_broker_api_id        = module.capability_broker.private_api_id
-  capability_broker_vpce_dns      = module.capability_broker.execute_api_vpce_dns_name
+  agentcore_admin_lambda_arn          = module.agentcore_admin.lambda_arn
+  agentcore_admin_token               = module.agentcore_admin.admin_token
+  capability_broker_session_table     = module.capability_broker.session_table_name
+  capability_broker_session_table_arn = module.capability_broker.session_table_arn
+  capability_broker_audience          = module.capability_broker.broker_audience
+  capability_broker_api_id            = module.capability_broker.private_api_id
+  capability_broker_vpce_dns          = module.capability_broker.execute_api_vpce_dns_name
 
   depends_on = [module.cognito]
 }
