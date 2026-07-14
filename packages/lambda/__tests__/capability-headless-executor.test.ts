@@ -13,6 +13,7 @@ import { schema } from "@thinkwork/database-pg";
 import { createFixtureAdapterRegistry } from "../lib/capability-broker/adapters/fixture.js";
 import { createFakeDynamo } from "./capability-broker-fakes.js";
 import {
+  buildOperationsMap,
   executeCapabilityHeadlessRoutine,
   extractHeadlessResult,
   HEADLESS_RESULT_MARKER,
@@ -20,6 +21,7 @@ import {
   type CapabilityDependency,
   type CapabilityHeadlessOptions,
 } from "../capability-headless-executor.js";
+import { formatTwcapRef, parseTwcapRef } from "@thinkwork/capability-contracts";
 import type { PythonTaskResult } from "../routine-task-python.js";
 
 const {
@@ -582,5 +584,68 @@ describe("extractHeadlessResult", () => {
         truncated: false,
       }),
     ).toBeNull();
+  });
+});
+
+describe("buildOperationsMap", () => {
+  const HEX =
+    "7a4e8d11ce339e1819984e8c85a39580a59ee45bcd7726cda534bc37456dd1af";
+
+  it("maps a friendly operationId to its canonical twcap reference", () => {
+    const dep: CapabilityDependency = {
+      twcap:
+        "twcap:sleek-squirrel-230/connection/github-rest-public@1#issues.list",
+      contractHash: HEX,
+      definitionVersionId: VERSION_ID,
+      operationId: "issues.list",
+    };
+    const map = buildOperationsMap([dep]);
+    const canonical = map["issues.list"];
+    expect(canonical).toBe(
+      formatTwcapRef({
+        namespace: "sleek-squirrel-230",
+        class: "connection",
+        slug: "github-rest-public",
+        version: "1",
+        operationId: "issues.list",
+        contractHash: HEX,
+      }),
+    );
+    // The canonical form the SDK sends must round-trip through the broker parser.
+    const ref = parseTwcapRef(canonical);
+    expect(ref.operationId).toBe("issues.list");
+    expect(ref.contractHash).toBe(HEX);
+    expect(ref.slug).toBe("github-rest-public");
+  });
+
+  it("derives the operationId from the twcap fragment when absent", () => {
+    const dep: CapabilityDependency = {
+      twcap: "twcap:ns/connection/slug@2#repos.get",
+      contractHash: HEX,
+      definitionVersionId: VERSION_ID,
+    };
+    const map = buildOperationsMap([dep]);
+    expect(Object.keys(map)).toEqual(["repos.get"]);
+    expect(parseTwcapRef(map["repos.get"]).version).toBe("2");
+  });
+
+  it("drops a dependency whose contract hash is not valid sha256 hex", () => {
+    const dep: CapabilityDependency = {
+      twcap: "twcap:ns/connection/slug@1#op",
+      contractHash: "sha256:not-hex",
+      definitionVersionId: VERSION_ID,
+      operationId: "op",
+    };
+    expect(buildOperationsMap([dep])).toEqual({});
+  });
+
+  it("drops a malformed compact reference rather than half-parsing it", () => {
+    const dep: CapabilityDependency = {
+      twcap: "twcap:ns/connection/slug#op",
+      contractHash: HEX,
+      definitionVersionId: VERSION_ID,
+      operationId: "op",
+    };
+    expect(buildOperationsMap([dep])).toEqual({});
   });
 });

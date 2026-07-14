@@ -134,4 +134,14 @@ export interface SessionBootstrap {
    * only in tests that stub the transport.
    */
   invokePath?: string;
+  /**
+   * Operation binding map: friendly `operationId` → canonical `twcap://…`
+   * reference (as `parseTwcapRef` accepts). A Routine author calls
+   * `client.call("issues.list", …)` with the friendly id; the SDK expands it to
+   * the exact pinned twcap before signing so the broker parses and authorizes
+   * the precise operation. Values are the SAME canonical reference every parity
+   * surface reproduces (`formatTwcapRef`). An operation the caller passes that
+   * is already a full `twcap:` reference is sent verbatim (no lookup).
+   */
+  operations?: Record<string, string>;
 }

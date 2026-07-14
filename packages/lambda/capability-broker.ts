@@ -1,14 +1,15 @@
 /**
- * Capability Broker Lambda (THINK-280 U3, U5) — INERT in production.
+ * Capability Broker Lambda (THINK-280 U3, U5; execution wired).
  *
  * The dedicated broker's private data endpoint. It runs a SESSIONED,
  * replay-safe proof-of-possession protocol and, only after exhaustive
  * action-time authorization, resolves the binding's credentials and dispatches
  * through the adapter registry (U5 installs the `http_openapi` and `platform`
- * adapters). It stays inert in production because the shipped authorization
- * loader denies every request until a later unit wires it — so no provider call
- * happens yet. The adapters + credential resolver are exercised via injected
- * deps in tests.
+ * adapters). The production handler wires a real DB-backed authorization loader
+ * (`createDrizzleAuthorizationLoader`) that re-authorizes every call against the
+ * current admitted contract, credential binding, grant, approval, and budget —
+ * fail-closed on any missing/drifted row. The adapters + credential resolver are
+ * also exercised via injected deps in tests.
  *
  * Strict order for a call request (nothing later runs until each step passes):
  *   parse/canonicalize → load session → verify audience/signature/clock →
@@ -88,9 +89,9 @@ import {
 /**
  * Freshly reloaded authorization state for one operation. The broker calls
  * this on EVERY request — the session snapshot is an upper bound, never cached
- * authorization. U-later wires a DB-backed loader; the shipped HTTP handler
- * uses a fail-closed default that denies everything until wired, so no dispatch
- * is possible in production in this slice.
+ * authorization. The production handler injects the DB-backed
+ * `createDrizzleAuthorizationLoader`; `denyingAuthorizationLoader` remains the
+ * fail-closed default a misconfigured deployment falls back to.
  */
 export interface AuthorizationSnapshot {
   definitionVersionId: string | null;
@@ -882,7 +883,13 @@ function getAwsRegion(): string {
  * wired in a later unit. Tests inject their own loader to exercise the full
  * machinery through to `unavailable_adapter`.
  */
-const denyingAuthorizationLoader: AuthorizationLoader = async () => ({
+/**
+ * Fail-closed authorization default: denies every request. The production
+ * handler wires the real DB-backed loader (`createDrizzleAuthorizationLoader`);
+ * this remains the safe default a misconfigured deployment falls back to and the
+ * baseline tests assert against.
+ */
+export const denyingAuthorizationLoader: AuthorizationLoader = async () => ({
   definitionVersionId: null,
   operation: null,
   currentContractHash: null,
@@ -956,13 +963,25 @@ export async function handler(event: HttpEventLike): Promise<{
 
   const evidence = await buildDrizzleEvidence();
 
-  // Real adapters are installed (http_openapi + platform), but the
-  // authorization loader still denies every request in this slice — so no
-  // provider call happens in production until a later unit wires the loader.
   const { createDrizzlePlatformArtifactWriter } =
     await import("./lib/capability-broker/adapters/platform-artifact-writer.js");
   const registry = buildCapabilityAdapterRegistry({
     artifactWriter: createDrizzlePlatformArtifactWriter(),
+  });
+
+  // Real DB-backed authorization: resolve the pinned operation to its current
+  // admitted contract, credential binding, grant, approval, and budget on EVERY
+  // call (never cached from the session). Fail-closed — any missing/drifted row
+  // yields a snapshot the pure policy rejects.
+  const { getDb } = await import("@thinkwork/database-pg");
+  const schema = await import("@thinkwork/database-pg/schema");
+  const { createDrizzleAuthorizationLoader } =
+    await import("./lib/capability-broker/authorization-loader.js");
+  const loadAuthorization = createDrizzleAuthorizationLoader({
+    db: getDb(),
+    schema: schema as unknown as Parameters<
+      typeof createDrizzleAuthorizationLoader
+    >[0]["schema"],
   });
 
   const broker = createBroker({
@@ -970,7 +989,7 @@ export async function handler(event: HttpEventLike): Promise<{
     table,
     evidence,
     registry,
-    loadAuthorization: denyingAuthorizationLoader,
+    loadAuthorization,
     credentialResolver: createSecretsManagerCredentialResolver({
       region: getAwsRegion(),
     }),

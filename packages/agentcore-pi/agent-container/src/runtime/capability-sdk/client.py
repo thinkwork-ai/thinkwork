@@ -122,6 +122,10 @@ class SessionBootstrap:
     region: str = "us-east-1"
     invoke_path: str = "/"
     host_header: str | None = None
+    # Friendly operationId -> canonical twcap:// reference. The SDK expands a
+    # bare operationId a Routine passes (e.g. "issues.list") to the exact pinned
+    # twcap before signing. An operation already in twcap: form is sent verbatim.
+    operations: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> SessionBootstrap:
@@ -137,6 +141,10 @@ class SessionBootstrap:
                 region=str(raw.get("region", "us-east-1")),
                 invoke_path=str(raw.get("invokePath", "/")),
                 host_header=(str(raw["hostHeader"]) if raw.get("hostHeader") else None),
+                operations={
+                    str(k): str(v)
+                    for k, v in (raw.get("operations") or {}).items()
+                },
             )
         except (KeyError, ValueError, TypeError) as exc:
             # Never echo the raw bootstrap (it holds the private key).
@@ -212,6 +220,7 @@ class CapabilityBrokerClient:
         self._api_id = bootstrap.broker_api_id
         self._region = bootstrap.region
         self._invoke_path = bootstrap.invoke_path
+        self._operations = dict(bootstrap.operations)
         self._host_header = (
             bootstrap.host_header
             or f"{bootstrap.broker_api_id}.execute-api.{bootstrap.region}.amazonaws.com"
@@ -258,7 +267,11 @@ class CapabilityBrokerClient:
         return self._next_sequence
 
     def call(self, operation: str, input: Any) -> BrokerResult:
-        """Invoke a ``twcap:`` operation. Serialized per session (v1)."""
+        """Invoke an operation. Accepts either a friendly ``operationId`` bound
+        in the session bootstrap (expanded to its exact pinned ``twcap://``
+        reference) or a full ``twcap:`` reference passed verbatim. Serialized
+        per session (v1)."""
+        resolved = self._resolve_operation(operation)
         with self._lock:
             sequence = self._allocate_sequence()
             client_request_id = self._id_factory()
@@ -268,7 +281,7 @@ class CapabilityBrokerClient:
                 "sequence": sequence,
                 "nonce": self._nonce_factory(),
                 "issuedAt": self._issued_at(),
-                "operation": operation,
+                "operation": resolved,
                 "input": input,
             }
             signature = self._sign_call(request)
@@ -341,6 +354,15 @@ class CapabilityBrokerClient:
                 "broker call outcome is indeterminate: response lost and status "
                 "lookup could not be delivered"
             ) from None
+
+    def _resolve_operation(self, operation: str) -> str:
+        """Expand a friendly operationId to its pinned twcap reference. A value
+        already in ``twcap:`` form is returned unchanged; an unbound id is passed
+        through so the broker fails it closed (``malformed operation reference``)
+        rather than the SDK guessing."""
+        if operation.startswith("twcap:"):
+            return operation
+        return self._operations.get(operation, operation)
 
     def _url(self) -> str:
         endpoint = self._endpoint.rstrip("/")
