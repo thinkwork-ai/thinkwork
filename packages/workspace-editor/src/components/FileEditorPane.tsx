@@ -7,6 +7,7 @@ import { Button } from "@thinkwork/ui";
 import { languageForFile } from "../lib/codemirror-language.js";
 import { managedSectionHighlight } from "../lib/managed-section-decorations.js";
 import { managedSectionHeadingsPresent } from "../lib/managed-sections.js";
+import { editorSelectionHighlight } from "../lib/selection-highlight.js";
 
 // House editor surface: the CodeMirror chrome (editor/scroller/gutters) reads as
 // the app's muted grey surface token — the same family as the tree/side panels —
@@ -16,17 +17,20 @@ import { managedSectionHeadingsPresent } from "../lib/managed-sections.js";
 // vscodeDark for now (a follow-up decision). Applies to every editor surface on
 // the page (main pane + split-view source pane) and to every other embed of the
 // shared editor (Settings → Workspace, scoped space/user editors).
-const houseEditorSurface = EditorView.theme({
+//
+// `.cm-content` deliberately carries NO background: the drawn selection layer
+// (`.cm-selectionLayer`, see selection-highlight.ts) paints at negative
+// z-index below in-flow content, so an opaque content background would hide
+// every selection band. The muted surface is carried by `&`/`.cm-scroller`,
+// whose own backgrounds paint below the layer. Exported for regression tests.
+export const houseEditorSurfaceSpec = {
   "&": {
     height: "100%",
     backgroundColor: "var(--muted) !important",
     color: "var(--foreground)",
   },
   ".cm-scroller": { backgroundColor: "var(--muted) !important" },
-  ".cm-content": {
-    backgroundColor: "var(--muted) !important",
-    color: "var(--foreground)",
-  },
+  ".cm-content": { color: "var(--foreground)" },
   ".cm-gutters": {
     backgroundColor: "var(--muted) !important",
     color: "var(--muted-foreground)",
@@ -40,16 +44,9 @@ const houseEditorSurface = EditorView.theme({
   ".cm-activeLine": { backgroundColor: "transparent" },
   ".cm-activeLineGutter": { backgroundColor: "transparent" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--foreground)" },
-  // Keep a visible selection on the grey surface (drawn layer + native).
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":
-    {
-      backgroundColor:
-        "color-mix(in oklab, var(--primary) 24%, transparent) !important",
-    },
-  ".cm-selectionMatch": {
-    backgroundColor: "color-mix(in oklab, var(--primary) 14%, transparent)",
-  },
-});
+} as const;
+
+const houseEditorSurface = EditorView.theme(houseEditorSurfaceSpec);
 
 export interface FileEditorPaneProps {
   openFile: string | null;
@@ -188,6 +185,7 @@ export function FileEditorPane({
               ...managedExtension,
               EditorView.lineWrapping,
               houseEditorSurface,
+              editorSelectionHighlight,
             ]}
             editable={!readOnly}
             style={{ fontSize: "12px" }}
