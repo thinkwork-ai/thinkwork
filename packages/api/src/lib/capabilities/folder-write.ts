@@ -37,6 +37,7 @@ import {
   type CapabilitySignedBy,
   type CapabilitySigner,
 } from "./sidecar-signing.js";
+import { capabilityFolderName } from "../workspace-constants.js";
 
 export type CapabilityFolderClass = "connection" | "tool";
 
@@ -70,7 +71,7 @@ export function capabilityDefinitionKey(
 ): string {
   const file =
     klass === "connection" ? CONNECTION_DEFINITION_FILE : TOOL_DEFINITION_FILE;
-  return `${targetPrefix}${klass}s/${slug}/${file}`;
+  return `${targetPrefix}${capabilityFolderName(klass)}/${slug}/${file}`;
 }
 
 export function capabilitySidecarKey(
@@ -78,7 +79,7 @@ export function capabilitySidecarKey(
   klass: CapabilityFolderClass,
   slug: string,
 ): string {
-  return `${targetPrefix}${klass}s/${slug}/${CAPABILITY_SIDECAR_FILE}`;
+  return `${targetPrefix}${capabilityFolderName(klass)}/${slug}/${CAPABILITY_SIDECAR_FILE}`;
 }
 
 export interface CapabilitySidecarFields {

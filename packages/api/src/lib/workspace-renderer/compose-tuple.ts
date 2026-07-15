@@ -69,6 +69,16 @@ import {
   type CapabilitySigner,
   type CapabilityVerifier,
 } from "../capabilities/sidecar-signing.js";
+import {
+  capabilityClassFromFolderName,
+  capabilityFolderFileRe,
+  connectionAssignmentRe,
+  connectionMarkerRe,
+  skillAssignmentRe,
+  skillMarkerRe,
+  toolAssignmentRe,
+  toolMarkerRe,
+} from "../workspace-constants.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -255,14 +265,14 @@ export function shouldRenderUserSourcePath(relPath: string): boolean {
 }
 
 /** `skills/<folder>/SKILL.md` marker — the installed-skill presence rule. */
-const SKILL_MARKER_RE = /^skills\/([^/]+)\/SKILL\.md$/;
+const SKILL_MARKER_RE = skillMarkerRe();
 /** Per-assignment state file beside the marker (absent = enabled). */
-const SKILL_ASSIGNMENT_RE = /^skills\/([^/]+)\/\.assignment\.json$/;
+const SKILL_ASSIGNMENT_RE = skillAssignmentRe();
 /** Capability folder markers (THINK-173 U2) — same presence rule. */
-const CONNECTION_MARKER_RE = /^connections\/([^/]+)\/CONNECTION\.md$/;
-const CONNECTION_ASSIGNMENT_RE = /^connections\/([^/]+)\/\.assignment\.json$/;
-const TOOL_MARKER_RE = /^tools\/([^/]+)\/TOOL\.md$/;
-const TOOL_ASSIGNMENT_RE = /^tools\/([^/]+)\/\.assignment\.json$/;
+const CONNECTION_MARKER_RE = connectionMarkerRe();
+const CONNECTION_ASSIGNMENT_RE = connectionAssignmentRe();
+const TOOL_MARKER_RE = toolMarkerRe();
+const TOOL_ASSIGNMENT_RE = toolAssignmentRe();
 
 /** `.assignment.json` semantics: absent/unparseable file = enabled. */
 function skillAssignmentEnabled(raw: string | null): boolean {
@@ -910,7 +920,7 @@ export async function renderWorkspaceTuple(
     }
     return scan;
   };
-  const CAPABILITY_FOLDER_FILE_RE = /^(connections|tools)\/([^/]+)\/(.+)$/;
+  const CAPABILITY_FOLDER_FILE_RE = capabilityFolderFileRe();
   for (const object of agentSource.objects) {
     const sourcePath = runtimeSourcePath(object.relPath);
     const marker = sourcePath.match(SKILL_MARKER_RE);
@@ -947,8 +957,7 @@ export async function renderWorkspaceTuple(
     // script trust report — with zero content reads.
     const folderFile = sourcePath.match(CAPABILITY_FOLDER_FILE_RE);
     if (folderFile && !sourcePath.endsWith("/.assignment.json")) {
-      const klass =
-        folderFile[1] === "connections" ? "connection" : ("tool" as const);
+      const klass = capabilityClassFromFolderName(folderFile[1]!) ?? "tool";
       capabilityScan(klass, folderFile[2]!).files.push({
         path: folderFile[3]!,
         etag: object.etag ?? null,

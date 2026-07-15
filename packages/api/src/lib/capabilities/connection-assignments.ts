@@ -29,6 +29,10 @@ import {
   parseConnectionPolicyBlock,
   type ConnectionPolicyBlock,
 } from "./connection-policy.js";
+import {
+  CAPABILITY_SIDECAR_FILE,
+  capabilityFolderName,
+} from "../workspace-constants.js";
 
 export {
   evaluateConnectionPolicyParity,
@@ -124,7 +128,7 @@ export async function readConnectionAssignment(
 ): Promise<ConnectionAssignmentRecord | null> {
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return null;
-  const key = `${targetPrefix}connections/${slug}/.assignment.json`;
+  const key = `${targetPrefix}${capabilityFolderName("connection")}/${slug}/${CAPABILITY_SIDECAR_FILE}`;
   try {
     const resp = await (deps.s3 ?? s3Client()).send(
       new GetObjectCommand({ Bucket: bucket, Key: key }),
@@ -158,7 +162,7 @@ export async function listConnectionAssignments(
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return null;
   const client = deps.s3 ?? s3Client();
-  const prefix = `${targetPrefix}connections/`;
+  const prefix = `${targetPrefix}${capabilityFolderName("connection")}/`;
   const slugs: string[] = [];
   let continuationToken: string | undefined;
   try {

@@ -30,6 +30,10 @@ import {
 import type { CapabilitySignedBy } from "../capabilities/sidecar-signing.js";
 import { resolveAgentWorkspacePrefix } from "../skills/assignment-state.js";
 import { materializeMcpAssignmentFoldersForAgents } from "../mcp/assignment-state.js";
+import {
+  CAPABILITY_SIDECAR_FILE,
+  capabilityFolderName,
+} from "../workspace-constants.js";
 
 type DbLike = typeof defaultDb;
 
@@ -207,7 +211,7 @@ export async function materializeAnalystConnectionFolder(input: {
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
-        Key: `${targetPrefix}connections/${slug}/${ANALYST_SCHEMA_FILE}`,
+        Key: `${targetPrefix}${capabilityFolderName("connection")}/${slug}/${ANALYST_SCHEMA_FILE}`,
         Body: input.schemaMarkdown,
         ContentType: "text/markdown; charset=utf-8",
       }),
@@ -242,9 +246,9 @@ export async function materializeAnalystConnectionFolder(input: {
 
   return {
     files: [
-      `connections/${slug}/CONNECTION.md`,
-      `connections/${slug}/.assignment.json`,
-      `connections/${slug}/${ANALYST_SCHEMA_FILE}`,
+      `${capabilityFolderName("connection")}/${slug}/CONNECTION.md`,
+      `${capabilityFolderName("connection")}/${slug}/${CAPABILITY_SIDECAR_FILE}`,
+      `${capabilityFolderName("connection")}/${slug}/${ANALYST_SCHEMA_FILE}`,
       `mcp/${slug}/.assignment.json`,
     ],
     agents: written,
