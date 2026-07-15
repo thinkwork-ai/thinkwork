@@ -39,6 +39,7 @@ import {
   operationContractHash,
   type CapabilityDescriptor,
 } from "@thinkwork/capability-contracts";
+import { classifyDescriptor } from "./self-extension-policy.js";
 import type { FolderWriteResult } from "./folder-write.js";
 import type {
   CapabilitySignedBy,
@@ -94,15 +95,47 @@ export interface AdmitConnectionProposalResult {
 const ADMISSIBLE_PROPOSAL_STATUSES = new Set(["draft", "submitted"]);
 const PLATFORM_NAMESPACE = "platform";
 
+/** Who is admitting: a reviewing operator, or an agent self-extending. */
+type AdmissionActor =
+  | { mode: "operator"; userId: string }
+  | { mode: "autonomous"; agentId: string };
+
+interface RunAdmissionParams {
+  tenantId: string;
+  proposalId: string;
+  /** Operator-only: the exact fingerprint the reviewer approved. Ignored for autonomous. */
+  reviewedFingerprint: string;
+  actor: AdmissionActor;
+  signer: CapabilitySigner;
+  folderWriter?: AdmissionFolderWriter;
+  /**
+   * Autonomous only: every operation must classify `auto` (public, read-only,
+   * no-credential, reversible, fully classified) or the whole admission is
+   * rejected with `held_for_review` — never a silent partial admit.
+   */
+  enforceAutoTier: boolean;
+}
+
 /**
  * Admit a reviewed connection proposal: exact-fingerprint approval, signed
- * immutable version row, folder projection after commit.
+ * immutable version row, folder projection after commit. Shared by the
+ * operator path ({@link admitConnectionProposal}) and the autonomous
+ * self-extension path ({@link autonomouslyAdmitProposal}) — the version-insert
+ * logic and immutability invariants are identical; only the admitter identity,
+ * fingerprint semantics, and the auto-tier gate differ.
  */
-export async function admitConnectionProposal(
+async function runAdmission(
   db: Db,
-  input: AdmitConnectionProposalInput,
+  input: RunAdmissionParams,
 ): Promise<AdmitConnectionProposalResult> {
-  const signedBy: CapabilitySignedBy = `operator:${input.adminUserId}`;
+  const signedBy: CapabilitySignedBy =
+    input.actor.mode === "operator"
+      ? `operator:${input.actor.userId}`
+      : `autonomous:${input.actor.agentId}`;
+  const admitterUserId =
+    input.actor.mode === "operator" ? input.actor.userId : null;
+  const admitterAgentId =
+    input.actor.mode === "autonomous" ? input.actor.agentId : null;
 
   const txOutcome = await db.transaction(
     async (
@@ -149,8 +182,14 @@ export async function admitConnectionProposal(
               : "payload_not_canonicalizable",
         };
       }
+      if (recomputed !== proposal.payload_fingerprint) {
+        return { kind: "rejected", reason: "fingerprint_mismatch" };
+      }
+      // Operator admission is an exact single-use review: the reviewed
+      // fingerprint must match what is admitted. Autonomous admission has no
+      // separate reviewer — the agent admits exactly the proposal it composed.
       if (
-        recomputed !== proposal.payload_fingerprint ||
+        input.actor.mode === "operator" &&
         recomputed !== input.reviewedFingerprint
       ) {
         return { kind: "rejected", reason: "fingerprint_mismatch" };
@@ -178,6 +217,16 @@ export async function admitConnectionProposal(
               ? err.violations.join("; ")
               : "descriptor: invalid",
         };
+      }
+
+      // (c.5) Autonomous self-extension ceiling. An agent may self-admit ONLY
+      // an auto-tier descriptor (public, read-only, no-credential, reversible,
+      // fully classified). Anything else is held for one-click operator review.
+      if (
+        input.enforceAutoTier &&
+        classifyDescriptor(descriptor).tier !== "auto"
+      ) {
+        return { kind: "rejected", reason: "held_for_review" };
       }
 
       // (d) Upsert the logical definition by (namespace, class, slug).
@@ -227,7 +276,7 @@ export async function admitConnectionProposal(
             slug: descriptor.slug,
             display_name: displayName,
             status: "active",
-            created_by_user_id: input.adminUserId,
+            created_by_user_id: admitterUserId,
           })
           .returning();
         definition = created!;
@@ -282,7 +331,9 @@ export async function admitConnectionProposal(
           },
           source_proposal_id: proposal.id,
           admitted_at: now,
-          admitted_by_user_id: input.adminUserId,
+          admitted_by_user_id: admitterUserId,
+          admission_mode: input.actor.mode,
+          admitted_by_agent_id: admitterAgentId,
         })
         .returning();
 
@@ -293,7 +344,7 @@ export async function admitConnectionProposal(
           status: "admitted",
           definition_id: definition.id,
           decided_at: now,
-          decided_by_user_id: input.adminUserId,
+          decided_by_user_id: admitterUserId,
         })
         .where(eq(capabilityConnectionProposals.id, proposal.id))
         .returning();
@@ -355,6 +406,72 @@ export async function admitConnectionProposal(
     }
   }
   return applied;
+}
+
+/**
+ * Operator admission: exact single-use fingerprint approval by a human. Byte-
+ * for-byte the original behavior — the shared core just carries the actor.
+ */
+export async function admitConnectionProposal(
+  db: Db,
+  input: AdmitConnectionProposalInput,
+): Promise<AdmitConnectionProposalResult> {
+  return runAdmission(db, {
+    tenantId: input.tenantId,
+    proposalId: input.proposalId,
+    reviewedFingerprint: input.reviewedFingerprint,
+    actor: { mode: "operator", userId: input.adminUserId },
+    signer: input.signer,
+    folderWriter: input.folderWriter,
+    enforceAutoTier: false,
+  });
+}
+
+export interface AutonomouslyAdmitProposalInput {
+  tenantId: string;
+  proposalId: string;
+  /** The agent self-extending — recorded as `autonomous:<agentId>` provenance. */
+  agentId: string;
+  signer: CapabilitySigner;
+  folderWriter?: AdmissionFolderWriter;
+}
+
+export interface AutonomouslyAdmitProposalResult {
+  /** `held_for_review`: the descriptor is not auto-tier — the proposal is left
+   *  for a human operator to admit through the normal review flow. */
+  outcome: "applied" | "rejected" | "held_for_review";
+  reason?: string;
+  definition?: CapabilityDefinitionRow;
+  version?: CapabilityDefinitionVersionRow;
+  proposal?: CapabilityConnectionProposalRow;
+}
+
+/**
+ * Autonomous self-extension admission: an agent admits a proposal it composed,
+ * with NO human — but ONLY when every operation is auto-tier (public, read-only,
+ * no-credential, reversible, fully classified). A non-auto descriptor returns
+ * `held_for_review` and the proposal is left untouched for the operator.
+ * The admitted version stays fully attributable (`admission_mode: autonomous`,
+ * `admitted_by_agent_id`) and every downstream call remains brokered, evidenced,
+ * and revocable.
+ */
+export async function autonomouslyAdmitProposal(
+  db: Db,
+  input: AutonomouslyAdmitProposalInput,
+): Promise<AutonomouslyAdmitProposalResult> {
+  const result = await runAdmission(db, {
+    tenantId: input.tenantId,
+    proposalId: input.proposalId,
+    reviewedFingerprint: "", // no separate reviewer — ignored for autonomous
+    actor: { mode: "autonomous", agentId: input.agentId },
+    signer: input.signer,
+    folderWriter: input.folderWriter,
+    enforceAutoTier: true,
+  });
+  if (result.outcome === "rejected" && result.reason === "held_for_review") {
+    return { outcome: "held_for_review", reason: "held_for_review" };
+  }
+  return result;
 }
 
 export interface CreateCandidateVersionInput {

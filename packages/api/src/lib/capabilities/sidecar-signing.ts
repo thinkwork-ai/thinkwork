@@ -48,6 +48,10 @@ export const CAPABILITY_SIGNATURE_ALGORITHM = "Ed25519";
  */
 export type CapabilitySignedBy =
   | `operator:${string}`
+  // Autonomous self-extension: an agent self-admitted an auto-tier (public,
+  // read-only, no-credential) capability with no human. The composing agent id
+  // follows the prefix; the admission_mode column carries the same provenance.
+  | `autonomous:${string}`
   | "backfill"
   | "plugin-reconciler"
   | "render"
@@ -299,7 +303,8 @@ export function parseCapabilitySignatureEnvelope(
     record.signed_by !== "plugin-reconciler" &&
     record.signed_by !== "render" &&
     record.signed_by !== "api-dispatch" &&
-    !record.signed_by.startsWith("operator:")
+    !record.signed_by.startsWith("operator:") &&
+    !record.signed_by.startsWith("autonomous:")
   ) {
     return null;
   }
