@@ -1372,6 +1372,12 @@ jobs:
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}"
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
             -var "analyst_policy_source=${{ vars.ANALYST_POLICY_SOURCE || 'row' }}"
+            # Governed autonomy — per-tenant self-extension opt-in allowlist.
+            # Empty (default) = NO tenant enabled; the two autonomous actions
+            # stay inert and fail-closed. Set via the repo variable so the
+            # runtime-config SSM document carries the value durably (a transient
+            # `aws ssm put-parameter` override is wiped by the next apply).
+            -var "capability_self_extension_tenants=${{ vars.CAPABILITY_SELF_EXTENSION_TENANTS || '' }}"
             # THINK-280 — capability governed runtime dogfood. deploy.yml is
             # dev-only (STAGE: dev, line ~83); prod/customers deploy via
             # deploy-harness.yml / release.yml where this var is absent (→ false).
