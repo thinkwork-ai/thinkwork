@@ -312,6 +312,100 @@ async function deleteKeys(
   }
 }
 
+export type ResignSidecarResult =
+  | FolderWriteResult
+  | { ok: true; skipped: "no_sidecar" };
+
+/**
+ * Author-dependent re-sign (subagent-folders U6 — R8). Re-signs a
+ * folder's EXISTING sidecar over the current definition bytes,
+ * preserving its recorded state (enabled, permissions, approval,
+ * config, trust, policy). Used after a platform-mediated tenant-admin
+ * edit of `agents/<slug>/INSTRUCTIONS.md` so the operator's own edit
+ * does not surface as drift. A missing sidecar is `skipped` — the
+ * skills convention says no sidecar is minted for plain enabled state.
+ * Callers own the authorization decision (tenant-admin only); non-admin
+ * writes must NOT call this, leaving the signature stale so the edit
+ * surfaces as drift in the governance feed.
+ */
+export async function resignCapabilityFolderSidecarIfPresent(input: {
+  targetPrefix: string;
+  klass: CapabilityFolderClass;
+  slug: string;
+  signedBy: CapabilitySignedBy;
+  deps?: CapabilityFolderWriteDeps;
+}): Promise<ResignSidecarResult> {
+  const deps = input.deps ?? {};
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return { ok: false, reason: "bucket_unconfigured" };
+  const s3 = deps.s3 ?? s3Client();
+
+  let sidecarRaw: string | null = null;
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: capabilitySidecarKey(input.targetPrefix, input.klass, input.slug),
+      }),
+    );
+    sidecarRaw = (await resp.Body?.transformToString()) ?? null;
+  } catch {
+    sidecarRaw = null;
+  }
+  if (sidecarRaw === null) return { ok: true, skipped: "no_sidecar" };
+
+  let existing: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(sidecarRaw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        ok: false,
+        reason: "write_failed",
+        detail: "existing sidecar is not a JSON object",
+      };
+    }
+    existing = parsed as Record<string, unknown>;
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "write_failed",
+      detail: `existing sidecar unparseable: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  return signExistingCapabilityFolder({
+    targetPrefix: input.targetPrefix,
+    klass: input.klass,
+    slug: input.slug,
+    sidecar: {
+      ...(typeof existing.enabled === "boolean"
+        ? { enabled: existing.enabled }
+        : {}),
+      ...(existing.permissions
+        ? {
+            permissions: existing.permissions as {
+              operations?: string[];
+            } & Record<string, unknown>,
+          }
+        : {}),
+      ...(existing.approval
+        ? { approval: existing.approval as ApprovalPolicy }
+        : {}),
+      ...(existing.config
+        ? { config: existing.config as Record<string, unknown> }
+        : {}),
+      ...(existing.trust
+        ? { trust: existing.trust as Record<string, unknown> }
+        : {}),
+      ...(existing.policy
+        ? { policy: existing.policy as Record<string, unknown> }
+        : {}),
+    },
+    signedBy: input.signedBy,
+    deps: input.deps,
+  });
+}
+
 /**
  * Generate a `connections/<slug>/CONNECTION.md` from a tenant MCP
  * registry row (mcp dual-write + U11 backfill reclassification). Refs

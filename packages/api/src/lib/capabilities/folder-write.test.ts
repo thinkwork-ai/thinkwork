@@ -8,6 +8,7 @@ import {
   removeCapabilityFolder,
   removeCapabilitySidecar,
   signExistingCapabilityFolder,
+  resignCapabilityFolderSidecarIfPresent,
 } from "./folder-write.js";
 import {
   capabilitySignerFromKey,
@@ -204,5 +205,103 @@ describe("connectionDefinitionFromRegistryRow", () => {
       "extra_op",
     ]);
     expect(definition).not.toContain("auth_config");
+  });
+});
+
+describe("resignCapabilityFolderSidecarIfPresent (subagent-folders U6)", () => {
+  const INSTRUCTIONS = `---
+description: Deep research specialist
+---
+
+Research thoroughly.
+`;
+  const EDITED = INSTRUCTIONS.replace("thoroughly", "very thoroughly");
+
+  async function seededAgentFolder() {
+    const s3 = fakeS3();
+    const put = await putCapabilityFolder({
+      targetPrefix: PREFIX,
+      klass: "agent",
+      slug: "researcher",
+      definition: INSTRUCTIONS,
+      sidecar: {
+        enabled: true,
+        policy: { execution: { maxTokens: 512 } },
+      },
+      signedBy: "operator:u1",
+      deps: { s3, bucket: "b", signer },
+    });
+    expect(put.ok).toBe(true);
+    return s3;
+  }
+
+  it("re-signs the existing sidecar over the edited definition, preserving fields", async () => {
+    const s3 = await seededAgentFolder();
+    // Operator edits INSTRUCTIONS.md → signature is now stale (drift).
+    const defKey = capabilityDefinitionKey(PREFIX, "agent", "researcher");
+    expect(defKey).toBe(`${PREFIX}agents/researcher/INSTRUCTIONS.md`);
+    s3.objects.set(defKey, EDITED);
+    const stale = JSON.parse(
+      s3.objects.get(capabilitySidecarKey(PREFIX, "agent", "researcher"))!,
+    );
+    expect(
+      verifyCapabilitySidecar({
+        verifier,
+        sidecar: stale,
+        definitionBytes: EDITED,
+      }),
+    ).toMatchObject({ ok: false, reason: "definition_drift" });
+
+    const result = await resignCapabilityFolderSidecarIfPresent({
+      targetPrefix: PREFIX,
+      klass: "agent",
+      slug: "researcher",
+      signedBy: "operator:admin-1",
+      deps: { s3, bucket: "b", signer },
+    });
+    expect(result.ok).toBe(true);
+
+    const resigned = JSON.parse(
+      s3.objects.get(capabilitySidecarKey(PREFIX, "agent", "researcher"))!,
+    );
+    expect(
+      verifyCapabilitySidecar({
+        verifier,
+        sidecar: resigned,
+        definitionBytes: EDITED,
+      }),
+    ).toEqual({ ok: true });
+    expect(resigned.enabled).toBe(true);
+    expect(resigned.policy).toEqual({ execution: { maxTokens: 512 } });
+    expect(resigned.signature.signed_by).toBe("operator:admin-1");
+  });
+
+  it("is a no-op skip when the folder has no sidecar (skills convention)", async () => {
+    const s3 = fakeS3({
+      [capabilityDefinitionKey(PREFIX, "agent", "researcher")]: INSTRUCTIONS,
+    });
+    const result = await resignCapabilityFolderSidecarIfPresent({
+      targetPrefix: PREFIX,
+      klass: "agent",
+      slug: "researcher",
+      signedBy: "operator:admin-1",
+      deps: { s3, bucket: "b", signer },
+    });
+    expect(result).toEqual({ ok: true, skipped: "no_sidecar" });
+    expect(
+      s3.objects.has(capabilitySidecarKey(PREFIX, "agent", "researcher")),
+    ).toBe(false);
+  });
+
+  it("fails typed when signing is unavailable", async () => {
+    const s3 = await seededAgentFolder();
+    const result = await resignCapabilityFolderSidecarIfPresent({
+      targetPrefix: PREFIX,
+      klass: "agent",
+      slug: "researcher",
+      signedBy: "operator:admin-1",
+      deps: { s3, bucket: "b", signer: null },
+    });
+    expect(result).toMatchObject({ ok: false, reason: "signing_unavailable" });
   });
 });

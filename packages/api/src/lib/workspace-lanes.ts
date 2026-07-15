@@ -41,6 +41,14 @@ const GENERATED_WORKSPACE_PROJECTION_PATHS = new Set([
 ]);
 
 function isAgentSourcePath(path: string): boolean {
+  // R9 (subagent-folders U6): `agents/` is deliberately ABSENT from this
+  // list, as are `connections/` and `tools/`. Agent-lane file writes to
+  // capability folders resolve unowned and are rejected at reconcile —
+  // the gated capability folder-write dispatch is the ONLY agent-authored
+  // channel. This matters most for `agents/`: the agent-level sidecar is
+  // optional (missing = enabled, operator-authored), so a reconcile-lane
+  // write there would mint a live sub-agent with operator provenance.
+  // Do not add these folders here without moving that guard.
   return (
     path === "AGENTS.md" ||
     path === "CONTEXT.md" ||
