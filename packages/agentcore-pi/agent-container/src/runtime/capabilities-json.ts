@@ -41,7 +41,7 @@ export type CapabilityManifestToolKind =
 export interface CapabilityManifestEntry {
   name: string;
   slug: string;
-  class: "builtin" | "skill" | "connection" | "tool";
+  class: "builtin" | "skill" | "connection" | "tool" | "agent";
   description?: string;
   kind?: CapabilityManifestToolKind;
   target?: string;
