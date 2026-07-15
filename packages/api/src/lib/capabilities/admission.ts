@@ -40,6 +40,11 @@ import {
   type CapabilityDescriptor,
 } from "@thinkwork/capability-contracts";
 import { classifyDescriptor } from "./self-extension-policy.js";
+import {
+  autoProvisionServiceBinding,
+  type AutoProvisionBindingDeps,
+  type AutoProvisionServiceBindingResult,
+} from "./self-extension-binding.js";
 import type { FolderWriteResult } from "./folder-write.js";
 import type {
   CapabilitySignedBy,
@@ -434,6 +439,15 @@ export interface AutonomouslyAdmitProposalInput {
   agentId: string;
   signer: CapabilitySigner;
   folderWriter?: AdmissionFolderWriter;
+  /**
+   * When present, a successful auto-tier admission also auto-provisions the
+   * agent's service principal + an empty-credential binding and drives it to
+   * `ready` via the read-only reachability probe (U2b) — making the
+   * self-admitted public capability actually runnable with no human. Omit it
+   * to admit only (e.g. in tests that don't exercise runnability). The real
+   * probe/secret-resolver deps are injected by the Pi Lambda action (U4).
+   */
+  provisioner?: AutoProvisionBindingDeps;
 }
 
 export interface AutonomouslyAdmitProposalResult {
@@ -444,6 +458,13 @@ export interface AutonomouslyAdmitProposalResult {
   definition?: CapabilityDefinitionRow;
   version?: CapabilityDefinitionVersionRow;
   proposal?: CapabilityConnectionProposalRow;
+  /**
+   * Result of the auto-provisioning step (U2b), present only when a
+   * `provisioner` was supplied and admission `applied`. A `degraded` binding
+   * still means admission succeeded — the auto-run will correctly block until
+   * the binding reaches `ready`.
+   */
+  binding?: AutoProvisionServiceBindingResult;
 }
 
 /**
@@ -471,6 +492,28 @@ export async function autonomouslyAdmitProposal(
   if (result.outcome === "rejected" && result.reason === "held_for_review") {
     return { outcome: "held_for_review", reason: "held_for_review" };
   }
+
+  // U2b: make the self-admitted public capability actually runnable — provision
+  // the agent's service principal + empty-credential binding and drive it to
+  // `ready`. Only on a clean applied admission with a version to bind, and only
+  // when the caller supplied the real probe/secret-resolver deps.
+  if (
+    result.outcome === "applied" &&
+    result.version &&
+    input.provisioner !== undefined
+  ) {
+    const binding = await autoProvisionServiceBinding(
+      db,
+      {
+        tenantId: input.tenantId,
+        definitionVersionId: result.version.id,
+        agentId: input.agentId,
+      },
+      input.provisioner,
+    );
+    return { ...result, binding };
+  }
+
   return result;
 }
 

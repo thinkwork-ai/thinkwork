@@ -26,6 +26,7 @@ import {
   capabilityConnectionProposals,
   capabilityDefinitions,
   capabilityDefinitionVersions,
+  tenantServicePrincipals,
 } from "@thinkwork/database-pg/schema";
 import {
   canonicalSha256Hex,
@@ -734,6 +735,51 @@ describe("autonomouslyAdmitProposal (self-extension)", () => {
     // The definition carries no operator author.
     const defs = tables.get(capabilityDefinitions)!;
     expect(defs[0].created_by_user_id).toBeNull();
+  });
+
+  it("auto-provisions a ready binding when a provisioner is supplied (U2b)", async () => {
+    const descriptor = autoDescriptor();
+    const proposal = proposalRowFor({ descriptor });
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+    ]);
+
+    const result = await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+      provisioner: {
+        probeRunner: { probe: async () => ({ ok: true, statusCode: 200 }) },
+        secretResolver: { resolve: async () => ({}) },
+      },
+    });
+
+    expect(result.outcome).toBe("applied");
+    // The self-admitted public capability is now runnable: SP + ready binding.
+    expect(result.binding?.outcome).toBe("ready");
+    expect(result.binding?.binding?.readiness).toBe("ready");
+    expect(result.binding?.servicePrincipalId).toBeTruthy();
+    expect(tables.get(tenantServicePrincipals) ?? []).toHaveLength(1);
+  });
+
+  it("omitting the provisioner admits only (no binding side-effect)", async () => {
+    const descriptor = autoDescriptor();
+    const proposal = proposalRowFor({ descriptor });
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+    ]);
+
+    const result = await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+    });
+
+    expect(result.outcome).toBe("applied");
+    expect(result.binding).toBeUndefined();
+    expect(tables.get(tenantServicePrincipals) ?? []).toHaveLength(0);
   });
 
   it("holds a credentialed descriptor for operator review (does not self-admit)", async () => {
