@@ -96,6 +96,7 @@ import {
 } from "../lib/goal-mode.js";
 import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import {
@@ -1506,6 +1507,23 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       }
     }
 
+    // THINK-280 U2 dispatch wiring: the Ed25519-signed caller context the
+    // runtime requires before it registers ANY capability Pi tools. Minted
+    // only for capability-folder agents; null (signing unavailable) keeps
+    // capability tools off for this dispatch — fail-closed, never unsigned.
+    const capabilityCallerContext = runtimeConfig.capabilityFolderDispatch
+      ? await mintCapabilityCallerContext({
+          actor: "agent",
+          tenantId,
+          agentId,
+          actorUserId: currentUserId || undefined,
+          threadId: threadId || undefined,
+          manifestFingerprint: renderedWorkspace.rendered
+            ? renderedWorkspace.capabilities?.fingerprint
+            : undefined,
+        })
+      : null;
+
     const invokeStart = Date.now();
     const invokePayload = {
       tenant_id: tenantId,
@@ -1680,6 +1698,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           runtimeConfig.capabilityFolderDispatch && renderedWorkspace.rendered
             ? renderedWorkspace.capabilities?.fingerprint
             : undefined,
+        capabilityCallerContext: capabilityCallerContext ?? undefined,
         configFingerprint: computeConfigFingerprint(
           {
             tenantId,
