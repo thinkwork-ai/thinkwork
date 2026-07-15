@@ -13,6 +13,7 @@
 import { describe, expect, it } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import {
+  isDescriptorShapedRejection,
   handleCapabilityControl,
   type CapabilityControlEvent,
 } from "./capability-control-service.js";
@@ -463,6 +464,14 @@ describe("connection_research", () => {
     if (!result.ok || result.action !== "connection_research")
       throw new Error();
     expect(result.result.state).toBe("ok");
+    // Authoring reference always rides research results — the composing
+    // agent has no other way to learn the descriptor enum vocabulary.
+    expect(result.result.descriptorContract?.enums["adapter.kind"]).toContain(
+      "http_openapi",
+    );
+    expect(
+      result.result.descriptorContract?.example.operations[0]?.latencyClass,
+    ).toBe("interactive");
     expect(result.result.definitions).toEqual([
       {
         id: "def-1",
@@ -835,5 +844,23 @@ describe("self-extension actions (governed autonomy)", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error();
     expect(result.reason).toBe("signing_unavailable");
+  });
+
+  it("classifies descriptor-shaped rejections (authoring reference attach gate)", () => {
+    // Validator-style violations → self-correctable, reference attaches.
+    expect(
+      isDescriptorShapedRejection("operations[0].latencyClass: invalid"),
+    ).toBe(true);
+    expect(
+      isDescriptorShapedRejection("descriptor: missing from payload"),
+    ).toBe(true);
+    expect(
+      isDescriptorShapedRejection("version: must be a decimal string"),
+    ).toBe(true);
+    expect(isDescriptorShapedRejection("adapter: invalid")).toBe(true);
+    // Governance outcomes → re-authoring cannot convert them; no reference.
+    expect(isDescriptorShapedRejection("held_for_review")).toBe(false);
+    expect(isDescriptorShapedRejection("proposal_not_found")).toBe(false);
+    expect(isDescriptorShapedRejection(undefined)).toBe(false);
   });
 });

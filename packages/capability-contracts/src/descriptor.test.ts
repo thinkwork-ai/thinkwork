@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DESCRIPTOR_CONTRACT_REFERENCE,
   CapabilityContractError,
   type CapabilityDescriptor,
   type OperationContract,
@@ -256,5 +257,27 @@ describe("twcap references", () => {
         contractHash: "a".repeat(64),
       }),
     ).toThrow(CapabilityContractError);
+  });
+});
+
+describe("DESCRIPTOR_CONTRACT_REFERENCE", () => {
+  it("ships an example that passes the validator it documents", () => {
+    expect(() =>
+      assertValidDescriptor(
+        JSON.parse(JSON.stringify(DESCRIPTOR_CONTRACT_REFERENCE.example)),
+      ),
+    ).not.toThrow();
+  });
+
+  it("example has no executability violations (auto-tier eligible shape)", () => {
+    const example = JSON.parse(
+      JSON.stringify(DESCRIPTOR_CONTRACT_REFERENCE.example),
+    ) as CapabilityDescriptor;
+    for (const op of example.operations) {
+      expect(operationExecutabilityViolations(op)).toEqual([]);
+      expect(op.effect === "none" || op.effect === "read").toBe(true);
+      expect(op.reversibility).toBe("reversible");
+    }
+    expect(example.bindingRequirements.credentialKinds).toEqual([]);
   });
 });

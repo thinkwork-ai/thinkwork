@@ -431,3 +431,83 @@ export function parseTwcapRef(value: string): TwcapReference {
     contractHash: hashMatch![1]!,
   };
 }
+
+/**
+ * Machine-readable descriptor authoring reference (governed autonomy DX).
+ *
+ * The first live self-extension drive failed exactly here: the composing
+ * agent must author a `CapabilityDescriptor`, but nothing on the tool
+ * surface documents the enum vocabulary, so every guess was rejected with
+ * `<field>: invalid` and no way to converge. This constant is returned by
+ * `connection_research` results and descriptor-invalid `self_admit` /
+ * admission rejections so a composing agent can self-correct in one step.
+ *
+ * Derived from the same const arrays the validator checks — it can never
+ * drift from `assertValidDescriptor`.
+ */
+export const DESCRIPTOR_CONTRACT_REFERENCE = {
+  enums: {
+    "adapter.kind": ADAPTER_KINDS,
+    "operations[].effect": OPERATION_EFFECTS,
+    "operations[].targetScope.kind": ["closed", "open_world"] as const,
+    "operations[].reversibility": REVERSIBILITY_CLASSES,
+    "operations[].idempotency": IDEMPOTENCY_CLASSES,
+    "operations[].principalModes[]": PRINCIPAL_MODES,
+    "operations[].approvalPolicy": APPROVAL_POLICIES,
+    "operations[].inputDataClass": DATA_CLASSES,
+    "operations[].outputDataClass": DATA_CLASSES,
+    "operations[].costClass": COST_CLASSES,
+    "operations[].latencyClass": LATENCY_CLASSES,
+    "operations[].outputClass": OUTPUT_CLASSES,
+  },
+  shape: {
+    namespace: "lowercase slug segment (^[a-z0-9][a-z0-9-]{0,127}$)",
+    class: "lowercase slug segment",
+    slug: "lowercase slug segment",
+    version: 'decimal integer string, e.g. "1"',
+    adapter:
+      "{ kind: one of adapter.kind enums, config: JSON } — http_openapi config carries { baseUrl, ... }",
+    bindingRequirements:
+      "{ credentialKinds: string[] (empty [] for public no-credential APIs), principalModes: PrincipalMode[] }",
+    provenance:
+      "{ sourceUrls: official https provider doc URLs (required, non-empty), evidenceRefs: string[] (may be []) }",
+    operations:
+      "OperationContract[] — every field required; targetScope closed additionally requires resourceSelector; reversibility compensable additionally requires compensation",
+  },
+  autoTier:
+    "Autonomous self-admission requires EVERY operation: effect none|read, credentialKinds [], reversibility reversible, no `unknown` cost/latency/output class, inputDataClass and outputDataClass public|internal. Anything else is held for operator review.",
+  example: {
+    namespace: "community",
+    class: "http-api",
+    slug: "example-public-api",
+    version: "1",
+    adapter: {
+      kind: "http_openapi",
+      config: { baseUrl: "https://api.example.com" },
+    },
+    bindingRequirements: { credentialKinds: [], principalModes: ["service"] },
+    provenance: {
+      sourceUrls: ["https://docs.example.com/api"],
+      evidenceRefs: [],
+    },
+    operations: [
+      {
+        operationId: "getItem",
+        summary: "Fetch a public item by id",
+        effect: "read",
+        targetScope: { kind: "open_world" },
+        reversibility: "reversible",
+        idempotency: "idempotent",
+        principalModes: ["service"],
+        approvalPolicy: "never",
+        inputSchema: { type: "object", properties: { id: { type: "string" } } },
+        outputSchema: { type: "object" },
+        inputDataClass: "public",
+        outputDataClass: "public",
+        costClass: "free",
+        latencyClass: "interactive",
+        outputClass: "inline",
+      },
+    ],
+  },
+} as const;
