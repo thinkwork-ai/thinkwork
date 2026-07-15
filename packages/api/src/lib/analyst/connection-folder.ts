@@ -29,6 +29,7 @@ import {
 } from "../capabilities/folder-write.js";
 import type { CapabilitySignedBy } from "../capabilities/sidecar-signing.js";
 import { resolveAgentWorkspacePrefix } from "../skills/assignment-state.js";
+import { materializeMcpAssignmentFoldersForAgents } from "../mcp/assignment-state.js";
 
 type DbLike = typeof defaultDb;
 
@@ -220,11 +221,31 @@ export async function materializeAnalystConnectionFolder(input: {
     );
   }
 
+  // Dual-write the legacy `mcp/<slug>/.assignment.json` attachment record for
+  // non-folder-dispatch agents (the helper skips flipped agents internally).
+  // The signed `connections/<slug>/` folder above is only the ATTACHMENT
+  // source for folder-dispatch agents; a flag-off agent resolves its MCP
+  // fleet from `mcp/<slug>/` files (mcp-configs.ts), so without this write
+  // the analyst source's query tool never attaches for it and the model can
+  // read SCHEMA.md but not execute — exactly the managed-MCP dual-write
+  // pattern (managed-mcp-applications.ts). Analyst Data Source registration
+  // previously wrote only `connections/`, leaving the source unusable on the
+  // default (un-flipped) platform agent.
+  await materializeMcpAssignmentFoldersForAgents(
+    {
+      agentIds: agentRows.map((agent) => agent.id),
+      tenantId: input.tenantId,
+      registryServerId: row.id,
+    },
+    { bucket, s3 },
+  );
+
   return {
     files: [
       `connections/${slug}/CONNECTION.md`,
       `connections/${slug}/.assignment.json`,
       `connections/${slug}/${ANALYST_SCHEMA_FILE}`,
+      `mcp/${slug}/.assignment.json`,
     ],
     agents: written,
     skipped,

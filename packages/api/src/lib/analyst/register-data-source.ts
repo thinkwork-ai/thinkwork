@@ -44,6 +44,10 @@ import {
 import { openExternalSourceClient } from "@thinkwork/lambda/analyst-reader-db";
 
 import { db as defaultDb } from "../../graphql/utils.js";
+import {
+  serializeAgentProfileFile,
+  writeAgentProfileFileForTenant,
+} from "../agent-profile-workspace-files.js";
 import { computeMcpUrlHash } from "../mcp-server-hash.js";
 import { analystConnectorAuthConfig } from "./provision-connector.js";
 import type { AnalystSourceTls } from "@thinkwork/lambda/analyst-caller-context";
@@ -650,7 +654,20 @@ export async function appendSourceToAnalystProfile(opts: {
 }): Promise<boolean> {
   const db = opts.db ?? defaultDb;
   const [row] = await db
-    .select({ id: agentProfiles.id, tool_policy: agentProfiles.tool_policy })
+    .select({
+      id: agentProfiles.id,
+      slug: agentProfiles.slug,
+      name: agentProfiles.name,
+      description: agentProfiles.description,
+      routing_guidance: agentProfiles.routing_guidance,
+      instructions: agentProfiles.instructions,
+      model_id: agentProfiles.model_id,
+      enabled: agentProfiles.enabled,
+      built_in_key: agentProfiles.built_in_key,
+      tool_policy: agentProfiles.tool_policy,
+      skill_policy: agentProfiles.skill_policy,
+      execution_controls: agentProfiles.execution_controls,
+    })
     .from(agentProfiles)
     .where(
       and(
@@ -668,15 +685,48 @@ export async function appendSourceToAnalystProfile(opts: {
     ? current.mcpServers.filter((x): x is string => typeof x === "string")
     : [];
   if (existingServers.includes(opts.slug)) return true;
+  const nextToolPolicy = {
+    ...current,
+    mcpServers: [...existingServers, opts.slug],
+  };
   await db
     .update(agentProfiles)
     .set({
-      tool_policy: {
-        ...current,
-        mcpServers: [...existingServers, opts.slug],
-      },
+      tool_policy: nextToolPolicy,
       updated_at: new Date(),
     })
     .where(eq(agentProfiles.id, row.id));
+
+  // Keep the file-authoritative `agents/<profile>.md` in sync with the DB
+  // row. The runtime renders the profile's workspace source from this file;
+  // a DB-only append leaves the source stale (the operator's workspace
+  // inspector shows the source WITHOUT the new data source, and a later
+  // file→DB projection would drop the append). Bucket-gated: a no-op in
+  // DB-mocked unit tests. Mirrors updateAgentProfile.mutation.ts.
+  try {
+    await writeAgentProfileFileForTenant({
+      tenantId: opts.tenantId,
+      slug: row.slug,
+      content: serializeAgentProfileFile({
+        slug: row.slug,
+        name: row.name,
+        description: row.description ?? undefined,
+        routingGuidance: row.routing_guidance ?? undefined,
+        instructions: String(row.instructions ?? ""),
+        modelId: row.model_id,
+        enabled: row.enabled !== false,
+        builtInKey: row.built_in_key ?? undefined,
+        toolPolicy: nextToolPolicy,
+        skillPolicy: row.skill_policy ?? {},
+        executionControls: row.execution_controls ?? {},
+        spaceIds: [],
+      }),
+    });
+  } catch (err) {
+    console.error(
+      `[register-data-source] analyst profile file sync failed for tenant ${opts.tenantId}:`,
+      err,
+    );
+  }
   return true;
 }

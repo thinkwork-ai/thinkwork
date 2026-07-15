@@ -42,8 +42,12 @@ vi.mock("../skills/assignment-state.js", () => ({
     agentId === "agent-no-prefix" ? null : `tenants/acme/agents/${agentId}/`,
   ),
 }));
+vi.mock("../mcp/assignment-state.js", () => ({
+  materializeMcpAssignmentFoldersForAgents: vi.fn(async () => 0),
+}));
 
 import { capabilitySignerFromKey } from "../capabilities/sidecar-signing.js";
+import { materializeMcpAssignmentFoldersForAgents } from "../mcp/assignment-state.js";
 import {
   ANALYST_CONNECTION_GUIDANCE,
   analystConnectionDefinition,
@@ -119,6 +123,19 @@ describe("analyst connection folder (U5)", () => {
       );
       expect(sidecar.signed_content_sha).toBeTypeOf("string");
     }
+
+    // Fix #1: the legacy `mcp/<slug>/.assignment.json` attachment record is
+    // dual-written so non-folder-dispatch agents actually attach the query
+    // tool (not just render SCHEMA.md).
+    expect(materializeMcpAssignmentFoldersForAgents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentIds: ["agent-1", "agent-2"],
+        tenantId: TENANT,
+        registryServerId: ROW.id,
+      }),
+      expect.objectContaining({ bucket: "bucket" }),
+    );
+    expect(result.files).toContain("mcp/postgres-dev/.assignment.json");
   });
 
   it("regenerated SCHEMA.md updates the workspace copy and busts the signature", async () => {
