@@ -198,7 +198,7 @@ export type ToolDefinitionResult =
  */
 export interface CapabilityAssignmentSidecar {
   slug: string;
-  class: "connection" | "tool";
+  class: "connection" | "tool" | "agent";
   /** Absent = enabled. */
   enabled?: boolean;
   /** { operations?: string[] } — the authz allowlist. */
@@ -567,7 +567,7 @@ export function parseCapabilitySidecar(
   const slug = requireSlug(record.slug, path, errors, "slug");
   const klass = requireEnum(
     record.class,
-    ["connection", "tool"] as const,
+    ["connection", "tool", "agent"] as const,
     "class",
     path,
     errors,

@@ -487,3 +487,155 @@ describe("computeCapabilityInputSignature", () => {
     expect(b).not.toBe(a);
   });
 });
+
+describe("agent folder admission (subagent-folders U4)", () => {
+  const instructionsMd = `---
+description: Deep research specialist
+model: anthropic/claude-sonnet-5
+---
+
+Research thoroughly. Cite sources.
+`;
+
+  function agentFolder(input: {
+    slug?: string;
+    definition?: string;
+    definitionEtag?: string | null;
+    sidecar?: "none" | "unsigned" | "signed";
+    sidecarExtras?: Record<string, unknown>;
+    definitionForSigning?: string;
+    files?: Array<{ path: string; etag?: string | null }>;
+  }): CapabilityFolderInput {
+    const slug = input.slug ?? "researcher";
+    const definition = input.definition ?? instructionsMd;
+    const sidecarMode = input.sidecar ?? "none";
+    let sidecarRaw: string | null = null;
+    if (sidecarMode !== "none") {
+      const base = {
+        slug,
+        class: "agent",
+        updated_at: "2026-07-05T00:00:00.000Z",
+        ...(input.sidecarExtras ?? {}),
+      };
+      if (sidecarMode === "unsigned") {
+        sidecarRaw = JSON.stringify(base);
+      } else {
+        const { signed_content_sha, signature } = signCapabilitySidecar({
+          signer,
+          sidecar: base,
+          definitionBytes: input.definitionForSigning ?? definition,
+          signedBy: "operator:u1",
+        });
+        sidecarRaw = JSON.stringify({ ...base, signed_content_sha, signature });
+      }
+    }
+    return {
+      class: "agent",
+      slug,
+      definitionPath: `agents/${slug}/INSTRUCTIONS.md`,
+      definitionRaw: definition,
+      definitionEtag: input.definitionEtag ?? "etag-1",
+      sidecarRaw,
+      files: input.files ?? [{ path: "INSTRUCTIONS.md", etag: "etag-1" }],
+    };
+  }
+
+  it("admits a sidecar-less folder as an active agent entry (R7 skills convention)", () => {
+    const { manifest } = compile([agentFolder({})]);
+    const entry = manifest.active.find((e) => e.class === "agent");
+    expect(entry).toMatchObject({
+      name: "researcher",
+      slug: "researcher",
+      class: "agent",
+      description: "Deep research specialist",
+      model: "anthropic/claude-sonnet-5",
+      instructionsEtag: "etag-1",
+    });
+    expect(entry?.execution).toMatchObject({ foreground: true });
+    expect(entry?.execution).not.toHaveProperty("maxSubagentDepth");
+    expect(manifest.withheld).toEqual([]);
+  });
+
+  it("withholds a folder whose INSTRUCTIONS.md lacks a description (R3)", () => {
+    const { manifest } = compile([
+      agentFolder({
+        definition: "---\nmodel: anthropic/claude-sonnet-5\n---\n\nBody\n",
+      }),
+    ]);
+    expect(manifest.active.find((e) => e.class === "agent")).toBeUndefined();
+    expect(manifest.withheld).toMatchObject([
+      { slug: "researcher", class: "agent", reason: "invalid_definition" },
+    ]);
+  });
+
+  it("withholds a nested agents/ folder with the nesting reason; parent files otherwise admit", () => {
+    const { manifest } = compile([
+      agentFolder({
+        files: [
+          { path: "INSTRUCTIONS.md", etag: "etag-1" },
+          { path: "agents/helper/INSTRUCTIONS.md", etag: "etag-2" },
+        ],
+      }),
+    ]);
+    expect(manifest.withheld).toMatchObject([
+      { slug: "researcher", class: "agent", reason: "nested_agent_folder" },
+    ]);
+  });
+
+  it("surfaces drift when INSTRUCTIONS.md was edited after signing (AE1)", () => {
+    const { manifest } = compile([
+      agentFolder({
+        sidecar: "signed",
+        definitionForSigning: instructionsMd.replace("Cite", "Never cite"),
+      }),
+    ]);
+    expect(manifest.withheld).toMatchObject([
+      { slug: "researcher", class: "agent", reason: "definition_drift" },
+    ]);
+  });
+
+  it("withholds an unsigned sidecar as a pending proposal", () => {
+    const { manifest } = compile([agentFolder({ sidecar: "unsigned" })]);
+    expect(manifest.withheld).toMatchObject([
+      { slug: "researcher", class: "agent", reason: "unsigned" },
+    ]);
+  });
+
+  it("withholds a signed disabled sidecar", () => {
+    const { manifest } = compile([
+      agentFolder({ sidecar: "signed", sidecarExtras: { enabled: false } }),
+    ]);
+    expect(manifest.withheld).toMatchObject([
+      { slug: "researcher", class: "agent", reason: "disabled" },
+    ]);
+  });
+
+  it("applies signed sidecar execution overrides to the entry", () => {
+    const { manifest } = compile([
+      agentFolder({
+        sidecar: "signed",
+        sidecarExtras: { policy: { execution: { maxTokens: 512 } } },
+      }),
+    ]);
+    const entry = manifest.active.find((e) => e.class === "agent");
+    expect(entry?.execution).toMatchObject({ maxTokens: 512 });
+  });
+
+  it("input signature changes when the INSTRUCTIONS.md etag changes", () => {
+    const skills: Array<{ slug: string; enabled: boolean; active: boolean }> =
+      [];
+    const a = computeCapabilityInputSignature({
+      capabilityObjects: [
+        { key: "agent:researcher/INSTRUCTIONS.md", etag: "e1" },
+      ],
+      skills,
+    });
+    const b = computeCapabilityInputSignature({
+      capabilityObjects: [
+        { key: "agent:researcher/INSTRUCTIONS.md", etag: "e2" },
+      ],
+      skills,
+    });
+    expect(b).not.toBe(a);
+  });
+});

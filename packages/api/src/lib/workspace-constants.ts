@@ -39,10 +39,11 @@ export const AGENT_CONNECTORS_FOLDER = "connectors";
 export const TOOLS_FOLDER = "tools";
 
 export function capabilityFolderName(
-  klass: "connection" | "tool",
+  klass: "connection" | "tool" | "agent",
   scope: CapabilityFolderScope = "root",
 ): string {
   if (klass === "tool") return TOOLS_FOLDER;
+  if (klass === "agent") return WORKSPACE_AGENTS_FOLDER;
   return scope === "agent" ? AGENT_CONNECTORS_FOLDER : ROOT_CONNECTIONS_FOLDER;
 }
 
@@ -93,24 +94,36 @@ export function toolAssignmentRe(): RegExp {
   return new RegExp(`^${TOOLS_FOLDER}/([^/]+)/\\.assignment\\.json$`);
 }
 
+/** `agents/<slug>/INSTRUCTIONS.md` marker (subagent-folders U4). */
+export function agentMarkerRe(): RegExp {
+  return new RegExp(`^${WORKSPACE_AGENTS_FOLDER}/([^/]+)/INSTRUCTIONS\\.md$`);
+}
+
+export function agentAssignmentRe(): RegExp {
+  return new RegExp(
+    `^${WORKSPACE_AGENTS_FOLDER}/([^/]+)/\\.assignment\\.json$`,
+  );
+}
+
 /**
  * Every capability-folder file (markers, entry scripts, support files)
- * for input-signature/etag scans: `^(connections|tools)/<slug>/<path>$`.
- * Group 1 is the folder name — map back to a class via
- * `capabilityClassFromFolderName`.
+ * for input-signature/etag scans:
+ * `^(connections|tools|agents)/<slug>/<path>$`. Group 1 is the folder
+ * name — map back to a class via `capabilityClassFromFolderName`.
  */
 export function capabilityFolderFileRe(
   scope: CapabilityFolderScope = "root",
 ): RegExp {
   return new RegExp(
-    `^(${capabilityFolderName("connection", scope)}|${TOOLS_FOLDER})/([^/]+)/(.+)$`,
+    `^(${capabilityFolderName("connection", scope)}|${TOOLS_FOLDER}|${WORKSPACE_AGENTS_FOLDER})/([^/]+)/(.+)$`,
   );
 }
 
 export function capabilityClassFromFolderName(
   folder: string,
-): "connection" | "tool" | null {
+): "connection" | "tool" | "agent" | null {
   if (folder === TOOLS_FOLDER) return "tool";
+  if (folder === WORKSPACE_AGENTS_FOLDER) return "agent";
   if (folder === ROOT_CONNECTIONS_FOLDER || folder === AGENT_CONNECTORS_FOLDER)
     return "connection";
   return null;

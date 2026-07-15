@@ -49,6 +49,11 @@ import {
   type CapabilitySigner,
   type CapabilityVerifier,
 } from "./sidecar-signing.js";
+import {
+  applyAgentFolderSidecar,
+  parseAgentFolderInstructions,
+  type AgentFolderConfig,
+} from "../agent-folder-format.js";
 
 export const CAPABILITIES_MANIFEST_VERSION = 1;
 /**
@@ -62,7 +67,10 @@ export const CAPABILITIES_MANIFEST_VERSION = 1;
 // rev 3: connection entries carry the signed sidecar `policy` block
 // (THINK-229 U3) — previously rendered manifests must recompile so the
 // block reaches dispatch.
-export const CAPABILITY_COMPILE_REVISION = 3;
+// rev 4: agents/<slug>/ folders are admitted as class "agent" entries
+// (subagent-folders U4) — previously rendered manifests must recompile
+// so existing agent folders reach the manifest.
+export const CAPABILITY_COMPILE_REVISION = 4;
 export const CAPABILITIES_LATEST_PATH = "capabilities.json";
 
 export function capabilitiesManifestPath(fingerprint: string): string {
@@ -80,14 +88,15 @@ export type WithheldReason =
   | "trust_gate"
   | "missing_connection"
   | "operation_not_permitted"
-  | "policy_blocked";
+  | "policy_blocked"
+  | "nested_agent_folder";
 
 export interface CapabilityManifestEntry {
   /** Tool-registration name (definition `name`; slug for connections). */
   name: string;
   /** Folder slug (identity). */
   slug: string;
-  class: "builtin" | "skill" | "connection" | "tool";
+  class: "builtin" | "skill" | "connection" | "tool" | "agent";
   description?: string;
   /** Tool entries only. */
   kind?: ToolKind;
@@ -114,6 +123,15 @@ export interface CapabilityManifestEntry {
    * and (post-flip) enforce from the sidecar source.
    */
   policy?: Record<string, unknown>;
+  /** Agent entries only (subagent-folders U4). */
+  model?: string;
+  execution?: Record<string, unknown>;
+  /**
+   * Etag of the compiled INSTRUCTIONS.md (KTD-10 pinning). Pi verifies
+   * the synced file against it before spawn and skips the profile
+   * loudly on mismatch — the run's fingerprint must be truthful.
+   */
+  instructionsEtag?: string | null;
   /**
    * Shadow descriptor identity (THINK-280 U1b), copied verbatim from
    * the definition's `capability_ref` frontmatter. Shadow-read only —
@@ -128,7 +146,7 @@ export interface CapabilityManifestEntry {
 
 export interface WithheldCapabilityEntry {
   slug: string;
-  class: "connection" | "tool";
+  class: "connection" | "tool" | "agent";
   reason: WithheldReason;
   detail?: string;
 }
@@ -148,10 +166,16 @@ export interface CapabilitiesManifest {
 }
 
 export interface CapabilityFolderInput {
-  class: "connection" | "tool";
+  class: "connection" | "tool" | "agent";
   slug: string;
   definitionPath: string;
   definitionRaw: string | null;
+  /**
+   * Definition-file etag from the workspace scan. Agent entries pin it
+   * into the manifest (KTD-10) so Pi can verify the synced
+   * INSTRUCTIONS.md is the compiled content before spawning.
+   */
+  definitionEtag?: string | null;
   sidecarRaw: string | null;
   /**
    * All folder files as (path, etag) pairs, sidecar excluded (U8). Lets
@@ -235,7 +259,16 @@ export function compileCapabilitiesManifest(
   // Pass 1 — per-folder admission: definition validity, sidecar
   // signature + drift (R3/R18), enabled, approval (v1 blunt gate), and
   // the script trust precondition (R8; U8 wires the real report check).
+  const activeAgents: Array<{
+    config: AgentFolderConfig;
+    instructionsEtag: string | null;
+  }> = [];
   for (const folder of input.folders) {
+    if (folder.class === "agent") {
+      const admittedAgent = admitAgentFolder(folder, input.verifier, withheld);
+      if (admittedAgent) activeAgents.push(admittedAgent);
+      continue;
+    }
     const admitted = admitFolder(folder, input.verifier, withheld);
     if (!admitted) continue;
     if (folder.class === "connection") {
@@ -383,6 +416,9 @@ export function compileCapabilitiesManifest(
       connectionEntry(connection.definition, connection.sidecar),
     ),
     ...survivingTools.map((tool) => toolEntry(tool.definition)),
+    ...activeAgents.map((agent) =>
+      agentEntry(agent.config, agent.instructionsEtag),
+    ),
   ];
 
   const body = {
@@ -560,6 +596,132 @@ function admitFolder(
     }
   }
   return { definition, sidecar };
+}
+
+/**
+ * Admit an `agents/<slug>/` folder (subagent-folders U4 — R6/R7/R9).
+ * Divergences from connection/tool admission: the definition file is
+ * INSTRUCTIONS.md (strict U3 schema), the sidecar is OPTIONAL (missing =
+ * enabled, operator-authored — the skills convention; the R9 provenance
+ * guard lives at the write path, not here), and nested `agents/` folders
+ * are rejected structurally (the depth-0 invariant, replacing the
+ * deleted maxSubagentDepth literals).
+ */
+function admitAgentFolder(
+  folder: CapabilityFolderInput,
+  verifier: CapabilityVerifier | null,
+  withheld: WithheldCapabilityEntry[],
+): { config: AgentFolderConfig; instructionsEtag: string | null } | null {
+  const reject = (reason: WithheldReason, detail?: string) => {
+    withheld.push({
+      slug: folder.slug,
+      class: "agent",
+      reason,
+      ...(detail ? { detail } : {}),
+    });
+    return null;
+  };
+
+  if (folder.definitionRaw === null) {
+    return reject("invalid_definition", "INSTRUCTIONS.md unreadable");
+  }
+  const nested = (folder.files ?? []).find((file) =>
+    file.path.startsWith("agents/"),
+  );
+  if (nested) {
+    return reject(
+      "nested_agent_folder",
+      `nested sub-agent folders are not supported (found '${nested.path}')`,
+    );
+  }
+  const parsed = parseAgentFolderInstructions(
+    folder.definitionRaw,
+    folder.definitionPath,
+  );
+  if (!parsed.valid) {
+    return reject(
+      "invalid_definition",
+      parsed.errors[0]?.message ?? "INSTRUCTIONS.md failed validation",
+    );
+  }
+  let config = parsed.parsed;
+  if (config.slug !== folder.slug) {
+    return reject(
+      "invalid_definition",
+      `instructions path slug '${config.slug}' does not match folder slug '${folder.slug}'`,
+    );
+  }
+
+  // Optional sidecar (R7): absent = enabled, operator-authored, nothing
+  // pending. Present = platform state; signature + drift checks engage.
+  if (folder.sidecarRaw !== null) {
+    const sidecarResult = parseCapabilitySidecar(
+      folder.sidecarRaw,
+      `agents/${folder.slug}/.assignment.json`,
+    );
+    if (!sidecarResult.valid) {
+      return reject(
+        "invalid_definition",
+        sidecarResult.errors[0]?.message ?? "sidecar failed validation",
+      );
+    }
+    const sidecar = sidecarResult.parsed;
+    if (sidecar.slug !== folder.slug || sidecar.class !== "agent") {
+      return reject(
+        "invalid_definition",
+        "sidecar slug/class does not match its folder",
+      );
+    }
+    // An unsigned sidecar is an agent-authored proposal awaiting
+    // approval (AE1) — withheld, never dispatched.
+    if (!sidecar.signature) return reject("unsigned");
+    if (!verifier) {
+      return reject("unsigned", "signature verification unavailable");
+    }
+    const verdict = verifyCapabilitySidecar({
+      verifier,
+      sidecar: sidecar as unknown as Record<string, unknown>,
+      definitionBytes: folder.definitionRaw,
+    });
+    if (!verdict.ok) return reject(verdict.reason);
+    if (sidecar.enabled === false) return reject("disabled");
+    if (sidecar.approval !== undefined && sidecar.approval !== "never") {
+      return reject("approval_gated", `approval policy '${sidecar.approval}'`);
+    }
+    const overlaid = applyAgentFolderSidecar(
+      config,
+      sidecar as unknown as {
+        enabled?: boolean;
+        policy?: Record<string, unknown>;
+      },
+      folder.definitionPath,
+    );
+    if (!overlaid.valid) {
+      return reject(
+        "invalid_definition",
+        overlaid.errors[0]?.message ?? "sidecar overrides failed validation",
+      );
+    }
+    config = overlaid.parsed;
+  }
+
+  if (!config.enabled) return reject("disabled");
+  return { config, instructionsEtag: folder.definitionEtag ?? null };
+}
+
+function agentEntry(
+  config: AgentFolderConfig,
+  instructionsEtag: string | null,
+): CapabilityManifestEntry {
+  return {
+    name: config.slug,
+    slug: config.slug,
+    class: "agent",
+    description: config.description,
+    ...(config.model ? { model: config.model } : {}),
+    execution: config.execution as unknown as Record<string, unknown>,
+    instructionsEtag,
+  };
 }
 
 function connectionEntry(

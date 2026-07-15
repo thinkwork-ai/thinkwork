@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   AGENT_CONNECTORS_FOLDER,
+  agentAssignmentRe,
+  agentMarkerRe,
   ROOT_CONNECTIONS_FOLDER,
   TOOLS_FOLDER,
   capabilityClassFromFolderName,
@@ -41,9 +43,22 @@ describe("workspace-constants reproduce today's literal patterns", () => {
     expect(toolAssignmentRe().source).toBe(
       /^tools\/([^/]+)\/\.assignment\.json$/.source,
     );
+    // U4 deliberately extends the folder-file scan with agents/ —
+    // covered by the CAPABILITY_COMPILE_REVISION 3→4 bump.
     expect(capabilityFolderFileRe().source).toBe(
-      /^(connections|tools)\/([^/]+)\/(.+)$/.source,
+      /^(connections|tools|agents)\/([^/]+)\/(.+)$/.source,
     );
+  });
+
+  it("agent folder markers (subagent-folders U4)", () => {
+    expect(capabilityFolderName("agent")).toBe("agents");
+    expect(agentMarkerRe().source).toBe(
+      /^agents\/([^/]+)\/INSTRUCTIONS\.md$/.source,
+    );
+    expect(agentAssignmentRe().source).toBe(
+      /^agents\/([^/]+)\/\.assignment\.json$/.source,
+    );
+    expect(capabilityClassFromFolderName("agents")).toBe("agent");
   });
 
   it("mcp assignment marker (assignment-state)", () => {

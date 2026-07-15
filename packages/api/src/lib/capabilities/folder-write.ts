@@ -31,6 +31,7 @@ import {
   TOOL_DEFINITION_FILE,
   type ApprovalPolicy,
 } from "./definition-schemas.js";
+import { AGENT_INSTRUCTIONS_FILE } from "../agent-folder-format.js";
 import {
   resolveConfiguredCapabilitySigner,
   signCapabilitySidecar,
@@ -39,7 +40,7 @@ import {
 } from "./sidecar-signing.js";
 import { capabilityFolderName } from "../workspace-constants.js";
 
-export type CapabilityFolderClass = "connection" | "tool";
+export type CapabilityFolderClass = "connection" | "tool" | "agent";
 
 export interface CapabilityFolderWriteDeps {
   s3?: Pick<S3Client, "send">;
@@ -70,7 +71,11 @@ export function capabilityDefinitionKey(
   slug: string,
 ): string {
   const file =
-    klass === "connection" ? CONNECTION_DEFINITION_FILE : TOOL_DEFINITION_FILE;
+    klass === "connection"
+      ? CONNECTION_DEFINITION_FILE
+      : klass === "agent"
+        ? AGENT_INSTRUCTIONS_FILE
+        : TOOL_DEFINITION_FILE;
   return `${targetPrefix}${capabilityFolderName(klass)}/${slug}/${file}`;
 }
 
