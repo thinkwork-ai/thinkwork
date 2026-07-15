@@ -3,6 +3,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { EditorView } from "@codemirror/view";
+import { editorSelectionHighlight } from "@thinkwork/workspace-editor";
 import { Badge } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +64,7 @@ export function RoutineCodeEditor({
             ? javascript({ jsx: true, typescript: true })
             : python(),
           EditorView.lineWrapping,
+          editorSelectionHighlight,
         ]}
         style={{ fontSize: "12px", backgroundColor: "black" }}
         className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"

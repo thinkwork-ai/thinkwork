@@ -32,7 +32,7 @@ function frontmatterValue(source: string, key: string): string | undefined {
   return undefined;
 }
 
-async function walk(dir: string): Promise<string[]> {
+async function walk(dir: string, isScopeRoot: boolean): Promise<string[]> {
   let entries: string[];
   try {
     entries = await readdir(dir);
@@ -42,6 +42,12 @@ async function walk(dir: string): Promise<string[]> {
 
   const found: string[] = [];
   for (const entry of entries.sort()) {
+    // Sub-agent folders live at `<scope root>/agents/<slug>/` and own their
+    // capability surface; a scope's discovery must never admit (or let a
+    // same-slug nested skill shadow) skills from those subtrees. Anchored at
+    // the scope root only — deeper `agents/` segments (e.g. skill assets under
+    // skills/skill-creator/agents/) are ordinary content.
+    if (isScopeRoot && entry === "agents") continue;
     const abs = path.join(dir, entry);
     let st;
     try {
@@ -50,7 +56,7 @@ async function walk(dir: string): Promise<string[]> {
       continue;
     }
     if (st.isDirectory()) {
-      found.push(...(await walk(abs)));
+      found.push(...(await walk(abs, false)));
     } else if (
       st.isFile() &&
       entry === "SKILL.md" &&
@@ -84,10 +90,17 @@ export function buildWorkspaceSkillFromContent(
   };
 }
 
+/**
+ * Discover the skills belonging to one agent scope. `scopeRoot` is the agent's
+ * own folder — the workspace root for the root agent, or
+ * `<workspace>/agents/<slug>/` for a sub-agent. Discovery is subtree-scoped:
+ * the walk never descends into the scope's `agents/` folder, so a nested
+ * sub-agent's skills neither join nor shadow this scope's surface.
+ */
 export async function discoverWorkspaceSkills(
-  workspaceDir: string,
+  scopeRoot: string,
 ): Promise<WorkspaceSkill[]> {
-  const skillFiles = await walk(workspaceDir);
+  const skillFiles = await walk(scopeRoot, true);
   const bySlug = new Map<string, WorkspaceSkill>();
 
   for (const skillPath of skillFiles) {
