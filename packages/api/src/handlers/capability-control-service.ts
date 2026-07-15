@@ -256,6 +256,17 @@ export interface SelfApproveRoutineResultOut {
   proposalId?: string;
   routineId?: string;
   gateSha?: string;
+  /**
+   * Promotion outcome behind an `applied` approval: `promoted` means the
+   * routine is live; anything else (e.g. `validation_failed`) means the
+   * hermetic gate blocked activation — first live drive showed the agent
+   * treating bare `applied` as success while its routine never activated.
+   */
+  promotionOutcome?: string;
+  /** Red hermetic-gate detail (per-fixture mismatches) for self-correction. */
+  hermetic?: unknown;
+  /** In-context loop nudge the model reads verbatim from the tool result. */
+  nextStep?: string;
 }
 
 export type CapabilityControlResponse =
@@ -878,6 +889,11 @@ async function runSelfApproveRoutine(
     result.promotion?.outcome === "promoted"
       ? (result.promotion.validatedSha ?? undefined)
       : undefined;
+  const promotionOutcome = result.promotion?.outcome;
+  const gateBlocked =
+    result.outcome === "applied" &&
+    promotionOutcome !== undefined &&
+    promotionOutcome !== "promoted";
   return {
     ok: true,
     action: "self_approve_routine",
@@ -893,6 +909,19 @@ async function runSelfApproveRoutine(
           }
         : {}),
       ...(gateSha ? { gateSha } : {}),
+      // Promotion transparency: an `applied` approval whose gate went red is
+      // NOT a runnable routine — say so, with the per-fixture detail, so the
+      // agent corrects its fixtures instead of reporting false success.
+      ...(promotionOutcome ? { promotionOutcome } : {}),
+      ...(gateBlocked && result.promotion?.hermetic
+        ? { hermetic: result.promotion.hermetic }
+        : {}),
+      ...(gateBlocked
+        ? {
+            nextStep:
+              "The hermetic fixture gate blocked activation — this routine is NOT runnable. Fix the fixtures (each expected output must be EXACTLY what the routine computes from that fixture's input — derive it, never estimate it), then routine_propose the corrected bundle and self_promote_routine again.",
+          }
+        : {}),
     },
   };
 }
