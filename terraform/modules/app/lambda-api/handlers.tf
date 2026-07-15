@@ -992,6 +992,19 @@ resource "aws_lambda_function" "handler" {
     }
   }
 
+  # Analyst data-path handlers get a stable NAT egress IP when
+  # analyst_egress_subnet_ids is set — external Postgres sources behind an IP
+  # allowlist admit that one EIP. Disjoint from the okf-efs-refresh block
+  # above (a function takes at most one vpc_config).
+  dynamic "vpc_config" {
+    for_each = contains(local.analyst_vpc_handlers, each.key) && local.analyst_vpc_enabled ? [1] : []
+
+    content {
+      subnet_ids         = var.analyst_egress_subnet_ids
+      security_group_ids = var.analyst_egress_security_group_ids
+    }
+  }
+
   dynamic "file_system_config" {
     for_each = each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
 

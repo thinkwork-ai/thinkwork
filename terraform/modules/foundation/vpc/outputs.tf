@@ -28,6 +28,11 @@ output "nat_gateway_id" {
   value       = local.nat_gateway_enabled ? aws_nat_gateway.main[0].id : null
 }
 
+output "nat_gateway_public_ip" {
+  description = "Public EIP of the NAT gateway — the stable egress IP of every VPC-attached workload (what external IP allowlists must admit)"
+  value       = local.nat_gateway_enabled ? aws_nat_gateway.main[0].public_ip : null
+}
+
 output "vpc_cidr_block" {
   description = "The VPC's CIDR block (for endpoint/SG rules that must admit the whole VPC)"
   value       = var.cidr_block

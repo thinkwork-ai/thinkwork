@@ -20,6 +20,17 @@ data "aws_caller_identity" "current" {}
 
 locals {
   okf_efs_vpc_enabled = length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+  # Handlers that open direct Postgres connections to registered analyst data
+  # sources. VPC-attaching them (analyst_egress_subnet_ids) gives their egress
+  # the NAT gateway's stable EIP, which external databases behind an IP
+  # allowlist can admit — a non-VPC Lambda egresses from the shared AWS pool
+  # and can never satisfy such an allowlist.
+  analyst_vpc_enabled = length(var.analyst_egress_subnet_ids) > 0 && length(var.analyst_egress_security_group_ids) > 0
+  analyst_vpc_handlers = toset([
+    "graphql-http",
+    "analyst-query-broker",
+    "analyst-connection-reconciler",
+  ])
   # Constructed rather than read from aws_apigatewayv2_stage.default.invoke_url
   # (the two are identical for an HTTP API's $default stage). Reading it off
   # the stage made every Lambda's env depend on the stage, which forbids the

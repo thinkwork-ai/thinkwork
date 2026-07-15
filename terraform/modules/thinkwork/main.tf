@@ -487,6 +487,34 @@ resource "terraform_data" "n8n_runtime_state_guardrails" {
     }
   }
 }
+# Egress-only SG for the VPC-attached analyst data-path Lambdas
+# (analyst_lambda_vpc_egress). Their whole point is a stable NAT egress IP for
+# external database allowlists; they accept no inbound traffic.
+resource "aws_security_group" "analyst_egress_lambda" {
+  count = var.analyst_lambda_vpc_egress ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-analyst-egress-"
+  description = "Egress for VPC-attached analyst data-path Lambdas"
+  vpc_id      = module.vpc.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-analyst-egress-lambda-sg" }
+
+  lifecycle {
+    create_before_destroy = true
+    precondition {
+      condition     = length(module.vpc.private_subnet_ids) > 0
+      error_message = "analyst_lambda_vpc_egress requires private (NAT-routed) subnets — a Lambda in a public subnet has no internet egress."
+    }
+  }
+}
+
 resource "aws_security_group" "okf_wiki_lambda" {
   count = var.okf_wiki_efs_enabled ? 1 : 0
 
@@ -1074,6 +1102,8 @@ module "api" {
   memory_engine                         = local.resolved_memory_engine
   okf_efs_subnet_ids                    = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
   okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
+  analyst_egress_subnet_ids             = var.analyst_lambda_vpc_egress ? module.vpc.private_subnet_ids : []
+  analyst_egress_security_group_ids     = var.analyst_lambda_vpc_egress ? [aws_security_group.analyst_egress_lambda[0].id] : []
   okf_efs_mount_target_ids              = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
   okf_efs_file_system_arn               = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
   okf_efs_refresh_access_point_arn      = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
