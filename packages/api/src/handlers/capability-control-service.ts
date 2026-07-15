@@ -44,6 +44,7 @@ import {
   type CapabilityCallerContextPayload,
 } from "@thinkwork/lambda/capability-caller-context";
 import {
+  DESCRIPTOR_CONTRACT_REFERENCE,
   formatTwcapRef,
   operationContractHash,
   operationExecutabilityViolations,
@@ -213,6 +214,12 @@ export interface ConnectionResearchResultOut {
     /** In-context loop nudge the model reads verbatim from the tool result. */
     nextStep?: string;
   };
+  /**
+   * Descriptor authoring reference (enums + shape + valid auto-tier
+   * example) — the composing agent otherwise has no way to learn the
+   * validator's vocabulary and admission fails on guessed enum values.
+   */
+  descriptorContract?: typeof DESCRIPTOR_CONTRACT_REFERENCE;
 }
 
 export interface RoutineProposeResultOut {
@@ -236,6 +243,11 @@ export interface SelfAdmitConnectionResultOut {
   /** Readiness of the auto-provisioned binding (U2b): ready | degraded | rejected. */
   bindingOutcome?: string;
   bindingReason?: string;
+  /**
+   * Attached on descriptor-shaped rejections so the composing agent can
+   * self-correct against the validator's actual vocabulary.
+   */
+  descriptorContract?: typeof DESCRIPTOR_CONTRACT_REFERENCE;
 }
 
 export interface SelfApproveRoutineResultOut {
@@ -589,6 +601,11 @@ async function runConnectionResearch(
     };
   }
 
+  // Always ship the authoring reference: composition happens right after
+  // research, and this is the only surface that can teach the validator's
+  // enum vocabulary before the first self_admit attempt.
+  result.descriptorContract = DESCRIPTOR_CONTRACT_REFERENCE;
+
   return { ok: true, action: "connection_research", result };
 }
 
@@ -722,6 +739,21 @@ function platformAgentFolderWriter(db: Db): AdmissionFolderWriter {
  * agent's service principal + empty-credential binding and drives it to `ready`
  * (U2b), returning the executable twcap. A non-auto descriptor → held_for_review.
  */
+/**
+ * Descriptor-shaped rejections (validator violations like
+ * "operations[0].latencyClass: invalid", "descriptor: missing from payload",
+ * "version: must be a decimal string") are self-correctable IF the agent
+ * learns the vocabulary — the caller attaches DESCRIPTOR_CONTRACT_REFERENCE
+ * so the retry can converge instead of guessing enum values. Governance
+ * rejections (held_for_review, binding failures) are NOT descriptor-shaped:
+ * re-authoring cannot and must not convert them.
+ */
+export function isDescriptorShapedRejection(reason: unknown): boolean {
+  if (typeof reason !== "string") return false;
+  if (reason === "held_for_review") return false;
+  return /descriptor|: invalid|: missing|: must |twcap: /i.test(reason);
+}
+
 async function runSelfAdmitConnection(
   db: Db,
   context: CapabilityCallerContextPayload,
@@ -758,12 +790,18 @@ async function runSelfAdmitConnection(
   });
 
   if (result.outcome !== "applied") {
+    const descriptorShaped =
+      result.outcome === "rejected" &&
+      isDescriptorShapedRejection(result.reason);
     return {
       ok: true,
       action: "self_admit_connection",
       result: {
         outcome: result.outcome,
         ...(result.reason ? { reason: result.reason } : {}),
+        ...(descriptorShaped
+          ? { descriptorContract: DESCRIPTOR_CONTRACT_REFERENCE }
+          : {}),
       },
     };
   }
