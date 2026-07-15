@@ -111,6 +111,12 @@ variable "enable_capability_broker" {
   default     = false
 }
 
+variable "analyst_lambda_vpc_egress" {
+  description = "VPC-attach the analyst data-path Lambdas so their egress rides the NAT gateway's stable EIP — required when an external analyst data source sits behind an IP allowlist. See the thinkwork module's analyst_egress_ip output for the IP to allowlist."
+  type        = bool
+  default     = false
+}
+
 variable "memory_engine" {
   description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments."
   type        = string
@@ -762,6 +768,7 @@ module "thinkwork" {
   database_engine                   = var.database_engine
   enable_hindsight                  = var.enable_hindsight
   enable_capability_broker          = var.enable_capability_broker
+  analyst_lambda_vpc_egress         = var.analyst_lambda_vpc_egress
   hindsight_database_name           = var.hindsight_database_name
   memory_engine                     = var.memory_engine
   twenty_provisioned                = var.twenty_provisioned
@@ -1329,4 +1336,9 @@ output "mcp_custom_domain_target" {
 output "customer_domain_name_servers" {
   description = "The four Route53 name servers for the customer-domain zone — publish these via the claim tool's `claim --set-targets` to delegate (empty when no customer domain is configured)."
   value       = module.thinkwork.customer_domain_name_servers
+}
+
+output "analyst_egress_ip" {
+  description = "Stable NAT egress IP of the VPC-attached analyst data-path Lambdas (null unless analyst_lambda_vpc_egress is set)"
+  value       = module.thinkwork.analyst_egress_ip
 }

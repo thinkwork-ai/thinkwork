@@ -273,6 +273,18 @@ variable "memory_engine" {
   }
 }
 
+variable "analyst_egress_subnet_ids" {
+  description = "Private (NAT-routed) subnet IDs for VPC-attaching the analyst data-path handlers (graphql-http, analyst-query-broker, analyst-connection-reconciler) so external Postgres sources can allowlist the stack's stable NAT egress IP. Leave empty to keep the handlers outside any VPC."
+  type        = list(string)
+  default     = []
+}
+
+variable "analyst_egress_security_group_ids" {
+  description = "Security group IDs for the VPC-attached analyst data-path handlers. Leave empty to keep the handlers outside any VPC."
+  type        = list(string)
+  default     = []
+}
+
 variable "okf_efs_subnet_ids" {
   description = "Subnet IDs for the OKF EFS hydrator Lambda VPC attachment. Leave empty to deploy the hydrator without an EFS mount."
   type        = list(string)
