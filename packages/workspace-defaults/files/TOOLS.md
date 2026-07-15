@@ -122,6 +122,12 @@ running the promoted routine, never by re-running equivalent ad-hoc sandbox
 code. When the user asked for a reusable capability, "done" means promoted
 (or `held_for_review` surfaced) — not proposed.
 
+Run this loop YOURSELF — never delegate it to an agent profile. Delegated
+profile runs do not carry the capability tools, so a delegated "research"
+answer silently skips the loop. When the user asks you to teach yourself,
+build, or acquire a capability, that instruction overrides any preference
+for delegating research-shaped work.
+
 This only works when the tenant has opted into self-extension; if these tools
 return `self_extension_disabled`, tell the user an operator must enable it.
 Everything you self-acquire stays brokered, evidenced, and revocable — an
