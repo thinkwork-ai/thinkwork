@@ -412,8 +412,9 @@ describe("SettingsMcpServers", () => {
       ).disabled,
     ).toBe(false);
 
-    // Header carries the Connectors title and the three-tab strip
-    // (Connections + merged MCP Servers + Data Sources, THINK-285).
+    // Header carries the Connectors title and the tab strip (Connections +
+    // merged MCP Servers + Data Sources, THINK-285; + Self-Acquired for
+    // governed autonomy U5).
     const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
     expect(headerConfig?.title).toBe("Connectors");
     expect(headerConfig?.breadcrumbs).toEqual([{ label: "Connectors" }]);
@@ -421,6 +422,7 @@ describe("SettingsMcpServers", () => {
       { to: "/settings/mcp-servers", label: "Connections" },
       { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
       { to: "/settings/mcp-servers/data-sources", label: "Data Sources" },
+      { to: "/settings/mcp-servers/self-acquired", label: "Self-Acquired" },
     ]);
   });
 
