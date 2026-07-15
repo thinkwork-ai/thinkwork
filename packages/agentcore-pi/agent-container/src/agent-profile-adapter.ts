@@ -114,7 +114,6 @@ export interface CompiledAgentProfileRunRequest {
   execution: {
     foreground: true;
     clarify: false;
-    maxSubagentDepth: 0;
     timeoutMs?: number;
     maxRuntimeMs?: number;
     maxExecutionTimeMs?: number;
@@ -660,7 +659,6 @@ export function compileAgentProfileRunRequest(
     execution: {
       foreground: true,
       clarify: false,
-      maxSubagentDepth: 0,
       ...(execution.timeoutMs !== undefined
         ? { timeoutMs: execution.timeoutMs }
         : {}),
