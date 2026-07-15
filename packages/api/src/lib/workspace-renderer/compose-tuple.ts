@@ -911,6 +911,17 @@ export async function renderWorkspaceTuple(
     sidecarEtag?: string | null;
     /** Every folder file (sidecar excluded) — U8 trust invalidation. */
     files: Array<{ path: string; etag?: string | null }>;
+    /**
+     * Agent folders only (subagent-folders U5): child grant sidecar
+     * object keys under skills|connectors/<child>/, fetched at compile
+     * time for Pass 2b grant resolution.
+     */
+    childGrantRefs?: Array<{
+      kind: "skill" | "connector";
+      slug: string;
+      path: string;
+      key: string;
+    }>;
   }
   const capabilityFolderScans = new Map<string, CapabilityFolderScan>();
   const capabilityScan = (
@@ -980,10 +991,24 @@ export async function renderWorkspaceTuple(
     // retrigger the compile.
     if (folderFile && folderFile[3] !== ".assignment.json") {
       const klass = capabilityClassFromFolderName(folderFile[1]!) ?? "tool";
-      capabilityScan(klass, folderFile[2]!).files.push({
+      const scan = capabilityScan(klass, folderFile[2]!);
+      scan.files.push({
         path: folderFile[3]!,
         etag: object.etag ?? null,
       });
+      if (klass === "agent") {
+        const childGrant = folderFile[3]!.match(
+          /^(connectors|skills)\/([^/]+)\/\.assignment\.json$/,
+        );
+        if (childGrant) {
+          (scan.childGrantRefs ??= []).push({
+            kind: childGrant[1] === "skills" ? "skill" : "connector",
+            slug: childGrant[2]!,
+            path: sourcePath,
+            key: object.key,
+          });
+        }
+      }
     }
   }
   // Skill trust gate (Composer U4/U5 honesty fix): routing rows may only
@@ -1150,6 +1175,19 @@ export async function renderWorkspaceTuple(
             ? objectStore.getText({ bucket, key: scan.sidecarKey })
             : Promise.resolve(null),
         ]);
+        const childGrants = scan.childGrantRefs?.length
+          ? await Promise.all(
+              scan.childGrantRefs.map(async (ref) => ({
+                kind: ref.kind,
+                slug: ref.slug,
+                path: ref.path,
+                sidecarRaw: await objectStore.getText({
+                  bucket,
+                  key: ref.key,
+                }),
+              })),
+            )
+          : undefined;
         return {
           class: scan.class,
           slug,
@@ -1164,6 +1202,7 @@ export async function renderWorkspaceTuple(
           definitionEtag: scan.definitionEtag ?? null,
           sidecarRaw,
           files: scan.files,
+          ...(childGrants ? { childGrants } : {}),
         };
       }),
     );

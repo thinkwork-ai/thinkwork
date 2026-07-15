@@ -89,7 +89,8 @@ export type WithheldReason =
   | "missing_connection"
   | "operation_not_permitted"
   | "policy_blocked"
-  | "nested_agent_folder";
+  | "nested_agent_folder"
+  | "missing_skill";
 
 export interface CapabilityManifestEntry {
   /** Tool-registration name (definition `name`; slug for connections). */
@@ -127,6 +128,15 @@ export interface CapabilityManifestEntry {
   model?: string;
   execution?: Record<string, unknown>;
   /**
+   * Resolved child grant surface (subagent-folders U5 — R10-R13).
+   * Presence-based: `agents/<slug>/skills|connectors/<child>/` folders,
+   * each carrying its own platform-signed narrowing sidecar. Withheld
+   * child grants stay on the entry (visible absence for the child
+   * prompt), never as runtime spawn errors.
+   */
+  grants?: AgentChildGrant[];
+  withheldGrants?: AgentWithheldGrant[];
+  /**
    * Etag of the compiled INSTRUCTIONS.md (KTD-10 pinning). Pi verifies
    * the synced file against it before spawn and skips the profile
    * loudly on mismatch — the run's fingerprint must be truthful.
@@ -142,6 +152,32 @@ export interface CapabilityManifestEntry {
    */
   twcap?: string;
   descriptor_fingerprint?: string;
+}
+
+export interface AgentChildGrant {
+  class: "skill" | "connector";
+  slug: string;
+  /**
+   * Connector grants: the granted operation set — the child sidecar's
+   * narrowing list when present (subset-validated against the root
+   * grant), else the root's effective surface.
+   */
+  operations?: string[];
+}
+
+export interface AgentWithheldGrant {
+  class: "skill" | "connector";
+  slug: string;
+  reason: WithheldReason;
+  detail?: string;
+}
+
+export interface AgentChildGrantInput {
+  kind: "skill" | "connector";
+  slug: string;
+  /** Workspace-relative sidecar path (for error messages). */
+  path: string;
+  sidecarRaw: string | null;
 }
 
 export interface WithheldCapabilityEntry {
@@ -177,6 +213,11 @@ export interface CapabilityFolderInput {
    */
   definitionEtag?: string | null;
   sidecarRaw: string | null;
+  /**
+   * Agent folders only (subagent-folders U5): the child grant sidecars
+   * found under `agents/<slug>/skills|connectors/<child>/`.
+   */
+  childGrants?: AgentChildGrantInput[];
   /**
    * All folder files as (path, etag) pairs, sidecar excluded (U8). Lets
    * the script trust check invalidate on ANY folder-file edit without
@@ -262,11 +303,17 @@ export function compileCapabilitiesManifest(
   const activeAgents: Array<{
     config: AgentFolderConfig;
     instructionsEtag: string | null;
+    childGrants: AgentChildGrantInput[];
   }> = [];
   for (const folder of input.folders) {
     if (folder.class === "agent") {
       const admittedAgent = admitAgentFolder(folder, input.verifier, withheld);
-      if (admittedAgent) activeAgents.push(admittedAgent);
+      if (admittedAgent) {
+        activeAgents.push({
+          ...admittedAgent,
+          childGrants: folder.childGrants ?? [],
+        });
+      }
       continue;
     }
     const admitted = admitFolder(folder, input.verifier, withheld);
@@ -416,8 +463,21 @@ export function compileCapabilitiesManifest(
       connectionEntry(connection.definition, connection.sidecar),
     ),
     ...survivingTools.map((tool) => toolEntry(tool.definition)),
+    // Pass 2b (subagent-folders U5): resolve each agent's child grant
+    // surface against the post-policy ACTIVE connections and the skill
+    // scan — grant failures become visible absence on the entry, never
+    // runtime spawn errors (R13).
     ...activeAgents.map((agent) =>
-      agentEntry(agent.config, agent.instructionsEtag),
+      agentEntry(
+        agent.config,
+        agent.instructionsEtag,
+        resolveAgentChildGrants({
+          childGrants: agent.childGrants,
+          connectionsBySlug,
+          skills: input.skills,
+          verifier: input.verifier,
+        }),
+      ),
     ),
   ];
 
@@ -712,6 +772,10 @@ function admitAgentFolder(
 function agentEntry(
   config: AgentFolderConfig,
   instructionsEtag: string | null,
+  grantSurface: {
+    grants: AgentChildGrant[];
+    withheldGrants: AgentWithheldGrant[];
+  },
 ): CapabilityManifestEntry {
   return {
     name: config.slug,
@@ -721,7 +785,161 @@ function agentEntry(
     ...(config.model ? { model: config.model } : {}),
     execution: config.execution as unknown as Record<string, unknown>,
     instructionsEtag,
+    grants: grantSurface.grants,
+    ...(grantSurface.withheldGrants.length > 0
+      ? { withheldGrants: grantSurface.withheldGrants }
+      : {}),
   };
+}
+
+/**
+ * The signing convention for child grant sidecars: there is no
+ * definition file inside a grant folder (definitions never copy down —
+ * R11), so the platform signs the sidecar payload over EMPTY definition
+ * bytes. The sidecar itself is the whole grant; the envelope makes it
+ * tamper-evident, and `signed_content_sha` pins sha256("").
+ */
+export const AGENT_CHILD_GRANT_SIGNING_BYTES = "";
+
+function resolveAgentChildGrants(input: {
+  childGrants: AgentChildGrantInput[];
+  connectionsBySlug: Map<
+    string,
+    { definition: ConnectionDefinition; sidecar: CapabilityAssignmentSidecar }
+  >;
+  skills: Array<{ slug: string; enabled: boolean; active: boolean }>;
+  verifier: CapabilityVerifier | null;
+}): { grants: AgentChildGrant[]; withheldGrants: AgentWithheldGrant[] } {
+  const grants: AgentChildGrant[] = [];
+  const withheldGrants: AgentWithheldGrant[] = [];
+  const skillState = new Map(input.skills.map((skill) => [skill.slug, skill]));
+
+  for (const child of input.childGrants) {
+    const klass = child.kind === "skill" ? "skill" : "connector";
+    const withhold = (reason: WithheldReason, detail?: string) => {
+      withheldGrants.push({
+        class: klass,
+        slug: child.slug,
+        reason,
+        ...(detail ? { detail } : {}),
+      });
+    };
+
+    // R6/R12: every grant folder carries its own platform-signed
+    // sidecar — presence alone activates nothing.
+    if (child.sidecarRaw === null) {
+      withhold("unsigned", "grant folder has no .assignment.json");
+      continue;
+    }
+    let sidecar: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(child.sidecarRaw) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        withhold("invalid_definition", "grant sidecar must be a JSON object");
+        continue;
+      }
+      sidecar = parsed as Record<string, unknown>;
+    } catch {
+      withhold(
+        "invalid_definition",
+        `grant sidecar at ${child.path} is not valid JSON`,
+      );
+      continue;
+    }
+    if (sidecar.slug !== child.slug) {
+      withhold(
+        "invalid_definition",
+        "grant sidecar slug does not match its folder",
+      );
+      continue;
+    }
+    if (!sidecar.signature) {
+      withhold("unsigned");
+      continue;
+    }
+    if (!input.verifier) {
+      withhold("unsigned", "signature verification unavailable");
+      continue;
+    }
+    const verdict = verifyCapabilitySidecar({
+      verifier: input.verifier,
+      sidecar,
+      definitionBytes: AGENT_CHILD_GRANT_SIGNING_BYTES,
+    });
+    if (!verdict.ok) {
+      withhold(verdict.reason);
+      continue;
+    }
+    if (sidecar.enabled === false) {
+      withhold("disabled");
+      continue;
+    }
+
+    if (child.kind === "skill") {
+      const rootSkill = skillState.get(child.slug);
+      if (!rootSkill || !rootSkill.enabled || !rootSkill.active) {
+        withhold(
+          "missing_skill",
+          `root skill '${child.slug}' is not installed and active`,
+        );
+        continue;
+      }
+      grants.push({ class: "skill", slug: child.slug });
+      continue;
+    }
+
+    // Connector grant: the root connection must be ACTIVE (a withheld
+    // or revoked root withers every child grant with no child edit —
+    // R11 cascade), and the narrowed operations must be a subset of the
+    // root's effective surface (R10, compile-time).
+    const root = input.connectionsBySlug.get(child.slug);
+    if (!root) {
+      withhold(
+        "missing_connection",
+        `root connection '${child.slug}' is not active`,
+      );
+      continue;
+    }
+    const rootPermitted = Array.isArray(root.sidecar.permissions?.operations)
+      ? (root.sidecar.permissions.operations as string[])
+      : null;
+    const rootSurface =
+      rootPermitted ??
+      (root.definition.operations.length > 0
+        ? root.definition.operations
+        : null);
+    const permissions = sidecar.permissions as
+      | { operations?: unknown }
+      | undefined;
+    const requested = Array.isArray(permissions?.operations)
+      ? (permissions.operations as string[])
+      : null;
+    if (requested) {
+      const denied = rootSurface
+        ? requested.filter((op) => !rootSurface.includes(op))
+        : [];
+      if (denied.length > 0) {
+        withhold(
+          "operation_not_permitted",
+          `operations [${denied.join(", ")}] exceed the root grant on '${child.slug}'`,
+        );
+        continue;
+      }
+      grants.push({
+        class: "connector",
+        slug: child.slug,
+        operations: requested,
+      });
+      continue;
+    }
+    grants.push({
+      class: "connector",
+      slug: child.slug,
+      ...(rootSurface ? { operations: rootSurface } : {}),
+    });
+  }
+
+  return { grants, withheldGrants };
 }
 
 function connectionEntry(
