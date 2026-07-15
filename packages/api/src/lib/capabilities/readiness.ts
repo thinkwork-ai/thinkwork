@@ -96,7 +96,7 @@ interface ProbeSelector {
  * path (no `{placeholder}` path params — the probe carries no operation input).
  * The probe NEVER touches a write/effectful operation.
  */
-function pickProbeOperation(descriptor: unknown): ProbeSelector | null {
+export function pickProbeOperation(descriptor: unknown): ProbeSelector | null {
   const ops =
     descriptor && typeof descriptor === "object"
       ? (descriptor as { operations?: unknown }).operations

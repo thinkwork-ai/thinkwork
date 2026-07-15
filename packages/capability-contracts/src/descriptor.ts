@@ -472,7 +472,7 @@ export const DESCRIPTOR_CONTRACT_REFERENCE = {
     provenance:
       "{ sourceUrls: official https provider doc URLs (required, non-empty), evidenceRefs: string[] (may be []) }",
     operations:
-      "OperationContract[] — every field required; targetScope closed additionally requires resourceSelector; reversibility compensable additionally requires compensation",
+      "OperationContract[] — every field required; targetScope closed additionally requires resourceSelector; reversibility compensable additionally requires compensation. IMPORTANT: at least one read+idempotent operation should carry targetScope {kind:'closed', resourceSelector:{method:'GET', host, path}} with a literal path (no {templates}) — the binding readiness probe issues one GET against it; without one the auto-provisioned binding stays degraded and the capability is never runnable.",
   },
   autoTier:
     "Autonomous self-admission requires EVERY operation: effect none|read, credentialKinds [], reversibility reversible, no `unknown` cost/latency/output class, inputDataClass and outputDataClass public|internal. Anything else is held for operator review.",
@@ -495,7 +495,17 @@ export const DESCRIPTOR_CONTRACT_REFERENCE = {
         operationId: "getItem",
         summary: "Fetch a public item by id",
         effect: "read",
-        targetScope: { kind: "open_world" },
+        // Closed scope with a literal GET selector: this is what the binding
+        // readiness probe calls — an open_world-only descriptor admits fine
+        // but its binding can never become ready (no probe operation).
+        targetScope: {
+          kind: "closed",
+          resourceSelector: {
+            method: "GET",
+            host: "api.example.com",
+            path: "/items/1",
+          },
+        },
         reversibility: "reversible",
         idempotency: "idempotent",
         principalModes: ["service"],

@@ -7,6 +7,7 @@
  * bodies must be unrepresentable in stored evidence.
  */
 
+import { DESCRIPTOR_CONTRACT_REFERENCE } from "@thinkwork/capability-contracts";
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +31,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import {
   createCredentialBinding,
+  pickProbeOperation,
   readOnlyHttpProbeRunner,
   revokeCredentialBinding,
   verifyCredentialBinding,
@@ -613,9 +615,7 @@ describe("readOnlyHttpProbeRunner", () => {
     });
     expect(out.ok).toBe(true);
     expect(out.statusCode).toBe(301);
-    expect(
-      (fetchSpy.mock.calls[0]![1] as RequestInit).redirect,
-    ).toBe("manual");
+    expect((fetchSpy.mock.calls[0]![1] as RequestInit).redirect).toBe("manual");
   });
 
   it("degrades with http_<status> on a 4xx", async () => {
@@ -674,5 +674,20 @@ describe("readOnlyHttpProbeRunner", () => {
     });
     expect(out.ok).toBe(false);
     expect(out.failureKind).toBe("probe_unreachable");
+  });
+});
+
+describe("descriptor contract reference probe-ability", () => {
+  it("the authoring reference example yields a probe operation (binding can reach ready)", () => {
+    // The first live self-extension drive produced a degraded binding with
+    // failureKind no_read_only_probe_operation: the agent copied the
+    // reference example's open_world targetScope, which admits fine but can
+    // never probe. The example must stay probe-able forever.
+    const sel = pickProbeOperation(
+      JSON.parse(JSON.stringify(DESCRIPTOR_CONTRACT_REFERENCE.example)),
+    );
+    expect(sel).not.toBeNull();
+    expect(sel?.method).toBe("GET");
+    expect(sel?.path.includes("{")).toBe(false);
   });
 });
