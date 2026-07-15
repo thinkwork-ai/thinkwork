@@ -3579,12 +3579,15 @@ export async function handleInvocation(
         ? `${skillCreatorCommandBlock}\n\n${message}`
         : message,
     );
-  const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
-  // Subagent-folders U9 — DUAL READ: when this dispatch pinned a
-  // capabilities manifest, resolve sub-agent profiles from its agent
-  // entries + the synced agents/<slug>/INSTRUCTIONS.md files and compare
-  // against the payload. Divergence is a structured warning; the payload
-  // stays authoritative until the per-tenant authority flip (U10).
+  let agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
+  // Subagent-folders U9/U10: when this dispatch pinned a capabilities
+  // manifest, resolve sub-agent profiles from its agent entries + the
+  // synced agents/<slug>/INSTRUCTIONS.md files.
+  //   - authority "manifest" (U10 per-agent flip): manifest profiles ARE
+  //     the central truth; the payload carries only space-local profiles
+  //     in full, which win on slug collision (today's shadowing rule).
+  //   - otherwise (dual-read soak): divergence is a structured warning
+  //     and the payload stays authoritative.
   if (capabilitiesManifest) {
     try {
       const manifestProfiles = await agentProfilesFromManifest({
@@ -3602,18 +3605,39 @@ export async function handleInvocation(
           detail: skippedProfile.detail,
         });
       }
-      for (const divergence of diffProfileSources({
-        payloadProfiles: agentProfiles,
-        manifestProfiles: manifestProfiles.profiles,
-      })) {
+      if (args.payload.agent_profiles_authority === "manifest") {
+        const payloadSlugs = new Set(
+          agentProfiles.map((profile) => profile.slug),
+        );
+        agentProfiles = [
+          ...agentProfiles,
+          ...manifestProfiles.profiles.filter(
+            (profile) => !payloadSlugs.has(profile.slug),
+          ),
+        ];
         logStructured({
-          level: "warn",
-          event: "agent_profile_manifest_divergence",
+          level: "info",
+          event: "agent_profiles_manifest_authority",
           tenantId: identity.tenantId,
           agentSlug: identity.agentSlug,
-          profileSlug: divergence.slug,
-          fields: divergence.fields,
+          manifestProfiles: manifestProfiles.profiles.length,
+          spaceLocalProfiles: payloadSlugs.size,
+          fingerprint: capabilitiesManifestFingerprint,
         });
+      } else {
+        for (const divergence of diffProfileSources({
+          payloadProfiles: agentProfiles,
+          manifestProfiles: manifestProfiles.profiles,
+        })) {
+          logStructured({
+            level: "warn",
+            event: "agent_profile_manifest_divergence",
+            tenantId: identity.tenantId,
+            agentSlug: identity.agentSlug,
+            profileSlug: divergence.slug,
+            fields: divergence.fields,
+          });
+        }
       }
     } catch (err) {
       logStructured({

@@ -112,7 +112,10 @@ import {
   type AgentProfileRuntimeConfig,
   type AgentRuntimePiExtension,
 } from "../lib/resolve-agent-runtime-config.js";
-import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import {
+  applyAgentProfileManifestAuthority,
+  buildAgentDispatchControlFields,
+} from "../lib/agent-dispatch-payload.js";
 import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { computeConfigFingerprint } from "../lib/capability-fingerprint.js";
@@ -707,6 +710,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
       capability_folder_dispatch: agents.capability_folder_dispatch,
+      agent_profile_manifest_authority: agents.agent_profile_manifest_authority,
       runtime_config: agents.runtime_config,
       budget_paused: agents.budget_paused,
       guardrail_id: agentTemplates.guardrail_id,
@@ -2279,7 +2283,16 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             ? renderedWorkspace.capabilities?.fingerprint
             : undefined,
         capabilityCallerContext: capabilityCallerContext ?? undefined,
-        agentProfiles: agentProfilesConfig,
+        ...applyAgentProfileManifestAuthority({
+          manifestAuthority:
+            agent.agent_profile_manifest_authority === true &&
+            agent.capability_folder_dispatch === true &&
+            Boolean(
+              renderedWorkspace.rendered &&
+              renderedWorkspace.capabilities?.fingerprint,
+            ),
+          profiles: agentProfilesConfig,
+        }),
         piExtensions,
         modelRoutingPolicy,
         approvedModelIds,
@@ -2998,7 +3011,16 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                   ? renderedWorkspace.capabilities?.fingerprint
                   : undefined,
               capabilityCallerContext: capabilityCallerContext ?? undefined,
-              agentProfiles: agentProfilesConfig,
+              ...applyAgentProfileManifestAuthority({
+                manifestAuthority:
+                  agent.agent_profile_manifest_authority === true &&
+                  agent.capability_folder_dispatch === true &&
+                  Boolean(
+                    renderedWorkspace.rendered &&
+                    renderedWorkspace.capabilities?.fingerprint,
+                  ),
+                profiles: agentProfilesConfig,
+              }),
               piExtensions,
               modelRoutingPolicy,
               approvedModelIds,

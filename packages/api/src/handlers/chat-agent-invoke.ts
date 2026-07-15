@@ -95,7 +95,10 @@ import {
   type RuntimeGoalMode,
 } from "../lib/goal-mode.js";
 import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
-import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import {
+  applyAgentProfileManifestAuthority,
+  buildAgentDispatchControlFields,
+} from "../lib/agent-dispatch-payload.js";
 import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
@@ -1673,7 +1676,19 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         threadId,
         threadTurnId: turnId,
         withheldConnections,
-        agentProfiles: runtimeConfig.agentProfilesConfig,
+        // Subagent-folders U10: flag-on agents ship space-local profiles
+        // only, marked with the manifest authority field (requires a pinned
+        // manifest — folder dispatch on and rendered).
+        ...applyAgentProfileManifestAuthority({
+          manifestAuthority:
+            runtimeConfig.agentProfileManifestAuthority &&
+            runtimeConfig.capabilityFolderDispatch &&
+            Boolean(
+              renderedWorkspace.rendered &&
+              renderedWorkspace.capabilities?.fingerprint,
+            ),
+          profiles: runtimeConfig.agentProfilesConfig,
+        }),
         piExtensions: runtimeConfig.piExtensions,
         modelRoutingPolicy,
         approvedModelIds,

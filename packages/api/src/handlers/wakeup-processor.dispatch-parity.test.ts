@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  applyAgentProfileManifestAuthority,
   buildAgentDispatchControlFields,
   REQUIRED_DISPATCH_FIELDS,
   type AgentDispatchControlFieldArgs,
@@ -597,5 +598,64 @@ describe("plate contract floor rides both dispatch paths (THINK-183 U6)", () => 
     expect(chatSource).not.toMatch(
       /documentPlatesForDispatch\(tenantId\)\s*\)\.map/,
     );
+  });
+});
+
+describe("agent profile manifest authority (subagent-folders U10)", () => {
+  const profiles = [
+    { slug: "researcher", sourceSpaceId: null },
+    { slug: "eng-helper", sourceSpaceId: "space-1" },
+  ] as never[];
+
+  it("flag off: profiles unchanged and no authority marker (byte-identical payload)", () => {
+    const result = applyAgentProfileManifestAuthority({
+      manifestAuthority: false,
+      profiles: profiles as never,
+    });
+    expect(result.agentProfiles).toBe(profiles);
+    expect(result.agentProfilesAuthority).toBeUndefined();
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({ agentProfiles: result.agentProfiles }),
+    );
+    expect(fields.agent_profiles_authority).toBeUndefined();
+    // undefined drops at JSON serialization — flag-off wire bytes are
+    // identical to the pre-U10 payload.
+    expect(Object.keys(JSON.parse(JSON.stringify(fields)))).not.toContain(
+      "agent_profiles_authority",
+    );
+  });
+
+  it("flag on: payload shrinks to space-local profiles + manifest marker", () => {
+    const result = applyAgentProfileManifestAuthority({
+      manifestAuthority: true,
+      profiles: profiles as never,
+    });
+    expect(result.agentProfiles).toEqual([
+      { slug: "eng-helper", sourceSpaceId: "space-1" },
+    ]);
+    expect(result.agentProfilesAuthority).toBe("manifest");
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({
+        agentProfiles: result.agentProfiles,
+        agentProfilesAuthority: result.agentProfilesAuthority,
+      }),
+    );
+    expect(fields.agent_profiles_authority).toBe("manifest");
+    expect(fields.agent_profiles).toEqual([
+      { slug: "eng-helper", sourceSpaceId: "space-1" },
+    ]);
+  });
+
+  it("both dispatch handlers route profiles through the shared authority helper", () => {
+    expect(
+      handlerSource("wakeup-processor.ts").match(
+        /applyAgentProfileManifestAuthority\(/g,
+      )?.length ?? 0,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      handlerSource("chat-agent-invoke.ts").match(
+        /applyAgentProfileManifestAuthority\(/g,
+      )?.length ?? 0,
+    ).toBeGreaterThanOrEqual(1);
   });
 });

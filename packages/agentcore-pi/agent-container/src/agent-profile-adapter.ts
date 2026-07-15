@@ -597,7 +597,10 @@ export function compileAgentProfileRunRequest(
   }
   rejectPromptSuppliedOverrides(args.requestedOverrides);
 
-  const model = cleanString(args.profile.modelId);
+  // Manifest-sourced profiles may omit model (inherit): fall back to the
+  // parent's model at spawn time (subagent-folders U10).
+  const model =
+    cleanString(args.profile.modelId) || cleanString(args.parentModelId);
   const fallbackModels = unique(args.profile.fallbackModelIds ?? []);
 
   const skills = compileSkills({
