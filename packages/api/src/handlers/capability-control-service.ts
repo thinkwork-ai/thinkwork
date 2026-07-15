@@ -210,6 +210,8 @@ export interface ConnectionResearchResultOut {
     reason?: string;
     proposalId?: string;
     payloadFingerprint?: string;
+    /** In-context loop nudge the model reads verbatim from the tool result. */
+    nextStep?: string;
   };
 }
 
@@ -219,6 +221,8 @@ export interface RoutineProposeResultOut {
   proposalId?: string;
   payloadFingerprint?: string;
   status?: string;
+  /** In-context loop nudge the model reads verbatim from the tool result. */
+  nextStep?: string;
 }
 
 export interface SelfAdmitConnectionResultOut {
@@ -577,6 +581,9 @@ async function runConnectionResearch(
         ? {
             proposalId: created.proposal.id,
             payloadFingerprint: created.proposal.payload_fingerprint,
+            // Loop nudge (governed autonomy): a drafted proposal admits
+            // nothing by itself — without this the model tends to stop here.
+            nextStep: `Nothing is admitted yet. Call self_admit_capability {proposalId: "${created.proposal.id}"} — public read-only operations admit instantly; anything credentialed or writing is held for operator review.`,
           }
         : {}),
     };
@@ -644,6 +651,10 @@ async function runRoutinePropose(
             proposalId: created.proposal.id,
             payloadFingerprint: created.proposal.payload_fingerprint,
             status: created.proposal.status,
+            // Loop nudge (governed autonomy): a submitted proposal is NOT a
+            // runnable routine — without this the model tends to stop here
+            // and answer from ad-hoc sandbox code instead of the capability.
+            nextStep: `This routine is NOT runnable until promoted. Call self_promote_routine {proposalId: "${created.proposal.id}"} now — auto-tier (public read-only) routines promote instantly after the hermetic gate; anything else is held for operator review. Answer from the promoted routine, not ad-hoc code.`,
           }
         : {}),
     },

@@ -518,6 +518,11 @@ describe("connection_research", () => {
       outcome: "applied",
       proposalId: "proposal-1",
     });
+    // Loop nudge: names the admit tool and carries the created proposal id.
+    expect(result.result.createdProposal?.nextStep).toContain(
+      "self_admit_capability",
+    );
+    expect(result.result.createdProposal?.nextStep).toContain("proposal-1");
     expect(inserted[0]).toMatchObject({
       tenant_id: TENANT_ID,
       status: "draft",
@@ -596,6 +601,10 @@ describe("routine_propose", () => {
     expect(result.result.outcome).toBe("applied");
     expect(result.result.status).toBe("submitted");
     expect(result.result.payloadFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    // Loop nudge: the model reads this verbatim — it must name the promote
+    // tool and carry the created proposal id.
+    expect(result.result.nextStep).toContain("self_promote_routine");
+    expect(result.result.nextStep).toContain(result.result.proposalId);
     expect(inserted).toHaveLength(1);
     expect(inserted[0].tenant_id).toBe(TENANT_ID);
     expect(inserted[0].created_by_actor_type).toBe("agent");

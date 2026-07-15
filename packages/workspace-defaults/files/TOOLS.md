@@ -116,6 +116,12 @@ read-only work. The loop:
    non-auto dependency or a red gate returns `held_for_review` or a failure —
    surface it, don't loop.
 
+The loop is NOT finished at `routine_propose` — a submitted proposal is not
+runnable. Always continue to `self_promote_routine`, and answer the user by
+running the promoted routine, never by re-running equivalent ad-hoc sandbox
+code. When the user asked for a reusable capability, "done" means promoted
+(or `held_for_review` surfaced) — not proposed.
+
 This only works when the tenant has opted into self-extension; if these tools
 return `self_extension_disabled`, tell the user an operator must enable it.
 Everything you self-acquire stays brokered, evidenced, and revocable — an
