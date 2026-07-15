@@ -228,6 +228,54 @@ async function loadEvalRunProgress(
   );
 }
 
+interface EvalRunCostRow {
+  evaluator_results: unknown;
+  agent_cost_usd: string | null;
+}
+
+/**
+ * Run cost = evaluator cost + priced agent-turn cost (Eval Profiles U5),
+ * the same per-row math the worker's finalization and the reconciler use.
+ * Any row missing a priced agent turn marks the total partial (R6).
+ */
+function summarizeEvalRunCost(rows: EvalRunCostRow[]): {
+  costUsd: number;
+  costPartial: boolean;
+} {
+  const costUsd = rows.reduce(
+    (total, row) =>
+      total +
+      evaluatorCostUsd(row.evaluator_results) +
+      (row.agent_cost_usd ? Number(row.agent_cost_usd) : 0),
+    0,
+  );
+  return {
+    costUsd,
+    costPartial: rows.some((row) => row.agent_cost_usd == null),
+  };
+}
+
+function evaluatorCostUsd(evaluatorResults: unknown): number {
+  if (!Array.isArray(evaluatorResults)) return 0;
+  return evaluatorResults.reduce((total: number, result) => {
+    const tokenUsage = (result as { token_usage?: unknown }).token_usage;
+    if (typeof tokenUsage !== "object" || tokenUsage === null) return total;
+    const usage = tokenUsage as Record<string, unknown>;
+    const inputTokens = finiteNumber(usage.inputTokens);
+    const outputTokens = finiteNumber(usage.outputTokens);
+    if (inputTokens > 0 || outputTokens > 0) {
+      return (
+        total + (inputTokens / 1000) * 0.0024 + (outputTokens / 1000) * 0.012
+      );
+    }
+    return total + (finiteNumber(usage.totalTokens) / 1000) * 0.012;
+  }, 0);
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 /**
  * The first THINK-289 implementation unlinked result rows instead of deleting
  * them. Until those rows age out, recompute a terminal run detail from the
@@ -245,6 +293,8 @@ async function withoutDeletedResultOrphans(
       trial_index: evalResults.trial_index,
       status: evalResults.status,
       override_status: evalResults.override_status,
+      evaluator_results: evalResults.evaluator_results,
+      agent_cost_usd: evalResults.agent_cost_usd,
     })
     .from(evalResults)
     .where(eq(evalResults.run_id, run.id));
@@ -269,6 +319,7 @@ async function withoutDeletedResultOrphans(
     caseOverrides,
     run.scoring_version,
   );
+  const cost = summarizeEvalRunCost(linkedRows);
 
   return {
     ...run,
@@ -279,6 +330,8 @@ async function withoutDeletedResultOrphans(
     errored: summary.errored,
     unstable: summary.unstable,
     pass_rate: summary.passRate === null ? null : summary.passRate.toFixed(4),
+    cost_usd: cost.costUsd.toFixed(6),
+    cost_partial: cost.costPartial,
     summary_scoring_version: summaryScoringVersionFor(
       run.scoring_version,
       CURRENT_EVAL_SCORING_VERSION,
@@ -397,6 +450,7 @@ function resolveEvalRunLatency(parent: {
 			FROM eval_results
 			WHERE run_id = ${parent.id}
 			  AND duration_ms IS NOT NULL
+			  AND test_case_id IS NOT NULL
 		`);
       const [row] = (result as unknown as { rows?: any[] }).rows ?? [];
       return { p50: percentileMs(row?.p50), p95: percentileMs(row?.p95) };
@@ -1719,6 +1773,8 @@ async function recomputeEvalRunSummaryInTransaction(
       trial_index: evalResults.trial_index,
       status: evalResults.status,
       override_status: evalResults.override_status,
+      evaluator_results: evalResults.evaluator_results,
+      agent_cost_usd: evalResults.agent_cost_usd,
     })
     .from(evalResults)
     .where(eq(evalResults.run_id, runId));
@@ -1742,6 +1798,7 @@ async function recomputeEvalRunSummaryInTransaction(
     run.scoring_version,
   );
 
+  const cost = summarizeEvalRunCost(rows);
   const isTerminal = ["completed", "cancelled", "failed"].includes(run.status);
   const adjustedTotalTests = options?.adjustment
     ? Math.max(0, run.total_tests - options.adjustment.removedCaseCount)
@@ -1771,6 +1828,10 @@ async function recomputeEvalRunSummaryInTransaction(
         unstable: summary.unstable,
         pass_rate:
           summary.passRate === null ? null : summary.passRate.toFixed(4),
+        // Cost is a pure per-row aggregate, so recomputing it from the
+        // remaining rows keeps the header honest after a case deletion.
+        cost_usd: cost.costUsd.toFixed(6),
+        cost_partial: cost.costPartial,
         summary_scoring_version: summaryScoringVersionFor(
           run.scoring_version,
           CURRENT_EVAL_SCORING_VERSION,
