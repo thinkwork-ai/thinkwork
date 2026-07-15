@@ -639,3 +639,221 @@ Research thoroughly. Cite sources.
     expect(b).not.toBe(a);
   });
 });
+
+describe("agent child grant resolution (subagent-folders U5)", () => {
+  const instructionsMd = `---
+description: Analyst sub-agent
+---
+
+Analyze data.
+`;
+
+  function childGrantSidecar(input: {
+    kind: "skill" | "connector";
+    slug: string;
+    operations?: string[];
+    enabled?: boolean;
+    signed?: boolean;
+  }) {
+    const base: Record<string, unknown> = {
+      slug: input.slug,
+      class: input.kind === "skill" ? "skill" : "connection",
+      updated_at: "2026-07-05T00:00:00.000Z",
+      ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+      ...(input.operations
+        ? { permissions: { operations: input.operations } }
+        : {}),
+    };
+    if (input.signed === false) return JSON.stringify(base);
+    const { signed_content_sha, signature } = signCapabilitySidecar({
+      signer,
+      sidecar: base,
+      definitionBytes: "",
+      signedBy: "operator:u1",
+    });
+    return JSON.stringify({ ...base, signed_content_sha, signature });
+  }
+
+  function agentWithGrants(
+    childGrants: Array<{
+      kind: "skill" | "connector";
+      slug: string;
+      sidecarRaw: string | null;
+    }>,
+  ): CapabilityFolderInput {
+    return {
+      class: "agent",
+      slug: "analyst",
+      definitionPath: "agents/analyst/INSTRUCTIONS.md",
+      definitionRaw: instructionsMd,
+      definitionEtag: "etag-1",
+      sidecarRaw: null,
+      files: [{ path: "INSTRUCTIONS.md", etag: "etag-1" }],
+      childGrants: childGrants.map((grant) => ({
+        ...grant,
+        path: `agents/analyst/${grant.kind === "skill" ? "skills" : "connectors"}/${grant.slug}/.assignment.json`,
+      })),
+    };
+  }
+
+  function rootConnection(operations: string[], permitted?: string[]) {
+    return signedFolder({
+      klass: "connection",
+      slug: "postgres-dev",
+      definition: `---
+name: postgres-dev
+description: Postgres dev connection.
+type: mcp
+operations:
+${operations.map((op) => `  - ${op}`).join("\n")}
+---
+Postgres.
+`,
+      ...(permitted
+        ? { sidecarExtras: { permissions: { operations: permitted } } }
+        : {}),
+    });
+  }
+
+  function agentEntryOf(manifest: {
+    active: Array<{ class: string; slug: string }>;
+  }) {
+    return manifest.active.find((e) => e.class === "agent") as
+      | ((typeof manifest.active)[number] & {
+          grants?: Array<Record<string, unknown>>;
+          withheldGrants?: Array<Record<string, unknown>>;
+        })
+      | undefined;
+  }
+
+  it("covers AE2: child requesting a superset of the root grant is withheld; subset admits", () => {
+    const denied = compile([
+      rootConnection(["query", "list", "write"], ["query", "list"]),
+      agentWithGrants([
+        {
+          kind: "connector",
+          slug: "postgres-dev",
+          sidecarRaw: childGrantSidecar({
+            kind: "connector",
+            slug: "postgres-dev",
+            operations: ["query", "write"],
+          }),
+        },
+      ]),
+    ]).manifest;
+    expect(agentEntryOf(denied)?.withheldGrants).toMatchObject([
+      {
+        class: "connector",
+        slug: "postgres-dev",
+        reason: "operation_not_permitted",
+      },
+    ]);
+    expect(agentEntryOf(denied)?.grants).toEqual([]);
+
+    const admitted = compile([
+      rootConnection(["query", "list", "write"], ["query", "list"]),
+      agentWithGrants([
+        {
+          kind: "connector",
+          slug: "postgres-dev",
+          sidecarRaw: childGrantSidecar({
+            kind: "connector",
+            slug: "postgres-dev",
+            operations: ["query"],
+          }),
+        },
+      ]),
+    ]).manifest;
+    expect(agentEntryOf(admitted)?.grants).toMatchObject([
+      { class: "connector", slug: "postgres-dev", operations: ["query"] },
+    ]);
+  });
+
+  it("covers AE2: a missing/withheld root connection withers the child grant with no child edit", () => {
+    const { manifest } = compile([
+      agentWithGrants([
+        {
+          kind: "connector",
+          slug: "postgres-dev",
+          sidecarRaw: childGrantSidecar({
+            kind: "connector",
+            slug: "postgres-dev",
+            operations: ["query"],
+          }),
+        },
+      ]),
+    ]);
+    expect(agentEntryOf(manifest)?.withheldGrants).toMatchObject([
+      {
+        class: "connector",
+        slug: "postgres-dev",
+        reason: "missing_connection",
+      },
+    ]);
+  });
+
+  it("a child skill grant referencing an uninstalled root skill is withheld absence; compile succeeds", () => {
+    const { manifest } = compile(
+      [
+        agentWithGrants([
+          {
+            kind: "skill",
+            slug: "crm",
+            sidecarRaw: childGrantSidecar({ kind: "skill", slug: "crm" }),
+          },
+        ]),
+      ],
+      { skills: [] },
+    );
+    expect(agentEntryOf(manifest)?.withheldGrants).toMatchObject([
+      { class: "skill", slug: "crm", reason: "missing_skill" },
+    ]);
+  });
+
+  it("an installed root skill grants the child skill", () => {
+    const { manifest } = compile(
+      [
+        agentWithGrants([
+          {
+            kind: "skill",
+            slug: "crm",
+            sidecarRaw: childGrantSidecar({ kind: "skill", slug: "crm" }),
+          },
+        ]),
+      ],
+      { skills: [{ slug: "crm", enabled: true, active: true }] },
+    );
+    expect(agentEntryOf(manifest)?.grants).toMatchObject([
+      { class: "skill", slug: "crm" },
+    ]);
+  });
+
+  it("an unsigned child grant sidecar is withheld (R6)", () => {
+    const { manifest } = compile([
+      rootConnection(["query"]),
+      agentWithGrants([
+        {
+          kind: "connector",
+          slug: "postgres-dev",
+          sidecarRaw: childGrantSidecar({
+            kind: "connector",
+            slug: "postgres-dev",
+            operations: ["query"],
+            signed: false,
+          }),
+        },
+      ]),
+    ]);
+    expect(agentEntryOf(manifest)?.withheldGrants).toMatchObject([
+      { class: "connector", slug: "postgres-dev", reason: "unsigned" },
+    ]);
+  });
+
+  it("no child folders → agent entry admits with an empty grant surface", () => {
+    const { manifest } = compile([agentWithGrants([])]);
+    const entry = agentEntryOf(manifest);
+    expect(entry).toBeDefined();
+    expect(entry?.grants).toEqual([]);
+    expect(entry?.withheldGrants).toBeUndefined();
+  });
+});
