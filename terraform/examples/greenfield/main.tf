@@ -466,6 +466,12 @@ variable "analyst_policy_source" {
   }
 }
 
+variable "capability_self_extension_tenants" {
+  description = "Governed autonomy opt-in: comma/space-separated tenant ids allowed to autonomously self-extend capabilities (self_admit_connection / self_approve_routine). Empty (default) = NO tenant enabled; self-extension ships inert and fail-closed."
+  type        = string
+  default     = ""
+}
+
 variable "wiki_aggregation_pass_enabled" {
   description = <<-EOT
     Feature flag for the wiki aggregation pass — the second LLM call
@@ -838,6 +844,7 @@ module "thinkwork" {
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
   analyst_policy_source                         = var.analyst_policy_source
+  capability_self_extension_tenants             = var.capability_self_extension_tenants
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key

@@ -109,6 +109,30 @@ function isSelfExtensionEnabled(tenantId: string): boolean {
   return allow.has(tenantId);
 }
 
+/**
+ * Per-agent gate: only a capability-participating agent (its
+ * `capability_folder_dispatch` flag set) may self-extend. Fail-closed — an
+ * agent that isn't found, is foreign-tenant, or lacks the flag is rejected.
+ * This is the agent-level companion to the tenant opt-in
+ * ({@link isSelfExtensionEnabled}).
+ */
+async function agentMaySelfExtend(
+  db: Db,
+  context: CapabilityCallerContextPayload,
+): Promise<boolean> {
+  const [agent] = await db
+    .select({ capabilityFolderDispatch: agents.capability_folder_dispatch })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.id, context.agentId),
+        eq(agents.tenant_id, context.tenantId),
+      ),
+    )
+    .limit(1);
+  return agent?.capabilityFolderDispatch === true;
+}
+
 const PRINCIPAL_MODES = new Set(["requester", "agent_owner", "service"]);
 
 // ---------------------------------------------------------------------------
@@ -702,6 +726,9 @@ async function runSelfAdmitConnection(
       "self_admit_connection requires a proposalId",
     );
   }
+  if (!(await agentMaySelfExtend(db, context))) {
+    return reject("folder_dispatch_required");
+  }
   const signer = await resolveConfiguredCapabilitySigner();
   if (!signer) {
     return reject("signing_unavailable");
@@ -787,6 +814,9 @@ async function runSelfApproveRoutine(
       "invalid_proposal_id",
       "self_approve_routine requires a proposalId",
     );
+  }
+  if (!(await agentMaySelfExtend(db, context))) {
+    return reject("folder_dispatch_required");
   }
 
   const result = await publishAutoComposedProposal(
