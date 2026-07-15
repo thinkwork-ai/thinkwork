@@ -276,6 +276,28 @@ describe("agent profile adapter", () => {
     expect(request.tools).toEqual(["execute_code"]);
   });
 
+  it("drops config-gated execute_code instead of failing when the interpreter is not provisioned", () => {
+    const request = compileAgentProfileRunRequest({
+      profile: researchProfile({
+        toolPolicy: {
+          builtInTools: ["execute_code", "file_read"],
+        },
+      }),
+      task: "How many rows are in public.customer?",
+      parentThreadTurnId: "turn-parent",
+      parentModelId: "anthropic/claude-sonnet-4-5",
+      // The sandbox interpreter is not provisioned this turn — the built-in
+      // Analyst profile declares execute_code, but a pure MCP/SQL query does
+      // not need it. It must degrade, not hard-fail the delegation.
+      availableToolNames: ["file_read"],
+      availableSkillNames: [],
+      mcpRegistry: registryWithTwentyTools(),
+    });
+
+    expect(request.tools).toEqual(["file_read"]);
+    expect(request.tools).not.toContain("execute_code");
+  });
+
   it("drops config-gated web tools instead of failing when the turn did not register them (THINK-143)", () => {
     const request = compileAgentProfileRunRequest({
       profile: researchProfile({

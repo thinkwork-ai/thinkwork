@@ -366,6 +366,15 @@ const OPTIONAL_CONFIG_GATED_TOOL_NAMES = new Set([
   "web_extract",
   "send-email",
   "send_email",
+  // execute_code (the code interpreter) registers only when the sandbox is
+  // provisioned for the invocation. The built-in Analyst profile declares it,
+  // but a tenant/agent without the interpreter enabled would otherwise
+  // hard-fail EVERY analyst dispatch with TOOL_NOT_AVAILABLE — even for a
+  // pure MCP/SQL query that never needs code. Treat it like the other
+  // config-gated tools: drop it from the allowlist (and warn) when the turn
+  // did not provision it, instead of failing the whole delegation.
+  "execute-code",
+  "execute_code",
 ]);
 const OPTIONAL_UNAVAILABLE_TOOL_NAMES = new Set([
   ...OPTIONAL_EPHEMERAL_TOOL_NAMES,
