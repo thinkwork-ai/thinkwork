@@ -113,6 +113,7 @@ import {
   type AgentRuntimePiExtension,
 } from "../lib/resolve-agent-runtime-config.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { computeConfigFingerprint } from "../lib/capability-fingerprint.js";
 import {
@@ -2171,6 +2172,26 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       },
     );
 
+    // THINK-280 U2 dispatch wiring: the Ed25519-signed caller context the
+    // runtime requires before it registers ANY capability Pi tools. Minted
+    // once per wakeup (session-shaped, 30-min TTL) and reused by BOTH this
+    // payload and the turn-loop re-invoke below (dispatch payload parity).
+    // Only for capability-folder agents; null (signing unavailable) keeps
+    // capability tools off for this dispatch — fail-closed, never unsigned.
+    const capabilityCallerContext =
+      agent.capability_folder_dispatch === true
+        ? await mintCapabilityCallerContext({
+            actor: "agent",
+            tenantId: wakeup.tenant_id,
+            agentId: wakeup.agent_id,
+            actorUserId: invokerUserId || undefined,
+            threadId: resolvedThreadId || undefined,
+            manifestFingerprint: renderedWorkspace.rendered
+              ? renderedWorkspace.capabilities?.fingerprint
+              : undefined,
+          })
+        : null;
+
     const agentCorePayload: Record<string, unknown> = {
       tenant_id: wakeup.tenant_id,
       // Unit 7 made workspace_tenant_id a hard gate in
@@ -2257,6 +2278,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           renderedWorkspace.rendered
             ? renderedWorkspace.capabilities?.fingerprint
             : undefined,
+        capabilityCallerContext: capabilityCallerContext ?? undefined,
         agentProfiles: agentProfilesConfig,
         piExtensions,
         modelRoutingPolicy,
@@ -2975,6 +2997,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 renderedWorkspace.rendered
                   ? renderedWorkspace.capabilities?.fingerprint
                   : undefined,
+              capabilityCallerContext: capabilityCallerContext ?? undefined,
               agentProfiles: agentProfilesConfig,
               piExtensions,
               modelRoutingPolicy,

@@ -195,6 +195,46 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect("capability_private_session" in wire).toBe(false);
   });
 
+  it("carries the capability caller context when minted, absent otherwise (THINK-280 U2 dispatch wiring)", () => {
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({ capabilityCallerContext: "b64url-encoded-context" }),
+    );
+    expect(fields.capability_caller_context).toBe("b64url-encoded-context");
+
+    // Non-capability agents and signing-unavailable dispatches omit it —
+    // the runtime then registers no capability tools (fail-closed; the
+    // control Lambda rejects absent contexts, there is no unsigned path).
+    const inert = buildAgentDispatchControlFields(baseArgs());
+    expect(inert.capability_caller_context).toBeUndefined();
+    const wire = JSON.parse(JSON.stringify(inert)) as Record<string, unknown>;
+    expect("capability_caller_context" in wire).toBe(false);
+  });
+
+  it("both handlers mint the capability caller context at dispatch (THINK-280 U2 dispatch wiring)", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    const chatSource = handlerSource("chat-agent-invoke.ts");
+
+    // The mint must happen at the trusted dispatch seam in BOTH handlers —
+    // the Pi container holds only the public key and can never mint. The
+    // wakeup handler mints once (session-shaped) and reuses the value in
+    // both its payload builders via the shared helper.
+    for (const source of [wakeupSource, chatSource]) {
+      expect(source).toContain("mintCapabilityCallerContext({");
+      expect(source).toContain(
+        "capabilityCallerContext: capabilityCallerContext ?? undefined",
+      );
+    }
+    // Reused, not re-minted, on the turn-loop re-invoke.
+    expect(wakeupSource.match(/mintCapabilityCallerContext\(\{/g)).toHaveLength(
+      1,
+    );
+    expect(
+      wakeupSource.match(
+        /capabilityCallerContext: capabilityCallerContext \?\? undefined/g,
+      ),
+    ).toHaveLength(2);
+  });
+
   it("all three builders pass the tenant plate list into the shared helper (THINK-153 KTD4)", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
     const chatSource = handlerSource("chat-agent-invoke.ts");
