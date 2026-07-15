@@ -189,9 +189,12 @@ function escapeHtml(s: string): string {
 /**
  * Split optional leading YAML frontmatter from the body. Malformed or
  * non-object frontmatter is warned-and-dropped, never a hard reject (KTD7 —
- * a stray hint never threatens render integrity).
+ * a stray hint never threatens render integrity). Leading whitespace/blank
+ * lines before the opening --- are tolerated: agents sometimes emit them,
+ * and an unmatched block falls through to the markdown renderer where the
+ * closing --- turns the keys into a setext heading (observed in prod).
  */
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const FRONTMATTER_RE = /^\s*---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 /**
  * Drop a leading YAML frontmatter block, if any. For digest CONSUMERS
