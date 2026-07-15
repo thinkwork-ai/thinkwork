@@ -120,3 +120,23 @@ describe("workspace contract v1 lane mapping", () => {
     });
   });
 });
+
+describe("capability folder paths are not agent-lane writable (subagent-folders R9)", () => {
+  it("classifies agents/, connections/, and tools/ paths as unowned", async () => {
+    const { workspacePathOwner } = await import("./workspace-lanes.js");
+    // The gated capability folder-write dispatch is the only
+    // agent-authored channel into these folders. agents/ especially:
+    // its optional sidecar means a reconcile-lane write would mint a
+    // live sub-agent with operator provenance.
+    expect(workspacePathOwner("agents/helper/INSTRUCTIONS.md")).toBe("unowned");
+    expect(workspacePathOwner("Agent/agents/helper/INSTRUCTIONS.md")).toBe(
+      "unowned",
+    );
+    expect(workspacePathOwner("agents/helper.md")).toBe("unowned");
+    expect(
+      workspacePathOwner("agents/helper/connectors/pg/.assignment.json"),
+    ).toBe("unowned");
+    expect(workspacePathOwner("connections/pg/CONNECTION.md")).toBe("unowned");
+    expect(workspacePathOwner("tools/scraper/TOOL.md")).toBe("unowned");
+  });
+});

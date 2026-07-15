@@ -173,6 +173,11 @@ import {
   isSpaceCapabilityWritePath,
   isVisibleUserContextPath,
 } from "./src/lib/workspace-lanes.js";
+import {
+  agentFolderSlugFromInstructionsPath,
+  isAgentFolderInstructionsPath,
+} from "./src/lib/agent-folder-format.js";
+import { resignCapabilityFolderSidecarIfPresent } from "./src/lib/capabilities/folder-write.js";
 import { buildSpaceManifestProjection } from "./src/lib/workspace-renderer/space-md-parser.js";
 import { stripGeneratedAgentsMdSections } from "./src/lib/workspace-renderer/agents-md-composer.js";
 
@@ -2635,6 +2640,9 @@ function isGovernanceFilePath(cleanPath: string): boolean {
   // Top-level governance files: exact basename match (no nesting).
   if (GOVERNANCE_FILE_BASENAMES.has(cleanPath)) return true;
   if (isAgentProfileWorkspacePath(cleanPath)) return true;
+  // Folder-form sub-agent instructions (subagent-folders U6) are
+  // governance-tier exactly like the legacy agents/<slug>.md files.
+  if (isAgentFolderInstructionsPath(cleanPath)) return true;
   // SKILL.md markers anywhere under skills/<slug>/ are also
   // governance-tier — they change agent capability.
   if (isSkillMarkerPath(cleanPath)) return true;
@@ -2959,6 +2967,34 @@ async function handlePut(
     }
 
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+
+    if (isAgentFolderInstructionsPath(cleanPath)) {
+      // Author-dependent re-sign (subagent-folders U6, R8): a
+      // platform-mediated edit by a TENANT ADMIN re-signs the folder's
+      // existing sidecar over the new bytes, recording the audit actor
+      // in the envelope's signed_by. Non-admin and API-key writes leave
+      // the signature stale on purpose — the edit surfaces as drift in
+      // the governance feed for approve/revert. No sidecar = nothing to
+      // re-sign (skills convention; the entry stays active).
+      const slug = agentFolderSlugFromInstructionsPath(cleanPath);
+      const isAdmin =
+        auth.authType !== "apikey" &&
+        (await callerIsTenantAdmin(tenantId, deps.userId));
+      if (slug && isAdmin) {
+        const resigned = await resignCapabilityFolderSidecarIfPresent({
+          targetPrefix: target.prefix,
+          klass: "agent",
+          slug,
+          signedBy: `operator:${auditActor.actorId}`,
+        });
+        if (!resigned.ok) {
+          return json(500, {
+            ok: false,
+            error: `INSTRUCTIONS.md saved but sidecar re-sign failed: ${resigned.reason}`,
+          });
+        }
+      }
+    }
 
     if (isAgentProfileWorkspacePath(cleanPath)) {
       try {

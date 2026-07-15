@@ -368,6 +368,20 @@ const {
   deleteSpaceAgentProfileProjectionMock: vi.fn(),
 }));
 
+const { resignSidecarMock } = vi.hoisted(() => ({
+  resignSidecarMock: vi.fn(async () => ({ ok: true as const })),
+}));
+vi.mock("../lib/capabilities/folder-write.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../lib/capabilities/folder-write.js")
+    >();
+  return {
+    ...actual,
+    resignCapabilityFolderSidecarIfPresent: resignSidecarMock,
+  };
+});
+
 vi.mock("../lib/agent-profile-workspace-files.js", async (importOriginal) => {
   const actual =
     await importOriginal<
@@ -7061,5 +7075,74 @@ describe("space-local agent profiles (plan 2026-06-12-002 U7)", () => {
       content: PROFILE_CONTENT,
     });
     expect(upsertSpaceAgentProfileProjectionMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("agent folder INSTRUCTIONS.md author-dependent re-sign (subagent-folders U6)", () => {
+  it("re-signs the sidecar for a tenant-admin PUT, recording the audit actor", async () => {
+    resignSidecarMock.mockClear();
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    // handlePut resolves the audit actor (resolveCallerFromAuth) and the
+    // U6 admin gate (callerIsTenantAdmin) after target resolution.
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "agents/researcher/INSTRUCTIONS.md",
+          content: "---\ndescription: Researcher\n---\n\nResearch.\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    // Governance-tier: the folder-form instructions edit is audited.
+    expect(emitMockImpl).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: "workspace.governance_file_edited",
+        resourceId: "acme/marco/agents/researcher/INSTRUCTIONS.md",
+      }),
+    );
+    expect(resignSidecarMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetPrefix: "tenants/acme/agents/marco/",
+        klass: "agent",
+        slug: "researcher",
+        signedBy: `operator:${USER_ID}`,
+      }),
+    );
+  });
+
+  it("never re-signs for a non-admin caller — the write gate rejects first", async () => {
+    resignSidecarMock.mockClear();
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "member" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "agents/researcher/INSTRUCTIONS.md",
+          content: "---\ndescription: Researcher\n---\n\nResearch.\n",
+        }),
+      ),
+    );
+
+    // Non-admin REST writes are rejected wholesale; the API-key lane is
+    // the non-admin writer that reaches the file, and the U6 gate
+    // (authType !== "apikey") keeps its signature stale on purpose.
+    expect(res.statusCode).toBe(403);
+    expect(resignSidecarMock).not.toHaveBeenCalled();
   });
 });
