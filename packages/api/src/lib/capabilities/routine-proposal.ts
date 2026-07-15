@@ -43,11 +43,13 @@ import {
 import {
   CanonicalizationError,
   canonicalSha256Hex,
+  type CapabilityDescriptor,
 } from "@thinkwork/capability-contracts";
 import {
   createRoutineOutputRedactor,
   scrubKnownTokenShapes,
 } from "@thinkwork/lambda/routine-output-redactor";
+import { classifyDescriptor } from "./self-extension-policy.js";
 
 export type Db = ReturnType<typeof getDb>;
 
@@ -850,6 +852,157 @@ export async function publishRepairProposal(
     promotionOutcome: promotion.outcome,
     diff: diff.fields,
     ...(promotion.commitSha ? { commitSha: promotion.commitSha } : {}),
+    ...(promotion.hermetic ? { hermetic: promotion.hermetic } : {}),
+    ...(promotion.readiness ? { readiness: promotion.readiness } : {}),
+    ...(promotion.reason ? { reason: promotion.reason } : {}),
+  };
+  if (promotion.outcome === "promoted") {
+    await db
+      .update(capabilityRoutineProposals)
+      .set({
+        status: "promoted",
+        promoted_commit_sha: promotion.commitSha ?? null,
+        approval_evidence_json: evidence,
+        decided_at: now(),
+      })
+      .where(eq(capabilityRoutineProposals.id, approved.id));
+  } else {
+    await db
+      .update(capabilityRoutineProposals)
+      .set({ approval_evidence_json: evidence })
+      .where(eq(capabilityRoutineProposals.id, approved.id));
+  }
+
+  return {
+    outcome: "applied",
+    proposal: {
+      ...approved,
+      status: promotion.outcome === "promoted" ? "promoted" : "approved",
+    },
+    promotion,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Autonomous self-approval (governed autonomy U3)
+// ---------------------------------------------------------------------------
+
+export interface PublishAutoComposedProposalInput {
+  tenantId: string;
+  proposalId: string;
+  /** The agent that composed the routine — recorded as autonomous provenance. */
+  agentId: string;
+}
+
+export interface PublishAutoComposedProposalResult {
+  /** `held_for_review`: a dependency is not auto-tier — the proposal is left
+   *  `submitted` for a human operator to approve through the normal queue. */
+  outcome: "applied" | "rejected" | "held_for_review";
+  reason?: string;
+  proposal?: CapabilityRoutineProposalRow;
+  promotion?: RoutinePromotionResult;
+}
+
+/**
+ * Autonomous self-approval: an agent promotes a routine it composed with NO
+ * human — but ONLY when every pinned dependency is auto-tier (public,
+ * read-only, no-credential, reversible, fully classified). Any non-auto
+ * dependency returns `held_for_review`, leaving the proposal `submitted` in the
+ * operator approval queue.
+ *
+ * Follows {@link approveRoutineProposal}'s flow (fresh approval of a submitted
+ * proposal) with {@link publishRepairProposal}'s machine attribution
+ * (`approval_mode: "autonomous"`, `decided_by_user_id: null`) — it bypasses the
+ * operator resolver entirely. The hermetic fixture gate still runs on the
+ * promoted SHA (zero external calls); every promotion stays evidenced.
+ */
+export async function publishAutoComposedProposal(
+  db: Db,
+  input: PublishAutoComposedProposalInput,
+  deps: { promoter: RoutineProposalPromoter; now?: () => Date },
+): Promise<PublishAutoComposedProposalResult> {
+  const now = deps.now ?? (() => new Date());
+
+  const [current] = (await db
+    .select()
+    .from(capabilityRoutineProposals)
+    .where(eq(capabilityRoutineProposals.id, input.proposalId))
+    .limit(1)) as CapabilityRoutineProposalRow[];
+  if (!current || current.tenant_id !== input.tenantId) {
+    return { outcome: "rejected", reason: "proposal_not_found" };
+  }
+
+  const bundle = current.payload_json as RoutineProposalBundle;
+
+  // Auto-tier gate: every pinned dependency's admitted version must classify
+  // `auto`. A single non-auto dependency holds the whole routine for the
+  // operator — fail-closed, conservative (a version with any non-auto operation
+  // is held even if the routine only uses an auto operation from it).
+  const depIds = Array.from(
+    new Set((bundle.dependencies ?? []).map((d) => d.definitionVersionId)),
+  );
+  if (depIds.length > 0) {
+    const versionRows = (await db
+      .select()
+      .from(capabilityDefinitionVersions)
+      .where(inArray(capabilityDefinitionVersions.id, depIds))) as Array<
+      typeof capabilityDefinitionVersions.$inferSelect
+    >;
+    const byId = new Map(versionRows.map((row) => [row.id, row]));
+    for (const dep of bundle.dependencies ?? []) {
+      const row = byId.get(dep.definitionVersionId);
+      if (!row || row.lifecycle !== "admitted") {
+        return {
+          outcome: "rejected",
+          reason: `dependency_not_admitted: ${dep.definitionVersionId}`,
+        };
+      }
+      const descriptor = row.descriptor_json;
+      // Fail-closed: a missing/malformed descriptor is never auto.
+      if (
+        !descriptor ||
+        typeof descriptor !== "object" ||
+        classifyDescriptor(descriptor as CapabilityDescriptor).tier !== "auto"
+      ) {
+        return { outcome: "held_for_review" };
+      }
+    }
+  }
+
+  // EXACT single-use consume, machine-attributed. No operator reviewer — the
+  // agent approves exactly the fingerprint it composed.
+  const consumed = (await db
+    .update(capabilityRoutineProposals)
+    .set({
+      status: "approved",
+      approval_mode: "autonomous",
+      decided_at: now(),
+      decided_by_user_id: null,
+    })
+    .where(
+      and(
+        eq(capabilityRoutineProposals.id, input.proposalId),
+        eq(
+          capabilityRoutineProposals.payload_fingerprint,
+          current.payload_fingerprint,
+        ),
+        eq(capabilityRoutineProposals.status, "submitted"),
+      ),
+    )
+    .returning()) as CapabilityRoutineProposalRow[];
+  if (consumed.length === 0) {
+    return { outcome: "rejected", reason: "stale_or_decided_fingerprint" };
+  }
+  const approved = consumed[0];
+
+  const promotion = await deps.promoter.promote({ proposal: approved, bundle });
+
+  const evidence: Record<string, unknown> = {
+    approvalMode: "autonomous",
+    composedByAgentId: input.agentId,
+    promotionOutcome: promotion.outcome,
+    ...(promotion.commitSha ? { commitSha: promotion.commitSha } : {}),
+    ...(promotion.validatedSha ? { validatedSha: promotion.validatedSha } : {}),
     ...(promotion.hermetic ? { hermetic: promotion.hermetic } : {}),
     ...(promotion.readiness ? { readiness: promotion.readiness } : {}),
     ...(promotion.reason ? { reason: promotion.reason } : {}),
