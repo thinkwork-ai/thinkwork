@@ -61,6 +61,12 @@ locals {
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
     # ONLY after clean shadow parity on live traffic.
     ANALYST_POLICY_SOURCE = var.analyst_policy_source
+    # Governed autonomy — per-tenant opt-in allowlist for autonomous capability
+    # self-extension (the two self_admit_connection / self_approve_routine
+    # actions on capability-control-service). Comma/space-separated tenant ids;
+    # empty (default) = NO tenant enabled, so self-extension ships inert and
+    # fail-closed. Read via getConfig() (env-wins) in isSelfExtensionEnabled.
+    CAPABILITY_SELF_EXTENSION_TENANTS = var.capability_self_extension_tenants
     # THINK-230 — the operator-facing provisionAnalystConnector mutation runs
     # the analyst connector provisioning ceremony inside graphql-http, so the
     # shared api handlers read the same broker-secret ARN + rds_iam connect

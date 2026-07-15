@@ -1340,6 +1340,12 @@ variable "analyst_policy_source" {
   }
 }
 
+variable "capability_self_extension_tenants" {
+  description = "Governed autonomy opt-in: comma/space-separated tenant ids allowed to autonomously self-extend capabilities. Empty (default) = NO tenant enabled; self-extension ships inert and fail-closed."
+  type        = string
+  default     = ""
+}
+
 variable "compliance_anchor_retention_days" {
   description = "Default Object Lock retention in days for the compliance audit-anchor bucket. SOC2 Type 1 baseline is 12 months (365)."
   type        = number

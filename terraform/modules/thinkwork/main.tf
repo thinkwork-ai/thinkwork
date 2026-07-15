@@ -1024,6 +1024,9 @@ module "api" {
   analyst_db_cluster_resource_id = module.database.cluster_resource_id
   analyst_policy_source          = var.analyst_policy_source
 
+  # Governed autonomy — per-tenant self-extension opt-in allowlist (default off).
+  capability_self_extension_tenants = var.capability_self_extension_tenants
+
   # Phase 3 U8b — KMS key + Object Lock mode forwarded as
   # COMPLIANCE_ANCHOR_KMS_KEY_ARN and COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE
   # env vars on the anchor Lambda. The live `_anchor_fn_live` requires

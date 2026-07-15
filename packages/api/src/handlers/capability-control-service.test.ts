@@ -785,4 +785,46 @@ describe("self-extension actions (governed autonomy)", () => {
     if (result.ok) throw new Error();
     expect(result.reason).toBe("invalid_proposal_id");
   });
+
+  it("requires the agent's capability_folder_dispatch flag (U6): an agent without it is rejected", async () => {
+    // Tenant opted in + a valid proposalId, but the agent lookup returns no
+    // row with the flag → folder_dispatch_required, before any lib work.
+    const { db } = mockDb(); // empty select queue → agent not found
+    const context = await mintContext();
+    const result = await withSelfExtension(TENANT_ID, () =>
+      handleCapabilityControl(
+        {
+          action: "self_admit_connection",
+          callerContext: context,
+          proposalId: "p-1",
+        },
+        { db, publicKeyPem },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("folder_dispatch_required");
+  });
+
+  it("passes the folder-dispatch gate for a capability-participating agent", async () => {
+    // Agent carries the flag → the gate passes and control reaches the signer
+    // (unconfigured in tests → signing_unavailable), proving the guard did not
+    // block a valid capability-participating agent.
+    const { db, selectQueue } = mockDb();
+    selectQueue.push([{ capabilityFolderDispatch: true }]);
+    const context = await mintContext();
+    const result = await withSelfExtension(TENANT_ID, () =>
+      handleCapabilityControl(
+        {
+          action: "self_admit_connection",
+          callerContext: context,
+          proposalId: "p-1",
+        },
+        { db, publicKeyPem },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("signing_unavailable");
+  });
 });
