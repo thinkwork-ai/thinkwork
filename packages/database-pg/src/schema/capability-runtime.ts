@@ -162,6 +162,15 @@ export const capabilityDefinitionVersions = pgTable(
         onDelete: "set null",
       },
     ),
+    /**
+     * Autonomous self-extension provenance. `admission_mode` is `operator` for
+     * a human-admitted version and `autonomous` when an agent self-admitted an
+     * auto-tier (public, read-only, no-credential) capability with no human.
+     * `admitted_by_agent_id` is the composing agent for autonomous admissions
+     * (null for operator). Every autonomous admission stays fully attributable.
+     */
+    admission_mode: text("admission_mode").notNull().default("operator"),
+    admitted_by_agent_id: uuid("admitted_by_agent_id"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

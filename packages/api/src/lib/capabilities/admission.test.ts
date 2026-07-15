@@ -41,6 +41,7 @@ import {
 import { parseConnectionDefinition } from "./definition-schemas.js";
 import {
   admitConnectionProposal,
+  autonomouslyAdmitProposal,
   connectionDefinitionFromDescriptor,
   createCandidateVersion,
   type AdmissionFolderWriter,
@@ -683,5 +684,130 @@ describe("connectionDefinitionFromDescriptor", () => {
     }
     const parsed = parseConnectionDefinition(definition, "x/CONNECTION.md");
     expect(parsed.valid).toBe(true);
+  });
+});
+
+describe("autonomouslyAdmitProposal (self-extension)", () => {
+  const AGENT = randomUUID();
+
+  // An auto-tier descriptor: public read, no credential, reversible, classified.
+  function autoDescriptor(overrides: Row = {}): CapabilityDescriptor {
+    return makeDescriptor({
+      slug: "github-rest-public",
+      bindingRequirements: { credentialKinds: [], principalModes: ["service"] },
+      operations: [
+        makeOperation({ inputDataClass: "public", outputDataClass: "public" }),
+      ],
+      ...overrides,
+    });
+  }
+
+  it("self-admits an auto-tier descriptor with autonomous provenance (no human)", async () => {
+    const descriptor = autoDescriptor();
+    const payload = { descriptor, displayName: "GitHub public" };
+    const proposal = proposalRowFor(payload);
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+    ]);
+
+    const result = await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+    });
+
+    expect(result.outcome).toBe("applied");
+    const versions = tables.get(capabilityDefinitionVersions)!;
+    expect(versions).toHaveLength(1);
+    expect(versions[0].admission_mode).toBe("autonomous");
+    expect(versions[0].admitted_by_agent_id).toBe(AGENT);
+    expect(versions[0].admitted_by_user_id).toBeNull();
+    // Signature provenance is autonomous, and verifies.
+    expect(versions[0].signature_json.signed_by).toBe(`autonomous:${AGENT}`);
+    expect(
+      verifier.verifyPayload(
+        descriptor as unknown as Record<string, unknown>,
+        versions[0].signature_json,
+      ),
+    ).toBe(true);
+    // The definition carries no operator author.
+    const defs = tables.get(capabilityDefinitions)!;
+    expect(defs[0].created_by_user_id).toBeNull();
+  });
+
+  it("holds a credentialed descriptor for operator review (does not self-admit)", async () => {
+    // makeDescriptor default requires credentialKinds ['api_key'] → review tier.
+    const descriptor = makeDescriptor();
+    const payload = { descriptor };
+    const proposal = proposalRowFor(payload);
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+    ]);
+
+    const result = await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+    });
+
+    expect(result.outcome).toBe("held_for_review");
+    expect(tables.get(capabilityDefinitionVersions) ?? []).toHaveLength(0);
+    // The proposal is left undecided for the operator.
+    expect(proposal.status).toBe("draft");
+  });
+
+  it("holds a write operation for operator review", async () => {
+    const descriptor = autoDescriptor({
+      operations: [
+        makeOperation({
+          operationId: "issues.create",
+          effect: "create",
+          inputDataClass: "public",
+          outputDataClass: "public",
+        }),
+      ],
+    });
+    const proposal = proposalRowFor({ descriptor });
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+    ]);
+
+    const result = await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+    });
+
+    expect(result.outcome).toBe("held_for_review");
+    expect(tables.get(capabilityDefinitionVersions) ?? []).toHaveLength(0);
+  });
+
+  it("holds a descriptor with an unclassified (forbidden) operation for review", async () => {
+    const descriptor = autoDescriptor({
+      operations: [
+        makeOperation({
+          inputDataClass: "public",
+          outputDataClass: "public",
+          costClass: "unknown",
+        }),
+      ],
+    });
+    const proposal = proposalRowFor({ descriptor });
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+    ]);
+
+    const result = await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+    });
+
+    expect(result.outcome).toBe("held_for_review");
+    expect(tables.get(capabilityDefinitionVersions) ?? []).toHaveLength(0);
   });
 });
