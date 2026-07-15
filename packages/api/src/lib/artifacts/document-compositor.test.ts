@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   compileDocument,
   resolveInternalWikiHref,
+  stripLeadingFrontmatter,
   type CompositorPlate,
   type DirectiveEngine,
 } from "./document-compositor.js";
@@ -252,6 +253,40 @@ stages:
       true,
     );
     expect(result.renderHtml).toContain('<h2 id="body">Body</h2>');
+  });
+
+  it("parses frontmatter preceded by leading blank lines (no setext-heading leak)", () => {
+    const result = compileOk(
+      `\n\n---\neyebrow: WEEKLY\n---\n\n## Body\n\nText.\n`,
+    );
+    expect(result.renderHtml).toContain('<div class="eyebrow">WEEKLY</div>');
+    // The frontmatter must never fall through to the markdown renderer,
+    // where the closing --- turns the keys into a setext heading.
+    expect(result.renderHtml).not.toContain("eyebrow: WEEKLY");
+  });
+
+  it("parses frontmatter preceded by leading spaces", () => {
+    const result = compileOk(
+      `  ---\neyebrow: WEEKLY\n---\n\n## Body\n\nText.\n`,
+    );
+    expect(result.renderHtml).toContain('<div class="eyebrow">WEEKLY</div>');
+    expect(result.renderHtml).not.toContain("eyebrow: WEEKLY");
+  });
+
+  it("leaves bodies without frontmatter unchanged", () => {
+    const markdown = `## Body\n\nText.\n`;
+    const result = compileOk(markdown);
+    expect(result.renderHtml).toContain('<h2 id="body">Body</h2>');
+    expect(stripLeadingFrontmatter(markdown)).toBe(markdown);
+  });
+
+  it("stripLeadingFrontmatter tolerates the same leading whitespace as the parser", () => {
+    expect(
+      stripLeadingFrontmatter(`\n\n---\neyebrow: WEEKLY\n---\n## Body\n`),
+    ).toBe("## Body\n");
+    expect(
+      stripLeadingFrontmatter(`  ---\neyebrow: WEEKLY\n---\n## Body\n`),
+    ).toBe("## Body\n");
   });
 
   it("strips raw <script> and external <img>, and output still passes preflight", () => {
