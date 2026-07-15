@@ -139,7 +139,8 @@ describe("built-in sub-agent folders (subagent-folders U7)", () => {
   it("ships the four built-in profiles as agents/<slug>/INSTRUCTIONS.md trees", () => {
     const defaults = loadDefaults();
     for (const slug of ["research", "coding", "analyst", "reviewer"]) {
-      const content = defaults[`agents/${slug}/INSTRUCTIONS.md`];
+      const content =
+        defaults[`agents/${slug}/INSTRUCTIONS.md` as keyof typeof defaults];
       expect(content, slug).toBeDefined();
       expect(content).toMatch(/^---\n/);
       expect(content).toContain("description:");
