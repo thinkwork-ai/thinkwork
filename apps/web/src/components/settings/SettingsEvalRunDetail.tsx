@@ -177,6 +177,54 @@ interface EvalResultRow {
   createdAt: string;
 }
 
+/**
+ * Deleted test cases must not remain visible in evaluation detail. Older API
+ * deployments unlinked historical result rows by clearing testCaseId, so keep
+ * the UI resilient while those rows are removed by the server-side fix.
+ */
+export function visibleEvalResults(
+  results: EvalResultRow[],
+): EvalResultRow[] {
+  return results.filter(
+    (result) =>
+      typeof result.testCaseId === "string" && result.testCaseId.length > 0,
+  );
+}
+
+interface VisibleEvalSummary {
+  totalTests: number;
+  passed: number;
+  failed: number;
+  errored: number;
+  unstable: number;
+  passRate: number | null;
+}
+
+/** Rebuild the visible case summary when a legacy orphan was filtered out. */
+export function summarizeVisibleEvalResults(
+  results: EvalResultRow[],
+): VisibleEvalSummary {
+  const groups = groupEvalResultsByCase(results);
+  const summary = {
+    totalTests: groups.length,
+    passed: 0,
+    failed: 0,
+    errored: 0,
+    unstable: 0,
+    passRate: null as number | null,
+  };
+
+  for (const group of groups) {
+    if (group.verdict === "pass") summary.passed += 1;
+    else if (group.verdict === "fail") summary.failed += 1;
+    else if (group.verdict === "unstable") summary.unstable += 1;
+    else summary.errored += 1;
+  }
+  const scored = summary.passed + summary.failed;
+  summary.passRate = scored > 0 ? summary.passed / scored : null;
+  return summary;
+}
+
 type CategoryPassRateResult = Pick<EvalResultRow, "category" | "status"> & {
   effectiveStatus?: string | null;
 };
@@ -511,8 +559,16 @@ export function SettingsEvalRunDetail() {
     return () => clearInterval(interval);
   }, [isRunning, silentRefetch]);
 
-  const runResults = (resultsResult.data?.evalRunResults ??
+  const rawRunResults = (resultsResult.data?.evalRunResults ??
     []) as unknown as EvalResultRow[];
+  const runResults = visibleEvalResults(rawRunResults);
+  const orphanAdjustedSummary = useMemo(
+    () =>
+      rawRunResults.length === runResults.length
+        ? null
+        : summarizeVisibleEvalResults(runResults),
+    [rawRunResults, runResults],
+  );
 
   const categories = useMemo(
     () =>
@@ -683,7 +739,13 @@ export function SettingsEvalRunDetail() {
 
   // Score over clean executions (server-computed, override-corrected).
   // Null pass rate on a terminal run renders "No score" — never 0%.
-  const passRate = runDetail ? evalRunPassRateDisplay(runDetail) : "—";
+  const passRate = orphanAdjustedSummary
+    ? orphanAdjustedSummary.passRate === null
+      ? "No score"
+      : `${(orphanAdjustedSummary.passRate * 100).toFixed(1)}%`
+    : runDetail
+      ? evalRunPassRateDisplay(runDetail)
+      : "—";
   // Dataset-pinned runs (Trust Core U6) show the dataset name + pinned
   // version in the header. includeArchived so archived datasets still
   // label their historical runs.
@@ -783,7 +845,7 @@ export function SettingsEvalRunDetail() {
           onClick={() => toggleStatusFilter("pass")}
           title="Show only passed"
         >
-          {runDetail.passed ?? 0} passed
+          {orphanAdjustedSummary?.passed ?? runDetail.passed ?? 0} passed
         </button>
         <span>,</span>
         <button
@@ -792,9 +854,9 @@ export function SettingsEvalRunDetail() {
           onClick={() => toggleStatusFilter("fail")}
           title="Show only behavioral failures"
         >
-          {runDetail.failed ?? 0} failed
+          {orphanAdjustedSummary?.failed ?? runDetail.failed ?? 0} failed
         </button>
-        {(runDetail.errored ?? 0) > 0 && (
+        {(orphanAdjustedSummary?.errored ?? runDetail.errored ?? 0) > 0 && (
           <>
             <span>,</span>
             <button
@@ -803,11 +865,14 @@ export function SettingsEvalRunDetail() {
               onClick={() => toggleStatusFilter("error")}
               title="Show only errored evals"
             >
-              {runDetail.errored} errored
+              {orphanAdjustedSummary?.errored ?? runDetail.errored} errored
             </button>
           </>
         )}
-        <span>of {runDetail.totalTests ?? 0} tests</span>
+        <span>
+          of {orphanAdjustedSummary?.totalTests ?? runDetail.totalTests ?? 0}{" "}
+          tests
+        </span>
       </span>
       {statusBadge(runDetail.status)}
       {isLegacyDesktopRun && (
@@ -854,7 +919,7 @@ export function SettingsEvalRunDetail() {
         {passRate}
         {passRate.endsWith("%") ? " pass rate" : ""}
       </span>
-      {(runDetail.errored ?? 0) > 0 && (
+      {(orphanAdjustedSummary?.errored ?? runDetail.errored ?? 0) > 0 && (
         <Badge
           variant="outline"
           className={cn(
@@ -865,16 +930,16 @@ export function SettingsEvalRunDetail() {
           onClick={() => toggleStatusFilter("error")}
         >
           <AlertTriangle className="h-3 w-3" />
-          {runDetail.errored} errored
+          {orphanAdjustedSummary?.errored ?? runDetail.errored} errored
         </Badge>
       )}
-      {(runDetail.unstable ?? 0) > 0 && (
+      {(orphanAdjustedSummary?.unstable ?? runDetail.unstable ?? 0) > 0 && (
         <Badge
           variant="outline"
           className="gap-1 border-purple-500/60 text-purple-600 dark:text-purple-400 tabular-nums"
           title="Cases whose scored trials split with no majority — excluded from the score like errors."
         >
-          {runDetail.unstable} unstable
+          {orphanAdjustedSummary?.unstable ?? runDetail.unstable} unstable
         </Badge>
       )}
       {(runDetail.latencyP50Ms != null || runDetail.latencyP95Ms != null) && (
