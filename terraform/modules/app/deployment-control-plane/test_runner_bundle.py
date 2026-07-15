@@ -1184,6 +1184,38 @@ def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default
     assert vars_json_default["app_certificate_arn"] == ""
 
 
+def test_write_runner_files_wires_analyst_lambda_vpc_egress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """analyst_lambda_vpc_egress needs all three wiring points (vars_json,
+    root variable, module argument) and reads runner-secrets first — the
+    durable per-environment home for the flag — with a payload fallback.
+    Secrets Manager JSON strings ("true") must land as real booleans."""
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    base_payload = {
+        "stage": "tei-e2e",
+        "awsRegion": "us-east-1",
+        "awsAccountId": "637423202447",
+        "dbPassword": "db-secret",
+        "apiAuthSecret": "api-secret",
+    }
+
+    assert runner.write_runner_files(base_payload, {})[
+        "analyst_lambda_vpc_egress"
+    ] is False
+    assert runner.write_runner_files(
+        base_payload, {"analystLambdaVpcEgress": "true"}
+    )["analyst_lambda_vpc_egress"] is True
+    assert runner.write_runner_files(
+        {**base_payload, "analystLambdaVpcEgress": True}, {}
+    )["analyst_lambda_vpc_egress"] is True
+
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+    assert 'variable "analyst_lambda_vpc_egress"' in main_tf
+    assert "= var.analyst_lambda_vpc_egress" in main_tf
+
+
 def test_write_runner_files_threads_customer_domain_vars_from_payload(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
