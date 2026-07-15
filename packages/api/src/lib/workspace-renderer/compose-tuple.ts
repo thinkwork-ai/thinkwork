@@ -70,6 +70,8 @@ import {
   type CapabilityVerifier,
 } from "../capabilities/sidecar-signing.js";
 import {
+  agentAssignmentRe,
+  agentMarkerRe,
   capabilityClassFromFolderName,
   capabilityFolderFileRe,
   connectionAssignmentRe,
@@ -273,6 +275,9 @@ const CONNECTION_MARKER_RE = connectionMarkerRe();
 const CONNECTION_ASSIGNMENT_RE = connectionAssignmentRe();
 const TOOL_MARKER_RE = toolMarkerRe();
 const TOOL_ASSIGNMENT_RE = toolAssignmentRe();
+/** Agent folder marker (subagent-folders U4) — same presence rule. */
+const AGENT_MARKER_RE = agentMarkerRe();
+const AGENT_ASSIGNMENT_RE = agentAssignmentRe();
 
 /** `.assignment.json` semantics: absent/unparseable file = enabled. */
 function skillAssignmentEnabled(raw: string | null): boolean {
@@ -899,7 +904,7 @@ export async function renderWorkspaceTuple(
   // Capability folders (THINK-173 U2): presence = declared; the compile
   // step below decides active vs withheld from the signed sidecar.
   interface CapabilityFolderScan {
-    class: "connection" | "tool";
+    class: "connection" | "tool" | "agent";
     definitionKey?: string;
     definitionEtag?: string | null;
     sidecarKey?: string;
@@ -909,7 +914,7 @@ export async function renderWorkspaceTuple(
   }
   const capabilityFolderScans = new Map<string, CapabilityFolderScan>();
   const capabilityScan = (
-    klass: "connection" | "tool",
+    klass: "connection" | "tool" | "agent",
     slug: string,
   ): CapabilityFolderScan => {
     const mapKey = `${klass}:${slug}`;
@@ -945,6 +950,18 @@ export async function renderWorkspaceTuple(
       scan.definitionKey = object.key;
       scan.definitionEtag = object.etag ?? null;
     }
+    const agentMarker = sourcePath.match(AGENT_MARKER_RE);
+    if (agentMarker) {
+      const scan = capabilityScan("agent", agentMarker[1]!);
+      scan.definitionKey = object.key;
+      scan.definitionEtag = object.etag ?? null;
+    }
+    const agentAssignment = sourcePath.match(AGENT_ASSIGNMENT_RE);
+    if (agentAssignment) {
+      const scan = capabilityScan("agent", agentAssignment[1]!);
+      scan.sidecarKey = object.key;
+      scan.sidecarEtag = object.etag ?? null;
+    }
     const toolAssignment = sourcePath.match(TOOL_ASSIGNMENT_RE);
     if (toolAssignment) {
       const scan = capabilityScan("tool", toolAssignment[1]!);
@@ -956,7 +973,12 @@ export async function renderWorkspaceTuple(
     // run.sh edit both retriggers the compile and invalidates the
     // script trust report — with zero content reads.
     const folderFile = sourcePath.match(CAPABILITY_FOLDER_FILE_RE);
-    if (folderFile && !sourcePath.endsWith("/.assignment.json")) {
+    // The folder's own sidecar is tracked separately (sidecarKey/etag);
+    // NESTED sidecars — a sub-agent's child grant files like
+    // agents/<slug>/connectors/<conn>/.assignment.json — are ordinary
+    // folder files and must feed the input signature so grant edits
+    // retrigger the compile.
+    if (folderFile && folderFile[3] !== ".assignment.json") {
       const klass = capabilityClassFromFolderName(folderFile[1]!) ?? "tool";
       capabilityScan(klass, folderFile[2]!).files.push({
         path: folderFile[3]!,
@@ -1132,9 +1154,14 @@ export async function renderWorkspaceTuple(
           class: scan.class,
           slug,
           definitionPath: `${scan.class}s/${slug}/${
-            scan.class === "connection" ? "CONNECTION.md" : "TOOL.md"
+            scan.class === "connection"
+              ? "CONNECTION.md"
+              : scan.class === "agent"
+                ? "INSTRUCTIONS.md"
+                : "TOOL.md"
           }`,
           definitionRaw,
+          definitionEtag: scan.definitionEtag ?? null,
           sidecarRaw,
           files: scan.files,
         };
