@@ -210,6 +210,8 @@ import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
 import { buildCapabilitySearchTool } from "./runtime/tools/capability-search.js";
 import { buildConnectionResearchTool } from "./runtime/tools/connection-research.js";
 import { buildRoutineProposeTool } from "./runtime/tools/routine-propose.js";
+import { buildSelfAdmitCapabilityTool } from "./runtime/tools/self-admit-capability.js";
+import { buildSelfPromoteRoutineTool } from "./runtime/tools/self-promote-routine.js";
 import { runAgentCoreBrowserAutomation } from "./runtime/browser-automation-runner.js";
 import {
   discoverWorkspaceSkills,
@@ -1534,6 +1536,21 @@ export async function buildInvocationResources(
       // THINK-280 U6 — propose a Routine for promotion (create-only; the
       // backing Lambda cannot approve, commit, validate, or activate).
       buildRoutineProposeTool({
+        env: args.env,
+        lambdaClient: capabilityLambdaClient,
+        callerContext: capabilityCallerContext,
+      }),
+      // Governed autonomy U4 — self-extension: autonomously admit a public
+      // capability and promote a composed Routine with NO human. The backing
+      // Lambda gates both fail-closed on the per-tenant opt-in and the
+      // auto-tier classifier; anything credentialed/writing is held for
+      // operator review. Default OFF — inert until a tenant is opted in.
+      buildSelfAdmitCapabilityTool({
+        env: args.env,
+        lambdaClient: capabilityLambdaClient,
+        callerContext: capabilityCallerContext,
+      }),
+      buildSelfPromoteRoutineTool({
         env: args.env,
         lambdaClient: capabilityLambdaClient,
         callerContext: capabilityCallerContext,

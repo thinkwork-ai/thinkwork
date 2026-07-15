@@ -661,3 +661,128 @@ describe("routine_propose", () => {
     expect(inserted).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Governed autonomy (U4) — self_admit_connection / self_approve_routine gate
+// ---------------------------------------------------------------------------
+
+describe("self-extension actions (governed autonomy)", () => {
+  const SELF_EXT_KEY = "CAPABILITY_SELF_EXTENSION_TENANTS";
+
+  function withSelfExtension<T>(value: string | null, fn: () => T): T {
+    const prev = process.env[SELF_EXT_KEY];
+    if (value === null) delete process.env[SELF_EXT_KEY];
+    else process.env[SELF_EXT_KEY] = value;
+    try {
+      return fn();
+    } finally {
+      if (prev === undefined) delete process.env[SELF_EXT_KEY];
+      else process.env[SELF_EXT_KEY] = prev;
+    }
+  }
+
+  it("recognizes both actions (not unknown_action)", async () => {
+    // Gate OFF by default — the actions exist but reject fail-closed, which is
+    // a different reason than an unknown action.
+    const { db } = mockDb();
+    const admit = await withSelfExtension(null, () =>
+      handleCapabilityControl(
+        {
+          action: "self_admit_connection",
+          callerContext: "",
+          proposalId: "p-1",
+        },
+        { db, publicKeyPem },
+      ),
+    );
+    // Empty caller context rejects at the trust boundary before the gate, but
+    // the action itself was accepted into the union (no unknown_action).
+    expect(admit.ok).toBe(false);
+    if (admit.ok) throw new Error();
+    expect(admit.reason).not.toBe("unknown_action");
+  });
+
+  it("is fail-closed by default: self_admit_connection rejects self_extension_disabled", async () => {
+    const { db } = mockDb();
+    const context = await mintContext();
+    const result = await withSelfExtension(null, () =>
+      handleCapabilityControl(
+        {
+          action: "self_admit_connection",
+          callerContext: context,
+          proposalId: "p-1",
+        },
+        { db, publicKeyPem },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("self_extension_disabled");
+  });
+
+  it("is fail-closed by default: self_approve_routine rejects self_extension_disabled", async () => {
+    const { db } = mockDb();
+    const context = await mintContext();
+    const result = await withSelfExtension(null, () =>
+      handleCapabilityControl(
+        {
+          action: "self_approve_routine",
+          callerContext: context,
+          proposalId: "p-1",
+        },
+        { db, publicKeyPem },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("self_extension_disabled");
+  });
+
+  it("does not enable a tenant absent from the allowlist", async () => {
+    const { db } = mockDb();
+    const context = await mintContext();
+    const result = await withSelfExtension(
+      "99999999-9999-9999-9999-999999999999",
+      () =>
+        handleCapabilityControl(
+          {
+            action: "self_admit_connection",
+            callerContext: context,
+            proposalId: "p-1",
+          },
+          { db, publicKeyPem },
+        ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("self_extension_disabled");
+  });
+
+  it("enabled but missing proposalId rejects invalid_proposal_id (before touching the lib)", async () => {
+    const { db } = mockDb();
+    const context = await mintContext();
+    const result = await withSelfExtension(TENANT_ID, () =>
+      handleCapabilityControl(
+        { action: "self_admit_connection", callerContext: context },
+        { db, publicKeyPem },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("invalid_proposal_id");
+  });
+
+  it("self_approve_routine enabled but missing proposalId rejects invalid_proposal_id", async () => {
+    const { db } = mockDb();
+    const context = await mintContext();
+    const result = await withSelfExtension(TENANT_ID, () =>
+      handleCapabilityControl(
+        { action: "self_approve_routine", callerContext: context },
+        { db, publicKeyPem },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.reason).toBe("invalid_proposal_id");
+  });
+});
