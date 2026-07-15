@@ -45,6 +45,7 @@ import {
 } from "@thinkwork/lambda/capability-caller-context";
 import {
   formatTwcapRef,
+  operationContractHash,
   operationExecutabilityViolations,
   type CapabilityDescriptor,
   type OperationContract,
@@ -54,11 +55,22 @@ import {
   searchCapabilityRuntime,
   type CapabilityConnectionProposalRow,
   type CapabilityDefinitionRow,
+  type Db,
 } from "../lib/capabilities/research.js";
 import {
   createRoutineProposal,
+  publishAutoComposedProposal,
   type RoutineProposalBundle,
 } from "../lib/capabilities/routine-proposal.js";
+import {
+  autonomouslyAdmitProposal,
+  type AdmissionFolderWriter,
+} from "../lib/capabilities/admission.js";
+import { resolveConfiguredCapabilitySigner } from "../lib/capabilities/sidecar-signing.js";
+import { createDefaultRoutineProposalPromoter } from "../lib/capabilities/routine-promoter.js";
+import { readOnlyHttpProbeRunner } from "../lib/capabilities/readiness.js";
+import { readTenantCredentialSecret } from "../lib/tenant-credentials/secret-store.js";
+import { agents, tenants } from "@thinkwork/database-pg/schema";
 
 const LOG_PREFIX = "[capability-control-service]";
 
@@ -66,9 +78,36 @@ export const CAPABILITY_CONTROL_ACTIONS = [
   "capability_search",
   "connection_research",
   "routine_propose",
+  "self_admit_connection",
+  "self_approve_routine",
 ] as const;
 export type CapabilityControlAction =
   (typeof CAPABILITY_CONTROL_ACTIONS)[number];
+
+/**
+ * SSM runtime-config allowlist of tenant ids permitted to self-extend
+ * (comma/space-separated). Read fail-closed: an unset/empty document means NO
+ * tenant is enabled, so the two autonomous actions stay inert until a tenant is
+ * explicitly opted in. Governed autonomy is default-OFF.
+ */
+const SELF_EXTENSION_TENANTS_CONFIG_KEY = "CAPABILITY_SELF_EXTENSION_TENANTS";
+
+function isSelfExtensionEnabled(tenantId: string): boolean {
+  let raw = "";
+  try {
+    raw = getConfig(SELF_EXTENSION_TENANTS_CONFIG_KEY) || "";
+  } catch {
+    raw = "";
+  }
+  if (!raw.trim()) return false;
+  const allow = new Set(
+    raw
+      .split(/[\s,]+/)
+      .map((t) => t.trim())
+      .filter(Boolean),
+  );
+  return allow.has(tenantId);
+}
 
 const PRINCIPAL_MODES = new Set(["requester", "agent_owner", "service"]);
 
@@ -89,6 +128,8 @@ export interface CapabilityControlEvent {
   proposal?: unknown;
   /** routine_propose: the immutable bundle + optional target routine. */
   routineProposal?: unknown;
+  /** self_admit_connection / self_approve_routine: the target proposal id. */
+  proposalId?: unknown;
 }
 
 export type CapabilityControlRejection = {
@@ -156,6 +197,27 @@ export interface RoutineProposeResultOut {
   status?: string;
 }
 
+export interface SelfAdmitConnectionResultOut {
+  outcome: "applied" | "rejected" | "held_for_review";
+  reason?: string;
+  /** The executable twcap ref of the admitted, runnable capability. */
+  twcap?: string;
+  definitionId?: string;
+  definitionVersionId?: string;
+  version?: number;
+  /** Readiness of the auto-provisioned binding (U2b): ready | degraded | rejected. */
+  bindingOutcome?: string;
+  bindingReason?: string;
+}
+
+export interface SelfApproveRoutineResultOut {
+  outcome: "applied" | "rejected" | "held_for_review";
+  reason?: string;
+  proposalId?: string;
+  routineId?: string;
+  gateSha?: string;
+}
+
 export type CapabilityControlResponse =
   | CapabilityControlRejection
   | { ok: true; action: "capability_search"; result: CapabilitySearchResult }
@@ -168,6 +230,16 @@ export type CapabilityControlResponse =
       ok: true;
       action: "routine_propose";
       result: RoutineProposeResultOut;
+    }
+  | {
+      ok: true;
+      action: "self_admit_connection";
+      result: SelfAdmitConnectionResultOut;
+    }
+  | {
+      ok: true;
+      action: "self_approve_routine";
+      result: SelfApproveRoutineResultOut;
     };
 
 // ---------------------------------------------------------------------------
@@ -555,6 +627,198 @@ async function runRoutinePropose(
 }
 
 // ---------------------------------------------------------------------------
+// self_admit_connection / self_approve_routine — governed autonomy (U4)
+// ---------------------------------------------------------------------------
+
+/**
+ * AdmissionFolderWriter over putCapabilityFolder, targeting the tenant's
+ * platform default agent workspace — the Lambda-side mirror of the resolver's
+ * platformAgentFolderWriter. Any failure is caught by the admission lib and
+ * surfaces as `projection_pending` on an applied admission; the signed version
+ * row stays authoritative (the broker authorizes from the DB, not the folder).
+ */
+function platformAgentFolderWriter(db: Db): AdmissionFolderWriter {
+  return {
+    async write(input) {
+      const [agent] = await db
+        .select({
+          slug: agents.slug,
+          workspace_folder_name: agents.workspace_folder_name,
+        })
+        .from(agents)
+        .where(
+          and(
+            eq(agents.tenant_id, input.tenantId),
+            eq(agents.is_platform_default, true),
+          ),
+        )
+        .limit(1);
+      if (!agent?.slug) {
+        throw new Error("tenant has no platform default agent workspace");
+      }
+      const [tenant] = await db
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, input.tenantId))
+        .limit(1);
+      if (!tenant?.slug) {
+        throw new Error("tenant not found");
+      }
+      const workspaceFolder = agent.workspace_folder_name ?? agent.slug;
+      const targetPrefix = `tenants/${tenant.slug}/agents/${workspaceFolder}/`;
+      const { putCapabilityFolder } =
+        await import("../lib/capabilities/folder-write.js");
+      return putCapabilityFolder({
+        targetPrefix,
+        klass: input.klass,
+        slug: input.slug,
+        definition: input.definition,
+        sidecar: input.sidecar,
+        signedBy: input.signedBy,
+      });
+    },
+  };
+}
+
+/**
+ * Autonomous self-admission (governed autonomy). An agent admits a proposal it
+ * composed with NO human — gated fail-closed on the per-tenant opt-in and the
+ * auto-tier classifier inside the lib. On success it also auto-provisions the
+ * agent's service principal + empty-credential binding and drives it to `ready`
+ * (U2b), returning the executable twcap. A non-auto descriptor → held_for_review.
+ */
+async function runSelfAdmitConnection(
+  db: Db,
+  context: CapabilityCallerContextPayload,
+  event: CapabilityControlEvent,
+): Promise<CapabilityControlResponse> {
+  if (!isSelfExtensionEnabled(context.tenantId)) {
+    return reject("self_extension_disabled");
+  }
+  const proposalId = asString(event.proposalId);
+  if (!proposalId) {
+    return reject(
+      "invalid_proposal_id",
+      "self_admit_connection requires a proposalId",
+    );
+  }
+  const signer = await resolveConfiguredCapabilitySigner();
+  if (!signer) {
+    return reject("signing_unavailable");
+  }
+
+  const result = await autonomouslyAdmitProposal(db, {
+    tenantId: context.tenantId,
+    proposalId,
+    agentId: context.agentId,
+    signer,
+    folderWriter: platformAgentFolderWriter(db),
+    provisioner: {
+      probeRunner: readOnlyHttpProbeRunner,
+      secretResolver: { resolve: (ref) => readTenantCredentialSecret(ref) },
+    },
+  });
+
+  if (result.outcome !== "applied") {
+    return {
+      ok: true,
+      action: "self_admit_connection",
+      result: {
+        outcome: result.outcome,
+        ...(result.reason ? { reason: result.reason } : {}),
+      },
+    };
+  }
+
+  // Build the executable twcap ref for the admitted version's first operation.
+  const descriptor = result.version?.descriptor_json as
+    | CapabilityDescriptor
+    | undefined;
+  const firstOp = descriptor?.operations?.[0];
+  const out: SelfAdmitConnectionResultOut = {
+    outcome: "applied",
+    ...(result.definition ? { definitionId: result.definition.id } : {}),
+    ...(result.version
+      ? {
+          definitionVersionId: result.version.id,
+          version: result.version.version,
+        }
+      : {}),
+    ...(result.binding
+      ? {
+          bindingOutcome: result.binding.outcome,
+          ...(result.binding.reason
+            ? { bindingReason: result.binding.reason }
+            : {}),
+        }
+      : {}),
+  };
+  if (descriptor && firstOp && result.version) {
+    out.twcap = formatTwcapRef({
+      namespace: descriptor.namespace,
+      class: descriptor.class,
+      slug: descriptor.slug,
+      version: String(result.version.version),
+      operationId: firstOp.operationId,
+      contractHash: operationContractHash(firstOp),
+    });
+  }
+  return { ok: true, action: "self_admit_connection", result: out };
+}
+
+/**
+ * Autonomous self-approval (governed autonomy). An agent promotes a routine it
+ * composed with NO human — gated fail-closed on the per-tenant opt-in and the
+ * auto-tier classifier over every pinned dependency inside the lib. The
+ * hermetic fixture gate still runs on the promoted SHA. A non-auto dependency →
+ * held_for_review (the proposal stays in the operator queue).
+ */
+async function runSelfApproveRoutine(
+  db: Db,
+  context: CapabilityCallerContextPayload,
+  event: CapabilityControlEvent,
+): Promise<CapabilityControlResponse> {
+  if (!isSelfExtensionEnabled(context.tenantId)) {
+    return reject("self_extension_disabled");
+  }
+  const proposalId = asString(event.proposalId);
+  if (!proposalId) {
+    return reject(
+      "invalid_proposal_id",
+      "self_approve_routine requires a proposalId",
+    );
+  }
+
+  const result = await publishAutoComposedProposal(
+    db,
+    { tenantId: context.tenantId, proposalId, agentId: context.agentId },
+    { promoter: createDefaultRoutineProposalPromoter() },
+  );
+
+  const gateSha =
+    result.promotion?.outcome === "promoted"
+      ? (result.promotion.validatedSha ?? undefined)
+      : undefined;
+  return {
+    ok: true,
+    action: "self_approve_routine",
+    result: {
+      outcome: result.outcome,
+      ...(result.reason ? { reason: result.reason } : {}),
+      ...(result.proposal
+        ? {
+            proposalId: result.proposal.id,
+            ...(result.proposal.routine_id
+              ? { routineId: result.proposal.routine_id }
+              : {}),
+          }
+        : {}),
+      ...(gateSha ? { gateSha } : {}),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -603,6 +867,12 @@ export async function handleCapabilityControl(
     }
     if (action === "routine_propose") {
       return await runRoutinePropose(db, context, event);
+    }
+    if (action === "self_admit_connection") {
+      return await runSelfAdmitConnection(db, context, event);
+    }
+    if (action === "self_approve_routine") {
+      return await runSelfApproveRoutine(db, context, event);
     }
     return await runConnectionResearch(db, context, event);
   } catch (err) {

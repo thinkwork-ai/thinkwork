@@ -27,7 +27,9 @@ import type { RuntimeEnvSnapshot } from "../../handler-context.js";
 export type CapabilityControlAction =
   | "capability_search"
   | "connection_research"
-  | "routine_propose";
+  | "routine_propose"
+  | "self_admit_connection"
+  | "self_approve_routine";
 
 export interface CapabilityControlRequest {
   action: CapabilityControlAction;
@@ -53,6 +55,8 @@ export interface CapabilityControlRequest {
     routineId?: string;
     bundle: unknown;
   };
+  /** self_admit_connection / self_approve_routine: target proposal id. */
+  proposalId?: string;
 }
 
 export type CapabilityControlOutcome =
