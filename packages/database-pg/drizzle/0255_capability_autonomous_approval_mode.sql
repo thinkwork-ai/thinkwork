@@ -6,7 +6,7 @@
 --
 -- Hand-rolled (constraint recreation): apply via
 --   psql "$DATABASE_URL" -f drizzle/0255_capability_autonomous_approval_mode.sql
--- creates: public.capability_routine_proposals_approval_mode_check
+-- creates-constraint: public.capability_routine_proposals.capability_routine_proposals_approval_mode_check
 
 ALTER TABLE public.capability_routine_proposals
   DROP CONSTRAINT IF EXISTS capability_routine_proposals_approval_mode_check;
