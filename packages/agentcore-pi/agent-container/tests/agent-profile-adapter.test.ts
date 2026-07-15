@@ -132,7 +132,6 @@ describe("agent profile adapter", () => {
     expect(request.execution).toMatchObject({
       foreground: true,
       clarify: false,
-      maxSubagentDepth: 0,
       timeoutMs: 15_000,
       maxTokens: 2_000,
       loopPolicy: {
@@ -147,6 +146,9 @@ describe("agent profile adapter", () => {
         costBudgetUsd: 0.05,
       },
     });
+    // Depth is enforced structurally (admission rejects nested agents/
+    // folders); the compiled execution block carries no depth field.
+    expect(request.execution).not.toHaveProperty("maxSubagentDepth");
     expect(runner.runProfile).toHaveBeenCalledWith(request);
     expect(evidence).toMatchObject({
       profileRunId: "profile-run-1",
