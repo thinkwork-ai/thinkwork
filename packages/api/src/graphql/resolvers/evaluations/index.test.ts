@@ -1293,6 +1293,8 @@ describe("eval run scoring-version surfacing", () => {
           errored: 0,
           unstable: 0,
           pass_rate: "0.5000",
+          cost_usd: "0.246921",
+          cost_partial: false,
         },
         agentName: "Agent",
       },
@@ -1303,12 +1305,16 @@ describe("eval run scoring-version surfacing", () => {
         trial_index: 0,
         status: "pass",
         override_status: null,
+        evaluator_results: [],
+        agent_cost_usd: "0.100000",
       },
       {
         test_case_id: "case-2",
         trial_index: 0,
         status: "fail",
         override_status: null,
+        evaluator_results: [],
+        agent_cost_usd: "0.146921",
       },
     ]);
     selectQueue.push([]); // no case-level overrides
@@ -1328,6 +1334,8 @@ describe("eval run scoring-version surfacing", () => {
       errored: 0,
       unstable: 0,
       passRate: 0,
+      costUsd: 0.146921,
+      costPartial: false,
     });
   });
 });
@@ -2683,6 +2691,17 @@ describe("evalRunTypeResolvers (run latency percentiles, U5)", () => {
     expect(await evalRunTypeResolvers.latencyP95Ms(idless)).toBeNull();
     expect(executeCalls.length).toBe(before);
   });
+
+  it("excludes deleted-case orphan rows from the percentile aggregate (THINK-289)", async () => {
+    executeResults.push([{ p50: 10, p95: 20 }]);
+    const before = executeCalls.length;
+    expect(await evalRunTypeResolvers.latencyP50Ms({ id: "run-orphans" })).toBe(
+      10,
+    );
+    expect(JSON.stringify(executeCalls[before])).toContain(
+      "test_case_id IS NOT NULL",
+    );
+  });
 });
 
 describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
@@ -2734,6 +2753,8 @@ describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
         trial_index: 0,
         status: "fail",
         override_status: null,
+        evaluator_results: [],
+        agent_cost_usd: "0.010000",
       },
     ]);
     selectQueue.push([]); // no remaining case-level overrides
@@ -2754,6 +2775,8 @@ describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
       errored: 0,
       unstable: 0,
       pass_rate: "0.0000",
+      cost_usd: "0.010000",
+      cost_partial: false,
     });
     expect(mockNotifyEvalRunUpdate).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -543,8 +543,9 @@ export function EvalTestCaseForm({
           </h3>
           <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/50 p-4">
             <p className="text-xs text-muted-foreground">
-              Permanently delete this test case. Historical run results are kept
-              but unlinked from it. This cannot be undone.
+              Permanently delete this test case and remove its results from all
+              past runs. Run summaries are recalculated without it. This cannot
+              be undone.
             </p>
             <Button
               type="button"
