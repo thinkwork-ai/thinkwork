@@ -8,11 +8,14 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Stub the CodeMirror editor to a plain element so we can assert the bound
-// value without driving the real editor in jsdom.
+// value without driving the real editor in jsdom. Props are captured so the
+// wired extensions can be asserted on too.
+const codeMirrorProps: Record<string, unknown>[] = [];
 vi.mock("@uiw/react-codemirror", () => ({
-  default: ({ value }: { value: string }) => (
-    <div data-testid="codemirror" data-value={value} />
-  ),
+  default: (props: { value: string }) => {
+    codeMirrorProps.push(props);
+    return <div data-testid="codemirror" data-value={props.value} />;
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -20,11 +23,13 @@ vi.mock("sonner", () => ({
 }));
 
 import { toast } from "sonner";
+import { editorSelectionHighlight } from "@thinkwork/workspace-editor";
 import { SystemPromptViewer } from "./SystemPromptViewer";
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  codeMirrorProps.length = 0;
 });
 
 describe("SystemPromptViewer", () => {
@@ -33,6 +38,14 @@ describe("SystemPromptViewer", () => {
     expect(screen.getByTestId("codemirror").getAttribute("data-value")).toBe(
       "# AGENTS.md\nyou are helpful",
     );
+  });
+
+  it("wires the shared selection highlight while staying read-only (THINK-296 AE3)", () => {
+    render(<SystemPromptViewer prompt="select me to copy" />);
+    expect(codeMirrorProps.length).toBeGreaterThan(0);
+    const props = codeMirrorProps[0];
+    expect(props.readOnly).toBe(true);
+    expect(props.extensions as unknown[]).toContain(editorSelectionHighlight);
   });
 
   it("renders nothing when the prompt is empty (caller owns the empty state)", () => {

@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
+import { editorSelectionHighlight } from "@thinkwork/workspace-editor";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
@@ -39,6 +40,7 @@ export function SystemPromptViewer({
       EditorView.lineWrapping,
       EditorView.editable.of(false),
       EditorView.contentAttributes.of({ tabindex: "-1" }),
+      editorSelectionHighlight,
     ];
     return prompt.length > HIGHLIGHT_MAX_CHARS ? base : [markdown(), ...base];
   }, [prompt.length]);

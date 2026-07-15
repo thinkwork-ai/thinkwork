@@ -9,6 +9,7 @@ import {
 import { javascript } from "@codemirror/lang-javascript";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import CodeMirror from "@uiw/react-codemirror";
+import { editorSelectionHighlight } from "@thinkwork/workspace-editor";
 import {
   Braces,
   Download,
@@ -747,7 +748,10 @@ function OperatorAppletTabs({
               onChange={setDraft}
               height="100%"
               theme={vscodeDark}
-              extensions={[javascript({ jsx: true, typescript: true })]}
+              extensions={[
+                javascript({ jsx: true, typescript: true }),
+                editorSelectionHighlight,
+              ]}
               style={{ fontSize: "13px", backgroundColor: "black" }}
               className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
               basicSetup={{

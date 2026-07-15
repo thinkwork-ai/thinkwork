@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
+import { editorSelectionHighlight } from "@thinkwork/workspace-editor";
 import { AppletMount, AppletRouteContent } from "./artifacts.$id";
 
 vi.mock("urql", () => ({
@@ -29,21 +30,20 @@ vi.mock("sonner", () => ({
 }));
 
 // Stub CodeMirror with a plain textarea so the editor is interactive in jsdom
-// without pulling the full editor runtime.
+// without pulling the full editor runtime. Props are captured so the wired
+// extensions can be asserted on too.
+const codeMirrorProps: Record<string, unknown>[] = [];
 vi.mock("@uiw/react-codemirror", () => ({
-  default: ({
-    value,
-    onChange,
-  }: {
-    value: string;
-    onChange: (value: string) => void;
-  }) => (
-    <textarea
-      data-testid="applet-source-editor"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
-  ),
+  default: (props: { value: string; onChange: (value: string) => void }) => {
+    codeMirrorProps.push(props);
+    return (
+      <textarea
+        data-testid="applet-source-editor"
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+      />
+    );
+  },
 }));
 
 const reexecuteAppletQuery = vi.fn();
@@ -163,6 +163,7 @@ afterEach(() => {
   cleanup();
   window.sessionStorage.clear();
   vi.clearAllMocks();
+  codeMirrorProps.length = 0;
 });
 
 describe("AppletRouteContent", () => {
@@ -341,6 +342,17 @@ describe("operator Source/Config tabs", () => {
     expect(screen.getByRole("tab", { name: "Artifact" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Source" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Config" })).toBeTruthy();
+  });
+
+  it("wires the shared selection highlight into the source editor (THINK-296)", async () => {
+    setTenant({ isOperator: true, roleResolved: true });
+    render(<AppletRouteContent appId={appId} />);
+    await screen.findByTestId("applet-iframe-host");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+    expect(codeMirrorProps.length).toBeGreaterThan(0);
+    const extensions = codeMirrorProps.at(-1)?.extensions as unknown[];
+    expect(extensions).toContain(editorSelectionHighlight);
   });
 
   it("saves edited source through AdminUpdateAppletSource and refetches", async () => {
