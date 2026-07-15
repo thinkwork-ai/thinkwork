@@ -172,6 +172,8 @@ export function versionToGql(
     sourceProposalId: row.source_proposal_id ?? null,
     admittedAt: iso(row.admitted_at),
     admittedByUserId: row.admitted_by_user_id ?? null,
+    admissionMode: row.admission_mode ?? "operator",
+    admittedByAgentId: row.admitted_by_agent_id ?? null,
     createdAt: iso(row.created_at),
     operations: deriveOperationViews(identity, row),
   };

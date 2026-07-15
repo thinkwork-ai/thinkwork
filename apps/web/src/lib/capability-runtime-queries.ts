@@ -34,6 +34,8 @@ export const CapabilityRuntimeCatalogQuery = graphql(`
         lifecycle
         descriptorFingerprint
         admittedAt
+        admissionMode
+        admittedByAgentId
         operations {
           operationId
           twcap
@@ -182,6 +184,7 @@ export const RoutineProposalsQuery = graphql(`
       approvalMode
       inboxItemId
       createdByActorType
+      createdByActorId
       decidedAt
       promotedCommitSha
       createdAt

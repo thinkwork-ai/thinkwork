@@ -47,6 +47,11 @@ type CapabilityDefinitionVersion {
   sourceProposalId: ID
   admittedAt: AWSDateTime
   admittedByUserId: ID
+  # operator | autonomous — 'autonomous' marks a version an agent self-admitted
+  # with no human (governed autonomy). Defaults 'operator' for every prior row.
+  admissionMode: String
+  # The composing agent for an autonomous self-admission; null for operator.
+  admittedByAgentId: ID
   createdAt: AWSDateTime!
   # Per-operation view derived from the signed descriptor — includes the
   # exact twcap reference and executability withholding reasons.
