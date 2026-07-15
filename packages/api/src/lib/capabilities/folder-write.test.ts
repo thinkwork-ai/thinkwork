@@ -9,6 +9,7 @@ import {
   removeCapabilitySidecar,
   signExistingCapabilityFolder,
   resignCapabilityFolderSidecarIfPresent,
+  putAgentChildGrantSidecar,
 } from "./folder-write.js";
 import {
   capabilitySignerFromKey,
@@ -303,5 +304,36 @@ Research thoroughly.
       deps: { s3, bucket: "b", signer: null },
     });
     expect(result).toMatchObject({ ok: false, reason: "signing_unavailable" });
+  });
+});
+
+describe("putAgentChildGrantSidecar (subagent-folders U7)", () => {
+  it("writes a signed narrowing sidecar under the greenfield connectors/ path", async () => {
+    const s3 = fakeS3();
+    const result = await putAgentChildGrantSidecar({
+      targetPrefix: PREFIX,
+      agentProfileSlug: "analyst",
+      childClass: "connection",
+      slug: "postgres-dev",
+      operations: ["query"],
+      signedBy: "operator:provision-analyst-connector",
+      deps: { s3, bucket: "b", signer },
+    });
+    expect(result.ok).toBe(true);
+    const key = `${PREFIX}agents/analyst/connectors/postgres-dev/.assignment.json`;
+    const sidecar = JSON.parse(s3.objects.get(key)!);
+    expect(sidecar).toMatchObject({
+      slug: "postgres-dev",
+      class: "connection",
+      permissions: { operations: ["query"] },
+    });
+    // Signed over empty definition bytes — the sidecar IS the grant.
+    expect(
+      verifyCapabilitySidecar({
+        verifier,
+        sidecar,
+        definitionBytes: "",
+      }),
+    ).toEqual({ ok: true });
   });
 });

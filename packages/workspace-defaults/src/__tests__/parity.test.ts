@@ -84,7 +84,7 @@ describe("workspace-defaults parity", () => {
     const fileNames = Object.keys(defaults);
     const combined = Object.values(defaults).join("\n");
 
-    expect(DEFAULTS_VERSION).toBe(37);
+    expect(DEFAULTS_VERSION).toBe(38);
     expect(fileNames).not.toContain("skills/json-render/SKILL.md");
     expect(fileNames).not.toContain("skills/a2ui/SKILL.md");
     expect(fileNames).not.toContain("skills/ag-ui/SKILL.md");
@@ -132,5 +132,25 @@ describe("historical governance defaults (reseed corpus)", () => {
         HISTORICAL_GOVERNANCE_DEFAULTS[name].length,
       ).toBeGreaterThanOrEqual(1);
     }
+  });
+});
+
+describe("built-in sub-agent folders (subagent-folders U7)", () => {
+  it("ships the four built-in profiles as agents/<slug>/INSTRUCTIONS.md trees", () => {
+    const defaults = loadDefaults();
+    for (const slug of ["research", "coding", "analyst", "reviewer"]) {
+      const content = defaults[`agents/${slug}/INSTRUCTIONS.md`];
+      expect(content, slug).toBeDefined();
+      expect(content).toMatch(/^---\n/);
+      expect(content).toContain("description:");
+    }
+    // Grants-by-presence: no static sidecars or grant folders ship in
+    // defaults — a signed sidecar cannot be static content.
+    expect(
+      Object.keys(defaults).some((f) => f.includes(".assignment.json")),
+    ).toBe(false);
+    expect(
+      Object.keys(defaults).some((f) => /^agents\/.*\/connectors\//.test(f)),
+    ).toBe(false);
   });
 });
