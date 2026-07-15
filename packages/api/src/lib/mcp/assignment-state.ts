@@ -30,6 +30,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getConfig } from "@thinkwork/runtime-config";
+import { mcpAssignmentRe } from "../workspace-constants.js";
 import {
   db,
   eq,
@@ -91,7 +92,7 @@ export function mcpFolderPrefix(targetPrefix: string, slug: string): string {
 }
 
 /** `mcp/<slug>/.assignment.json` marker — the attached-server presence rule. */
-const MCP_ASSIGNMENT_RE = /^mcp\/([^/]+)\/\.assignment\.json$/;
+const MCP_ASSIGNMENT_RE = mcpAssignmentRe();
 
 /**
  * Build the manifest state from a registry row + the agent-level config.
