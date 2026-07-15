@@ -159,6 +159,10 @@ import {
   type McpJsonConfig,
 } from "./runtime/mcp-json.js";
 import {
+  agentProfilesFromManifest,
+  diffProfileSources,
+} from "./runtime/manifest-agent-profiles.js";
+import {
   CapabilitiesJsonError,
   readCapabilitiesManifest,
   type CapabilitiesManifestFile,
@@ -3576,6 +3580,51 @@ export async function handleInvocation(
         : message,
     );
   const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
+  // Subagent-folders U9 — DUAL READ: when this dispatch pinned a
+  // capabilities manifest, resolve sub-agent profiles from its agent
+  // entries + the synced agents/<slug>/INSTRUCTIONS.md files and compare
+  // against the payload. Divergence is a structured warning; the payload
+  // stays authoritative until the per-tenant authority flip (U10).
+  if (capabilitiesManifest) {
+    try {
+      const manifestProfiles = await agentProfilesFromManifest({
+        manifest: capabilitiesManifest,
+        workspaceDir: env.workspaceDir,
+      });
+      for (const skippedProfile of manifestProfiles.skipped) {
+        logStructured({
+          level: "warn",
+          event: "agent_profile_manifest_skip",
+          tenantId: identity.tenantId,
+          agentSlug: identity.agentSlug,
+          profileSlug: skippedProfile.slug,
+          reason: skippedProfile.reason,
+          detail: skippedProfile.detail,
+        });
+      }
+      for (const divergence of diffProfileSources({
+        payloadProfiles: agentProfiles,
+        manifestProfiles: manifestProfiles.profiles,
+      })) {
+        logStructured({
+          level: "warn",
+          event: "agent_profile_manifest_divergence",
+          tenantId: identity.tenantId,
+          agentSlug: identity.agentSlug,
+          profileSlug: divergence.slug,
+          fields: divergence.fields,
+        });
+      }
+    } catch (err) {
+      logStructured({
+        level: "warn",
+        event: "agent_profile_manifest_dual_read_failed",
+        tenantId: identity.tenantId,
+        agentSlug: identity.agentSlug,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
   // THINK-229 U4 (R8): withheld-connection notices from the dispatch's
   // MCP build — injected into delegated-child context so the model names
   // the outage instead of estimating.
