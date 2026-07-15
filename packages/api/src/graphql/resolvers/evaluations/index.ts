@@ -228,6 +228,64 @@ async function loadEvalRunProgress(
   );
 }
 
+/**
+ * The first THINK-289 implementation unlinked result rows instead of deleting
+ * them. Until those rows age out, recompute a terminal run detail from the
+ * still-linked results so its counters and denominator agree with the rows the
+ * user can actually see. Runs without an orphan keep their persisted summary.
+ */
+async function withoutDeletedResultOrphans(
+  run: typeof evalRuns.$inferSelect,
+): Promise<typeof evalRuns.$inferSelect> {
+  if (!["completed", "cancelled", "failed"].includes(run.status)) return run;
+
+  const rows = await db
+    .select({
+      test_case_id: evalResults.test_case_id,
+      trial_index: evalResults.trial_index,
+      status: evalResults.status,
+      override_status: evalResults.override_status,
+    })
+    .from(evalResults)
+    .where(eq(evalResults.run_id, run.id));
+  if (!rows.some((row) => row.test_case_id === null)) return run;
+
+  const linkedRows = rows.filter(
+    (row): row is typeof row & { test_case_id: string } =>
+      row.test_case_id !== null,
+  );
+  const caseOverrides =
+    run.scoring_version === null
+      ? []
+      : await db
+          .select({
+            test_case_id: evalCaseOverrides.test_case_id,
+            override_status: evalCaseOverrides.override_status,
+          })
+          .from(evalCaseOverrides)
+          .where(eq(evalCaseOverrides.run_id, run.id));
+  const summary = summarizeEvalRunVerdicts(
+    linkedRows,
+    caseOverrides,
+    run.scoring_version,
+  );
+
+  return {
+    ...run,
+    total_tests: new Set(linkedRows.map((row) => row.test_case_id)).size,
+    expected_result_rows: linkedRows.length,
+    passed: summary.passed,
+    failed: summary.failed,
+    errored: summary.errored,
+    unstable: summary.unstable,
+    pass_rate: summary.passRate === null ? null : summary.passRate.toFixed(4),
+    summary_scoring_version: summaryScoringVersionFor(
+      run.scoring_version,
+      CURRENT_EVAL_SCORING_VERSION,
+    ),
+  };
+}
+
 function resultToGraphql(
   row: Record<string, unknown>,
   testCase?: { name: string; category: string } | null,
@@ -626,10 +684,11 @@ const evalRun = async (_p: any, args: { id: string }, ctx: GraphQLContext) => {
     .leftJoin(agents, eq(evalRuns.agent_id, agents.id))
     .where(and(eq(evalRuns.id, args.id), eq(evalRuns.tenant_id, tenantId)));
   if (!row) return null;
+  const run = await withoutDeletedResultOrphans(row.run);
   const progressByRunId = await loadEvalRunProgress([args.id]);
   return runToGraphql(
     withLiveProgress(
-      row.run as unknown as Record<string, unknown>,
+      run as unknown as Record<string, unknown>,
       progressByRunId.get(args.id),
     ),
     row.agentName,
@@ -659,14 +718,19 @@ const evalRunResults = async (
     .leftJoin(evalTestCases, eq(evalResults.test_case_id, evalTestCases.id))
     .where(eq(evalResults.run_id, args.runId))
     .orderBy(desc(evalResults.created_at));
-  const actualRows = rows.map((r) =>
-    resultToGraphql(
-      r.result as unknown as Record<string, unknown>,
-      r.testCaseName
-        ? { name: r.testCaseName, category: r.testCaseCategory ?? "" }
-        : null,
-    ),
-  );
+  // Rows unlinked by the original THINK-289 implementation represent
+  // already-deleted test cases. Do not surface those historical orphans as
+  // anonymous results while older deployments are still being cleaned up.
+  const actualRows = rows
+    .filter((r) => r.result.test_case_id !== null)
+    .map((r) =>
+      resultToGraphql(
+        r.result as unknown as Record<string, unknown>,
+        r.testCaseName
+          ? { name: r.testCaseName, category: r.testCaseCategory ?? "" }
+          : null,
+      ),
+    );
 
   // Multi-trial runs (Eval Profiles U4) write several rows per case —
   // group them so every trial row survives the planned-set merge below
@@ -1466,21 +1530,60 @@ const deleteEvalTestCase = async (
   }
 
   // eval_results.test_case_id and eval_case_overrides.test_case_id both FK
-  // this row with NO ACTION, so a bare delete throws for any case that has
-  // ever been run. Unlink results (rows are self-contained snapshots; run
-  // views render unlinked rows), drop the case's overrides, then the case —
-  // one transaction, everything on the tx handle (a getDb() query inside a
-  // held tx deadlocks the max-2 pool).
+  // this row with NO ACTION, so dependent rows must be removed first. A test
+  // case delete is a full deletion from evaluation history: keeping result
+  // snapshots with a null FK creates an anonymous row in every affected run.
+  // Delete results, overrides, then the case in one transaction; keep every
+  // query on the tx handle (a getDb() query inside a held tx deadlocks the
+  // max-2 pool).
+  const recomputedRuns: RecomputedEvalRunSummary[] = [];
   try {
     await db.transaction(async (tx) => {
-      await tx
-        .update(evalResults)
-        .set({ test_case_id: null })
+      const affectedRows = await tx
+        .select({ runId: evalResults.run_id })
+        .from(evalResults)
         .where(eq(evalResults.test_case_id, args.id));
+      const removedResultCounts = new Map<string, number>();
+      for (const row of affectedRows) {
+        removedResultCounts.set(
+          row.runId,
+          (removedResultCounts.get(row.runId) ?? 0) + 1,
+        );
+      }
+
+      // Serialize with worker/reconciler finalization before removing rows.
+      // Lock in sorted order so deleting a case present in several runs cannot
+      // deadlock another multi-run maintenance transaction.
+      const affectedRunIds = [...removedResultCounts.keys()].sort();
+      for (const runId of affectedRunIds) {
+        await tx.execute(sql`
+          SELECT pg_advisory_xact_lock(
+            hashtext('eval-run-reconcile'),
+            hashtext(${runId})
+          )
+        `);
+      }
+
+      await tx.delete(evalResults).where(eq(evalResults.test_case_id, args.id));
       await tx
         .delete(evalCaseOverrides)
         .where(eq(evalCaseOverrides.test_case_id, args.id));
       await tx.delete(evalTestCases).where(eq(evalTestCases.id, args.id));
+
+      for (const runId of affectedRunIds) {
+        const recomputed = await recomputeEvalRunSummaryInTransaction(
+          tx,
+          runId,
+          {
+            acquireLock: false,
+            adjustment: {
+              removedCaseCount: 1,
+              removedResultCount: removedResultCounts.get(runId) ?? 0,
+            },
+          },
+        );
+        if (recomputed) recomputedRuns.push(recomputed);
+      }
     });
   } catch (err) {
     console.error(
@@ -1502,6 +1605,26 @@ const deleteEvalTestCase = async (
     throw new GraphQLError("Failed to delete test case", {
       extensions: { code: "INTERNAL_SERVER_ERROR" },
     });
+  }
+
+  for (const recomputed of recomputedRuns) {
+    try {
+      await notifyEvalRunUpdate({
+        runId: recomputed.run.id,
+        tenantId: recomputed.run.tenant_id,
+        agentId: recomputed.run.agent_id,
+        status: recomputed.run.status,
+        totalTests: recomputed.run.total_tests,
+        passed: recomputed.summary.passed,
+        failed: recomputed.summary.failed,
+        passRate: recomputed.summary.passRate ?? undefined,
+      });
+    } catch (err) {
+      console.warn(
+        `deleteEvalTestCase: run update notification for ${recomputed.run.id} failed:`,
+        err,
+      );
+    }
   }
   return true;
 };
@@ -1551,90 +1674,133 @@ function evalNotFound(message: string): GraphQLError {
   });
 }
 
-/**
- * Recompute a run's summary counters after an override write, under the
- * SAME run-level advisory lock the reconciler holds while finalizing
- * (`'eval-run-reconcile'`, runId). An override landing mid-finalize
- * either waits for the finalizer's transaction (then recomputes over
- * its synthetic rows too) or commits first (the finalizer's own
- * override-aware summary then includes it) — the lock means the two
- * writers can never interleave and clobber each other.
- *
- * Counter writes only land on terminal runs (completed/cancelled),
- * guarded on that same status so a concurrent transition is never
- * overwritten. In-flight runs are skipped: the worker's (override-
- * aware) finalization owns their counters and the live read overlay
- * already computes effective verdicts. The recompute preserves the
- * run's stamped scoring semantics — legacy runs (null scoring_version)
- * recompute under legacy math and keep a null summary stamp, never a
- * silent upgrade.
- */
-async function recomputeEvalRunSummaryAfterOverride(runId: string): Promise<{
+type EvalTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+interface EvalRunSummaryAdjustment {
+  removedCaseCount: number;
+  removedResultCount: number;
+}
+
+interface RecomputedEvalRunSummary {
   run: typeof evalRuns.$inferSelect;
   summary: ReturnType<typeof summarizeEvalRunVerdicts>;
-} | null> {
-  return await db.transaction(async (tx) => {
+}
+
+/**
+ * Recompute a run's persisted summary from its remaining result rows.
+ * Callers serialize on the same run-level advisory lock as the reconciler,
+ * so finalization, overrides, and test-case deletion cannot clobber one
+ * another. Optional deletion adjustments also shrink the run's case and
+ * fan-out totals in the same transaction as the result removal.
+ */
+async function recomputeEvalRunSummaryInTransaction(
+  tx: EvalTransaction,
+  runId: string,
+  options?: {
+    acquireLock?: boolean;
+    adjustment?: EvalRunSummaryAdjustment;
+  },
+): Promise<RecomputedEvalRunSummary | null> {
+  if (options?.acquireLock !== false) {
     await tx.execute(sql`
       SELECT pg_advisory_xact_lock(
         hashtext('eval-run-reconcile'),
         hashtext(${runId})
       )
     `);
+  }
 
-    const [run] = await tx
-      .select()
-      .from(evalRuns)
-      .where(eq(evalRuns.id, runId));
-    if (!run) return null;
+  const [run] = await tx.select().from(evalRuns).where(eq(evalRuns.id, runId));
+  if (!run) return null;
 
-    const rows = await tx
-      .select({
-        test_case_id: evalResults.test_case_id,
-        trial_index: evalResults.trial_index,
-        status: evalResults.status,
-        override_status: evalResults.override_status,
+  const rows = await tx
+    .select({
+      test_case_id: evalResults.test_case_id,
+      trial_index: evalResults.trial_index,
+      status: evalResults.status,
+      override_status: evalResults.override_status,
+    })
+    .from(evalResults)
+    .where(eq(evalResults.run_id, runId));
+  // Case-level overrides (KTD9) apply LAST in the aggregation layer;
+  // legacy (unversioned) runs never consult them.
+  const caseOverrides =
+    run.scoring_version === null
+      ? []
+      : await tx
+          .select({
+            test_case_id: evalCaseOverrides.test_case_id,
+            override_status: evalCaseOverrides.override_status,
+          })
+          .from(evalCaseOverrides)
+          .where(eq(evalCaseOverrides.run_id, runId));
+  // Same trial-aggregation layer the worker's finalization consumes
+  // (KTD4 — the two summary call sites must never fork).
+  const summary = summarizeEvalRunVerdicts(
+    rows,
+    caseOverrides,
+    run.scoring_version,
+  );
+
+  const isTerminal = ["completed", "cancelled", "failed"].includes(run.status);
+  const adjustedTotalTests = options?.adjustment
+    ? Math.max(0, run.total_tests - options.adjustment.removedCaseCount)
+    : run.total_tests;
+  const adjustedExpectedResultRows = options?.adjustment
+    ? run.expected_result_rows === null
+      ? null
+      : Math.max(
+          0,
+          run.expected_result_rows - options.adjustment.removedResultCount,
+        )
+    : run.expected_result_rows;
+
+  if (isTerminal) {
+    await tx
+      .update(evalRuns)
+      .set({
+        ...(options?.adjustment
+          ? {
+              total_tests: adjustedTotalTests,
+              expected_result_rows: adjustedExpectedResultRows,
+            }
+          : {}),
+        passed: summary.passed,
+        failed: summary.failed,
+        errored: summary.errored,
+        unstable: summary.unstable,
+        pass_rate:
+          summary.passRate === null ? null : summary.passRate.toFixed(4),
+        summary_scoring_version: summaryScoringVersionFor(
+          run.scoring_version,
+          CURRENT_EVAL_SCORING_VERSION,
+        ),
       })
-      .from(evalResults)
-      .where(eq(evalResults.run_id, runId));
-    // Case-level overrides (KTD9) apply LAST in the aggregation layer;
-    // legacy (unversioned) runs never consult them.
-    const caseOverrides =
-      run.scoring_version === null
-        ? []
-        : await tx
-            .select({
-              test_case_id: evalCaseOverrides.test_case_id,
-              override_status: evalCaseOverrides.override_status,
-            })
-            .from(evalCaseOverrides)
-            .where(eq(evalCaseOverrides.run_id, runId));
-    // Same trial-aggregation layer the worker's finalization consumes
-    // (KTD4 — the two summary call sites must never fork).
-    const summary = summarizeEvalRunVerdicts(
-      rows,
-      caseOverrides,
-      run.scoring_version,
-    );
+      .where(and(eq(evalRuns.id, runId), eq(evalRuns.status, run.status)));
+  }
 
-    if (run.status === "completed" || run.status === "cancelled") {
-      await tx
-        .update(evalRuns)
-        .set({
-          passed: summary.passed,
-          failed: summary.failed,
-          errored: summary.errored,
-          unstable: summary.unstable,
-          pass_rate:
-            summary.passRate === null ? null : summary.passRate.toFixed(4),
-          summary_scoring_version: summaryScoringVersionFor(
-            run.scoring_version,
-            CURRENT_EVAL_SCORING_VERSION,
-          ),
-        })
-        .where(and(eq(evalRuns.id, runId), eq(evalRuns.status, run.status)));
-    }
+  return {
+    run: {
+      ...run,
+      total_tests: isTerminal ? adjustedTotalTests : run.total_tests,
+      expected_result_rows: isTerminal
+        ? adjustedExpectedResultRows
+        : run.expected_result_rows,
+    },
+    summary,
+  };
+}
 
-    return { run, summary };
+/**
+ * Override writes use their own transaction and acquire the reconciler lock
+ * inside it. In-flight runs remain read-overlay-only; terminal runs persist
+ * the recomputed counters under their original scoring semantics.
+ */
+async function recomputeEvalRunSummaryAfterOverride(
+  runId: string,
+): Promise<RecomputedEvalRunSummary | null> {
+  return await db.transaction(async (tx) => {
+    return await recomputeEvalRunSummaryInTransaction(tx, runId);
   });
 }
 

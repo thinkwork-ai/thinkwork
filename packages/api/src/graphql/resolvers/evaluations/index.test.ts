@@ -736,6 +736,56 @@ describe("eval query tenant scoping", () => {
     expect(clause.and[1].eq[1]).toBe("tenant-1");
   });
 
+  it("evalRunResults omits results orphaned by an earlier test-case deletion", async () => {
+    selectQueue.push([
+      {
+        id: "run-1",
+        tenant_id: "tenant-1",
+        status: "completed",
+        dataset_id: null,
+        selected_test_case_ids: [],
+        categories: [],
+      },
+    ]);
+    selectQueue.push([
+      {
+        result: {
+          id: "orphan-result",
+          run_id: "run-1",
+          test_case_id: null,
+          status: "pass",
+          trial_index: 0,
+          evaluator_results: [],
+          assertions: [],
+        },
+        testCaseName: null,
+        testCaseCategory: null,
+      },
+      {
+        result: {
+          id: "kept-result",
+          run_id: "run-1",
+          test_case_id: "case-1",
+          status: "fail",
+          trial_index: 0,
+          evaluator_results: [],
+          assertions: [],
+        },
+        testCaseName: "Kept case",
+        testCaseCategory: "red-team",
+      },
+    ]);
+    selectQueue.push([]); // no currently enabled placeholder cases
+
+    const result = await evaluationsQueries.evalRunResults(
+      {},
+      { runId: "run-1" },
+      adminCtx,
+    );
+
+    expect(result.map((row) => String(row.id))).toEqual(["kept-result"]);
+  });
+
   it("evalTestCaseHistory returns empty for a cross-tenant test case", async () => {
     selectQueue.push([]); // tenant-pinned test-case lookup misses
     const result = await evaluationsQueries.evalTestCaseHistory(
@@ -1139,6 +1189,7 @@ describe("eval run scoring-version surfacing", () => {
         agentName: "Agent",
       },
     ]);
+    selectQueue.push([]); // deleted-result orphan probe
     selectQueue.push([]); // loadEvalRunProgress
 
     const legacy = await evaluationsQueries.evalRun(
@@ -1175,6 +1226,7 @@ describe("eval run scoring-version surfacing", () => {
         agentName: "Agent",
       },
     ]);
+    selectQueue.push([]); // deleted-result orphan probe
     selectQueue.push([]); // loadEvalRunProgress
 
     const stamped = await evaluationsQueries.evalRun(
@@ -1212,6 +1264,7 @@ describe("eval run scoring-version surfacing", () => {
         agentName: "Agent",
       },
     ]);
+    selectQueue.push([]); // deleted-result orphan probe
     selectQueue.push([]); // loadEvalRunProgress
 
     const run = await evaluationsQueries.evalRun(
@@ -1220,6 +1273,62 @@ describe("eval run scoring-version surfacing", () => {
       adminCtx,
     );
     expect(run).toMatchObject({ errored: 2, passRate: null });
+  });
+
+  it("evalRun removes legacy orphan results from its persisted summary", async () => {
+    selectQueue.push([
+      {
+        run: {
+          id: "run-with-orphan",
+          tenant_id: "tenant-1",
+          status: "completed",
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          summary_scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          categories: [],
+          selected_test_case_ids: [],
+          total_tests: 2,
+          expected_result_rows: 2,
+          passed: 1,
+          failed: 1,
+          errored: 0,
+          unstable: 0,
+          pass_rate: "0.5000",
+        },
+        agentName: "Agent",
+      },
+    ]);
+    selectQueue.push([
+      {
+        test_case_id: null,
+        trial_index: 0,
+        status: "pass",
+        override_status: null,
+      },
+      {
+        test_case_id: "case-2",
+        trial_index: 0,
+        status: "fail",
+        override_status: null,
+      },
+    ]);
+    selectQueue.push([]); // no case-level overrides
+    selectQueue.push([]); // loadEvalRunProgress
+
+    const run = await evaluationsQueries.evalRun(
+      {},
+      { id: "run-with-orphan" },
+      adminCtx,
+    );
+
+    expect(run).toMatchObject({
+      totalTests: 1,
+      expectedResultRows: 1,
+      passed: 0,
+      failed: 1,
+      errored: 0,
+      unstable: 0,
+      passRate: 0,
+    });
   });
 });
 
@@ -2588,7 +2697,7 @@ describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
     datasetCaseId: "case-baseline-1",
   };
 
-  it("unlinks eval_results, deletes overrides, then the case — never S3 for a manual case", async () => {
+  it("deletes eval_results, overrides, then the case — never S3 for a manual case", async () => {
     selectQueue.push([manualRow]);
 
     const result = await evaluationsMutations.deleteEvalTestCase(
@@ -2598,12 +2707,63 @@ describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
     );
 
     expect(result).toBe(true);
-    // SET NULL on eval_results.test_case_id inside the transaction.
-    expect(updateSets).toEqual([{ test_case_id: null }]);
-    // Two deletes: eval_case_overrides, then the case row.
-    expect(deleteWheres).toHaveLength(2);
+    expect(updateSets).toHaveLength(0);
+    // Three deletes: eval_results, eval_case_overrides, then the case row.
+    expect(deleteWheres).toHaveLength(3);
     expect(mockRemoveCaseInStore).not.toHaveBeenCalled();
     expect(mockDatasetDeps).not.toHaveBeenCalled();
+  });
+
+  it("recomputes each affected terminal run after removing the case results", async () => {
+    selectQueue.push([manualRow]);
+    selectQueue.push([{ runId: "run-1" }, { runId: "run-1" }]);
+    selectQueue.push([
+      {
+        id: "run-1",
+        tenant_id: "tenant-1",
+        agent_id: "agent-1",
+        status: "completed",
+        total_tests: 2,
+        expected_result_rows: 3,
+        scoring_version: CURRENT_EVAL_SCORING_VERSION,
+      },
+    ]);
+    selectQueue.push([
+      {
+        test_case_id: "case-2",
+        trial_index: 0,
+        status: "fail",
+        override_status: null,
+      },
+    ]);
+    selectQueue.push([]); // no remaining case-level overrides
+    updateResults.push([]);
+
+    await evaluationsMutations.deleteEvalTestCase(
+      {},
+      { id: "case-1" },
+      adminCtx,
+    );
+
+    const runUpdate = updateSets[0] as Record<string, unknown>;
+    expect(runUpdate).toMatchObject({
+      total_tests: 1,
+      expected_result_rows: 1,
+      passed: 0,
+      failed: 1,
+      errored: 0,
+      unstable: 0,
+      pass_rate: "0.0000",
+    });
+    expect(mockNotifyEvalRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-1",
+        totalTests: 1,
+        passed: 0,
+        failed: 1,
+        passRate: 0,
+      }),
+    );
   });
 
   it("missing row stays an idempotent no-op — no gate, no writes", async () => {
@@ -2648,8 +2808,8 @@ describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
       storage,
       store,
     );
-    expect(updateSets).toEqual([{ test_case_id: null }]);
-    expect(deleteWheres).toHaveLength(2);
+    expect(updateSets).toHaveLength(0);
+    expect(deleteWheres).toHaveLength(3);
   });
 
   it("a tombstone-step failure does not abort the DB delete", async () => {
@@ -2673,8 +2833,8 @@ describe("deleteEvalTestCase transactional delete (THINK-289)", () => {
     );
 
     expect(result).toBe(true);
-    expect(updateSets).toEqual([{ test_case_id: null }]);
-    expect(deleteWheres).toHaveLength(2);
+    expect(updateSets).toHaveLength(0);
+    expect(deleteWheres).toHaveLength(3);
     warn.mockRestore();
   });
 

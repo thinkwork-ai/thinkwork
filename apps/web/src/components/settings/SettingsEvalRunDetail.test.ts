@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   calculateCategoryPassRates,
   groupEvalResultsByCase,
+  summarizeVisibleEvalResults,
+  visibleEvalResults,
 } from "./SettingsEvalRunDetail";
 
 describe("SettingsEvalRunDetail category pass rates", () => {
@@ -80,6 +82,34 @@ function trialRow(overrides: Record<string, unknown>) {
     ...overrides,
   } as never;
 }
+
+describe("visibleEvalResults (THINK-289)", () => {
+  it("omits legacy result rows whose deleted test case was unlinked", () => {
+    const visible = visibleEvalResults([
+      trialRow({ id: "orphan", testCaseId: null, testCaseName: null }),
+      trialRow({ id: "kept", testCaseId: "case-1" }),
+    ]);
+
+    expect(visible.map((result) => result.id)).toEqual(["kept"]);
+  });
+
+  it("recomputes the displayed run summary from remaining cases", () => {
+    const summary = summarizeVisibleEvalResults([
+      trialRow({ id: "pass", testCaseId: "case-1", status: "pass" }),
+      trialRow({ id: "fail", testCaseId: "case-2", status: "fail" }),
+      trialRow({ id: "error", testCaseId: "case-3", status: "error" }),
+    ]);
+
+    expect(summary).toEqual({
+      totalTests: 3,
+      passed: 1,
+      failed: 1,
+      errored: 1,
+      unstable: 0,
+      passRate: 0.5,
+    });
+  });
+});
 
 describe("groupEvalResultsByCase (KTD12)", () => {
   it("majority of scored trials wins; trials nest under the case ordered by trialIndex", () => {
