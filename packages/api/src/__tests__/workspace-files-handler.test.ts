@@ -120,6 +120,7 @@ vi.mock("../graphql/utils.js", () => {
       return { __eq: [a, b] };
     },
     and: (...args: unknown[]) => ({ __and: args }),
+    isNull: (col: unknown) => ({ __isNull: col }),
     sql: (strings: unknown, ...args: unknown[]) => ({ __sql: [strings, args] }),
     agents: {
       id: tableCol("agents.id"),
@@ -359,11 +360,15 @@ vi.mock("../lib/evals/skill-eval-run.js", async (importOriginal) => {
 const {
   upsertAgentProfileProjectionMock,
   deleteAgentProfileProjectionMock,
+  upsertAgentProfileFolderProjectionMock,
+  deleteAgentProfileFolderProjectionMock,
   upsertSpaceAgentProfileProjectionMock,
   deleteSpaceAgentProfileProjectionMock,
 } = vi.hoisted(() => ({
   upsertAgentProfileProjectionMock: vi.fn(),
   deleteAgentProfileProjectionMock: vi.fn(),
+  upsertAgentProfileFolderProjectionMock: vi.fn(),
+  deleteAgentProfileFolderProjectionMock: vi.fn(),
   upsertSpaceAgentProfileProjectionMock: vi.fn(),
   deleteSpaceAgentProfileProjectionMock: vi.fn(),
 }));
@@ -391,6 +396,10 @@ vi.mock("../lib/agent-profile-workspace-files.js", async (importOriginal) => {
     ...actual,
     upsertAgentProfileProjectionFromFile: upsertAgentProfileProjectionMock,
     deleteAgentProfileProjectionForFile: deleteAgentProfileProjectionMock,
+    upsertAgentProfileProjectionFromFolderFile:
+      upsertAgentProfileFolderProjectionMock,
+    deleteAgentProfileProjectionFromFolderFile:
+      deleteAgentProfileFolderProjectionMock,
     upsertSpaceAgentProfileProjectionFromFile:
       upsertSpaceAgentProfileProjectionMock,
     deleteSpaceAgentProfileProjectionForFile:
@@ -7115,6 +7124,14 @@ describe("agent folder INSTRUCTIONS.md author-dependent re-sign (subagent-folder
         klass: "agent",
         slug: "researcher",
         signedBy: `operator:${USER_ID}`,
+      }),
+    );
+    // Subagent-folders U12: the folder→DB projection shim refreshed the
+    // agent_profiles row so flag-off tenants dispatch the edit.
+    expect(upsertAgentProfileFolderProjectionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_A,
+        path: "agents/researcher/INSTRUCTIONS.md",
       }),
     );
   });

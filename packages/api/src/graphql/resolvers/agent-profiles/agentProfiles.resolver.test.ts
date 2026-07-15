@@ -13,6 +13,8 @@ const {
   mockWriteAgentProfileFile,
   mockDeleteAgentProfileFile,
   mockSerializeAgentProfileFile,
+  mockWriteAgentProfileFolder,
+  mockDeleteAgentProfileFolderInstructions,
   tables,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
@@ -22,6 +24,8 @@ const {
   mockWriteAgentProfileFile: vi.fn(),
   mockDeleteAgentProfileFile: vi.fn(),
   mockSerializeAgentProfileFile: vi.fn(),
+  mockWriteAgentProfileFolder: vi.fn(),
+  mockDeleteAgentProfileFolderInstructions: vi.fn(),
   mockRequireAdminOrServiceCaller: vi.fn(),
   mockAssertTenantModelAvailable: vi.fn(),
   mockGetTenantModelCatalogEntry: vi.fn(),
@@ -97,6 +101,10 @@ vi.mock("../../../lib/agent-profile-workspace-files.js", () => ({
   writeAgentProfileFileForTenant: mockWriteAgentProfileFile,
   deleteAgentProfileFileForTenant: mockDeleteAgentProfileFile,
   serializeAgentProfileFile: mockSerializeAgentProfileFile,
+  // Subagent-folders U12: mutations also emit the folder form.
+  writeAgentProfileFolderForTenant: mockWriteAgentProfileFolder,
+  deleteAgentProfileFolderInstructionsForTenant:
+    mockDeleteAgentProfileFolderInstructions,
 }));
 
 vi.mock("../../../lib/model-catalog/tenant-catalog.js", () => ({

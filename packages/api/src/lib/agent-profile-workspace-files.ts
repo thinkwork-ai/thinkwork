@@ -18,6 +18,14 @@ import {
   tenants,
 } from "../graphql/utils.js";
 import { normalizeExecutionControlsForStorage } from "./agent-profile-loop-policy.js";
+import { DEFAULT_PROFILE_MODEL_ID } from "../graphql/resolvers/agent-profiles/built-in-agent-profiles.js";
+import {
+  agentFolderInstructionsPath,
+  agentFolderSlugFromInstructionsPath,
+  parseAgentFolderInstructions,
+  serializeAgentFolderInstructions,
+  type AgentFolderExecutionInput,
+} from "./agent-folder-format.js";
 
 const PROFILE_PATH_RE = /^agents\/([a-z0-9][a-z0-9-]*)\.md$/;
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -387,6 +395,198 @@ export async function deleteAgentProfileFileForTenant(input: {
     }),
   );
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Folder-form write/projection boundary (subagent-folders U12 — R22/R23).
+// The legacy parser above stays FROZEN; these helpers are the only bridge
+// between the two representations on the API side. During the migration
+// window every profile write emits BOTH forms (legacy file + folder
+// INSTRUCTIONS.md); the legacy file is deleted only by a later
+// delete-on-write cleanup once all four path gates are deployed dual-read.
+// ---------------------------------------------------------------------------
+
+interface AgentProfileFolderSource {
+  slug: string;
+  name: string;
+  description?: string | null;
+  routingGuidance?: string | null;
+  instructions: string;
+  modelId: string;
+  enabled?: boolean | null;
+  toolPolicy?: unknown;
+  executionControls?: unknown;
+}
+
+const FOLDER_EXECUTION_KEYS = [
+  "clarify",
+  "maxRuntimeMs",
+  "maxTokens",
+  "costBudgetUsd",
+  "maxQueriesPerRun",
+  "thinking",
+  "reviewGate",
+  "maxReviewLoops",
+  "loopPolicy",
+] as const;
+
+/**
+ * Serialize a profile row into the strict folder form. `description`
+ * absorbs `routingGuidance` (the folder format has no routing field);
+ * when both are absent the display name stands in — deterministic and
+ * operator-visible, unlike the AE4 converter which flags instead (a
+ * mutation caller is interactively creating the profile and sees the
+ * result immediately).
+ */
+export function serializeAgentProfileFolderForm(
+  source: AgentProfileFolderSource,
+): string {
+  const description =
+    [source.description, source.routingGuidance]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter(Boolean)
+      .join(" ") || source.name.trim();
+  const toolPolicy = asRecord(source.toolPolicy);
+  const builtInTools = stringArray(toolPolicy.builtInTools);
+  const storedExecution = asRecord(source.executionControls);
+  const execution: Record<string, unknown> = {};
+  for (const key of FOLDER_EXECUTION_KEYS) {
+    if (storedExecution[key] !== undefined && storedExecution[key] !== null) {
+      execution[key] = storedExecution[key];
+    }
+  }
+  return serializeAgentFolderInstructions({
+    slug: source.slug,
+    description,
+    model: source.modelId,
+    enabled: source.enabled !== false,
+    ...(builtInTools.length > 0 ? { builtInTools } : {}),
+    ...(Object.keys(execution).length > 0
+      ? { execution: execution as AgentFolderExecutionInput }
+      : {}),
+    instructions: source.instructions,
+  });
+}
+
+export async function writeAgentProfileFolderForTenant(input: {
+  tenantId: string;
+  slug: string;
+  source: AgentProfileFolderSource;
+}): Promise<boolean> {
+  const workspaceBucket = getConfig("WORKSPACE_BUCKET");
+  if (!workspaceBucket) return false;
+  const target = await resolveAgentWorkspaceTarget(input.tenantId);
+  if (!target) return false;
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: workspaceBucket,
+      Key: `${target.prefix}${agentFolderInstructionsPath(input.slug)}`,
+      Body: serializeAgentProfileFolderForm(input.source),
+      ContentType: "text/plain; charset=utf-8",
+    }),
+  );
+  return true;
+}
+
+export async function deleteAgentProfileFolderInstructionsForTenant(input: {
+  tenantId: string;
+  slug: string;
+}): Promise<boolean> {
+  const workspaceBucket = getConfig("WORKSPACE_BUCKET");
+  if (!workspaceBucket) return false;
+  const target = await resolveAgentWorkspaceTarget(input.tenantId);
+  if (!target) return false;
+  await s3.send(
+    new DeleteObjectCommand({
+      Bucket: workspaceBucket,
+      Key: `${target.prefix}${agentFolderInstructionsPath(input.slug)}`,
+    }),
+  );
+  return true;
+}
+
+/**
+ * Folder→DB projection shim (plan U12): until U11 retires the DB
+ * readers, folder-form INSTRUCTIONS.md writes refresh the central
+ * `agent_profiles` row so flag-off tenants (payload-authoritative
+ * dispatch) see edits immediately. Strict parse; a validation error
+ * throws so the workspace-files caller surfaces it to the operator.
+ * Grants are NOT projected here — skillSlugs/mcpServers stay owned by
+ * the grant mutations / child grant folders.
+ */
+export async function upsertAgentProfileProjectionFromFolderFile(input: {
+  tenantId: string;
+  path: string;
+  content: string;
+}) {
+  const slug = agentFolderSlugFromInstructionsPath(input.path);
+  if (!slug) return null;
+  const parsed = parseAgentFolderInstructions(input.content, input.path);
+  if (!parsed.valid) {
+    throw new Error(
+      parsed.errors[0]?.message ??
+        `Agent folder file ${input.path} failed validation`,
+    );
+  }
+  const config = parsed.parsed;
+  if (config.model) await assertProfileModelAvailable(config.model);
+
+  const [existing] = await db
+    .select()
+    .from(agentProfiles)
+    .where(
+      and(
+        eq(agentProfiles.tenant_id, input.tenantId),
+        eq(agentProfiles.slug, slug),
+        isNull(agentProfiles.source_space_id),
+      ),
+    );
+
+  const currentToolPolicy = asRecord(existing?.tool_policy);
+  const values = {
+    tenant_id: input.tenantId,
+    slug,
+    name: existing?.name ?? titleize(slug),
+    description: config.description,
+    routing_guidance: null,
+    instructions: config.instructions,
+    model_id: config.model ?? existing?.model_id ?? DEFAULT_PROFILE_MODEL_ID,
+    enabled: config.enabled,
+    built_in_key: existing?.built_in_key ?? null,
+    tool_policy: {
+      ...currentToolPolicy,
+      builtInTools: config.builtInTools ?? [],
+    },
+    skill_policy: existing?.skill_policy ?? { skillSlugs: [] },
+    execution_controls: normalizeExecutionControlsForStorage(config.execution),
+    updated_at: new Date(),
+  };
+
+  const [row] = existing
+    ? await db
+        .update(agentProfiles)
+        .set(values)
+        .where(eq(agentProfiles.id, existing.id))
+        .returning()
+    : await db.insert(agentProfiles).values(values).returning();
+  return row;
+}
+
+export async function deleteAgentProfileProjectionFromFolderFile(input: {
+  tenantId: string;
+  path: string;
+}) {
+  const slug = agentFolderSlugFromInstructionsPath(input.path);
+  if (!slug) return;
+  await db
+    .delete(agentProfiles)
+    .where(
+      and(
+        eq(agentProfiles.tenant_id, input.tenantId),
+        eq(agentProfiles.slug, slug),
+        isNull(agentProfiles.source_space_id),
+      ),
+    );
 }
 
 async function resolveAgentWorkspaceTarget(
