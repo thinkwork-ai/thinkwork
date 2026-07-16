@@ -892,7 +892,7 @@ const AGENT_SCOPE = "agent:agent-1";
 
 /** A bare marker folder (no sidecar) — the flag-on end state. */
 function markerFolder(input: {
-  klass: "connection" | "tool" | "agent";
+  klass: "connection" | "tool" | "agent" | "mcp";
   slug: string;
   definition: string;
   scopeRef?: string;
@@ -901,9 +901,11 @@ function markerFolder(input: {
   const definitionPath =
     input.klass === "agent"
       ? `agents/${input.slug}/INSTRUCTIONS.md`
-      : `${input.klass}s/${input.slug}/${
-          input.klass === "connection" ? "CONNECTION.md" : "TOOL.md"
-        }`;
+      : input.klass === "mcp"
+        ? `mcp/${input.slug}/MCP.md`
+        : `${input.klass}s/${input.slug}/${
+            input.klass === "connection" ? "CONNECTION.md" : "TOOL.md"
+          }`;
   const markerName = definitionPath.split("/").pop()!;
   const files = [
     { path: markerName, etag: `"etag-${input.slug}-marker"` },
@@ -1170,6 +1172,107 @@ describe("registry-trust admission (THINK-302 U3)", () => {
     });
     // Same S3 etags, different registry state → different signature.
     expect(withBinding).not.toBe(base);
+  });
+});
+
+describe("mcp first-class class (THINK-302 U4)", () => {
+  const mcpMarker = `---\nname: dagster\ndescription: Dagster orchestration MCP.\nserver: srv-registry-ref\nenabled_tools:\n  - launch_run\n  - get_run_status\n---\nUse for pipelines.\n`;
+
+  function mcpSetup(overrides?: { approval?: string; definition?: string }) {
+    const definition =
+      overrides?.definition ??
+      (overrides?.approval
+        ? mcpMarker.replace(
+            "server:",
+            `approval: ${overrides.approval}\nserver:`,
+          )
+        : mcpMarker);
+    const folder = markerFolder({
+      klass: "mcp",
+      slug: "dagster",
+      definition,
+    });
+    const binding = bindingFor(folder, { "MCP.md": definition });
+    const bindings = new Map([
+      [bindingScanKey(AGENT_SCOPE, "mcp", "dagster"), binding],
+    ]);
+    return { folder, bindings };
+  }
+
+  it("compiles a bound MCP.md folder into an active mcp entry with server + tools", () => {
+    const { folder, bindings } = mcpSetup();
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings,
+    });
+    const entry = manifest.active.find((e) => e.class === "mcp");
+    expect(entry).toMatchObject({
+      name: "dagster",
+      slug: "dagster",
+      class: "mcp",
+      server: "srv-registry-ref",
+      enabledTools: ["launch_run", "get_run_status"],
+      source_scope: AGENT_SCOPE,
+    });
+    expect(manifest.withheld).toEqual([]);
+  });
+
+  it("withholds an unbound mcp folder as unsigned (no legacy sidecar path)", () => {
+    const { folder } = mcpSetup();
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings: new Map(),
+    });
+    expect(manifest.active.some((e) => e.class === "mcp")).toBe(false);
+    expect(manifest.withheld).toEqual([
+      { slug: "dagster", class: "mcp", reason: "unsigned" },
+    ]);
+  });
+
+  it("withholds mcp entirely when registry trust is off", () => {
+    const { folder } = mcpSetup();
+    const { manifest } = registryCompile([folder], {
+      registryTrust: false,
+      bindings: new Map(),
+    });
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({
+        slug: "dagster",
+        class: "mcp",
+        reason: "unsigned",
+        detail: expect.stringContaining("registry trust"),
+      }),
+    ]);
+  });
+
+  it("drifts when the MCP.md marker changed after binding", () => {
+    const { folder, bindings } = mcpSetup();
+    const drifted = {
+      ...folder,
+      definitionRaw: folder.definitionRaw!.replace(
+        "Use for pipelines.",
+        "Use for pipelines (edited).",
+      ),
+    };
+    const { manifest } = registryCompile([drifted], {
+      registryTrust: true,
+      bindings,
+    });
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({ slug: "dagster", reason: "definition_drift" }),
+    ]);
+  });
+
+  it("keeps the approval_gated withhold for a gated mcp grant (pre-U12)", () => {
+    const { folder, bindings } = mcpSetup({ approval: "always" });
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings,
+    });
+    expect(manifest.active.some((e) => e.class === "mcp")).toBe(false);
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({ slug: "dagster", reason: "approval_gated" }),
+    ]);
   });
 });
 
