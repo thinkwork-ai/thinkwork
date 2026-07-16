@@ -3257,6 +3257,7 @@ Join hints:
 | next_run_at | timestamp with time zone |  |
 | created_by_type | text |  |
 | created_by_id | text |  |
+| run_as_user_id | uuid |  |
 | created_at | timestamp with time zone | not null |
 | updated_at | timestamp with time zone | not null |
 
@@ -3264,6 +3265,7 @@ Join hints:
 
 - `scheduled_jobs.agent_id` → `agents.id`
 - `scheduled_jobs.routine_id` → `routines.id`
+- `scheduled_jobs.run_as_user_id` → `users.id`
 - `scheduled_jobs.space_id` → `spaces.id`
 - `scheduled_jobs.tenant_id` → `tenants.id`
 
