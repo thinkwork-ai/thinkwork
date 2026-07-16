@@ -87,7 +87,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "harness-runner" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -228,6 +228,14 @@ build_handler "twenty-client-engagement" \
 
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
+
+# harness-runner (THINK-311 U5): Event-mode target for harness-flagged
+# agents — projects the chat payload into AWS AgentCore Harness config,
+# drives InvokeHarness, fulfills emit_document, finalizes the turn.
+# In the bundled-SDK list: needs @aws-sdk/client-bedrock-agentcore(-control)
+# 3.1088+ (Harness ops), newer than the runtime's built-in SDK.
+build_handler "harness-runner" \
+  "$REPO_ROOT/packages/api/src/handlers/harness-runner.ts"
 
 build_handler "chat-agent-activity" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-activity.ts"

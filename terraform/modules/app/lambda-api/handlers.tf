@@ -406,6 +406,19 @@ locals {
     # knowledge_graph_search tool; the per-agent tool policy gates on top.
     "chat-agent-invoke" = {
       KNOWLEDGE_GRAPH_TOOL_ENABLED = tostring(var.knowledge_graph_tool_enabled)
+      # THINK-311 U5: makes resolveRuntimeFunctionName's "harness" branch
+      # resolvable — a harness-flagged agent's turn dispatches to the
+      # harness-runner Lambda; without this env the branch throws
+      # RuntimeNotProvisionedError (the U2 inert behavior). Composed
+      # statically (same convention as function_name below) to avoid a
+      # resource self-reference cycle through this env map.
+      HARNESS_RUNNER_FUNCTION_NAME = "thinkwork-${var.stage}-api-harness-runner"
+    }
+    # THINK-311 U5: CreateHarness requires the execution role ARN (U4
+    # module output; empty string when the harness module is disabled —
+    # the runner then fails the turn explicitly, never falls back to Pi).
+    "harness-runner" = {
+      HARNESS_EXECUTION_ROLE_ARN = var.agentcore_harness_execution_role_arn
     }
     # 240s: sync Hindsight retain (LLM extraction + auto-consolidation) can
     # exceed 60s; the client timeout must stay below the Lambda timeout (300s)
@@ -626,6 +639,13 @@ resource "aws_lambda_function" "handler" {
     # Bearer API_AUTH_SECRET. Idempotent on thread_turns.finalized_at
     # (migration 0123). Plan: 2026-05-22-006.
     "chat-agent-finalize",
+    # harness-runner — THINK-311 U5: Event-mode target for harness-flagged
+    # agents. The chat dispatch selector (resolveRuntimeFunctionName) routes
+    # a trial agent's turn here instead of the Pi container Lambda; the
+    # runner projects the payload into an AWS AgentCore Harness config,
+    # drives InvokeHarness, fulfills emit_document, and finalizes the turn
+    # via processFinalize. No API route — direct Event invoke only.
+    "harness-runner",
     # canvas-refresh — headless Living Artifacts data-refresh (THINK-145 U6).
     # Invoked RequestResponse by the refreshCanvasData mutation (graphql-http)
     # and by job-trigger's canvas_refresh branch (U7). Re-runs the saved
@@ -957,8 +977,11 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  # harness-runner holds the Lambda open for the full Harness turn (the
+  # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
+  # legitimate trial limitation, recorded, not engineered around).
+  timeout     = each.key == "harness-runner" ? 900 : each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "harness-runner" ? 512 : each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1080,6 +1103,20 @@ resource "aws_sqs_queue" "wiki_compile_dlq" {
 resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["chat-agent-invoke"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
+# harness-runner retry-0 (THINK-311 U5, async-retry idempotency): an AWS
+# async retry would re-execute a whole agent turn. Failures finalize the
+# turn in-process (finalize-through-failure); a hard crash is reconciled
+# by the stall monitor (timed_out + checkout release, no retry enqueue
+# for harness turns). No DLQ destination for the same reason as
+# chat-agent-invoke above: the shared role's inline policy budget is at
+# the AWS cap, and the stall monitor is the operational surface.
+resource "aws_lambda_function_event_invoke_config" "harness_runner" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["harness-runner"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
 }

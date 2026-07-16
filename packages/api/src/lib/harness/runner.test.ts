@@ -1,0 +1,482 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  parseHarnessInvokeEvent,
+  runHarnessTurn,
+  type HarnessRunnerDeps,
+  type HarnessStreamEvent,
+} from "./runner.js";
+import type { FinalizePayload } from "../chat-finalize/types.js";
+
+function stream(
+  events: HarnessStreamEvent[],
+): AsyncIterable<HarnessStreamEvent> {
+  return (async function* () {
+    for (const event of events) yield event;
+  })();
+}
+
+function textEvents(
+  text: string,
+  stopReason = "end_turn",
+): HarnessStreamEvent[] {
+  return [
+    { messageStart: { role: "assistant" } },
+    { contentBlockStart: { contentBlockIndex: 0 } },
+    { contentBlockDelta: { contentBlockIndex: 0, delta: { text } } },
+    { contentBlockStop: { contentBlockIndex: 0 } },
+    { messageStop: { stopReason } },
+    { metadata: { usage: { inputTokens: 100, outputTokens: 20 } } },
+  ];
+}
+
+function toolUseEvents(
+  name: string,
+  toolUseId: string,
+  input: Record<string, unknown>,
+  stopReason = "tool_use",
+): HarnessStreamEvent[] {
+  const json = JSON.stringify(input);
+  return [
+    { messageStart: { role: "assistant" } },
+    {
+      contentBlockStart: {
+        contentBlockIndex: 0,
+        start: { toolUse: { toolUseId, name } },
+      },
+    },
+    {
+      contentBlockDelta: {
+        contentBlockIndex: 0,
+        delta: { toolUse: { input: json.slice(0, 10) } },
+      },
+    },
+    {
+      contentBlockDelta: {
+        contentBlockIndex: 0,
+        delta: { toolUse: { input: json.slice(10) } },
+      },
+    },
+    { contentBlockStop: { contentBlockIndex: 0 } },
+    { messageStop: { stopReason } },
+    { metadata: { usage: { inputTokens: 50, outputTokens: 10 } } },
+  ];
+}
+
+const EMIT_INPUT = {
+  genre: "qbr",
+  title: "QBR: 777 Automotive",
+  abstract: "Quarterly business review.",
+  digest_markdown: "# QBR\n\ncontent",
+};
+
+function basePayload(): Record<string, unknown> {
+  return {
+    tenant_id: "tenant-1",
+    thread_id: "thread-1",
+    assistant_id: "agent-1",
+    thread_turn_id: "turn-1",
+    trace_id: "trace-1",
+    message: "Generate the QBR for 777 Automotive",
+    system_prompt: "You are ThinkWork, the tenant platform agent.",
+    messages_history: [],
+    model: "moonshotai.kimi-k2.5",
+    instance_id: "thinkwork-agent",
+    agent_name: "ThinkWork Agent",
+    cost_owner_user_id: "user-1",
+    user_id: "user-1",
+    capabilities_manifest_fingerprint: "manifest-fp",
+    config_fingerprint: "config-fp",
+    skills: [
+      {
+        skillId: "document-composer",
+        s3Key: "tenants/tei/agents/thinkwork-agent/skills/document-composer",
+      },
+    ],
+    mcp_configs: [
+      {
+        name: "lastmile-data",
+        url: "https://mcp.example.com/lastmile",
+        transport: "streamable-http",
+        auth: { type: "bearer", token: "tok" },
+        tools: ["query"],
+      },
+    ],
+    document_plates: [
+      { slug: "qbr", displayName: "QBR", useFor: "quarterly business reviews" },
+    ],
+    agent_profiles: [],
+    pi_extensions: [],
+  };
+}
+
+interface TestDeps extends HarnessRunnerDeps {
+  finalizePayloads: FinalizePayload[];
+  invocations: Array<{ messages: unknown }>;
+  emissions: Array<Record<string, unknown>>;
+}
+
+function makeDeps(
+  streams: Array<AsyncIterable<HarnessStreamEvent>>,
+  options: {
+    emitResults?: Array<{ statusCode: number; body: Record<string, unknown> }>;
+  } = {},
+): TestDeps {
+  const finalizePayloads: FinalizePayload[] = [];
+  const invocations: Array<{ messages: unknown }> = [];
+  const emissions: Array<Record<string, unknown>> = [];
+  const emitResults = [...(options.emitResults ?? [])];
+  const queue = [...streams];
+  return {
+    finalizePayloads,
+    invocations,
+    emissions,
+    executionRoleArn: "arn:aws:iam::123:role/harness-exec",
+    workspaceBucket: "bucket-1",
+    keepaliveIntervalMs: 0,
+    ensureHarness: vi.fn(async () => ({
+      harnessArn: "arn:aws:bedrock-agentcore:us-east-1:123:harness/h1",
+      harnessId: "h1",
+      harnessVersion: "3",
+    })),
+    invokeHarness: vi.fn(async (input) => {
+      invocations.push({ messages: input.messages });
+      const next = queue.shift();
+      if (!next) throw new Error("test: no more scripted streams");
+      return next;
+    }),
+    emitDocument: vi.fn(async (input) => {
+      emissions.push(input.raw);
+      return (
+        emitResults.shift() ?? {
+          statusCode: 200,
+          body: {
+            ok: true,
+            artifactId: "artifact-1",
+            documentId: "doc-1",
+            status: "draft",
+            headVersion: 0,
+          },
+        }
+      );
+    }),
+    finalize: vi.fn(async (payload: FinalizePayload) => {
+      finalizePayloads.push(payload);
+      return { finalized: true, messageId: "msg-1" };
+    }),
+    bumpTurnActivity: vi.fn(async () => {}),
+    fetchWorkspaceText: vi.fn(async () => null),
+    resolveModelProvider: vi.fn(async () => "bedrock"),
+  };
+}
+
+describe("parseHarnessInvokeEvent", () => {
+  it("unwraps the API-GW-shaped body", () => {
+    expect(
+      parseHarnessInvokeEvent({
+        rawPath: "/invocations",
+        body: JSON.stringify({ tenant_id: "t" }),
+      }),
+    ).toEqual({ tenant_id: "t" });
+  });
+
+  it("passes through a bare payload", () => {
+    expect(parseHarnessInvokeEvent({ tenant_id: "t" })).toEqual({
+      tenant_id: "t",
+    });
+  });
+});
+
+describe("runHarnessTurn — happy path", () => {
+  it("fulfills emit_document and finalizes completed with the evidence triple", async () => {
+    const deps = makeDeps([
+      stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),
+      stream(textEvents("Here is the QBR.")),
+    ]);
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
+    // Emission received the camelCase raw shape handleDocumentEmission parses.
+    expect(deps.emissions).toEqual([
+      {
+        genre: "qbr",
+        title: "QBR: 777 Automotive",
+        abstract: "Quarterly business review.",
+        digestMarkdown: "# QBR\n\ncontent",
+      },
+    ]);
+    // Tool result went back on the same session as a toolResult block.
+    expect(deps.invocations).toHaveLength(2);
+    const followUp = deps.invocations[1].messages as Array<{
+      role: string;
+      content: Array<Record<string, unknown>>;
+    }>;
+    expect(followUp).toHaveLength(1);
+    expect(followUp[0].role).toBe("user");
+    expect(followUp[0].content[0].toolResult).toMatchObject({
+      toolUseId: "tool-1",
+      status: "success",
+    });
+
+    expect(deps.finalizePayloads).toHaveLength(1);
+    const finalize = deps.finalizePayloads[0];
+    expect(finalize).toMatchObject({
+      thread_turn_id: "turn-1",
+      status: "completed",
+      runtime_type: "harness",
+      agent_model: "moonshotai.kimi-k2.5",
+      cost_owner_user_id: "user-1",
+      changed_files: [],
+    });
+    expect(finalize.response?.content).toBe("Here is the QBR.");
+    expect(finalize.usage).toMatchObject({
+      model: "moonshotai.kimi-k2.5",
+      input_tokens: 150,
+      output_tokens: 30,
+    });
+    const harness = (finalize.response?.diagnostics as Record<string, unknown>)
+      ?.harness as Record<string, unknown>;
+    expect(harness).toMatchObject({
+      harness_id: "h1",
+      harness_version: "3",
+      manifest_fingerprint: "manifest-fp",
+      config_fingerprint: "config-fp",
+      artifact_id: "artifact-1",
+      emission_attempts: 1,
+      emission_successes: 1,
+    });
+    expect(harness.projection_fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(finalize.response?.tool_invocations).toEqual([
+      expect.objectContaining({
+        tool_name: "emit_document",
+        status: "completed",
+      }),
+    ]);
+  });
+
+  it("relays emission rejections as error tool results and lets the model retry", async () => {
+    const deps = makeDeps(
+      [
+        stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),
+        stream(toolUseEvents("emit_document", "tool-2", EMIT_INPUT)),
+        stream(textEvents("Fixed and emitted.")),
+      ],
+      {
+        emitResults: [
+          {
+            statusCode: 200,
+            body: {
+              ok: false,
+              code: "COMPILE_REJECTED",
+              diagnostics: [
+                {
+                  code: "ANALYSIS_INVALID",
+                  message: "trend needs 3-24 points",
+                  location: "tw:analysis",
+                },
+              ],
+            },
+          },
+          {
+            statusCode: 200,
+            body: {
+              ok: true,
+              artifactId: "artifact-2",
+              documentId: "doc-2",
+              status: "draft",
+              headVersion: 0,
+            },
+          },
+        ],
+      },
+    );
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.emissions).toHaveLength(2);
+    const firstResult = (
+      deps.invocations[1].messages as Array<{
+        content: Array<Record<string, unknown>>;
+      }>
+    )[0].content[0].toolResult as Record<string, unknown>;
+    expect(firstResult.status).toBe("error");
+    expect(JSON.stringify(firstResult.content)).toContain("ANALYSIS_INVALID");
+    const harness = (
+      deps.finalizePayloads[0].response?.diagnostics as Record<string, unknown>
+    )?.harness as Record<string, unknown>;
+    expect(harness).toMatchObject({
+      emission_attempts: 2,
+      emission_successes: 1,
+      artifact_id: "artifact-2",
+    });
+  });
+});
+
+describe("runHarnessTurn — explicit failures (AE2/KTD-4)", () => {
+  it("fails on a non-end_turn terminal stopReason naming the reason", async () => {
+    const deps = makeDeps([
+      stream(textEvents("partial...", "max_iterations_exceeded")),
+    ]);
+    const result = await runHarnessTurn(basePayload(), deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "max_iterations_exceeded",
+    );
+    expect(deps.invocations).toHaveLength(1);
+  });
+
+  it("fails on runtimeClientError", async () => {
+    const deps = makeDeps([
+      stream([
+        { messageStart: { role: "assistant" } },
+        { runtimeClientError: { message: "MCP endpoint unreachable" } },
+      ]),
+    ]);
+    const result = await runHarnessTurn(basePayload(), deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "runtime_client_error",
+    );
+  });
+
+  it("fails when the run ends without a successful emission after rejections (never a false pass)", async () => {
+    const deps = makeDeps(
+      [
+        stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),
+        stream(textEvents("Sorry, giving up.")),
+      ],
+      {
+        emitResults: [
+          {
+            statusCode: 200,
+            body: { ok: false, code: "COMPILE_REJECTED", diagnostics: [] },
+          },
+        ],
+      },
+    );
+    const result = await runHarnessTurn(basePayload(), deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "without a successful document emission",
+    );
+  });
+
+  it("fails fatally on COMPILER_DEFECT instead of looping", async () => {
+    const deps = makeDeps(
+      [stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT))],
+      {
+        emitResults: [
+          {
+            statusCode: 500,
+            body: { ok: false, code: "COMPILER_DEFECT", error: "boom" },
+          },
+        ],
+      },
+    );
+    const result = await runHarnessTurn(basePayload(), deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain("COMPILER_DEFECT");
+  });
+
+  it("fails a projection rejection before any Harness call, naming the capability", async () => {
+    const deps = makeDeps([]);
+    const payload = {
+      ...basePayload(),
+      guardrail_config: { guardrailIdentifier: "g" },
+    };
+    const result = await runHarnessTurn(payload, deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "bedrock_guardrail",
+    );
+    expect(deps.ensureHarness).not.toHaveBeenCalled();
+    expect(deps.invocations).toHaveLength(0);
+  });
+
+  it("declares unsupported payload features (goal mode) without invoking Harness", async () => {
+    const deps = makeDeps([]);
+    const payload = { ...basePayload(), goal_mode: { enabled: true } };
+    const result = await runHarnessTurn(payload, deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain("goal_mode");
+    expect(deps.ensureHarness).not.toHaveBeenCalled();
+  });
+
+  it("fails the pi-ai analog: empty content + zero output tokens on end_turn", async () => {
+    const deps = makeDeps([
+      stream([
+        { messageStart: { role: "assistant" } },
+        { messageStop: { stopReason: "end_turn" } },
+        { metadata: { usage: { inputTokens: 10, outputTokens: 0 } } },
+      ]),
+    ]);
+    const result = await runHarnessTurn(basePayload(), deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "empty content and zero output tokens",
+    );
+  });
+
+  it("returns malformed tool input as an error tool result and continues", async () => {
+    const deps = makeDeps([
+      stream([
+        { messageStart: { role: "assistant" } },
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: "tool-1", name: "emit_document" } },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { toolUse: { input: "{not json" } },
+          },
+        },
+        { messageStop: { stopReason: "tool_use" } },
+      ]),
+      stream(textEvents("Answered without a document.")),
+    ]);
+    const result = await runHarnessTurn(basePayload(), deps);
+    expect(result.status).toBe("completed");
+    expect(deps.emissions).toHaveLength(0);
+    const toolResult = (
+      deps.invocations[1].messages as Array<{
+        content: Array<Record<string, unknown>>;
+      }>
+    )[0].content[0].toolResult as Record<string, unknown>;
+    expect(toolResult.status).toBe("error");
+    expect(JSON.stringify(toolResult.content)).toContain(
+      "malformed tool input",
+    );
+  });
+});
+
+describe("runHarnessTurn — turn lifecycle (KTD-9)", () => {
+  it("bumps last_activity_at while streaming", async () => {
+    const deps = makeDeps([stream(textEvents("done"))]);
+    await runHarnessTurn(basePayload(), deps);
+    expect(deps.bumpTurnActivity).toHaveBeenCalledWith({
+      turnId: "turn-1",
+      tenantId: "tenant-1",
+    });
+  });
+
+  it("finalizes-through-failure when the SDK throws mid-run", async () => {
+    const deps = makeDeps([]);
+    (deps.invokeHarness as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("ValidationException: bad session id"),
+    );
+    const result = await runHarnessTurn(basePayload(), deps);
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads).toHaveLength(1);
+    expect(deps.finalizePayloads[0]).toMatchObject({
+      status: "failed",
+      runtime_type: "harness",
+    });
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "ValidationException",
+    );
+  });
+});
