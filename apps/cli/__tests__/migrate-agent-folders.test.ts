@@ -15,7 +15,7 @@ import type { WorkspaceObjectStore } from "../src/lib/migrations/folder-canon-mi
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 
-const PREFIX = "tenants/acme/agents/marco/workspace/";
+const PREFIX = "tenants/acme/agents/marco/";
 
 function memoryStore(seed: Record<string, string>): WorkspaceObjectStore & {
   objects: Map<string, string>;
@@ -282,3 +282,20 @@ function sortValue(value: unknown): unknown {
   }
   return value;
 }
+
+describe("prefix discovery matches the live bucket layout", () => {
+  it("discovers tenants/<t>/agents/<folder>/ prefixes directly, excluding _catalog", async () => {
+    const store = memoryStore({
+      "tenants/acme/agents/marco/AGENTS.md": "root",
+      "tenants/acme/agents/marco/agents/helper.md": legacyProfile(),
+      "tenants/acme/agents/_catalog/defaults/workspace/AGENTS.md": "tpl",
+      "tenants/acme/threads/t-1/AGENTS.md": "thread copy",
+    });
+    const summary = await migrateAgentFolders(
+      options(store, { agentSlug: undefined }),
+    );
+    expect(summary.reports.map((r) => r.prefix)).toEqual([
+      "tenants/acme/agents/marco/",
+    ]);
+  });
+});

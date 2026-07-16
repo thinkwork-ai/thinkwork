@@ -128,9 +128,7 @@ async function discoverPrefixes(
     if (!options.tenantSlug) {
       throw new Error("--tenant is required when --agent is provided");
     }
-    return [
-      `tenants/${options.tenantSlug}/agents/${options.agentSlug}/workspace/`,
-    ];
+    return [`tenants/${options.tenantSlug}/agents/${options.agentSlug}/`];
   }
   const rootPrefix = options.tenantSlug
     ? `tenants/${options.tenantSlug}/`
@@ -138,8 +136,10 @@ async function discoverPrefixes(
   const keys = await options.store.list(rootPrefix);
   const prefixes = new Set<string>();
   for (const key of keys) {
-    // Central agent workspaces: tenants/<t>/agents/<a>/workspace/...
-    let match = key.match(/^(tenants\/[^/]+\/agents\/[^/]+\/workspace\/)/);
+    // Central agent workspaces live at tenants/<t>/agents/<folder>/
+    // directly (resolveAgentWorkspacePrefix — no /workspace/ suffix).
+    // `_catalog/` holds template/defaults copies, not live workspaces.
+    let match = key.match(/^(tenants\/[^/]+\/agents\/(?!_catalog\/)[^/]+\/)./);
     if (match) {
       prefixes.add(match[1]!);
       continue;
