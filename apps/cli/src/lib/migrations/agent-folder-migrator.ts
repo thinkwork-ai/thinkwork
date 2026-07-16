@@ -1,13 +1,19 @@
 /**
  * Agent-folder backfill/convert migrator (subagent-folders plan
- * 2026-07-15-001, U8 — R5 backfill half, R22 sweep half, AE4).
+ * 2026-07-15-001, U8 — R5 backfill half, R22 sweep half, AE4; U16 adds
+ * the root-instructions rename pass).
  *
- * Two jobs, both idempotent:
+ * Three jobs, all idempotent:
  *   (a) materialize the four built-in profiles as `agents/<slug>/`
  *       folders (content from @thinkwork/workspace-defaults) where the
  *       folder does not already exist;
  *   (b) convert legacy `agents/<slug>.md` profile files into the strict
- *       folder form — `INSTRUCTIONS.md` + signed child grant sidecars.
+ *       folder form — `INSTRUCTIONS.md` + signed child grant sidecars;
+ *   (c) U16 root rename: when the workspace root holds `AGENTS.md` and no
+ *       `INSTRUCTIONS.md`, COPY the bytes to `INSTRUCTIONS.md`
+ *       byte-identically (managed sections included) and leave `AGENTS.md`
+ *       in place for the dual-read fallback window. AGENTS.md deletion is
+ *       a later cleanup, never this sweep.
  *
  * The sweep PRESERVES legacy files: deletion happens only via U12's
  * delete-on-write once all four path gates are deployed dual-read.
@@ -77,6 +83,8 @@ export interface AgentFolderAgentReport {
   status: "dry-run" | "migrated" | "noop" | "failed";
   builtInsMaterialized: string[];
   converted: string[];
+  /** U16 root renames performed (AGENTS.md copied to INSTRUCTIONS.md). */
+  rootInstructionsRenames: string[];
   skipped: string[];
   droppedFields: Array<{ path: string; fields: string[] }>;
   flags: AgentFolderFlag[];
@@ -105,6 +113,7 @@ export async function migrateAgentFolders(
         status: "failed",
         builtInsMaterialized: [],
         converted: [],
+        rootInstructionsRenames: [],
         skipped: [],
         droppedFields: [],
         flags: [],
@@ -164,6 +173,7 @@ async function migratePrefix(
     status: options.mode === "apply" ? "noop" : "dry-run",
     builtInsMaterialized: [],
     converted: [],
+    rootInstructionsRenames: [],
     skipped: [],
     droppedFields: [],
     flags: [],
@@ -189,6 +199,27 @@ async function migratePrefix(
       await write(`${prefix}${path}`, content);
       if (!report.builtInsMaterialized.includes(slug)) {
         report.builtInsMaterialized.push(slug);
+      }
+    }
+  }
+
+  // (c → U16) Root instructions rename — central agent workspaces only
+  // (Space sources have no root AGENTS.md). Idempotent: once
+  // INSTRUCTIONS.md exists the pass never writes again; AGENTS.md stays in
+  // place for the dual-read fallback window (deleted by a later cleanup).
+  if (!isSpacePrefix) {
+    const legacyRootKey = `${prefix}AGENTS.md`;
+    const rootInstructionsKey = `${prefix}INSTRUCTIONS.md`;
+    const existingInstructions = await options.store.read(rootInstructionsKey);
+    if (existingInstructions !== null) {
+      report.skipped.push(`${rootInstructionsKey} (already_renamed)`);
+    } else {
+      const legacyRoot = await options.store.read(legacyRootKey);
+      if (legacyRoot !== null) {
+        // Byte-identical copy — managed sections and operator prose are
+        // preserved exactly; content is never rewritten by this pass.
+        await write(rootInstructionsKey, legacyRoot);
+        report.rootInstructionsRenames.push(rootInstructionsKey);
       }
     }
   }
@@ -275,7 +306,7 @@ async function migratePrefix(
   if (options.mode === "apply") {
     report.status = report.writes.length > 0 ? "migrated" : "noop";
   }
-  report.message = `${report.builtInsMaterialized.length} built-ins, ${report.converted.length} conversions, ${report.skipped.length} skips, ${report.flags.length} flags`;
+  report.message = `${report.builtInsMaterialized.length} built-ins, ${report.converted.length} conversions, ${report.rootInstructionsRenames.length} root renames, ${report.skipped.length} skips, ${report.flags.length} flags`;
   return report;
 }
 

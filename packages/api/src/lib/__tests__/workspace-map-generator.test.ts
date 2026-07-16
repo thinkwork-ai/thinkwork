@@ -239,7 +239,9 @@ function resetState(): void {
   );
 }
 
-function lastWrittenAgentsMd(path = "AGENTS.md"): string | null {
+// Root map writes land on INSTRUCTIONS.md (U16 writer flip); nested maps
+// keep the AGENTS.md basename.
+function lastWrittenAgentsMd(path = "INSTRUCTIONS.md"): string | null {
   const put = [...s3Calls.puts]
     .reverse()
     .find((p) => p.key === `${PREFIX}${path}`);
@@ -407,7 +409,9 @@ describe("regenerateAgentsMdDerivedSections", () => {
     expect(written).toContain(
       "| Editor Review | baseline | Review edited workspace files |",
     );
-    expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
+    expect(s3Calls.puts.map((p) => p.key)).toEqual([
+      `${PREFIX}INSTRUCTIONS.md`,
+    ]);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
   });
 
@@ -585,7 +589,9 @@ describe("normalizeAgentsMd", () => {
     expect(written).toContain("## Folder Structure");
     expect(written).toContain("memory/");
     expect(written).not.toContain("not markdown at all");
-    expect(s3Calls.puts.map((p) => p.key)).toEqual([`${PREFIX}AGENTS.md`]);
+    expect(s3Calls.puts.map((p) => p.key)).toEqual([
+      `${PREFIX}INSTRUCTIONS.md`,
+    ]);
     expect(mockRegenerateManifest).toHaveBeenCalledTimes(1);
   });
 });
@@ -1081,14 +1087,14 @@ describe("regenerateWorkspaceMap — idempotent write", () => {
       },
     ];
     await regenerateWorkspaceMap("agent-1", "computer-1");
-    expect(s3Calls.puts.length).toBe(2); // AGENTS.md + CONTEXT.md
+    expect(s3Calls.puts.length).toBe(2); // INSTRUCTIONS.md + CONTEXT.md
     const firstAgentsMd = lastWrittenAgentsMd()!;
     const firstContextMd =
       [...s3Calls.puts].reverse().find((p) => p.key === `${PREFIX}CONTEXT.md`)
         ?.body ?? "";
 
     // Configure S3 to return the same body the renderer just wrote.
-    state.s3GetResponses.set(`${PREFIX}AGENTS.md`, firstAgentsMd);
+    state.s3GetResponses.set(`${PREFIX}INSTRUCTIONS.md`, firstAgentsMd);
     state.s3GetResponses.set(`${PREFIX}CONTEXT.md`, firstContextMd);
     s3Calls.puts.length = 0;
     mockRegenerateManifest.mockReset();
@@ -1101,7 +1107,7 @@ describe("regenerateWorkspaceMap — idempotent write", () => {
   });
 
   it("writes when content differs from what's on S3", async () => {
-    state.s3GetResponses.set(`${PREFIX}AGENTS.md`, "stale content");
+    state.s3GetResponses.set(`${PREFIX}INSTRUCTIONS.md`, "stale content");
     state.s3GetResponses.set(`${PREFIX}CONTEXT.md`, "stale content");
     state.workflows = [
       {

@@ -49,7 +49,12 @@ function isAgentSourcePath(path: string): boolean {
   // optional (missing = enabled, operator-authored), so a reconcile-lane
   // write there would mint a live sub-agent with operator provenance.
   // Do not add these folders here without moving that guard.
+  //
+  // U16: root "INSTRUCTIONS.md" is the EXACT root basename only — a nested
+  // `agents/<slug>/INSTRUCTIONS.md` arrives as its full path, never
+  // matches this string, and stays excluded per the R9 guard above.
   return (
+    path === "INSTRUCTIONS.md" ||
     path === "AGENTS.md" ||
     path === "CONTEXT.md" ||
     path === "GUARDRAILS.md" ||

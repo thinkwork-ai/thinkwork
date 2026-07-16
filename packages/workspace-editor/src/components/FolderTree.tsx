@@ -18,11 +18,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@thinkwork/ui";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@thinkwork/ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@thinkwork/ui";
 import {
   FileTree,
   FileTreeActions,
@@ -624,7 +620,14 @@ function FolderTreeItem(
   // affordance for an inherited-template update.
   const updateAvailable = updateAvailableFor(node.path);
   const fileLabel = isRenaming ? <InlineNameInput {...props} /> : node.name;
-  const canRegenerateMap = node.name === "AGENTS.md" && onRegenerateMap;
+  // Regenerate Map targets workspace-map files: the root instructions file
+  // (INSTRUCTIONS.md since subagent-folders U16; legacy root AGENTS.md
+  // during the fallback window) and nested AGENTS.md maps. A nested
+  // INSTRUCTIONS.md (agents/<slug>/INSTRUCTIONS.md) is a sub-agent
+  // definition, never a map — no regenerate affordance there.
+  const canRegenerateMap =
+    (node.name === "AGENTS.md" || node.path === "INSTRUCTIONS.md") &&
+    onRegenerateMap;
   const canGenerateFolderStructure =
     node.name === "CONTEXT.md" && onGenerateFolderStructure;
 

@@ -280,8 +280,15 @@ async function ensureParentRoutingRow(
   const folder = Array.from(importedWorkspaceFolders(tree)).sort()[0];
   if (!folder) return false;
   const slug = workspaceSlugFromFolderPath(folder) ?? folder;
-  const existing = (await storage.getText("AGENTS.md")) ?? defaultAgentsMd();
-  const subAgentsMd = tree[`${folder}/AGENTS.md`] ?? "";
+  // U16 dual-read: routing rows land in the root instructions file —
+  // INSTRUCTIONS.md preferred, legacy AGENTS.md as the seed fallback; the
+  // write always targets INSTRUCTIONS.md.
+  const existing =
+    (await storage.getText("INSTRUCTIONS.md")) ??
+    (await storage.getText("AGENTS.md")) ??
+    defaultAgentsMd();
+  const subAgentsMd =
+    tree[`${folder}/INSTRUCTIONS.md`] ?? tree[`${folder}/AGENTS.md`] ?? "";
   const parsed = subAgentsMd ? parseAgentsMd(subAgentsMd) : null;
   const skills = parsed
     ? Array.from(new Set(parsed.routing.flatMap((row) => row.skills))).sort()
@@ -293,7 +300,7 @@ async function ensureParentRoutingRow(
     skills,
   });
   if (next === existing) return false;
-  await storage.putText("AGENTS.md", next);
+  await storage.putText("INSTRUCTIONS.md", next);
   return true;
 }
 

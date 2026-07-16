@@ -265,7 +265,7 @@ async function ensureActiveSpaceMdSources(
 
 /**
  * Governance-file reseed (Composer plan 2026-07-02-001 U6): rewrite an
- * existing agent's AGENTS.md / CONTEXT.md when — and only when — its live
+ * existing agent's INSTRUCTIONS.md / CONTEXT.md when — and only when — its live
  * content is byte-identical to a previously shipped default version
  * (after `{{AGENT_NAME}}` / `{{TENANT_NAME}}` substitution with the
  * agent's own values). Hand-edited or map-recomposed files are left
@@ -319,7 +319,7 @@ async function reseedTenantAgentGovernanceFiles(
       console.log(
         `[seed-defaults] ${tenantSlug}/${agent.agentSlug}: reseeded governance file(s) ${rewritten.join(", ")} (byte-identical to a prior default)`,
       );
-      if (rewritten.includes("AGENTS.md")) {
+      if (rewritten.includes("INSTRUCTIONS.md")) {
         // Refresh derived sections so the reseeded map carries real
         // workspace state instead of the shipped placeholder bodies.
         await regenerateAgentsMdDerivedSections(agent.agentId);

@@ -64,11 +64,15 @@ export default function PersonalizeAgentScreen() {
     setLoading(true);
     try {
       const target = { agentId: id };
-      const [agentsRes, userRes] = await Promise.all([
+      // U16 dual-read: root instructions moved to INSTRUCTIONS.md; fall
+      // back to legacy AGENTS.md for not-yet-migrated tenants. Saves
+      // always write INSTRUCTIONS.md (writer flip).
+      const [instructionsRes, agentsRes, userRes] = await Promise.all([
+        getWorkspaceFile(target, "INSTRUCTIONS.md"),
         getWorkspaceFile(target, "AGENTS.md"),
         getWorkspaceFile(target, "USER.md"),
       ]);
-      const agentsMd = agentsRes.content ?? "";
+      const agentsMd = instructionsRes.content || agentsRes.content || "";
       const user = userRes.content ?? "";
       setRawAgentsMd(agentsMd);
       setRawUser(user);
@@ -91,14 +95,14 @@ export default function PersonalizeAgentScreen() {
       const target = { agentId: id };
       if (advancedMode) {
         await Promise.all([
-          putWorkspaceFile(target, "AGENTS.md", rawAgentsMd),
+          putWorkspaceFile(target, "INSTRUCTIONS.md", rawAgentsMd),
           putWorkspaceFile(target, "USER.md", rawUser),
         ]);
       } else {
         const nextAgentsMd = renderAgentsMd(rawAgentsMd, form);
         const nextUserMd = renderUserMd(form);
         await Promise.all([
-          putWorkspaceFile(target, "AGENTS.md", nextAgentsMd),
+          putWorkspaceFile(target, "INSTRUCTIONS.md", nextAgentsMd),
           putWorkspaceFile(target, "USER.md", nextUserMd),
         ]);
         // Update raw values for advanced mode consistency
@@ -190,7 +194,7 @@ export default function PersonalizeAgentScreen() {
         {advancedMode ? (
           <View className="px-4 gap-4">
             <View>
-              <Text className="text-sm font-medium mb-1">AGENTS.md</Text>
+              <Text className="text-sm font-medium mb-1">INSTRUCTIONS.md</Text>
               <TextInput
                 value={rawAgentsMd}
                 onChangeText={setRawAgentsMd}

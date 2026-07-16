@@ -10,6 +10,11 @@ import {
 describe("workspace contract v1 lane mapping", () => {
   it("maps rendered Agent, User, Space, and Thread notes paths to owners", () => {
     expect(workspacePathOwner("AGENTS.md")).toBe("agent");
+    // U16: root INSTRUCTIONS.md is an agent source path — the EXACT root
+    // basename only; nested agents/<slug>/INSTRUCTIONS.md stays unowned
+    // (R9 guard, asserted below).
+    expect(workspacePathOwner("INSTRUCTIONS.md")).toBe("agent");
+    expect(workspacePathOwner("Agent/INSTRUCTIONS.md")).toBe("agent");
     expect(workspacePathOwner("CONTEXT.md")).toBe("agent");
     expect(workspacePathOwner("memory/preferences.md")).toBe("agent");
     expect(workspacePathOwner("skills/reporting/SKILL.md")).toBe("agent");

@@ -1,5 +1,7 @@
 /**
- * AGENTS.md routing-table parser (Plan §008 U6).
+ * Root-instructions routing-table parser (Plan §008 U6). Content-based and
+ * rename-neutral: the same entry parses the root INSTRUCTIONS.md (subagent-
+ * folders U16) and legacy/nested AGENTS.md files.
  *
  * Extracts the `| Task | Go to | Read | Skills |` markdown table from a
  * folder's AGENTS.md content into typed `RoutingRow[]`. Surrounding prose

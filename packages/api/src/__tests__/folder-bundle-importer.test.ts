@@ -66,7 +66,9 @@ describe("importFolderBundle", () => {
       "workspaces/expenses/NOTES.md",
     ]);
     expect(files.get("workspaces/expenses/CONTEXT.md")).toBe("# Expenses");
-    expect(files.get("AGENTS.md")).toContain(
+    // U16 writer flip: the routing row is seeded from the legacy AGENTS.md
+    // (dual-read fallback) but written to INSTRUCTIONS.md.
+    expect(files.get("INSTRUCTIONS.md")).toContain(
       "| Specialist for expenses | workspaces/expenses/ | workspaces/expenses/CONTEXT.md |  |",
     );
   });

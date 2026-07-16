@@ -32,8 +32,11 @@ export interface PiInvocationPayload {
 // System-prompt composition order. LLM attention is strongest at the start
 // and end; middle positions get less weight. The order below is deliberate:
 //
-//   1. AGENTS.md — Layer-1 routing map. The model needs to know the
-//      territory (who-I-am-as-router, subagent table) before anything else.
+//   1. INSTRUCTIONS.md (fallback AGENTS.md) — Layer-1 routing map. The model
+//      needs to know the territory (who-I-am-as-router, subagent table)
+//      before anything else. Subagent-folders U16 renamed the root
+//      instructions file; during the migration window the loader prefers
+//      INSTRUCTIONS.md and falls back to AGENTS.md — NEVER both.
 //   2. CONTEXT.md — current per-thread / per-space context.
 //   3. GUARDRAILS.md — safety floor; must apply everywhere.
 //   4. SPACE.md — active Space context when a tuple renderer supplied one.
@@ -42,10 +45,14 @@ export interface PiInvocationPayload {
 //
 // SOUL.md, IDENTITY.md, PLATFORM.md, CAPABILITIES.md, MEMORY_GUIDE.md, and
 // TOOLS.md may still exist during the migration window; their content has
-// moved into AGENTS.md sections or dynamic runtime policy, so this loader no
-// longer reads them.
+// moved into the root instructions sections or dynamic runtime policy, so
+// this loader no longer reads them.
+export const ROOT_INSTRUCTIONS_FILE = "INSTRUCTIONS.md" as const;
+export const LEGACY_ROOT_INSTRUCTIONS_FILE = "AGENTS.md" as const;
+
 export const PROMPT_FILES = [
-  "AGENTS.md",
+  ROOT_INSTRUCTIONS_FILE,
+  LEGACY_ROOT_INSTRUCTIONS_FILE,
   "CONTEXT.md",
   "GUARDRAILS.md",
   "SPACE.md",
@@ -335,10 +342,17 @@ export async function composeSystemPromptFromFiles(
   if (agentProfilePolicy) parts.push(agentProfilePolicy);
 
   let filesLoaded = 0;
+  let rootInstructionsLoaded = false;
   for (const filename of PROMPT_FILES) {
     if (filename === "User/USER.md" && !includeUserMd) continue;
+    // Dual-read window (subagent-folders U16): AGENTS.md is only the
+    // fallback for a missing INSTRUCTIONS.md — never compose both.
+    if (filename === LEGACY_ROOT_INSTRUCTIONS_FILE && rootInstructionsLoaded) {
+      continue;
+    }
     const content = await args.readPromptFile(filename);
     if (content) {
+      if (filename === ROOT_INSTRUCTIONS_FILE) rootInstructionsLoaded = true;
       parts.push(content);
       filesLoaded++;
     }

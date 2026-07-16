@@ -68,6 +68,44 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     );
   });
 
+  it("U16 dual-read: loads INSTRUCTIONS.md when present and skips AGENTS.md entirely", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      now: FIXED_NOW,
+      fileReader: readerFor({
+        "INSTRUCTIONS.md": "INSTRUCTIONS BODY",
+        "AGENTS.md": "LEGACY AGENTS BODY",
+      }),
+    });
+    expect(prompt).toContain("INSTRUCTIONS BODY");
+    expect(prompt).not.toContain("LEGACY AGENTS BODY");
+  });
+
+  it("U16 dual-read: falls back to AGENTS.md when INSTRUCTIONS.md is missing", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "LEGACY AGENTS BODY" }),
+    });
+    expect(prompt).toContain("LEGACY AGENTS BODY");
+  });
+
+  it("U16 dual-read: an INSTRUCTIONS.md that reads as empty falls back to AGENTS.md", async () => {
+    // The default filesystem reader normalizes empty/whitespace files to
+    // null, so an empty INSTRUCTIONS.md must not shadow a real AGENTS.md.
+    const reader: WorkspaceFileReader = async (filePath) =>
+      filePath.endsWith("AGENTS.md") ? "LEGACY AGENTS BODY" : null;
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      now: FIXED_NOW,
+      fileReader: reader,
+    });
+    expect(prompt).toContain("LEGACY AGENTS BODY");
+  });
+
   it("includes canvas parity guidance only when a canvas tool is available", async () => {
     const withCanvas = await composeSystemPrompt({
       payload: {},

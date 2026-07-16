@@ -2,7 +2,7 @@
  * Governance-file reseed — Composer plan 2026-07-02-001 U6 (R6/AE3).
  *
  * Defaults materialize into an agent's S3 prefix once, at bootstrap
- * (`workspace-bootstrap.ts` copies at write time); AGENTS.md / CONTEXT.md
+ * (`workspace-bootstrap.ts` copies at write time); INSTRUCTIONS.md / CONTEXT.md
  * are live-class files a defaults-version bump never rewrites. New default
  * content therefore reaches newly bootstrapped agents only. This module
  * closes AE3's "tenant that never customized" gap: it rewrites an existing
@@ -132,7 +132,7 @@ export interface TenantReseedSummary {
  * the current default and no-ops.
  *
  * `afterAgentRewrite` fires once per agent that had at least one file
- * rewritten — the handler uses it to refresh derived AGENTS.md sections
+ * rewritten — the handler uses it to refresh derived INSTRUCTIONS.md sections
  * and regenerate the workspace manifest.
  */
 export async function reseedTenantGovernanceDefaults(input: {
@@ -164,7 +164,16 @@ export async function reseedTenantGovernanceDefaults(input: {
 
     for (const file of RESEEDABLE_GOVERNANCE_FILES) {
       const key = `tenants/${input.tenantSlug}/agents/${agent.agentSlug}/${file}`;
-      const liveContent = await input.store.getText(key);
+      let liveContent = await input.store.getText(key);
+      if (liveContent === null && file === "INSTRUCTIONS.md") {
+        // U16 rename window: an unmigrated agent still holds its root
+        // instructions as AGENTS.md. Read the legacy name for the
+        // byte-identity check; a rewrite lands on INSTRUCTIONS.md — the
+        // reseed doubles as the migration for never-customized agents.
+        liveContent = await input.store.getText(
+          `tenants/${input.tenantSlug}/agents/${agent.agentSlug}/AGENTS.md`,
+        );
+      }
       const decision = decideGovernanceReseed({
         file,
         liveContent,

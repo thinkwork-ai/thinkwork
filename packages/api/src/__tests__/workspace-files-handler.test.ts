@@ -614,6 +614,10 @@ async function parse(result: { statusCode: number; body: string }) {
 
 beforeEach(() => {
   s3Mock.reset();
+  // Default: any un-stubbed GET behaves as a missing object. The U16
+  // dual-read probes INSTRUCTIONS.md before the legacy AGENTS.md, so tests
+  // that stub only one key must see NoSuchKey (not undefined) for the other.
+  s3Mock.on(GetObjectCommand).rejects(noSuchKey());
   lambdaMock.reset();
   resetDbQueue();
   resetEqCalls();
@@ -730,7 +734,7 @@ describe("agent AGENTS.md derived section refresh", () => {
     );
 
     expect(res.statusCode).toBe(500);
-    expect(res.body.error).toMatch(/AGENTS\.md section refresh failed/);
+    expect(res.body.error).toMatch(/INSTRUCTIONS\.md section refresh failed/);
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(1);
   });
 
@@ -6071,7 +6075,9 @@ describe("agent create-sub-agent", () => {
     const puts = s3Mock.commandCalls(PutObjectCommand);
     expect(puts.map((call) => call.args[0].input.Key)).toEqual([
       "tenants/acme/agents/marco/workspaces/support/CONTEXT.md",
-      "tenants/acme/agents/marco/AGENTS.md",
+      // U16 writer flip: routing row seeded from the legacy AGENTS.md but
+      // written to INSTRUCTIONS.md.
+      "tenants/acme/agents/marco/INSTRUCTIONS.md",
     ]);
     expect(String(puts[1].args[0].input.Body)).toContain(
       "| support specialist | workspaces/support/ | workspaces/support/CONTEXT.md |  |",
@@ -6518,7 +6524,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
 
     expect(res.statusCode).toBe(200);
     const put = s3Mock.commandCalls(PutObjectCommand)[0]?.args[0].input;
-    expect(put?.Key).toBe("tenants/acme/agents/marco/AGENTS.md");
+    expect(put?.Key).toBe("tenants/acme/agents/marco/INSTRUCTIONS.md");
     expect(String(put?.Body)).toContain(
       "- **Creature:** axolotl with injection",
     );
@@ -6594,7 +6600,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     );
 
     expect(res.statusCode).toBe(422);
-    expect(res.body.error).toContain("AGENTS.md is missing the Creature");
+    expect(res.body.error).toContain("INSTRUCTIONS.md is missing the Creature");
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
@@ -6622,7 +6628,7 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
     );
 
     expect(res.statusCode).toBe(422);
-    expect(res.body.error).toContain("AGENTS.md is missing the Creature");
+    expect(res.body.error).toContain("INSTRUCTIONS.md is missing the Creature");
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
@@ -6898,7 +6904,7 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
     );
 
     expect(res.statusCode).toBe(500);
-    expect(res.body.error).toMatch(/AGENTS.md section refresh failed/);
+    expect(res.body.error).toMatch(/INSTRUCTIONS.md section refresh failed/);
     expect(res.body.error).toMatch(/workspace map unavailable/);
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(1);
   });

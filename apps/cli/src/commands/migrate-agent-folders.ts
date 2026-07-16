@@ -12,7 +12,7 @@ export function registerMigrateAgentFoldersCommand(program: Command): void {
   program
     .command("migrate-agent-folders")
     .description(
-      "Materialize built-in sub-agent folders and convert legacy agents/<slug>.md profile files to the folder form (subagent-folders U8). The sweep preserves legacy files.",
+      "Materialize built-in sub-agent folders, convert legacy agents/<slug>.md profile files to the folder form (subagent-folders U8), and copy the root AGENTS.md to INSTRUCTIONS.md byte-identically (U16 rename; AGENTS.md is left in place for the fallback window). The sweep preserves legacy files.",
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug to migrate")

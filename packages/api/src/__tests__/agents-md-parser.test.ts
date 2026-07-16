@@ -282,8 +282,9 @@ describe("parseAgentsMd — error paths", () => {
 });
 
 describe("parseAgentsMd — fixture parity", () => {
-  it("parses the seeded packages/workspace-defaults/files/AGENTS.md fixture without errors", () => {
-    // The seeded AGENTS.md starts with an empty routing table. Operators add
+  it("parses the seeded packages/workspace-defaults/files/INSTRUCTIONS.md fixture without errors", () => {
+    // The seeded INSTRUCTIONS.md (root instructions, renamed from AGENTS.md
+    // by subagent-folders U16) starts with an empty routing table. Operators add
     // real rows when they create sub-agents; example text must stay outside
     // the table so deploy smoke treats parser warnings as real failures.
     const fixture = resolve(
@@ -293,7 +294,7 @@ describe("parseAgentsMd — fixture parity", () => {
       "..",
       "workspace-defaults",
       "files",
-      "AGENTS.md",
+      "INSTRUCTIONS.md",
     );
     const md = readFileSync(fixture, "utf8");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
