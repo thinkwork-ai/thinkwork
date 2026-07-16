@@ -10,8 +10,6 @@ import {
   spaceIntegrations,
   spaceKnowledgeBases,
   spaceMembers,
-  spaceMcpServers,
-  tenantMcpServers,
   users,
   snakeToCamel,
 } from "../../utils.js";
@@ -86,20 +84,6 @@ export const spaceTypeResolvers = {
       );
     return rows.map((row) => toGraphqlSpaceChild(row));
   },
-  mcpServers: async (parent: any) => {
-    const spaceId = parent.id;
-    const tenantId = parent.tenantId ?? parent.tenant_id;
-    const rows = await db
-      .select()
-      .from(spaceMcpServers)
-      .where(
-        and(
-          eq(spaceMcpServers.tenant_id, tenantId),
-          eq(spaceMcpServers.space_id, spaceId),
-        ),
-      );
-    return rows.map((row) => toGraphqlSpaceChild(row));
-  },
   knowledgeBases: async (parent: any) => {
     const spaceId = parent.id;
     const tenantId = parent.tenantId ?? parent.tenant_id;
@@ -157,23 +141,5 @@ export const spaceChecklistTemplateTypeResolvers = {
         ),
       );
     return rows.map((row) => toGraphqlSpaceChild(row));
-  },
-};
-
-export const spaceMcpServerTypeResolvers = {
-  mcpServer: async (parent: any) => {
-    const mcpServerId = parent.mcpServerId ?? parent.mcp_server_id;
-    const tenantId = parent.tenantId ?? parent.tenant_id;
-    if (!mcpServerId || !tenantId) return null;
-    const [row] = await db
-      .select()
-      .from(tenantMcpServers)
-      .where(
-        and(
-          eq(tenantMcpServers.tenant_id, tenantId),
-          eq(tenantMcpServers.id, mcpServerId),
-        ),
-      );
-    return row ? snakeToCamel(row) : null;
   },
 };

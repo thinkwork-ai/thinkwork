@@ -1981,7 +1981,6 @@ export type CreateScheduledJobInput = {
   name: Scalars["String"]["input"];
   prompt?: InputMaybe<Scalars["String"]["input"]>;
   routineId?: InputMaybe<Scalars["ID"]["input"]>;
-  runAsUserId?: InputMaybe<Scalars["ID"]["input"]>;
   scheduleExpression?: InputMaybe<Scalars["String"]["input"]>;
   scheduleType?: InputMaybe<Scalars["String"]["input"]>;
   spaceId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -4839,7 +4838,6 @@ export type Mutation = {
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
-  setSpaceTools: Space;
   setTenantMemberPassword: SetTenantMemberPasswordResult;
   /**
    * Set the CALLER's notification preference for one thread (mute / mentions-only /
@@ -6057,10 +6055,6 @@ export type MutationSetSpaceKnowledgeBasesArgs = {
 export type MutationSetSpaceRuntimeOverridesArgs = {
   input: SetSpaceRuntimeOverridesInput;
   spaceId: Scalars["ID"]["input"];
-};
-
-export type MutationSetSpaceToolsArgs = {
-  input: SetSpaceToolsInput;
 };
 
 export type MutationSetTenantMemberPasswordArgs = {
@@ -9489,7 +9483,6 @@ export type ScheduledJob = {
   nextRunAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   prompt?: Maybe<Scalars["String"]["output"]>;
   routineId?: Maybe<Scalars["ID"]["output"]>;
-  runAsUserId?: Maybe<Scalars["ID"]["output"]>;
   scheduleExpression?: Maybe<Scalars["String"]["output"]>;
   scheduleType?: Maybe<Scalars["String"]["output"]>;
   spaceId?: Maybe<Scalars["ID"]["output"]>;
@@ -9631,13 +9624,6 @@ export type SetSpaceRuntimeOverridesInput = {
   guardrailId?: InputMaybe<Scalars["ID"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   sandbox?: InputMaybe<Scalars["Boolean"]["input"]>;
-};
-
-export type SetSpaceToolsInput = {
-  builtInToolSlugs: Array<Scalars["String"]["input"]>;
-  mcpServerIds: Array<Scalars["ID"]["input"]>;
-  spaceId: Scalars["ID"]["input"];
-  tenantId: Scalars["ID"]["input"];
 };
 
 export type SetTenantMemberPasswordInput = {
@@ -9904,7 +9890,6 @@ export type Space = {
   knowledgeBases: Array<SpaceKnowledgeBase>;
   lastActivityAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   mcpPolicy?: Maybe<Scalars["AWSJSON"]["output"]>;
-  mcpServers: Array<SpaceMcpServer>;
   members: Array<SpaceMember>;
   name: Scalars["String"]["output"];
   prompt?: Maybe<Scalars["String"]["output"]>;
@@ -10016,19 +10001,6 @@ export type SpaceKnowledgeBaseInput = {
   searchConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
-export type SpaceMcpServer = {
-  __typename?: "SpaceMcpServer";
-  config?: Maybe<Scalars["AWSJSON"]["output"]>;
-  createdAt: Scalars["AWSDateTime"]["output"];
-  enabled: Scalars["Boolean"]["output"];
-  id: Scalars["ID"]["output"];
-  mcpServer?: Maybe<SpaceTenantMcpServer>;
-  mcpServerId: Scalars["ID"]["output"];
-  spaceId: Scalars["ID"]["output"];
-  tenantId: Scalars["ID"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
-};
-
 export type SpaceMember = {
   __typename?: "SpaceMember";
   createdAt: Scalars["AWSDateTime"]["output"];
@@ -10079,22 +10051,6 @@ export enum SpaceStatus {
   Active = "ACTIVE",
   Archived = "ARCHIVED",
 }
-
-export type SpaceTenantMcpServer = {
-  __typename?: "SpaceTenantMcpServer";
-  authType: Scalars["String"]["output"];
-  createdAt: Scalars["AWSDateTime"]["output"];
-  enabled: Scalars["Boolean"]["output"];
-  id: Scalars["ID"]["output"];
-  name: Scalars["String"]["output"];
-  oauthProvider?: Maybe<Scalars["String"]["output"]>;
-  slug: Scalars["String"]["output"];
-  status: Scalars["String"]["output"];
-  tenantId: Scalars["ID"]["output"];
-  tools?: Maybe<Scalars["AWSJSON"]["output"]>;
-  transport: Scalars["String"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
-};
 
 export type StartAutomationBuilderInput = {
   builderThreadId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -11335,7 +11291,6 @@ export type UpdateScheduledJobInput = {
   enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
   prompt?: InputMaybe<Scalars["String"]["input"]>;
-  runAsUserId?: InputMaybe<Scalars["ID"]["input"]>;
   scheduleExpression?: InputMaybe<Scalars["String"]["input"]>;
   scheduleType?: InputMaybe<Scalars["String"]["input"]>;
   spaceId?: InputMaybe<Scalars["ID"]["input"]>;

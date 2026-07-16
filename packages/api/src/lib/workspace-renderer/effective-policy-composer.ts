@@ -1,16 +1,11 @@
 export interface WorkspacePolicyInput {
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
-  spaceToolPolicy?: unknown;
-  spaceMcpPolicy?: unknown;
   modelRoutingSources?: WorkspaceModelRoutingSource[];
 }
 
 export type WorkspaceModelRoutingSourceOwner =
-  | "agent"
-  | "space"
-  | "workspace"
-  | "user";
+  "agent" | "space" | "workspace" | "user";
 
 export interface WorkspaceModelRoutingRouteInput {
   tool: string;
@@ -40,16 +35,14 @@ export interface EffectiveWorkspaceModelRoutingEntry {
 export interface EffectiveWorkspacePolicy {
   blockedTools: string[];
   allowedTools: string[] | null;
+  // THINK-302 U6 (R21): retained on the shape for the compile-side mcp policy
+  // pass + inspector, but now ALWAYS empty — space mcp_policy is retired, so
+  // no server is ever allow/blocklisted here. Removal of the fields entirely is
+  // a deferred follow-up once the compile mcp-policy pass is also retired.
   mcpAllowedServers: string[] | null;
   mcpBlockedServers: string[];
   modelRouting: EffectiveWorkspaceModelRoutingEntry[];
   diagnostics: string[];
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 function stringArray(value: unknown): string[] {
@@ -67,17 +60,6 @@ function stringArray(value: unknown): string[] {
 function nullableStringArray(value: unknown): string[] | null {
   const values = stringArray(value);
   return values.length > 0 ? values : null;
-}
-
-function intersectNullable(
-  left: string[] | null,
-  right: string[] | null,
-): string[] | null {
-  if (!left && !right) return null;
-  if (!left) return right;
-  if (!right) return left;
-  const rightSet = new Set(right);
-  return left.filter((item) => rightSet.has(item)).sort();
 }
 
 function modelRouteKey(route: WorkspaceModelRoutingRouteInput): string {
@@ -120,22 +102,14 @@ function composeModelRouting(
 export function composeWorkspacePolicy(
   input: WorkspacePolicyInput,
 ): EffectiveWorkspacePolicy {
-  const toolPolicy = asObject(input.spaceToolPolicy);
-  const mcpPolicy = asObject(input.spaceMcpPolicy);
-  const agentBlocked = stringArray(input.agentBlockedTools);
-  const spaceBlocked = stringArray(toolPolicy.blockedTools);
-  const blockedTools = Array.from(
-    new Set([...agentBlocked, ...spaceBlocked]),
-  ).sort();
-
-  const agentAllowed = nullableStringArray(input.agentAllowedTools);
-  const spaceAllowed = nullableStringArray(toolPolicy.allowedTools);
-  const allowedTools = intersectNullable(agentAllowed, spaceAllowed);
+  // THINK-302 U6 (R21): space tool_policy/mcp_policy are retired — the
+  // effective policy is now the agent-scope tool policy plus model routing.
+  // (Space/user capability scoping is expressed as folder GRANTS via the
+  // registry-trust path, not subtractive policy.)
+  const blockedTools = stringArray(input.agentBlockedTools);
+  const allowedTools = nullableStringArray(input.agentAllowedTools);
 
   const diagnostics: string[] = [];
-  if (agentBlocked.length > 0 && spaceBlocked.length > 0) {
-    diagnostics.push("agent_and_space_blocked_tools_union_applied");
-  }
   if (
     allowedTools &&
     blockedTools.some((tool) => allowedTools.includes(tool))
@@ -150,8 +124,8 @@ export function composeWorkspacePolicy(
   return {
     blockedTools,
     allowedTools,
-    mcpAllowedServers: nullableStringArray(mcpPolicy.allowedServers),
-    mcpBlockedServers: stringArray(mcpPolicy.blockedServers),
+    mcpAllowedServers: null,
+    mcpBlockedServers: [],
     modelRouting,
     diagnostics,
   };
