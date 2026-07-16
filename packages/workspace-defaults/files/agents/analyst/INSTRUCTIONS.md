@@ -2,6 +2,7 @@
 description: >-
   Delegates data analysis, metric review, and structured reporting. Use for
   data, spreadsheet, CRM, database, SQL, and quantitative analysis subtasks.
+model: us.anthropic.claude-sonnet-4-6
 builtInTools:
   - execute_code
   - file_read

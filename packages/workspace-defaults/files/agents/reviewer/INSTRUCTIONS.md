@@ -4,6 +4,7 @@ description: >-
   final response when an answer, artifact, or delegated result needs a quality
   gate, or when the parent Agent is uncertain whether the output is good
   enough.
+model: us.anthropic.claude-sonnet-4-6
 execution:
   reviewGate: true
   maxReviewLoops: 2
