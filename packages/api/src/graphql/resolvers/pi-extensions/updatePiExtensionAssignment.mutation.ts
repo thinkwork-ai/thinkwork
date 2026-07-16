@@ -1,6 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
 import {
-  agentProfiles,
   and,
   db,
   eq,
@@ -59,22 +58,14 @@ export async function updatePiExtensionAssignment(
     assertVersionCanBeAssigned(version, enabled);
 
     if (target.targetType === "agent_profile") {
-      const agentProfileId = target.agentProfileId;
-      if (!agentProfileId)
-        throw badInput("Agent Profile assignment requires profile id");
-      const [profile] = await tx
-        .select()
-        .from(agentProfiles)
-        .where(
-          and(
-            eq(agentProfiles.tenant_id, tenantId),
-            eq(agentProfiles.id, agentProfileId),
-          ),
-        );
-      if (!profile) throw badInput("Agent Profile does not belong to tenant");
-      if (profile.source_space_id != null) {
-        throw badInput("Space-local Agent Profiles cannot receive extensions");
-      }
+      // Subagent-folders U11: profile-targeted extension assignments are
+      // retired. Sub-agent profiles are workspace folders assembled from
+      // the capabilities manifest — the dispatch payload no longer carries
+      // per-profile extension lists, so a profile-scoped assignment could
+      // never load. (The uuid FK also cannot reference retired rows.)
+      throw badInput(
+        "Sub-agent-scoped Pi extension assignments are retired — assign the extension at agent scope",
+      );
     }
 
     if (!enabled) {
@@ -86,12 +77,7 @@ export async function updatePiExtensionAssignment(
             eq(piExtensionAssignments.tenant_id, tenantId),
             eq(piExtensionAssignments.version_id, versionId),
             eq(piExtensionAssignments.target_type, target.targetType),
-            target.targetType === "agent_profile"
-              ? eq(
-                  piExtensionAssignments.agent_profile_id,
-                  target.agentProfileId!,
-                )
-              : isNull(piExtensionAssignments.agent_profile_id),
+            isNull(piExtensionAssignments.agent_profile_id),
           ),
         );
     } else {
@@ -100,68 +86,37 @@ export async function updatePiExtensionAssignment(
         tenantId,
         versionId,
         sourceId: version.source_id,
-        targetType: target.targetType,
-        agentProfileId: target.agentProfileId,
         now,
       });
       const grantedPermissions = normalizeGrantedPermissions({
         value: args.input.grantedPermissions,
         requestedPermissionClasses: version.permission_classes,
       });
-      if (target.targetType === "default_agent") {
-        await tx
-          .insert(piExtensionAssignments)
-          .values({
-            tenant_id: tenantId,
-            version_id: versionId,
-            target_type: target.targetType,
-            agent_profile_id: null,
+      await tx
+        .insert(piExtensionAssignments)
+        .values({
+          tenant_id: tenantId,
+          version_id: versionId,
+          target_type: target.targetType,
+          agent_profile_id: null,
+          enabled: true,
+          granted_permissions: grantedPermissions,
+          assigned_by_user_id: actorId,
+          updated_at: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            piExtensionAssignments.tenant_id,
+            piExtensionAssignments.version_id,
+          ],
+          targetWhere: sql`${piExtensionAssignments.target_type} = 'default_agent'`,
+          set: {
             enabled: true,
             granted_permissions: grantedPermissions,
             assigned_by_user_id: actorId,
             updated_at: now,
-          })
-          .onConflictDoUpdate({
-            target: [
-              piExtensionAssignments.tenant_id,
-              piExtensionAssignments.version_id,
-            ],
-            targetWhere: sql`${piExtensionAssignments.target_type} = 'default_agent'`,
-            set: {
-              enabled: true,
-              granted_permissions: grantedPermissions,
-              assigned_by_user_id: actorId,
-              updated_at: now,
-            },
-          });
-      } else {
-        await tx
-          .insert(piExtensionAssignments)
-          .values({
-            tenant_id: tenantId,
-            version_id: versionId,
-            target_type: target.targetType,
-            agent_profile_id: target.agentProfileId,
-            enabled: true,
-            granted_permissions: grantedPermissions,
-            assigned_by_user_id: actorId,
-            updated_at: now,
-          })
-          .onConflictDoUpdate({
-            target: [
-              piExtensionAssignments.tenant_id,
-              piExtensionAssignments.agent_profile_id,
-              piExtensionAssignments.version_id,
-            ],
-            targetWhere: sql`${piExtensionAssignments.target_type} = 'agent_profile'`,
-            set: {
-              enabled: true,
-              granted_permissions: grantedPermissions,
-              assigned_by_user_id: actorId,
-              updated_at: now,
-            },
-          });
-      }
+          },
+        });
     }
 
     return loadPiExtensionGraphql({
@@ -179,8 +134,6 @@ async function disablePreviousAssignments(input: {
   tenantId: string;
   versionId: string;
   sourceId: string;
-  targetType: "default_agent" | "agent_profile";
-  agentProfileId: string | null;
   now: Date;
 }) {
   const previousVersionRows = await input.tx
@@ -196,19 +149,14 @@ async function disablePreviousAssignments(input: {
   const previousVersionIds = previousVersionRows.map((row) => row.id);
   if (previousVersionIds.length === 0) return;
 
-  const targetCondition =
-    input.targetType === "agent_profile"
-      ? eq(piExtensionAssignments.agent_profile_id, input.agentProfileId!)
-      : isNull(piExtensionAssignments.agent_profile_id);
-
   await input.tx
     .update(piExtensionAssignments)
     .set({ enabled: false, updated_at: input.now })
     .where(
       and(
         eq(piExtensionAssignments.tenant_id, input.tenantId),
-        eq(piExtensionAssignments.target_type, input.targetType),
-        targetCondition,
+        eq(piExtensionAssignments.target_type, "default_agent"),
+        isNull(piExtensionAssignments.agent_profile_id),
         inArray(piExtensionAssignments.version_id, previousVersionIds),
       ),
     );

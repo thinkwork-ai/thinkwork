@@ -1,8 +1,7 @@
 import type { GraphQLContext } from "../../context.js";
-import { agentProfiles, db } from "../../utils.js";
 import {
-  serializeAgentProfileFile,
-  writeAgentProfileFileForTenant,
+  getAgentFolderProfileForTenant,
+  listAgentFolderProfilesForTenant,
   writeAgentProfileFolderForTenant,
 } from "../../../lib/agent-profile-workspace-files.js";
 import { normalizeExecutionControlsForStorage } from "../../../lib/agent-profile-loop-policy.js";
@@ -10,14 +9,11 @@ import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   assertAvailableModel,
   assertCustomProfileSlugAvailable,
-  assertSpacesBelongToTenant,
   badInput,
-  ensureBuiltInAgentProfiles,
+  folderProfileToGraphql,
   normalizeProfileSlug,
   parseJsonInput,
-  replaceAgentProfileSpaceAssignments,
   resolveAvailableCustomSlug,
-  toAgentProfileGraphql,
 } from "./shared.js";
 
 interface AgentProfileInput {
@@ -34,6 +30,16 @@ interface AgentProfileInput {
   spaceIds?: string[] | null;
 }
 
+/**
+ * Create a sub-agent (subagent-folders U11): a pure folder write — the
+ * mutation serializes `agents/<slug>/INSTRUCTIONS.md` (strict U3 format)
+ * into the tenant's agent workspace; the next render compiles it into
+ * the capabilities manifest. No `agent_profiles` row is written.
+ * `spaceIds` is ignored: space-scoped sub-agents are a future
+ * folder-based arc. `skillPolicy` is ignored: grants are folder presence
+ * (`agents/<slug>/skills|connectors/<child>/`), written by the grant
+ * mutations.
+ */
 export async function createAgentProfile(
   _parent: unknown,
   args: { tenantId: string; input: AgentProfileInput },
@@ -44,9 +50,12 @@ export async function createAgentProfile(
     args.tenantId,
     "agent_profiles:create",
   );
-  await ensureBuiltInAgentProfiles(args.tenantId);
 
   const input = args.input;
+  const existingSlugs = (
+    (await listAgentFolderProfilesForTenant(args.tenantId)) ?? []
+  ).map((profile) => profile.slug);
+
   // An explicit slug is honored as-is (collision is a clean user error); when
   // it's derived from the name we resolve to a free slug so a generic default
   // like "New Agent Profile" can be created repeatedly.
@@ -54,23 +63,14 @@ export async function createAgentProfile(
   if (input.slug) {
     slug = normalizeProfileSlug(input.slug);
     assertCustomProfileSlugAvailable(slug);
-    const clash = await resolveAvailableCustomSlug(args.tenantId, slug);
-    if (clash !== slug) {
+    if (existingSlugs.includes(slug)) {
       throw badInput(`An Agent Profile with slug "${slug}" already exists`);
     }
   } else {
-    slug = await resolveAvailableCustomSlug(args.tenantId, input.name);
+    slug = resolveAvailableCustomSlug(existingSlugs, input.name);
   }
   await assertAvailableModel(args.tenantId, input.modelId);
-  const spaceIds = await assertSpacesBelongToTenant(
-    args.tenantId,
-    input.spaceIds,
-  );
   const toolPolicy = (parseJsonInput(input.toolPolicy) ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const skillPolicy = (parseJsonInput(input.skillPolicy) ?? {}) as Record<
     string,
     unknown
   >;
@@ -78,50 +78,7 @@ export async function createAgentProfile(
     parseJsonInput(input.executionControls) ?? {},
   );
 
-  const [row] = await db
-    .insert(agentProfiles)
-    .values({
-      tenant_id: args.tenantId,
-      slug,
-      name: input.name.trim(),
-      description: input.description ?? null,
-      routing_guidance: input.routingGuidance ?? null,
-      instructions: input.instructions,
-      model_id: input.modelId,
-      enabled: input.enabled ?? true,
-      built_in_key: null,
-      tool_policy: toolPolicy,
-      skill_policy: skillPolicy,
-      execution_controls: executionControls,
-      updated_at: new Date(),
-    })
-    .returning();
-
-  await replaceAgentProfileSpaceAssignments({
-    tenantId: args.tenantId,
-    profileId: row.id,
-    spaceIds,
-  });
-
-  await writeAgentProfileFileForTenant({
-    tenantId: args.tenantId,
-    slug,
-    content: serializeAgentProfileFile({
-      slug,
-      name: input.name,
-      description: input.description,
-      routingGuidance: input.routingGuidance,
-      instructions: input.instructions,
-      modelId: input.modelId,
-      enabled: input.enabled ?? true,
-      toolPolicy,
-      skillPolicy,
-      executionControls,
-      spaceIds,
-    }),
-  });
-  // Subagent-folders U12 (R22): every write also emits the folder form.
-  await writeAgentProfileFolderForTenant({
+  const written = await writeAgentProfileFolderForTenant({
     tenantId: args.tenantId,
     slug,
     source: {
@@ -136,6 +93,17 @@ export async function createAgentProfile(
       executionControls,
     },
   });
+  if (!written) {
+    throw new Error(
+      "Agent Profile folder write failed: no workspace target is resolvable for this tenant",
+    );
+  }
 
-  return toAgentProfileGraphql(row);
+  const profile = await getAgentFolderProfileForTenant(args.tenantId, slug);
+  if (!profile) {
+    throw new Error(
+      `Agent Profile folder for "${slug}" was written but did not read back`,
+    );
+  }
+  return folderProfileToGraphql(args.tenantId, profile);
 }

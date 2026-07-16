@@ -73,9 +73,6 @@ export interface WorkspaceTupleRepository {
   listSpaceParticipants?(
     tuple: ResolvedWorkspaceRenderTuple,
   ): Promise<WorkspaceSpaceParticipantEntry[]>;
-  listRoutableAgentProfiles?(
-    tuple: ResolvedWorkspaceRenderTuple,
-  ): Promise<WorkspaceAgentProfileRoutingEntry[]>;
   /**
    * SAVED (non-draft) canvases in the tuple's active Space (Living Artifacts
    * THINK-145 U9, R19). Rendered as a passive `### Saved Canvases` block in

@@ -160,16 +160,7 @@ import {
   isAgentIdentityField,
   replaceAgentsMdIdentityField,
 } from "./src/lib/agents-md-persona-surgery.js";
-import {
-  deleteAgentProfileProjectionForFile,
-  deleteAgentProfileProjectionFromFolderFile,
-  deleteSpaceAgentProfileProjectionForFile,
-  isAgentProfileWorkspacePath,
-  isSpaceAgentProfileWorkspacePath,
-  upsertAgentProfileProjectionFromFile,
-  upsertAgentProfileProjectionFromFolderFile,
-  upsertSpaceAgentProfileProjectionFromFile,
-} from "./src/lib/agent-profile-workspace-files.js";
+import { isAgentProfileWorkspacePath } from "./src/lib/agent-profile-workspace-files.js";
 import {
   isProtectedOrchestrationWritePath,
   isSpaceCapabilityWritePath,
@@ -2908,27 +2899,9 @@ async function handlePut(
     if (isSkillMarkerPath(cleanPath)) {
       await refreshSpaceSkillInventory(target);
     }
-    if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
-      // Space-local Agent Profile projection (plan 2026-06-12-002 U7):
-      // operator puts to a Space source's agents/<slug>.md project into a
-      // space-scoped agent_profiles row. Mirrors the central agent-target
-      // hook below — S3 is committed first, a projection failure surfaces
-      // as 400 so the operator sees the validation error.
-      try {
-        await upsertSpaceAgentProfileProjectionFromFile({
-          tenantId,
-          spaceId: target.spaceId,
-          path: cleanPath,
-          content,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return json(400, {
-          ok: false,
-          error: `Agent Profile file saved but projection refresh failed: ${message}`,
-        });
-      }
-    }
+    // Subagent-folders U11: the space-local agent_profiles projection is
+    // retired — Space `agents/<slug>.md` files are inert content; space-
+    // scoped sub-agents are a future folder-based arc.
     return json(200, { ok: true });
   }
 
@@ -3033,42 +3006,10 @@ async function handlePut(
       }
     }
 
-    if (isAgentProfileWorkspacePath(cleanPath)) {
-      try {
-        await upsertAgentProfileProjectionFromFile({
-          tenantId,
-          path: cleanPath,
-          content,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return json(400, {
-          ok: false,
-          error: `Agent Profile file saved but projection refresh failed: ${message}`,
-        });
-      }
-    }
-
-    // Subagent-folders U12 — folder→DB projection shim: until U11
-    // retires the DB readers, folder-form INSTRUCTIONS.md writes refresh
-    // the agent_profiles row so flag-off tenants dispatch the edit on
-    // the next turn (the legacy projection above triggers only on
-    // agents/<slug>.md keys).
-    if (isAgentFolderInstructionsPath(cleanPath)) {
-      try {
-        await upsertAgentProfileProjectionFromFolderFile({
-          tenantId,
-          path: cleanPath,
-          content,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return json(400, {
-          ok: false,
-          error: `INSTRUCTIONS.md saved but projection refresh failed: ${message}`,
-        });
-      }
-    }
+    // Subagent-folders U11: the agent_profiles projections (legacy
+    // agents/<slug>.md AND the U12 folder→DB shim) are retired — the
+    // folder files are the source of truth; the render compiles them
+    // into the capabilities manifest directly.
 
     if (isSkillMarkerPath(cleanPath)) {
       const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
@@ -3291,31 +3232,14 @@ async function handleDelete(
   let indexWarning: string | undefined;
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-    if (isAgentProfileWorkspacePath(cleanPath)) {
-      await deleteAgentProfileProjectionForFile({ tenantId, path: cleanPath });
-    }
-    if (isAgentFolderInstructionsPath(cleanPath)) {
-      // U12: deleting the folder's INSTRUCTIONS.md removes the central
-      // projection row — mirroring the legacy-file delete hook.
-      await deleteAgentProfileProjectionFromFolderFile({
-        tenantId,
-        path: cleanPath,
-      });
-    }
+    // Subagent-folders U11: no agent_profiles projection to remove — the
+    // deleted file WAS the profile; the next render drops it from the
+    // capabilities manifest.
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
   } else if (target.kind === "space") {
     if (isSkillMarkerPath(cleanPath)) {
       await refreshSpaceSkillInventory(target);
-    }
-    if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
-      // Mirror the central agents/<slug>.md delete: removing the file
-      // removes the space-local projection row (plan 2026-06-12-002 U7).
-      await deleteSpaceAgentProfileProjectionForFile({
-        tenantId,
-        spaceId: target.spaceId,
-        path: cleanPath,
-      });
     }
   } else if (target.kind === "catalog") {
     // Re-index the affected slug: deleting one file of a multi-file skill

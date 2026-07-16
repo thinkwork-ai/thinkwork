@@ -59,8 +59,6 @@ import {
   knowledgeBases,
   guardrails,
   spaces,
-  agentProfiles,
-  agentProfileSpaceAssignments,
   tenantMcpServers,
   piExtensionAssignments,
   piExtensionSources,
@@ -104,11 +102,7 @@ import {
 import { threadJsonRenderUiEnabledFromAgentConfig } from "./thread-json-render/capability.js";
 import { discoverWorkspaceSkillsFromPaths } from "./skills-tree-walker.js";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
-import {
-  normalizeAgentProfileExecutionControls,
-  type AgentLoopPolicy,
-} from "./agent-profile-loop-policy.js";
-import { listTenantModelCatalogByIds } from "./model-catalog/tenant-catalog.js";
+import { type AgentLoopPolicy } from "./agent-profile-loop-policy.js";
 import { loadTrustedCatalogSkillIds } from "./skill-trust/runtime-gate.js";
 import {
   piExtensionArtifactHash,
@@ -325,12 +319,6 @@ export interface AgentRuntimeConfig {
    * policy filter (the manifest already carries the policy verdict).
    */
   capabilityFolderDispatch: boolean;
-  /**
-   * Subagent-folders U10: manifest/tree is the sub-agent profile truth
-   * for this agent — the payload shrinks to space-local profiles only
-   * and carries agent_profiles_authority: "manifest".
-   */
-  agentProfileManifestAuthority: boolean;
   browserAutomationEnabled: boolean;
   threadJsonRenderUiEnabled: boolean;
   contextEngineEnabled: boolean;
@@ -479,7 +467,6 @@ export async function resolveAgentRuntimeConfig(
       system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
       capability_folder_dispatch: agents.capability_folder_dispatch,
-      agent_profile_manifest_authority: agents.agent_profile_manifest_authority,
       template_id: agents.template_id,
       runtime: agents.runtime,
       model: agents.model,
@@ -943,8 +930,6 @@ export async function resolveAgentRuntimeConfig(
     blockedTools,
     sandboxTemplate: (agent.sandbox as TemplateSandboxConfig | null) ?? null,
     capabilityFolderDispatch: agent.capability_folder_dispatch === true,
-    agentProfileManifestAuthority:
-      agent.agent_profile_manifest_authority === true,
     browserAutomationEnabled,
     threadJsonRenderUiEnabled,
     contextEngineEnabled,
@@ -977,13 +962,10 @@ export async function resolveAgentRuntimeConfig(
   });
 
   const overriddenConfig = applyRuntimeOverrides(resolvedConfig, overrides);
-  overriddenConfig.agentProfilesConfig = await loadAgentProfileRuntimeConfigs({
-    tenantId: opts.tenantId,
-    spaceId: opts.spaceId ?? null,
-    mcpConfigs,
-    logPrefix,
-    diagnostics,
-  });
+  // Subagent-folders U11: `agentProfilesConfig` stays [] — sub-agent
+  // profiles are compiled into the capabilities manifest from workspace
+  // `agents/<slug>/` folders; the legacy `agent_profiles` row loading is
+  // retired. Pi assembles profiles from the pinned manifest.
   const piExtensionAssignments = await loadPiExtensionRuntimeAssignments({
     tenantId: opts.tenantId,
     agentProfileIds: overriddenConfig.agentProfilesConfig.map(
@@ -1141,316 +1123,6 @@ function addExtensionContainerGatePrediction(
         "container will skip at load: no runtime permission provider exists yet (THINK-123)",
     });
   }
-}
-
-/**
- * Loads the tenant's enabled Agent Profiles as runtime configs, filtered to
- * the active Space (space-restricted profiles only ship when their Space is
- * active). Exported so the wakeup dispatch path resolves `agent_profiles`
- * exactly the way the chat path does (plan 2026-06-12-002 U1 parity).
- *
- * Space-local profiles (U7): rows with `source_space_id` set ship only when
- * that Space is the active Space. On slug collision the space-local profile
- * wins while its Space is active — the central profile is dropped for that
- * thread and its id is surfaced as `shadowedCentralProfileId` on the winning
- * config. Central profiles resolve alone everywhere else.
- */
-export async function loadAgentProfileRuntimeConfigs(input: {
-  tenantId: string;
-  spaceId: string | null;
-  mcpConfigs: McpConfig[];
-  logPrefix: string;
-  /**
-   * Opt-in diagnostics collector (U1). When present, the query drops the
-   * `enabled = true` SQL predicate so disabled profiles can be reported with
-   * a `profile_disabled` reason — the in-loop enabled check below still
-   * excludes them from the returned configs, so behavior is unchanged.
-   */
-  diagnostics?: CapabilityDiagnosticsCollector | null;
-}): Promise<AgentProfileRuntimeConfig[]> {
-  const db = getDb();
-  const profileRows = await db
-    .select({
-      id: agentProfiles.id,
-      slug: agentProfiles.slug,
-      name: agentProfiles.name,
-      description: agentProfiles.description,
-      routing_guidance: agentProfiles.routing_guidance,
-      instructions: agentProfiles.instructions,
-      model_id: agentProfiles.model_id,
-      enabled: agentProfiles.enabled,
-      built_in_key: agentProfiles.built_in_key,
-      tool_policy: agentProfiles.tool_policy,
-      skill_policy: agentProfiles.skill_policy,
-      execution_controls: agentProfiles.execution_controls,
-      source_space_id: agentProfiles.source_space_id,
-    })
-    .from(agentProfiles)
-    .where(
-      input.diagnostics
-        ? eq(agentProfiles.tenant_id, input.tenantId)
-        : and(
-            eq(agentProfiles.tenant_id, input.tenantId),
-            eq(agentProfiles.enabled, true),
-          ),
-    );
-
-  if (profileRows.length === 0) return [];
-
-  const profileModelIds = [
-    ...new Set(profileRows.map((profile) => profile.model_id)),
-  ];
-  const availableModelRows = await listTenantModelCatalogByIds(
-    {
-      tenantId: input.tenantId,
-      modelIds: profileModelIds,
-    },
-    { db },
-  );
-  const availableModelIds = new Set(
-    availableModelRows.map((row) => row.modelId),
-  );
-
-  const assignmentRows = await db
-    .select({
-      profile_id: agentProfileSpaceAssignments.profile_id,
-      space_id: agentProfileSpaceAssignments.space_id,
-    })
-    .from(agentProfileSpaceAssignments)
-    .where(eq(agentProfileSpaceAssignments.tenant_id, input.tenantId));
-  const spaceIdsByProfileId = new Map<string, string[]>();
-  for (const row of assignmentRows) {
-    const list = spaceIdsByProfileId.get(row.profile_id) ?? [];
-    list.push(row.space_id);
-    spaceIdsByProfileId.set(row.profile_id, list);
-  }
-
-  const mcpRows = await db
-    .select({
-      id: tenantMcpServers.id,
-      slug: tenantMcpServers.slug,
-      name: tenantMcpServers.name,
-      tools: tenantMcpServers.tools,
-    })
-    .from(tenantMcpServers)
-    .where(
-      and(
-        eq(tenantMcpServers.tenant_id, input.tenantId),
-        eq(tenantMcpServers.status, "approved"),
-        eq(tenantMcpServers.enabled, true),
-      ),
-    );
-  const mcpRowsBySlug = new Map(mcpRows.map((row) => [row.slug, row]));
-  const mcpConfigByName = new Map(
-    input.mcpConfigs.map((cfg) => [cfg.name, cfg]),
-  );
-
-  // U7 shadowing pre-pass: slugs of space-local profiles that will actually
-  // ship for the active Space (model must be available). A central profile
-  // with the same slug is shadowed for this thread.
-  const activeSpaceLocalSlugs = new Set<string>();
-  const eligibleCentralIdBySlug = new Map<string, string>();
-  for (const profile of profileRows) {
-    if (profile.enabled !== true) continue;
-    if (!availableModelIds.has(profile.model_id)) continue;
-    if (profile.source_space_id) {
-      if (input.spaceId && profile.source_space_id === input.spaceId) {
-        activeSpaceLocalSlugs.add(profile.slug);
-      }
-    } else {
-      const assigned = spaceIdsByProfileId.get(profile.id) ?? [];
-      if (
-        assigned.length === 0 ||
-        (input.spaceId && assigned.includes(input.spaceId))
-      ) {
-        eligibleCentralIdBySlug.set(profile.slug, profile.id);
-      }
-    }
-  }
-
-  const configs: AgentProfileRuntimeConfig[] = [];
-  for (const profile of profileRows) {
-    if (profile.enabled !== true) {
-      input.diagnostics?.add({
-        capabilityClass: "agent_profile",
-        capabilityId: profile.slug,
-        displayName: profile.name,
-        reason: "profile_disabled",
-      });
-      continue;
-    }
-    if (!availableModelIds.has(profile.model_id)) {
-      console.warn(
-        `${input.logPrefix} Agent Profile ${profile.slug} skipped: model ${profile.model_id} is not available`,
-      );
-      input.diagnostics?.add({
-        capabilityClass: "agent_profile",
-        capabilityId: profile.slug,
-        displayName: profile.name,
-        reason: "model_unavailable",
-        detail: `model ${profile.model_id} is not in the tenant model catalog`,
-      });
-      continue;
-    }
-    if (profile.source_space_id) {
-      // Space-local profile: ships only while its Space is active.
-      if (!input.spaceId || profile.source_space_id !== input.spaceId) {
-        input.diagnostics?.add({
-          capabilityClass: "agent_profile",
-          capabilityId: profile.slug,
-          displayName: profile.name,
-          reason: "space_mismatch",
-          detail: `space-local profile ships only while its Space (${profile.source_space_id}) is active`,
-        });
-        continue;
-      }
-    } else if (activeSpaceLocalSlugs.has(profile.slug)) {
-      // Central profile shadowed by an active space-local profile (U7).
-      console.warn(
-        `${input.logPrefix} Agent Profile ${profile.slug} (central ${profile.id}) shadowed by space-local profile for space ${input.spaceId}`,
-      );
-      input.diagnostics?.add({
-        capabilityClass: "agent_profile",
-        capabilityId: profile.slug,
-        displayName: profile.name,
-        reason: "shadowed_by_space_local",
-        detail: `central profile shadowed by a space-local profile with the same slug for space ${input.spaceId}`,
-      });
-      continue;
-    }
-    const assignedSpaceIds = [
-      ...new Set(
-        profile.source_space_id
-          ? // Space-local rows are scoped by their origin Space regardless of
-            // assignment-row drift.
-            [
-              profile.source_space_id,
-              ...(spaceIdsByProfileId.get(profile.id) ?? []),
-            ]
-          : (spaceIdsByProfileId.get(profile.id) ?? []),
-      ),
-    ];
-    if (
-      !profile.source_space_id &&
-      assignedSpaceIds.length > 0 &&
-      (!input.spaceId || !assignedSpaceIds.includes(input.spaceId))
-    ) {
-      input.diagnostics?.add({
-        capabilityClass: "agent_profile",
-        capabilityId: profile.slug,
-        displayName: profile.name,
-        reason: "space_mismatch",
-        detail:
-          "profile is space-restricted and the selected Space is not in its assignment list",
-      });
-      continue;
-    }
-
-    const toolPolicy = normalizeRecord(profile.tool_policy);
-    const skillPolicy = normalizeRecord(profile.skill_policy);
-    const executionControls = normalizeAgentProfileExecutionControls(
-      profile.execution_controls,
-    );
-    const builtInTools = normalizeStringArray(toolPolicy.builtInTools);
-    const mcpServerSlugs = normalizeStringArray(toolPolicy.mcpServers);
-    const skillSlugs = normalizeStringArray(skillPolicy.skillSlugs);
-    const mcpServers = mcpServerSlugs
-      .map((slug) => {
-        const row = mcpRowsBySlug.get(slug);
-        const runtimeConfig = mcpConfigByName.get(slug);
-        if (!row || !runtimeConfig) {
-          input.diagnostics?.add({
-            capabilityClass: "mcp_server",
-            capabilityId: slug,
-            reason: "mcp_server_not_resolved",
-            detail: `agent profile ${profile.slug} tool_policy names this server but it ${
-              !row
-                ? "is not an approved+enabled tenant MCP server"
-                : "did not resolve a runtime MCP config"
-            }`,
-          });
-          return null;
-        }
-        const availableTools = normalizeMcpToolNames(
-          runtimeConfig.availableTools ?? row.tools,
-        );
-        const allowedTools =
-          runtimeConfig.tools && runtimeConfig.tools.length > 0
-            ? normalizeStringArray(runtimeConfig.tools)
-            : availableTools;
-        return {
-          id: row.id,
-          slug: row.slug,
-          name: row.name,
-          availableTools,
-          allowedTools,
-        };
-      })
-      .filter((server): server is AgentProfileRuntimeMcpServer =>
-        Boolean(server),
-      );
-    const mcpToolAllowlist = Object.fromEntries(
-      mcpServers.map((server) => [server.slug, server.allowedTools]),
-    );
-
-    // THINK-229 U4 (KTD6): when a profile carries the analyst broker and
-    // the dispatch attached the signed sidecar budget block (post-flip
-    // only), the per-run cap is overridden FROM that block — the in-loop
-    // counter and the broker's policyClaims then draw from one signed
-    // source instead of a profile-config value that can drift.
-    let effectiveExecutionControls = executionControls;
-    for (const slug of mcpServerSlugs) {
-      const runtimeConfig = mcpConfigByName.get(slug);
-      const perRun = runtimeConfig?.sidecarBudgets?.maxQueriesPerRun;
-      // THINK-232: same signed-source-wins pattern for the per-run dollar
-      // budget — when the sidecar carries costBudgetUsd it overrides the
-      // profile-config value the delegation loop enforces.
-      const costBudgetUsd = runtimeConfig?.sidecarBudgets?.costBudgetUsd;
-      const perRunValid =
-        typeof perRun === "number" && Number.isFinite(perRun) && perRun > 0;
-      const costBudgetValid =
-        typeof costBudgetUsd === "number" &&
-        Number.isFinite(costBudgetUsd) &&
-        costBudgetUsd > 0;
-      if (perRunValid || costBudgetValid) {
-        effectiveExecutionControls = {
-          ...effectiveExecutionControls,
-          ...(perRunValid ? { maxQueriesPerRun: perRun } : {}),
-          ...(costBudgetValid ? { costBudgetUsd } : {}),
-        };
-        break;
-      }
-    }
-
-    configs.push({
-      id: profile.id,
-      slug: profile.slug,
-      name: profile.name,
-      description: profile.description ?? null,
-      routingGuidance: profile.routing_guidance ?? null,
-      instructions: profile.instructions,
-      modelId: profile.model_id,
-      builtInKey: profile.built_in_key ?? null,
-      enabled: true,
-      availability: {
-        scope: assignedSpaceIds.length > 0 ? "space_restricted" : "global",
-        spaceIds: assignedSpaceIds,
-      },
-      sourceSpaceId: profile.source_space_id ?? null,
-      shadowedCentralProfileId: profile.source_space_id
-        ? (eligibleCentralIdBySlug.get(profile.slug) ?? null)
-        : null,
-      builtInTools,
-      mcpServers,
-      mcpToolAllowlist,
-      toolPolicyMcpSlugs: mcpServerSlugs,
-      skillSlugs,
-      piExtensions: [],
-      executionControls: effectiveExecutionControls,
-    });
-  }
-
-  return configs;
 }
 
 function normalizeRecord(value: unknown): Record<string, unknown> {

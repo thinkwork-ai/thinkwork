@@ -183,10 +183,6 @@ vi.mock("../../../lib/analyst/register-data-source.js", () => ({
     );
     return { id: "srv-9" };
   },
-  appendSourceToAnalystProfile: async () => {
-    h.calls.push("profile");
-    return true;
-  },
 }));
 
 const ctx = { auth: { email: "op@example.com" } } as never;
@@ -343,7 +339,6 @@ describe("registerInternalAnalystDataSource (THINK-239)", () => {
       "render",
       "s3",
       "row:kind=internal,cluster=thinkwork-dev-aurora,schema=public",
-      "profile",
       "materialize:signedBy=operator:op@example.com",
     ]);
     expect(result).toEqual({

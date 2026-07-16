@@ -1,29 +1,21 @@
 import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { resolveTenantPlatformAgent } from "./agents/tenant-platform-agent.js";
-import {
-  agentProfileSpaceAssignments,
-  agentProfiles,
-  and,
-  db,
-  eq,
-  isNull,
-  modelCatalog,
-  spaces,
-  tenants,
-} from "../graphql/utils.js";
+import { db, eq, tenants } from "../graphql/utils.js";
 import { normalizeExecutionControlsForStorage } from "./agent-profile-loop-policy.js";
-import { DEFAULT_PROFILE_MODEL_ID } from "../graphql/resolvers/agent-profiles/built-in-agent-profiles.js";
 import {
   agentFolderInstructionsPath,
-  agentFolderSlugFromInstructionsPath,
+  applyAgentFolderSidecar,
   parseAgentFolderInstructions,
   serializeAgentFolderInstructions,
+  type AgentFolderConfig,
   type AgentFolderExecutionInput,
 } from "./agent-folder-format.js";
 
@@ -192,174 +184,6 @@ export function parseAgentProfileFile(input: {
   };
 }
 
-export async function upsertAgentProfileProjectionFromFile(input: {
-  tenantId: string;
-  path: string;
-  content: string;
-}) {
-  const parsed = parseAgentProfileFile(input);
-  if (!parsed) return null;
-  await assertProfileModelAvailable(parsed.modelId);
-  const spaceIds = await resolveProfileSpaceIds(
-    input.tenantId,
-    parsed.spaceRefs,
-  );
-  const [existing] = await db
-    .select()
-    .from(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, input.tenantId),
-        eq(agentProfiles.slug, parsed.slug),
-        // Central projection only ever touches central rows — a space-local
-        // profile with the same slug is a distinct row (U7 shadowing).
-        isNull(agentProfiles.source_space_id),
-      ),
-    );
-
-  const values = {
-    tenant_id: input.tenantId,
-    slug: parsed.slug,
-    name: parsed.name,
-    description: parsed.description,
-    routing_guidance: parsed.routingGuidance,
-    instructions: parsed.instructions,
-    model_id: parsed.modelId,
-    enabled: parsed.enabled,
-    built_in_key: existing?.built_in_key ?? parsed.builtInKey,
-    tool_policy: parsed.toolPolicy,
-    skill_policy: parsed.skillPolicy,
-    execution_controls: parsed.executionControls,
-    updated_at: new Date(),
-  };
-
-  const [row] = existing
-    ? await db
-        .update(agentProfiles)
-        .set(values)
-        .where(eq(agentProfiles.id, existing.id))
-        .returning()
-    : await db.insert(agentProfiles).values(values).returning();
-
-  await replaceProjectionSpaceAssignments({
-    tenantId: input.tenantId,
-    profileId: row.id,
-    spaceIds,
-  });
-
-  return row;
-}
-
-/**
- * Projects a Space source `agents/<slug>.md` put into a space-local
- * agent_profiles row (plan 2026-06-12-002 U7). The row is scoped to the
- * Space via `source_space_id` and assigned to exactly that Space through
- * agent_profile_space_assignments, so the existing space-availability
- * filtering in loadAgentProfileRuntimeConfigs / listRoutableAgentProfiles
- * picks it up without extra wiring. Frontmatter `spaces:` refs are ignored —
- * folder placement is the scope. `builtInKey` is forced null: built-in
- * identity belongs to central profiles only.
- */
-export async function upsertSpaceAgentProfileProjectionFromFile(input: {
-  tenantId: string;
-  spaceId: string;
-  path: string;
-  content: string;
-}) {
-  const parsed = parseAgentProfileFile({
-    path: input.path,
-    content: input.content,
-  });
-  if (!parsed) return null;
-  await assertProfileModelAvailable(parsed.modelId);
-
-  const [existing] = await db
-    .select()
-    .from(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, input.tenantId),
-        eq(agentProfiles.slug, parsed.slug),
-        eq(agentProfiles.source_space_id, input.spaceId),
-      ),
-    );
-
-  const values = {
-    tenant_id: input.tenantId,
-    slug: parsed.slug,
-    name: parsed.name,
-    description: parsed.description,
-    routing_guidance: parsed.routingGuidance,
-    instructions: parsed.instructions,
-    model_id: parsed.modelId,
-    enabled: parsed.enabled,
-    built_in_key: null,
-    source_space_id: input.spaceId,
-    tool_policy: parsed.toolPolicy,
-    skill_policy: parsed.skillPolicy,
-    execution_controls: parsed.executionControls,
-    updated_at: new Date(),
-  };
-
-  const [row] = existing
-    ? await db
-        .update(agentProfiles)
-        .set(values)
-        .where(eq(agentProfiles.id, existing.id))
-        .returning()
-    : await db.insert(agentProfiles).values(values).returning();
-
-  await replaceProjectionSpaceAssignments({
-    tenantId: input.tenantId,
-    profileId: row.id,
-    spaceIds: [input.spaceId],
-  });
-
-  return row;
-}
-
-export async function deleteAgentProfileProjectionForFile(input: {
-  tenantId: string;
-  path: string;
-}) {
-  const slug = agentProfileSlugFromWorkspacePath(input.path);
-  if (!slug) return false;
-  await db
-    .delete(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, input.tenantId),
-        eq(agentProfiles.slug, slug),
-        isNull(agentProfiles.source_space_id),
-      ),
-    );
-  return true;
-}
-
-/**
- * Removes the space-local projection row for a deleted Space source
- * `agents/<slug>.md` file. Mirrors the central delete (hard delete — the
- * file is the source of truth; assignments cascade with the row).
- */
-export async function deleteSpaceAgentProfileProjectionForFile(input: {
-  tenantId: string;
-  spaceId: string;
-  path: string;
-}) {
-  const slug = spaceAgentProfileSlugFromWorkspacePath(input.path);
-  if (!slug) return false;
-  await db
-    .delete(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, input.tenantId),
-        eq(agentProfiles.slug, slug),
-        eq(agentProfiles.source_space_id, input.spaceId),
-      ),
-    );
-  return true;
-}
-
 export async function writeAgentProfileFileForTenant(input: {
   tenantId: string;
   slug: string;
@@ -505,88 +329,143 @@ export async function deleteAgentProfileFolderInstructionsForTenant(input: {
   return true;
 }
 
-/**
- * Folder→DB projection shim (plan U12): until U11 retires the DB
- * readers, folder-form INSTRUCTIONS.md writes refresh the central
- * `agent_profiles` row so flag-off tenants (payload-authoritative
- * dispatch) see edits immediately. Strict parse; a validation error
- * throws so the workspace-files caller surfaces it to the operator.
- * Grants are NOT projected here — skillSlugs/mcpServers stay owned by
- * the grant mutations / child grant folders.
- */
-export async function upsertAgentProfileProjectionFromFolderFile(input: {
-  tenantId: string;
-  path: string;
-  content: string;
-}) {
-  const slug = agentFolderSlugFromInstructionsPath(input.path);
-  if (!slug) return null;
-  const parsed = parseAgentFolderInstructions(input.content, input.path);
-  if (!parsed.valid) {
-    throw new Error(
-      parsed.errors[0]?.message ??
-        `Agent folder file ${input.path} failed validation`,
-    );
-  }
-  const config = parsed.parsed;
-  if (config.model) await assertProfileModelAvailable(config.model);
+// ---------------------------------------------------------------------------
+// Workspace agent-folder index (subagent-folders U11).
+//
+// With `agent_profiles` retired as a mirror store, profile readers resolve
+// sub-agents from the workspace tree itself: presence = an
+// `agents/<slug>/INSTRUCTIONS.md` folder file (strict U3 format), state =
+// the optional `.assignment.json` sidecar. Mirrors the workspace skill
+// index pattern (`lib/skills/workspace-skill-index.ts`): all reads fail
+// soft — an unresolvable bucket/prefix returns null so callers pick their
+// own degraded behavior.
+// ---------------------------------------------------------------------------
 
-  const [existing] = await db
-    .select()
-    .from(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, input.tenantId),
-        eq(agentProfiles.slug, slug),
-        isNull(agentProfiles.source_space_id),
-      ),
-    );
-
-  const currentToolPolicy = asRecord(existing?.tool_policy);
-  const values = {
-    tenant_id: input.tenantId,
-    slug,
-    name: existing?.name ?? titleize(slug),
-    description: config.description,
-    routing_guidance: null,
-    instructions: config.instructions,
-    model_id: config.model ?? existing?.model_id ?? DEFAULT_PROFILE_MODEL_ID,
-    enabled: config.enabled,
-    built_in_key: existing?.built_in_key ?? null,
-    tool_policy: {
-      ...currentToolPolicy,
-      builtInTools: config.builtInTools ?? [],
-    },
-    skill_policy: existing?.skill_policy ?? { skillSlugs: [] },
-    execution_controls: normalizeExecutionControlsForStorage(config.execution),
-    updated_at: new Date(),
-  };
-
-  const [row] = existing
-    ? await db
-        .update(agentProfiles)
-        .set(values)
-        .where(eq(agentProfiles.id, existing.id))
-        .returning()
-    : await db.insert(agentProfiles).values(values).returning();
-  return row;
+export interface WorkspaceAgentFolderProfile {
+  slug: string;
+  config: AgentFolderConfig;
+  /** S3 LastModified of INSTRUCTIONS.md; null when unknown. */
+  updatedAt: Date | null;
 }
 
-export async function deleteAgentProfileProjectionFromFolderFile(input: {
-  tenantId: string;
-  path: string;
-}) {
-  const slug = agentFolderSlugFromInstructionsPath(input.path);
-  if (!slug) return;
-  await db
-    .delete(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, input.tenantId),
-        eq(agentProfiles.slug, slug),
-        isNull(agentProfiles.source_space_id),
-      ),
+const AGENT_FOLDER_INSTRUCTIONS_KEY_RE = /^agents\/([^/]+)\/INSTRUCTIONS\.md$/;
+
+/**
+ * List the tenant's central sub-agent folder profiles. Invalid folder
+ * files (strict-parse failures) are skipped with a warning — the render
+ * path reports them as withheld manifest entries; the listing surface
+ * only shows admissible profiles.
+ */
+export async function listAgentFolderProfilesForTenant(
+  tenantId: string,
+): Promise<WorkspaceAgentFolderProfile[] | null> {
+  const workspaceBucket = workspaceBucketOrNull();
+  if (!workspaceBucket) return null;
+  const target = await resolveAgentWorkspaceTarget(tenantId);
+  if (!target) return null;
+
+  const listing: Array<{ slug: string; lastModified: Date | null }> = [];
+  let continuationToken: string | undefined;
+  do {
+    const resp = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: workspaceBucket,
+        Prefix: `${target.prefix}agents/`,
+        ContinuationToken: continuationToken,
+      }),
     );
+    for (const obj of resp.Contents ?? []) {
+      if (!obj.Key?.startsWith(target.prefix)) continue;
+      const rel = obj.Key.slice(target.prefix.length);
+      const slug = rel.match(AGENT_FOLDER_INSTRUCTIONS_KEY_RE)?.[1];
+      if (slug) listing.push({ slug, lastModified: obj.LastModified ?? null });
+    }
+    continuationToken = resp.IsTruncated
+      ? resp.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  const profiles: WorkspaceAgentFolderProfile[] = [];
+  for (const entry of listing.sort((a, b) => a.slug.localeCompare(b.slug))) {
+    const profile = await readAgentFolderProfile(
+      workspaceBucket,
+      target.prefix,
+      entry.slug,
+      entry.lastModified,
+    );
+    if (profile) profiles.push(profile);
+  }
+  return profiles;
+}
+
+/** Resolve one sub-agent folder profile; null = absent or invalid. */
+export async function getAgentFolderProfileForTenant(
+  tenantId: string,
+  slug: string,
+): Promise<WorkspaceAgentFolderProfile | null> {
+  const workspaceBucket = workspaceBucketOrNull();
+  if (!workspaceBucket) return null;
+  const target = await resolveAgentWorkspaceTarget(tenantId);
+  if (!target) return null;
+  return readAgentFolderProfile(workspaceBucket, target.prefix, slug, null);
+}
+
+async function readAgentFolderProfile(
+  bucket: string,
+  prefix: string,
+  slug: string,
+  lastModified: Date | null,
+): Promise<WorkspaceAgentFolderProfile | null> {
+  const path = agentFolderInstructionsPath(slug);
+  const content = await getObjectText(bucket, `${prefix}${path}`);
+  if (content === null) return null;
+  const parsed = parseAgentFolderInstructions(content, path);
+  if (!parsed.valid) {
+    console.warn(
+      `[agent-folder-index] skipping invalid ${path}: ${parsed.errors[0]?.message}`,
+    );
+    return null;
+  }
+  let config = parsed.parsed;
+  const sidecarRaw = await getObjectText(
+    bucket,
+    `${prefix}agents/${slug}/.assignment.json`,
+  );
+  if (sidecarRaw !== null) {
+    let sidecar: { enabled?: boolean; policy?: Record<string, unknown> };
+    try {
+      sidecar = JSON.parse(sidecarRaw) as typeof sidecar;
+    } catch {
+      sidecar = {};
+    }
+    const overlaid = applyAgentFolderSidecar(config, sidecar, path);
+    if (overlaid.valid) config = overlaid.parsed;
+  }
+  return { slug, config, updatedAt: lastModified };
+}
+
+async function getObjectText(
+  bucket: string,
+  key: string,
+): Promise<string | null> {
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    return (await resp.Body?.transformToString()) ?? null;
+  } catch (err) {
+    const name = (err as { name?: string }).name;
+    if (name === "NoSuchKey" || name === "NotFound") return null;
+    throw err;
+  }
+}
+
+function workspaceBucketOrNull(): string | null {
+  try {
+    return getConfig("WORKSPACE_BUCKET") || null;
+  } catch {
+    return null;
+  }
 }
 
 async function resolveAgentWorkspaceTarget(
@@ -600,61 +479,6 @@ async function resolveAgentWorkspaceTarget(
   if (!tenant?.slug || !agent.slug) return null;
   const agentSlug = agent.workspace_folder_name ?? agent.slug;
   return { prefix: `tenants/${tenant.slug}/agents/${agentSlug}/` };
-}
-
-async function assertProfileModelAvailable(modelId: string): Promise<void> {
-  const [row] = await db
-    .select({ modelId: modelCatalog.model_id })
-    .from(modelCatalog)
-    .where(
-      and(
-        eq(modelCatalog.model_id, modelId),
-        eq(modelCatalog.is_available, true),
-      ),
-    );
-  if (!row) throw new Error(`Model is not available: ${modelId}`);
-}
-
-async function resolveProfileSpaceIds(
-  tenantId: string,
-  refs: readonly string[],
-): Promise<string[]> {
-  if (refs.length === 0) return [];
-  const rows = await db
-    .select({ id: spaces.id, slug: spaces.slug, name: spaces.name })
-    .from(spaces)
-    .where(eq(spaces.tenant_id, tenantId));
-  const byRef = new Map<string, string>();
-  for (const row of rows) {
-    byRef.set(row.id, row.id);
-    if (row.slug) byRef.set(row.slug, row.id);
-    if (row.name) byRef.set(row.name, row.id);
-  }
-  const ids = refs.map((ref) => byRef.get(ref) ?? ref);
-  const valid = new Set(rows.map((row) => row.id));
-  const missing = ids.filter((id) => !valid.has(id));
-  if (missing.length > 0) {
-    throw new Error("One or more Spaces do not belong to this tenant");
-  }
-  return Array.from(new Set(ids));
-}
-
-async function replaceProjectionSpaceAssignments(input: {
-  tenantId: string;
-  profileId: string;
-  spaceIds: readonly string[];
-}) {
-  await db
-    .delete(agentProfileSpaceAssignments)
-    .where(eq(agentProfileSpaceAssignments.profile_id, input.profileId));
-  if (input.spaceIds.length === 0) return;
-  await db.insert(agentProfileSpaceAssignments).values(
-    input.spaceIds.map((spaceId) => ({
-      tenant_id: input.tenantId,
-      profile_id: input.profileId,
-      space_id: spaceId,
-    })),
-  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

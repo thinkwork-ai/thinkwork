@@ -45,7 +45,6 @@ import {
 } from "../lib/sandbox-preflight.js";
 import {
   AgentNotFoundError,
-  applySidecarBudgetOverrides,
   resolveAgentRuntimeConfig,
   tenantCatalogSkillS3Key,
 } from "../lib/resolve-agent-runtime-config.js";
@@ -95,10 +94,7 @@ import {
   type RuntimeGoalMode,
 } from "../lib/goal-mode.js";
 import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
-import {
-  applyAgentProfileManifestAuthority,
-  buildAgentDispatchControlFields,
-} from "../lib/agent-dispatch-payload.js";
+import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
@@ -1349,15 +1345,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           withheldNotices: withheldConnections,
         },
       );
-      // THINK-232/KTD6: profiles above were resolved against ZERO MCP
-      // configs (the folder-dispatch deferral), so the in-resolver
-      // signed-sidecar budget override never fired — re-apply it against
-      // the rebuilt configs so maxQueriesPerRun/costBudgetUsd from the
-      // signed sidecar actually reach the delegation loop.
-      runtimeConfig.agentProfilesConfig = applySidecarBudgetOverrides(
-        runtimeConfig.agentProfilesConfig,
-        mcpConfigs,
-      );
     }
 
     const isEffectivelyBlocked = (toolName: string): boolean =>
@@ -1389,15 +1376,13 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // blocklist (KD4). Kept SEPARATE from `effectiveSkillsConfig` so the runtime
     // can both load uninstalled pins and emphasize all of them, without mutating
     // the resolved/installed set.
+    // Subagent-folders U11: profile skill pins are retired — sub-agent
+    // skill grants are child grant folders resolved from the manifest;
+    // only message-level pins remain on this path.
     const messagePinnedSkillSlugs = Array.isArray(event.pinnedSkills)
       ? event.pinnedSkills
       : [];
-    const profilePinnedSkillSlugs = runtimeConfig.agentProfilesConfig.flatMap(
-      (profile) => profile.skillSlugs,
-    );
-    const pinnedSkillSlugs = [
-      ...new Set([...messagePinnedSkillSlugs, ...profilePinnedSkillSlugs]),
-    ];
+    const pinnedSkillSlugs = [...new Set(messagePinnedSkillSlugs)];
     const trustedPinnedSkillIds = await loadTrustedCatalogSkillIds({
       tenantId,
       skillIds: pinnedSkillSlugs,
@@ -1411,7 +1396,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     });
     if (pinnedSkillSlugs.length > 0) {
       console.log(
-        `[chat-agent-invoke] pinned skills requested=${pinnedSkillSlugs.length} message=${messagePinnedSkillSlugs.length} profiles=${profilePinnedSkillSlugs.length} allowed=${pinnedSkillsConfig.length}`,
+        `[chat-agent-invoke] pinned skills requested=${pinnedSkillSlugs.length} message=${messagePinnedSkillSlugs.length} allowed=${pinnedSkillsConfig.length}`,
       );
     }
     const effectiveMcpPolicy = renderedWorkspace.rendered
@@ -1676,19 +1661,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         threadId,
         threadTurnId: turnId,
         withheldConnections,
-        // Subagent-folders U10: flag-on agents ship space-local profiles
-        // only, marked with the manifest authority field (requires a pinned
-        // manifest — folder dispatch on and rendered).
-        ...applyAgentProfileManifestAuthority({
-          manifestAuthority:
-            runtimeConfig.agentProfileManifestAuthority &&
-            runtimeConfig.capabilityFolderDispatch &&
-            Boolean(
-              renderedWorkspace.rendered &&
-              renderedWorkspace.capabilities?.fingerprint,
-            ),
-          profiles: runtimeConfig.agentProfilesConfig,
-        }),
         piExtensions: runtimeConfig.piExtensions,
         modelRoutingPolicy,
         approvedModelIds,

@@ -1,8 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-  agentProfileSpaceAssignments,
-  agentProfiles,
   agents,
   spaceMembers,
   tenantMembers,
@@ -10,6 +8,10 @@ import {
   threads,
   users,
 } from "@thinkwork/database-pg/schema";
+import {
+  listAgentFolderProfilesForTenant,
+  type WorkspaceAgentFolderProfile,
+} from "../agent-profile-workspace-files.js";
 import type { MentionTarget } from "./parse-message-mentions.js";
 
 export const DEFAULT_AGENT_MENTION_ALIASES = ["agent", "think"] as const;
@@ -377,6 +379,14 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
     return [...byKey.values()].filter((target) => target.targetId);
   }
 
+  /**
+   * Subagent-folders U11: mention targets come from the workspace
+   * agent-folder index (`agents/<slug>/INSTRUCTIONS.md`), not
+   * `agent_profiles` rows. Folder profiles are tenant-global (space-
+   * scoped sub-agents are a future folder-based arc), so no space
+   * filtering applies; targetId is the folder slug. Best-effort — an
+   * unresolvable workspace adds no profile targets.
+   */
   private async addAgentProfileTargets(
     byKey: Map<string, ThreadMentionTarget>,
     input: {
@@ -385,64 +395,26 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       includeAllProfiles?: boolean;
     },
   ) {
-    const profileRows = await this.db
-      .select({
-        profileId: agentProfiles.id,
-        slug: agentProfiles.slug,
-        name: agentProfiles.name,
-        description: agentProfiles.description,
-        routingGuidance: agentProfiles.routing_guidance,
-        sourceSpaceId: agentProfiles.source_space_id,
-      })
-      .from(agentProfiles)
-      .where(
-        and(
-          eq(agentProfiles.tenant_id, input.tenantId),
-          eq(agentProfiles.enabled, true),
-        ),
+    let profiles: WorkspaceAgentFolderProfile[] | null = null;
+    try {
+      profiles = await listAgentFolderProfilesForTenant(input.tenantId);
+    } catch (err) {
+      console.warn(
+        "[thread-mention-targets] agent-folder index unavailable:",
+        err,
       );
-    if (profileRows.length === 0) return;
-
-    const assignmentRows = await this.db
-      .select({
-        profileId: agentProfileSpaceAssignments.profile_id,
-        spaceId: agentProfileSpaceAssignments.space_id,
-      })
-      .from(agentProfileSpaceAssignments)
-      .where(eq(agentProfileSpaceAssignments.tenant_id, input.tenantId));
-    const assignments = new Map<string, Set<string>>();
-    for (const row of assignmentRows) {
-      const existing = assignments.get(row.profileId) ?? new Set<string>();
-      existing.add(row.spaceId);
-      assignments.set(row.profileId, existing);
     }
-
-    const eligibleRows = profileRows.filter((row) => {
-      const spacesForProfile = assignments.get(row.profileId);
-      return (
-        input.includeAllProfiles ||
-        !spacesForProfile ||
-        spacesForProfile.size === 0 ||
-        (input.spaceId ? spacesForProfile.has(input.spaceId) : false)
-      );
-    });
-    // A space-local profile shadows a same-slug central profile while its
-    // Space is active (mirrors loadAgentProfileRuntimeConfigs).
-    const shadowedSlugs = new Set(
-      eligibleRows
-        .filter((row) => input.spaceId && row.sourceSpaceId === input.spaceId)
-        .map((row) => row.slug),
-    );
-    for (const row of eligibleRows) {
-      if (row.sourceSpaceId === null && shadowedSlugs.has(row.slug)) continue;
+    for (const profile of profiles ?? []) {
+      if (!profile.config.enabled) continue;
+      const name = titleizeSlug(profile.slug);
       addTarget(byKey, {
-        id: `agent_profile:${row.profileId}`,
+        id: `agent_profile:${profile.slug}`,
         targetType: "agent_profile",
-        targetId: row.profileId,
-        displayName: row.name,
-        aliases: [row.name, row.slug].filter(isString),
+        targetId: profile.slug,
+        displayName: name,
+        aliases: [name, profile.slug].filter(isString),
         role: "Agent Profile",
-        description: row.description ?? row.routingGuidance,
+        description: profile.config.description,
       });
     }
   }
@@ -476,7 +448,6 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       role: agent.role,
     });
   }
-
 }
 
 function targetFromRow(row: {
@@ -577,6 +548,14 @@ export function markDefaultAgentTarget(
       ...(target.aliases ?? []),
     ]),
   });
+}
+
+function titleizeSlug(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function isString(value: unknown): value is string {

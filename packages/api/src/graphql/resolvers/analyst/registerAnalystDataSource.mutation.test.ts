@@ -129,10 +129,6 @@ vi.mock("../../../lib/analyst/register-data-source.js", () => ({
     h.calls.push(`row:kind=${opts.source?.kind}`);
     return { id: "srv-9" };
   },
-  appendSourceToAnalystProfile: async () => {
-    h.calls.push("profile");
-    return true;
-  },
 }));
 
 const ctx = { auth: { email: "op@example.com" } } as never;
@@ -260,7 +256,6 @@ describe("registerAnalystDataSource (THINK-239)", () => {
       "render",
       "s3",
       "row:kind=external",
-      "profile",
       "materialize:signedBy=operator:op@example.com",
     ]);
     expect(result).toEqual({

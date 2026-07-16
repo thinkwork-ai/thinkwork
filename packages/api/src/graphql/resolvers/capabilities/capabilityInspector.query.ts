@@ -36,7 +36,6 @@ import {
   agents,
   spaces,
   users,
-  agentProfiles,
   skillCatalog,
   tenantMcpServers,
   resolvedCapabilityManifests,
@@ -66,6 +65,17 @@ import { spaceTriggerServiceIdentity } from "../../../lib/workspace-renderer/spa
 import type { EffectiveWorkspacePolicy } from "../../../lib/workspace-renderer/effective-policy-composer.js";
 import { getConfig } from "@thinkwork/runtime-config";
 import { projectCapabilityOperationItems } from "./capabilityInspectorOperations.js";
+import { getAgentFolderProfileForTenant } from "../../../lib/agent-profile-workspace-files.js";
+import { resolveCurrentCapabilitiesManifest } from "../../../lib/capabilities/current-manifest.js";
+import type { CapabilitiesManifest } from "../../../lib/capabilities/manifest-compile.js";
+
+function titleizeProfileSlug(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 const LOG_PREFIX = "[capability-inspector]";
 
@@ -389,24 +399,23 @@ export async function capabilityInspector(
     spaceRow = space;
   }
 
+  // Subagent-folders U11: agentProfileId is the workspace agent-folder
+  // slug — the profile identity comes from the folder index, and the
+  // effective/withheld state from the compiled capabilities manifest
+  // (resolved after the render below).
   let selectedProfile: { id: string; slug: string; name: string } | null = null;
   if (args.agentProfileId) {
-    const [profile] = await db
-      .select({
-        id: agentProfiles.id,
-        slug: agentProfiles.slug,
-        name: agentProfiles.name,
-      })
-      .from(agentProfiles)
-      .where(
-        and(
-          eq(agentProfiles.id, args.agentProfileId),
-          eq(agentProfiles.tenant_id, args.tenantId),
-        ),
-      )
-      .limit(1);
-    if (!profile) return invalid("agent profile not found in tenant");
-    selectedProfile = profile;
+    const slug = args.agentProfileId.trim();
+    const folderProfile = await getAgentFolderProfileForTenant(
+      args.tenantId,
+      slug,
+    );
+    if (!folderProfile) return invalid("agent profile not found in tenant");
+    selectedProfile = {
+      id: slug,
+      slug,
+      name: titleizeProfileSlug(slug),
+    };
   }
 
   if (perspectiveUserId) {
@@ -451,30 +460,12 @@ export async function capabilityInspector(
   }
   const diagnostics = config.capabilityDiagnostics ?? [];
 
-  // Selected profile must be visible in the resolution (active or dropped
-  // with a reason). A profile that is neither — e.g. assigned to a different
-  // Space than the selected one — is an invalid selection (KTD-4).
-  const activeProfile = selectedProfile
-    ? (config.agentProfilesConfig.find(
-        (profile) => profile.id === selectedProfile.id,
-      ) ?? null)
-    : null;
-  const selectedProfileDrops = selectedProfile
-    ? diagnostics.filter(
-        (drop) =>
-          drop.capabilityClass === "agent_profile" &&
-          drop.capabilityId === selectedProfile.slug,
-      )
-    : [];
-  if (selectedProfile && !activeProfile && selectedProfileDrops.length === 0) {
-    return invalid(
-      "agent profile is not part of this selection's resolution (is it assigned to the selected Space?)",
-    );
-  }
-
-  // ── Renderer half (U2 seam): effective TOOLS.md policy, zero writes.
-  // Failures degrade to a policy-less view rather than failing inspection.
+  // ── Renderer half (U2 seam): effective TOOLS.md policy + the compiled
+  // capabilities manifest (subagent-folders U11 — agent-class entries are
+  // the sub-agent profile truth), zero writes. Failures degrade to a
+  // policy-less view rather than failing inspection.
   let effectivePolicy: EffectiveWorkspacePolicy | null = null;
+  let manifest: CapabilitiesManifest | null = null;
   if (args.spaceId) {
     try {
       const rendered = await renderWorkspaceTuple(
@@ -494,6 +485,7 @@ export async function capabilityInspector(
         { persist: false },
       );
       effectivePolicy = rendered.effectivePolicy;
+      manifest = rendered.capabilities?.manifest ?? null;
     } catch (err) {
       console.warn(`${LOG_PREFIX} read-only render unavailable:`, err);
       diagnostics.push({
@@ -503,7 +495,38 @@ export async function capabilityInspector(
         detail: `workspace policy unavailable: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
+  } else {
+    // No Space selected: resolve the agent's current manifest through the
+    // default-Space read-only render (same resolution the thread-less
+    // dispatchers use). Best-effort — profile rows degrade to the folder
+    // identity when unavailable.
+    try {
+      manifest =
+        (await resolveCurrentCapabilitiesManifest({
+          tenantId: args.tenantId,
+          agentId,
+          userId: perspectiveUserId,
+          logPrefix: LOG_PREFIX,
+        })) ?? null;
+    } catch (err) {
+      console.warn(`${LOG_PREFIX} current-manifest resolution failed:`, err);
+    }
   }
+
+  // Selected profile state from the manifest: an active `class: "agent"`
+  // entry is the granted subset; a withheld entry renders its reason.
+  const activeProfile = selectedProfile
+    ? (manifest?.active.find(
+        (entry) =>
+          entry.class === "agent" && entry.slug === selectedProfile.slug,
+      ) ?? null)
+    : null;
+  const withheldProfile = selectedProfile
+    ? (manifest?.withheld.find(
+        (entry) =>
+          entry.class === "agent" && entry.slug === selectedProfile.slug,
+      ) ?? null)
+    : null;
 
   // ── Plugin gate: same module, same fail-closed requester semantics both
   // dispatch paths use.
@@ -583,77 +606,71 @@ export async function capabilityInspector(
     return "agent: workspace folder";
   };
 
-  if (activeProfile) {
-    // Profile-scoped view: the selected profile's granted subset.
-    const profileLabel = `agent profile ${activeProfile.slug}`;
-    const resolvedSkillIds = new Set(
-      config.skillsConfig.map((skill) => skill.skillId),
-    );
-    for (const tool of activeProfile.builtInTools) {
+  if (selectedProfile && activeProfile) {
+    // Profile-scoped view (subagent-folders U11): the manifest agent
+    // entry's granted subset — built-in tool surface config plus the
+    // resolved child grant folders.
+    const profileLabel = `agent profile ${selectedProfile.slug}`;
+    for (const tool of activeProfile.builtInTools ?? []) {
       push({
         capabilityClass: "builtin_tool",
         capabilityId: tool,
         active: true,
-        provenance: `${profileLabel}: tool_policy`,
+        provenance: `${profileLabel}: builtInTools`,
       });
     }
-    for (const server of activeProfile.mcpServers) {
-      push({
-        capabilityClass: "mcp_server",
-        capabilityId: server.slug,
-        displayName: server.name,
-        active: true,
-        provenance: `${profileLabel}: tool_policy`,
-        detail:
-          server.allowedTools.length < server.availableTools.length
-            ? `allowed tools: ${server.allowedTools.join(", ")}`
-            : null,
-      });
+    for (const grant of activeProfile.grants ?? []) {
+      if (grant.class === "skill") {
+        push({
+          capabilityClass: "skill",
+          capabilityId: grant.slug,
+          active: true,
+          provenance: `${profileLabel}: skills/${grant.slug}/ grant folder`,
+        });
+      } else {
+        push({
+          capabilityClass: "mcp_server",
+          capabilityId: grant.slug,
+          active: true,
+          provenance: `${profileLabel}: connectors/${grant.slug}/ grant folder`,
+          detail:
+            grant.operations && grant.operations.length > 0
+              ? `operations: ${grant.operations.join(", ")}`
+              : null,
+        });
+      }
     }
-    for (const slug of activeProfile.skillSlugs) {
-      const available = resolvedSkillIds.has(slug);
+    for (const withheldGrant of activeProfile.withheldGrants ?? []) {
       push({
-        capabilityClass: "skill",
-        capabilityId: slug,
-        active: available,
-        provenance: `${profileLabel}: skill_policy`,
-        reason: available ? null : "not_installed",
-        detail: available
-          ? null
-          : "skill_policy references a skill the agent's resolution does not include (SKILL_NOT_AVAILABLE at runtime)",
-      });
-    }
-    for (const extension of activeProfile.piExtensions) {
-      push({
-        capabilityClass: "pi_extension",
-        capabilityId: extension.assignmentId,
-        displayName: extension.displayName ?? extension.name,
-        active: true,
-        provenance: `${profileLabel}: extension assignment`,
+        capabilityClass:
+          withheldGrant.class === "skill" ? "skill" : "mcp_server",
+        capabilityId: withheldGrant.slug,
+        active: false,
+        provenance: `${profileLabel}: ${withheldGrant.class} grant folder`,
+        reason: withheldGrant.reason,
+        detail: withheldGrant.detail ?? null,
       });
     }
     push({
       capabilityClass: "agent_profile",
-      capabilityId: activeProfile.slug,
-      displayName: activeProfile.name,
+      capabilityId: selectedProfile.slug,
+      displayName: selectedProfile.name,
       active: true,
-      provenance:
-        activeProfile.availability.scope === "global"
-          ? "tenant-global profile"
-          : "space-restricted profile",
+      provenance: "workspace agents/ folder (manifest entry)",
     });
   } else if (selectedProfile) {
-    // Selected profile was dropped: the set is its drop-reason rows.
-    for (const drop of selectedProfileDrops) {
-      push({
-        capabilityClass: drop.capabilityClass,
-        capabilityId: drop.capabilityId,
-        displayName: drop.displayName ?? null,
-        active: false,
-        reason: drop.reason,
-        detail: drop.detail ?? null,
-      });
-    }
+    // Selected profile is withheld from the manifest (or no manifest is
+    // resolvable): the set is its withheld-reason row.
+    push({
+      capabilityClass: "agent_profile",
+      capabilityId: selectedProfile.slug,
+      displayName: selectedProfile.name,
+      active: false,
+      reason: withheldProfile?.reason ?? "resolution_fault",
+      detail: withheldProfile
+        ? (withheldProfile.detail ?? null)
+        : "no capabilities manifest is resolvable for this selection",
+    });
   } else {
     // Full default-agent view.
     for (const skill of config.skillsConfig) {
@@ -708,26 +725,29 @@ export async function capabilityInspector(
         provenance: "agent: extension assignment",
       });
     }
-    for (const profile of config.agentProfilesConfig) {
+    // Subagent-folders U11: sub-agent rows come from the compiled
+    // manifest's agent-class entries (active + withheld), not DB rows.
+    for (const entry of manifest?.active ?? []) {
+      if (entry.class !== "agent") continue;
       push({
         capabilityClass: "agent_profile",
-        capabilityId: profile.slug,
-        displayName: profile.name,
+        capabilityId: entry.slug,
+        displayName: titleizeProfileSlug(entry.slug),
         active: true,
-        provenance:
-          profile.availability.scope === "global"
-            ? "tenant-global profile"
-            : "space-restricted profile",
+        provenance: "workspace agents/ folder (manifest entry)",
       });
-      for (const extension of profile.piExtensions) {
-        push({
-          capabilityClass: "pi_extension",
-          capabilityId: extension.assignmentId,
-          displayName: extension.displayName ?? extension.name,
-          active: true,
-          provenance: `agent profile ${profile.slug}: extension assignment`,
-        });
-      }
+    }
+    for (const entry of manifest?.withheld ?? []) {
+      if (entry.class !== "agent") continue;
+      push({
+        capabilityClass: "agent_profile",
+        capabilityId: entry.slug,
+        displayName: titleizeProfileSlug(entry.slug),
+        active: false,
+        provenance: "workspace agents/ folder (manifest entry)",
+        reason: entry.reason,
+        detail: entry.detail ?? null,
+      });
     }
     for (const install of pluginInstallRows) {
       const gatedOff =
@@ -835,20 +855,28 @@ export async function capabilityInspector(
 
   // U13: runtime truth beside the prediction, divergence gated on the
   // fingerprint. A lookup fault degrades to "no manifest yet" semantics.
-  const { observed, divergence } = await loadObservedAndDivergence({
-    tenantId: args.tenantId,
-    agentId,
-    spaceId: args.spaceId ?? null,
-    agentProfileId: selectedProfile?.id ?? null,
-    predictedFingerprint: configFingerprint,
-    predictedItems: items,
-  }).catch((err) => {
-    console.warn(`${LOG_PREFIX} manifest lookup failed:`, err);
-    return {
-      observed: null,
-      divergence: { state: "no_manifest_yet" as const },
-    };
-  });
+  // Profile-scoped selections skip the lookup (U11): the stored
+  // agent_profile_id column is a uuid keyed to retired rows — slugs can
+  // never match, so the honest answer is "no manifest yet".
+  const { observed, divergence } = selectedProfile
+    ? {
+        observed: null,
+        divergence: { state: "no_manifest_yet" as const },
+      }
+    : await loadObservedAndDivergence({
+        tenantId: args.tenantId,
+        agentId,
+        spaceId: args.spaceId ?? null,
+        agentProfileId: null,
+        predictedFingerprint: configFingerprint,
+        predictedItems: items,
+      }).catch((err) => {
+        console.warn(`${LOG_PREFIX} manifest lookup failed:`, err);
+        return {
+          observed: null,
+          divergence: { state: "no_manifest_yet" as const },
+        };
+      });
 
   return {
     state: "ok",

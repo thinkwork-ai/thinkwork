@@ -1,8 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-  agentProfileSpaceAssignments,
-  agentProfiles,
   agents,
   artifacts,
   spaceMembers,
@@ -17,7 +15,6 @@ import {
 } from "../artifacts/canvas-access.js";
 import type {
   ResolvedWorkspaceRenderTuple,
-  WorkspaceAgentProfileRoutingEntry,
   WorkspaceCanvasIndexEntry,
   WorkspaceSpaceIndexEntry,
   WorkspaceSpaceParticipantEntry,
@@ -228,79 +225,6 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
         (left, right) =>
           left.name.localeCompare(right.name) ||
           left.id.localeCompare(right.id),
-      );
-  }
-
-  async listRoutableAgentProfiles(
-    tuple: ResolvedWorkspaceRenderTuple,
-  ): Promise<WorkspaceAgentProfileRoutingEntry[]> {
-    const profileRows = await this.db
-      .select({
-        id: agentProfiles.id,
-        slug: agentProfiles.slug,
-        name: agentProfiles.name,
-        routingGuidance: agentProfiles.routing_guidance,
-        sourceSpaceId: agentProfiles.source_space_id,
-      })
-      .from(agentProfiles)
-      .where(
-        and(
-          eq(agentProfiles.tenant_id, tuple.tenantId),
-          eq(agentProfiles.enabled, true),
-        ),
-      );
-    if (profileRows.length === 0) return [];
-
-    const assignmentRows = await this.db
-      .select({
-        profileId: agentProfileSpaceAssignments.profile_id,
-        spaceId: agentProfileSpaceAssignments.space_id,
-      })
-      .from(agentProfileSpaceAssignments)
-      .where(eq(agentProfileSpaceAssignments.tenant_id, tuple.tenantId));
-    const spaceIdsByProfileId = new Map<string, Set<string>>();
-    for (const row of assignmentRows) {
-      const set = spaceIdsByProfileId.get(row.profileId) ?? new Set<string>();
-      set.add(row.spaceId);
-      spaceIdsByProfileId.set(row.profileId, set);
-    }
-
-    const visible = profileRows.filter((profile) => {
-      if (profile.sourceSpaceId) {
-        // Space-local profile (plan 2026-06-12-002 U7): routable only while
-        // its origin Space is the active Space.
-        return profile.sourceSpaceId === tuple.spaceId;
-      }
-      const assignedSpaceIds = spaceIdsByProfileId.get(profile.id);
-      // No assignments → globally available; otherwise the active Space
-      // must be among the assignments (mirrors
-      // loadAgentProfileRuntimeConfigs scoping).
-      return !assignedSpaceIds || assignedSpaceIds.has(tuple.spaceId);
-    });
-
-    // Slug collision: the active Space's local profile shadows the central
-    // one in the routing tree (mirrors loadAgentProfileRuntimeConfigs U7).
-    const spaceLocalSlugs = new Set(
-      visible
-        .filter((profile) => profile.sourceSpaceId)
-        .map((profile) => profile.slug),
-    );
-
-    return visible
-      .filter(
-        (profile) =>
-          profile.sourceSpaceId || !spaceLocalSlugs.has(profile.slug),
-      )
-      .map((profile) => ({
-        id: profile.id,
-        slug: profile.slug,
-        name: profile.name,
-        routingGuidance: profile.routingGuidance ?? null,
-      }))
-      .sort(
-        (left, right) =>
-          left.name.localeCompare(right.name) ||
-          left.slug.localeCompare(right.slug),
       );
   }
 

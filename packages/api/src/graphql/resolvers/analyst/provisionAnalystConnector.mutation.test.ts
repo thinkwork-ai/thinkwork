@@ -87,9 +87,6 @@ vi.mock("../../../lib/analyst/provision-connector.js", () => ({
     if (h.state.connectorError) throw h.state.connectorError;
     return h.state.connectorOutcome;
   },
-  refreshAnalystProfileFromSeed: async () => {
-    h.calls.push("refreshProfile");
-  },
 }));
 
 const ctx = { auth: { email: "op@example.com" } } as never;
@@ -153,7 +150,6 @@ describe("provisionAnalystConnector", () => {
       "ensureBroker:rotate=false",
       "resolveRds",
       "provision:reApprove=false",
-      "refreshProfile",
       "genSchema",
       "materialize:signedBy=operator:op@example.com",
     ]);

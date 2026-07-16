@@ -1,172 +1,121 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ─── DB mock (queue-based) ──────────────────────────────────────────────────
-// The projection functions (upsert/delete, central + space-local) are
-// exercised against a scriptable drizzle facade so the origin-scoping
-// predicates (source_space_id IS NULL vs = spaceId) can be asserted.
+// ─── S3 mock (scriptable send) ──────────────────────────────────────────────
+// U11: the workspace agent-folder index (list/get) is exercised against a
+// scriptable S3 facade; the retired agent_profiles projections are gone —
+// this file no longer mocks a database beyond the tenant lookup.
 
-const { dbState } = vi.hoisted(() => ({
-  dbState: {
-    selectResults: [] as unknown[][],
-    selectCalls: [] as Array<{ table: unknown; where: unknown }>,
-    insertCalls: [] as Array<{ table: unknown; values: unknown }>,
-    updateCalls: [] as Array<{
-      table: unknown;
-      values: unknown;
-      where: unknown;
-    }>,
-    deleteCalls: [] as Array<{ table: unknown; where: unknown }>,
+const { s3State } = vi.hoisted(() => ({
+  s3State: {
+    objects: new Map<string, string>(),
+    lastModified: new Map<string, Date>(),
+    sent: [] as Array<{ kind: string; input: Record<string, unknown> }>,
   },
 }));
 
-vi.mock("./agents/tenant-platform-agent.js", () => ({
-  resolveTenantPlatformAgent: vi.fn(),
-}));
-
-vi.mock("../graphql/utils.js", () => {
-  const col = (name: string) => ({ __col: name });
-  const table = (name: string, cols: string[]) => {
-    const entries: Array<[string, unknown]> = cols.map((c) => [
-      c,
-      col(`${name}.${c}`),
-    ]);
-    entries.push(["__table", name]);
-    return Object.fromEntries(entries);
-  };
+vi.mock("@aws-sdk/client-s3", () => {
+  class FakeCommand {
+    constructor(
+      public kind: string,
+      public input: Record<string, unknown>,
+    ) {}
+  }
   return {
-    db: {
-      select: () => ({
-        from: (t: unknown) => ({
-          where: (w: unknown) => {
-            dbState.selectCalls.push({ table: t, where: w });
-            return Promise.resolve(dbState.selectResults.shift() ?? []);
-          },
-        }),
-      }),
-      insert: (t: unknown) => ({
-        values: (v: unknown) => {
-          dbState.insertCalls.push({ table: t, values: v });
-          const row = Array.isArray(v) ? v[0] : v;
-          const result = Promise.resolve([
-            { id: "inserted-id", ...(row as Record<string, unknown>) },
-          ]) as Promise<unknown[]> & { returning: () => Promise<unknown[]> };
-          result.returning = () =>
-            Promise.resolve([
-              { id: "inserted-id", ...(row as Record<string, unknown>) },
-            ]);
-          return result;
-        },
-      }),
-      update: (t: unknown) => ({
-        set: (v: unknown) => ({
-          where: (w: unknown) => ({
-            returning: () => {
-              dbState.updateCalls.push({ table: t, values: v, where: w });
-              return Promise.resolve([
-                { id: "updated-id", ...(v as Record<string, unknown>) },
-              ]);
+    S3Client: class {
+      async send(command: InstanceType<typeof FakeCommand>) {
+        s3State.sent.push({ kind: command.kind, input: command.input });
+        const key = command.input.Key as string | undefined;
+        if (command.kind === "get") {
+          if (!key || !s3State.objects.has(key)) {
+            const err = new Error("NoSuchKey") as Error & { name: string };
+            err.name = "NoSuchKey";
+            throw err;
+          }
+          return {
+            Body: {
+              transformToString: async () => s3State.objects.get(key),
             },
-          }),
-        }),
-      }),
-      delete: (t: unknown) => ({
-        where: (w: unknown) => {
-          dbState.deleteCalls.push({ table: t, where: w });
-          return Promise.resolve([]);
-        },
-      }),
+          };
+        }
+        if (command.kind === "list") {
+          const prefix = command.input.Prefix as string;
+          return {
+            Contents: [...s3State.objects.keys()]
+              .filter((k) => k.startsWith(prefix))
+              .map((k) => ({
+                Key: k,
+                LastModified: s3State.lastModified.get(k),
+              })),
+            IsTruncated: false,
+          };
+        }
+        return {};
+      }
     },
-    eq: (c: unknown, v: unknown) => ({ op: "eq", col: c, val: v }),
-    and: (...preds: unknown[]) => ({ op: "and", preds }),
-    isNull: (c: unknown) => ({ op: "isNull", col: c }),
-    agentProfiles: table("agent_profiles", [
-      "id",
-      "tenant_id",
-      "slug",
-      "name",
-      "description",
-      "routing_guidance",
-      "instructions",
-      "model_id",
-      "enabled",
-      "built_in_key",
-      "source_space_id",
-      "tool_policy",
-      "skill_policy",
-      "execution_controls",
-      "created_at",
-      "updated_at",
-    ]),
-    agentProfileSpaceAssignments: table("agent_profile_space_assignments", [
-      "profile_id",
-      "tenant_id",
-      "space_id",
-      "created_at",
-    ]),
-    modelCatalog: table("model_catalog", ["model_id", "is_available"]),
-    spaces: table("spaces", ["id", "tenant_id", "slug", "name"]),
-    tenants: table("tenants", ["id", "slug"]),
+    GetObjectCommand: class extends FakeCommand {
+      constructor(input: Record<string, unknown>) {
+        super("get", input);
+      }
+    },
+    ListObjectsV2Command: class extends FakeCommand {
+      constructor(input: Record<string, unknown>) {
+        super("list", input);
+      }
+    },
+    PutObjectCommand: class extends FakeCommand {
+      constructor(input: Record<string, unknown>) {
+        super("put", input);
+      }
+    },
+    DeleteObjectCommand: class extends FakeCommand {
+      constructor(input: Record<string, unknown>) {
+        super("delete", input);
+      }
+    },
   };
 });
 
+vi.mock("@thinkwork/runtime-config", () => ({
+  getConfig: (key: string) => (key === "WORKSPACE_BUCKET" ? "bucket" : ""),
+}));
+
+vi.mock("./agents/tenant-platform-agent.js", () => ({
+  resolveTenantPlatformAgent: vi.fn(async () => ({
+    slug: "think",
+    workspace_folder_name: "think",
+  })),
+}));
+
+vi.mock("../graphql/utils.js", () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: () => Promise.resolve([{ slug: "acme" }]),
+      }),
+    }),
+  },
+  eq: () => ({}),
+  tenants: { id: {}, slug: {} },
+}));
+
 import {
   agentProfileSlugFromWorkspacePath,
-  deleteAgentProfileProjectionForFile,
-  deleteSpaceAgentProfileProjectionForFile,
+  getAgentFolderProfileForTenant,
   isAgentProfileWorkspacePath,
   isSpaceAgentProfileWorkspacePath,
+  listAgentFolderProfilesForTenant,
   parseAgentProfileFile,
   serializeAgentProfileFile,
   spaceAgentProfileSlugFromWorkspacePath,
-  upsertAgentProfileProjectionFromFile,
-  upsertSpaceAgentProfileProjectionFromFile,
 } from "./agent-profile-workspace-files.js";
 
 const TENANT_ID = "tenant-1";
-const SPACE_ID = "space-b";
-const MODEL_ID = "claude-haiku-4-5";
-const VALID_CONTENT = `---\nname: Research\nmodel: ${MODEL_ID}\nenabled: true\n---\n\n# Instructions\n\nDo research.\n`;
-
-interface Pred {
-  op?: string;
-  col?: { __col?: string };
-  val?: unknown;
-  preds?: unknown[];
-}
-
-function flattenPreds(pred: unknown): Pred[] {
-  const out: Pred[] = [];
-  const walk = (p: unknown) => {
-    if (!p || typeof p !== "object") return;
-    const anyP = p as Pred;
-    if (anyP.op === "and" && Array.isArray(anyP.preds)) {
-      anyP.preds.forEach(walk);
-      return;
-    }
-    if (anyP.op) out.push(anyP);
-  };
-  walk(pred);
-  return out;
-}
-
-function hasEq(pred: unknown, colName: string, val: unknown): boolean {
-  return flattenPreds(pred).some(
-    (p) => p.op === "eq" && p.col?.__col === colName && p.val === val,
-  );
-}
-
-function hasIsNull(pred: unknown, colName: string): boolean {
-  return flattenPreds(pred).some(
-    (p) => p.op === "isNull" && p.col?.__col === colName,
-  );
-}
+const PREFIX = "tenants/acme/agents/think/";
 
 beforeEach(() => {
-  dbState.selectResults.length = 0;
-  dbState.selectCalls.length = 0;
-  dbState.insertCalls.length = 0;
-  dbState.updateCalls.length = 0;
-  dbState.deleteCalls.length = 0;
+  s3State.objects.clear();
+  s3State.lastModified.clear();
+  s3State.sent.length = 0;
 });
 
 describe("agent profile workspace files", () => {
@@ -276,176 +225,65 @@ describe("agent profile workspace files", () => {
   });
 });
 
-describe("central agent profile projection scoping", () => {
-  it("upsert looks up only central rows (source_space_id IS NULL)", async () => {
-    dbState.selectResults.push([{ model_id: MODEL_ID }]); // model availability
-    dbState.selectResults.push([]); // existing profile lookup → insert path
+describe("workspace agent-folder index (subagent-folders U11)", () => {
+  const INSTRUCTIONS = `---\ndescription: Helps with research.\nmodel: m-1\nbuiltInTools:\n  - web-search\n---\n\nDo the research.\n`;
 
-    await upsertAgentProfileProjectionFromFile({
-      tenantId: TENANT_ID,
-      path: "agents/research.md",
-      content: VALID_CONTENT,
-    });
-
-    const profileLookup = dbState.selectCalls.find(
-      (call) =>
-        (call.table as { __table?: string }).__table === "agent_profiles",
+  it("lists agents/<slug>/INSTRUCTIONS.md folder profiles", async () => {
+    s3State.objects.set(
+      `${PREFIX}agents/research/INSTRUCTIONS.md`,
+      INSTRUCTIONS,
     );
-    expect(profileLookup).toBeDefined();
-    expect(
-      hasIsNull(profileLookup?.where, "agent_profiles.source_space_id"),
-    ).toBe(true);
-    expect(hasEq(profileLookup?.where, "agent_profiles.slug", "research")).toBe(
-      true,
+    s3State.objects.set(
+      `${PREFIX}agents/coding/INSTRUCTIONS.md`,
+      `---\ndescription: Codes.\nenabled: false\n---\n\nCode.\n`,
     );
-
-    expect(dbState.insertCalls).toHaveLength(1);
-    const inserted = dbState.insertCalls[0].values as Record<string, unknown>;
-    expect(inserted.slug).toBe("research");
-    expect(inserted.source_space_id).toBeUndefined();
-  });
-
-  it("delete removes only the central row for the slug", async () => {
-    const removed = await deleteAgentProfileProjectionForFile({
-      tenantId: TENANT_ID,
-      path: "agents/research.md",
-    });
-
-    expect(removed).toBe(true);
-    expect(dbState.deleteCalls).toHaveLength(1);
-    const { where } = dbState.deleteCalls[0];
-    expect(hasIsNull(where, "agent_profiles.source_space_id")).toBe(true);
-    expect(hasEq(where, "agent_profiles.slug", "research")).toBe(true);
-    expect(hasEq(where, "agent_profiles.tenant_id", TENANT_ID)).toBe(true);
-  });
-});
-
-describe("space-local agent profile projection (plan 2026-06-12-002 U7)", () => {
-  it("creates a row scoped to the Space and assigns it to exactly that Space", async () => {
-    dbState.selectResults.push([{ model_id: MODEL_ID }]); // model availability
-    dbState.selectResults.push([]); // existing space-local lookup → insert
-
-    const row = await upsertSpaceAgentProfileProjectionFromFile({
-      tenantId: TENANT_ID,
-      spaceId: SPACE_ID,
-      path: "agents/research.md",
-      content: VALID_CONTENT,
-    });
-
-    const profileLookup = dbState.selectCalls.find(
-      (call) =>
-        (call.table as { __table?: string }).__table === "agent_profiles",
+    // Non-profile keys under agents/ are ignored.
+    s3State.objects.set(
+      `${PREFIX}agents/research/skills/x/.assignment.json`,
+      "{}",
     );
-    expect(
-      hasEq(profileLookup?.where, "agent_profiles.source_space_id", SPACE_ID),
-    ).toBe(true);
+    s3State.objects.set(`${PREFIX}agents/legacy.md`, "---\nmodel: m\n---\n");
 
-    expect(dbState.insertCalls.length).toBeGreaterThanOrEqual(1);
-    const inserted = dbState.insertCalls[0].values as Record<string, unknown>;
-    expect(inserted.source_space_id).toBe(SPACE_ID);
-    expect(inserted.built_in_key).toBeNull();
-    expect(inserted.slug).toBe("research");
-    expect(row).toMatchObject({ slug: "research" });
-
-    // Assignments replaced with exactly the origin Space.
-    const assignmentDelete = dbState.deleteCalls.find(
-      (call) =>
-        (call.table as { __table?: string }).__table ===
-        "agent_profile_space_assignments",
+    const profiles = await listAgentFolderProfilesForTenant(TENANT_ID);
+    expect(profiles?.map((p) => p.slug)).toEqual(["coding", "research"]);
+    const research = profiles?.find((p) => p.slug === "research");
+    expect(research?.config).toMatchObject({
+      description: "Helps with research.",
+      model: "m-1",
+      enabled: true,
+      builtInTools: ["web-search"],
+      instructions: "Do the research.",
+    });
+    expect(profiles?.find((p) => p.slug === "coding")?.config.enabled).toBe(
+      false,
     );
-    expect(assignmentDelete).toBeDefined();
-    const assignmentInsert = dbState.insertCalls.find(
-      (call) =>
-        (call.table as { __table?: string }).__table ===
-        "agent_profile_space_assignments",
+  });
+
+  it("skips strict-parse failures instead of failing the listing", async () => {
+    s3State.objects.set(
+      `${PREFIX}agents/bad/INSTRUCTIONS.md`,
+      `---\nmodelId: legacy-alias\n---\n\nBody.\n`,
     );
-    expect(assignmentInsert?.values).toEqual([
-      {
-        tenant_id: TENANT_ID,
-        profile_id: "inserted-id",
-        space_id: SPACE_ID,
-      },
-    ]);
+    s3State.objects.set(`${PREFIX}agents/good/INSTRUCTIONS.md`, INSTRUCTIONS);
+    const profiles = await listAgentFolderProfilesForTenant(TENANT_ID);
+    expect(profiles?.map((p) => p.slug)).toEqual(["good"]);
   });
 
-  it("updates the existing space-local row on re-put", async () => {
-    dbState.selectResults.push([{ model_id: MODEL_ID }]); // model availability
-    dbState.selectResults.push([
-      { id: "existing-space-profile", built_in_key: "stale" },
-    ]); // existing space-local row
-
-    await upsertSpaceAgentProfileProjectionFromFile({
-      tenantId: TENANT_ID,
-      spaceId: SPACE_ID,
-      path: "agents/research.md",
-      content: VALID_CONTENT,
-    });
-
-    expect(dbState.updateCalls).toHaveLength(1);
-    const update = dbState.updateCalls[0];
-    expect(
-      hasEq(update.where, "agent_profiles.id", "existing-space-profile"),
-    ).toBe(true);
-    const values = update.values as Record<string, unknown>;
-    expect(values.source_space_id).toBe(SPACE_ID);
-    expect(values.built_in_key).toBeNull();
+  it("applies the .assignment.json sidecar overlay (disable wins)", async () => {
+    s3State.objects.set(
+      `${PREFIX}agents/research/INSTRUCTIONS.md`,
+      INSTRUCTIONS,
+    );
+    s3State.objects.set(
+      `${PREFIX}agents/research/.assignment.json`,
+      JSON.stringify({ enabled: false }),
+    );
+    const profile = await getAgentFolderProfileForTenant(TENANT_ID, "research");
+    expect(profile?.config.enabled).toBe(false);
   });
 
-  it("skips projection on malformed frontmatter — no partial row", async () => {
-    await expect(
-      upsertSpaceAgentProfileProjectionFromFile({
-        tenantId: TENANT_ID,
-        spaceId: SPACE_ID,
-        path: "agents/research.md",
-        content: "No frontmatter here.\n",
-      }),
-    ).rejects.toThrow(/requires frontmatter/);
-
-    expect(dbState.selectCalls).toHaveLength(0);
-    expect(dbState.insertCalls).toHaveLength(0);
-    expect(dbState.updateCalls).toHaveLength(0);
-  });
-
-  it("rejects unavailable models without writing a row", async () => {
-    dbState.selectResults.push([]); // model availability → not available
-
-    await expect(
-      upsertSpaceAgentProfileProjectionFromFile({
-        tenantId: TENANT_ID,
-        spaceId: SPACE_ID,
-        path: "agents/research.md",
-        content: VALID_CONTENT,
-      }),
-    ).rejects.toThrow(/Model is not available/);
-
-    expect(dbState.insertCalls).toHaveLength(0);
-    expect(dbState.updateCalls).toHaveLength(0);
-  });
-
-  it("delete removes only the space-local row for that Space", async () => {
-    const removed = await deleteSpaceAgentProfileProjectionForFile({
-      tenantId: TENANT_ID,
-      spaceId: SPACE_ID,
-      path: "agents/research.md",
-    });
-
-    expect(removed).toBe(true);
-    expect(dbState.deleteCalls).toHaveLength(1);
-    const { where } = dbState.deleteCalls[0];
-    expect(hasEq(where, "agent_profiles.source_space_id", SPACE_ID)).toBe(true);
-    expect(hasEq(where, "agent_profiles.slug", "research")).toBe(true);
-    expect(hasIsNull(where, "agent_profiles.source_space_id")).toBe(false);
-  });
-
-  it("delete ignores non-profile paths", async () => {
-    const removed = await deleteSpaceAgentProfileProjectionForFile({
-      tenantId: TENANT_ID,
-      spaceId: SPACE_ID,
-      path: "knowledge/notes.md",
-    });
-
-    expect(removed).toBe(false);
-    expect(dbState.deleteCalls).toHaveLength(0);
+  it("returns null for an absent folder profile", async () => {
+    expect(await getAgentFolderProfileForTenant(TENANT_ID, "ghost")).toBeNull();
   });
 });
 

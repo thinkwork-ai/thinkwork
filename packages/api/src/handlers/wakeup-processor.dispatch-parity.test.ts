@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  applyAgentProfileManifestAuthority,
   buildAgentDispatchControlFields,
   REQUIRED_DISPATCH_FIELDS,
   type AgentDispatchControlFieldArgs,
@@ -39,7 +38,6 @@ function baseArgs(
     apiAuthSecret: "test-secret",
     threadId: "thread-1",
     threadTurnId: "turn-1",
-    agentProfiles: [],
     piExtensions: [],
     modelRoutingPolicy: undefined,
     approvedModelIds: undefined,
@@ -258,10 +256,8 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(fields.thread_turn_id).toBe("turn-1");
   });
 
-  it("tenant with no profiles ships agent_profiles as [] — present after JSON serialization, not absent", () => {
-    const fields = buildAgentDispatchControlFields(
-      baseArgs({ agentProfiles: [] }),
-    );
+  it("ships agent_profiles as [] — present after JSON serialization, not absent", () => {
+    const fields = buildAgentDispatchControlFields(baseArgs());
     const wire = JSON.parse(JSON.stringify(fields)) as Record<string, unknown>;
     expect("agent_profiles" in wire).toBe(true);
     expect(wire.agent_profiles).toEqual([]);
@@ -601,61 +597,22 @@ describe("plate contract floor rides both dispatch paths (THINK-183 U6)", () => 
   });
 });
 
-describe("agent profile manifest authority (subagent-folders U10)", () => {
-  const profiles = [
-    { slug: "researcher", sourceSpaceId: null },
-    { slug: "eng-helper", sourceSpaceId: "space-1" },
-  ] as never[];
-
-  it("flag off: profiles unchanged and no authority marker (byte-identical payload)", () => {
-    const result = applyAgentProfileManifestAuthority({
-      manifestAuthority: false,
-      profiles: profiles as never,
-    });
-    expect(result.agentProfiles).toBe(profiles);
-    expect(result.agentProfilesAuthority).toBeUndefined();
-    const fields = buildAgentDispatchControlFields(
-      baseArgs({ agentProfiles: result.agentProfiles }),
-    );
-    expect(fields.agent_profiles_authority).toBeUndefined();
-    // undefined drops at JSON serialization — flag-off wire bytes are
-    // identical to the pre-U10 payload.
-    expect(Object.keys(JSON.parse(JSON.stringify(fields)))).not.toContain(
-      "agent_profiles_authority",
-    );
-  });
-
-  it("flag on: payload shrinks to space-local profiles + manifest marker", () => {
-    const result = applyAgentProfileManifestAuthority({
-      manifestAuthority: true,
-      profiles: profiles as never,
-    });
-    expect(result.agentProfiles).toEqual([
-      { slug: "eng-helper", sourceSpaceId: "space-1" },
-    ]);
-    expect(result.agentProfilesAuthority).toBe("manifest");
-    const fields = buildAgentDispatchControlFields(
-      baseArgs({
-        agentProfiles: result.agentProfiles,
-        agentProfilesAuthority: result.agentProfilesAuthority,
-      }),
-    );
+describe("agent profile manifest authority (subagent-folders U11)", () => {
+  it("every dispatch is manifest-authoritative with no profile bodies", () => {
+    const fields = buildAgentDispatchControlFields(baseArgs());
     expect(fields.agent_profiles_authority).toBe("manifest");
-    expect(fields.agent_profiles).toEqual([
-      { slug: "eng-helper", sourceSpaceId: "space-1" },
-    ]);
+    expect(fields.agent_profiles).toEqual([]);
+    const wire = JSON.parse(JSON.stringify(fields)) as Record<string, unknown>;
+    expect(wire.agent_profiles_authority).toBe("manifest");
+    expect(wire.agent_profiles).toEqual([]);
   });
 
-  it("both dispatch handlers route profiles through the shared authority helper", () => {
-    expect(
-      handlerSource("wakeup-processor.ts").match(
-        /applyAgentProfileManifestAuthority\(/g,
-      )?.length ?? 0,
-    ).toBeGreaterThanOrEqual(2);
-    expect(
-      handlerSource("chat-agent-invoke.ts").match(
-        /applyAgentProfileManifestAuthority\(/g,
-      )?.length ?? 0,
-    ).toBeGreaterThanOrEqual(1);
+  it("no dispatch handler assembles profile bodies inline (readers retired)", () => {
+    for (const handler of ["wakeup-processor.ts", "chat-agent-invoke.ts"]) {
+      const source = handlerSource(handler);
+      expect(source).not.toContain("loadAgentProfileRuntimeConfigs");
+      expect(source).not.toContain("applyAgentProfileManifestAuthority");
+      expect(source).not.toContain("agent_profiles:");
+    }
   });
 });

@@ -30,11 +30,7 @@ import { randomUUID } from "node:crypto";
 
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { and, eq } from "drizzle-orm";
-import {
-  agentProfiles,
-  tenantMcpServers,
-  tenants,
-} from "@thinkwork/database-pg/schema";
+import { tenantMcpServers, tenants } from "@thinkwork/database-pg/schema";
 import {
   ANALYST_DEFAULT_SOURCE_SCHEMA,
   renderStoredAnalystSchemaMarkdown,
@@ -44,10 +40,6 @@ import {
 import { openExternalSourceClient } from "@thinkwork/lambda/analyst-reader-db";
 
 import { db as defaultDb } from "../../graphql/utils.js";
-import {
-  serializeAgentProfileFile,
-  writeAgentProfileFileForTenant,
-} from "../agent-profile-workspace-files.js";
 import { computeMcpUrlHash } from "../mcp-server-hash.js";
 import { analystConnectorAuthConfig } from "./provision-connector.js";
 import type { AnalystSourceTls } from "@thinkwork/lambda/analyst-caller-context";
@@ -633,100 +625,4 @@ export async function insertExternalSourceRow(opts: {
     .values(values)
     .returning({ id: tenantMcpServers.id });
   return { id: inserted!.id };
-}
-
-// ---------------------------------------------------------------------------
-// Analyst profile tool policy
-// ---------------------------------------------------------------------------
-
-/**
- * Union the new source slug into the tenant's analyst profile
- * `tool_policy.mcpServers` (mirrors refreshAnalystProfileFromSeed's union).
- * No-op-safe: absent profile is tolerated (a tenant may register a source
- * before opening the profiles surface — the slug is added the next time the
- * profile is seeded/refreshed, and dispatch reads servers from the registry
- * regardless).
- */
-export async function appendSourceToAnalystProfile(opts: {
-  tenantId: string;
-  slug: string;
-  db?: DbLike;
-}): Promise<boolean> {
-  const db = opts.db ?? defaultDb;
-  const [row] = await db
-    .select({
-      id: agentProfiles.id,
-      slug: agentProfiles.slug,
-      name: agentProfiles.name,
-      description: agentProfiles.description,
-      routing_guidance: agentProfiles.routing_guidance,
-      instructions: agentProfiles.instructions,
-      model_id: agentProfiles.model_id,
-      enabled: agentProfiles.enabled,
-      built_in_key: agentProfiles.built_in_key,
-      tool_policy: agentProfiles.tool_policy,
-      skill_policy: agentProfiles.skill_policy,
-      execution_controls: agentProfiles.execution_controls,
-    })
-    .from(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, opts.tenantId),
-        eq(agentProfiles.built_in_key, "analyst"),
-      ),
-    )
-    .limit(1);
-  if (!row) return false;
-  const current =
-    row.tool_policy && typeof row.tool_policy === "object"
-      ? (row.tool_policy as Record<string, unknown>)
-      : {};
-  const existingServers = Array.isArray(current.mcpServers)
-    ? current.mcpServers.filter((x): x is string => typeof x === "string")
-    : [];
-  if (existingServers.includes(opts.slug)) return true;
-  const nextToolPolicy = {
-    ...current,
-    mcpServers: [...existingServers, opts.slug],
-  };
-  await db
-    .update(agentProfiles)
-    .set({
-      tool_policy: nextToolPolicy,
-      updated_at: new Date(),
-    })
-    .where(eq(agentProfiles.id, row.id));
-
-  // Keep the file-authoritative `agents/<profile>.md` in sync with the DB
-  // row. The runtime renders the profile's workspace source from this file;
-  // a DB-only append leaves the source stale (the operator's workspace
-  // inspector shows the source WITHOUT the new data source, and a later
-  // file→DB projection would drop the append). Bucket-gated: a no-op in
-  // DB-mocked unit tests. Mirrors updateAgentProfile.mutation.ts.
-  try {
-    await writeAgentProfileFileForTenant({
-      tenantId: opts.tenantId,
-      slug: row.slug,
-      content: serializeAgentProfileFile({
-        slug: row.slug,
-        name: row.name,
-        description: row.description ?? undefined,
-        routingGuidance: row.routing_guidance ?? undefined,
-        instructions: String(row.instructions ?? ""),
-        modelId: row.model_id,
-        enabled: row.enabled !== false,
-        builtInKey: row.built_in_key ?? undefined,
-        toolPolicy: nextToolPolicy,
-        skillPolicy: row.skill_policy ?? {},
-        executionControls: row.execution_controls ?? {},
-        spaceIds: [],
-      }),
-    });
-  } catch (err) {
-    console.error(
-      `[register-data-source] analyst profile file sync failed for tenant ${opts.tenantId}:`,
-      err,
-    );
-  }
-  return true;
 }

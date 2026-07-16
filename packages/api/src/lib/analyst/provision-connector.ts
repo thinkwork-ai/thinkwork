@@ -22,12 +22,10 @@
 
 import { and, eq } from "drizzle-orm";
 import {
-  agentProfiles,
   tenantCredentials,
   tenantMcpServers,
 } from "@thinkwork/database-pg/schema";
 
-import { BUILT_IN_PROFILE_SEEDS } from "../../graphql/resolvers/agent-profiles/built-in-agent-profiles.js";
 import { db as defaultDb } from "../../graphql/utils.js";
 import { computeMcpUrlHash } from "../mcp-server-hash.js";
 import { RDS_IAM_REQUIRED_METADATA_FIELDS } from "../tenant-credentials/secret-store.js";
@@ -174,76 +172,6 @@ export async function ensureAnalystBrokerSecretValue(input: {
     }),
   );
   return "created";
-}
-
-/**
- * Refresh the tenant's seeded analyst profile from the current built-in
- * seed (THINK-228 U6): instructions, execution controls (incl. the R9
- * maxQueriesPerRun cap), and the tool_policy union of the existing policy
- * with the seed (preserving operator-added tools/servers). The seeder
- * only merges tool policy on its own; instructions/controls otherwise
- * update only for tenants seeded after the change — this provisioning
- * step is the explicit operator action that brings an existing tenant's
- * analyst up to date. Deliberate overwrite of instructions.
- */
-export async function refreshAnalystProfileFromSeed(
-  tenantId: string,
-  db: DbLike = defaultDb,
-): Promise<void> {
-  const seed = BUILT_IN_PROFILE_SEEDS.find((s) => s.built_in_key === "analyst");
-  if (!seed) throw new Error("analyst built-in seed missing");
-
-  const [row] = await db
-    .select({
-      id: agentProfiles.id,
-      tool_policy: agentProfiles.tool_policy,
-    })
-    .from(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, tenantId),
-        eq(agentProfiles.built_in_key, "analyst"),
-      ),
-    )
-    .limit(1);
-  if (!row) {
-    throw new Error(
-      `tenant ${tenantId} has no seeded analyst profile — open the profiles surface once (the seeder runs there) and re-run`,
-    );
-  }
-
-  const current =
-    row.tool_policy && typeof row.tool_policy === "object"
-      ? (row.tool_policy as Record<string, unknown>)
-      : {};
-  const union = (a: unknown, b: unknown): string[] => [
-    ...new Set([
-      ...(Array.isArray(a)
-        ? a.filter((x): x is string => typeof x === "string")
-        : []),
-      ...(Array.isArray(b)
-        ? b.filter((x): x is string => typeof x === "string")
-        : []),
-    ]),
-  ];
-  const seedPolicy = seed.tool_policy as {
-    builtInTools?: unknown;
-    mcpServers?: unknown;
-  };
-
-  await db
-    .update(agentProfiles)
-    .set({
-      instructions: seed.instructions,
-      execution_controls: seed.execution_controls,
-      tool_policy: {
-        ...current,
-        builtInTools: union(current.builtInTools, seedPolicy.builtInTools),
-        mcpServers: union(current.mcpServers, seedPolicy.mcpServers),
-      },
-      updated_at: new Date(),
-    })
-    .where(eq(agentProfiles.id, row.id));
 }
 
 /**

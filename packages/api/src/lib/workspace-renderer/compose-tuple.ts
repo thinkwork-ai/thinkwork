@@ -711,6 +711,14 @@ function fallbackAuthorizedSpaces(
   ];
 }
 
+function titleizeAgentFolderSlug(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function renderGeneratedAgentsMd(input: {
   tuple: ResolvedWorkspaceRenderTuple;
   baseline: string;
@@ -1121,7 +1129,6 @@ export async function renderWorkspaceTuple(
   const [
     authorizedSpaces,
     spaceParticipants,
-    routableAgentProfiles,
     agentsMdBaseline,
     marker,
     existingManifest,
@@ -1133,7 +1140,6 @@ export async function renderWorkspaceTuple(
     repository.listAuthorizedSpaces?.(tuple) ??
       Promise.resolve(fallbackAuthorizedSpaces(tuple)),
     repository.listSpaceParticipants?.(tuple) ?? Promise.resolve([]),
-    repository.listRoutableAgentProfiles?.(tuple) ?? Promise.resolve([]),
     // U16 dual-read: the agent-source baseline moved to INSTRUCTIONS.md;
     // legacy AGENTS.md is the fallback for not-yet-migrated tenants. The
     // RENDERED artifact keeps the AGENTS.md name for now (Pi's hydrate
@@ -1269,6 +1275,23 @@ export async function renderWorkspaceTuple(
     path: capabilitiesManifestPath(capabilitiesFingerprint),
     manifest: capabilitiesManifest,
   };
+  // Subagent-folders U11: the AGENTS.md routing tree's sub-agent entries
+  // come from the compiled capabilities manifest (`class: "agent"`) —
+  // the folder files ARE the profiles; `agent_profiles` rows are retired.
+  const routableAgentProfiles: WorkspaceAgentProfileRoutingEntry[] =
+    capabilitiesManifest.active
+      .filter((entry) => entry.class === "agent")
+      .map((entry) => ({
+        id: entry.slug,
+        slug: entry.slug,
+        name: titleizeAgentFolderSlug(entry.slug),
+        routingGuidance: entry.description ?? null,
+      }))
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          left.slug.localeCompare(right.slug),
+      );
   const agentsMd = renderGeneratedAgentsMd({
     tuple,
     baseline: agentsMdBaseline ?? "",

@@ -15,7 +15,8 @@
  *   4. writeSourceCredentialSecret  — per-source reader credential
  *   5. writeSourceModelToS3         — model.json + SCHEMA.md
  *   6. insertExternalSourceRow      — born-approved tenant_mcp_servers row
- *   7. appendSourceToAnalystProfile — union the slug into tool_policy.mcpServers
+ *   7. (retired U11) profile tool_policy union — the analyst grant is the
+ *      signed agents/analyst/connectors/<slug>/ child folder (step below)
  *   8. materializeAnalystConnectionFolder — signed connections/<slug>/ folder
  */
 
@@ -33,7 +34,6 @@ import {
   AnalystRegistrationInputError,
   AnalystRegistrationPostureError,
   analystSourceCredentialSecretName,
-  appendSourceToAnalystProfile,
   assertSlugAvailable,
   insertExternalSourceRow,
   probeAndModelExternalSource,
@@ -194,10 +194,7 @@ export const registerAnalystDataSource = async (
     source: { kind: "external" },
   });
 
-  // 7. Union the slug into the analyst profile's tool policy.
-  await appendSourceToAnalystProfile({ tenantId, slug: input.slug });
-
-  // 8. Materialize the signed connections/<slug>/ folder into every agent.
+  // 7. Materialize the signed connections/<slug>/ folder into every agent.
   const signer = ctx.auth.email || userId || "unknown";
   const signedBy: CapabilitySignedBy = `operator:${signer}`;
   const folder = await materializeAnalystConnectionFolder({

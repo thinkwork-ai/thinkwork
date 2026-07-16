@@ -12,7 +12,8 @@
  *   1. ensureAnalystBrokerSecret     — write/rotate the broker credential
  *   2. ensureAnalystRdsIamCredential — only when the IAM env block is wired
  *   3. provisionAnalystConnector     — upsert the approved registry row
- *   4. refreshAnalystProfileFromSeed — bring the tenant's analyst up to date
+ *   4. (retired U11) analyst profile refresh — the built-in analyst is a
+ *      workspace agents/analyst/ folder now; no DB row to refresh
  *   5. materializeAnalystConnectionFolder — write the signed workspace folder
  *
  * Config resolution: every document-only key is read through
@@ -34,7 +35,6 @@ import {
   ensureAnalystBrokerSecret,
   ensureAnalystRdsIamCredential,
   provisionAnalystConnector as provisionAnalystConnectorRow,
-  refreshAnalystProfileFromSeed,
   resolveAnalystProvisionConfig,
   resolveAnalystRdsIamConfig,
 } from "../../../lib/analyst/provision-connector.js";
@@ -137,10 +137,7 @@ export const provisionAnalystConnector = async (
     });
   }
 
-  // 4. Refresh the tenant's analyst profile from the built-in seed.
-  await refreshAnalystProfileFromSeed(config.tenantId);
-
-  // 5. Materialize the signed workspace connection folder. The generated
+  // 4. Materialize the signed workspace connection folder. The generated
   //    semantic model is produced from the committed source rather than the
   //    on-disk SCHEMA.md file, which is not present in the Lambda bundle.
   const schemaMarkdown = generateAnalystSchemaMarkdown();

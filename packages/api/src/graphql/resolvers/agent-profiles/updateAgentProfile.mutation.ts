@@ -1,16 +1,8 @@
 import type { GraphQLContext } from "../../context.js";
 import {
-  agentProfiles,
-  agentProfileSpaceAssignments,
-  and,
-  db,
-  eq,
-} from "../../utils.js";
-import {
   deleteAgentProfileFileForTenant,
   deleteAgentProfileFolderInstructionsForTenant,
-  serializeAgentProfileFile,
-  writeAgentProfileFileForTenant,
+  getAgentFolderProfileForTenant,
   writeAgentProfileFolderForTenant,
 } from "../../../lib/agent-profile-workspace-files.js";
 import { normalizeExecutionControlsForStorage } from "../../../lib/agent-profile-loop-policy.js";
@@ -18,15 +10,13 @@ import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   assertAvailableModel,
   assertCustomProfileSlugAvailable,
-  assertSpacesBelongToTenant,
   badInput,
-  ensureBuiltInAgentProfiles,
-  loadAgentProfileRow,
+  folderProfileToGraphql,
   normalizeProfileSlug,
+  notFound,
   parseJsonInput,
-  replaceAgentProfileSpaceAssignments,
-  toAgentProfileGraphql,
 } from "./shared.js";
+import { BUILT_IN_AGENT_PROFILE_KEYS } from "./built-in-agent-profiles.js";
 
 interface UpdateAgentProfileInput {
   slug?: string | null;
@@ -42,6 +32,14 @@ interface UpdateAgentProfileInput {
   spaceIds?: string[] | null;
 }
 
+/**
+ * Update a sub-agent (subagent-folders U11): folder-write only. The
+ * current state is read from `agents/<slug>/INSTRUCTIONS.md`, the input
+ * patch is applied, and the folder file is rewritten (the next render
+ * recompiles the manifest). Renames delete the old folder file plus the
+ * legacy `agents/<slug>.md` form (delete-on-write). `spaceIds` and
+ * `skillPolicy` are ignored — see createAgentProfile.
+ */
 export async function updateAgentProfile(
   _parent: unknown,
   args: { tenantId: string; id: string; input: UpdateAgentProfileInput },
@@ -52,158 +50,128 @@ export async function updateAgentProfile(
     args.tenantId,
     "agent_profiles:update",
   );
-  await ensureBuiltInAgentProfiles(args.tenantId);
 
-  const existing = await loadAgentProfileRow(args.tenantId, args.id);
-  // Space-local rows (source_space_id set) are projections of a Space's
-  // workspace files. Updating one here would write the profile file into the
-  // CENTRAL agent source (agents/<slug>.md), minting a phantom central
-  // profile via the put hook.
-  if (existing.source_space_id != null) {
-    throw badInput(
-      "Space-local Agent Profiles are managed from their Space's workspace files (Settings → Spaces → the owning Space → Workspace files)",
-    );
-  }
+  const currentSlug = normalizeProfileSlug(args.id);
+  const existing = await getAgentFolderProfileForTenant(
+    args.tenantId,
+    currentSlug,
+  );
+  if (!existing) throw notFound("Agent Profile not found");
+  const config = existing.config;
+  const isBuiltIn = (BUILT_IN_AGENT_PROFILE_KEYS as readonly string[]).includes(
+    currentSlug,
+  );
+
   const input = args.input ?? {};
-  const updates: Record<string, unknown> = { updated_at: new Date() };
-
+  let finalSlug = currentSlug;
   if (input.slug !== undefined) {
-    if (existing.built_in_key) {
+    if (isBuiltIn) {
       throw badInput("Built-in Agent Profile slug cannot be changed");
     }
     const slug = normalizeProfileSlug(input.slug ?? "");
     assertCustomProfileSlugAvailable(slug);
-    updates.slug = slug;
+    if (slug !== currentSlug) {
+      const clash = await getAgentFolderProfileForTenant(args.tenantId, slug);
+      if (clash) {
+        throw badInput(`An Agent Profile with slug "${slug}" already exists`);
+      }
+      finalSlug = slug;
+    }
   }
-  if (input.name !== undefined) updates.name = input.name;
-  if (input.description !== undefined) updates.description = input.description;
-  if (input.routingGuidance !== undefined) {
-    updates.routing_guidance = input.routingGuidance;
-  }
-  if (input.instructions !== undefined)
-    updates.instructions = input.instructions;
+
+  let modelId = config.model ?? null;
   if (input.modelId !== undefined) {
     if (!input.modelId) throw badInput("Model is required");
     await assertAvailableModel(args.tenantId, input.modelId);
-    updates.model_id = input.modelId;
-  }
-  if (input.enabled !== undefined) updates.enabled = input.enabled ?? true;
-  // U11 — write-path exclusivity (R12): the unified grant/detach mutations are
-  // the ONLY writers of `skillPolicy.skillSlugs` and `toolPolicy.mcpServers`.
-  // `updateAgentProfile` owns `toolPolicy.builtInTools` alone: it merges the
-  // incoming built-in list into the current tool policy (preserving mcpServers
-  // written by the unified path) and never touches skill_policy. The input
-  // fields stay in the schema — accepted, but skillSlugs/mcpServers are ignored.
-  if (input.toolPolicy !== undefined) {
-    const incoming = (parseJsonInput(input.toolPolicy) ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const currentToolPolicy = (existing.tool_policy ?? {}) as Record<
-      string,
-      unknown
-    >;
-    updates.tool_policy = {
-      ...currentToolPolicy,
-      builtInTools: Array.isArray(incoming.builtInTools)
-        ? incoming.builtInTools
-        : (currentToolPolicy.builtInTools ?? []),
-    };
-  }
-  // skillPolicy is intentionally NOT written here (U11) — skillSlugs are owned
-  // by grantCapability/detachCapability at profile scope.
-  if (input.executionControls !== undefined) {
-    updates.execution_controls = normalizeExecutionControlsForStorage(
-      parseJsonInput(input.executionControls) ?? {},
-    );
+    modelId = input.modelId;
   }
 
-  let spaceIds: string[] | undefined;
-  if (input.spaceIds !== undefined) {
-    spaceIds = await assertSpacesBelongToTenant(args.tenantId, input.spaceIds);
-  }
-  const effectiveSpaceIds =
-    spaceIds ?? (await loadAgentProfileSpaceIds(args.id));
+  // The folder format has a single `description` field; incoming
+  // description/routingGuidance merge through the serializer exactly like
+  // the create path. When neither is provided the existing (already
+  // merged) description carries forward.
+  const descriptionProvided =
+    input.description !== undefined || input.routingGuidance !== undefined;
+  const description = descriptionProvided
+    ? (input.description ?? null)
+    : config.description;
+  const routingGuidance = descriptionProvided
+    ? (input.routingGuidance ?? null)
+    : null;
 
-  const [row] = await db
-    .update(agentProfiles)
-    .set(updates)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, args.tenantId),
-        eq(agentProfiles.id, args.id),
-      ),
-    )
-    .returning();
+  const builtInTools =
+    input.toolPolicy !== undefined
+      ? extractBuiltInTools(parseJsonInput(input.toolPolicy))
+      : (config.builtInTools ?? []);
 
-  if (spaceIds) {
-    await replaceAgentProfileSpaceAssignments({
-      tenantId: args.tenantId,
-      profileId: args.id,
-      spaceIds,
-    });
-  }
+  const executionControls =
+    input.executionControls !== undefined
+      ? normalizeExecutionControlsForStorage(
+          parseJsonInput(input.executionControls) ?? {},
+        )
+      : (config.execution as unknown as Record<string, unknown>);
 
-  const finalSlug = String(row.slug);
-  if (String(existing.slug) !== finalSlug) {
-    await deleteAgentProfileFileForTenant({
-      tenantId: args.tenantId,
-      slug: String(existing.slug),
-    });
-    await deleteAgentProfileFolderInstructionsForTenant({
-      tenantId: args.tenantId,
-      slug: String(existing.slug),
-    });
-  }
-  await writeAgentProfileFileForTenant({
-    tenantId: args.tenantId,
-    slug: finalSlug,
-    content: serializeAgentProfileFile({
-      slug: finalSlug,
-      name: String(row.name),
-      description: nullableString(row.description),
-      routingGuidance: nullableString(row.routing_guidance),
-      instructions: String(row.instructions ?? ""),
-      modelId: String(row.model_id),
-      enabled: row.enabled !== false,
-      builtInKey: nullableString(row.built_in_key),
-      toolPolicy: row.tool_policy ?? {},
-      skillPolicy: row.skill_policy ?? {},
-      executionControls: row.execution_controls ?? {},
-      spaceIds: effectiveSpaceIds,
-    }),
-  });
-  // Subagent-folders U12 (R22): every write also emits the folder form.
-  // The legacy file above keeps being written during the migration
-  // window; delete-on-write lands as a later cleanup once all four path
-  // gates are deployed dual-read.
-  await writeAgentProfileFolderForTenant({
+  const written = await writeAgentProfileFolderForTenant({
     tenantId: args.tenantId,
     slug: finalSlug,
     source: {
       slug: finalSlug,
-      name: String(row.name),
-      description: nullableString(row.description),
-      routingGuidance: nullableString(row.routing_guidance),
-      instructions: String(row.instructions ?? ""),
-      modelId: String(row.model_id),
-      enabled: row.enabled !== false,
-      toolPolicy: row.tool_policy ?? {},
-      executionControls: row.execution_controls ?? {},
+      name: input.name ?? finalSlug,
+      description,
+      routingGuidance,
+      instructions:
+        input.instructions !== undefined && input.instructions !== null
+          ? input.instructions
+          : config.instructions,
+      modelId: modelId ?? "",
+      enabled:
+        input.enabled !== undefined ? (input.enabled ?? true) : config.enabled,
+      toolPolicy: { builtInTools },
+      executionControls,
     },
   });
+  if (!written) {
+    throw new Error(
+      "Agent Profile folder write failed: no workspace target is resolvable for this tenant",
+    );
+  }
 
-  return toAgentProfileGraphql(row);
+  if (finalSlug !== currentSlug) {
+    await deleteAgentProfileFolderInstructionsForTenant({
+      tenantId: args.tenantId,
+      slug: currentSlug,
+    });
+    await deleteAgentProfileFileForTenant({
+      tenantId: args.tenantId,
+      slug: currentSlug,
+    });
+  }
+  // Delete-on-write (U12 cleanup): the folder form is authoritative — a
+  // successful folder write removes the legacy agents/<slug>.md file so
+  // one slug renders as one entity.
+  await deleteAgentProfileFileForTenant({
+    tenantId: args.tenantId,
+    slug: finalSlug,
+  });
+
+  const profile = await getAgentFolderProfileForTenant(
+    args.tenantId,
+    finalSlug,
+  );
+  if (!profile) {
+    throw new Error(
+      `Agent Profile folder for "${finalSlug}" was written but did not read back`,
+    );
+  }
+  return folderProfileToGraphql(args.tenantId, profile);
 }
 
-async function loadAgentProfileSpaceIds(profileId: string): Promise<string[]> {
-  const rows = await db
-    .select({ spaceId: agentProfileSpaceAssignments.space_id })
-    .from(agentProfileSpaceAssignments)
-    .where(eq(agentProfileSpaceAssignments.profile_id, profileId));
-  return rows.map((row) => row.spaceId);
-}
-
-function nullableString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
+function extractBuiltInTools(toolPolicy: unknown): string[] {
+  if (!toolPolicy || typeof toolPolicy !== "object") return [];
+  const value = (toolPolicy as { builtInTools?: unknown }).builtInTools;
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is string => typeof entry === "string" && !!entry.trim(),
+      )
+    : [];
 }
