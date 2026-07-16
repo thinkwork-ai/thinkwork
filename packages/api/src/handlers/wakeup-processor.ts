@@ -97,6 +97,7 @@ import {
 import { WORKSPACE_TURN_IN_FLIGHT_STATUSES } from "../lib/workspace-events/run-lifecycle.js";
 import type { PromptTemplateContext } from "../lib/orchestration/index.js";
 import {
+  HarnessChatDispatchOnlyError,
   normalizeAgentRuntimeType,
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
@@ -232,14 +233,30 @@ export async function invokeAgentCore(
 ): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
   let functionName = "";
   try {
+    // THINK-311 (KTD-7): the Harness trial is chat-dispatch only. A
+    // harness-flagged agent reaching the wakeup/retry path is a declared
+    // explicit failure — resolving the harness function here would run
+    // the trial engine outside its scope, and falling through to Pi
+    // would be the silent fallback R4 forbids.
+    if (normalizeAgentRuntimeType(runtimeType) === "harness") {
+      throw new HarnessChatDispatchOnlyError("wakeup");
+    }
     functionName = resolveRuntimeFunctionName(runtimeType);
   } catch (err) {
+    // Normalization itself may be what threw (unknown selector), so fall
+    // back to the raw value rather than re-normalizing uncaught.
+    let runtimeLabel: string;
+    try {
+      runtimeLabel = normalizeAgentRuntimeType(runtimeType);
+    } catch {
+      runtimeLabel = String(runtimeType ?? "pi");
+    }
     return {
       ok: false,
-      status: 503,
+      status: err instanceof HarnessChatDispatchOnlyError ? 501 : 503,
       result: {
         error: err instanceof Error ? err.message : String(err),
-        runtime_type: normalizeAgentRuntimeType(runtimeType),
+        runtime_type: runtimeLabel,
       },
     };
   }
@@ -1230,7 +1247,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         }
       : undefined;
   const contextEngineEnabled =
-    runtimeType !== "pi" &&
+    // Strands-only legacy gate (always false since Pi became the sole
+    // runtime). THINK-311: written as `=== "strands"` so the "harness"
+    // trial value cannot flip this dormant capability on.
+    runtimeType === "strands" &&
     templateContextEngineEnabled &&
     !blockedTools.includes("query_context") &&
     !blockedTools.includes("context_engine");

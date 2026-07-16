@@ -212,4 +212,22 @@ describe("wakeup processor system prompt capture", () => {
     });
     expect(mocks.lambdaSend).not.toHaveBeenCalled();
   });
+
+  it("declares harness wakeup dispatch unsupported instead of running Pi (THINK-311 KTD-7)", async () => {
+    vi.stubEnv("AGENTCORE_PI_FUNCTION_NAME", "thinkwork-dev-agentcore-pi");
+    vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "thinkwork-dev-harness-runner");
+
+    const result = await invokeAgentCore({ message: "wake up" }, "harness");
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 501,
+      result: {
+        runtime_type: "harness",
+        error: expect.stringContaining("trial-scoped to chat dispatch"),
+      },
+    });
+    // Neither engine is invoked — even with both functions provisioned.
+    expect(mocks.lambdaSend).not.toHaveBeenCalled();
+  });
 });
