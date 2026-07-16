@@ -1,16 +1,20 @@
 import type { GraphQLContext } from "../../context.js";
-import { agentProfiles, and, db, eq } from "../../utils.js";
 import {
   deleteAgentProfileFileForTenant,
   deleteAgentProfileFolderInstructionsForTenant,
+  getAgentFolderProfileForTenant,
 } from "../../../lib/agent-profile-workspace-files.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
-import {
-  badInput,
-  ensureBuiltInAgentProfiles,
-  loadAgentProfileRow,
-} from "./shared.js";
+import { badInput, normalizeProfileSlug, notFound } from "./shared.js";
+import { BUILT_IN_AGENT_PROFILE_KEYS } from "./built-in-agent-profiles.js";
 
+/**
+ * Delete a sub-agent (subagent-folders U11): folder-write only — removes
+ * the folder's INSTRUCTIONS.md (grant folders wither at compile without
+ * their parent entry and are swept by the reconciler, never bulk-deleted
+ * here) plus the legacy `agents/<slug>.md` form. No `agent_profiles` row
+ * is touched.
+ */
 export async function deleteAgentProfile(
   _parent: unknown,
   args: { tenantId: string; id: string },
@@ -21,39 +25,18 @@ export async function deleteAgentProfile(
     args.tenantId,
     "agent_profiles:delete",
   );
-  await ensureBuiltInAgentProfiles(args.tenantId);
 
-  const existing = await loadAgentProfileRow(args.tenantId, args.id);
-  // Space-local rows (source_space_id set) are projections of a Space's
-  // workspace files. Deleting one here would remove the CENTRAL agent
-  // source agents/<slug>.md — killing a same-slug central profile.
-  if (existing.source_space_id != null) {
-    throw badInput(
-      "Space-local Agent Profiles are managed from their Space's workspace files (Settings → Spaces → the owning Space → Workspace files)",
-    );
-  }
-  if (existing.built_in_key) {
+  const slug = normalizeProfileSlug(args.id);
+  if ((BUILT_IN_AGENT_PROFILE_KEYS as readonly string[]).includes(slug)) {
     throw badInput("Built-in Agent Profiles can be disabled but not deleted");
   }
+  const existing = await getAgentFolderProfileForTenant(args.tenantId, slug);
+  if (!existing) throw notFound("Agent Profile not found");
 
-  await db
-    .delete(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.tenant_id, args.tenantId),
-        eq(agentProfiles.id, args.id),
-      ),
-    );
-  await deleteAgentProfileFileForTenant({
-    tenantId: args.tenantId,
-    slug: String(existing.slug),
-  });
-  // Subagent-folders U12: remove the folder form too (INSTRUCTIONS.md
-  // only — grant folders wither at compile without their parent entry
-  // and are swept by the reconciler, never bulk-deleted here).
   await deleteAgentProfileFolderInstructionsForTenant({
     tenantId: args.tenantId,
-    slug: String(existing.slug),
+    slug,
   });
+  await deleteAgentProfileFileForTenant({ tenantId: args.tenantId, slug });
   return true;
 }

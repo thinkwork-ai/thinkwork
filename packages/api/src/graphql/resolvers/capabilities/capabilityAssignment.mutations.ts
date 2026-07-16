@@ -10,11 +10,12 @@
  *   - skill @ agent          → `installCatalogSkill` / `uninstallCatalogSkill`
  *                              (S3 workspace materialization + CONTEXT.md
  *                              wiring) + workspace manifest regeneration;
- *   - skill @ profile        → `agent_profiles.skill_policy.skillSlugs`;
- *   - mcp_server @ agent     → `agent_mcp_servers` upsert/delete;
- *   - mcp_server @ profile   → `agent_profiles.tool_policy.mcpServers`
- *                              (slugs only — the per-server allowlist passes
- *                              through from the agent-level server config);
+ *   - skill @ profile        → signed `agents/<slug>/skills/<child>/` child
+ *                              grant folder (subagent-folders U11);
+ *   - mcp_server @ agent     → workspace file + signed connection folder;
+ *   - mcp_server @ profile   → signed `agents/<slug>/connectors/<child>/`
+ *                              child grant folder (the agent-level server
+ *                              config's allowlist passes through);
  *   - pi_extension @ both    → delegates to THINK-114's
  *                              `updatePiExtensionAssignment` (adapt, don't
  *                              fork).
@@ -42,7 +43,6 @@ import {
   and,
   agents,
   tenants,
-  agentProfiles,
   skillCatalog,
   tenantMcpServers,
 } from "../../utils.js";
@@ -179,45 +179,25 @@ async function resolveAgentTarget(
   };
 }
 
-interface ProfileRow {
-  id: string;
-  slug: string;
-  source_space_id: string | null;
-  tool_policy: Record<string, unknown>;
-  skill_policy: Record<string, unknown>;
-}
-
-async function requireCentralProfile(
-  client: Pick<typeof db, "select">,
+/**
+ * Subagent-folders U11: an agent-profile grant target is a workspace
+ * `agents/<slug>/` folder — `agentProfileId` IS the folder slug (the
+ * legacy row UUIDs no longer resolve). Validates the folder exists under
+ * the tenant's platform agent workspace.
+ */
+async function requireProfileFolder(
   tenantId: string,
   agentProfileId: string | null | undefined,
-): Promise<ProfileRow> {
+): Promise<{ slug: string }> {
   if (!agentProfileId) {
     throw badInput("agent-profile scope requires agentProfileId");
   }
-  const [profile] = await client
-    .select({
-      id: agentProfiles.id,
-      slug: agentProfiles.slug,
-      source_space_id: agentProfiles.source_space_id,
-      tool_policy: agentProfiles.tool_policy,
-      skill_policy: agentProfiles.skill_policy,
-    })
-    .from(agentProfiles)
-    .where(
-      and(
-        eq(agentProfiles.id, agentProfileId),
-        eq(agentProfiles.tenant_id, tenantId),
-      ),
-    )
-    .limit(1);
+  const slug = agentProfileId.trim();
+  const { getAgentFolderProfileForTenant } =
+    await import("../../../lib/agent-profile-workspace-files.js");
+  const profile = await getAgentFolderProfileForTenant(tenantId, slug);
   if (!profile) throw notFound("agent profile not found in tenant");
-  if (profile.source_space_id != null) {
-    throw badInput(
-      "space-local agent profiles are file-authoritative — edit the Space source's agents/ folder instead",
-    );
-  }
-  return profile as ProfileRow;
+  return { slug };
 }
 
 interface AuditSpec {
@@ -388,13 +368,20 @@ async function skillAgentMutation(
   };
 }
 
-// ─── skill @ profile: skill_policy.skillSlugs subset ───────────────────────
+// ─── skill @ profile: agents/<slug>/skills/<child>/ grant folder ───────────
+// (subagent-folders U11 — grants are folder presence with a platform-
+// signed sidecar; agent_profiles.skill_policy is retired.)
 
 async function skillProfileMutation(
   mode: MutationMode,
   input: CapabilityMutationGqlInput,
-  audit: (spec: AuditSpec) => Parameters<typeof emitAuditEvent>[1],
+  signedBy: `operator:${string}`,
 ): Promise<ClassOutcome> {
+  const {
+    agentChildGrantExists,
+    putAgentChildGrantSidecar,
+    removeAgentChildGrantSidecar,
+  } = await import("../../../lib/capabilities/folder-write.js");
   const slug = input.capabilityRef.trim();
   if (mode === "grant") {
     const [catalogRow] = await db
@@ -412,39 +399,42 @@ async function skillProfileMutation(
     }
   }
 
-  return db.transaction(async (tx) => {
-    const profile = await requireCentralProfile(
-      tx,
-      input.tenantId,
-      input.agentProfileId,
+  const profile = await requireProfileFolder(
+    input.tenantId,
+    input.agentProfileId,
+  );
+  const target = await resolveAgentTarget(input.tenantId, input.agentId);
+  const grantInput = {
+    targetPrefix: target.targetPrefix,
+    agentProfileSlug: profile.slug,
+    childClass: "skill" as const,
+    slug,
+  };
+  const exists = await agentChildGrantExists(grantInput);
+  if (exists === null) throw new Error("WORKSPACE_BUCKET is not configured");
+  if (mode === "grant" ? exists : !exists) {
+    return { outcome: "noop", auditEmitted: false };
+  }
+  const result =
+    mode === "grant"
+      ? await putAgentChildGrantSidecar({ ...grantInput, signedBy })
+      : await removeAgentChildGrantSidecar(grantInput);
+  if (!result.ok) {
+    throw new Error(
+      `agent-profile skill ${mode} failed: ${result.reason}${
+        "detail" in result && result.detail ? ` (${result.detail})` : ""
+      }`,
     );
-    const skillPolicy = { ...(profile.skill_policy ?? {}) };
-    const slugs = normalizeStringArray(skillPolicy.skillSlugs);
-    const has = slugs.includes(slug);
-    if (mode === "grant" ? has : !has) {
-      return { outcome: "noop" as const, auditEmitted: true };
-    }
-    const nextSlugs =
-      mode === "grant"
-        ? [...slugs, slug]
-        : slugs.filter((entry) => entry !== slug);
-    await tx
-      .update(agentProfiles)
-      .set({
-        skill_policy: { ...skillPolicy, skillSlugs: nextSlugs },
-        updated_at: new Date(),
-      })
-      .where(eq(agentProfiles.id, profile.id));
-    await emitAuditEvent(
-      tx,
-      audit({
-        eventType: AUDIT_EVENT_TYPES.skill[mode],
-        before: { skillSlugs: slugs },
-        after: { skillSlugs: nextSlugs },
-      }),
-    );
-    return { outcome: "applied" as const, auditEmitted: true };
-  });
+  }
+  return {
+    outcome: "applied",
+    auditEmitted: false,
+    audit: {
+      eventType: AUDIT_EVENT_TYPES.skill[mode],
+      before: { granted: mode !== "grant" },
+      after: { granted: mode === "grant" },
+    },
+  };
 }
 
 // ─── mcp_server @ agent: workspace file + signed connection folder ─────────
@@ -525,9 +515,8 @@ async function mcpAgentMutation(
   /** Normalized prior state: null = not attached. */
   let existing: { enabled: boolean; enabledTools: string[] | null } | null;
   if (flipped) {
-    const { readConnectionAssignment } = await import(
-      "../../../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../../../lib/capabilities/connection-assignments.js");
     const record = await readConnectionAssignment(
       target.targetPrefix,
       generated.slug,
@@ -799,13 +788,21 @@ async function folderCapabilityMutation(
   };
 }
 
-// ─── mcp_server @ profile: tool_policy.mcpServers subset ───────────────────
+// ─── mcp_server @ profile: agents/<slug>/connectors/<child>/ grant folder ──
+// (subagent-folders U11 — grants are folder presence with a platform-
+// signed sidecar; agent_profiles.tool_policy.mcpServers is retired. The
+// root grant's effective surface applies — no per-child narrowing here.)
 
 async function mcpProfileMutation(
   mode: MutationMode,
   input: CapabilityMutationGqlInput,
-  audit: (spec: AuditSpec) => Parameters<typeof emitAuditEvent>[1],
+  signedBy: `operator:${string}`,
 ): Promise<ClassOutcome> {
+  const {
+    agentChildGrantExists,
+    putAgentChildGrantSidecar,
+    removeAgentChildGrantSidecar,
+  } = await import("../../../lib/capabilities/folder-write.js");
   if (input.toolAllowlist && input.toolAllowlist.length > 0) {
     throw badInput(
       "per-server tool allowlists live on the agent-level server assignment and pass through to profiles — grant the allowlist at agent scope",
@@ -817,39 +814,43 @@ async function mcpProfileMutation(
   );
   const slug = server.slug ?? server.name;
 
-  return db.transaction(async (tx) => {
-    const profile = await requireCentralProfile(
-      tx,
-      input.tenantId,
-      input.agentProfileId,
+  const profile = await requireProfileFolder(
+    input.tenantId,
+    input.agentProfileId,
+  );
+  const target = await resolveAgentTarget(input.tenantId, input.agentId);
+  const grantInput = {
+    targetPrefix: target.targetPrefix,
+    agentProfileSlug: profile.slug,
+    childClass: "connection" as const,
+    slug,
+  };
+  const exists = await agentChildGrantExists(grantInput);
+  if (exists === null) throw new Error("WORKSPACE_BUCKET is not configured");
+  if (mode === "grant" ? exists : !exists) {
+    return { outcome: "noop", auditEmitted: false, itemId: slug };
+  }
+  const result =
+    mode === "grant"
+      ? await putAgentChildGrantSidecar({ ...grantInput, signedBy })
+      : await removeAgentChildGrantSidecar(grantInput);
+  if (!result.ok) {
+    throw new Error(
+      `agent-profile mcp_server ${mode} failed: ${result.reason}${
+        "detail" in result && result.detail ? ` (${result.detail})` : ""
+      }`,
     );
-    const toolPolicy = { ...(profile.tool_policy ?? {}) };
-    const slugs = normalizeStringArray(toolPolicy.mcpServers);
-    const has = slugs.includes(slug);
-    if (mode === "grant" ? has : !has) {
-      return { outcome: "noop" as const, auditEmitted: true, itemId: slug };
-    }
-    const nextSlugs =
-      mode === "grant"
-        ? [...slugs, slug]
-        : slugs.filter((entry) => entry !== slug);
-    await tx
-      .update(agentProfiles)
-      .set({
-        tool_policy: { ...toolPolicy, mcpServers: nextSlugs },
-        updated_at: new Date(),
-      })
-      .where(eq(agentProfiles.id, profile.id));
-    await emitAuditEvent(
-      tx,
-      audit({
-        eventType: AUDIT_EVENT_TYPES.mcp_server[mode],
-        before: { mcpServers: slugs },
-        after: { mcpServers: nextSlugs },
-      }),
-    );
-    return { outcome: "applied" as const, auditEmitted: true, itemId: slug };
-  });
+  }
+  return {
+    outcome: "applied",
+    auditEmitted: false,
+    itemId: slug,
+    audit: {
+      eventType: AUDIT_EVENT_TYPES.mcp_server[mode],
+      before: { granted: mode !== "grant" },
+      after: { granted: mode === "grant" },
+    },
+  };
 }
 
 // ─── pi_extension: delegate to THINK-114's assignment mutation ──────────────
@@ -1025,7 +1026,7 @@ async function executeCapabilityMutation(
   if (capabilityClass === "skill" && scope === "agent") {
     result = await skillAgentMutation(mode, rawInput, agentTarget!);
   } else if (capabilityClass === "skill") {
-    result = await skillProfileMutation(mode, rawInput, auditBase);
+    result = await skillProfileMutation(mode, rawInput, `operator:${actorId}`);
   } else if (capabilityClass === "mcp_server" && scope === "agent") {
     result = await mcpAgentMutation(
       mode,
@@ -1035,7 +1036,7 @@ async function executeCapabilityMutation(
       `operator:${actorId}`,
     );
   } else if (capabilityClass === "mcp_server") {
-    result = await mcpProfileMutation(mode, rawInput, auditBase);
+    result = await mcpProfileMutation(mode, rawInput, `operator:${actorId}`);
   } else if (capabilityClass === "connection" || capabilityClass === "tool") {
     result = await folderCapabilityMutation(
       mode,

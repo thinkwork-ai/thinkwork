@@ -18,10 +18,7 @@
  * Plan 2026-06-12-002 U1 (dynamic workspace) — wakeup dispatch payload parity.
  */
 
-import type {
-  AgentProfileRuntimeConfig,
-  AgentRuntimePiExtension,
-} from "./resolve-agent-runtime-config.js";
+import type { AgentRuntimePiExtension } from "./resolve-agent-runtime-config.js";
 import type { EffectiveWorkspaceModelRoutingEntry } from "./workspace-renderer/index.js";
 
 /**
@@ -128,16 +125,6 @@ export interface AgentDispatchControlFieldArgs {
   apiAuthSecret: string;
   threadId: string | null | undefined;
   threadTurnId: string | null | undefined;
-  agentProfiles: AgentProfileRuntimeConfig[];
-  /**
-   * Subagent-folders U10: "manifest" when the per-agent authority flag
-   * is on — the runtime assembles central sub-agent profiles from the
-   * pinned capabilities manifest; `agentProfiles` then carries ONLY
-   * space-local profiles in full (their post-flip mechanism is
-   * dispatch-time Space filtering — see the plan's Open Questions).
-   * Undefined = payload-authoritative (today's behavior, byte-identical).
-   */
-  agentProfilesAuthority?: "manifest";
   piExtensions: AgentRuntimePiExtension[];
   modelRoutingPolicy:
     | { routes: EffectiveWorkspaceModelRoutingEntry[] }
@@ -233,34 +220,6 @@ export interface AgentDispatchControlFieldArgs {
   capabilityCallerContext?: string;
 }
 
-/**
- * Apply the per-agent manifest-authority flip (subagent-folders U10) to
- * the resolved profile configs. Both dispatch builders MUST route
- * through this so parity is structural: flag off = profiles unchanged
- * and no authority marker (byte-identical payload); flag on = the
- * payload shrinks to space-local profiles only (full form — their
- * space-conditional filtering happens at payload-build time and has no
- * manifest mechanism yet) and carries agent_profiles_authority:
- * "manifest" so Pi assembles central profiles from the pinned manifest.
- */
-export function applyAgentProfileManifestAuthority(input: {
-  manifestAuthority: boolean;
-  profiles: AgentProfileRuntimeConfig[];
-}): {
-  agentProfiles: AgentProfileRuntimeConfig[];
-  agentProfilesAuthority?: "manifest";
-} {
-  if (!input.manifestAuthority) {
-    return { agentProfiles: input.profiles };
-  }
-  return {
-    agentProfiles: input.profiles.filter(
-      (profile) => profile.sourceSpaceId !== null,
-    ),
-    agentProfilesAuthority: "manifest",
-  };
-}
-
 export function buildAgentDispatchControlFields(
   args: AgentDispatchControlFieldArgs,
 ): Record<RequiredDispatchField, unknown> {
@@ -279,9 +238,12 @@ export function buildAgentDispatchControlFields(
     config_fingerprint: args.configFingerprint || undefined,
     capabilities_manifest_fingerprint:
       args.capabilitiesManifestFingerprint || undefined,
-    // Always an array — `[]` (not absent) when the tenant has no profiles.
-    agent_profiles: args.agentProfiles,
-    agent_profiles_authority: args.agentProfilesAuthority,
+    // Subagent-folders U11: sub-agent profiles are manifest-authoritative
+    // everywhere — the payload never carries full profile bodies. Pi
+    // assembles central profiles from the pinned capabilities manifest
+    // (`class: "agent"` entries); the array stays `[]` by contract.
+    agent_profiles: [],
+    agent_profiles_authority: "manifest",
     withheld_connections:
       args.withheldConnections && args.withheldConnections.length > 0
         ? args.withheldConnections

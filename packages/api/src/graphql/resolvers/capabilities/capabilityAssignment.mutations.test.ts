@@ -32,6 +32,10 @@ const {
   mockReadMcp,
   mockPutCapabilityFolder,
   mockRemoveCapabilityFolder,
+  mockAgentChildGrantExists,
+  mockPutAgentChildGrantSidecar,
+  mockRemoveAgentChildGrantSidecar,
+  mockGetAgentFolderProfileForTenant,
 } = vi.hoisted(() => ({
   rowsQueue: [] as unknown[][],
   txOps: [] as Array<{ op: string; tx: unknown; args: unknown }>,
@@ -53,6 +57,10 @@ const {
   mockReadMcp: vi.fn(),
   mockPutCapabilityFolder: vi.fn(),
   mockRemoveCapabilityFolder: vi.fn(),
+  mockAgentChildGrantExists: vi.fn(),
+  mockPutAgentChildGrantSidecar: vi.fn(),
+  mockRemoveAgentChildGrantSidecar: vi.fn(),
+  mockGetAgentFolderProfileForTenant: vi.fn(),
 }));
 
 function takeRows(): unknown[] {
@@ -260,8 +268,17 @@ vi.mock("../../../lib/capabilities/folder-write.js", async (importOriginal) => {
     ...actual,
     putCapabilityFolder: mockPutCapabilityFolder,
     removeCapabilityFolder: mockRemoveCapabilityFolder,
+    agentChildGrantExists: mockAgentChildGrantExists,
+    putAgentChildGrantSidecar: mockPutAgentChildGrantSidecar,
+    removeAgentChildGrantSidecar: mockRemoveAgentChildGrantSidecar,
   };
 });
+
+// Subagent-folders U11: the profile grant target is a workspace agents/
+// folder — resolved through the folder index, never agent_profiles rows.
+vi.mock("../../../lib/agent-profile-workspace-files.js", () => ({
+  getAgentFolderProfileForTenant: mockGetAgentFolderProfileForTenant,
+}));
 
 import {
   grantCapability,
@@ -328,6 +345,20 @@ beforeEach(() => {
   mockReadConnectionAssignment.mockResolvedValue(null);
   mockPutCapabilityFolder.mockResolvedValue({ ok: true });
   mockRemoveCapabilityFolder.mockResolvedValue({ ok: true });
+  mockAgentChildGrantExists.mockResolvedValue(false);
+  mockPutAgentChildGrantSidecar.mockResolvedValue({ ok: true });
+  mockRemoveAgentChildGrantSidecar.mockResolvedValue({ ok: true });
+  mockGetAgentFolderProfileForTenant.mockResolvedValue({
+    slug: "coding",
+    config: {
+      slug: "coding",
+      description: "Codes.",
+      enabled: true,
+      execution: {},
+      instructions: "Code.",
+    },
+    updatedAt: null,
+  });
 });
 
 describe("matrix conformance (R2)", () => {
@@ -624,168 +655,106 @@ describe("skill @ agent (catalog install)", () => {
   });
 });
 
-describe("skill @ profile (skill_policy subset)", () => {
-  it("grant appends to skill_policy.skillSlugs and audits in the same transaction", async () => {
+describe("skill @ profile (child grant folder — subagent-folders U11)", () => {
+  const GRANT_INPUT = {
+    tenantId: TENANT_ID,
+    capabilityClass: "SKILL",
+    scope: "AGENT_PROFILE",
+    agentProfileId: "coding",
+    capabilityRef: "expenses",
+  };
+
+  it("grant writes the signed agents/<slug>/skills/<child>/ sidecar and audits", async () => {
     rowsQueue.push(
       [{ slug: "expenses" }], // skillCatalog validation
-      [
-        {
-          id: PROFILE_ID,
-          slug: "coding",
-          source_space_id: null,
-          tool_policy: {},
-          skill_policy: { skillSlugs: ["existing"] },
-        },
-      ],
+      [AGENT_ROW], // platform agent target
+      [TENANT_ROW],
     );
 
-    const result = await grantCapability(
-      null,
-      {
-        input: {
-          tenantId: TENANT_ID,
-          capabilityClass: "SKILL",
-          scope: "AGENT_PROFILE",
-          agentProfileId: PROFILE_ID,
-          capabilityRef: "expenses",
-        },
-      },
-      ctx,
-    );
+    const result = await grantCapability(null, { input: GRANT_INPUT }, ctx);
 
-    const update = txOps.find((op) => op.op === "update");
-    expect(update).toBeDefined();
-    expect(
-      (update!.args as { values: { skill_policy: unknown } }).values
-        .skill_policy,
-    ).toEqual({ skillSlugs: ["existing", "expenses"] });
-    // Audit event rides the SAME transaction handle as the write.
+    expect(mockPutAgentChildGrantSidecar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetPrefix: "tenants/acme/agents/ada/",
+        agentProfileSlug: "coding",
+        childClass: "skill",
+        slug: "expenses",
+        signedBy: `operator:${USER_ID}`,
+      }),
+    );
     expect(mockEmitAuditEvent).toHaveBeenCalledTimes(1);
-    expect(mockEmitAuditEvent.mock.calls[0][0]).toBe(update!.tx);
+    expect(
+      (mockEmitAuditEvent.mock.calls[0][1] as { eventType: string }).eventType,
+    ).toBe("skill.granted");
     expect(result.outcome).toBe("applied");
     expect(mockCapabilityInspector).toHaveBeenCalledWith(
       null,
-      expect.objectContaining({ agentProfileId: PROFILE_ID }),
+      expect.objectContaining({ agentProfileId: "coding" }),
       ctx,
     );
   });
 
-  it("a failed write leaves no audit event", async () => {
-    rowsQueue.push(
-      [{ slug: "expenses" }],
-      [
-        {
-          id: PROFILE_ID,
-          slug: "coding",
-          source_space_id: null,
-          tool_policy: {},
-          skill_policy: {},
-        },
-      ],
-    );
-    updateShouldThrow.value = "db down";
+  it("idempotent re-grant is a no-op — no write, no audit", async () => {
+    rowsQueue.push([{ slug: "expenses" }], [AGENT_ROW], [TENANT_ROW]);
+    mockAgentChildGrantExists.mockResolvedValue(true);
 
-    await expect(
-      grantCapability(
-        null,
-        {
-          input: {
-            tenantId: TENANT_ID,
-            capabilityClass: "SKILL",
-            scope: "AGENT_PROFILE",
-            agentProfileId: PROFILE_ID,
-            capabilityRef: "expenses",
-          },
-        },
-        ctx,
-      ),
-    ).rejects.toThrow("db down");
+    const result = await grantCapability(null, { input: GRANT_INPUT }, ctx);
+
+    expect(result.outcome).toBe("noop");
+    expect(mockPutAgentChildGrantSidecar).not.toHaveBeenCalled();
     expect(mockEmitAuditEvent).not.toHaveBeenCalled();
   });
 
-  it("space-local profiles are rejected as file-authoritative", async () => {
-    rowsQueue.push(
-      [{ slug: "expenses" }],
-      [
-        {
-          id: PROFILE_ID,
-          slug: "coding",
-          source_space_id: "space-1",
-          tool_policy: {},
-          skill_policy: {},
-        },
-      ],
-    );
-    await expect(
-      grantCapability(
-        null,
-        {
-          input: {
-            tenantId: TENANT_ID,
-            capabilityClass: "SKILL",
-            scope: "AGENT_PROFILE",
-            agentProfileId: PROFILE_ID,
-            capabilityRef: "expenses",
-          },
-        },
-        ctx,
-      ),
-    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
-    expect(mockEmitAuditEvent).not.toHaveBeenCalled();
-  });
+  it("detach removes the child grant sidecar (folder absence = detach)", async () => {
+    rowsQueue.push([AGENT_ROW], [TENANT_ROW]);
+    mockAgentChildGrantExists.mockResolvedValue(true);
 
-  // Agent page merge (THINK-132 U5): the tree's profile-scoped attach must be
-  // a drop-in for the retired chip editor — a grant touches ONLY skillSlugs
-  // and carries every sibling policy key through unchanged.
-  it("grant preserves sibling skill_policy keys untouched", async () => {
-    rowsQueue.push(
-      [{ slug: "expenses" }],
-      [
-        {
-          id: PROFILE_ID,
-          slug: "coding",
-          source_space_id: null,
-          tool_policy: {},
-          skill_policy: { skillSlugs: ["existing"], pinned: ["existing"] },
-        },
-      ],
-    );
+    const result = await detachCapability(null, { input: GRANT_INPUT }, ctx);
 
-    await grantCapability(
-      null,
-      {
-        input: {
-          tenantId: TENANT_ID,
-          capabilityClass: "SKILL",
-          scope: "AGENT_PROFILE",
-          agentProfileId: PROFILE_ID,
-          capabilityRef: "expenses",
-        },
-      },
-      ctx,
+    expect(mockRemoveAgentChildGrantSidecar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentProfileSlug: "coding",
+        childClass: "skill",
+        slug: "expenses",
+      }),
     );
-
-    const update = txOps.find((op) => op.op === "update");
+    expect(result.outcome).toBe("applied");
     expect(
-      (update!.args as { values: { skill_policy: unknown } }).values
-        .skill_policy,
-    ).toEqual({ pinned: ["existing"], skillSlugs: ["existing", "expenses"] });
+      (mockEmitAuditEvent.mock.calls[0][1] as { eventType: string }).eventType,
+    ).toBe("skill.detached");
+  });
+
+  it("a failed sidecar write throws and leaves no audit event", async () => {
+    rowsQueue.push([{ slug: "expenses" }], [AGENT_ROW], [TENANT_ROW]);
+    mockPutAgentChildGrantSidecar.mockResolvedValue({
+      ok: false,
+      reason: "write_failed",
+      detail: "s3 down",
+    });
+
+    await expect(
+      grantCapability(null, { input: GRANT_INPUT }, ctx),
+    ).rejects.toThrow("write_failed");
+    expect(mockEmitAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it("an unknown profile folder slug is NOT_FOUND", async () => {
+    rowsQueue.push([{ slug: "expenses" }]);
+    mockGetAgentFolderProfileForTenant.mockResolvedValue(null);
+
+    await expect(
+      grantCapability(null, { input: GRANT_INPUT }, ctx),
+    ).rejects.toMatchObject({ extensions: { code: "NOT_FOUND" } });
+    expect(mockEmitAuditEvent).not.toHaveBeenCalled();
   });
 });
 
-describe("mcp_server @ profile (tool_policy subset)", () => {
-  it("grant appends the server slug to tool_policy.mcpServers; the allowlist passes through from the agent-level config", async () => {
+describe("mcp_server @ profile (connectors/ child grant folder)", () => {
+  it("grant writes the signed agents/<slug>/connectors/<child>/ sidecar and audits", async () => {
     rowsQueue.push(
       [{ id: SERVER_ID, slug: "github", name: "GitHub" }], // registry
-      [
-        {
-          id: PROFILE_ID,
-          slug: "coding",
-          source_space_id: null,
-          tool_policy: { builtInTools: ["search"] },
-          skill_policy: {},
-        },
-      ],
+      [AGENT_ROW],
+      [TENANT_ROW],
     );
     mockCapabilityInspector.mockResolvedValue(
       cannedInspection([
@@ -793,8 +762,7 @@ describe("mcp_server @ profile (tool_policy subset)", () => {
           capabilityClass: "mcp_server",
           capabilityId: "github",
           active: true,
-          provenance: "agent profile coding: tool_policy",
-          detail: "allowed tools: issues_read, pulls_read",
+          provenance: "agent profile coding: connectors/github/ grant folder",
         },
       ]),
     );
@@ -806,21 +774,22 @@ describe("mcp_server @ profile (tool_policy subset)", () => {
           tenantId: TENANT_ID,
           capabilityClass: "MCP_SERVER",
           scope: "AGENT_PROFILE",
-          agentProfileId: PROFILE_ID,
+          agentProfileId: "coding",
           capabilityRef: "github",
         },
       },
       ctx,
     );
 
-    const update = txOps.find((op) => op.op === "update");
-    expect(
-      (update!.args as { values: { tool_policy: unknown } }).values.tool_policy,
-    ).toEqual({ builtInTools: ["search"], mcpServers: ["github"] });
-    expect(result.item).toMatchObject({
-      capabilityId: "github",
-      detail: "allowed tools: issues_read, pulls_read",
-    });
+    expect(mockPutAgentChildGrantSidecar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentProfileSlug: "coding",
+        childClass: "connection",
+        slug: "github",
+        signedBy: `operator:${USER_ID}`,
+      }),
+    );
+    expect(result.item).toMatchObject({ capabilityId: "github" });
     expect(mockEmitAuditEvent).toHaveBeenCalledTimes(1);
     expect(
       (mockEmitAuditEvent.mock.calls[0][1] as { eventType: string }).eventType,
@@ -836,7 +805,7 @@ describe("mcp_server @ profile (tool_policy subset)", () => {
             tenantId: TENANT_ID,
             capabilityClass: "MCP_SERVER",
             scope: "AGENT_PROFILE",
-            agentProfileId: PROFILE_ID,
+            agentProfileId: "coding",
             capabilityRef: "github",
             toolAllowlist: ["issues_read"],
           },

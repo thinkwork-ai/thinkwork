@@ -106,16 +106,11 @@ import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
 import {
   applyAgentSkillMetadata,
-  loadAgentProfileRuntimeConfigs,
   loadPiExtensionRuntimeAssignments,
   loadWorkspaceSkillConfigs,
-  type AgentProfileRuntimeConfig,
   type AgentRuntimePiExtension,
 } from "../lib/resolve-agent-runtime-config.js";
-import {
-  applyAgentProfileManifestAuthority,
-  buildAgentDispatchControlFields,
-} from "../lib/agent-dispatch-payload.js";
+import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { computeConfigFingerprint } from "../lib/capability-fingerprint.js";
@@ -710,7 +705,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
       capability_folder_dispatch: agents.capability_folder_dispatch,
-      agent_profile_manifest_authority: agents.agent_profile_manifest_authority,
       runtime_config: agents.runtime_config,
       budget_paused: agents.budget_paused,
       guardrail_id: agentTemplates.guardrail_id,
@@ -2019,29 +2013,19 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     invokerUserId && modelRoutingRoutes.length > 0
       ? { routes: modelRoutingRoutes }
       : undefined;
-  // Profiles + approved catalog are independent lookups — resolve them
-  // concurrently. Per-arm semantics preserved: profile resolution stays
-  // best-effort (failure → `[]`), catalog failure still fails the wakeup.
-  const [agentProfilesConfig, approvedModelIds] = await Promise.all([
-    loadAgentProfileRuntimeConfigs({
-      tenantId: wakeup.tenant_id,
-      spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId ?? null,
-      mcpConfigs: mcpConfigsRaw,
-      logPrefix: "[wakeup-processor]",
-    }).catch((err): AgentProfileRuntimeConfig[] => {
-      console.error(`[wakeup-processor] Agent profile resolution failed:`, err);
-      return [];
-    }),
+  // Subagent-folders U11: sub-agent profiles are manifest-authoritative —
+  // the legacy `agent_profiles` row loading is retired; Pi assembles
+  // profiles from the pinned capabilities manifest.
+  const approvedModelIds =
     modelRoutingPolicy && invokerUserId
-      ? listApprovedModelCatalog({
+      ? await listApprovedModelCatalog({
           tenantId: wakeup.tenant_id,
           userId: invokerUserId,
         }).then((models) => models.map((model) => model.modelId))
-      : Promise.resolve(undefined),
-  ]);
+      : undefined;
   const piExtensionAssignments = await loadPiExtensionRuntimeAssignments({
     tenantId: wakeup.tenant_id,
-    agentProfileIds: agentProfilesConfig.map((profile) => profile.id),
+    agentProfileIds: [],
     logPrefix: "[wakeup-processor]",
   }).catch(
     (
@@ -2055,10 +2039,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     },
   );
   const piExtensions = piExtensionAssignments.defaultAgent;
-  for (const profile of agentProfilesConfig) {
-    profile.piExtensions =
-      piExtensionAssignments.byAgentProfileId.get(profile.id) ?? [];
-  }
 
   const startMs = Date.now();
   // Generate trace ID for observability correlation (PRD-20)
@@ -2154,18 +2134,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           artifactHash: extension.artifactHash,
           grantedPermissionClasses: extension.grantedPermissionClasses,
         })),
-        agentProfiles: agentProfilesConfig.map((profile) => ({
-          id: profile.id,
-          slug: profile.slug,
-          modelId: profile.modelId,
-          builtInTools: profile.builtInTools,
-          skillSlugs: profile.skillSlugs,
-          mcpToolAllowlist: profile.mcpToolAllowlist,
-          availabilityScope: profile.availability.scope,
-          piExtensionAssignmentIds: profile.piExtensions.map(
-            (extension) => extension.assignmentId,
-          ),
-        })),
+        // Subagent-folders U11: sub-agent profiles no longer enter the
+        // fingerprint from DB rows — the capabilities manifest carries
+        // the agent entries (chat parity: agentProfilesConfig is []).
+        agentProfiles: [],
         // THINK-173 U5: folder capabilities project from the SAME
         // manifest on both dispatch paths (parity helper).
         ...fingerprintInputsFromCapabilitiesManifest(
@@ -2283,16 +2255,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             ? renderedWorkspace.capabilities?.fingerprint
             : undefined,
         capabilityCallerContext: capabilityCallerContext ?? undefined,
-        ...applyAgentProfileManifestAuthority({
-          manifestAuthority:
-            agent.agent_profile_manifest_authority === true &&
-            agent.capability_folder_dispatch === true &&
-            Boolean(
-              renderedWorkspace.rendered &&
-              renderedWorkspace.capabilities?.fingerprint,
-            ),
-          profiles: agentProfilesConfig,
-        }),
         piExtensions,
         modelRoutingPolicy,
         approvedModelIds,
@@ -2340,11 +2302,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           threadId: runThreadId,
           messageId,
         });
-        const profilePinnedSlugs = agentProfilesConfig.flatMap(
-          (profile) => profile.skillSlugs,
-        );
+        // Subagent-folders U11: profile skill pins are retired — child
+        // grant folders carry sub-agent skill grants via the manifest.
         const policyAllowedPinnedSlugs = filterBlockedSkills(
-          [...new Set([...messagePinnedSlugs, ...profilePinnedSlugs])],
+          [...new Set(messagePinnedSlugs)],
           effectiveBlockedTools,
         );
         const trustedPinnedSlugs = [
@@ -3011,16 +2972,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                   ? renderedWorkspace.capabilities?.fingerprint
                   : undefined,
               capabilityCallerContext: capabilityCallerContext ?? undefined,
-              ...applyAgentProfileManifestAuthority({
-                manifestAuthority:
-                  agent.agent_profile_manifest_authority === true &&
-                  agent.capability_folder_dispatch === true &&
-                  Boolean(
-                    renderedWorkspace.rendered &&
-                    renderedWorkspace.capabilities?.fingerprint,
-                  ),
-                profiles: agentProfilesConfig,
-              }),
               piExtensions,
               modelRoutingPolicy,
               approvedModelIds,

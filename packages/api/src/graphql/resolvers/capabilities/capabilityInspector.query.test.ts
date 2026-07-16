@@ -17,6 +17,8 @@ const {
   mockRenderWorkspaceTuple,
   mockResolvePluginGate,
   mockListWorkspaceMcpSlugs,
+  mockGetAgentFolderProfileForTenant,
+  mockResolveCurrentCapabilitiesManifest,
 } = vi.hoisted(() => ({
   rowsQueue: [] as unknown[][],
   mockRequireAdminOrServiceCaller: vi.fn(),
@@ -24,6 +26,8 @@ const {
   mockRenderWorkspaceTuple: vi.fn(),
   mockResolvePluginGate: vi.fn(),
   mockListWorkspaceMcpSlugs: vi.fn(),
+  mockGetAgentFolderProfileForTenant: vi.fn(),
+  mockResolveCurrentCapabilitiesManifest: vi.fn(),
 }));
 
 function takeRows(): unknown[] {
@@ -113,6 +117,16 @@ vi.mock("../../../lib/workspace-renderer/compose-tuple.js", () => ({
 
 vi.mock("../../../lib/plugins/gating.js", () => ({
   resolvePluginGate: mockResolvePluginGate,
+}));
+
+// Subagent-folders U11: profile identity comes from the workspace
+// agent-folder index; effective/withheld state from the compiled manifest.
+vi.mock("../../../lib/agent-profile-workspace-files.js", () => ({
+  getAgentFolderProfileForTenant: mockGetAgentFolderProfileForTenant,
+}));
+
+vi.mock("../../../lib/capabilities/current-manifest.js", () => ({
+  resolveCurrentCapabilitiesManifest: mockResolveCurrentCapabilitiesManifest,
 }));
 
 // Composer U9a: attached-MCP workspace-folder lookup. Default (empty)
@@ -272,6 +286,8 @@ beforeEach(() => {
   mockResolvePluginGate.mockResolvedValue(EMPTY_GATE);
   // Default: no attached-MCP workspace folders → pre-U9a registry provenance.
   mockListWorkspaceMcpSlugs.mockResolvedValue([]);
+  mockGetAgentFolderProfileForTenant.mockResolvedValue(null);
+  mockResolveCurrentCapabilitiesManifest.mockResolvedValue(undefined);
 });
 
 /** Stage the selection lookups + inventory queries for a happy-path call. */
@@ -543,20 +559,74 @@ describe("item assembly", () => {
   });
 });
 
-describe("profile selection", () => {
+describe("profile selection (subagent-folders U11: folder index + manifest)", () => {
+  const FOLDER_PROFILE = {
+    slug: "coding",
+    config: {
+      slug: "coding",
+      description: "Codes.",
+      enabled: true,
+      execution: {},
+      instructions: "Code.",
+    },
+    updatedAt: null,
+  };
+
   function stageProfileSelection() {
     rowsQueue.push([{ id: AGENT_ID }]); // agent
-    rowsQueue.push([{ id: PROFILE_ID, slug: "coding", name: "Coding" }]); // profile
     rowsQueue.push([]); // catalog
     rowsQueue.push([]); // mcp inventory
     rowsQueue.push([]); // plugin installs
+    mockGetAgentFolderProfileForTenant.mockResolvedValue(FOLDER_PROFILE);
   }
 
-  it("active profile → the profile's granted subset with per-item provenance", async () => {
+  function manifestWith(overrides: Record<string, unknown> = {}) {
+    return {
+      version: 5,
+      fingerprint: "fp-1",
+      input_signature: "sig-1",
+      generated_at: "2026-07-15T00:00:00.000Z",
+      agent: { tenant_id: TENANT_ID, agent_slug: "ada" },
+      active: [],
+      withheld: [],
+      signature: null,
+      ...overrides,
+    };
+  }
+
+  it("active profile → the manifest entry's granted subset with per-item provenance", async () => {
     stageProfileSelection();
+    mockResolveCurrentCapabilitiesManifest.mockResolvedValue(
+      manifestWith({
+        active: [
+          {
+            name: "coding",
+            slug: "coding",
+            class: "agent",
+            description: "Codes.",
+            builtInTools: ["bash"],
+            grants: [
+              {
+                class: "connector",
+                slug: "github",
+                operations: ["search_issues"],
+              },
+              { class: "skill", slug: "approve-receipt" },
+            ],
+            withheldGrants: [
+              {
+                class: "skill",
+                slug: "not-on-agent",
+                reason: "missing_skill",
+              },
+            ],
+          },
+        ],
+      }),
+    );
     const res = await capabilityInspector(
       null,
-      { tenantId: TENANT_ID, agentId: AGENT_ID, agentProfileId: PROFILE_ID },
+      { tenantId: TENANT_ID, agentId: AGENT_ID, agentProfileId: "coding" },
       ctx,
     );
     expect(res.state).toBe("ok");
@@ -565,45 +635,59 @@ describe("profile selection", () => {
       expect.objectContaining({
         capabilityClass: "builtin_tool",
         capabilityId: "bash",
-        provenance: "agent profile coding: tool_policy",
+        provenance: "agent profile coding: builtInTools",
       }),
     );
     expect(items).toContainEqual(
       expect.objectContaining({
         capabilityClass: "mcp_server",
         capabilityId: "github",
+        active: true,
         detail: expect.stringContaining("search_issues"),
       }),
     );
-    // Subset-constraint honesty: a skill_policy slug the agent lacks is inactive.
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        capabilityClass: "skill",
+        capabilityId: "approve-receipt",
+        active: true,
+      }),
+    );
+    // Withheld child grants render as visible absence, never spawn errors.
     expect(items).toContainEqual(
       expect.objectContaining({
         capabilityClass: "skill",
         capabilityId: "not-on-agent",
         active: false,
-        reason: "not_installed",
+        reason: "missing_skill",
+      }),
+    );
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        capabilityClass: "agent_profile",
+        capabilityId: "coding",
+        active: true,
       }),
     );
   });
 
-  it("dropped profile → its drop-reason rows only", async () => {
-    mockResolveAgentRuntimeConfig.mockResolvedValue(
-      baseConfig({
-        agentProfilesConfig: [],
-        capabilityDiagnostics: [
+  it("withheld profile → its withheld-reason row", async () => {
+    stageProfileSelection();
+    mockResolveCurrentCapabilitiesManifest.mockResolvedValue(
+      manifestWith({
+        withheld: [
           {
-            capabilityClass: "agent_profile",
-            capabilityId: "coding",
-            displayName: "Coding",
-            reason: "profile_disabled",
+            slug: "coding",
+            class: "agent",
+            reason: "disabled",
+            detail: "sidecar disabled",
           },
         ],
       }),
     );
-    stageProfileSelection();
     const res = await capabilityInspector(
       null,
-      { tenantId: TENANT_ID, agentId: AGENT_ID, agentProfileId: PROFILE_ID },
+      { tenantId: TENANT_ID, agentId: AGENT_ID, agentProfileId: "coding" },
       ctx,
     );
     expect(res.state).toBe("ok");
@@ -611,20 +695,36 @@ describe("profile selection", () => {
       expect.objectContaining({
         capabilityId: "coding",
         active: false,
-        reason: "profile_disabled",
+        reason: "disabled",
+        detail: "sidecar disabled",
       }),
     ]);
   });
 
-  it("profile neither active nor dropped → invalid_selection", async () => {
-    mockResolveAgentRuntimeConfig.mockResolvedValue(
-      baseConfig({ agentProfilesConfig: [], capabilityDiagnostics: [] }),
-    );
-    rowsQueue.push([{ id: AGENT_ID }]); // agent
-    rowsQueue.push([{ id: PROFILE_ID, slug: "coding", name: "Coding" }]); // profile
+  it("folder exists but no manifest is resolvable → inactive resolution_fault row", async () => {
+    stageProfileSelection();
+    mockResolveCurrentCapabilitiesManifest.mockResolvedValue(undefined);
     const res = await capabilityInspector(
       null,
-      { tenantId: TENANT_ID, agentId: AGENT_ID, agentProfileId: PROFILE_ID },
+      { tenantId: TENANT_ID, agentId: AGENT_ID, agentProfileId: "coding" },
+      ctx,
+    );
+    expect(res.state).toBe("ok");
+    expect(res.predicted?.items).toEqual([
+      expect.objectContaining({
+        capabilityId: "coding",
+        active: false,
+        reason: "resolution_fault",
+      }),
+    ]);
+  });
+
+  it("unknown profile slug → invalid_selection", async () => {
+    rowsQueue.push([{ id: AGENT_ID }]); // agent
+    mockGetAgentFolderProfileForTenant.mockResolvedValue(null);
+    const res = await capabilityInspector(
+      null,
+      { tenantId: TENANT_ID, agentId: AGENT_ID, agentProfileId: "ghost" },
       ctx,
     );
     expect(res.state).toBe("invalid_selection");

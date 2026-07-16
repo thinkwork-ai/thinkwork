@@ -1,50 +1,30 @@
 import type { GraphQLContext } from "../../context.js";
-import { agentProfiles, and, db, eq, isNull } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { getAgentFolderProfileForTenant } from "../../../lib/agent-profile-workspace-files.js";
 import {
   badInput,
-  ensureBuiltInAgentProfiles,
-  notFound,
+  folderProfileToGraphql,
   normalizeProfileSlug,
-  toAgentProfileGraphql,
 } from "./shared.js";
 
+/**
+ * Single-profile lookup (subagent-folders U11): folder-index sourced.
+ * `id` and `slug` are the same identifier now — the folder slug is the
+ * profile identity (legacy row UUIDs no longer resolve).
+ */
 export async function agentProfile(
   _parent: unknown,
   args: { tenantId: string; id?: string | null; slug?: string | null },
   ctx: GraphQLContext,
 ) {
   await requireAdminOrServiceCaller(ctx, args.tenantId, "agent_profiles:read");
-  await ensureBuiltInAgentProfiles(args.tenantId);
 
-  if (!args.id && !args.slug) {
+  const ref = args.id ?? args.slug;
+  if (!ref) {
     throw badInput("Either id or slug is required");
   }
 
-  // Slug lookups resolve the CENTRAL profile only: a space-local profile may
-  // share the slug (partial unique indexes split by source_space_id), so an
-  // unscoped slug match would return one of the two nondeterministically.
-  const selector = args.id
-    ? eq(agentProfiles.id, args.id)
-    : and(
-        eq(agentProfiles.slug, normalizeProfileSlug(args.slug ?? "")),
-        isNull(agentProfiles.source_space_id),
-      );
-  const [row] = await db
-    .select()
-    .from(agentProfiles)
-    .where(and(eq(agentProfiles.tenant_id, args.tenantId), selector));
-
-  return row ? toAgentProfileGraphql(row) : null;
-}
-
-export async function loadRequiredAgentProfile(tenantId: string, id: string) {
-  const [row] = await db
-    .select()
-    .from(agentProfiles)
-    .where(
-      and(eq(agentProfiles.tenant_id, tenantId), eq(agentProfiles.id, id)),
-    );
-  if (!row) throw notFound("Agent Profile not found");
-  return row;
+  const slug = normalizeProfileSlug(ref);
+  const profile = await getAgentFolderProfileForTenant(args.tenantId, slug);
+  return profile ? folderProfileToGraphql(args.tenantId, profile) : null;
 }

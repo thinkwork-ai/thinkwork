@@ -449,6 +449,65 @@ export async function resignCapabilityFolderSidecarIfPresent(input: {
  * IS the grant (see AGENT_CHILD_GRANT_SIGNING_BYTES in manifest-compile).
  * Child connection grants debut the greenfield `connectors/` spelling.
  */
+/** Key of a sub-agent child grant sidecar (subagent-folders U5/U11). */
+export function agentChildGrantSidecarKey(input: {
+  targetPrefix: string;
+  agentProfileSlug: string;
+  childClass: "connection" | "skill";
+  slug: string;
+}): string {
+  const folder =
+    input.childClass === "skill"
+      ? WORKSPACE_SKILLS_FOLDER
+      : capabilityFolderName("connection", "agent");
+  return `${input.targetPrefix}agents/${input.agentProfileSlug}/${folder}/${input.slug}/${CAPABILITY_SIDECAR_FILE}`;
+}
+
+/**
+ * Whether a sub-agent child grant sidecar exists. `null` = bucket
+ * unconfigured (caller decides degraded behavior).
+ */
+export async function agentChildGrantExists(input: {
+  targetPrefix: string;
+  agentProfileSlug: string;
+  childClass: "connection" | "skill";
+  slug: string;
+  deps?: CapabilityFolderWriteDeps;
+}): Promise<boolean | null> {
+  const deps = input.deps ?? {};
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return null;
+  const s3 = deps.s3 ?? s3Client();
+  try {
+    await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: agentChildGrantSidecarKey(input),
+      }),
+    );
+    return true;
+  } catch (err) {
+    const name = (err as { name?: string }).name;
+    if (name === "NoSuchKey" || name === "NotFound") return false;
+    throw err;
+  }
+}
+
+/**
+ * Remove a sub-agent child grant (detach = folder absence). Deletes the
+ * sidecar — the whole grant, since child grant folders never carry a
+ * definition file (R11).
+ */
+export async function removeAgentChildGrantSidecar(input: {
+  targetPrefix: string;
+  agentProfileSlug: string;
+  childClass: "connection" | "skill";
+  slug: string;
+  deps?: CapabilityFolderWriteDeps;
+}): Promise<FolderWriteResult> {
+  return deleteKeys(input, [agentChildGrantSidecarKey(input)]);
+}
+
 export async function putAgentChildGrantSidecar(input: {
   targetPrefix: string;
   agentProfileSlug: string;

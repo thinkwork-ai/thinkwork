@@ -13,7 +13,6 @@ import {
 import { listTenantModelCatalog } from "../../../lib/model-catalog/tenant-catalog.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { toGraphqlSpace } from "../spaces/shared.js";
-import { ensureBuiltInAgentProfiles } from "./shared.js";
 
 const DEFAULT_AGENT_PROFILE_BUILTIN_TOOLS = Array.from(
   new Set([...BUILTIN_TOOL_SLUGS, "execute_code", "bash", "file_read"]),
@@ -25,7 +24,6 @@ export async function agentProfileEditorCatalog(
   ctx: GraphQLContext,
 ) {
   await requireAdminOrServiceCaller(ctx, args.tenantId, "agent_profiles:read");
-  await ensureBuiltInAgentProfiles(args.tenantId);
 
   const [models, spaceRows, skillRows, builtinToolRows, mcpServerRows] =
     await Promise.all([

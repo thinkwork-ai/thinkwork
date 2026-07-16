@@ -1489,7 +1489,7 @@ operator can revoke it at any time.
  *     byte-identical to a previously shipped default version (see
  *     `src/historical.ts`).
  */
-export const DEFAULTS_VERSION = 40;
+export const DEFAULTS_VERSION = 41;
 
 // ---------------------------------------------------------------------------
 // Aggregator
@@ -1522,6 +1522,7 @@ description: >-
   Delegates focused research, source finding, and synthesis. Use for web,
   document, and knowledge-gathering subtasks that need citations or source
   comparison.
+model: us.anthropic.claude-sonnet-4-6
 builtInTools:
   - web-search
   - web-extract
@@ -1534,6 +1535,7 @@ const AGENT_CODING_INSTRUCTIONS_MD = `---
 description: >-
   Delegates code inspection, implementation, and test tasks. Use for software
   engineering subtasks in Spaces where coding work is allowed.
+model: us.anthropic.claude-opus-4-8
 builtInTools:
   - execute_code
   - bash
@@ -1546,6 +1548,7 @@ const AGENT_ANALYST_INSTRUCTIONS_MD = `---
 description: >-
   Delegates data analysis, metric review, and structured reporting. Use for
   data, spreadsheet, CRM, database, SQL, and quantitative analysis subtasks.
+model: us.anthropic.claude-sonnet-4-6
 builtInTools:
   - execute_code
   - file_read
@@ -1567,6 +1570,7 @@ description: >-
   final response when an answer, artifact, or delegated result needs a quality
   gate, or when the parent Agent is uncertain whether the output is good
   enough.
+model: us.anthropic.claude-sonnet-4-6
 execution:
   reviewGate: true
   maxReviewLoops: 2

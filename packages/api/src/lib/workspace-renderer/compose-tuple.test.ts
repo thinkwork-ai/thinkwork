@@ -17,7 +17,6 @@ import {
 } from "./space-membership-check.js";
 import type {
   ResolvedWorkspaceRenderTuple,
-  WorkspaceAgentProfileRoutingEntry,
   WorkspaceObjectMetadata,
   WorkspaceRendererObjectStore,
   WorkspaceSpaceIndexEntry,
@@ -60,7 +59,6 @@ const DEFAULT_SPACE_TUPLE: ResolvedWorkspaceRenderTuple = {
 interface FakeRepositoryOptions {
   authorizedSpaces?: WorkspaceSpaceIndexEntry[];
   participants?: WorkspaceSpaceParticipantEntry[];
-  agentProfiles?: WorkspaceAgentProfileRoutingEntry[];
 }
 
 class FakeRepository implements WorkspaceTupleRepository {
@@ -91,12 +89,6 @@ class FakeRepository implements WorkspaceTupleRepository {
 
   async listSpaceParticipants(): Promise<WorkspaceSpaceParticipantEntry[]> {
     return this.options.participants ?? [];
-  }
-
-  async listRoutableAgentProfiles(): Promise<
-    WorkspaceAgentProfileRoutingEntry[]
-  > {
-    return this.options.agentProfiles ?? [];
   }
 }
 
@@ -926,7 +918,18 @@ describe("renderWorkspaceTuple", () => {
   });
 
   it("lists authorized Spaces, participants, and profiles in the routing section", async () => {
-    const store = new FakeStore(seedObjects());
+    // Subagent-folders U11: routable sub-agents come from the compiled
+    // capabilities manifest (agents/<slug>/ folders), not repository rows.
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/agents/finance-agent/agents/researcher/INSTRUCTIONS.md": {
+          content: "---\ndescription: Deep research tasks\n---\n\nResearch.\n",
+        },
+        "tenants/acme/agents/finance-agent/agents/writer/INSTRUCTIONS.md": {
+          content: "---\ndescription: Writes things.\n---\n\nWrite.\n",
+        },
+      }),
+    );
 
     await renderWorkspaceTuple(
       { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
@@ -953,20 +956,6 @@ describe("renderWorkspaceTuple", () => {
             { id: "user-2", name: "Alice", slug: "alice" },
             { id: "user-1", name: "Eric", slug: "eric" },
           ],
-          agentProfiles: [
-            {
-              id: "profile-1",
-              slug: "researcher",
-              name: "Researcher",
-              routingGuidance: "Deep research tasks",
-            },
-            {
-              id: "profile-2",
-              slug: "writer",
-              name: "Writer",
-              routingGuidance: null,
-            },
-          ],
         }),
         objectStore: store,
         now: () => new Date("2026-05-22T10:00:00.000Z"),
@@ -992,7 +981,7 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(composed).not.toContain("`User/alice/`");
     expect(composed).toContain("- Researcher — Deep research tasks");
-    expect(composed).toContain("- Writer");
+    expect(composed).toContain("- Writer — Writes things.");
   });
 
   it("busts the render cache when routing membership changes without source mtime drift", async () => {
