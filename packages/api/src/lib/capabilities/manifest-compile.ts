@@ -299,6 +299,61 @@ export interface RegistryTrustInput {
   bindingsUnavailable?: boolean;
 }
 
+/** Stamp an entry's winning `source_scope` (omitted when there is none). */
+function withScope(
+  entry: CapabilityManifestEntry,
+  sourceScope: string | undefined,
+): CapabilityManifestEntry {
+  return sourceScope ? { ...entry, source_scope: sourceScope } : entry;
+}
+
+/**
+ * Scope specificity for most-specific-wins (THINK-302 R16): a `user:` grant
+ * beats `space:`, which beats a sub-agent (`agent:<id>/sub:<slug>`), which
+ * beats the agent root (`agent:<id>`). Unknown/absent scopes rank lowest.
+ */
+export function scopeSpecificity(sourceScope: string | undefined): number {
+  if (!sourceScope) return -1;
+  if (sourceScope.startsWith("user:")) return 3;
+  if (sourceScope.startsWith("space:")) return 2;
+  if (sourceScope.includes("/sub:")) return 1;
+  if (sourceScope.startsWith("agent:")) return 0;
+  return -1;
+}
+
+/**
+ * Most-specific-scope-wins dedup (THINK-302 R16/KTD-4). Among entries that
+ * share a `(class, slug)` identity AND carry a `source_scope`, keep only the
+ * most specific; drop the rest (superseded, not withheld). Entries without a
+ * `source_scope` — builtins, skills, the legacy sidecar path — never
+ * participate, so a single-scope manifest is unchanged.
+ */
+export function selectMostSpecificScope(
+  active: CapabilityManifestEntry[],
+): CapabilityManifestEntry[] {
+  const bestByKey = new Map<string, number>();
+  for (const entry of active) {
+    if (!entry.source_scope) continue;
+    const key = `${entry.class}:${entry.slug}`;
+    const spec = scopeSpecificity(entry.source_scope);
+    const prev = bestByKey.get(key);
+    if (prev === undefined || spec > prev) bestByKey.set(key, spec);
+  }
+  const emittedWinnerKeys = new Set<string>();
+  return active.filter((entry) => {
+    if (!entry.source_scope) return true;
+    const key = `${entry.class}:${entry.slug}`;
+    if (scopeSpecificity(entry.source_scope) !== bestByKey.get(key)) {
+      return false;
+    }
+    // Guard against two folders that tie at the same winning scope (should
+    // not happen — scan keys are unique per scope): keep the first only.
+    if (emittedWinnerKeys.has(key)) return false;
+    emittedWinnerKeys.add(key);
+    return true;
+  });
+}
+
 /** Map key for a scope-qualified binding lookup — shared by compile + signature. */
 export function bindingScanKey(
   scopeRef: string,
@@ -438,11 +493,10 @@ export function compileCapabilitiesManifest(
     sidecar: CapabilityAssignmentSidecar;
     sourceScope?: string;
   }> = [];
-  const activeMcp: Array<{ definition: McpMarkerDefinition }> = [];
-  // THINK-302 U3: winning source scope per admitted entry name (R16).
-  // At U3 a slug is unique across the single agent-root scope; U5's
-  // most-specific-wins dedup populates this before compile.
-  const sourceScopeByName = new Map<string, string>();
+  const activeMcp: Array<{
+    definition: McpMarkerDefinition;
+    sourceScope?: string;
+  }> = [];
 
   // Pass 1 — per-folder admission: definition validity, sidecar
   // signature + drift (R3/R18), enabled, approval (v1 blunt gate), and
@@ -451,6 +505,7 @@ export function compileCapabilitiesManifest(
     config: AgentFolderConfig;
     instructionsEtag: string | null;
     childGrants: AgentChildGrantInput[];
+    sourceScope?: string;
   }> = [];
   for (const folder of input.folders) {
     if (folder.class === "agent") {
@@ -465,26 +520,22 @@ export function compileCapabilitiesManifest(
           config: admittedAgent.config,
           instructionsEtag: admittedAgent.instructionsEtag,
           childGrants: folder.childGrants ?? [],
+          ...(admittedAgent.sourceScope
+            ? { sourceScope: admittedAgent.sourceScope }
+            : {}),
         });
-        if (admittedAgent.sourceScope) {
-          sourceScopeByName.set(
-            admittedAgent.config.slug,
-            admittedAgent.sourceScope,
-          );
-        }
       }
       continue;
     }
     if (folder.class === "mcp") {
       const admittedMcp = admitMcpFolder(folder, withheld, input.registry);
       if (admittedMcp) {
-        activeMcp.push({ definition: admittedMcp.definition });
-        if (admittedMcp.sourceScope) {
-          sourceScopeByName.set(
-            admittedMcp.definition.name,
-            admittedMcp.sourceScope,
-          );
-        }
+        activeMcp.push({
+          definition: admittedMcp.definition,
+          ...(admittedMcp.sourceScope
+            ? { sourceScope: admittedMcp.sourceScope }
+            : {}),
+        });
       }
       continue;
     }
@@ -496,9 +547,6 @@ export function compileCapabilitiesManifest(
       input.generatedAt,
     );
     if (!admitted) continue;
-    if (admitted.sourceScope) {
-      sourceScopeByName.set(admitted.definition.name, admitted.sourceScope);
-    }
     if (folder.class === "connection") {
       activeConnections.push(
         admitted as {
@@ -643,37 +691,48 @@ export function compileCapabilitiesManifest(
         class: "skill" as const,
       })),
     ...activeConnections.map((connection) =>
-      connectionEntry(connection.definition, connection.sidecar),
+      withScope(
+        connectionEntry(connection.definition, connection.sidecar),
+        connection.sourceScope,
+      ),
     ),
-    ...survivingTools.map((tool) => toolEntry(tool.definition)),
+    ...survivingTools.map((tool) =>
+      withScope(toolEntry(tool.definition), tool.sourceScope),
+    ),
     // THINK-302 U4: mcp/<slug>/ grants as first-class `mcp` entries.
-    ...activeMcp.map((mcp) => mcpEntry(mcp.definition)),
+    ...activeMcp.map((mcp) =>
+      withScope(mcpEntry(mcp.definition), mcp.sourceScope),
+    ),
     // Pass 2b (subagent-folders U5): resolve each agent's child grant
     // surface against the post-policy ACTIVE connections and the skill
     // scan — grant failures become visible absence on the entry, never
     // runtime spawn errors (R13).
     ...activeAgents.map((agent) =>
-      agentEntry(
-        agent.config,
-        agent.instructionsEtag,
-        resolveAgentChildGrants({
-          childGrants: agent.childGrants,
-          connectionsBySlug,
-          skills: input.skills,
-          verifier: input.verifier,
-        }),
+      withScope(
+        agentEntry(
+          agent.config,
+          agent.instructionsEtag,
+          resolveAgentChildGrants({
+            childGrants: agent.childGrants,
+            connectionsBySlug,
+            skills: input.skills,
+            verifier: input.verifier,
+          }),
+        ),
+        agent.sourceScope,
       ),
     ),
   ];
 
-  // THINK-302 U3 (R16/R20): stamp the winning source scope on entries that
-  // were admitted via a registry binding. Under the rev-5 sidecar path
-  // `sourceScopeByName` is empty, so the manifest body stays byte-identical
-  // (additive field, KTD-3).
-  for (const entry of active) {
-    const scope = sourceScopeByName.get(entry.slug);
-    if (scope) entry.source_scope = scope;
-  }
+  // THINK-302 U5 (R16/KTD-4): most-specific scope wins on slug collision.
+  // When the same (class, slug) is granted at multiple scopes, keep the
+  // entry from the most specific scope (user > space > sub-agent > root)
+  // and drop the less-specific duplicates — they are the SAME capability
+  // superseded by a more specific grant, not a withheld failure. Entries
+  // with no `source_scope` (legacy sidecar path / builtins / skills) never
+  // collide across scopes and pass through untouched, so a single-scope
+  // manifest body is byte-identical (KTD-3).
+  const deduped = selectMostSpecificScope(active);
 
   const body = {
     version: CAPABILITIES_MANIFEST_VERSION,
@@ -681,7 +740,7 @@ export function compileCapabilitiesManifest(
       tenant_id: input.agent.tenantId,
       agent_slug: input.agent.agentSlug,
     },
-    active,
+    active: deduped,
     withheld,
   };
   const fingerprint = createHash("sha256")
