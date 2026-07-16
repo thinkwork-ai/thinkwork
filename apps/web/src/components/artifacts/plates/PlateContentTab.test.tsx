@@ -195,6 +195,37 @@ describe("PlateAnalysisPicker (U6)", () => {
     expect(rows[1].op).toBe("ratio_pct");
     expect(rows[1].source).toBe("tenant");
   });
+
+  it("move buttons reorder tenant analyses; floor rows stay put and unmovable", () => {
+    const onChange = vi.fn();
+    const tenant = (rowKey: string, key: string): AnalysisRowState => ({
+      rowKey,
+      key,
+      op: "ratio_pct",
+      presentation: { directive: "stats" },
+      source: "tenant",
+    });
+    renderTab(
+      <PlateContentTab
+        sections={[]}
+        analyses={[FLOOR_ANALYSIS, tenant("a1", "first"), tenant("a2", "second")]}
+        isPlatform={false}
+        allowedDirectives={null}
+        onSectionsChange={vi.fn()}
+        onAnalysesChange={onChange}
+      />,
+    );
+    // Floor row has no move controls; two tenant rows do.
+    const ups = screen.getAllByTestId("plate-analysis-move-up");
+    expect(ups).toHaveLength(2);
+    fireEvent.click(ups[1]);
+    const rows = onChange.mock.calls.at(-1)![0] as AnalysisRowState[];
+    expect(rows.map((r) => r.key)).toEqual([
+      "pipeline-conversion",
+      "second",
+      "first",
+    ]);
+  });
 });
 
 describe("Plate directive vocabulary", () => {

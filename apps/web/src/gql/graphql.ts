@@ -2049,6 +2049,7 @@ export type DocumentPlateDraftConfigInput = {
   analyses?: InputMaybe<Scalars['AWSJSON']['input']>;
   displayName?: InputMaybe<Scalars['String']['input']>;
   eyebrow?: InputMaybe<Scalars['String']['input']>;
+  ownContract?: InputMaybe<Scalars['Boolean']['input']>;
   paletteDark?: InputMaybe<Scalars['AWSJSON']['input']>;
   paletteLight?: InputMaybe<Scalars['AWSJSON']['input']>;
   sectionOverrides?: InputMaybe<Scalars['AWSJSON']['input']>;
@@ -8642,6 +8643,7 @@ export type SaveDocumentPlateInput = {
   displayName?: InputMaybe<Scalars['String']['input']>;
   eyebrow?: InputMaybe<Scalars['String']['input']>;
   hidden?: InputMaybe<Scalars['Boolean']['input']>;
+  ownContract?: InputMaybe<Scalars['Boolean']['input']>;
   paletteDark?: InputMaybe<Scalars['AWSJSON']['input']>;
   paletteLight?: InputMaybe<Scalars['AWSJSON']['input']>;
   sectionOverrides?: InputMaybe<Scalars['AWSJSON']['input']>;

@@ -64,8 +64,12 @@ export async function documentPlatePreview(
     // THINK-188: platform drafts may patch floor sections; validate the
     // overrides against the plate's actual floor (same bound the save uses).
     const rawDraft = args.draftConfig as Record<string, unknown>;
+    // Full-ownership drafts (ownContract) carry the whole contract — floor
+    // overrides don't apply.
+    const ownContract =
+      origin === "platform_override" && rawDraft.ownContract === true;
     const sectionOverrides =
-      origin === "platform_override"
+      origin === "platform_override" && !ownContract
         ? boundedSectionOverrides(
             rawDraft.sectionOverrides,
             getPlatformPlate(args.slug)?.sections ?? [],
@@ -89,6 +93,7 @@ export async function documentPlatePreview(
           sections: draft.sections,
           analyses: draft.analyses,
           ...(sectionOverrides ? { sectionOverrides } : {}),
+          ...(ownContract ? { ownContract: true } : {}),
         },
         hidden: base?.hidden ?? false,
       },

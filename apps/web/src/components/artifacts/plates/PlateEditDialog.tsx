@@ -1,23 +1,19 @@
 /**
  * Plate registry (THINK-153 U7) — the operator plate editor.
  *
- * Structured dialog (SetAppStyleDialog precedent) with a live, debounced
- * preview. Modes:
+ * Structured dialog (SetAppStyleDialog precedent). Modes:
  *  - create: blank tenant plate,
  *  - clone: create a tenant plate pre-filled from an existing plate,
  *  - edit tenant: full field set + delete,
  *  - edit platform: palette overrides + hidden only (structural fields shown
  *    read-only); Reset + Hide/Unhide instead of delete.
  *
- * The preview drives `documentPlatePreview` with the unsaved draft config,
- * debounced ~500ms and sequence-guarded (see `applyPlatePreviewResult`): an
- * out-of-order earlier response never overwrites a later one, a diagnostics
- * response keeps the last-good HTML with a banner, and Save is disabled while
- * a save is pending.
+ * Slug and display name sit above the Content/Style tabs — they're required
+ * on create/clone, so they must be visible regardless of the active tab.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useClient, useMutation, useQuery } from "urql";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "urql";
 import {
   Button,
   Checkbox,
@@ -37,26 +33,21 @@ import {
 import type { DocumentPlateDiagnostic } from "@/gql/graphql";
 import {
   DeleteDocumentPlateMutation,
-  DocumentPlatePreviewQuery,
   PlateConformanceQuery,
   SaveDocumentPlateMutation,
 } from "@/lib/graphql-queries";
-import { PlatePreviewFrame } from "./PlatePreviewPanel";
 import { parseConformanceSummary } from "./PlateConformancePanel";
 import { PlateContentTab } from "./PlateContentTab";
 import {
   analysisRowsFromContract,
-  applyPlatePreviewResult,
   buildContractPayload,
   duplicateSectionRowKeys,
-  initialPlatePreviewState,
   PLATE_DIRECTIVE_KINDS,
   PLATE_PALETTE_TOKENS,
   sectionRowsFromContract,
   type AnalysisRowState,
   type PlateDirectiveKind,
   type PlateItem,
-  type PlatePreviewState,
   type SectionRowState,
 } from "./plate-support";
 
@@ -132,16 +123,12 @@ function seedForm(mode: PlateEditMode): PlateFormState {
     paletteDark: { ...(source.overrides?.paletteDark ?? {}) },
     directives,
     hidden: source.hidden,
-    // Contract rows edit the RESOLVED contract; buildContractPayload later
-    // diffs floor rows against their baselines into a delta (KTD1).
-    sections: sectionRowsFromContract(
-      source.sections,
-      source.origin === "tenant",
-    ),
-    analysesRows: analysisRowsFromContract(
-      source.analyses,
-      source.origin === "tenant",
-    ),
+    // Full ownership on edit: every contract row is editable — renamable,
+    // reorderable, removable — regardless of origin. Saving a platform plate
+    // sends the whole contract with ownContract: true; Reset restores the
+    // platform definition.
+    sections: sectionRowsFromContract(source.sections, true),
+    analysesRows: analysisRowsFromContract(source.analyses, true),
   };
 }
 
@@ -171,7 +158,6 @@ export function PlateEditDialog({
   tenantId,
   onSaved,
 }: PlateEditDialogProps) {
-  const client = useClient();
   const [{ fetching: saving }, savePlate] = useMutation(
     SaveDocumentPlateMutation,
   );
@@ -207,52 +193,6 @@ export function PlateEditDialog({
   const allowedDirectives = allChecked
     ? null
     : PLATE_DIRECTIVE_KINDS.filter((kind) => form.directives.has(kind));
-
-  // Draft config for the live preview. Platform plates accept palette only —
-  // sending structural fields would be rejected server-side (they're read-only
-  // in this mode anyway), so omit them.
-  const draftConfig = useMemo(() => {
-    const paletteLight = JSON.stringify(nonEmptyPalette(form.paletteLight));
-    const paletteDark = JSON.stringify(nonEmptyPalette(form.paletteDark));
-    const contract = buildContractPayload(
-      form.sections,
-      form.analysesRows.filter((a) => a.source === "platform" || a.key),
-      isPlatform,
-    );
-    if (isPlatform) {
-      return { paletteLight, paletteDark, ...contract };
-    }
-    return {
-      displayName: form.displayName || undefined,
-      useFor: form.useFor || undefined,
-      eyebrow: form.eyebrow || undefined,
-      titleSuffix: form.titleSuffix || undefined,
-      paletteLight,
-      paletteDark,
-      allowedDirectives,
-      ...contract,
-    };
-  }, [
-    isPlatform,
-    form.paletteLight,
-    form.paletteDark,
-    form.displayName,
-    form.useFor,
-    form.eyebrow,
-    form.titleSuffix,
-    form.sections,
-    form.analysesRows,
-    allowedDirectives,
-  ]);
-
-  const previewSlug =
-    form.slug || (isEdit ? (mode as { plate: PlateItem }).plate.slug : "");
-  const { state: preview, pending } = usePlateLivePreview({
-    client,
-    tenantId,
-    slug: open && previewSlug ? previewSlug : null,
-    draftConfig,
-  });
 
   // THINK-189 R8: measured section stats for existing plates (edit mode
   // only — new/cloned plates have no corpus). Display-only evidence.
@@ -350,10 +290,13 @@ export function PlateEditDialog({
     // Wipe guard (THINK-188): the save ALWAYS carries the full current
     // contract state — the server rebuilds row config from this input, so a
     // style-only save that omitted it would delete stored contract deltas.
+    // Rows are all tenant-owned in the editor (full ownership on edit), so
+    // the payload is always the full contract; platform saves flag it with
+    // ownContract so the server stores it verbatim instead of floor-merging.
     const contract = buildContractPayload(
       form.sections,
       form.analysesRows,
-      isPlatform,
+      false,
     );
 
     const input = isPlatform
@@ -363,6 +306,7 @@ export function PlateEditDialog({
           paletteLight,
           paletteDark,
           hidden: form.hidden,
+          ownContract: true,
           ...contract,
         }
       : {
@@ -446,18 +390,42 @@ export function PlateEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(92vh,860px)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent className="max-h-[min(92vh,860px)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader className="border-b border-border px-6 py-4">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid min-h-0 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          {/* Form column: Style | Content tabs (THINK-188 U5); the preview
-              column stays outside the tabs and reflects the combined draft. */}
+        <div className="grid min-h-0 grid-cols-1 gap-0 overflow-hidden">
+          {/* Form column: identity fields above the Style | Content tabs
+              (THINK-188 U5) — slug/name are required on create/clone, so they
+              stay visible regardless of the active tab. */}
           <div
-            className="min-h-0 space-y-4 overflow-y-auto border-b border-border p-6 md:border-b-0 md:border-r"
+            className="min-h-0 space-y-4 overflow-y-auto p-6"
             data-testid="plate-edit-form"
           >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {!isEdit ? (
+                <Field label="Slug" htmlFor="plate-slug">
+                  <Input
+                    id="plate-slug"
+                    value={form.slug}
+                    onChange={(e) => setField("slug", e.target.value)}
+                    placeholder="quarterly-report"
+                    data-testid="plate-field-slug"
+                  />
+                </Field>
+              ) : null}
+              <Field label="Display name" htmlFor="plate-display-name">
+                <Input
+                  id="plate-display-name"
+                  value={form.displayName}
+                  onChange={(e) => setField("displayName", e.target.value)}
+                  disabled={!structuralEditable}
+                  data-testid="plate-field-display-name"
+                />
+              </Field>
+            </div>
+
             <Tabs defaultValue="content">
               <TabsList
                 variant="line"
@@ -491,26 +459,6 @@ export function PlateEditDialog({
                 ) : null}
 
                 <div className="space-y-3">
-                  {!isEdit ? (
-                    <Field label="Slug" htmlFor="plate-slug">
-                      <Input
-                        id="plate-slug"
-                        value={form.slug}
-                        onChange={(e) => setField("slug", e.target.value)}
-                        placeholder="quarterly-report"
-                        data-testid="plate-field-slug"
-                      />
-                    </Field>
-                  ) : null}
-                  <Field label="Display name" htmlFor="plate-display-name">
-                    <Input
-                      id="plate-display-name"
-                      value={form.displayName}
-                      onChange={(e) => setField("displayName", e.target.value)}
-                      disabled={!structuralEditable}
-                      data-testid="plate-field-display-name"
-                    />
-                  </Field>
                   <Field label="Use for" htmlFor="plate-use-for">
                     <Input
                       id="plate-use-for"
@@ -622,18 +570,6 @@ export function PlateEditDialog({
                 </ul>
               </div>
             ) : null}
-          </div>
-
-          {/* Live preview column */}
-          <div className="min-h-0 overflow-hidden p-6">
-            <PlatePreviewFrame
-              title={form.displayName || previewSlug || "Preview"}
-              slug={previewSlug || null}
-              html={preview.html}
-              diagnostics={preview.diagnostics}
-              pending={pending}
-              className="h-full rounded-lg border border-border"
-            />
           </div>
         </div>
 
@@ -821,77 +757,6 @@ function PaletteInput({
       />
     </div>
   );
-}
-
-// ─── Live preview (debounced + sequence-guarded) ──────────────────────────
-
-interface UsePlateLivePreviewArgs {
-  client: ReturnType<typeof useClient>;
-  tenantId: string | null;
-  slug: string | null;
-  draftConfig: Record<string, unknown>;
-}
-
-function usePlateLivePreview({
-  client,
-  tenantId,
-  slug,
-  draftConfig,
-}: UsePlateLivePreviewArgs): {
-  state: PlatePreviewState;
-  pending: boolean;
-} {
-  const [state, setState] = useState<PlatePreviewState>(
-    initialPlatePreviewState,
-  );
-  const [pending, setPending] = useState(false);
-  const requestIdRef = useRef(0);
-
-  // Stable key so the effect only re-fires when the request actually changes.
-  const key = JSON.stringify({ tenantId, slug, draftConfig });
-
-  useEffect(() => {
-    if (!slug) {
-      setState(initialPlatePreviewState);
-      setPending(false);
-      return;
-    }
-    const handle = setTimeout(() => {
-      const requestId = requestIdRef.current + 1;
-      requestIdRef.current = requestId;
-      setPending(true);
-      void client
-        .query(
-          DocumentPlatePreviewQuery,
-          { tenantId, slug, draftConfig },
-          { requestPolicy: "network-only" },
-        )
-        .toPromise()
-        .then((result) => {
-          const preview = result.data?.documentPlatePreview;
-          const diagnostics: DocumentPlateDiagnostic[] =
-            preview?.diagnostics ??
-            (result.error
-              ? [{ code: "ERROR", message: result.error.message }]
-              : []);
-          setState((prev) =>
-            applyPlatePreviewResult(prev, {
-              requestId,
-              html: preview?.html ?? null,
-              diagnostics,
-            }),
-          );
-        })
-        .finally(() => {
-          // Only the latest request clears the pending indicator.
-          if (requestId === requestIdRef.current) setPending(false);
-        });
-    }, 500);
-    return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  return { state, pending };
 }
 
 function extractDiagnostics(error: unknown): DocumentPlateDiagnostic[] {
