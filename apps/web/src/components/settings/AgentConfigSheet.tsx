@@ -37,6 +37,9 @@ import {
 const RUNTIME_OPTIONS: { value: AgentRuntime; label: string }[] = [
   // FLUE is the Pi runtime; surfaced as "Pi" per product naming.
   { value: AgentRuntime.Flue, label: "Pi" },
+  // THINK-311: tenant-wide AWS AgentCore Harness switch. Chat turns run on
+  // Harness; scheduled/automation wakeups fail loudly while selected.
+  { value: AgentRuntime.Harness, label: "AWS Harness" },
 ];
 
 const DEFAULT_GOAL_TOKEN_BUDGET = 100_000;

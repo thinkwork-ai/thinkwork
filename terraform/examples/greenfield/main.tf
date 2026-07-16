@@ -444,12 +444,6 @@ variable "brain_source_agent_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
-variable "harness_trial_enabled" {
-  description = "Stage gate for the THINK-311 per-turn AWS Harness trial runtime. Default off; enable on trial stages only."
-  type        = bool
-  default     = false
-}
-
 variable "knowledge_graph_observations_ingest_enabled" {
   description = "Enable the Brain distillation schedule (observations -> knowledge graph). Ships disabled; flip on dev after a validated manual run (plan 2026-07-03-005 U4)."
   type        = bool
@@ -858,7 +852,6 @@ module "thinkwork" {
   wiki_source                                   = var.wiki_source
   analyst_policy_source                         = var.analyst_policy_source
   capability_self_extension_tenants             = var.capability_self_extension_tenants
-  harness_trial_enabled                         = var.harness_trial_enabled
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key

@@ -924,8 +924,7 @@ describe("chat-agent-invoke runtime routing", () => {
     expect(body.runtime_type).toBe("harness");
   });
 
-  it("routes a per-turn harness request to the harness runner when the trial gate is on (THINK-311 U5b)", async () => {
-    vi.stubEnv("HARNESS_TRIAL_ENABLED", "true");
+  it("routes a per-turn harness request to the harness runner (THINK-311 U5b)", async () => {
     vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "harness-runner-fn");
     const { handler } = await import("./chat-agent-invoke.js");
 
@@ -955,31 +954,6 @@ describe("chat-agent-invoke runtime routing", () => {
           }),
         }),
       ]),
-    );
-  });
-
-  it("fails a per-turn harness request visibly when the trial gate is off — never a silent Pi run", async () => {
-    vi.stubEnv("HARNESS_TRIAL_ENABLED", "");
-    mocks.insertAssistantMessage.mockResolvedValueOnce({ id: "message-gate" });
-    const { handler } = await import("./chat-agent-invoke.js");
-
-    const result = await handler({
-      tenantId: "tenant-1",
-      threadId: "thread-1",
-      agentId: "agent-1",
-      userMessage: "run the QBR on harness",
-      messageId: "message-1",
-      requestedRuntime: "harness",
-    });
-
-    expect(result).toEqual({ ok: false, threadTurnId: undefined });
-    expect(mocks.lambdaSend).not.toHaveBeenCalled();
-    expect(mocks.insertValues).toEqual([]);
-    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
-      "thread-1",
-      "tenant-1",
-      "agent-1",
-      expect.stringContaining("Harness trial runtime is not enabled"),
     );
   });
 

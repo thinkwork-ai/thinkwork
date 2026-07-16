@@ -1368,9 +1368,3 @@ variable "compliance_anchor_retention_days" {
     error_message = "compliance_anchor_retention_days must be greater than 0."
   }
 }
-
-variable "harness_trial_enabled" {
-  description = "Stage gate for the THINK-311 per-turn AWS Harness trial runtime (chat composer runtime picker). Default off; enable on trial stages only."
-  type        = bool
-  default     = false
-}

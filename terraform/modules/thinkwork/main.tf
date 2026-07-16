@@ -1055,9 +1055,6 @@ module "api" {
   # Governed autonomy — per-tenant self-extension opt-in allowlist (default off).
   capability_self_extension_tenants = var.capability_self_extension_tenants
 
-  # THINK-311 U5b — stage gate for the per-turn Harness trial runtime.
-  harness_trial_enabled = var.harness_trial_enabled
-
   # THINK-311 U4 — keys the Harness invoker grants in the grouped ai policy
   # (empty string when the harness module is disabled = grants omitted).
   agentcore_harness_execution_role_arn = module.agentcore_harness.execution_role_arn

@@ -612,37 +612,19 @@ export function resolveTurnUseMemory(askMode?: boolean | null): boolean {
 }
 
 /**
- * THINK-311 U5b: a runtime was requested for the turn but the stage-level
- * trial gate is off. Surfaced as a visible assistant error message — the
- * turn never dispatches to any engine.
+ * THINK-311 U5b: per-turn runtime selection. The composer's runtime
+ * picker is the control — a "harness" request routes this turn to the
+ * Harness runner. On a stage without the Harness infra the run fails
+ * loudly downstream; it never silently falls back to Pi (R4).
  */
-export class HarnessTrialDisabledError extends Error {
-  constructor() {
-    super(
-      "The AWS Harness trial runtime is not enabled on this stage (HARNESS_TRIAL_ENABLED).",
-    );
-    this.name = "HarnessTrialDisabledError";
-  }
-}
-
-export function harnessTrialEnabledFromConfig(): boolean {
-  return (
-    (getConfig("HARNESS_TRIAL_ENABLED", "") || "").toLowerCase() === "true"
-  );
-}
-
 export function resolveChatInvocationRuntimeType(args: {
   configuredRuntimeType: AgentRuntimeType;
   requestedRuntime?: string | null;
-  harnessTrialEnabled?: boolean;
   computerId?: string | null;
   computerTaskId?: string | null;
 }): AgentRuntimeType {
   const requested = (args.requestedRuntime ?? "").toLowerCase();
   if (requested === "harness") {
-    if (!args.harnessTrialEnabled) {
-      throw new HarnessTrialDisabledError();
-    }
     return "harness";
   }
   if (requested && requested !== "pi") {
@@ -851,15 +833,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       runtimeType = resolveChatInvocationRuntimeType({
         configuredRuntimeType: runtimeConfig.runtimeType,
         requestedRuntime: event.requestedRuntime,
-        harnessTrialEnabled: harnessTrialEnabledFromConfig(),
         computerId: event.computerId,
         computerTaskId: event.computerTaskId,
       });
     } catch (err) {
-      if (
-        err instanceof HarnessTrialDisabledError ||
-        err instanceof UnknownAgentRuntimeTypeError
-      ) {
+      if (err instanceof UnknownAgentRuntimeTypeError) {
         // Runtime was explicitly requested but cannot be honored: tell the
         // user in the thread instead of running any engine (R4). No turn
         // row exists yet, so an assistant message is the visible surface.

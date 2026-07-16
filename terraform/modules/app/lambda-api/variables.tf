@@ -764,12 +764,6 @@ variable "compliance_exports_runner_role_name" {
   default     = ""
 }
 
-variable "harness_trial_enabled" {
-  description = "Stage gate for the THINK-311 per-turn AWS Harness trial runtime. Off: a requestedRuntime=harness turn fails visibly; it never silently runs Pi. Enable on trial stages only."
-  type        = bool
-  default     = false
-}
-
 variable "knowledge_graph_tool_enabled" {
   description = "Stage gate for the Pi knowledge_graph_search tool (plan 2026-06-09-004 U8). Per-agent tool policy gates on top."
   type        = bool
