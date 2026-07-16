@@ -203,6 +203,14 @@ export interface ComposerWorkspaceEditorProps {
   /** Slugs whose profiles may be deleted (built-ins are excluded). */
   deletableProfileSlugs?: ReadonlySet<string>;
   /**
+   * Sub-agent folder grammar (subagent-folders U13, R24): flips the
+   * `agents/<slug>/` folder's Disable/Enable action. The host routes it
+   * through the same updateAgentProfile mutation the Profiles sheet uses.
+   */
+  onSetAgentProfileEnabled?: (slug: string, enabled: boolean) => void;
+  /** Slugs currently disabled (enabled=false) — flips the menu label. */
+  disabledProfileSlugs?: ReadonlySet<string>;
+  /**
    * Selected profile's display name (Agent page merge U6): when set,
    * attach/detach menu labels carry the profile scope so a profile-scoped
    * write never masquerades as an agent-level one.
@@ -440,6 +448,20 @@ export function isCompiledArtifactPath(path: string): boolean {
   );
 }
 
+/**
+ * Hidden-by-default tree artifacts (subagent-folders U13, R25): the compiled
+ * render outputs above PLUS every dot-prefixed basename anywhere in the tree
+ * (`.assignment.json` sidecars — root capability folders AND sub-agent child
+ * grant folders — `.gitkeep` placeholders, any future platform dotfile).
+ * They are machine state, not operator content; the existing Show-compiled
+ * debug toggle re-includes them all.
+ */
+export function isHiddenArtifactPath(path: string): boolean {
+  if (isCompiledArtifactPath(path)) return true;
+  const basename = path.split("/").pop() ?? path;
+  return basename.startsWith(".");
+}
+
 function connectionSlugForFolder(node: TreeNode): string | null {
   if (!node.isFolder) return null;
   // Dual-read window (subagent-folders U15): the workspace folder renamed
@@ -460,6 +482,29 @@ function toolSlugForFolder(node: TreeNode): string | null {
 function agentProfileSlugForFile(node: TreeNode): string | null {
   if (node.isFolder) return null;
   const match = /^agents\/([^/]+)\.md$/.exec(node.path);
+  return match ? match[1] : null;
+}
+
+/**
+ * Sub-agent slug for an `agents/<slug>` FOLDER node, else null
+ * (subagent-folders U13, R24): the folder form is a MANAGED node —
+ * Configure / Disable / Remove, never raw Rename/Delete.
+ */
+function agentFolderSlugForNode(node: TreeNode): string | null {
+  if (!node.isFolder) return null;
+  const match = /^agents\/([^/]+)$/.exec(node.path);
+  return match ? match[1] : null;
+}
+
+/**
+ * Sub-agent slug for the folder-form definition file
+ * `agents/<slug>/INSTRUCTIONS.md` — it carries the dedicated edit
+ * affordance (the folder-form counterpart of the U2 profile-file
+ * treatment; the legacy `agents/<slug>.md` special cases retire with U11).
+ */
+function agentInstructionsSlugForFile(node: TreeNode): string | null {
+  if (node.isFolder) return null;
+  const match = /^agents\/([^/]+)\/INSTRUCTIONS\.md$/.exec(node.path);
   return match ? match[1] : null;
 }
 
@@ -577,6 +622,8 @@ export function ComposerWorkspaceEditor({
   onDeleteAgentProfile,
   onCountToolAutomationRefs,
   deletableProfileSlugs,
+  onSetAgentProfileEnabled,
+  disabledProfileSlugs,
   profileScopeName = null,
   initialSelectedPath = null,
 }: ComposerWorkspaceEditorProps) {
@@ -689,6 +736,21 @@ export function ComposerWorkspaceEditor({
     () => new Map(entries.map((entry) => [entry.path, entry])),
     [entries],
   );
+
+  // Slugs that exist in FOLDER form (`agents/<slug>/…`). During the U12
+  // migration window a slug may render both `agents/<slug>.md` and the
+  // folder — the folder wins (R23): the stale legacy file must never show
+  // a second set of profile affordances. Computed from ALL entries, not
+  // the visible ones, so a folder whose remaining files are hidden
+  // dotfiles still supersedes its legacy file.
+  const agentFolderSlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const entry of entries) {
+      const match = /^agents\/([^/]+)\//.exec(entry.path);
+      if (match) slugs.add(match[1]);
+    }
+    return slugs;
+  }, [entries]);
 
   const srcForPath = useCallback(
     (path: string) => resolvePathSource(path, result),
@@ -856,13 +918,17 @@ export function ComposerWorkspaceEditor({
   // Debug toggle: compiled artifacts are off by default; the manifest
   // stays inspectable through the capability sheet either way.
   const [showCompiled, setShowCompiled] = useState(false);
-  const visibleEntries = useMemo(
-    () =>
-      showCompiled
-        ? entries
-        : entries.filter((entry) => !isCompiledArtifactPath(entry.path)),
-    [entries, showCompiled],
-  );
+  const visibleEntries = useMemo(() => {
+    if (showCompiled) return entries;
+    return entries.filter((entry) => {
+      if (isHiddenArtifactPath(entry.path)) return false;
+      // A legacy flat `agents/<slug>.md` superseded by its folder form is
+      // dead weight until THINK-299 deletes it server-side — hide it rather
+      // than render a second, affordance-less node for the same sub-agent.
+      const legacy = /^agents\/([^/]+)\.md$/.exec(entry.path);
+      return !(legacy && agentFolderSlugs.has(legacy[1]));
+    });
+  }, [entries, showCompiled, agentFolderSlugs]);
   // Attach/detach progress renders in the host's footer status (no ghost
   // nodes or per-node badges in the tree — the folder simply appears on the
   // post-sync refetch).
@@ -970,15 +1036,48 @@ export function ComposerWorkspaceEditor({
     const canRemoveConnection = Boolean(
       connectionSlug && canManageSkills && !isRemoving,
     );
-    // Profile files get the dedicated Edit/Delete treatment (U2); the generic
-    // "Open agent source" item is suppressed for them by contract (R5).
-    const profileSlug = agentProfileSlugForFile(node);
-    const canConfigureProfile = Boolean(profileSlug && onConfigureAgentProfile);
-    const canDeleteProfile = Boolean(
-      profileSlug &&
-      onDeleteAgentProfile &&
-      deletableProfileSlugs?.has(profileSlug),
+    // Sub-agent folders (subagent-folders U13, R24): `agents/<slug>/` is a
+    // MANAGED node — Configure / Disable / Remove; raw Rename/Delete are
+    // suppressed below. The INSTRUCTIONS.md inside carries the dedicated
+    // edit affordance.
+    const agentFolderSlug = agentFolderSlugForNode(node);
+    const instructionsSlug = agentInstructionsSlugForFile(node);
+    // Legacy `agents/<slug>.md` files keep the U2 treatment during the
+    // migration window (they retire with U11) — but when BOTH forms exist
+    // for one slug the FOLDER wins (R23): the stale file shows no
+    // affordances at all, so a slug never carries dual menus.
+    const legacyProfileSlug = agentProfileSlugForFile(node);
+    const legacySuperseded = Boolean(
+      legacyProfileSlug && agentFolderSlugs.has(legacyProfileSlug),
     );
+    const profileSlug =
+      agentFolderSlug ??
+      instructionsSlug ??
+      (legacySuperseded ? null : legacyProfileSlug);
+    const canConfigureProfile = Boolean(profileSlug && onConfigureAgentProfile);
+    // Remove belongs to the ENTITY node (the folder, or a non-superseded
+    // legacy file) — never to the INSTRUCTIONS.md inside a folder.
+    const removeProfileSlug =
+      agentFolderSlug ?? (legacySuperseded ? null : legacyProfileSlug);
+    const canDeleteProfile = Boolean(
+      removeProfileSlug &&
+      onDeleteAgentProfile &&
+      deletableProfileSlugs?.has(removeProfileSlug),
+    );
+    const canToggleProfileEnabled = Boolean(
+      agentFolderSlug && onSetAgentProfileEnabled,
+    );
+    const isDisabledAgentFolder = Boolean(
+      agentFolderSlug && disabledProfileSlugs?.has(agentFolderSlug),
+    );
+    // KTD-4 operator half (grant creation auto-signs). TODO(subagent-folders
+    // plan 2026-07-15-001 U13): no platform-signed child-grant API surface
+    // exists yet — child sidecars under `agents/<slug>/skills|connectors/`
+    // must be signed by the platform (`signExistingCapabilityFolder`-style),
+    // and writing them through the raw workspace-files API would produce
+    // unsigned (withheld) grants. Until a mutation lands, the affordances
+    // render disabled so operators can see where the flow will live.
+    const canShowGrantAffordances = Boolean(agentFolderSlug && canManageSkills);
     // The agents/ root is structural: profiles are created through the
     // Profiles sheet, never as raw files.
     const isAgentsRoot = node.isFolder && node.path === "agents";
@@ -1022,22 +1121,30 @@ export function ComposerWorkspaceEditor({
       !isSkillsRoot &&
       !isMcpRoot &&
       !isConnectionsRoot &&
-      !isAgentsRoot,
+      !isAgentsRoot &&
+      // The FOLDER form supersedes a stale legacy `agents/<slug>.md` — the
+      // dead file gets no ops at all (one entity, one set of affordances).
+      !legacySuperseded,
     );
     // connections/<slug> is fully managed: its lifecycle is Approve /
-    // Re-approve / Remove — no raw file ops at all.
-    const canNewInside = stdEligible && !connectionSlug;
-    // Capability folders (skills/<slug>, mcp/<slug>, connections/<slug>) map
-    // their destructive action to Detach/Remove — never raw Rename/Delete
-    // that would bypass the unified mutation.
+    // Re-approve / Remove — no raw file ops at all. agents/<slug> is
+    // likewise managed (U13): grants arrive via the pickers, never raw
+    // file creation.
+    const canNewInside = stdEligible && !connectionSlug && !agentFolderSlug;
+    // Capability folders (skills/<slug>, mcp/<slug>, connections/<slug>,
+    // agents/<slug>) map their destructive action to Detach/Remove — never
+    // raw Rename/Delete that would bypass the unified mutation. The folder
+    // form's INSTRUCTIONS.md is the signed definition file — renaming or
+    // raw-deleting it would orphan the folder, so it edits in place only.
     const canRename = Boolean(
       stdEligible && !node.isFolder
-        ? !node.entry?.generated
+        ? !node.entry?.generated && !instructionsSlug
         : stdEligible &&
             node.isFolder &&
             !skillSlug &&
             !mcpSlug &&
             !connectionSlug &&
+            !agentFolderSlug &&
             !isSourceRoot,
     );
     const canDelete = canRename;
@@ -1063,6 +1170,8 @@ export function ComposerWorkspaceEditor({
       canRemoveConnection ||
       canConfigureProfile ||
       canDeleteProfile ||
+      canToggleProfileEnabled ||
+      canShowGrantAffordances ||
       canAddProfileHere ||
       hasStdOps;
 
@@ -1173,20 +1282,73 @@ export function ComposerWorkspaceEditor({
               onSelect={() =>
                 profileSlug && onConfigureAgentProfile?.(profileSlug)
               }
-              data-testid={`menu-configure-profile-${profileSlug}`}
+              // The INSTRUCTIONS.md file carries the same edit affordance as
+              // its folder under a distinct testid (one slug renders both).
+              data-testid={
+                instructionsSlug
+                  ? `menu-edit-instructions-${profileSlug}`
+                  : `menu-configure-profile-${profileSlug}`
+              }
             >
-              <SlidersHorizontal className="mr-2 size-4" /> Edit Agent Profile
+              <SlidersHorizontal className="mr-2 size-4" />{" "}
+              {agentFolderSlug ? "Configure Sub-Agent" : "Edit Agent Profile"}
             </ContextMenuItem>
+          ) : null}
+          {canToggleProfileEnabled && agentFolderSlug ? (
+            <ContextMenuItem
+              onSelect={() =>
+                onSetAgentProfileEnabled?.(
+                  agentFolderSlug,
+                  isDisabledAgentFolder,
+                )
+              }
+              data-testid={`menu-${isDisabledAgentFolder ? "enable" : "disable"}-profile-${agentFolderSlug}`}
+            >
+              {isDisabledAgentFolder ? (
+                <>
+                  <Eye className="mr-2 size-4" /> Enable Sub-Agent
+                </>
+              ) : (
+                <>
+                  <EyeOff className="mr-2 size-4" /> Disable Sub-Agent
+                </>
+              )}
+            </ContextMenuItem>
+          ) : null}
+          {canShowGrantAffordances && agentFolderSlug ? (
+            // TODO(subagent-folders plan 2026-07-15-001 U13 / KTD-4): wire
+            // these to a platform-signed child-grant mutation (skill picker
+            // over installed root skills; connector picker with an
+            // operations multi-select narrowed to the root grant). Child
+            // sidecars must be platform-signed — the raw workspace-files
+            // API would write unsigned (withheld) grants, so the flow
+            // ships disabled until the signing surface exists.
+            <>
+              <ContextMenuItem
+                disabled
+                data-testid={`menu-add-skill-grant-${agentFolderSlug}`}
+              >
+                <Plus className="mr-2 size-4" /> Add skill grant… (coming soon)
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled
+                data-testid={`menu-add-connector-grant-${agentFolderSlug}`}
+              >
+                <Plus className="mr-2 size-4" /> Add connector grant… (coming
+                soon)
+              </ContextMenuItem>
+            </>
           ) : null}
           {canDeleteProfile ? (
             <ContextMenuItem
               variant="destructive"
               onSelect={() =>
-                profileSlug && onDeleteAgentProfile?.(profileSlug)
+                removeProfileSlug && onDeleteAgentProfile?.(removeProfileSlug)
               }
-              data-testid={`menu-delete-profile-${profileSlug}`}
+              data-testid={`menu-delete-profile-${removeProfileSlug}`}
             >
-              <Trash2 className="mr-2 size-4" /> Delete Agent Profile
+              <Trash2 className="mr-2 size-4" />{" "}
+              {agentFolderSlug ? "Remove Sub-Agent…" : "Delete Agent Profile"}
             </ContextMenuItem>
           ) : null}
           {canAddHere ? (
@@ -1230,8 +1392,8 @@ export function ComposerWorkspaceEditor({
             >
               <Plus className="mr-2 size-4" />{" "}
               {profileScopeName
-                ? `Add Connection for ${profileScopeName}…`
-                : "Add Connection…"}
+                ? `Add Connector for ${profileScopeName}…`
+                : "Add Connector…"}
             </ContextMenuItem>
           ) : null}
           {canDetachMcp ? (

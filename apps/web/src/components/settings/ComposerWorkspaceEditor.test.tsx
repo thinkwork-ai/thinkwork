@@ -1540,3 +1540,240 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     expect(screen.queryByTestId("menu-remove-connection-firecrawl")).toBeNull();
   });
 });
+
+/** Expands every collapsed folder currently in the tree (iteratively). */
+function expandAllFolders() {
+  for (let pass = 0; pass < 12; pass += 1) {
+    const collapsed = Array.from(
+      document.querySelectorAll(
+        '[data-testid^="tree-toggle-"][aria-expanded="false"]',
+      ),
+    );
+    if (collapsed.length === 0) break;
+    collapsed.forEach((toggle) => fireEvent.click(toggle));
+  }
+}
+
+describe("sub-agent folder grammar (subagent-folders U13)", () => {
+  const AGENT_FOLDER_ENTRIES = [
+    ...ENTRIES,
+    {
+      path: "agents/researcher/INSTRUCTIONS.md",
+      owner: "agent",
+      generated: false,
+      size: 90,
+    },
+    {
+      path: "agents/researcher/skills/crm/.assignment.json",
+      owner: "agent",
+      generated: false,
+      size: 40,
+    },
+    {
+      path: "agents/researcher/connectors/pg/.assignment.json",
+      owner: "agent",
+      generated: false,
+      size: 40,
+    },
+    // Legacy-only slug (no folder form) — keeps the U2 file treatment.
+    {
+      path: "agents/analyst.md",
+      owner: "agent",
+      generated: false,
+      size: 64,
+    },
+  ];
+
+  function seedAgentFolderTree(extra: Record<string, unknown>[] = []) {
+    getManifestMock.mockResolvedValue(
+      manifest({ entries: [...AGENT_FOLDER_ENTRIES, ...extra] }),
+    );
+  }
+
+  it("agents/<slug>/ offers Configure/Disable/Remove and suppresses raw Rename/Delete", async () => {
+    seedAgentFolderTree();
+    const configureMock = vi.fn();
+    const setEnabledMock = vi.fn();
+    const deleteMock = vi.fn();
+    await renderEditor({
+      canManageSkills: true,
+      onConfigureAgentProfile: configureMock,
+      onSetAgentProfileEnabled: setEnabledMock,
+      onDeleteAgentProfile: deleteMock,
+      deletableProfileSlugs: new Set(["researcher"]),
+    });
+    await screen.findByTestId("tree-node-agents/researcher");
+    // Configure.
+    fireEvent.click(screen.getByTestId("menu-configure-profile-researcher"));
+    expect(configureMock).toHaveBeenCalledWith("researcher");
+    // Disable (enabled today → callback flips to false).
+    fireEvent.click(screen.getByTestId("menu-disable-profile-researcher"));
+    expect(setEnabledMock).toHaveBeenCalledWith("researcher", false);
+    // Remove.
+    fireEvent.click(screen.getByTestId("menu-delete-profile-researcher"));
+    expect(deleteMock).toHaveBeenCalledWith("researcher");
+    // Raw file ops are suppressed on the managed folder.
+    expect(screen.queryByTestId("menu-rename-agents/researcher")).toBeNull();
+    expect(screen.queryByTestId("menu-delete-agents/researcher")).toBeNull();
+    expect(screen.queryByTestId("menu-cut-agents/researcher")).toBeNull();
+    expect(screen.queryByTestId("menu-new-file-agents/researcher")).toBeNull();
+    expect(
+      screen.queryByTestId("menu-new-folder-agents/researcher"),
+    ).toBeNull();
+  });
+
+  it("a disabled sub-agent folder offers Enable instead of Disable", async () => {
+    seedAgentFolderTree();
+    const setEnabledMock = vi.fn();
+    await renderEditor({
+      onSetAgentProfileEnabled: setEnabledMock,
+      disabledProfileSlugs: new Set(["researcher"]),
+    });
+    await screen.findByTestId("tree-node-agents/researcher");
+    expect(screen.queryByTestId("menu-disable-profile-researcher")).toBeNull();
+    fireEvent.click(screen.getByTestId("menu-enable-profile-researcher"));
+    expect(setEnabledMock).toHaveBeenCalledWith("researcher", true);
+  });
+
+  it("Remove is gated on deletableProfileSlugs (built-ins keep no Remove)", async () => {
+    seedAgentFolderTree();
+    await renderEditor({
+      onDeleteAgentProfile: vi.fn(),
+      deletableProfileSlugs: new Set<string>(),
+    });
+    await screen.findByTestId("tree-node-agents/researcher");
+    expect(screen.queryByTestId("menu-delete-profile-researcher")).toBeNull();
+  });
+
+  it("INSTRUCTIONS.md carries the dedicated edit affordance but no raw ops and no Remove", async () => {
+    seedAgentFolderTree();
+    const configureMock = vi.fn();
+    await renderEditor({
+      onConfigureAgentProfile: configureMock,
+      onDeleteAgentProfile: vi.fn(),
+      deletableProfileSlugs: new Set(["researcher"]),
+    });
+    await screen.findByTestId("tree-file-agents/researcher/INSTRUCTIONS.md");
+    fireEvent.click(screen.getByTestId("menu-edit-instructions-researcher"));
+    expect(configureMock).toHaveBeenCalledWith("researcher");
+    // No raw rename/delete on the definition file; Remove lives on the folder.
+    expect(
+      screen.queryByTestId("menu-rename-agents/researcher/INSTRUCTIONS.md"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId("menu-delete-agents/researcher/INSTRUCTIONS.md"),
+    ).toBeNull();
+    // Exactly one Remove for the slug — on the folder node.
+    expect(
+      screen.getAllByTestId("menu-delete-profile-researcher"),
+    ).toHaveLength(1);
+  });
+
+  it("KTD-4 operator grant affordances render disabled pending the signing surface", async () => {
+    seedAgentFolderTree();
+    await renderEditor({ canManageSkills: true });
+    await screen.findByTestId("tree-node-agents/researcher");
+    const skillGrant = screen.getByTestId("menu-add-skill-grant-researcher");
+    const connectorGrant = screen.getByTestId(
+      "menu-add-connector-grant-researcher",
+    );
+    expect(skillGrant.hasAttribute("disabled")).toBe(true);
+    expect(connectorGrant.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("withholds the grant affordances without write scope", async () => {
+    seedAgentFolderTree();
+    await renderEditor({ canManageSkills: false });
+    await screen.findByTestId("tree-node-agents/researcher");
+    expect(screen.queryByTestId("menu-add-skill-grant-researcher")).toBeNull();
+    expect(
+      screen.queryByTestId("menu-add-connector-grant-researcher"),
+    ).toBeNull();
+  });
+
+  it("hides .assignment.json (any dot-prefixed basename) by default; the debug toggle re-includes it", async () => {
+    seedAgentFolderTree();
+    await renderEditor();
+    await screen.findByTestId("tree-node-agents/researcher");
+    // The grant folders hold only dotfile sidecars → whole subtree hidden.
+    expect(
+      screen.queryByTestId("tree-node-agents/researcher/skills"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId(
+        "tree-file-agents/researcher/skills/crm/.assignment.json",
+      ),
+    ).toBeNull();
+    // The visible definition file stays.
+    expect(
+      screen.getByTestId("tree-file-agents/researcher/INSTRUCTIONS.md"),
+    ).toBeTruthy();
+    // Toggle on: the sidecars list for debugging.
+    fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
+    expandAllFolders();
+    expect(
+      screen.getByTestId(
+        "tree-file-agents/researcher/skills/crm/.assignment.json",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId(
+        "tree-file-agents/researcher/connectors/pg/.assignment.json",
+      ),
+    ).toBeTruthy();
+    // Toggle back off.
+    fireEvent.click(screen.getByTestId("composer-toggle-compiled"));
+    expect(
+      screen.queryByTestId(
+        "tree-file-agents/researcher/skills/crm/.assignment.json",
+      ),
+    ).toBeNull();
+  });
+
+  it("legacy agents/<slug>.md WITHOUT a folder keeps the existing dedicated menu", async () => {
+    seedAgentFolderTree();
+    const configureMock = vi.fn();
+    const deleteMock = vi.fn();
+    await renderEditor({
+      onConfigureAgentProfile: configureMock,
+      onDeleteAgentProfile: deleteMock,
+      deletableProfileSlugs: new Set(["analyst"]),
+    });
+    await screen.findByTestId("tree-file-agents/analyst.md");
+    fireEvent.click(screen.getByTestId("menu-configure-profile-analyst"));
+    expect(configureMock).toHaveBeenCalledWith("analyst");
+    fireEvent.click(screen.getByTestId("menu-delete-profile-analyst"));
+    expect(deleteMock).toHaveBeenCalledWith("analyst");
+    // No folder-only affordances on the legacy file.
+    expect(screen.queryByTestId("menu-disable-profile-analyst")).toBeNull();
+  });
+
+  it("a slug with BOTH file and folder hides the legacy file (folder wins)", async () => {
+    seedAgentFolderTree([
+      // Stale legacy file for the SAME slug as the folder (R23 window).
+      {
+        path: "agents/researcher.md",
+        owner: "agent",
+        generated: false,
+        size: 64,
+      },
+    ]);
+    await renderEditor({
+      canManageSkills: true,
+      onConfigureAgentProfile: vi.fn(),
+      onSetAgentProfileEnabled: vi.fn(),
+      onDeleteAgentProfile: vi.fn(),
+      deletableProfileSlugs: new Set(["researcher"]),
+    });
+    // The superseded legacy file is dropped from the tree entirely — one
+    // sub-agent, one node, one set of affordances (the folder's).
+    await screen.findByTestId("tree-node-agents/researcher");
+    expect(screen.queryByTestId("tree-file-agents/researcher.md")).toBeNull();
+    expect(
+      screen.getAllByTestId("menu-configure-profile-researcher"),
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByTestId("menu-delete-profile-researcher"),
+    ).toHaveLength(1);
+  });
+});
