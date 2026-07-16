@@ -187,6 +187,9 @@ export const threadTurns = pgTable(
     index("idx_thread_turns_kind").on(table.kind),
     index("idx_thread_turns_thread").on(table.thread_id),
     index("idx_thread_turns_webhook").on(table.webhook_id),
+    // THINK-307 KTD4: successor-turn lookups (retry dispatcher guard,
+    // finalize reconciliation, recovery resolver) walk origin_turn_id.
+    index("idx_thread_turns_origin_turn").on(table.origin_turn_id),
     uniqueIndex("uq_thread_turns_mobile_client_turn")
       .on(table.tenant_id, table.thread_id, table.external_run_id)
       .where(

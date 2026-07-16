@@ -475,6 +475,40 @@ export function extractComposedSystemPrompt(
 
 const db = getDb();
 
+/**
+ * THINK-307 R6/KTD6: resolve the triggering_message_id a retry-attempt turn
+ * should carry. Retry wakeups have no messageId in their payload; the attempt
+ * turn inherits the origin turn's link so the recovered answer pairs to the
+ * user's original message. Returns null (today's behavior) for chat wakeups
+ * that carry their own messageId, for non-retry wakeups, when the origin turn
+ * is missing or unlinked, or when the lookup fails — pairing is best-effort
+ * and must never block turn creation.
+ */
+export async function resolveRetryTriggeringMessageId(
+  executor: {
+    execute: (query: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }>;
+  },
+  messageId: string | null,
+  originTurnId: string | undefined,
+): Promise<string | null> {
+  if (messageId || !originTurnId) return null;
+  try {
+    const result = await executor.execute(sql`
+			SELECT triggering_message_id FROM thread_turns WHERE id = ${originTurnId}::uuid
+		`);
+    const row = (result.rows || [])[0] as
+      | { triggering_message_id: string | null }
+      | undefined;
+    return row?.triggering_message_id ?? null;
+  } catch (err) {
+    console.error(
+      `[wakeup-processor] Failed to resolve origin triggering_message_id for turn ${originTurnId}:`,
+      err,
+    );
+    return null;
+  }
+}
+
 export async function loadChatMessageAttachmentContext(input: {
   tenantId: string;
   threadId: string;
@@ -1395,6 +1429,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const retryAttempt = (payload?.retryAttempt as number) || 0;
   const originTurnId = (payload?.originTurnId as string) || undefined;
 
+  // THINK-307 R6/KTD6: a retry wakeup carries no messageId of its own, so
+  // inherit the origin turn's triggering_message_id — the recovered answer
+  // then renders under the user's original message and the per-message
+  // dispatch indicator follows the live attempt. Chat wakeups with their own
+  // messageId are untouched; a null origin value stamps null.
+  const retryTriggeringMessageId = await resolveRetryTriggeringMessageId(
+    db,
+    messageId,
+    originTurnId,
+  );
+
   // PRD-09 Batch 3: Resolve workflow config for turn loop + workspace isolation
   const workflowConfig = await resolveWorkflowConfig(wakeup.tenant_id);
 
@@ -1419,8 +1464,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       trigger_detail: wakeup.trigger_detail,
       // THINK-136 U6/KTD3: durable turn→message link for the dispatch
       // indicator. Mirrors chat-agent-invoke's stamp (parity test enforces
-      // both). Null for non-chat wakeups (payload carries no messageId).
-      triggering_message_id: messageId,
+      // both). Null for non-chat wakeups (payload carries no messageId),
+      // except retry wakeups, which inherit the origin turn's link
+      // (THINK-307 R6).
+      triggering_message_id: messageId ?? retryTriggeringMessageId,
       runtime_type: runtimeType,
       status: "running",
       started_at: now,
