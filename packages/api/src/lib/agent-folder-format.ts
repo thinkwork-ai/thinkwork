@@ -22,8 +22,12 @@
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { MAX_DESCRIPTION_LEN, splitFrontmatter } from "./skill-md-parser.js";
-import type { CapabilityDefinitionError } from "./capabilities/definition-schemas.js";
+import type {
+  ApprovalPolicy,
+  CapabilityDefinitionError,
+} from "./capabilities/definition-schemas.js";
 import { CAPABILITY_SLUG_PATTERN } from "./capabilities/definition-schemas.js";
+import { validateMarkerConfigFields } from "./capabilities/marker-frontmatter.js";
 import {
   AGENT_LOOP_MODES,
   EXTERNAL_REVIEWER_POLICIES,
@@ -44,6 +48,11 @@ const ALLOWED_KEYS = [
   "enabled",
   "builtInTools",
   "execution",
+  // Shared marker trust fields (THINK-302 U2, R7): the sub-agent
+  // INSTRUCTIONS.md carries the same behavioral-config grammar as the
+  // capability markers.
+  "approval",
+  "operations",
 ] as const;
 
 /** Strict `execution:` keys (camelCase only; snake_case is an alias → error). */
@@ -123,6 +132,10 @@ export interface AgentFolderConfig {
    */
   builtInTools?: string[];
   execution: AgentFolderExecution;
+  /** Runtime HITL policy (THINK-302 R11). Absent in frontmatter = never. */
+  approval: ApprovalPolicy;
+  /** Granted operation allowlist (THINK-302 R7). Absent = unrestricted. */
+  operations?: string[];
   /** The prose body of INSTRUCTIONS.md, verbatim (trimmed). */
   instructions: string;
 }
@@ -134,6 +147,8 @@ export interface AgentFolderInstructionsInput {
   enabled?: boolean;
   builtInTools?: string[];
   execution?: AgentFolderExecutionInput;
+  approval?: ApprovalPolicy;
+  operations?: string[];
   instructions: string;
 }
 
@@ -180,6 +195,12 @@ export function serializeAgentFolderInstructions(
   }
   if (input.execution && Object.keys(input.execution).length > 0) {
     frontmatter.execution = input.execution;
+  }
+  if (input.approval && input.approval !== "never") {
+    frontmatter.approval = input.approval;
+  }
+  if (input.operations && input.operations.length > 0) {
+    frontmatter.operations = input.operations;
   }
   const yaml = stringifyYaml(frontmatter, { collectionStyle: "block" }).trim();
   return `---\n${yaml}\n---\n\n${input.instructions.trim()}\n`;
@@ -286,6 +307,11 @@ export function parseAgentFolderInstructions(
   }
   const builtInTools = validateBuiltInTools(record.builtInTools, path, errors);
   const executionInput = validateExecution(record.execution, path, errors);
+  const trustFields = validateMarkerConfigFields(
+    { approval: record.approval, operations: record.operations },
+    path,
+    errors,
+  );
 
   if (errors.length > 0 || !description) {
     return { valid: false, errors };
@@ -300,6 +326,8 @@ export function parseAgentFolderInstructions(
       enabled,
       ...(builtInTools && builtInTools.length > 0 ? { builtInTools } : {}),
       execution: normalizeAgentFolderExecution(executionInput ?? {}),
+      approval: trustFields.approval,
+      ...(trustFields.operations ? { operations: trustFields.operations } : {}),
       instructions: split.body.trim(),
     },
   };

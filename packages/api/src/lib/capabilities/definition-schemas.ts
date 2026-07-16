@@ -38,6 +38,8 @@ export const CAPABILITY_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 export const CONNECTION_DEFINITION_FILE = "CONNECTION.md";
 export const TOOL_DEFINITION_FILE = "TOOL.md";
+/** First-class mcp/<slug>/ marker (THINK-302 U2/U4). */
+export const MCP_DEFINITION_FILE = "MCP.md";
 export const CAPABILITY_SIDECAR_FILE = ".assignment.json";
 
 export const TOOL_KINDS = [
@@ -633,12 +635,12 @@ export function parseCapabilitySidecar(
  * literal secret material. Accepted reference shapes: Secrets Manager /
  * SSM refs, ARNs, `ref:` markers, and env-var-name style values.
  */
-const SECRET_KEY_RE =
+export const SECRET_KEY_RE =
   /(?:^|_)(?:token|secret|password|apikey|api_key|client_secret|private_key|credentials?|authorization)$/i;
-const ALLOWED_REF_RE =
+export const ALLOWED_REF_RE =
   /^(?:secretsmanager:|ssm:|ref:|arn:aws:secretsmanager:|arn:aws:ssm:|[A-Z][A-Z0-9_]*$)/;
 
-function scanForSecretValues(
+export function scanForSecretValues(
   value: unknown,
   keyPath: string,
   path: string,
