@@ -24,6 +24,7 @@ import { agents, tenantMcpServers } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../../graphql/utils.js";
 import {
   connectionDefinitionFromRegistryRow,
+  putAgentChildGrantSidecar,
   putCapabilityFolder,
   type CapabilityFolderWriteDeps,
 } from "../capabilities/folder-write.js";
@@ -216,6 +217,26 @@ export async function materializeAnalystConnectionFolder(input: {
         ContentType: "text/markdown; charset=utf-8",
       }),
     );
+    // Sub-agent child grant (subagent-folders U7 — R10): the analyst
+    // built-in profile's connector grant is the presence of
+    // agents/analyst/connectors/<slug>/ with a signed narrowing sidecar
+    // (greenfield connectors/ spelling). Best-effort like the mcp
+    // dual-write below: the root folder is the authority; a failed child
+    // grant surfaces at compile as absence, not as a broken registration.
+    const childGrant = await putAgentChildGrantSidecar({
+      targetPrefix,
+      agentProfileSlug: "analyst",
+      childClass: "connection",
+      slug,
+      operations: ["query"],
+      signedBy,
+      deps: { ...input.deps, bucket, s3 },
+    });
+    if (!childGrant.ok) {
+      console.warn(
+        `[analyst-connection-folder] child grant write failed for agent ${agent.id}: ${childGrant.reason}`,
+      );
+    }
     written += 1;
   }
 
@@ -249,6 +270,7 @@ export async function materializeAnalystConnectionFolder(input: {
       `${capabilityFolderName("connection")}/${slug}/CONNECTION.md`,
       `${capabilityFolderName("connection")}/${slug}/${CAPABILITY_SIDECAR_FILE}`,
       `${capabilityFolderName("connection")}/${slug}/${ANALYST_SCHEMA_FILE}`,
+      `agents/analyst/${capabilityFolderName("connection", "agent")}/${slug}/${CAPABILITY_SIDECAR_FILE}`,
       `mcp/${slug}/.assignment.json`,
     ],
     agents: written,

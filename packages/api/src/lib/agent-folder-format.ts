@@ -38,7 +38,13 @@ const AGENT_FOLDER_INSTRUCTIONS_RE =
   /^agents\/([a-z0-9][a-z0-9-]*)\/INSTRUCTIONS\.md$/;
 
 /** Frontmatter keys the strict format accepts — nothing else. */
-const ALLOWED_KEYS = ["description", "model", "enabled", "execution"] as const;
+const ALLOWED_KEYS = [
+  "description",
+  "model",
+  "enabled",
+  "builtInTools",
+  "execution",
+] as const;
 
 /** Strict `execution:` keys (camelCase only; snake_case is an alias → error). */
 const ALLOWED_EXECUTION_KEYS = [
@@ -107,6 +113,15 @@ export interface AgentFolderConfig {
   /** Absent = inherit the platform/parent default at compile time. */
   model?: string;
   enabled: boolean;
+  /**
+   * Pi built-in tool names this sub-agent may use (e.g. `web-search`,
+   * `execute_code`). Config, NOT a capability grant: tenant capabilities
+   * (skills, connectors) are granted by folder presence; built-ins are
+   * ambient platform tools narrowed here, mirroring the root TOOLS.md
+   * posture. Absent/empty = no built-in tools beyond the delegation
+   * baseline.
+   */
+  builtInTools?: string[];
   execution: AgentFolderExecution;
   /** The prose body of INSTRUCTIONS.md, verbatim (trimmed). */
   instructions: string;
@@ -117,6 +132,7 @@ export interface AgentFolderInstructionsInput {
   description: string;
   model?: string;
   enabled?: boolean;
+  builtInTools?: string[];
   execution?: AgentFolderExecutionInput;
   instructions: string;
 }
@@ -159,6 +175,9 @@ export function serializeAgentFolderInstructions(
   };
   if (input.model?.trim()) frontmatter.model = input.model.trim();
   if (input.enabled === false) frontmatter.enabled = false;
+  if (input.builtInTools && input.builtInTools.length > 0) {
+    frontmatter.builtInTools = input.builtInTools;
+  }
   if (input.execution && Object.keys(input.execution).length > 0) {
     frontmatter.execution = input.execution;
   }
@@ -265,6 +284,7 @@ export function parseAgentFolderInstructions(
       enabled = record.enabled;
     }
   }
+  const builtInTools = validateBuiltInTools(record.builtInTools, path, errors);
   const executionInput = validateExecution(record.execution, path, errors);
 
   if (errors.length > 0 || !description) {
@@ -278,6 +298,7 @@ export function parseAgentFolderInstructions(
       description,
       ...(model ? { model } : {}),
       enabled,
+      ...(builtInTools && builtInTools.length > 0 ? { builtInTools } : {}),
       execution: normalizeAgentFolderExecution(executionInput ?? {}),
       instructions: split.body.trim(),
     },
@@ -345,6 +366,26 @@ export function applyAgentFolderSidecar(
       execution,
     },
   };
+}
+
+function validateBuiltInTools(
+  raw: unknown,
+  path: string,
+  errors: CapabilityDefinitionError[],
+): string[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (
+    !Array.isArray(raw) ||
+    raw.some((v) => typeof v !== "string" || !v.trim())
+  ) {
+    errors.push({
+      kind: "FieldShape",
+      message: `${path} field 'builtInTools' must be a list of non-empty tool-name strings`,
+      details: { path, field: "builtInTools" },
+    });
+    return undefined;
+  }
+  return (raw as string[]).map((v) => v.trim());
 }
 
 function validateExecution(
