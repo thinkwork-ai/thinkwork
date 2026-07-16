@@ -24,6 +24,10 @@ const rollback0142 = readFileSync(
   join(HERE, "..", "drizzle", "0142_pi_only_agent_runtime_rollback.sql"),
   "utf-8",
 );
+const migration0257 = readFileSync(
+  join(HERE, "..", "drizzle", "0257_agents_runtime_allow_harness.sql"),
+  "utf-8",
+);
 
 describe("agent runtime selector schema", () => {
   it("defaults agents to the Pi runtime", () => {
@@ -109,5 +113,14 @@ describe("agent runtime selector schema", () => {
     expect(migration0142).toContain("ALTER COLUMN runtime SET DEFAULT 'pi'");
     expect(migration0142).toContain("CHECK (runtime = 'pi')");
     expect(rollback0142).toContain("CHECK (runtime IN ('strands', 'pi'))");
+  });
+
+  it("allows the harness runtime for the AgentCore trial (THINK-311)", () => {
+    expect(migration0257).toMatch(
+      /--\s*creates-constraint:\s*public\.agents\.agents_runtime_check\b/,
+    );
+    expect(migration0257).toContain(
+      "CHECK (runtime IN ('strands', 'flue', 'pi', 'harness'))",
+    );
   });
 });
