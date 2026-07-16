@@ -765,7 +765,7 @@ locals {
   # Group 3: AI — Bedrock model invocation, Knowledge Bases, AgentCore
   # memory / evaluations / code interpreter.
   # ---------------------------------------------------------------------------
-  api_ai_statements = [
+  api_ai_statements = concat([
     # (was inline policy "bedrock-invoke")
     # Cross-region inference profiles (us.anthropic.claude-*) require
     # `bedrock:InvokeModel` on the *inference-profile* ARN AND on the
@@ -886,7 +886,65 @@ locals {
       ]
       Resource = "*"
     },
-  ]
+    ],
+    # THINK-311 U4 — AgentCore Harness trial invoker grants, present only when
+    # the agentcore-harness module is enabled (empty role ARN = module off).
+    # Ship-inert: no handler calls Harness until U5's harness-runner lands.
+    #
+    # CRITICAL: never grant `bedrock-agentcore:InvokeAgentRuntimeCommand`
+    # anywhere — it bypasses Harness allowedTools enforcement. Invocation goes
+    # through InvokeHarness / InvokeAgentRuntime only.
+    var.agentcore_harness_execution_role_arn != "" ? [
+      {
+        # Data plane — invoke a Harness (and its runtime endpoints) directly.
+        Sid    = "AgentCoreHarnessInvoke"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:InvokeHarness",
+          "bedrock-agentcore:InvokeAgentRuntime",
+        ]
+        Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:harness/*"
+      },
+      {
+        # Control plane — CreateHarness has no resource ARN at create time
+        # (same non-scopable shape as bedrock:CreateKnowledgeBase above), so
+        # this statement is "*"; PassRole below stays scoped to the single
+        # Harness execution role.
+        Sid    = "AgentCoreHarnessControl"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:CreateHarness",
+          "bedrock-agentcore:GetHarness",
+          "bedrock-agentcore:UpdateHarness",
+          "bedrock-agentcore:DeleteHarness",
+          "bedrock-agentcore:CreateHarnessEndpoint",
+          "bedrock-agentcore:GetHarnessEndpoint",
+          "bedrock-agentcore:ListHarnessEndpoints",
+          "bedrock-agentcore:ListHarnesses",
+          "bedrock-agentcore:ListHarnessVersions",
+        ]
+        Resource = "*"
+      },
+    ] : [],
+    # (Separate conditional from the two statements above only because the
+    # Condition attribute gives this object a different Terraform type —
+    # same gate, same feature.)
+    var.agentcore_harness_execution_role_arn != "" ? [
+      {
+        # CreateHarness takes executionRoleArn; the caller must be able to
+        # pass exactly that role, and only to the bedrock-agentcore service.
+        Sid      = "AgentCoreHarnessPassExecutionRole"
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = var.agentcore_harness_execution_role_arn
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "bedrock-agentcore.amazonaws.com"
+          }
+        }
+      },
+    ] : [],
+  )
 
   # ---------------------------------------------------------------------------
   # Group 4: observability — CloudWatch Logs reads, ECS/ALB health reads.

@@ -1055,6 +1055,10 @@ module "api" {
   # Governed autonomy — per-tenant self-extension opt-in allowlist (default off).
   capability_self_extension_tenants = var.capability_self_extension_tenants
 
+  # THINK-311 U4 — keys the Harness invoker grants in the grouped ai policy
+  # (empty string when the harness module is disabled = grants omitted).
+  agentcore_harness_execution_role_arn = module.agentcore_harness.execution_role_arn
+
   # Phase 3 U8b — KMS key + Object Lock mode forwarded as
   # COMPLIANCE_ANCHOR_KMS_KEY_ARN and COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE
   # env vars on the anchor Lambda. The live `_anchor_fn_live` requires
@@ -1245,6 +1249,20 @@ module "agentcore_pi" {
   okf_efs_security_group_ids    = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
   okf_efs_file_system_arn       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
   okf_efs_read_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : ""
+}
+
+# AgentCore Harness trial (THINK-311 U4) — ship-inert, pure IAM. Provisions
+# the Harness microVM execution role; the api Lambda's Harness invoker grants
+# ride the grouped ai policy in lambda-api (keyed off this module's role-ARN
+# output). No handler creates or invokes a Harness until U5.
+module "agentcore_harness" {
+  source = "../app/agentcore-harness"
+
+  enabled     = var.enable_agentcore_harness
+  stage       = var.stage
+  region      = var.region
+  account_id  = var.account_id
+  bucket_name = module.s3.bucket_name
 }
 
 # Capability Broker (THINK-280 U3) — ship-inert, gated by

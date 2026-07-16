@@ -18,7 +18,8 @@
   "dependencies": {
     "@aws-sdk/client-bedrock": "^3.1024.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1028.0",
-    "@aws-sdk/client-bedrock-agentcore": "^3.1024.0",
+    "@aws-sdk/client-bedrock-agentcore": "^3.1088.0",
+    "@aws-sdk/client-bedrock-agentcore-control": "^3.1088.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1024.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.917.0",
     "@aws-sdk/client-codebuild": "^3.1043.0",
@@ -76,7 +77,6 @@
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-agent": "^3.1024.0",
-    "@aws-sdk/client-bedrock-agentcore-control": "^3.917.0",
     "@aws-sdk/s3-request-presigner": "^3.1023.0",
     "@envelop/depth-limit": "^7.1.1",
     "@graphql-tools/schema": "^10.0.31",

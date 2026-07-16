@@ -651,3 +651,11 @@ output "analyst_egress_ip" {
   description = "Stable NAT egress IP of the VPC-attached analyst data-path Lambdas — the address an external database's IP allowlist must admit. Null unless analyst_lambda_vpc_egress is set (and the stack has a NAT gateway)."
   value       = var.analyst_lambda_vpc_egress ? module.vpc.nat_gateway_public_ip : null
 }
+
+# THINK-311 U4 — AgentCore Harness trial. U5's harness-runner wires this into
+# its handler environment; graphql-http deliberately gets NO new env var (the
+# grouped-env 4KB ceiling, see project_graphql_http_env_4kb_ceiling).
+output "agentcore_harness_execution_role_arn" {
+  description = "Execution role ARN Harness microVMs assume (CreateHarness executionRoleArn). Empty when enable_agentcore_harness is false."
+  value       = module.agentcore_harness.execution_role_arn
+}
