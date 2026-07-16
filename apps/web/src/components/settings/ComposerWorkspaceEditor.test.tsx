@@ -1748,7 +1748,7 @@ describe("sub-agent folder grammar (subagent-folders U13)", () => {
     expect(screen.queryByTestId("menu-disable-profile-analyst")).toBeNull();
   });
 
-  it("a slug with BOTH file and folder shows ONE entity's affordances (folder wins)", async () => {
+  it("a slug with BOTH file and folder hides the legacy file (folder wins)", async () => {
     seedAgentFolderTree([
       // Stale legacy file for the SAME slug as the folder (R23 window).
       {
@@ -1765,17 +1765,15 @@ describe("sub-agent folder grammar (subagent-folders U13)", () => {
       onDeleteAgentProfile: vi.fn(),
       deletableProfileSlugs: new Set(["researcher"]),
     });
-    await screen.findByTestId("tree-file-agents/researcher.md");
-    // Exactly ONE Configure and ONE Remove for the slug — the folder's.
+    // The superseded legacy file is dropped from the tree entirely — one
+    // sub-agent, one node, one set of affordances (the folder's).
+    await screen.findByTestId("tree-node-agents/researcher");
+    expect(screen.queryByTestId("tree-file-agents/researcher.md")).toBeNull();
     expect(
       screen.getAllByTestId("menu-configure-profile-researcher"),
     ).toHaveLength(1);
     expect(
       screen.getAllByTestId("menu-delete-profile-researcher"),
     ).toHaveLength(1);
-    // The superseded legacy file carries NO ops at all — not even raw ones.
-    expect(screen.queryByTestId("menu-rename-agents/researcher.md")).toBeNull();
-    expect(screen.queryByTestId("menu-delete-agents/researcher.md")).toBeNull();
-    expect(screen.queryByTestId("menu-cut-agents/researcher.md")).toBeNull();
   });
 });

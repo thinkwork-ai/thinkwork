@@ -918,13 +918,17 @@ export function ComposerWorkspaceEditor({
   // Debug toggle: compiled artifacts are off by default; the manifest
   // stays inspectable through the capability sheet either way.
   const [showCompiled, setShowCompiled] = useState(false);
-  const visibleEntries = useMemo(
-    () =>
-      showCompiled
-        ? entries
-        : entries.filter((entry) => !isHiddenArtifactPath(entry.path)),
-    [entries, showCompiled],
-  );
+  const visibleEntries = useMemo(() => {
+    if (showCompiled) return entries;
+    return entries.filter((entry) => {
+      if (isHiddenArtifactPath(entry.path)) return false;
+      // A legacy flat `agents/<slug>.md` superseded by its folder form is
+      // dead weight until THINK-299 deletes it server-side — hide it rather
+      // than render a second, affordance-less node for the same sub-agent.
+      const legacy = /^agents\/([^/]+)\.md$/.exec(entry.path);
+      return !(legacy && agentFolderSlugs.has(legacy[1]));
+    });
+  }, [entries, showCompiled, agentFolderSlugs]);
   // Attach/detach progress renders in the host's footer status (no ghost
   // nodes or per-node badges in the tree — the folder simply appears on the
   // post-sync refetch).
@@ -1388,8 +1392,8 @@ export function ComposerWorkspaceEditor({
             >
               <Plus className="mr-2 size-4" />{" "}
               {profileScopeName
-                ? `Add Connection for ${profileScopeName}…`
-                : "Add Connection…"}
+                ? `Add Connector for ${profileScopeName}…`
+                : "Add Connector…"}
             </ContextMenuItem>
           ) : null}
           {canDetachMcp ? (
