@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ideation: Controlled-Loop Simplification</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#fbfaf8; --ink:#1f2430; --muted:#5b6472; --line:#e3e0d9;
+  --accent:#2b5fb8; --accent-soft:#e9f0fb; --accent-text:#274f96;
+  --warn:#a35a17; --warn-soft:#fbf1e4; --warn-text:#8a4d13;
+  --ok:#2a7d4f; --ok-soft:#e7f4ec; --ok-text:#22653f;
+  --card:#ffffff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 Inter,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;}
+main{max-width:920px;margin:0 auto;padding:40px 28px 64px;}
+h1{font-size:28px;line-height:1.25;margin:6px 0 4px;}
+h2{font-size:20px;margin:44px 0 12px;padding-top:10px;border-top:1px solid var(--line);}
+h3{font-size:16px;margin:0;}
+p{max-width:72ch;}
+code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.86em;background:#f1efe9;padding:1px 5px;border-radius:4px;}
+.eyebrow{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+.meta{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--muted);font-size:13px;margin:10px 0 0;}
+.meta span b{color:var(--ink);font-weight:600;}
+.lede{font-size:16px;color:var(--ink);max-width:76ch;}
+.axes{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px;}
+.axes li{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:14px;}
+.axes li b{font-weight:600;}
+.jump{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:14px 0 22px;}
+.jump ol{margin:6px 0 0;padding-left:22px;}
+.jump a{color:var(--accent-text);text-decoration:none;}
+.jump a:hover{text-decoration:underline;}
+article.idea{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:0 0 22px;}
+.idea-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+.chip{display:inline-block;font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 10px;}
+.chip.rank{background:var(--accent);color:#fff;font-family:"JetBrains Mono",monospace;}
+.chip.axis{background:#f1efe9;color:var(--muted);}
+.chip.conf-hi{background:var(--ok-soft);color:var(--ok-text);}
+.chip.conf-md{background:var(--warn-soft);color:var(--warn-text);}
+.chip.cx{background:var(--accent-soft);color:var(--accent-text);}
+dl.fields{margin:12px 0 0;}
+dl.fields dt{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-top:12px;}
+dl.fields dd{margin:3px 0 0;max-width:76ch;}
+blockquote{margin:6px 0;padding:6px 14px;border-left:3px solid var(--line);color:var(--muted);font-size:13.5px;}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:12px 0;}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top;}
+th{background:#f4f2ec;font-weight:600;}
+figure{margin:16px 0 4px;}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:4px;}
+footer.composition-signal{margin-top:56px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;}
+.callout{border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:14px 0;background:var(--warn-soft);}
+.callout .eyebrow{color:var(--warn-text);}
+svg text{font-family:Inter,sans-serif;}
+</style>
+</head>
+<body>
+<main>
+<div class="eyebrow">Ideation · repo-grounded</div>
+<h1>Controlled-Loop Simplification</h1>
+<div class="meta">
+  <span><b>Date</b> 2026-07-16</span>
+  <span><b>Topic</b> controlled-loop-simplification</span>
+  <span><b>Focus</b> Incorporate the Emerging AI "agent as a controlled loop" model (Trigger → Goal → Tools → State → Check → Stop) to simplify ThinkWork's loop strategy</span>
+  <span><b>Mode</b> repo-grounded</span>
+</div>
+
+<p class="lede">ThinkWork's loop machinery has grown into parallel subsystems that each own a slice of the article's six-piece loop. The strongest, verified finding of this session: <strong>the Check slot is empty in production</strong> — <code>decideWorkflowContinuation</code> stamps <code>exit_signal_satisfied</code> whenever the model calls <code>goal_complete</code>; the declared <code>exitSignal</code> text is never evaluated, and <code>completionCriteria</code> are prose folded into the prompt. Every ranked idea below deletes or consolidates something; none adds a parallel mechanism.</p>
+
+<h2 id="grounding-context">Grounding Context</h2>
+<p><strong>Codebase Context.</strong> Loop execution spans: three Pi invoke payload builders (chat-agent-invoke, wakeup-processor, <code>buildAgentLoopWakeupPayload</code>/<code>interpreter-wakeup</code>) kept in parity by a solutions doc and a test — three production bugs to date; goal completion signaled exclusively by the model calling <code>goal_complete</code> (judge modes declared in <code>contracts.ts</code> but removed from the product surface in THINK-137 U10); three run ledgers (<code>workflow_runs</code>, <code>agent_loop_runs</code>/<code>agent_loop_iterations</code>, <code>thread_turns</code>) tracking the same execution; <code>context_snapshot</code> rebuilt from the wakeup payload every turn with no run-level STATE store; stop conditions split across two inconsistent enforcement surfaces (legacy <code>completion-decision.ts</code> checks <code>maxTokens</code>/<code>maxRuntimeMs</code>; the canonical interpreter checks only <code>maxIterations</code>; <code>costBudgetUsd</code> enforced nowhere); the stall monitor disabled 2026-07-15 for false timeouts (THINK-301); no-progress detection absent. Working ratchets already exist — skill-eval-gate (staged scoring, deferred swap) and the hermetic fixture gate on routine proposals (which correctly blocked a bad fixture on the first live autonomous admission, 2026-07-15).</p>
+<p><strong>External context.</strong> The 2025–26 ecosystem converged on exactly the article's primitives: Claude Code <code>/goal</code> (separate cheap evaluator grades an objective condition per turn), Ralph loops (fresh session per iteration; state in files, "agents forget, repositories do not"), llm-stop-conditions (named composable stops, every stop returns a reason), OpenAI Agents SDK (approval = paused run, budgets consistent across gates), Kubernetes reconciliation (level-triggered re-derivation from declared state). Market gap: no multi-tenant enterprise harness packages per-tenant checklisted goals + auditable stop reasons + approval-as-paused-run — a governance story ThinkWork is positioned to own.</p>
+
+<h2 id="topic-axes">Topic Axes</h2>
+<ul class="axes">
+  <li><b>triggers-wakeups</b> — trigger families, payload builders, dispatch parity</li>
+  <li><b>goal-completion</b> — goal declaration, gradeable criteria, completion signaling, judges</li>
+  <li><b>loop-state</b> — where run/iteration state lives, ledgers, context snapshots, state files</li>
+  <li><b>stop-budgets</b> — stop conditions, budgets, timeouts, no-progress, approval gates</li>
+  <li><b>verification-ratchet</b> — per-turn checks, verification skills, eval feedback, improvement loop</li>
+</ul>
+
+<h2 id="ranked-ideas">Ranked Ideas</h2>
+<div class="jump">
+  <span class="eyebrow">Jump to</span>
+  <ol>
+    <li><a href="#i1">Make the Check real — external per-turn grading of completion criteria</a></li>
+    <li><a href="#i2">Pointer payloads + a run STATE document</a></li>
+    <li><a href="#i3">One trigger vocabulary</a></li>
+    <li><a href="#i4">Unified stop policy — one composed evaluator, named reasons, enforce-or-delete</a></li>
+    <li><a href="#i5">One verification gate contract — loops ride the existing ratchet</a></li>
+    <li><a href="#i6">Progress-based liveness — replace the disabled stall monitor</a></li>
+    <li><a href="#i7">One run ledger — thread_turns as journal, the rest as projections</a></li>
+  </ol>
+</div>
+
+<article class="idea" id="i1">
+  <div class="idea-head">
+    <span class="chip rank">1</span><h3>Make the Check real — external per-turn grading of completion criteria</h3>
+    <span class="chip axis">goal-completion</span><span class="chip conf-hi">Confidence 90%</span><span class="chip cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Today a loop "completes" when the model calls <code>goal_complete</code> — a self-certification prompted by an instruction, with <code>completionCriteria</code> string-joined into the objective and the declared <code>exitSignal</code> never evaluated by any code path. Give the Check slot a real occupant: at save time, criteria must resolve to a gradeable check (command exit code, data query with expected shape, eval case, or LLM rubric — ungradeable goals are rejected at authoring); after each turn, a cheap evaluator model grades the declared criteria against the turn's evidence and returns PASS or a numbered failure list; the loop exits only on PASS. <code>goal_complete</code> becomes "request grading," not "declare victory." This is deliberately <em>not</em> a resurrection of the six judge modes THINK-137 deleted — it is one check path, and it deletes surface: the decorative <code>exitSignal</code> field, prose-only criteria, and the dead judge-mode scaffolding still declared in <code>contracts.ts:27-39</code>.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> Verified in <code>packages/agent-loops-core/src/interpreter.ts</code> — <code>decideWorkflowContinuation</code> branches only on goal-run status and never inspects <code>policy.exitSignal</code>; <code>loop-to-workflow.ts:90-93</code> — <code>exitSignal = completionCriteria.join("; ") || objective.trim()</code>; <code>completion-decision.ts</code> — "This is NOT a judge — the worker's own goal-run signal drives completion… there is no judge verdict anymore." <code>external:</code> Claude Code <code>/goal</code> — separate cheap evaluator (Haiku-class) grades the condition per turn and returns a reason string.</dd>
+    <dt>Rationale</dt>
+    <dd>The self-extension arc proved the behavioral law: "fabrication is the failure mode when posture is closed but the loop is absent." An agent under iteration pressure will call <code>goal_complete</code> optimistically — the article treats an external check as the non-negotiable piece of a working loop, and it is precisely the piece ThinkWork's loops lack. This also unlocks ideas 5 and 6: the check output is the substrate for evaluator fixtures and no-progress detection.</dd>
+    <dt>Downsides</dt>
+    <dd>Narrowly re-opens a decided deletion (THINK-137 U10) — needs explicit re-adjudication that "one check path" is not "six judge modes back." Adds a per-turn evaluator invocation (cheap model, but nonzero cost/latency). Migration story needed for existing loops with vibes-criteria.</dd>
+  </dl>
+  <figure>
+  <svg viewBox="0 0 840 210" role="img" aria-label="Current self-certified completion vs proposed external check">
+    <text x="14" y="24" font-size="12" font-weight="600" fill="#a35a17">TODAY — self-certified</text>
+    <rect x="14" y="38" width="150" height="44" rx="8" fill="#fff" stroke="#e3e0d9"/><text x="89" y="58" font-size="12" text-anchor="middle">Agent turn</text><text x="89" y="73" font-size="11" text-anchor="middle" fill="#5b6472">works on objective</text>
+    <line x1="164" y1="60" x2="238" y2="60" stroke="#5b6472" marker-end="url(#a)"/>
+    <rect x="240" y="38" width="170" height="44" rx="8" fill="#fbf1e4" stroke="#e3c9a4"/><text x="325" y="58" font-size="12" text-anchor="middle">goal_complete()</text><text x="325" y="73" font-size="11" text-anchor="middle" fill="#8a4d13">model's own claim</text>
+    <line x1="410" y1="60" x2="484" y2="60" stroke="#5b6472" marker-end="url(#a)"/>
+    <rect x="486" y="38" width="200" height="44" rx="8" fill="#fff" stroke="#e3e0d9"/><text x="586" y="58" font-size="12" text-anchor="middle">"exit_signal_satisfied"</text><text x="586" y="73" font-size="11" text-anchor="middle" fill="#5b6472">exitSignal text never read</text>
+    <text x="14" y="122" font-size="12" font-weight="600" fill="#2a7d4f">PROPOSED — externally checked</text>
+    <rect x="14" y="136" width="150" height="44" rx="8" fill="#fff" stroke="#e3e0d9"/><text x="89" y="156" font-size="12" text-anchor="middle">Agent turn</text><text x="89" y="171" font-size="11" text-anchor="middle" fill="#5b6472">works on objective</text>
+    <line x1="164" y1="158" x2="238" y2="158" stroke="#5b6472" marker-end="url(#a)"/>
+    <rect x="240" y="136" width="170" height="44" rx="8" fill="#e9f0fb" stroke="#b9cdec"/><text x="325" y="156" font-size="12" text-anchor="middle">Cheap evaluator</text><text x="325" y="171" font-size="11" text-anchor="middle" fill="#274f96">grades declared criteria</text>
+    <line x1="410" y1="150" x2="484" y2="150" stroke="#2a7d4f" marker-end="url(#a)"/><text x="447" y="142" font-size="11" fill="#22653f">PASS</text>
+    <rect x="486" y="128" width="120" height="36" rx="8" fill="#e7f4ec" stroke="#a9d4bb"/><text x="546" y="150" font-size="12" text-anchor="middle" fill="#22653f">complete</text>
+    <line x1="410" y1="170" x2="484" y2="176" stroke="#a35a17" marker-end="url(#a)"/><text x="447" y="192" font-size="11" fill="#8a4d13">fail list</text>
+    <rect x="486" y="170" width="200" height="36" rx="8" fill="#fff" stroke="#e3e0d9"/><text x="586" y="192" font-size="12" text-anchor="middle">next turn (numbered failures)</text>
+    <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5b6472"/></marker></defs>
+  </svg>
+  <figcaption>Illustrative contrast: today the model certifies its own completion; the proposal inserts one cheap external grader whose failure list drives the next turn.</figcaption>
+  </figure>
+</article>
+
+<article class="idea" id="i2">
+  <div class="idea-head">
+    <span class="chip rank">2</span><h3>Pointer payloads + a run STATE document</h3>
+    <span class="chip axis">loop-state</span><span class="chip conf-hi">Confidence 80%</span><span class="chip cx">Complexity High</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Attack the payload-parity bug class at its cause. Today three builders each snapshot every capability-gating field into the wakeup payload, and <code>context_snapshot</code> is rebuilt from that payload every turn — so every new field must be added to all builders and "carried identically on the initial ('start') and resume payloads." Flip to level-triggered dispatch: the wakeup carries <code>{runId, iteration, reason, provenance}</code> and the runtime re-derives goal, document binding, gates, and identity from declared state at turn start. Pair it with the article's most concrete prescription: each run carries one small STATE document (Goal / Completed / Evidence / Next action / Blockers) written at finalize and read at dispatch; full history stays in the turn ledger and is never reloaded. A shared-payload-builder extraction is the weaker fallback if the full inversion is too large a bite.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> Parity doc <code>docs/solutions/architecture-patterns/wakeup-processor-payload-parity-with-chat-agent-invoke-2026-06-12.md</code> — "Anything the runtime gates on payload fields must be added to both, or the capability silently exists only on direct chat turns. This has now bitten three times"; <code>run-ledger.ts:462-463</code> (verified verbatim) — "Carried IDENTICALLY on the initial ('start') and resume payloads"; evidence dossier — "context_snapshot: RELOADED each turn from wakeup payload… No RUN_LOG or STATE files found." <code>external:</code> Kubernetes level-triggered reconciliation; Ralph loops' files-over-history.</dd>
+    <dt>Rationale</dt>
+    <dd>Three production incidents share one root cause, and the org's own postmortem prescribes the refactor. But extraction still leaves an edge-triggered design where documentation enforces correctness; pointer payloads make the failure class structurally impossible and shrink the Pi dispatch contract to "given a runId, reconstruct the turn." The STATE document gives loops durable, model-legible progress — the one thing the wakeup payload can never carry.</dd>
+    <dt>Downsides</dt>
+    <dd>The largest blast radius on the list: touches chat dispatch latency, the Pi runtime contract, and resume semantics. Needs staged migration (loop/wakeup paths first, chat last). Fresh-context iterations (the Ralph variant) are worth piloting on one loop family, not mandating platform-wide.</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i3">
+  <div class="idea-head">
+    <span class="chip rank">3</span><h3>One trigger vocabulary</h3>
+    <span class="chip axis">triggers-wakeups</span><span class="chip conf-hi">Confidence 85%</span><span class="chip cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Verification found the fragmentation is worse than the dossiers reported: at least four trigger vocabularies coexist — nine <code>trigger_type</code> values on <code>scheduled_jobs</code>, a six-value <code>AgentLoopDispatchTriggerFamily</code> union, <code>JobTriggerEvent.triggerType</code> with 10+ values plus bolted-on webhook fields, an eight-value <code>APPROVAL_TRIGGER_FAMILIES</code>, and loose ad-hoc strings (<code>eval_scheduled</code>, <code>skill_run</code>, <code>canvas_refresh</code>) compared via raw <code>startsWith("agent_")</code> checks. Collapse to one Trigger contract: a single <code>startRun(loopId, provenance, payloadPointer?)</code> entry point where schedule/webhook/manual/event/approval-resolution are thin adapters supplying provenance as data, never behavior. The webhook provenance seam (fenced untrusted payload) becomes the one payload mechanism for every family.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>scheduled-jobs.ts:47</code> (9 values, verified), <code>run-ledger.ts:45-51</code> (6-family union, verified), <code>job-trigger.ts</code> (overlapping unions + <code>APPROVAL_TRIGGER_FAMILIES</code> + ad-hoc constants, verified by fresh-context reviewer). <code>reasoned:</code> the article needs exactly one thing from a trigger — a reason to start the loop; everything else is attribution.</dd>
+    <dt>Rationale</dt>
+    <dd>Every new trigger source today means touching job-trigger, run-ledger, and the payload builders in lockstep. If post-dispatch behavior never actually branches by family (the forcing question for the room), the whole surface collapses to a log field, and testing one function tests every family.</dd>
+    <dt>Downsides</dt>
+    <dd>Schema migration on <code>scheduled_jobs.trigger_type</code> plus a compatibility window; approval-resume semantics (budgets carry forward, not reset) need explicit design so the gate doesn't silently reset counters.</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i4">
+  <div class="idea-head">
+    <span class="chip rank">4</span><h3>Unified stop policy — one composed evaluator, named reasons, enforce-or-delete</h3>
+    <span class="chip axis">stop-budgets</span><span class="chip conf-hi">Confidence 80%</span><span class="chip cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Verification corrected the raw finding: it is not "budgets declared, enforced nowhere" but two parallel enforcement surfaces with inconsistent coverage — the legacy AgentLoop path (<code>completion-decision.ts</code>) checks <code>maxTokens</code> and <code>maxRuntimeMs</code>, while the canonical interpreter's <code>ContinuationPolicy</code> carries only <code>exitSignal</code>/<code>maxIterations</code>/<code>oversight</code>; <code>costBudgetUsd</code> is enforced nowhere; the approval-step timeout appears unenforced. Consolidate onto one <code>evaluateStops(state, policy) → {stop, reason}</code> function — composed named conditions (MaxIterations, MaxUsd, MaxSeconds, NoProgress, LeaseExpired, ApprovalTimeout) — invoked at the single continuation seam. Every field in the contract is either enforced there or deleted; every stop writes its named reason to the run. Fold in the two near-identical budget-pause blocks in <code>cost-recording.ts</code> as one scope-parameterized autonomy-freeze primitive (SRE-style: exhaustion freezes autonomy and requires approval, richer than a kill switch).</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>contracts.ts:97-99</code> (fields declared) vs <code>workflow-definition.ts:403-416</code> (ContinuationPolicy carries only exitSignal/maxIterations/oversight) vs <code>completion-decision.ts</code> budgetStopReason (checks maxTokens/maxRuntimeMs on the legacy path) — all verified; <code>cost-recording.ts:340-429</code> duplicate blocks verified. <code>external:</code> llm-stop-conditions — composable named stops, every stop returns <code>should_stop</code> + a reason.</dd>
+    <dt>Rationale</dt>
+    <dd>An operator who sets <code>costBudgetUsd</code> today gets nothing — a declared-but-inert safety knob in a multi-tenant enterprise product. Auditable named stop reasons are also the differentiator the external research flags as unpackaged by any SDK. One seam, one composition, honest contract.</dd>
+    <dt>Downsides</dt>
+    <dd>Per-run cost attribution (for MaxUsd) needs a cost rollup keyed to the run, which today requires joining cost_events; deciding enforce-vs-delete per field is a product call that will break some existing configs.</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i5">
+  <div class="idea-head">
+    <span class="chip rank">5</span><h3>One verification gate contract — loops ride the existing ratchet</h3>
+    <span class="chip axis">verification-ratchet</span><span class="chip conf-md">Confidence 75%</span><span class="chip cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>ThinkWork already shipped the article's ratchet — twice: skill-eval-gate (candidate scored against a staged dataset; workspace swap deferred below threshold) and the hermetic fixture gate on routine proposals (<code>{status: green|red, fixtures:[…]}</code>; promotion only on green — and it correctly blocked a bad fixture on the first live autonomous admission). Loops are not customers of either: loop version edits swap live with zero scoring, and no run-level snapshot records which version executed. Unify the verdict/evidence contract (the neutral <code>verdict.source</code> seam in evals-core exists for this) and make loop-version promotion a gate client: each loop carries a small benchmark; a new version installs only when it meets the incumbent's pass rate. Apply "evaluate the evaluator" to idea 1's checks — a completion check may not gate anything until it passes known-pass and known-fail fixtures.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>skill-eval-gate.ts:2-11</code> (verified verbatim) — "workspace swap DEFERRED… HELD until an operator applies it"; <code>routine-proposal.ts:~412-438</code> hermetic-green promotion (verified); evidence dossier — "Agent loop version snapshot NOT stored per run." <code>external:</code> evaluator-hardening practice (known-pass/known-fail fixtures before trusting a judge as a gate).</dd>
+    <dt>Rationale</dt>
+    <dd>"The evaluation is the ratchet — without it the agent is not improving, it is only moving." Consolidating three bespoke gates into one contract is pure simplification, and it closes THNK-46's core unresolved gap (no one contract tying goal, judgment, and evidence together) with machinery that is already live and proven.</dd>
+    <dt>Downsides</dt>
+    <dd>Loop benchmarks need authoring (the article's "20 real cases" discipline) — cheap per loop but nonzero operator effort; gate friction on loop edits must have an operator override, mirroring skill-eval-gate's.</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i6">
+  <div class="idea-head">
+    <span class="chip rank">6</span><h3>Progress-based liveness — replace the disabled stall monitor</h3>
+    <span class="chip axis">stop-budgets</span><span class="chip conf-md">Confidence 70%</span><span class="chip cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>The stall monitor infers liveness from an activity timestamp that nothing is obligated to feed — chat turns never bump <code>last_activity_at</code>, so it produced false <code>timed_out</code> verdicts and was disabled in production (THINK-301). Replace inference with proof, in either or both of two shapes: (a) a finalize-renewed lease — every dispatch writes <code>lease_expires_at</code>; the only renewal event is finalize; expiry is terminal, checked by a trivial sweep; a <code>waiting_for_human</code> run holds a longer lease, giving approval gates their timeout for free; (b) check-output diffing — two consecutive identical failure lists from idea 1's grader is itself the <code>no_progress</code> stop, with the numbered failures as the blocker report. A Fischer-increment extension (progress earns iterations; unproductive turns drain the bank) can replace the flat <code>maxIterations</code> cap later — worthwhile only framed as a replacement, not an addition.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>stall-monitor.ts:1-75</code> (verified) — <code>STALL_THRESHOLD_MINUTES = 5</code>, <code>COALESCE(last_activity_at, started_at)</code>; memory/THINK-301 — disabled 2026-07-15; evidence dossier — "No-Progress Detection: ABSENT." <code>external:</code> Chubby/etcd leases (liveness proven by renewal, never inferred); Kubernetes requeue-with-backoff.</dd>
+    <dt>Rationale</dt>
+    <dd>THINK-301 is at Requirements Review right now — this is a competing requirement that deletes the failure-prone mechanism instead of patching every code path to remember to bump a timestamp. "Is it getting closer?" is the right question; "is it moving?" already failed in production.</dd>
+    <dt>Downsides</dt>
+    <dd>Check-output diffing depends on idea 1 landing first; the lease design must pick renewal points carefully (finalize-only is clean but long tool-running turns need a lease horizon longer than the longest legitimate turn).</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i7">
+  <div class="idea-head">
+    <span class="chip rank">7</span><h3>One run ledger — thread_turns as journal, the rest as projections</h3>
+    <span class="chip axis">loop-state</span><span class="chip conf-md">Confidence 65%</span><span class="chip cx">Complexity High</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Three ledgers record the same execution at different grains, joined ad hoc (<code>agent_loop_iterations.thread_turn_id</code>). Adopt the accounting split: <code>thread_turns</code> — where finalize idempotency, cost, and usage already land — is the only independently written journal; <code>agent_loop_runs</code>/<code>agent_loop_iterations</code> and the run-level rollups on <code>workflow_runs</code> become finalize-time projections, with a cheap trial-balance check (projected totals must match journal totals) instead of three write paths that can disagree. Pin a loop-version snapshot per run at dispatch, copying the eval <code>profile_snapshot</code> pattern, so a mid-flight definition edit never reinterprets a running loop.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> evidence dossier — "Three separate ledgers tracking the same execution from different perspectives… No direct run-level state store"; <code>evaluations.ts:254-255</code> (verified) — <code>profile_snapshot</code> pinned at dispatch. <code>external:</code> double-entry journal/subledger separation with mechanical reconciliation. Aligns with the parked canonical-run-model plan (2026-07-07, "single ledger").</dd>
+    <dt>Rationale</dt>
+    <dd>Gives the canonical-run-model plan its hardest missing decision (which table is the source of truth) and a migration shape that deletes write paths incrementally rather than big-bang merging tables. Every future loop feature stops asking "which ledger do I write?"</dd>
+    <dt>Downsides</dt>
+    <dd>Verification flagged this as a heavier lift than the raw idea admits — the three ledgers sit at genuinely different grains (run/iteration/turn), so "become projections" is a multi-PR migration, not a refactor. Sequence after ideas 2–4 shrink what the ledgers must carry.</dd>
+  </dl>
+</article>
+
+<div class="callout">
+  <div class="eyebrow">Sequencing note</div>
+  <p style="margin:6px 0 0">Idea 1 is the keystone: its check output feeds idea 6's no-progress detection and is governed by idea 5's fixture gate. Ideas 2–4 are independent consolidations that can start in parallel. Idea 7 gets cheaper after the others shrink the state the ledgers carry.</p>
+</div>
+
+<h2 id="rejection-summary">Rejection Summary</h2>
+<table>
+  <tr><th>#</th><th>Idea</th><th>Reason rejected</th></tr>
+  <tr><td>1</td><td>Loop definitions as <code>GOAL.md</code> workspace folders</td><td>Reasoned-only basis; conflicts with per-run version pinning unless git-committed; revisit after the THINK-302 capability-grammar round settles the folder taxonomy.</td></tr>
+  <tr><td>2</td><td>Kill goal auto-replace (fresh goal per iteration)</td><td>Verifier: <code>THINKWORK_PI_GOAL_AUTO_REPLACE</code> is set for every headless dispatch, not just interpreter loops — a blanket kill breaks crashed-run recovery on single-turn automations; needs narrower scoping inside idea 2's design.</td></tr>
+  <tr><td>3</td><td>Delete dead judge-mode scaffolding as its own initiative</td><td>Sound but a cleanup ticket, not a direction — folded into idea 1's scope (the scaffolding deletes when the one check path lands).</td></tr>
+  <tr><td>4</td><td>Approval as paused-run trigger family (standalone)</td><td>Cited "not enforced" comment not found at the cited location; underlying claim unverified from the schema file; subsumed by idea 4's stop evaluator and idea 3's trigger contract.</td></tr>
+  <tr><td>5</td><td>Pin loop version snapshot per run (standalone)</td><td>Sound; folded into idea 7 as a sub-requirement.</td></tr>
+  <tr><td>6</td><td>Merge duplicate budget-pause blocks (standalone)</td><td>Sound quick win; folded into idea 4's autonomy-freeze primitive.</td></tr>
+  <tr><td>7</td><td>Fischer-clock progress-funded budget (standalone)</td><td>Net-new config surface unless framed as replacing <code>maxIterations</code>; folded into idea 6 as an optional extension.</td></tr>
+  <tr><td>8</td><td>Extract one shared payload builder (only)</td><td>Weaker form of idea 2 — still edge-triggered, parity by convention; kept as idea 2's fallback if the inversion is too large.</td></tr>
+</table>
+
+<footer class="composition-signal">Composed 2026-07-16 by ce-ideate from the Emerging AI article "How to Build an AI Agent That Works in Loops" (Jul 2026) + repo evidence dossiers (run a7f3c9e2)</footer>
+</main>
+</body>
+</html>
