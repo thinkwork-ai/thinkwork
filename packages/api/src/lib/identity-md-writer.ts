@@ -1,14 +1,16 @@
 /**
- * AGENTS.md identity write-at-rename (name-line surgery).
+ * Root-instructions identity write-at-rename (name-line surgery).
  *
  * Called from `updateAgent` when `name` changes. Reads the agent's
- * current AGENTS.md override (if any) and rewrites ONLY the Name line —
- * the rest of the file (Creature, Vibe, Emoji, Avatar, any agent-owned
- * backstory below) survives intact.
+ * current root instructions override (INSTRUCTIONS.md preferred, legacy
+ * AGENTS.md fallback — subagent-folders U16 rename window) and rewrites
+ * ONLY the Name line — the rest of the file (Creature, Vibe, Emoji,
+ * Avatar, any agent-owned backstory below) survives intact. Writes always
+ * land on INSTRUCTIONS.md.
  *
  * If no override exists yet, the writer seeds the agent prefix with the
- * template AGENTS.md and `{{AGENT_NAME}}` substituted to the current
- * agent name.
+ * template INSTRUCTIONS.md and `{{AGENT_NAME}}` substituted to the
+ * current agent name.
  *
  * Two anchor shapes are recognized:
  *   - New bullet: `- **Name:** <value>`
@@ -49,8 +51,15 @@ function bucket(): string {
 // trick user-md-writer.ts uses). Callers pass whichever is in scope.
 export type DbOrTx = { select: typeof defaultDb.select };
 
-function agentKey(tenantSlug: string, agentSlug: string): string {
-  return `tenants/${tenantSlug}/agents/${agentSlug}/AGENTS.md`;
+const ROOT_INSTRUCTIONS_BASENAME = "INSTRUCTIONS.md";
+const LEGACY_ROOT_INSTRUCTIONS_BASENAME = "AGENTS.md";
+
+function agentKey(
+  tenantSlug: string,
+  agentSlug: string,
+  basename: string = ROOT_INSTRUCTIONS_BASENAME,
+): string {
+  return `tenants/${tenantSlug}/agents/${agentSlug}/${basename}`;
 }
 
 function isNotFound(err: unknown): boolean {
@@ -103,18 +112,24 @@ async function readAgentOverride(
   tenantSlug: string,
   agentSlug: string,
 ): Promise<string | null> {
-  try {
-    const resp = await s3.send(
-      new GetObjectCommand({
-        Bucket: bucket(),
-        Key: agentKey(tenantSlug, agentSlug),
-      }),
-    );
-    return (await resp.Body?.transformToString("utf-8")) ?? "";
-  } catch (err) {
-    if (isNotFound(err)) return null;
-    throw err;
+  // U16 dual-read: prefer INSTRUCTIONS.md, fall back to legacy AGENTS.md.
+  for (const basename of [
+    ROOT_INSTRUCTIONS_BASENAME,
+    LEGACY_ROOT_INSTRUCTIONS_BASENAME,
+  ]) {
+    try {
+      const resp = await s3.send(
+        new GetObjectCommand({
+          Bucket: bucket(),
+          Key: agentKey(tenantSlug, agentSlug, basename),
+        }),
+      );
+      return (await resp.Body?.transformToString("utf-8")) ?? "";
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
+    }
   }
+  return null;
 }
 
 interface ResolvedAgent {
@@ -164,7 +179,7 @@ export class IdentityMdWriterError extends Error {
 
 function renderTemplate(agentName: string): string {
   const templates = loadDefaults();
-  const template = templates["AGENTS.md"];
+  const template = templates["INSTRUCTIONS.md"];
   return substitute({ AGENT_NAME: agentName }, template);
 }
 
@@ -173,18 +188,19 @@ function renderTemplate(agentName: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Rewrite the agent's AGENTS.md identity section with the current agent name.
+ * Rewrite the agent's INSTRUCTIONS.md identity section with the current
+ * agent name.
  *
  * - If an override exists and has a recognized Name anchor, replace only
  *   that line. Everything else in the file is preserved.
  * - If an override exists but neither anchor matches, insert a Name line into
  *   an existing Identity section or append a minimal Identity section.
  * - If no override exists, seed the agent prefix with the template
- *   AGENTS.md with `{{AGENT_NAME}}` substituted.
+ *   INSTRUCTIONS.md with `{{AGENT_NAME}}` substituted.
  *
  * Per docs/plans/2026-04-27-003: there is no composer cache to
  * invalidate. The runtimes pull the agent prefix on every invocation,
- * so AGENTS.md changes propagate on the next turn without ceremony.
+ * so root-instructions changes propagate on the next turn without ceremony.
  */
 export async function writeIdentityMdForAgent(
   tx: DbOrTx,
@@ -202,7 +218,7 @@ export async function writeIdentityMdForAgent(
   if (!resolved) {
     throw new IdentityMdWriterError(
       "AGENT_UNRESOLVABLE",
-      "Could not resolve agent or tenant for AGENTS.md identity write",
+      "Could not resolve agent or tenant for INSTRUCTIONS.md identity write",
     );
   }
 

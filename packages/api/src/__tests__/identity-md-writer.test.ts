@@ -1,12 +1,14 @@
 /**
  * Tests for writeIdentityMdForAgent — name-line surgery.
  *
- * Contract:
- *   - If an agent-override AGENTS.md exists at the agent's prefix,
- *     replace ONLY the Name line and PUT the mutated bytes back.
+ * Contract (U16: root instructions renamed to INSTRUCTIONS.md; the writer
+ * dual-reads INSTRUCTIONS.md → legacy AGENTS.md and always PUTs
+ * INSTRUCTIONS.md):
+ *   - If an agent-override root instructions file exists at the agent's
+ *     prefix, replace ONLY the Name line and PUT the mutated bytes back.
  *     Everything else in the file survives intact (agent-owned prose).
  *   - If no override exists, seed the agent prefix with the template
- *     AGENTS.md with `{{AGENT_NAME}}` substituted.
+ *     INSTRUCTIONS.md with `{{AGENT_NAME}}` substituted.
  *   - Matches both the new `- **Name:** <x>` bullet shape and the
  *     legacy `Your name is **<x>**.` prose shape.
  *   - Transient S3 PUT failure retries once, then bubbles.
@@ -128,10 +130,15 @@ function queueBase(overrides: Record<string, unknown> = {}) {
   pushDbRows([tenantRow()]);
 }
 
-const AGENT_IDENTITY_KEY = "tenants/acme/agents/marco/AGENTS.md";
+const AGENT_IDENTITY_KEY = "tenants/acme/agents/marco/INSTRUCTIONS.md";
+const LEGACY_IDENTITY_KEY = "tenants/acme/agents/marco/AGENTS.md";
 
 beforeEach(() => {
   s3Mock.reset();
+  // Default: any un-stubbed GET is a missing object. The U16 dual-read
+  // probes INSTRUCTIONS.md then legacy AGENTS.md; per-test stubs override
+  // the key(s) that should exist.
+  s3Mock.on(GetObjectCommand).rejects(noSuchKey());
   resetDbQueue();
 });
 
@@ -178,6 +185,57 @@ describe("writeIdentityMdForAgent — new-shape anchor", () => {
   });
 });
 
+// ─── U16 dual-read: legacy AGENTS.md fallback ────────────────────────────────
+
+describe("writeIdentityMdForAgent — legacy AGENTS.md fallback (U16)", () => {
+  it("reads a not-yet-renamed AGENTS.md override and writes the result to INSTRUCTIONS.md", async () => {
+    queueBase();
+    const existing = [
+      "# AGENTS.md - Who Am I?",
+      "",
+      "- **Name:** OldName",
+      "",
+      "Legacy-file backstory to carry forward.",
+      "",
+    ].join("\n");
+    // INSTRUCTIONS.md missing (default noSuchKey); AGENTS.md holds the map.
+    s3Mock
+      .on(GetObjectCommand, { Key: LEGACY_IDENTITY_KEY })
+      .resolves(body(existing));
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    await writeIdentityMdForAgent(mockTx(), AGENT_ID);
+
+    const puts = s3Mock.commandCalls(PutObjectCommand);
+    expect(puts.length).toBe(1);
+    // Writer flip: the surgery result lands on INSTRUCTIONS.md.
+    expect(puts[0].args[0].input.Key).toBe(AGENT_IDENTITY_KEY);
+    const rendered = String(puts[0].args[0].input.Body);
+    expect(rendered).toContain("- **Name:** Marco");
+    expect(rendered).toContain("Legacy-file backstory to carry forward.");
+  });
+
+  it("prefers INSTRUCTIONS.md over a stale AGENTS.md when both exist", async () => {
+    queueBase();
+    s3Mock
+      .on(GetObjectCommand, { Key: AGENT_IDENTITY_KEY })
+      .resolves(body("# Map\n\n- **Name:** OldName\n\nCurrent file.\n"));
+    s3Mock
+      .on(GetObjectCommand, { Key: LEGACY_IDENTITY_KEY })
+      .resolves(body("# Map\n\n- **Name:** Stale\n\nStale file.\n"));
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    await writeIdentityMdForAgent(mockTx(), AGENT_ID);
+
+    const puts = s3Mock.commandCalls(PutObjectCommand);
+    expect(puts.length).toBe(1);
+    expect(puts[0].args[0].input.Key).toBe(AGENT_IDENTITY_KEY);
+    const rendered = String(puts[0].args[0].input.Body);
+    expect(rendered).toContain("Current file.");
+    expect(rendered).not.toContain("Stale file.");
+  });
+});
+
 // ─── Name-line surgery (legacy prose shape) ──────────────────────────────────
 
 describe("writeIdentityMdForAgent — legacy-shape anchor", () => {
@@ -215,7 +273,7 @@ describe("writeIdentityMdForAgent — legacy-shape anchor", () => {
 // ─── No existing override → seed from template ───────────────────────────────
 
 describe("writeIdentityMdForAgent — no existing override", () => {
-  it("seeds the agent prefix with the template AGENTS.md substituted", async () => {
+  it("seeds the agent prefix with the template INSTRUCTIONS.md substituted", async () => {
     queueBase();
     s3Mock
       .on(GetObjectCommand, { Key: AGENT_IDENTITY_KEY })
@@ -237,7 +295,7 @@ describe("writeIdentityMdForAgent — no existing override", () => {
 // ─── No anchor matches (edge case) ───────────────────────────────────────────
 
 describe("writeIdentityMdForAgent — no anchor matches", () => {
-  it("inserts the Name line into AGENTS.md without rewriting the whole map", async () => {
+  it("inserts the Name line into INSTRUCTIONS.md without rewriting the whole map", async () => {
     queueBase();
     // Agent has hand-edited the file into free prose with no Name anchor.
     const existing = [

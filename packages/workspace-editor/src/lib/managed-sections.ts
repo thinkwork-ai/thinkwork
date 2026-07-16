@@ -2,7 +2,8 @@
  * Managed-section awareness for the shared WorkspaceFileEditor (Composer
  * plan 2026-07-02-001 U7; R9, F3, KTD-1).
  *
- * Some governance files (AGENTS.md, CONTEXT.md) carry *managed sections*:
+ * Some governance files (INSTRUCTIONS.md — the root map, renamed from
+ * AGENTS.md by subagent-folders U16 — and CONTEXT.md) carry *managed sections*:
  * known `## ` headings whose bodies are recomputed from the effective
  * capability set on every render and on every skill toggle. An operator who
  * edits inside one of those bodies has their edit silently destroyed on the
@@ -13,7 +14,7 @@
  * Composer is NOT the only writer: Settings → Workspace and the scoped
  * space/user editors write the same source files, and the map path
  * (`packages/api/src/lib/workspace-map-generator.ts`) recomposes these
- * sections back into the source AGENTS.md on skill toggles. An unmarked
+ * sections back into the source INSTRUCTIONS.md on skill toggles. An unmarked
  * editor lets any of those surfaces save a doomed edit.
  *
  * IMPORTANT — cross-package coupling (no import allowed):

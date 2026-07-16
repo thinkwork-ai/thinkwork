@@ -1,11 +1,14 @@
 /**
  * Workspace Map Generator
  *
- * Generates AGENTS.md (the map) and top-level CONTEXT.md from S3 workspace
- * structure. These two files are always loaded into the parent agent's system
- * prompt.
+ * Generates INSTRUCTIONS.md (the map — renamed from AGENTS.md by
+ * subagent-folders U16) and top-level CONTEXT.md from S3 workspace
+ * structure. These two files are always loaded into the parent agent's
+ * system prompt. During the rename fallback window this module READS
+ * whichever root file exists (INSTRUCTIONS.md preferred, AGENTS.md
+ * fallback) and always WRITES INSTRUCTIONS.md.
  *
- * AGENTS.md — The Map
+ * INSTRUCTIONS.md — The Map
  *   - Folder structure of entire workspace
  *   - Skill catalog discovered from SKILL.md files in the workspace tree
  *   - Auto-generated; users don't edit directly
@@ -95,6 +98,7 @@ export type DerivedSectionName = AgentsMdManagedSectionName;
 const LEGACY_DERIVED_SECTIONS = ["Knowledge Bases", "Workflows"] as const;
 
 const ROOT_ANNOTATIONS = new Map<string, string>([
+  ["INSTRUCTIONS.md", "You are here (always loaded)"],
   ["AGENTS.md", "You are here (always loaded)"],
   ["CONTEXT.md", "Task router"],
   ["memory/", "Long-lived agent memory"],
@@ -132,18 +136,42 @@ function workspacePrefix(tenantSlug: string, agentSlug: string): string {
   return `tenants/${tenantSlug}/agents/${agentSlug}/`;
 }
 
-function normalizeAgentsMdPath(path = "AGENTS.md"): string {
+/** Root instructions basename (subagent-folders U16 rename). */
+export const ROOT_INSTRUCTIONS_BASENAME = "INSTRUCTIONS.md";
+/** Legacy root basename — read-fallback only during the rename window. */
+export const LEGACY_ROOT_INSTRUCTIONS_BASENAME = "AGENTS.md";
+
+function normalizeAgentsMdPath(path = ROOT_INSTRUCTIONS_BASENAME): string {
   const trimmed = path.trim();
   if (!trimmed || trimmed.startsWith("/") || trimmed.includes("\\")) {
-    throw new Error(`Invalid AGENTS.md path: ${path}`);
+    throw new Error(`Invalid workspace map path: ${path}`);
   }
   const segments = trimmed.split("/");
   for (const segment of segments) {
     if (!segment || segment === "." || segment === "..") {
-      throw new Error(`Invalid AGENTS.md path: ${path}`);
+      throw new Error(`Invalid workspace map path: ${path}`);
     }
   }
-  if (segments[segments.length - 1] !== "AGENTS.md") {
+  const basename = segments[segments.length - 1];
+  if (segments.length === 1) {
+    // Root map: the writer flipped to INSTRUCTIONS.md (U16). A legacy root
+    // AGENTS.md request retargets so regeneration always lands on the new
+    // canonical name; the read side falls back to AGENTS.md for the seed.
+    if (
+      basename !== ROOT_INSTRUCTIONS_BASENAME &&
+      basename !== LEGACY_ROOT_INSTRUCTIONS_BASENAME
+    ) {
+      throw new Error(
+        `Regenerate map path must end with ${ROOT_INSTRUCTIONS_BASENAME} (or legacy AGENTS.md): ${path}`,
+      );
+    }
+    return ROOT_INSTRUCTIONS_BASENAME;
+  }
+  // Nested maps keep the legacy AGENTS.md basename: nested
+  // `agents/<slug>/INSTRUCTIONS.md` files are sub-agent DEFINITIONS
+  // (subagent-folders U6), not workspace maps — regenerating map sections
+  // into one would clobber a sub-agent's instructions.
+  if (basename !== LEGACY_ROOT_INSTRUCTIONS_BASENAME) {
     throw new Error(`Regenerate map path must end with AGENTS.md: ${path}`);
   }
   return segments.join("/");
@@ -470,11 +498,11 @@ function renderWorkspaceTree(
 
 function scopedAgentsMdRenderContext(
   context: WorkspaceMapRenderContext,
-  agentsMdPathInput = "AGENTS.md",
+  agentsMdPathInput = ROOT_INSTRUCTIONS_BASENAME,
 ): AgentsMdRenderScope {
   const agentsMdPath = normalizeAgentsMdPath(agentsMdPathInput);
   const folderPath =
-    agentsMdPath === "AGENTS.md"
+    agentsMdPath === ROOT_INSTRUCTIONS_BASENAME
       ? ""
       : agentsMdPath.slice(0, -"/AGENTS.md".length);
   const folderPrefix = folderPath ? `${folderPath}/` : "";
@@ -697,14 +725,15 @@ async function loadWorkspaceMapRenderContext(
 // ---------------------------------------------------------------------------
 
 /**
- * Regenerate AGENTS.md and CONTEXT.md for an agent.
+ * Regenerate INSTRUCTIONS.md and CONTEXT.md for an agent.
  *
  * Reads:
  *   - S3 workspace folders → workspace discovery, CONTEXT.md parsing,
  *     and SKILL.md tree-walk catalog
  *
  * Writes:
- *   - AGENTS.md to S3 workspace (skipped when content unchanged)
+ *   - INSTRUCTIONS.md to S3 workspace (skipped when content unchanged;
+ *     the write target flipped from AGENTS.md in subagent-folders U16)
  *   - CONTEXT.md to S3 workspace (skipped when content unchanged)
  *
  */
@@ -730,16 +759,25 @@ export async function regenerateWorkspaceMap(
   // Idempotent write — skip the S3 PutObject when the rendered content
   //    matches what's already on S3. Saves writes on no-op toggles
   //    (re-clicking Connect on already-active row) and avoids manifest
-  //    regen churn.
+  //    regen churn. The comparison targets INSTRUCTIONS.md — a first
+  //    regeneration after the U16 rename materializes the new name even
+  //    when a byte-identical legacy AGENTS.md is present.
   const [existingAgentsMap, existingContextRouter] = await Promise.all([
-    readS3Text(context.bucket, `${context.prefix}AGENTS.md`),
+    readS3Text(
+      context.bucket,
+      `${context.prefix}${ROOT_INSTRUCTIONS_BASENAME}`,
+    ),
     readS3Text(context.bucket, `${context.prefix}CONTEXT.md`),
   ]);
   const agentsMapChanged = existingAgentsMap !== agentsMap;
   const contextRouterChanged = existingContextRouter !== contextRouter;
 
   if (agentsMapChanged) {
-    await writeS3Text(context.bucket, `${context.prefix}AGENTS.md`, agentsMap);
+    await writeS3Text(
+      context.bucket,
+      `${context.prefix}${ROOT_INSTRUCTIONS_BASENAME}`,
+      agentsMap,
+    );
   }
   if (contextRouterChanged) {
     await writeS3Text(
@@ -778,12 +816,15 @@ export async function regenerateWorkspaceMap(
 }
 
 /**
- * Refresh only the derived AGENTS.md sections while preserving operator-owned
- * prose such as routing notes and custom instructions.
+ * Refresh only the derived map sections while preserving operator-owned
+ * prose such as routing notes and custom instructions. The root target is
+ * INSTRUCTIONS.md (U16 writer flip); the seed is read from whichever root
+ * file exists (INSTRUCTIONS.md preferred, legacy AGENTS.md fallback) so
+ * operator prose survives the rename.
  */
 export async function regenerateAgentsMdDerivedSections(
   agentId: string,
-  agentsMdPathInput = "AGENTS.md",
+  agentsMdPathInput = ROOT_INSTRUCTIONS_BASENAME,
 ): Promise<void> {
   const context = await loadWorkspaceMapRenderContext(agentId);
   if (!context) return;
@@ -791,9 +832,22 @@ export async function regenerateAgentsMdDerivedSections(
   const targetKey = `${context.prefix}${scope.agentsMdPath}`;
 
   const existingAgentsMd = await readS3Text(context.bucket, targetKey);
+  let seedSource = existingAgentsMd;
+  if (
+    (seedSource === null || seedSource.trim() === "") &&
+    scope.agentsMdPath === ROOT_INSTRUCTIONS_BASENAME
+  ) {
+    // Rename fallback window: seed from the legacy root AGENTS.md so the
+    // first refresh after the U16 flip carries operator prose forward into
+    // the new INSTRUCTIONS.md target.
+    seedSource = await readS3Text(
+      context.bucket,
+      `${context.prefix}${LEGACY_ROOT_INSTRUCTIONS_BASENAME}`,
+    );
+  }
   const seedAgentsMd =
-    existingAgentsMd && existingAgentsMd.trim() !== ""
-      ? existingAgentsMd
+    seedSource && seedSource.trim() !== ""
+      ? seedSource
       : `# ${scope.rootLabel} — Workspace Map\n`;
   const nextAgentsMd = replaceDerivedAgentsMdSections(
     seedAgentsMd,
@@ -832,17 +886,18 @@ export async function regenerateAgentsMdDerivedSections(
 }
 
 /**
- * Repair AGENTS.md from the canonical workspace-defaults template, then render
- * the same derived sections into it. This is intentionally stronger than the
- * section refresh helper above: operator-triggered normalization replaces
- * malformed custom prose with a known-good map skeleton.
+ * Repair the root INSTRUCTIONS.md from the canonical workspace-defaults
+ * template, then render the same derived sections into it. This is
+ * intentionally stronger than the section refresh helper above:
+ * operator-triggered normalization replaces malformed custom prose with a
+ * known-good map skeleton. Writes INSTRUCTIONS.md (U16 writer flip).
  */
 export async function normalizeAgentsMd(agentId: string): Promise<void> {
   const context = await loadWorkspaceMapRenderContext(agentId);
   if (!context) return;
 
   const nextAgentsMd = replaceDerivedAgentsMdSections(
-    loadFile("AGENTS.md"),
+    loadFile(ROOT_INSTRUCTIONS_BASENAME),
     renderDerivedAgentsMdSections({
       agentSlug: context.agentSlug,
       workspaceObjectPaths: context.workspaceObjectPaths,
@@ -852,16 +907,20 @@ export async function normalizeAgentsMd(agentId: string): Promise<void> {
   );
   const existingAgentsMd = await readS3Text(
     context.bucket,
-    `${context.prefix}AGENTS.md`,
+    `${context.prefix}${ROOT_INSTRUCTIONS_BASENAME}`,
   );
   if (existingAgentsMd === nextAgentsMd) {
     console.log(
-      `[workspace-map] Skipped AGENTS.md normalization for ${context.agentSlug}: content unchanged`,
+      `[workspace-map] Skipped INSTRUCTIONS.md normalization for ${context.agentSlug}: content unchanged`,
     );
     return;
   }
 
-  await writeS3Text(context.bucket, `${context.prefix}AGENTS.md`, nextAgentsMd);
+  await writeS3Text(
+    context.bucket,
+    `${context.prefix}${ROOT_INSTRUCTIONS_BASENAME}`,
+    nextAgentsMd,
+  );
   try {
     const { regenerateManifest } = await import("./workspace-manifest.js");
     await regenerateManifest(
@@ -871,11 +930,11 @@ export async function normalizeAgentsMd(agentId: string): Promise<void> {
     );
   } catch {
     console.warn(
-      `[workspace-map] Could not regenerate manifest after AGENTS.md normalization`,
+      `[workspace-map] Could not regenerate manifest after INSTRUCTIONS.md normalization`,
     );
   }
   console.log(
-    `[workspace-map] Normalized AGENTS.md for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s)`,
+    `[workspace-map] Normalized INSTRUCTIONS.md for ${context.agentSlug}: ${context.workspaces.length} workspace(s), ${context.skills.length} skill(s)`,
   );
 }
 

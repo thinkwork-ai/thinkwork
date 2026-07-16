@@ -24,7 +24,7 @@
  *   delete → { ok: true }
  *   export-skill / import-skill / install-skill / uninstall-skill / reinstall-skill → { ok: true, ... }
  *   generate-folder-structure → { ok: true }
- *   regenerate-map → { ok: true } (optional path scopes refresh to that AGENTS.md)
+ *   regenerate-map → { ok: true } (optional path scopes refresh to that map file — root INSTRUCTIONS.md or a nested AGENTS.md)
  *   normalize-map → { ok: true }
  *   errors → { ok: false, error }
  *
@@ -238,6 +238,35 @@ function bucket(): string {
   return getConfig("WORKSPACE_BUCKET") || "";
 }
 
+// Root instructions rename (subagent-folders U16): the root map file is
+// INSTRUCTIONS.md; AGENTS.md remains a read-side fallback until the
+// per-tenant migrator has run everywhere. Writers in this handler always
+// target INSTRUCTIONS.md.
+const ROOT_INSTRUCTIONS_BASENAME = "INSTRUCTIONS.md";
+const LEGACY_ROOT_INSTRUCTIONS_BASENAME = "AGENTS.md";
+
+/** Dual-read the root instructions file: INSTRUCTIONS.md preferred,
+ *  legacy AGENTS.md fallback, null when neither exists. */
+async function readRootInstructionsText(target: {
+  key: (path: string) => string;
+}): Promise<string | null> {
+  for (const name of [
+    ROOT_INSTRUCTIONS_BASENAME,
+    LEGACY_ROOT_INSTRUCTIONS_BASENAME,
+  ]) {
+    try {
+      const resp = await s3.send(
+        new GetObjectCommand({ Bucket: bucket(), Key: target.key(name) }),
+      );
+      const text = await resp.Body?.transformToString("utf-8");
+      if (text !== undefined) return text;
+    } catch (err) {
+      if (!isNoSuchKey(err)) throw err;
+    }
+  }
+  return null;
+}
+
 async function refreshAgentAgentsMdSections(
   target: AgentTarget,
   operation: string,
@@ -248,11 +277,11 @@ async function refreshAgentAgentsMdSections(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
-      `[workspace-files] ${operation} AGENTS.md section refresh failed: ${message}`,
+      `[workspace-files] ${operation} INSTRUCTIONS.md section refresh failed: ${message}`,
     );
     return json(500, {
       ok: false,
-      error: `${operation} succeeded but AGENTS.md section refresh failed: ${message}`,
+      error: `${operation} succeeded but INSTRUCTIONS.md section refresh failed: ${message}`,
     });
   }
 }
@@ -2632,6 +2661,7 @@ function isSkillMarkerPath(path: string): boolean {
  * they're added to the workspace defaults bundle.
  */
 const GOVERNANCE_FILE_BASENAMES: ReadonlySet<string> = new Set([
+  "INSTRUCTIONS.md",
   "AGENTS.md",
   "GUARDRAILS.md",
   "MEMORY_GUIDE.md",
@@ -2723,9 +2753,14 @@ async function handlePut(
     });
   }
 
-  if (cleanPath === "AGENTS.md" || cleanPath.endsWith("/AGENTS.md")) {
+  if (
+    cleanPath === "AGENTS.md" ||
+    cleanPath.endsWith("/AGENTS.md") ||
+    cleanPath === "INSTRUCTIONS.md"
+  ) {
     // The rendered workspace appends a marker-delimited generated routing
-    // section to AGENTS.md. Strip it on baseline puts so an operator pasting
+    // section to the root map file (INSTRUCTIONS.md since U16; the rendered
+    // artifact is still named AGENTS.md). Strip it on baseline puts so an operator pasting
     // a composed file back through settings cannot nest generated sections
     // (plan 2026-06-12-002 U2). Runs before the derived-section and
     // derive-agent-skills hooks, which operate on the persisted baseline.
@@ -3169,18 +3204,8 @@ async function handleCreateSubAgent(
     });
   }
 
-  let agentsMd = defaultAgentsMd();
-  try {
-    const resp = await s3.send(
-      new GetObjectCommand({
-        Bucket: bucket(),
-        Key: target.key("AGENTS.md"),
-      }),
-    );
-    agentsMd = (await resp.Body?.transformToString("utf-8")) ?? agentsMd;
-  } catch (err) {
-    if (!isNoSuchKey(err)) throw err;
-  }
+  const agentsMd =
+    (await readRootInstructionsText(target)) ?? defaultAgentsMd();
 
   const nextAgentsMd = appendRoutingRowIfMissing(agentsMd, {
     task: `${cleanSlug} specialist`,
@@ -3200,7 +3225,7 @@ async function handleCreateSubAgent(
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket(),
-      Key: target.key("AGENTS.md"),
+      Key: target.key(ROOT_INSTRUCTIONS_BASENAME),
       Body: nextAgentsMd,
       ContentType: "text/plain; charset=utf-8",
     }),
@@ -4505,29 +4530,16 @@ async function handleUpdateIdentityField(
   }
   const label = identityFieldLabel(field);
 
-  const agentsMdKey = target.key("AGENTS.md");
-  let existing: string | null = null;
-  try {
-    const resp = await s3.send(
-      new GetObjectCommand({ Bucket: bucket(), Key: agentsMdKey }),
-    );
-    existing = (await resp.Body?.transformToString("utf-8")) ?? "";
-  } catch (err) {
-    const name = (err as { name?: string } | null)?.name;
-    const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
-      ?.$metadata?.httpStatusCode;
-    const isNotFound =
-      err instanceof NoSuchKey ||
-      name === "NoSuchKey" ||
-      name === "NotFound" ||
-      status === 404;
-    if (!isNotFound) throw err;
-  }
+  // U16 dual-read: identity line surgery reads whichever root instructions
+  // file exists (INSTRUCTIONS.md preferred, legacy AGENTS.md fallback) and
+  // writes the result to INSTRUCTIONS.md — the writer flip migrates the
+  // file forward on first edit.
+  const existing = await readRootInstructionsText(target);
 
   if (!existing) {
     return json(422, {
       ok: false,
-      error: `AGENTS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
+      error: `INSTRUCTIONS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
     });
   }
 
@@ -4535,14 +4547,14 @@ async function handleUpdateIdentityField(
   if (rendered === null) {
     return json(422, {
       ok: false,
-      error: `AGENTS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
+      error: `INSTRUCTIONS.md is missing the ${label} line anchor; have your human rerun the folder-canon migration.`,
     });
   }
 
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket(),
-      Key: agentsMdKey,
+      Key: target.key(ROOT_INSTRUCTIONS_BASENAME),
       Body: rendered,
       ContentType: "text/plain; charset=utf-8",
     }),
@@ -4568,10 +4580,18 @@ async function handleRegenerateMap(
         error: err instanceof Error ? err.message : "Invalid AGENTS.md path",
       });
     }
-    if (!agentsMdPath.endsWith("/AGENTS.md") && agentsMdPath !== "AGENTS.md") {
+    if (
+      !agentsMdPath.endsWith("/AGENTS.md") &&
+      agentsMdPath !== "AGENTS.md" &&
+      agentsMdPath !== ROOT_INSTRUCTIONS_BASENAME
+    ) {
+      // Root map: INSTRUCTIONS.md (or legacy AGENTS.md, retargeted by the
+      // generator). Nested maps keep the AGENTS.md basename — a nested
+      // INSTRUCTIONS.md is a sub-agent definition, not a map.
       return json(400, {
         ok: false,
-        error: "regenerate-map path must point to an AGENTS.md file",
+        error:
+          "regenerate-map path must point to the root INSTRUCTIONS.md or a nested AGENTS.md file",
       });
     }
   }

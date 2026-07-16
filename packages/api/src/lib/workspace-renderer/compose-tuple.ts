@@ -1134,7 +1134,17 @@ export async function renderWorkspaceTuple(
       Promise.resolve(fallbackAuthorizedSpaces(tuple)),
     repository.listSpaceParticipants?.(tuple) ?? Promise.resolve([]),
     repository.listRoutableAgentProfiles?.(tuple) ?? Promise.resolve([]),
-    objectStore.getText({ bucket, key: `${agentPrefix}AGENTS.md` }),
+    // U16 dual-read: the agent-source baseline moved to INSTRUCTIONS.md;
+    // legacy AGENTS.md is the fallback for not-yet-migrated tenants. The
+    // RENDERED artifact keeps the AGENTS.md name for now (Pi's hydrate
+    // contract + prompt compose dual-read cover the window).
+    objectStore
+      .getText({ bucket, key: `${agentPrefix}INSTRUCTIONS.md` })
+      .then((instructions) =>
+        instructions !== null
+          ? instructions
+          : objectStore.getText({ bucket, key: `${agentPrefix}AGENTS.md` }),
+      ),
     objectStore.getText({ bucket, key: markerKey }),
     objectStore.getText({ bucket, key: manifestKey }),
     objectStore.getText({ bucket, key: agentsMdKey }),

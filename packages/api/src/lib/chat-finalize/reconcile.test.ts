@@ -444,6 +444,57 @@ describe("reconcileChangedFiles", () => {
     expect(store.puts).toEqual([]);
   });
 
+  it("names INSTRUCTIONS.md in the read-only rejection when the renamed root file is generated (U16)", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest: {
+        ...hydrateManifest,
+        files: [
+          ...hydrateManifest.files,
+          {
+            path: "INSTRUCTIONS.md",
+            sourceKey: "tenants/acme/threads/thread-1/INSTRUCTIONS.md",
+            sourcePrefix: "tenants/acme/threads/thread-1/",
+            etag: '"instructions-generated"',
+            sourcePath: "INSTRUCTIONS.md",
+            owner: "agent" as const,
+            readOnly: true,
+            generated: true,
+          },
+        ],
+      },
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "INSTRUCTIONS.md",
+          op: "modify",
+          content: "# Edited routing\n",
+          base_etag: '"instructions-generated"',
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "INSTRUCTIONS.md",
+        owner: "agent",
+        status: "rejected",
+        code: "read_only_generated_file",
+        message:
+          "INSTRUCTIONS.md is composed at render time; edit the agent baseline in Settings → Agents (Workspace files).",
+      }),
+    ]);
+    expect(store.puts).toEqual([]);
+  });
+
   it("honors the manifest generated flag for any generated file", async () => {
     const store = objectStore();
 

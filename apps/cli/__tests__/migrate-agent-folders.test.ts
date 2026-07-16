@@ -226,6 +226,89 @@ describe("migrateAgentFolders", () => {
     expect(summary.pendingWrites).toBe(report.writes.length);
   });
 
+  it("U16: copies root AGENTS.md to INSTRUCTIONS.md byte-identically, managed sections intact, preserving AGENTS.md", async () => {
+    const rootAgentsMd = [
+      "# Marco — Workspace Map",
+      "",
+      "Operator prose that must survive byte-for-byte.",
+      "",
+      "## Folder Structure",
+      "",
+      "```",
+      "marco/",
+      "├── INSTRUCTIONS.md ← You are here (always loaded)",
+      "└── memory/",
+      "```",
+      "",
+      "## Skills & Tools",
+      "",
+      "| Skill | Scope | Description |",
+      "|-------|-------|-------------|",
+      "| crm | baseline | CRM ops |",
+      "",
+    ].join("\n");
+    const store = memoryStore({
+      [`${PREFIX}AGENTS.md`]: rootAgentsMd,
+    });
+    const summary = await migrateAgentFolders(options(store));
+    const report = summary.reports[0]!;
+    expect(report.rootInstructionsRenames).toEqual([
+      `${PREFIX}INSTRUCTIONS.md`,
+    ]);
+    // Byte-identical copy; legacy file preserved for the fallback window.
+    expect(store.objects.get(`${PREFIX}INSTRUCTIONS.md`)).toBe(rootAgentsMd);
+    expect(store.objects.get(`${PREFIX}AGENTS.md`)).toBe(rootAgentsMd);
+  });
+
+  it("U16: second run is a no-op — existing INSTRUCTIONS.md is never overwritten", async () => {
+    const store = memoryStore({
+      [`${PREFIX}AGENTS.md`]: "# Root map\n",
+    });
+    await migrateAgentFolders(options(store));
+    const before = new Map(store.objects);
+    const second = await migrateAgentFolders(options(store));
+    const report = second.reports[0]!;
+    expect(report.rootInstructionsRenames).toEqual([]);
+    expect(
+      report.skipped.some((entry) => entry.includes("already_renamed")),
+    ).toBe(true);
+    expect(store.objects).toEqual(before);
+
+    // A diverged INSTRUCTIONS.md is also never clobbered by a stale AGENTS.md.
+    store.objects.set(`${PREFIX}INSTRUCTIONS.md`, "# Diverged\n");
+    await migrateAgentFolders(options(store));
+    expect(store.objects.get(`${PREFIX}INSTRUCTIONS.md`)).toBe("# Diverged\n");
+  });
+
+  it("U16: dry-run reports the rename without writing", async () => {
+    const store = memoryStore({
+      [`${PREFIX}AGENTS.md`]: "# Root map\n",
+    });
+    const summary = await migrateAgentFolders(
+      options(store, { mode: "dry-run" }),
+    );
+    const report = summary.reports[0]!;
+    expect(report.rootInstructionsRenames).toEqual([
+      `${PREFIX}INSTRUCTIONS.md`,
+    ]);
+    expect(report.writes).toContain(`${PREFIX}INSTRUCTIONS.md`);
+    expect(store.objects.has(`${PREFIX}INSTRUCTIONS.md`)).toBe(false);
+  });
+
+  it("U16: space-source prefixes are exempt from the root rename pass", async () => {
+    const spacePrefix = "tenants/acme/spaces/eng/";
+    const store = memoryStore({
+      [`${spacePrefix}agents/helper.md`]: legacyProfile(),
+      [`${spacePrefix}AGENTS.md`]: "# Space file that is not a root map\n",
+    });
+    const summary = await migrateAgentFolders(
+      options(store, { tenantSlug: "acme", agentSlug: undefined }),
+    );
+    const report = summary.reports.find((r) => r.prefix === spacePrefix)!;
+    expect(report.rootInstructionsRenames).toEqual([]);
+    expect(store.objects.has(`${spacePrefix}INSTRUCTIONS.md`)).toBe(false);
+  });
+
   it("converts space-local profile files in place without materializing built-ins", async () => {
     const spacePrefix = "tenants/acme/spaces/eng/";
     const store = memoryStore({

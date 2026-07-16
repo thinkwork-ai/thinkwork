@@ -5,12 +5,12 @@
  * The workspace-blueprint 3-layer context-delivery architecture maps onto
  * platform file positions as:
  *
- *   - agent-root AGENTS.md  = Layer 1, the map (always loaded)
+ *   - agent-root INSTRUCTIONS.md (renamed from AGENTS.md, U16) = Layer 1, the map (always loaded)
  *   - agent-root CONTEXT.md = Layer 2, the task router
  *   - space SPACE.md        = Layer 3, the self-contained workspace layer
  *
  * The defaults must also keep carrying the U4 managed headings
- * (`## Folder Structure` + `## Skills & Tools` in AGENTS.md, `## Routing`
+ * (`## Folder Structure` + `## Skills & Tools` in INSTRUCTIONS.md, `## Routing`
  * in CONTEXT.md) so the managed-sections engine fills their bodies at
  * render / map time.
  */
@@ -18,8 +18,8 @@
 import { describe, expect, it } from "vitest";
 import { loadFile } from "../index.js";
 
-describe("AGENTS.md — Layer 1 map", () => {
-  const content = loadFile("AGENTS.md");
+describe("INSTRUCTIONS.md — Layer 1 map", () => {
+  const content = loadFile("INSTRUCTIONS.md");
 
   it("carries the managed headings the engine recomposes", () => {
     expect(content).toMatch(/^## Folder Structure$/m);

@@ -11,6 +11,9 @@ import { listWorkspaceFiles } from "@/lib/workspace-api";
 
 const WORKSPACE_FILE_DESCRIPTIONS: Record<string, string> = {
   "USER.md": "What the assistant knows about you",
+  // Root instructions file (INSTRUCTIONS.md since subagent-folders U16;
+  // AGENTS.md still appears for not-yet-migrated tenants).
+  "INSTRUCTIONS.md": "Identity, personality, routing, and collaboration rules",
   "AGENTS.md": "Identity, personality, routing, and collaboration rules",
   "TOOLS.md": "Tool usage preferences and instructions",
 };

@@ -1,5 +1,5 @@
 /**
- * Backfill legacy ROUTER.md `- skills:` directives into root AGENTS.md.
+ * Backfill legacy ROUTER.md `- skills:` directives into the root\n * instructions file (INSTRUCTIONS.md, legacy AGENTS.md — U16 rename-aware).
  *
  * Plan §008 U27 moved skill ownership to AGENTS.md routing rows. ROUTER.md
  * remains a channel-profile file selector only, so this one-shot preserves
@@ -295,12 +295,26 @@ export async function runBackfill(
         continue;
       }
       const legacyRows = parseLegacyRouterSkillRows(router);
+      // U16 rename-aware: read whichever root instructions file exists
+      // (INSTRUCTIONS.md preferred, legacy AGENTS.md fallback) and write
+      // back to that same file — this backfill patches legacy state and
+      // must not race the rename migrator by minting a new file name.
+      const instructionsMd = await readS3Text(bkt, `${prefix}INSTRUCTIONS.md`);
+      const legacyAgentsMd =
+        instructionsMd === null
+          ? await readS3Text(bkt, `${prefix}AGENTS.md`)
+          : null;
+      const targetBasename =
+        instructionsMd !== null || legacyAgentsMd === null
+          ? "INSTRUCTIONS.md"
+          : "AGENTS.md";
       const agentsMd =
-        (await readS3Text(bkt, `${prefix}AGENTS.md`)) ??
+        instructionsMd ??
+        legacyAgentsMd ??
         "# AGENTS.md\n\n## Routing\n\n| Task | Go to | Read | Skills |\n| --- | --- | --- | --- |\n";
       const merged = mergeLegacyRouterSkillsIntoAgentsMd(agentsMd, legacyRows);
       if (options.destructive && merged.changed) {
-        await writeS3Text(bkt, `${prefix}AGENTS.md`, merged.content);
+        await writeS3Text(bkt, `${prefix}${targetBasename}`, merged.content);
       }
       agentsOut.push({
         tenantSlug: candidate.tenantSlug,

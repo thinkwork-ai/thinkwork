@@ -8,6 +8,11 @@
  *   - a customized file is left alone;
  *   - a file already at the current default is skipped (idempotency);
  *   - a missing file is skipped (bootstrap owns first materialization).
+ *
+ * Subagent-folders U16 renamed the root instructions file to
+ * INSTRUCTIONS.md. The walker dual-reads (INSTRUCTIONS.md preferred,
+ * legacy AGENTS.md fallback) and always writes INSTRUCTIONS.md — for a
+ * never-customized agent the reseed doubles as the rename migration.
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,21 +29,22 @@ import {
 
 const VALUES = { AGENT_NAME: "Marco", TENANT_NAME: "Acme" };
 
-const OLD_AGENTS_MD = HISTORICAL_GOVERNANCE_DEFAULTS["AGENTS.md"].at(-1)!;
+const OLD_INSTRUCTIONS_MD =
+  HISTORICAL_GOVERNANCE_DEFAULTS["INSTRUCTIONS.md"].at(-1)!;
 const OLD_CONTEXT_MD = HISTORICAL_GOVERNANCE_DEFAULTS["CONTEXT.md"].at(-1)!;
 
 describe("decideGovernanceReseed", () => {
   it("rewrites a file byte-identical to a substituted historical default", () => {
-    const live = substitute(VALUES, OLD_AGENTS_MD);
+    const live = substitute(VALUES, OLD_INSTRUCTIONS_MD);
     const decision = decideGovernanceReseed({
-      file: "AGENTS.md",
+      file: "INSTRUCTIONS.md",
       liveContent: live,
       placeholderValues: VALUES,
     });
     expect(decision.action).toBe("rewrite");
     if (decision.action === "rewrite") {
       expect(decision.nextContent).toBe(
-        substitute(VALUES, loadFile("AGENTS.md")),
+        substitute(VALUES, loadFile("INSTRUCTIONS.md")),
       );
       // The substituted current default carries the agent's real name,
       // not the raw placeholder.
@@ -53,10 +59,10 @@ describe("decideGovernanceReseed", () => {
     // substitution pipeline when the placeholder values reproduce them.
     const live = substitute(
       { AGENT_NAME: "Old Name", TENANT_NAME: "Acme" },
-      OLD_AGENTS_MD,
+      OLD_INSTRUCTIONS_MD,
     );
     const decision = decideGovernanceReseed({
-      file: "AGENTS.md",
+      file: "INSTRUCTIONS.md",
       liveContent: live,
       placeholderValues: { AGENT_NAME: "Old Name", TENANT_NAME: "Acme" },
     });
@@ -64,10 +70,10 @@ describe("decideGovernanceReseed", () => {
   });
 
   it("skips a customized file", () => {
-    const live = `${substitute(VALUES, OLD_AGENTS_MD)}\n## Operator Notes\n\nHand-written.\n`;
+    const live = `${substitute(VALUES, OLD_INSTRUCTIONS_MD)}\n## Operator Notes\n\nHand-written.\n`;
     expect(
       decideGovernanceReseed({
-        file: "AGENTS.md",
+        file: "INSTRUCTIONS.md",
         liveContent: live,
         placeholderValues: VALUES,
       }).action,
@@ -80,11 +86,11 @@ describe("decideGovernanceReseed", () => {
     // customized, never clobbered.
     const live = substitute(
       { AGENT_NAME: "Someone Else", TENANT_NAME: "Acme" },
-      OLD_AGENTS_MD,
+      OLD_INSTRUCTIONS_MD,
     );
     expect(
       decideGovernanceReseed({
-        file: "AGENTS.md",
+        file: "INSTRUCTIONS.md",
         liveContent: live,
         placeholderValues: VALUES,
       }).action,
@@ -130,12 +136,13 @@ class MemoryStore implements ReseedObjectStore {
 function tenantStore(): MemoryStore {
   return new MemoryStore(
     new Map([
-      // never-customized agent — both files are old defaults
+      // never-customized agent, NOT yet renamed — root instructions still
+      // live at the legacy AGENTS.md key (U16 fallback read)
       [
         "tenants/acme/agents/pristine/AGENTS.md",
         substitute(
           { AGENT_NAME: "Pristine", TENANT_NAME: "Acme" },
-          OLD_AGENTS_MD,
+          OLD_INSTRUCTIONS_MD,
         ),
       ],
       [
@@ -145,10 +152,11 @@ function tenantStore(): MemoryStore {
           OLD_CONTEXT_MD,
         ),
       ],
-      // customized agent — operator-edited AGENTS.md, old CONTEXT.md
+      // customized agent, already renamed — operator-edited
+      // INSTRUCTIONS.md, old CONTEXT.md
       [
-        "tenants/acme/agents/custom/AGENTS.md",
-        "# AGENTS.md\n\nHand-tuned operator map.\n",
+        "tenants/acme/agents/custom/INSTRUCTIONS.md",
+        "# INSTRUCTIONS.md\n\nHand-tuned operator map.\n",
       ],
       [
         "tenants/acme/agents/custom/CONTEXT.md",
@@ -185,11 +193,21 @@ describe("reseedTenantGovernanceDefaults", () => {
     expect(summary.agentsRewritten).toBe(2);
     expect(summary.filesRewritten).toBe(3);
 
-    // pristine: both governance files rewritten to the substituted current default
+    // pristine: the legacy AGENTS.md matched an old default; the rewrite
+    // lands on INSTRUCTIONS.md (reseed doubles as the U16 migration) and
+    // the legacy file is left untouched for the fallback window.
+    expect(
+      await store.getText("tenants/acme/agents/pristine/INSTRUCTIONS.md"),
+    ).toBe(
+      substitute(
+        { AGENT_NAME: "Pristine", TENANT_NAME: "Acme" },
+        loadFile("INSTRUCTIONS.md"),
+      ),
+    );
     expect(await store.getText("tenants/acme/agents/pristine/AGENTS.md")).toBe(
       substitute(
         { AGENT_NAME: "Pristine", TENANT_NAME: "Acme" },
-        loadFile("AGENTS.md"),
+        OLD_INSTRUCTIONS_MD,
       ),
     );
     expect(await store.getText("tenants/acme/agents/pristine/CONTEXT.md")).toBe(
@@ -199,10 +217,10 @@ describe("reseedTenantGovernanceDefaults", () => {
       ),
     );
 
-    // custom: hand-edited AGENTS.md untouched; old-default CONTEXT.md rewritten
-    expect(await store.getText("tenants/acme/agents/custom/AGENTS.md")).toBe(
-      "# AGENTS.md\n\nHand-tuned operator map.\n",
-    );
+    // custom: hand-edited INSTRUCTIONS.md untouched; old-default CONTEXT.md rewritten
+    expect(
+      await store.getText("tenants/acme/agents/custom/INSTRUCTIONS.md"),
+    ).toBe("# INSTRUCTIONS.md\n\nHand-tuned operator map.\n");
     expect(await store.getText("tenants/acme/agents/custom/CONTEXT.md")).toBe(
       substitute(
         { AGENT_NAME: "Custom", TENANT_NAME: "Acme" },
@@ -211,14 +229,16 @@ describe("reseedTenantGovernanceDefaults", () => {
     );
 
     expect(rewrites).toEqual([
-      { agentId: "a-1", files: ["AGENTS.md", "CONTEXT.md"] },
+      { agentId: "a-1", files: ["INSTRUCTIONS.md", "CONTEXT.md"] },
       { agentId: "a-2", files: ["CONTEXT.md"] },
     ]);
 
     const pristineCustomizedResult = summary.results.find(
       (r) => r.agentSlug === "custom",
     );
-    expect(pristineCustomizedResult?.skippedCustomized).toEqual(["AGENTS.md"]);
+    expect(pristineCustomizedResult?.skippedCustomized).toEqual([
+      "INSTRUCTIONS.md",
+    ]);
   });
 
   it("is idempotent — a second run rewrites nothing", async () => {
@@ -254,12 +274,14 @@ describe("reseedTenantGovernanceDefaults", () => {
     expect(summary.filesRewritten).toBe(0);
     expect(store.puts).toEqual([]);
     expect(summary.results[0]?.skippedMissing).toEqual([
-      "AGENTS.md",
+      "INSTRUCTIONS.md",
       "CONTEXT.md",
     ]);
   });
 
   it("customized-tenant render input is unchanged — no put touches a customized file", async () => {
+    // Customized content still living at the legacy AGENTS.md key: the
+    // fallback read must classify it customized and never write anywhere.
     const customized = "# AGENTS.md\n\nBespoke routing everywhere.\n";
     const store = new MemoryStore(
       new Map([
@@ -278,5 +300,8 @@ describe("reseedTenantGovernanceDefaults", () => {
     expect(await store.getText("tenants/acme/agents/solo/AGENTS.md")).toBe(
       customized,
     );
+    expect(
+      await store.getText("tenants/acme/agents/solo/INSTRUCTIONS.md"),
+    ).toBeNull();
   });
 });

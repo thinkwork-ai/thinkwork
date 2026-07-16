@@ -6,10 +6,12 @@
  * the `_catalog/defaults/workspace/*` S3 layer from this content at tenant
  * creation / re-seed time.
  *
- * Canonical file set (R1, extended by plan §008 U3 with `AGENTS.md` +
- * `CONTEXT.md` so the runtime's already-existing loaders for those two
- * filenames find seeded content on day one):
- *   USER.md, SPACE.md, AGENTS.md, CONTEXT.md, GUARDRAILS.md,
+ * Canonical file set (R1, extended by plan §008 U3 with the root
+ * instructions file + `CONTEXT.md` so the runtime's already-existing
+ * loaders for those two filenames find seeded content on day one; the
+ * root instructions file is `INSTRUCTIONS.md` since subagent-folders U16
+ * renamed it from `AGENTS.md`):
+ *   USER.md, SPACE.md, INSTRUCTIONS.md, CONTEXT.md, GUARDRAILS.md,
  *   MEMORY_GUIDE.md, ROUTER.md,
  *   memory/lessons.md, memory/preferences.md, memory/contacts.md,
  *   skills/.gitkeep, skills/automation-loop-designer/SKILL.md,
@@ -388,7 +390,10 @@ current user message, the current message wins.
 `;
 
 /**
- * Mirror of `packages/workspace-defaults/files/AGENTS.md`.
+ * Mirror of `packages/workspace-defaults/files/INSTRUCTIONS.md` (subagent-folders
+ * U16 renamed the root instructions file from AGENTS.md; content is
+ * byte-identical to the last shipped AGENTS.md default so migrated
+ * byte-copies still hash-match).
  *
  * Layer-1 Map authored at the root of every Fat-folder agent: who I am,
  * how the folder is organized, the structured routing table that
@@ -397,7 +402,7 @@ current user message, the current message wins.
  * enforces. Default is empty/placeholder; template authors and the
  * builder's drag-to-organize / routing-table editor populate it.
  */
-const AGENTS_MD = `# AGENTS.md
+const INSTRUCTIONS_MD = `# AGENTS.md
 
 ## What This Is
 
@@ -1479,11 +1484,12 @@ operator can revoke it at any time.
  *     `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them. The one carve-out is
  *     the governance-file reseed (Composer plan 2026-07-02-001 U6): the
- *     seed handler rewrites an existing agent's AGENTS.md / CONTEXT.md
- *     when — and only when — its live content is byte-identical to a
- *     previously shipped default version (see `src/historical.ts`).
+ *     seed handler rewrites an existing agent's INSTRUCTIONS.md (formerly
+ *     AGENTS.md) / CONTEXT.md when — and only when — its live content is
+ *     byte-identical to a previously shipped default version (see
+ *     `src/historical.ts`).
  */
-export const DEFAULTS_VERSION = 39;
+export const DEFAULTS_VERSION = 40;
 
 // ---------------------------------------------------------------------------
 // Aggregator
@@ -1574,7 +1580,7 @@ Review the candidate agent output against the user's request and available evide
 export const CANONICAL_FILE_NAMES = [
   "USER.md",
   "SPACE.md",
-  "AGENTS.md",
+  "INSTRUCTIONS.md",
   "CONTEXT.md",
   "TOOLS.md",
   "GUARDRAILS.md",
@@ -1619,7 +1625,7 @@ export type CanonicalFileName = (typeof CANONICAL_FILE_NAMES)[number];
 const CONTENT: Record<CanonicalFileName, string> = {
   "USER.md": USER_MD,
   "SPACE.md": SPACE_MD,
-  "AGENTS.md": AGENTS_MD,
+  "INSTRUCTIONS.md": INSTRUCTIONS_MD,
   "CONTEXT.md": CONTEXT_MD,
   "TOOLS.md": TOOLS_MD,
   "GUARDRAILS.md": GUARDRAILS_MD,

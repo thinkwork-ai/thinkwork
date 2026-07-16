@@ -3,13 +3,13 @@
  * Regenerate `src/historical.ts` from git history.
  *
  * The governance-file reseed (Composer plan 2026-07-02-001 U6) rewrites an
- * existing agent's AGENTS.md / CONTEXT.md only when its live content is
+ * existing agent's INSTRUCTIONS.md / CONTEXT.md only when its live content is
  * byte-identical to a PREVIOUSLY SHIPPED default version. This script
  * enumerates every committed version of the governance defaults from git
  * history and inlines them (Lambda bundles are self-contained — no `files/`
  * directory ships with them).
  *
- * Run it from the package directory whenever `files/AGENTS.md` or
+ * Run it from the package directory whenever `files/INSTRUCTIONS.md` or
  * `files/CONTEXT.md` changes:
  *
  *   node scripts/generate-historical-governance.mjs
@@ -33,7 +33,16 @@ const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
   encoding: "utf8",
 }).trim();
 
-const GOVERNANCE_FILES = ["AGENTS.md", "CONTEXT.md"];
+// Each entry: current default file name → the files/ paths whose git
+// history feeds its historical corpus. INSTRUCTIONS.md is the renamed
+// root instructions file (subagent-folders U16); every previously shipped
+// AGENTS.md default remains reseed-eligible under the new name, so a live
+// AGENTS.md (or a byte-copied INSTRUCTIONS.md) that matches an old
+// default still reseeds.
+const GOVERNANCE_FILES = [
+  { name: "INSTRUCTIONS.md", historyPaths: ["INSTRUCTIONS.md", "AGENTS.md"] },
+  { name: "CONTEXT.md", historyPaths: ["CONTEXT.md"] },
+];
 
 function sha256(content) {
   return createHash("sha256").update(content, "utf8").digest("hex");
@@ -67,37 +76,42 @@ function scrubRetiredVocabulary(content) {
     .replaceAll(productSnake, "brain");
 }
 
-function historicalVersions(fileName) {
-  const absPath = join(packageRoot, "files", fileName);
-  const repoRelativePath = relative(repoRoot, absPath).split("\\").join("/");
+function historicalVersions(entry) {
+  const absPath = join(packageRoot, "files", entry.name);
   const current = scrubRetiredVocabulary(readFileSync(absPath, "utf8"));
-
-  const commits = execFileSync(
-    "git",
-    ["log", "--format=%H", "--", repoRelativePath],
-    { cwd: repoRoot, encoding: "utf8" },
-  )
-    .split("\n")
-    .filter(Boolean)
-    .reverse(); // oldest first
 
   const seen = new Set();
   const versions = [];
-  for (const commit of commits) {
-    const rawContent = gitShow(commit, repoRelativePath);
-    if (rawContent === null) continue;
-    const content = scrubRetiredVocabulary(rawContent);
-    const hash = sha256(content);
-    if (seen.has(hash)) continue;
-    seen.add(hash);
-    if (content === current) continue; // current content is not "historical"
-    versions.push(content);
+  for (const historyName of entry.historyPaths) {
+    const historyAbsPath = join(packageRoot, "files", historyName);
+    const repoRelativePath = relative(repoRoot, historyAbsPath)
+      .split("\\")
+      .join("/");
+    const commits = execFileSync(
+      "git",
+      ["log", "--format=%H", "--", repoRelativePath],
+      { cwd: repoRoot, encoding: "utf8" },
+    )
+      .split("\n")
+      .filter(Boolean)
+      .reverse(); // oldest first
+
+    for (const commit of commits) {
+      const rawContent = gitShow(commit, repoRelativePath);
+      if (rawContent === null) continue;
+      const content = scrubRetiredVocabulary(rawContent);
+      const hash = sha256(content);
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+      if (content === current) continue; // current content is not "historical"
+      versions.push(content);
+    }
   }
   return { current, versions };
 }
 
 const byFile = new Map(
-  GOVERNANCE_FILES.map((name) => [name, historicalVersions(name)]),
+  GOVERNANCE_FILES.map((entry) => [entry.name, historicalVersions(entry)]),
 );
 
 const lines = [];
@@ -119,7 +133,7 @@ lines.push(
 lines.push(
   "/** Governance files eligible for the byte-identical reseed. */",
   "export const RESEEDABLE_GOVERNANCE_FILES = [",
-  ...GOVERNANCE_FILES.map((name) => `  ${JSON.stringify(name)},`),
+  ...GOVERNANCE_FILES.map((entry) => `  ${JSON.stringify(entry.name)},`),
   "] as const;",
   "",
   "export type ReseedableGovernanceFile =",
@@ -139,9 +153,11 @@ lines.push(
   "  string",
   "> = {",
 );
-for (const name of GOVERNANCE_FILES) {
-  const { current } = byFile.get(name);
-  lines.push(`  ${JSON.stringify(name)}: ${JSON.stringify(sha256(current))},`);
+for (const entry of GOVERNANCE_FILES) {
+  const { current } = byFile.get(entry.name);
+  lines.push(
+    `  ${JSON.stringify(entry.name)}: ${JSON.stringify(sha256(current))},`,
+  );
 }
 lines.push("};", "");
 
@@ -156,9 +172,9 @@ lines.push(
   "  readonly string[]",
   "> = {",
 );
-for (const name of GOVERNANCE_FILES) {
-  const { versions } = byFile.get(name);
-  lines.push(`  ${JSON.stringify(name)}: [`);
+for (const entry of GOVERNANCE_FILES) {
+  const { versions } = byFile.get(entry.name);
+  lines.push(`  ${JSON.stringify(entry.name)}: [`);
   for (const content of versions) {
     lines.push(`    ${JSON.stringify(content)},`);
   }
@@ -168,8 +184,8 @@ lines.push("};", "");
 
 writeFileSync(join(packageRoot, "src", "historical.ts"), lines.join("\n"));
 
-for (const name of GOVERNANCE_FILES) {
-  const { versions } = byFile.get(name);
-  console.log(`${name}: ${versions.length} historical version(s)`);
+for (const entry of GOVERNANCE_FILES) {
+  const { versions } = byFile.get(entry.name);
+  console.log(`${entry.name}: ${versions.length} historical version(s)`);
 }
 console.log("Wrote src/historical.ts");

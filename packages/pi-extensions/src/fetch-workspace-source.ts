@@ -3,7 +3,8 @@
  * (plan 2026-06-12-002 U5; R6, R7 mount-level, AE1).
  *
  * The agent's rendered workspace hydrates only the active Space + acting
- * user. The AGENTS.md "Workspace Routing" section lists other authorized
+ * user. The root instructions file's (INSTRUCTIONS.md, legacy AGENTS.md)
+ * "Workspace Routing" section lists other authorized
  * Spaces and participants; this tool lets the agent pull one of those source
  * folders into /workspace on demand:
  *
@@ -240,7 +241,7 @@ export function createFetchWorkspaceSourceExtension(
         description:
           "Fetch an authorized workspace source folder into /workspace mid-turn as READ-ONLY " +
           "reference context. Valid targets are listed in the 'Workspace Routing' section of " +
-          "AGENTS.md: other authorized Spaces (kind 'space') and Active Space participants " +
+          "the workspace instructions file: other authorized Spaces (kind 'space') and Active Space participants " +
           "(kind 'user'). Pass listed_in_routing: true when the target appears in that section. " +
           "Spaces mount at Spaces/<slug>/ and fetched participant folders at Users/<slug>/ " +
           "(distinct from your acting user's writable User/ folder). Fetched files are " +
@@ -258,7 +259,7 @@ export function createFetchWorkspaceSourceExtension(
           listed_in_routing: Type.Optional(
             Type.Boolean({
               description:
-                "True when this target was listed in the AGENTS.md Workspace Routing section.",
+                "True when this target was listed in the workspace instructions Workspace Routing section.",
             }),
           ),
         }),

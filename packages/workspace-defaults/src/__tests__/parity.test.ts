@@ -84,7 +84,7 @@ describe("workspace-defaults parity", () => {
     const fileNames = Object.keys(defaults);
     const combined = Object.values(defaults).join("\n");
 
-    expect(DEFAULTS_VERSION).toBe(39);
+    expect(DEFAULTS_VERSION).toBe(40);
     expect(fileNames).not.toContain("skills/json-render/SKILL.md");
     expect(fileNames).not.toContain("skills/a2ui/SKILL.md");
     expect(fileNames).not.toContain("skills/ag-ui/SKILL.md");

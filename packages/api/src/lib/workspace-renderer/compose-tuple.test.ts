@@ -847,6 +847,53 @@ describe("renderWorkspaceTuple", () => {
     expect(recovered).toContain(WORKSPACE_ROUTING_MARKER);
   });
 
+  it("U16 dual-read: prefers the agent-source INSTRUCTIONS.md over a stale legacy AGENTS.md baseline", async () => {
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/agents/finance-agent/INSTRUCTIONS.md": {
+          content: "# INSTRUCTIONS.md\n\nRenamed root routing.\n",
+          lastModified: "2026-05-22T09:30:00.000Z",
+        },
+      }),
+    );
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    const composed =
+      store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
+    // Baseline came from INSTRUCTIONS.md, never the legacy file (both exist
+    // in the seed; "never both" — the legacy content must not leak in).
+    expect(composed).toContain("Renamed root routing.");
+    expect(composed).not.toContain("Root routing.");
+  });
+
+  it("U16 dual-read: falls back to the legacy AGENTS.md baseline when INSTRUCTIONS.md is absent", async () => {
+    // The default seed carries only the legacy AGENTS.md source file.
+    const store = new FakeStore(seedObjects());
+
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    const composed =
+      store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
+    expect(composed).toContain("Root routing.");
+  });
+
   it("recomposes the generated AGENTS.md idempotently across renders", async () => {
     const store = new FakeStore(seedObjects());
     const deps = {

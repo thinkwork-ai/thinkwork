@@ -121,7 +121,7 @@ function freshDefaultsStore(): FakeStore {
     new Map([
       [
         "tenants/acme/agents/fresh-agent/AGENTS.md",
-        substitute(VALUES, loadFile("AGENTS.md")),
+        substitute(VALUES, loadFile("INSTRUCTIONS.md")),
       ],
       [
         "tenants/acme/agents/fresh-agent/CONTEXT.md",
@@ -160,7 +160,7 @@ describe("fresh-tenant compose — blueprint shape end-to-end (AE3)", () => {
     expect(generated).toBeDefined();
 
     // Baseline preserved byte-for-byte ahead of the generated section.
-    const baseline = substitute(VALUES, loadFile("AGENTS.md")).trimEnd();
+    const baseline = substitute(VALUES, loadFile("INSTRUCTIONS.md")).trimEnd();
     expect(generated!.startsWith(baseline)).toBe(true);
 
     // Blueprint map shape: managed headings + operator routing table +
@@ -204,7 +204,7 @@ describe("fresh-tenant compose — blueprint shape end-to-end (AE3)", () => {
 
 describe("managed-sections engine over the blueprint defaults", () => {
   it("fills the AGENTS.md managed headings while preserving blueprint prose", () => {
-    const next = replaceDerivedAgentsMdSections(loadFile("AGENTS.md"), {
+    const next = replaceDerivedAgentsMdSections(loadFile("INSTRUCTIONS.md"), {
       "Folder Structure": "\n```text\nfresh-agent/\n```\n",
       "Skills & Tools": "\n| Skill | Scope |\n| --- | --- |\n",
     });

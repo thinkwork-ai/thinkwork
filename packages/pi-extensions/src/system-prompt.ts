@@ -46,7 +46,7 @@ const defaultFileReader: WorkspaceFileReader = async (filePath) => {
  * Build the agent's system prompt by reading workspace files from disk.
  *
  * Composes the runtime system prompt as date prefix → runtime policy →
- * workspace files (AGENTS/CONTEXT/GUARDRAILS/SPACE/USER) → workspace skills
+ * workspace files (INSTRUCTIONS [fallback AGENTS]/CONTEXT/GUARDRAILS/SPACE/USER) → workspace skills
  * block.
  *
  * Falls back to `payload.system_prompt` (or a short default) only when
