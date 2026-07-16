@@ -410,6 +410,8 @@ locals {
       # thinkwork-<stage>-api-* names never ride env (R1/R10 identity-only
       # rule); resolveRuntimeFunctionName derives it from STAGE at call
       # time, exactly like workspace-renderer.
+      # THINK-311 U5b: stage gate for the per-turn Harness trial runtime.
+      HARNESS_TRIAL_ENABLED = tostring(var.harness_trial_enabled)
     }
     # THINK-311 U5: CreateHarness requires the execution role ARN (U4
     # module output; empty string when the harness module is disabled —

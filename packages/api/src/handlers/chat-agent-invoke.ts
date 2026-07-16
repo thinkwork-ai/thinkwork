@@ -56,6 +56,7 @@ import { buildPinnedSkillConfigs } from "../lib/skills/message-pinned-skills.js"
 import { documentPlatesForDispatch } from "../lib/artifacts/plate-registry.js";
 import {
   resolveRuntimeFunctionName,
+  UnknownAgentRuntimeTypeError,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
 import {
@@ -326,6 +327,13 @@ interface InvokeEvent {
   askMode?: boolean;
   modelId?: string;
   requestedModelId?: string;
+  /**
+   * THINK-311 U5b: per-turn Harness trial selection (composer runtime
+   * picker → messages.metadata.requestedRuntime → dispatch). Honored only
+   * when the stage-level HARNESS_TRIAL_ENABLED gate is on; requested with
+   * the gate off is an explicit visible failure, never a silent Pi run.
+   */
+  requestedRuntime?: string;
   requestedProfileSlug?: string;
   /**
    * Mobile Pi background handoff reuses the durable local thread_turn row so
@@ -521,7 +529,10 @@ function isEffectiveWorkspacePolicy(
 }
 
 type ChatInvokeIdentitySource =
-  "message_sender" | "thread_creator" | "computer_agent_human_pair" | "none";
+  | "message_sender"
+  | "thread_creator"
+  | "computer_agent_human_pair"
+  | "none";
 
 export interface ChatInvokeIdentity {
   currentUserId: string;
@@ -600,11 +611,44 @@ export function resolveTurnUseMemory(askMode?: boolean | null): boolean {
   return askMode ? false : true;
 }
 
+/**
+ * THINK-311 U5b: a runtime was requested for the turn but the stage-level
+ * trial gate is off. Surfaced as a visible assistant error message — the
+ * turn never dispatches to any engine.
+ */
+export class HarnessTrialDisabledError extends Error {
+  constructor() {
+    super(
+      "The AWS Harness trial runtime is not enabled on this stage (HARNESS_TRIAL_ENABLED).",
+    );
+    this.name = "HarnessTrialDisabledError";
+  }
+}
+
+export function harnessTrialEnabledFromConfig(): boolean {
+  return (
+    (getConfig("HARNESS_TRIAL_ENABLED", "") || "").toLowerCase() === "true"
+  );
+}
+
 export function resolveChatInvocationRuntimeType(args: {
   configuredRuntimeType: AgentRuntimeType;
+  requestedRuntime?: string | null;
+  harnessTrialEnabled?: boolean;
   computerId?: string | null;
   computerTaskId?: string | null;
 }): AgentRuntimeType {
+  const requested = (args.requestedRuntime ?? "").toLowerCase();
+  if (requested === "harness") {
+    if (!args.harnessTrialEnabled) {
+      throw new HarnessTrialDisabledError();
+    }
+    return "harness";
+  }
+  if (requested && requested !== "pi") {
+    // Mistyped runtime request → loud failure, never a silent Pi run (R4).
+    throw new UnknownAgentRuntimeTypeError(requested);
+  }
   return args.configuredRuntimeType;
 }
 
@@ -802,11 +846,45 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       throw err;
     }
 
-    const runtimeType = resolveChatInvocationRuntimeType({
-      configuredRuntimeType: runtimeConfig.runtimeType,
-      computerId: event.computerId,
-      computerTaskId: event.computerTaskId,
-    });
+    let runtimeType: AgentRuntimeType;
+    try {
+      runtimeType = resolveChatInvocationRuntimeType({
+        configuredRuntimeType: runtimeConfig.runtimeType,
+        requestedRuntime: event.requestedRuntime,
+        harnessTrialEnabled: harnessTrialEnabledFromConfig(),
+        computerId: event.computerId,
+        computerTaskId: event.computerTaskId,
+      });
+    } catch (err) {
+      if (
+        err instanceof HarnessTrialDisabledError ||
+        err instanceof UnknownAgentRuntimeTypeError
+      ) {
+        // Runtime was explicitly requested but cannot be honored: tell the
+        // user in the thread instead of running any engine (R4). No turn
+        // row exists yet, so an assistant message is the visible surface.
+        console.warn(`[chat-agent-invoke] ${err.message}`);
+        const errMsg = await insertAssistantMessage(
+          threadId,
+          tenantId,
+          agentId,
+          err.message,
+        );
+        if (errMsg) {
+          await notifyNewMessage({
+            messageId: errMsg.id,
+            threadId,
+            tenantId,
+            role: "assistant",
+            content: err.message,
+            senderType: "agent",
+            senderId: agentId,
+          });
+        }
+        return { ok: false, threadTurnId: undefined };
+      }
+      throw err;
+    }
     const configuredAgentModel = runtimeConfig.templateModel;
     const requestedParentModel =
       normalizeRequestedModelId(event.modelId) ??
@@ -1004,6 +1082,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
                 ? {
                     requested_model: requestedParentModel,
                   }
+                : {}),
+              ...(event.requestedRuntime
+                ? { requested_runtime: event.requestedRuntime }
                 : {}),
               agent_slug: agentSlug || undefined,
               space_id: spaceId || undefined,

@@ -22,6 +22,10 @@ import {
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
 import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
+import {
+  InvalidRequestedRuntimeError,
+  requestedRuntimeFromMetadata,
+} from "../../../lib/turn-runtime-selection.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
@@ -186,6 +190,19 @@ export const sendMessage = async (
     modelId: i.modelId,
     metadata: parsedMetadata,
   });
+  // THINK-311 U5b: per-turn Harness trial selection from the composer's
+  // runtime picker. Malformed values reject here — never silently Pi.
+  let requestedRuntime: "harness" | null = null;
+  try {
+    requestedRuntime = requestedRuntimeFromMetadata(parsedMetadata);
+  } catch (err) {
+    if (err instanceof InvalidRequestedRuntimeError) {
+      throw new GraphQLError(err.message, {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+    throw err;
+  }
   if (isUserMessage && requestedModelId) {
     if (senderType !== "user" || !senderId) {
       throw new GraphQLError("Requester user identity required", {
@@ -584,6 +601,7 @@ export const sendMessage = async (
         messageId: row.id,
         content: i.content,
         requestedModelId,
+        ...(requestedRuntime ? { requestedRuntime } : {}),
         requestedProfileSlug,
         ...(resolvedGoalMode ? { goalMode: resolvedGoalMode } : {}),
         ...(skillCreatorCommand ? { skillCreatorCommand } : {}),

@@ -127,6 +127,9 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   // so the auto-pick effect resolves to the Agent default; an explicit change
   // in this composer still applies for the rest of the session.
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [selectedRuntime, setSelectedRuntime] = useState<"pi" | "harness">(
+    "pi",
+  );
   const {
     computers,
     fetching: computersFetching,
@@ -427,6 +430,10 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         sendInput.modelId = turnModelId;
         metadata.requestedModelId = turnModelId;
       }
+      if (selectedRuntime === "harness") {
+        // THINK-311 U5b: this turn runs on the AWS Harness trial path.
+        metadata.requestedRuntime = "harness";
+      }
       metadata = appendGoalModeMetadata(metadata, goalMode);
       if (Object.keys(metadata).length > 0) {
         sendInput.metadata = JSON.stringify(metadata);
@@ -538,6 +545,8 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           approvedModels={approvedModels ?? undefined}
           selectedModelId={selectedModelId}
           onSelectedModelChange={handleSelectedModelChange}
+          selectedRuntime={selectedRuntime}
+          onSelectedRuntimeChange={setSelectedRuntime}
           isSubmitting={fetching || busy || computersFetching || spacesFetching}
           error={error}
         />
