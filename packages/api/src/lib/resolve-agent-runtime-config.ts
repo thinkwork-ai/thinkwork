@@ -325,6 +325,12 @@ export interface AgentRuntimeConfig {
    * policy filter (the manifest already carries the policy verdict).
    */
   capabilityFolderDispatch: boolean;
+  /**
+   * Subagent-folders U10: manifest/tree is the sub-agent profile truth
+   * for this agent — the payload shrinks to space-local profiles only
+   * and carries agent_profiles_authority: "manifest".
+   */
+  agentProfileManifestAuthority: boolean;
   browserAutomationEnabled: boolean;
   threadJsonRenderUiEnabled: boolean;
   contextEngineEnabled: boolean;
@@ -473,6 +479,7 @@ export async function resolveAgentRuntimeConfig(
       system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
       capability_folder_dispatch: agents.capability_folder_dispatch,
+      agent_profile_manifest_authority: agents.agent_profile_manifest_authority,
       template_id: agents.template_id,
       runtime: agents.runtime,
       model: agents.model,
@@ -936,6 +943,8 @@ export async function resolveAgentRuntimeConfig(
     blockedTools,
     sandboxTemplate: (agent.sandbox as TemplateSandboxConfig | null) ?? null,
     capabilityFolderDispatch: agent.capability_folder_dispatch === true,
+    agentProfileManifestAuthority:
+      agent.agent_profile_manifest_authority === true,
     browserAutomationEnabled,
     threadJsonRenderUiEnabled,
     contextEngineEnabled,

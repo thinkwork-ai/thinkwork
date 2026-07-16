@@ -96,6 +96,20 @@ export const agents = pgTable(
     capability_folder_dispatch: boolean("capability_folder_dispatch")
       .notNull()
       .default(false),
+    /**
+     * Subagent-folders U10 per-agent authority flip: when true, the
+     * compiled capabilities manifest (agent entries + synced
+     * agents/<slug>/ folders) is the sub-agent profile truth — the
+     * dispatch payload carries only space-local profiles in full, and
+     * Pi assembles central profiles from the manifest. Flipped per
+     * agent after the dual-read soak's two-sided gate passes (minimum
+     * comparison counts AND zero non-benign divergences).
+     */
+    agent_profile_manifest_authority: boolean(
+      "agent_profile_manifest_authority",
+    )
+      .notNull()
+      .default(false),
     budget_monthly_cents: integer("budget_monthly_cents"),
     spent_monthly_cents: integer("spent_monthly_cents").default(0),
     budget_paused: boolean("budget_paused").notNull().default(false),
