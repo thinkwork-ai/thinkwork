@@ -428,18 +428,6 @@ variable "brain_dream_state_enabled" {
   default     = false
 }
 
-variable "retry_dispatcher_enabled" {
-  description = "Enable the recurring retry-dispatcher schedule (THINK-307). Never enable on a stage before THINK-305, THINK-308, and THINK-309 are live there; manual invokes work regardless."
-  type        = bool
-  default     = false
-}
-
-variable "stall_threshold_minutes" {
-  description = "Minutes of turn inactivity before the stall monitor marks a running turn timed_out; the retry dispatcher reads the same knob as its origin-freshness guard (THINK-306/THINK-307)."
-  type        = number
-  default     = 5
-}
-
 variable "requester_memory_dreaming_model_id" {
   description = "Bedrock Converse model id for requester memory REM reflection."
   type        = string
@@ -871,8 +859,6 @@ module "thinkwork" {
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression
   brain_dream_state_enabled                     = var.brain_dream_state_enabled
-  retry_dispatcher_enabled                      = var.retry_dispatcher_enabled
-  stall_threshold_minutes                       = var.stall_threshold_minutes
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   agentcore_memory_id                           = var.agentcore_memory_id

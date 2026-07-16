@@ -28,19 +28,7 @@
  * insertion, etc. The behavior must match chat-agent-invoke today.
  */
 
-import {
-  and,
-  desc,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNull,
-  ne,
-  notInArray,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
@@ -51,7 +39,6 @@ import {
   artifacts,
   messages,
   pendingUserQuestions,
-  retryQueue,
   skillDrafts,
   threadTurns,
   threads,
@@ -198,9 +185,6 @@ export async function processFinalize(
       id: threadTurns.id,
       runtimeType: threadTurns.runtime_type,
       contextSnapshot: threadTurns.context_snapshot,
-      // U2 (THINK-308): immutable after turn insert — non-null iff this turn
-      // is a retry attempt whose success must close the origin's retry rows.
-      originTurnId: threadTurns.origin_turn_id,
     });
   if (claimed.length === 0) {
     try {
@@ -642,85 +626,33 @@ export async function processFinalize(
     ...(goalRun ? { goal_run: goalRun } : {}),
   };
 
-  // THINK-308 U1: the succeeded write is a CAS — it only lands on a
-  // non-terminal turn. A zero-row result means a terminal verdict (usually
-  // the stall monitor's timed_out) got there first; that case reconciles
-  // explicitly instead of blind-overwriting the verdict.
-  const succeededSet = {
-    status: "succeeded",
-    finished_at: new Date(),
-    runtime_type: runtimeType || undefined,
-    system_prompt: capturedSystemPrompt || undefined,
-    result_json: {
-      response: responseText.slice(0, 10000),
-      runtime: runtimeType || undefined,
-      ...(goalRun ? { goal_run: goalRun } : {}),
-    },
-    usage_json: turnUsage,
-  };
-  let statusWriteLanded = false;
-  let deferredToRecovery = false;
   try {
-    const casHit = await db
+    await db
       .update(threadTurns)
-      .set(succeededSet)
-      .where(
-        and(
-          eq(threadTurns.id, turnId),
-          inArray(threadTurns.status, ["queued", "running"]),
-        ),
-      )
-      .returning({ id: threadTurns.id });
-
-    if (casHit.length > 0) {
-      statusWriteLanded = true;
-    } else {
-      const reconciliation = await reconcileTerminalStatusOnFinalize({
-        turnId,
-        tenantId,
-        threadId,
-        succeededSet,
-      });
-      statusWriteLanded = reconciliation.statusWriteLanded;
-      deferredToRecovery = reconciliation.deferredToRecovery;
-    }
-
-    if (statusWriteLanded) {
-      await notifyThreadTurnUpdate({
-        runId: turnId,
-        tenantId,
-        threadId,
-        agentId,
+      .set({
         status: "succeeded",
-        triggerName: "Chat",
-      });
-    }
+        finished_at: new Date(),
+        runtime_type: runtimeType || undefined,
+        system_prompt: capturedSystemPrompt || undefined,
+        result_json: {
+          response: responseText.slice(0, 10000),
+          runtime: runtimeType || undefined,
+          ...(goalRun ? { goal_run: goalRun } : {}),
+        },
+        usage_json: turnUsage,
+      })
+      .where(eq(threadTurns.id, turnId));
+
+    await notifyThreadTurnUpdate({
+      runId: turnId,
+      tenantId,
+      threadId,
+      agentId,
+      status: "succeeded",
+      triggerName: "Chat",
+    });
   } catch (turnErr) {
     console.error(`[chat-finalize] Failed to update thread_turn:`, turnErr);
-  }
-
-  // THINK-308 U2: a retry attempt that lands its succeeded write closes the
-  // origin turn's open retry rows — the first-ever writer of 'succeeded'
-  // in the retry lifecycle (parent D3), which is what ends the
-  // "recovering" state after a genuine recovery.
-  const claimedOriginTurnId = claimed[0]?.originTurnId ?? null;
-  if (statusWriteLanded && claimedOriginTurnId) {
-    try {
-      await db
-        .update(retryQueue)
-        .set({ status: "succeeded", updated_at: new Date() })
-        .where(
-          and(
-            eq(retryQueue.origin_turn_id, claimedOriginTurnId),
-            inArray(retryQueue.status, ["pending", "dispatched"]),
-          ),
-        );
-    } catch (retryCloseErr) {
-      console.error(
-        `[chat-finalize] Failed to close origin retry rows for origin=${claimedOriginTurnId}:`,
-        retryCloseErr,
-      );
-    }
   }
 
   await recordTraceEvidenceSafely({
@@ -766,20 +698,6 @@ export async function processFinalize(
     responseText,
     turnStatus: "completed",
   });
-
-  // THINK-308 R3: a recovery attempt is in flight for this timed_out turn —
-  // the successor carries the thread's one answer, so the origin's answer
-  // surfacing (assistant message, Slack reply, push, new-message notify) is
-  // suppressed. Events, trace evidence, and finalized_at completed above /
-  // below as usual.
-  if (deferredToRecovery) {
-    console.log(
-      `[chat-finalize] Turn ${turnId} deferred to recovery; suppressing answer surfacing`,
-    );
-    await markTurnFinalized(turnId);
-    await promoteDeferredWakeupSafely(tenantId, threadId);
-    return { finalized: true, messageId: null, reconcile: reconcileReport };
-  }
 
   // Early exit on empty response (legacy behavior — no message inserted)
   if (!responseText || responseText === "{}") {
@@ -2454,149 +2372,6 @@ async function resolveFinalizeCostOwnerUserId(input: {
     .limit(1);
 
   return thread?.userId ?? null;
-}
-
-/**
- * THINK-308 U1 (KTD1/KTD2): the succeeded CAS write returned zero rows, so
- * the turn is in a terminal state. One fresh single-row read picks the
- * branch:
- *
- * - `timed_out` → explicit reconciliation. Order is load-bearing: (1)
- *   supersede the turn's `pending` retry rows FIRST — this contends with the
- *   retry dispatcher's status-guarded `pending → dispatched` claim on the
- *   same row, so exactly one side wins; (2) check blockers — a successor
- *   attempt turn (`origin_turn_id` = this turn, or a later manual-Retry
- *   sibling sharing its `triggering_message_id` that is not
- *   failed/cancelled) or a `dispatched` retry row; (3) no blocker → guarded
- *   flip to succeeded carrying the full succeeded payload plus cleared
- *   `error`/`error_code` (a status-only flip would leave the stall verdict
- *   text on a succeeded turn). A blocked or race-lost flip defers to the
- *   recovery attempt: the origin keeps `timed_out` and its answer surfacing
- *   is suppressed (R3).
- * - any other terminal status (`failed`/`cancelled`/`skipped`) → skip the
- *   status write and its notify; the rest of finalize completes.
- *
- * Every status transition here is a CAS (`UPDATE … WHERE status = …`); the
- * mutable status is never pre-read as a write predicate. Emits one
- * single-line JSON `timeout_reconciliation` log (Q3) that THINK-310's
- * rollout monitoring queries.
- */
-async function reconcileTerminalStatusOnFinalize(input: {
-  turnId: string;
-  tenantId: string;
-  threadId: string;
-  succeededSet: Record<string, unknown>;
-}): Promise<{ statusWriteLanded: boolean; deferredToRecovery: boolean }> {
-  const { turnId, tenantId, threadId } = input;
-
-  const [current] = await db
-    .select({
-      status: threadTurns.status,
-      triggeringMessageId: threadTurns.triggering_message_id,
-      createdAt: threadTurns.created_at,
-    })
-    .from(threadTurns)
-    .where(eq(threadTurns.id, turnId))
-    .limit(1);
-
-  if (!current || current.status !== "timed_out") {
-    console.log(
-      `[chat-finalize] Succeeded status write skipped for turn ${turnId}: terminal status=${current?.status ?? "missing"}`,
-    );
-    return { statusWriteLanded: false, deferredToRecovery: false };
-  }
-
-  // (1) Supersede pending retry rows BEFORE the blocker check (KTD2).
-  const superseded = await db
-    .update(retryQueue)
-    .set({ status: "superseded", updated_at: new Date() })
-    .where(
-      and(
-        eq(retryQueue.origin_turn_id, turnId),
-        eq(retryQueue.status, "pending"),
-      ),
-    )
-    .returning({ id: retryQueue.id });
-
-  const logReconciliation = (
-    outcome: "flipped_succeeded" | "deferred_to_recovery",
-    blockingSuccessorTurnId: string | null,
-    blockingRetryRowId: string | null,
-  ) => {
-    console.log(
-      JSON.stringify({
-        event: "timeout_reconciliation",
-        turn_id: turnId,
-        tenant_id: tenantId,
-        thread_id: threadId,
-        outcome,
-        superseded_retry_rows: superseded.length,
-        blocking_successor_turn_id: blockingSuccessorTurnId,
-        blocking_retry_row_id: blockingRetryRowId,
-      }),
-    );
-  };
-
-  // (2) Blocker check: an origin-linked successor attempt, a manual-Retry
-  // sibling (redispatched through the normal chat path — it never stamps
-  // origin_turn_id, only shares the triggering message), or a dispatched
-  // retry row whose attempt turn may not exist yet.
-  const manualRetrySibling = current.triggeringMessageId
-    ? and(
-        ne(threadTurns.id, turnId),
-        eq(threadTurns.triggering_message_id, current.triggeringMessageId),
-        gt(threadTurns.created_at, current.createdAt),
-        notInArray(threadTurns.status, ["failed", "cancelled"]),
-      )
-    : undefined;
-  const [successor] = await db
-    .select({ successorId: threadTurns.id })
-    .from(threadTurns)
-    .where(
-      and(
-        eq(threadTurns.tenant_id, tenantId),
-        manualRetrySibling
-          ? or(eq(threadTurns.origin_turn_id, turnId), manualRetrySibling)
-          : eq(threadTurns.origin_turn_id, turnId),
-      ),
-    )
-    .limit(1);
-  const [dispatchedRow] = await db
-    .select({ blockingRetryRowId: retryQueue.id })
-    .from(retryQueue)
-    .where(
-      and(
-        eq(retryQueue.origin_turn_id, turnId),
-        eq(retryQueue.status, "dispatched"),
-      ),
-    )
-    .limit(1);
-
-  if (successor || dispatchedRow) {
-    logReconciliation(
-      "deferred_to_recovery",
-      successor?.successorId ?? null,
-      dispatchedRow?.blockingRetryRowId ?? null,
-    );
-    return { statusWriteLanded: false, deferredToRecovery: true };
-  }
-
-  // (3) Guarded flip: full succeeded payload + cleared stall verdict.
-  const flipped = await db
-    .update(threadTurns)
-    .set({ ...input.succeededSet, error: null, error_code: null })
-    .where(and(eq(threadTurns.id, turnId), eq(threadTurns.status, "timed_out")))
-    .returning({ id: threadTurns.id });
-
-  if (flipped.length === 0) {
-    // Race loss: the status changed between the read and the flip. The
-    // null/null blocking fields distinguish this from a blocker deferral.
-    logReconciliation("deferred_to_recovery", null, null);
-    return { statusWriteLanded: false, deferredToRecovery: true };
-  }
-
-  logReconciliation("flipped_succeeded", null, null);
-  return { statusWriteLanded: true, deferredToRecovery: false };
 }
 
 async function markTurnFinalized(turnId: string): Promise<void> {
