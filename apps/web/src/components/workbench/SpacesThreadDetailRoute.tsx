@@ -444,6 +444,9 @@ export function SpacesThreadDetailRoute({
   // via TenantContext.isOperator; the mutation re-checks server-side.
   const [flagEvalTurnId, setFlagEvalTurnId] = useState<string | null>(null);
   const [flagEvalOpen, setFlagEvalOpen] = useState(false);
+  const [selectedRuntime, setSelectedRuntime] = useState<"pi" | "agentcore">(
+    "pi",
+  );
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
     readStoredModelId(),
   );
@@ -1850,6 +1853,8 @@ export function SpacesThreadDetailRoute({
       approvedModels={approvedModels ?? undefined}
       selectedModelId={selectedModelId}
       onSelectedModelChange={handleSelectedModelChange}
+      selectedRuntime={selectedRuntime}
+      onSelectedRuntimeChange={setSelectedRuntime}
       currentUser={{
         id: userId,
       }}
@@ -1991,6 +1996,10 @@ export function SpacesThreadDetailRoute({
         if (turnModelId) {
           sendInput.modelId = turnModelId;
           metadata.requestedModelId = turnModelId;
+        }
+        if (selectedRuntime === "agentcore") {
+          // THINK-311 U5b: this turn runs on the AWS AgentCore trial path.
+          metadata.requestedRuntime = "agentcore";
         }
         metadata = appendGoalModeMetadata(metadata, goalMode);
         if (Object.keys(metadata).length > 0) {

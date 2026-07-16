@@ -59,6 +59,13 @@ export interface DispatchDefaultAgentTurnInput {
   messageId: string;
   content?: string | null;
   requestedModelId?: string | null;
+  /**
+   * THINK-311 U5b: per-turn runtime selection from the composer's runtime
+   * picker (metadata.requestedRuntime). Honored only by the direct chat
+   * dispatch — the wakeup fallback resolves the runtime from the agent
+   * row (Pi), so an agentcore-requested turn must never ride it (R4).
+   */
+  requestedRuntime?: "agentcore" | null;
   requestedProfileSlug?: string | null;
   goalMode?: RuntimeGoalMode | null;
   skillCreatorCommand?: SkillCreatorCommandMetadata | null;
@@ -117,6 +124,8 @@ export interface DefaultAgentChatInvoke {
    */
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   requestedModelId?: string;
+  /** THINK-311 U5b: per-turn AgentCore trial selection (chat path only). */
+  requestedRuntime?: "agentcore";
   requestedProfileSlug?: string;
   goalMode?: RuntimeGoalMode;
   skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
@@ -215,6 +224,9 @@ export async function dispatchDefaultAgentChatTurn(
     ...(input.requestedModelId
       ? { requestedModelId: input.requestedModelId }
       : {}),
+    ...(input.requestedRuntime === "agentcore"
+      ? { requestedRuntime: "agentcore" as const }
+      : {}),
     ...(input.requestedProfileSlug
       ? { requestedProfileSlug: input.requestedProfileSlug }
       : {}),
@@ -249,6 +261,16 @@ export async function dispatchDefaultAgentChatTurn(
       enqueued: false,
       wakeupRequestId: null,
     };
+  }
+
+  // THINK-311 U5b (R4/KTD-7): an agentcore-requested turn must never ride the
+  // wakeup fallback — the wakeup processor resolves the runtime from the
+  // agent row and would silently run Pi. Fail the dispatch loudly instead;
+  // sendMessage stamps a visible failed state so the sender can retry.
+  if (input.requestedRuntime === "agentcore") {
+    throw new Error(
+      "AgentCore trial turn could not be dispatched directly; refusing the wakeup fallback (it would run Pi).",
+    );
   }
 
   const wakeup = buildDefaultAgentTurnWakeup({

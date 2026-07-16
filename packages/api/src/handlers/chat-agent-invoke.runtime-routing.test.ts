@@ -924,6 +924,39 @@ describe("chat-agent-invoke runtime routing", () => {
     expect(body.runtime_type).toBe("harness");
   });
 
+  it("routes a per-turn agentcore request to the harness runner (THINK-311 U5b)", async () => {
+    vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "harness-runner-fn");
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    const result = await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "run the QBR on harness",
+      messageId: "message-1",
+      requestedRuntime: "agentcore",
+    });
+
+    expect(result).toEqual({ ok: true, threadTurnId: "turn-pi-1" });
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: { FunctionName: string; Payload: Uint8Array };
+    };
+    expect(command.input.FunctionName).toBe("harness-runner-fn");
+    const body = decodeInvokeBody(command);
+    expect(body.runtime_type).toBe("harness");
+    // Evidence: the per-turn request is recorded on the turn row.
+    expect(mocks.insertValues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtime_type: "harness",
+          context_snapshot: expect.objectContaining({
+            requested_runtime: "agentcore",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("dispatches nothing when runtime config resolution rejects the runtime selector", async () => {
     mocks.resolveAgentRuntimeConfig.mockRejectedValueOnce(
       new Error('Unknown agent runtime selector "harness2".'),

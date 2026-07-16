@@ -12,10 +12,14 @@ describe("parseAgentRuntimeInput", () => {
     expect(parseAgentRuntimeInput("PI")).toBe("pi");
   });
 
-  it("rejects the harness trial selector on the GraphQL write path (THINK-311)", () => {
-    // The trial flag is flipped by an operator via SQL on the trial stage
-    // only — never through the product API.
-    expect(() => parseAgentRuntimeInput("HARNESS")).toThrow(
+  it("accepts the AGENTCORE runtime from the Agent-configuration dropdown (THINK-311)", () => {
+    expect(parseAgentRuntimeInput("AGENTCORE")).toBe("harness");
+    expect(parseAgentRuntimeInput("agentcore")).toBe("harness");
+    expect(parseAgentRuntimeInput("harness")).toBe("harness");
+  });
+
+  it("still rejects unknown runtimes", () => {
+    expect(() => parseAgentRuntimeInput("warp")).toThrow(
       "Invalid agent runtime",
     );
   });
@@ -31,7 +35,8 @@ describe("agentRuntimeToGraphqlEnum", () => {
     expect(agentRuntimeToGraphqlEnum("strands")).toBe("FLUE");
   });
 
-  it("serializes harness-flagged rows through the deployed enum so agent queries keep working (THINK-311)", () => {
-    expect(agentRuntimeToGraphqlEnum("harness")).toBe("FLUE");
+  it("serializes internal harness rows as the AGENTCORE enum value (THINK-311)", () => {
+    expect(agentRuntimeToGraphqlEnum("harness")).toBe("AGENTCORE");
+    expect(agentRuntimeToGraphqlEnum("agentcore")).toBe("AGENTCORE");
   });
 });
