@@ -395,8 +395,18 @@ function bindingMatches(
 export interface CompileCapabilitiesManifestInput {
   agent: { tenantId: string; agentSlug: string };
   folders: CapabilityFolderInput[];
-  /** From the render's existing skill scan (enabled + trust-gated). */
-  skills: Array<{ slug: string; enabled: boolean; active: boolean }>;
+  /**
+   * From the render's existing skill scan (enabled + trust-gated). THINK-302
+   * U5: `sourceScope` is the winning grant scope when the four-scope union is
+   * active; omitted (agent-only) tenants leave it undefined and their skill
+   * entries carry no `source_scope`.
+   */
+  skills: Array<{
+    slug: string;
+    enabled: boolean;
+    active: boolean;
+    sourceScope?: string;
+  }>;
   /** Folder-external extension tool names known to the caller. */
   extensionToolNames?: readonly string[];
   /**
@@ -429,7 +439,12 @@ export interface CompileCapabilitiesManifestInput {
  */
 export function computeCapabilityInputSignature(input: {
   capabilityObjects: Array<{ key: string; etag?: string | null }>;
-  skills: Array<{ slug: string; enabled: boolean; active: boolean }>;
+  skills: Array<{
+    slug: string;
+    enabled: boolean;
+    active: boolean;
+    sourceScope?: string;
+  }>;
   extensionToolNames?: readonly string[];
   mcpPolicy?: {
     allowedServers: string[] | null;
@@ -734,11 +749,16 @@ export function compileCapabilitiesManifest(
     })),
     ...input.skills
       .filter((skill) => skill.enabled && skill.active)
-      .map((skill) => ({
-        name: skill.slug,
-        slug: skill.slug,
-        class: "skill" as const,
-      })),
+      .map((skill) =>
+        withScope(
+          {
+            name: skill.slug,
+            slug: skill.slug,
+            class: "skill" as const,
+          },
+          skill.sourceScope,
+        ),
+      ),
     ...activeConnections.map((connection) =>
       withScope(
         connectionEntry(connection.definition, connection.sidecar),
