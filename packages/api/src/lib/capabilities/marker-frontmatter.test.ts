@@ -11,9 +11,13 @@ import { describe, expect, it } from "vitest";
 import {
   parseMarkerConfig,
   parseMcpDefinition,
+  serializeConnectionDefinition,
   serializeMcpDefinition,
+  serializeSkillDefinition,
   validateMarkerConfigFields,
 } from "./marker-frontmatter.js";
+import { parseConnectionDefinition } from "./definition-schemas.js";
+import { parseSkillMd } from "../skill-md-parser.js";
 import { parseAgentFolderInstructions } from "../agent-folder-format.js";
 import type { CapabilityDefinitionError } from "./definition-schemas.js";
 
@@ -295,5 +299,147 @@ Do research.
       path,
     );
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("serializeConnectionDefinition", () => {
+  const CONN_PATH = "connectors/dagster/CONNECTION.md";
+
+  it("round-trips through parseConnectionDefinition", () => {
+    const doc = serializeConnectionDefinition({
+      name: "dagster",
+      description: "Dagster orchestration MCP connection.",
+      type: "mcp",
+      url: "https://mcp.example.com/dagster",
+      operations: ["list_runs", "get_run"],
+      approval: "once",
+      rateLimitRpm: 60,
+      modelOverride: "claude-opus",
+      config: { registryServerId: "srv-123", tokenEnvVar: "DAGSTER_TOKEN" },
+      body: "Dagster — MCP connection managed by the platform.",
+    });
+    const result = parseConnectionDefinition(doc, CONN_PATH);
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.parsed.name).toBe("dagster");
+    expect(result.parsed.description).toBe(
+      "Dagster orchestration MCP connection.",
+    );
+    expect(result.parsed.type).toBe("mcp");
+    expect(result.parsed.url).toBe("https://mcp.example.com/dagster");
+    expect(result.parsed.operations).toEqual(["list_runs", "get_run"]);
+    expect(result.parsed.body).toContain("Dagster");
+    // Per-grant config lands on internal (the connection parser's passthrough).
+    expect(result.parsed.internal.approval).toBe("once");
+    expect(result.parsed.internal.rate_limit_rpm).toBe(60);
+    expect(result.parsed.internal.model_override).toBe("claude-opus");
+    expect(result.parsed.internal.config).toEqual({
+      registryServerId: "srv-123",
+      tokenEnvVar: "DAGSTER_TOKEN",
+    });
+  });
+
+  it("elides the app principal default and approval:never", () => {
+    const doc = serializeConnectionDefinition({
+      name: "conn",
+      description: "d",
+      type: "api",
+      principalType: "app",
+      approval: "never",
+    });
+    expect(doc).not.toContain("principal_type");
+    expect(doc).not.toContain("approval");
+  });
+
+  it("is byte-stable: same logical input, identical bytes and sha", () => {
+    const build = () =>
+      serializeConnectionDefinition({
+        name: "conn",
+        description: "d",
+        type: "mcp",
+        operations: ["b", "a"],
+        config: { z: "1", a: "2" },
+        internal: { category: "crm", tags: ["x"] },
+        body: "body",
+      });
+    expect(build()).toBe(build());
+    expect(sha(build())).toBe(sha(build()));
+  });
+
+  it("preserves and key-sorts passthrough internal fields", () => {
+    const doc = serializeConnectionDefinition({
+      name: "conn",
+      description: "d",
+      type: "mcp",
+      internal: { zeta: "z", alpha: "a" },
+    });
+    expect(doc.indexOf("alpha")).toBeLessThan(doc.indexOf("zeta"));
+    const result = parseConnectionDefinition(doc, CONN_PATH);
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.parsed.internal.alpha).toBe("a");
+    expect(result.parsed.internal.zeta).toBe("z");
+  });
+});
+
+describe("serializeSkillDefinition", () => {
+  const SKILL_PATH = "skills/sales-prep/SKILL.md";
+
+  it("round-trips through parseSkillMd", () => {
+    const doc = serializeSkillDefinition({
+      name: "sales-prep",
+      description: "Prep a sales call.",
+      allowedTools: ["Read", "Grep"],
+      execution: "context",
+      approval: "always",
+      operations: ["send_email"],
+      rateLimitRpm: 30,
+      modelOverride: "claude-sonnet",
+      config: { connectionId: "c-1", skillType: "admin" },
+      internal: { triggers: ["sales"], category: "crm" },
+      body: "# Sales prep\nDo the thing.",
+    });
+    const result = parseSkillMd(doc, SKILL_PATH);
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.parsed.name).toBe("sales-prep");
+    expect(result.parsed.description).toBe("Prep a sales call.");
+    expect(result.parsed.allowedToolsDeclared).toEqual(["Read", "Grep"]);
+    expect(result.parsed.execution).toBe("context");
+    expect(result.parsed.body).toContain("Sales prep");
+    expect(result.parsed.internal?.approval).toBe("always");
+    expect(result.parsed.internal?.operations).toEqual(["send_email"]);
+    expect(result.parsed.internal?.rate_limit_rpm).toBe(30);
+    expect(result.parsed.internal?.model_override).toBe("claude-sonnet");
+    expect(result.parsed.internal?.config).toEqual({
+      connectionId: "c-1",
+      skillType: "admin",
+    });
+    expect(result.parsed.internal?.triggers).toEqual(["sales"]);
+  });
+
+  it("elides approval:never and absent execution", () => {
+    const doc = serializeSkillDefinition({
+      name: "s",
+      description: "d",
+      approval: "never",
+      execution: null,
+    });
+    expect(doc).not.toContain("approval");
+    expect(doc).not.toContain("execution");
+  });
+
+  it("is byte-stable: same logical input, identical bytes and sha", () => {
+    const build = () =>
+      serializeSkillDefinition({
+        name: "s",
+        description: "d",
+        operations: ["b", "a"],
+        config: { z: "1", a: "2" },
+        internal: { triggers: ["x"], category: "crm" },
+        body: "body",
+      });
+    expect(build()).toBe(build());
+    expect(sha(build())).toBe(sha(build()));
   });
 });

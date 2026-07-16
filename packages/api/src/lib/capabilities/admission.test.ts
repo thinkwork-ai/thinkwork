@@ -23,9 +23,11 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import {
+  capabilityApprovals,
   capabilityConnectionProposals,
   capabilityDefinitions,
   capabilityDefinitionVersions,
+  tenants,
   tenantServicePrincipals,
 } from "@thinkwork/database-pg/schema";
 import {
@@ -735,6 +737,56 @@ describe("autonomouslyAdmitProposal (self-extension)", () => {
     // The definition carries no operator author.
     const defs = tables.get(capabilityDefinitions)!;
     expect(defs[0].created_by_user_id).toBeNull();
+  });
+
+  it("records a capability_approvals binding when registry-trust is ON (THINK-302 U8)", async () => {
+    const descriptor = autoDescriptor();
+    const proposal = proposalRowFor({ descriptor });
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+      // Flag ON for this tenant.
+      [tenants, [{ id: TENANT, capability_registry_trust: true }]],
+    ]);
+    const writer = recordingWriter({ ok: true });
+
+    const result = await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+      folderWriter: writer.writer,
+    });
+
+    expect(result.outcome).toBe("applied");
+    const bindings = tables.get(capabilityApprovals) ?? [];
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({
+      tenant_id: TENANT,
+      scope_ref: `agent:${AGENT}`,
+      class: "connection",
+      slug: "github-rest-public",
+      signed_by: `autonomous:${AGENT}`,
+    });
+  });
+
+  it("records NO binding when registry-trust is OFF (legacy sidecar seam)", async () => {
+    const descriptor = autoDescriptor();
+    const proposal = proposalRowFor({ descriptor });
+    const { db, tables } = fakeDb([
+      [capabilityConnectionProposals, [proposal]],
+      [tenants, [{ id: TENANT, capability_registry_trust: false }]],
+    ]);
+    const writer = recordingWriter({ ok: true });
+
+    await autonomouslyAdmitProposal(db, {
+      tenantId: TENANT,
+      proposalId: proposal.id as string,
+      agentId: AGENT,
+      signer,
+      folderWriter: writer.writer,
+    });
+
+    expect(tables.get(capabilityApprovals) ?? []).toHaveLength(0);
   });
 
   it("auto-provisions a ready binding when a provisioner is supplied (U2b)", async () => {

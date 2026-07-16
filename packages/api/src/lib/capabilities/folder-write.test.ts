@@ -389,3 +389,125 @@ describe("putAgentChildGrantSidecar (subagent-folders U7)", () => {
     ).toEqual({ ok: true });
   });
 });
+
+// THINK-302 U8 — registry-trust (flag-ON) branch: grants record a
+// scope-qualified capability_approvals binding + marker frontmatter, and write
+// NO `.assignment.json`. Presence of the (patched) marker folder IS the grant.
+
+/** Fake db capturing capability_approvals inserts (recordBinding). */
+function fakeRegistryDb() {
+  const inserts: Array<Record<string, unknown>> = [];
+  const db = {
+    insert: () => ({
+      values: (values: Record<string, unknown>) => ({
+        returning: async () => {
+          inserts.push(values);
+          return [{ id: "binding-1", ...values }];
+        },
+      }),
+    }),
+  };
+  return { db: db as any, inserts };
+}
+
+describe("registry-trust (flag ON) branch", () => {
+  it("signExistingCapabilityFolder records a binding + marker, no sidecar", async () => {
+    const defKey = capabilityDefinitionKey(PREFIX, "connection", "firecrawl");
+    const s3 = fakeS3({ [defKey]: DEFINITION });
+    const { db, inserts } = fakeRegistryDb();
+    const result = await signExistingCapabilityFolder({
+      targetPrefix: PREFIX,
+      klass: "connection",
+      slug: "firecrawl",
+      sidecar: { enabled: true, permissions: { operations: ["scrape"] } },
+      signedBy: "operator:user-1",
+      registry: {
+        db,
+        tenantId: "t1",
+        scopeRef: "agent:a1",
+        signedBy: "operator:user-1",
+      },
+      deps: { s3: s3 as any, bucket: "b", signer },
+    });
+    expect(result).toEqual({ ok: true });
+    // No sidecar written.
+    expect(
+      s3.objects.has(capabilitySidecarKey(PREFIX, "connection", "firecrawl")),
+    ).toBe(false);
+    // Marker patched with the per-grant operations frontmatter.
+    const marker = s3.objects.get(defKey)!;
+    expect(marker).toContain("operations:");
+    expect(marker).toContain("scrape");
+    // A binding row was recorded at the agent scope.
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({
+      tenant_id: "t1",
+      scope_ref: "agent:a1",
+      class: "connection",
+      slug: "firecrawl",
+      signed_by: "operator:user-1",
+    });
+    expect(typeof inserts[0]!.marker_sha).toBe("string");
+    expect(typeof inserts[0]!.folder_attestation_sha).toBe("string");
+  });
+
+  it("putCapabilityFolder records a binding + marker, no sidecar", async () => {
+    const s3 = fakeS3();
+    const { db, inserts } = fakeRegistryDb();
+    const result = await putCapabilityFolder({
+      targetPrefix: PREFIX,
+      klass: "connection",
+      slug: "linear",
+      definition: DEFINITION,
+      sidecar: { enabled: true, config: { registryServerId: "srv-1" } },
+      signedBy: "backfill",
+      registry: {
+        db,
+        tenantId: "t1",
+        scopeRef: "agent:a1",
+        signedBy: "backfill",
+      },
+      deps: { s3: s3 as any, bucket: "b", signer },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(
+      s3.objects.has(capabilitySidecarKey(PREFIX, "connection", "linear")),
+    ).toBe(false);
+    const marker = s3.objects.get(
+      capabilityDefinitionKey(PREFIX, "connection", "linear"),
+    )!;
+    // Merged config lands in the marker frontmatter (references only).
+    expect(marker).toContain("registryServerId");
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({ class: "connection", slug: "linear" });
+  });
+
+  it("putAgentChildGrantSidecar records a binding, writes no sidecar file", async () => {
+    const s3 = fakeS3();
+    const { db, inserts } = fakeRegistryDb();
+    const result = await putAgentChildGrantSidecar({
+      targetPrefix: PREFIX,
+      agentProfileSlug: "analyst",
+      childClass: "connection",
+      slug: "postgres-dev",
+      operations: ["query"],
+      signedBy: "operator:u1",
+      registry: {
+        db,
+        tenantId: "t1",
+        scopeRef: "agent:a1/sub:analyst",
+        signedBy: "operator:u1",
+      },
+      deps: { s3, bucket: "b", signer },
+    });
+    expect(result.ok).toBe(true);
+    const key = `${PREFIX}agents/analyst/connectors/postgres-dev/.assignment.json`;
+    expect(s3.objects.has(key)).toBe(false);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({
+      scope_ref: "agent:a1/sub:analyst",
+      class: "connection",
+      slug: "postgres-dev",
+    });
+  });
+});

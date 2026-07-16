@@ -30,6 +30,7 @@ import {
   lookupKey,
   listBindings,
   recordBinding,
+  severBinding,
   type BindingKey,
 } from "./approval-registry.js";
 
@@ -99,6 +100,17 @@ function fakeDb(seed: Array<[unknown, Row[]]> = []) {
           const row: Row = { id: randomUUID(), created_at: new Date(), ...v };
           rowsFor(t).push(row);
           return Promise.resolve([row]);
+        },
+      }),
+    }),
+    delete: (t: unknown) => ({
+      where: (cond: unknown) => ({
+        returning: () => {
+          const rows = rowsFor(t);
+          const removed = rows.filter((r) => rowMatches(r, cond));
+          const kept = rows.filter((r) => !rowMatches(r, cond));
+          tables.set(t, kept);
+          return Promise.resolve(removed.map((r) => ({ id: r.id })));
         },
       }),
     }),
@@ -251,6 +263,50 @@ describe("recordBinding + lookupBindings", () => {
       keys: [],
     });
     expect(found.size).toBe(0);
+  });
+});
+
+describe("severBinding (revoke path — THINK-302 U8)", () => {
+  it("removes every binding for a key and leaves other keys intact", async () => {
+    const { db } = fakeDb();
+    await recordBinding(db, bindingInput());
+    await recordBinding(db, bindingInput({ markerSha: "c".repeat(64) }));
+    await recordBinding(db, bindingInput({ slug: "other-skill" }));
+
+    const removed = await severBinding(db, {
+      tenantId: TENANT,
+      scopeRef: `agent:${AGENT}`,
+      class: "skill",
+      slug: "market-report",
+    });
+    expect(removed).toBe(2);
+
+    const gone = await lookupBindings(db, {
+      tenantId: TENANT,
+      keys: [
+        { scopeRef: `agent:${AGENT}`, class: "skill", slug: "market-report" },
+      ],
+    });
+    expect(gone.size).toBe(0);
+    // The unrelated slug survives.
+    const survivor = await lookupBindings(db, {
+      tenantId: TENANT,
+      keys: [
+        { scopeRef: `agent:${AGENT}`, class: "skill", slug: "other-skill" },
+      ],
+    });
+    expect(survivor.size).toBe(1);
+  });
+
+  it("returns 0 when no binding matches the key", async () => {
+    const { db } = fakeDb();
+    const removed = await severBinding(db, {
+      tenantId: TENANT,
+      scopeRef: `agent:${AGENT}`,
+      class: "skill",
+      slug: "nope",
+    });
+    expect(removed).toBe(0);
   });
 });
 

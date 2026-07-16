@@ -29,6 +29,10 @@ import {
   type CapabilityFolderWriteDeps,
 } from "../capabilities/folder-write.js";
 import type { CapabilitySignedBy } from "../capabilities/sidecar-signing.js";
+import {
+  capabilityRegistryTrustEnabled,
+  type RegistryBindingContext,
+} from "../capabilities/registry-trust-flag.js";
 import { resolveAgentWorkspacePrefix } from "../skills/assignment-state.js";
 import { materializeMcpAssignmentFoldersForAgents } from "../mcp/assignment-state.js";
 import {
@@ -169,6 +173,15 @@ export async function materializeAnalystConnectionFolder(input: {
   }
   const s3 = input.deps?.s3 ?? s3Client();
 
+  // THINK-302 U8: honor the tenant registry-trust flag. ON ⇒ each grant
+  // records a scope-qualified capability_approvals binding + marker frontmatter
+  // (no `.assignment.json`). OFF (every tenant today) ⇒ the legacy signed
+  // sidecar path, byte-identical.
+  const registryTrust = await capabilityRegistryTrustEnabled(
+    db,
+    input.tenantId,
+  );
+
   const skipped: MaterializeResult["skipped"] = [];
   let written = 0;
   for (const agent of agentRows) {
@@ -177,6 +190,22 @@ export async function materializeAnalystConnectionFolder(input: {
       skipped.push({ agentId: agent.id, reason: "no_workspace_prefix" });
       continue;
     }
+    const rootRegistry: RegistryBindingContext | undefined = registryTrust
+      ? {
+          db,
+          tenantId: input.tenantId,
+          scopeRef: `agent:${agent.id}`,
+          signedBy,
+        }
+      : undefined;
+    const childRegistry: RegistryBindingContext | undefined = registryTrust
+      ? {
+          db,
+          tenantId: input.tenantId,
+          scopeRef: `agent:${agent.id}/sub:analyst`,
+          signedBy,
+        }
+      : undefined;
     const result = await putCapabilityFolder({
       targetPrefix,
       klass: "connection",
@@ -203,6 +232,7 @@ export async function materializeAnalystConnectionFolder(input: {
         },
       },
       signedBy,
+      registry: rootRegistry,
       deps: { ...input.deps, bucket, s3 },
     });
     if (!result.ok) {
@@ -230,6 +260,7 @@ export async function materializeAnalystConnectionFolder(input: {
       slug,
       operations: ["query"],
       signedBy,
+      registry: childRegistry,
       deps: { ...input.deps, bucket, s3 },
     });
     if (!childGrant.ok) {

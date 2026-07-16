@@ -43,6 +43,16 @@ import {
   WORKSPACE_SKILLS_FOLDER,
   LEGACY_ROOT_CONNECTIONS_FOLDER,
 } from "../workspace-constants.js";
+import { createHash } from "node:crypto";
+import {
+  mergeMarkerConfig,
+  type MarkerConfigMerge,
+} from "./marker-frontmatter.js";
+import {
+  computeFolderAttestation,
+  recordBinding,
+} from "./approval-registry.js";
+import type { RegistryBindingContext } from "./registry-trust-flag.js";
 
 export type CapabilityFolderClass = "connection" | "tool" | "agent";
 
@@ -132,6 +142,13 @@ export async function signExistingCapabilityFolder(input: {
   slug: string;
   sidecar: CapabilitySidecarFields;
   signedBy: CapabilitySignedBy;
+  /**
+   * Registry-trust (flag-ON) branch: when present, the grant records a
+   * scope-qualified `capability_approvals` binding + patches the marker
+   * frontmatter and writes NO `.assignment.json` sidecar. Absent = legacy
+   * signed-sidecar path, byte-identical to pre-THINK-302.
+   */
+  registry?: RegistryBindingContext;
   deps?: CapabilityFolderWriteDeps;
 }): Promise<FolderWriteResult> {
   const deps = input.deps ?? {};
@@ -174,6 +191,8 @@ export async function putCapabilityFolder(input: {
   definition: string;
   sidecar: CapabilitySidecarFields;
   signedBy: CapabilitySignedBy;
+  /** Registry-trust (flag-ON) branch — see {@link signExistingCapabilityFolder}. */
+  registry?: RegistryBindingContext;
   deps?: CapabilityFolderWriteDeps;
 }): Promise<FolderWriteResult> {
   const deps = input.deps ?? {};
@@ -209,6 +228,100 @@ export async function putCapabilityFolder(input: {
   });
 }
 
+function markerFileFor(klass: CapabilityFolderClass): string {
+  return klass === "connection"
+    ? CONNECTION_DEFINITION_FILE
+    : klass === "agent"
+      ? AGENT_INSTRUCTIONS_FILE
+      : TOOL_DEFINITION_FILE;
+}
+
+/** Coerce the sidecar's arbitrary-typed config to the marker's ref-only map. */
+function markerMergeFromSidecar(
+  sidecar: CapabilitySidecarFields,
+): MarkerConfigMerge {
+  const config: Record<string, string> = {};
+  if (sidecar.config) {
+    for (const [key, value] of Object.entries(sidecar.config)) {
+      if (typeof value === "string") config[key] = value;
+    }
+  }
+  const operations = Array.isArray(sidecar.permissions?.operations)
+    ? (sidecar.permissions!.operations as string[])
+    : undefined;
+  return {
+    ...(sidecar.approval ? { approval: sidecar.approval } : {}),
+    ...(operations && operations.length > 0 ? { operations } : {}),
+    ...(Object.keys(config).length > 0 ? { config } : {}),
+  };
+}
+
+/**
+ * Registry-trust (flag-ON) grant: patch the marker frontmatter with the
+ * per-grant config, record a scope-qualified `capability_approvals` binding
+ * over the marker sha + whole-folder attestation, and write NO sidecar.
+ * Presence of the (patched) marker folder IS the grant.
+ */
+async function writeRegistryBinding(input: {
+  targetPrefix: string;
+  klass: CapabilityFolderClass;
+  slug: string;
+  sidecar: CapabilitySidecarFields;
+  definitionBytes: string;
+  bucket: string;
+  s3: Pick<S3Client, "send">;
+  registry: RegistryBindingContext;
+}): Promise<FolderWriteResult> {
+  const markerBytes = mergeMarkerConfig(
+    input.definitionBytes,
+    input.klass,
+    markerMergeFromSidecar(input.sidecar),
+  );
+  const markerFile = markerFileFor(input.klass);
+  try {
+    await input.s3.send(
+      new PutObjectCommand({
+        Bucket: input.bucket,
+        Key: capabilityDefinitionKey(
+          input.targetPrefix,
+          input.klass,
+          input.slug,
+        ),
+        Body: markerBytes,
+        ContentType: "text/markdown; charset=utf-8",
+      }),
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "write_failed",
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+  const markerSha = createHash("sha256").update(markerBytes).digest("hex");
+  const folderAttestationSha = computeFolderAttestation([
+    { path: markerFile, content: markerBytes },
+  ]);
+  try {
+    await recordBinding(input.registry.db, {
+      tenantId: input.registry.tenantId,
+      scopeRef: input.registry.scopeRef,
+      class: input.klass,
+      slug: input.slug,
+      markerSha,
+      folderAttestationSha,
+      signedBy: input.registry.signedBy,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "write_failed",
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+  return { ok: true };
+}
+
 async function writeSignedSidecar(input: {
   targetPrefix: string;
   klass: CapabilityFolderClass;
@@ -218,8 +331,21 @@ async function writeSignedSidecar(input: {
   definitionBytes: string;
   bucket: string;
   s3: Pick<S3Client, "send">;
+  registry?: RegistryBindingContext;
   deps: CapabilityFolderWriteDeps;
 }): Promise<FolderWriteResult> {
+  if (input.registry) {
+    return writeRegistryBinding({
+      targetPrefix: input.targetPrefix,
+      klass: input.klass,
+      slug: input.slug,
+      sidecar: input.sidecar,
+      definitionBytes: input.definitionBytes,
+      bucket: input.bucket,
+      s3: input.s3,
+      registry: input.registry,
+    });
+  }
   const signer =
     input.deps.signer !== undefined
       ? input.deps.signer
@@ -348,8 +474,7 @@ async function deleteKeys(
 }
 
 export type ResignSidecarResult =
-  | FolderWriteResult
-  | { ok: true; skipped: "no_sidecar" };
+  FolderWriteResult | { ok: true; skipped: "no_sidecar" };
 
 /**
  * Author-dependent re-sign (subagent-folders U6 — R8). Re-signs a
@@ -516,12 +641,48 @@ export async function putAgentChildGrantSidecar(input: {
   /** Connector grants: the narrowed operation allowlist. */
   operations?: string[];
   signedBy: CapabilitySignedBy;
+  /**
+   * Registry-trust (flag-ON) branch: record a scope-qualified binding for the
+   * sub-agent child grant (the caller supplies `agent:<id>/sub:<slug>` in the
+   * scopeRef) and write NO sidecar. Child grant folders carry no definition
+   * file, so the binding is over the narrowed-operations payload.
+   */
+  registry?: RegistryBindingContext;
   deps?: CapabilityFolderWriteDeps;
 }): Promise<FolderWriteResult> {
   const deps = input.deps ?? {};
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return { ok: false, reason: "bucket_unconfigured" };
   const s3 = deps.s3 ?? s3Client();
+  if (input.registry) {
+    // No definition file exists for a child grant; the binding is over the
+    // narrowed-operations payload (empty marker → stable sha for a bare grant).
+    const payload =
+      input.operations && input.operations.length > 0
+        ? JSON.stringify({ operations: input.operations })
+        : "";
+    const markerSha = createHash("sha256").update(payload).digest("hex");
+    try {
+      await recordBinding(input.registry.db, {
+        tenantId: input.registry.tenantId,
+        scopeRef: input.registry.scopeRef,
+        class: input.childClass,
+        slug: input.slug,
+        markerSha,
+        folderAttestationSha: computeFolderAttestation(
+          payload ? [{ path: "grant.json", content: payload }] : [],
+        ),
+        signedBy: input.registry.signedBy,
+      });
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: "write_failed",
+        detail: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
   const signer =
     deps.signer !== undefined
       ? deps.signer

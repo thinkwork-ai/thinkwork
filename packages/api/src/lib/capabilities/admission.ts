@@ -22,8 +22,14 @@
  * reason 'projection_pending' — the version row is authoritative.
  */
 
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { stringify as stringifyYaml } from "yaml";
+import {
+  computeFolderAttestation,
+  recordBinding,
+} from "./approval-registry.js";
+import { capabilityRegistryTrustEnabled } from "./registry-trust-flag.js";
 import {
   capabilityConnectionProposals,
   capabilityDefinitions,
@@ -381,18 +387,19 @@ async function runAdmission(
   // (g/h) Folder projection AFTER commit — failure never unwinds the
   // authoritative version row.
   if (input.folderWriter) {
+    const definition = connectionDefinitionFromDescriptor({
+      descriptor: txOutcome.descriptor,
+      finalVersion: txOutcome.finalVersion,
+      fingerprint: txOutcome.fingerprint,
+      contractHashes: txOutcome.contractHashes,
+      displayName: txOutcome.definition.display_name,
+    });
     try {
       const written = await input.folderWriter.write({
         tenantId: input.tenantId,
         klass: "connection",
         slug: txOutcome.descriptor.slug,
-        definition: connectionDefinitionFromDescriptor({
-          descriptor: txOutcome.descriptor,
-          finalVersion: txOutcome.finalVersion,
-          fingerprint: txOutcome.fingerprint,
-          contractHashes: txOutcome.contractHashes,
-          displayName: txOutcome.definition.display_name,
-        }),
+        definition,
         sidecar: {
           enabled: true,
           permissions: {
@@ -405,6 +412,28 @@ async function runAdmission(
       });
       if (!written.ok) {
         return { ...applied, reason: "projection_pending" };
+      }
+      // Registry-trust (flag-ON): the folderWriter seam wrote the marker (no
+      // sidecar); admission records the scope-qualified binding for the
+      // self-extending agent (auto-tier ⇒ approval `never`). Absent flag ⇒
+      // the seam's own signed-sidecar path is authoritative and unchanged.
+      if (
+        input.actor.mode === "autonomous" &&
+        (await capabilityRegistryTrustEnabled(db, input.tenantId))
+      ) {
+        const agentId = input.actor.agentId;
+        await recordBinding(db, {
+          tenantId: input.tenantId,
+          scopeRef: `agent:${agentId}`,
+          class: "connection",
+          slug: txOutcome.descriptor.slug,
+          markerSha: createHash("sha256").update(definition).digest("hex"),
+          folderAttestationSha: computeFolderAttestation([
+            { path: "CONNECTION.md", content: definition },
+          ]),
+          definitionId: txOutcome.definition.id,
+          signedBy,
+        });
       }
     } catch {
       return { ...applied, reason: "projection_pending" };

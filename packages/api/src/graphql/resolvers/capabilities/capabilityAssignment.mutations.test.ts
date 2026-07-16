@@ -165,6 +165,15 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   },
 }));
 
+// THINK-302 U8: the tenant registry-trust flag is OFF for every tenant today,
+// so these tests exercise the legacy sidecar path. Mocking the helper to false
+// keeps the shared select-row queue intact (the real read would consume a row).
+// ON-path (binding + marker, no sidecar) coverage lives in the writer-level
+// unit tests (folder-write / skills / mcp assignment-state).
+vi.mock("../../../lib/capabilities/registry-trust-flag.js", () => ({
+  capabilityRegistryTrustEnabled: async () => false,
+}));
+
 vi.mock("../core/authz.js", () => ({
   requireAdminOrServiceCaller: mockRequireAdminOrServiceCaller,
 }));
@@ -926,6 +935,8 @@ describe("mcp_server @ agent (workspace files are the assignment)", () => {
         tenantId: TENANT_ID,
         agentConfig: { toolAllowlist: ["issues_read"] },
       }),
+      // Flag OFF ⇒ empty deps (no registry context threaded).
+      {},
     );
     expect(mockPutCapabilityFolder).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -172,3 +172,86 @@ describe("assignment-state file store", () => {
     expect(await readSkillAssignmentState(PREFIX, "s")).toBeNull();
   });
 });
+
+// THINK-302 U8 — registry-trust (flag-ON): the per-grant config merges into
+// `skills/<slug>/SKILL.md` frontmatter + records a binding; NO `.assignment.json`.
+describe("registry-trust (flag ON) skill grant", () => {
+  const SKILL_MD = `---
+name: google-email
+description: Send and read email.
+---
+
+Do email things.
+`;
+
+  function fakeRegistryDb() {
+    const inserts: Array<Record<string, unknown>> = [];
+    const db = {
+      insert: () => ({
+        values: (values: Record<string, unknown>) => ({
+          returning: async () => {
+            inserts.push(values);
+            return [{ id: "b1", ...values }];
+          },
+        }),
+      }),
+    };
+    return {
+      db: db as unknown as import("../capabilities/research.js").Db,
+      inserts,
+    };
+  }
+
+  it("patches SKILL.md + records a binding and writes no sidecar", async () => {
+    store.set(`${PREFIX}skills/google-email/SKILL.md`, SKILL_MD);
+    const { db, inserts } = fakeRegistryDb();
+    const ok = await patchSkillAssignmentState({
+      agentId: "agent-1",
+      slug: "google-email",
+      targetPrefix: PREFIX,
+      patch: {
+        configMerge: { connectionId: "conn-1", tokenEnvVar: "GMAIL" },
+        permissions: { operations: ["send_email"] },
+      },
+      registry: {
+        db,
+        tenantId: "t1",
+        scopeRef: "agent:a1",
+        signedBy: "operator:u1",
+      },
+    });
+    expect(ok).toBe(true);
+    // No .assignment.json sidecar.
+    expect(store.has(assignmentStateKey(PREFIX, "google-email"))).toBe(false);
+    // SKILL.md now carries the merged per-grant config.
+    const marker = store.get(`${PREFIX}skills/google-email/SKILL.md`)!;
+    expect(marker).toContain("operations:");
+    expect(marker).toContain("send_email");
+    expect(marker).toContain("connectionId");
+    // Binding recorded at the skill class.
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({
+      tenant_id: "t1",
+      scope_ref: "agent:a1",
+      class: "skill",
+      slug: "google-email",
+    });
+  });
+
+  it("returns false when the SKILL.md marker is absent", async () => {
+    const { db } = fakeRegistryDb();
+    const ok = await patchSkillAssignmentState({
+      agentId: "agent-1",
+      slug: "ghost",
+      targetPrefix: PREFIX,
+      patch: { enabled: true },
+      registry: {
+        db,
+        tenantId: "t1",
+        scopeRef: "agent:a1",
+        signedBy: "operator:u1",
+      },
+    });
+    expect(ok).toBe(false);
+  });
+});
