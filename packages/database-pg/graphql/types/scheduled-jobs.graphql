@@ -23,6 +23,10 @@ type ScheduledJob {
   nextRunAt: AWSDateTime
   createdByType: String
   createdById: String
+  # THINK-302 U7 (R28): the user this scheduled/wakeup turn runs AS — it
+  # composes that user's (and the run-in-space's) capability scopes. Null =
+  # root-only. NEVER inherits the creator's grants from createdById.
+  runAsUserId: ID
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -42,6 +46,10 @@ input CreateScheduledJobInput {
   timezone: String
   createdByType: String
   createdById: String
+  # THINK-302 U7 (R28/KTD-14): run-as target. Self-assignment is allowed for
+  # any member; assigning another user requires a tenant operator (enforced in
+  # the resolver via authorizeRunAsAssignment).
+  runAsUserId: ID
 }
 
 extend type Query {
@@ -89,6 +97,9 @@ input UpdateScheduledJobInput {
   scheduleExpression: String
   timezone: String
   enabled: Boolean
+  # THINK-302 U7 (R28): set/change/clear run-as. `null` clears (job degrades to
+  # root-only); a non-null value is re-authorized via authorizeRunAsAssignment.
+  runAsUserId: ID
 }
 
 """

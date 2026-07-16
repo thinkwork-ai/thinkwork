@@ -28,6 +28,10 @@ import {
   invokeJobScheduleManager,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
+import { authorizeRunAsAssignment } from "../../../lib/scheduled-jobs/run-as-authz.js";
+import { resolveRunAsAuthzInputs } from "../../../lib/scheduled-jobs/run-as-facts.js";
+import { createRunAsReaders } from "../../../lib/scheduled-jobs/run-as-readers.js";
 
 interface UpdateInput {
   name?: string;
@@ -39,6 +43,7 @@ interface UpdateInput {
   scheduleExpression?: string;
   timezone?: string;
   enabled?: boolean;
+  runAsUserId?: string | null;
 }
 
 export const updateScheduledJob = async (
@@ -50,6 +55,7 @@ export const updateScheduledJob = async (
     .select({
       id: scheduledJobs.id,
       tenant_id: scheduledJobs.tenant_id,
+      space_id: scheduledJobs.space_id,
     })
     .from(scheduledJobs)
     .where(eq(scheduledJobs.id, args.id));
@@ -60,12 +66,43 @@ export const updateScheduledJob = async (
 
   await requireAdminOrServiceCaller(ctx, row.tenant_id, "update_scheduled_job");
 
+  // THINK-302 U7 (R28/KTD-14): authorize run-as before mutating. A non-null
+  // run-as is re-authorized against the actor's operator-ness and the target's
+  // membership (using the job's NEW run-in-space when the same update changes
+  // it); clearing (null) is always allowed. Bare service callers hold the
+  // shared secret (already gated by requireAdminOrServiceCaller) and are
+  // trusted infrastructure, so they set identity directly.
+  const i = args.input;
+  const effectiveSpaceId =
+    i.spaceId !== undefined ? (i.spaceId ?? null) : row.space_id;
+  if (i.runAsUserId !== undefined && i.runAsUserId !== null) {
+    const caller = await resolveCallerFromAuth(ctx.auth);
+    if (caller.userId) {
+      const { actor, target } = await resolveRunAsAuthzInputs(
+        createRunAsReaders(),
+        {
+          tenantId: row.tenant_id,
+          actorUserId: caller.userId,
+          runAsUserId: i.runAsUserId,
+          spaceId: effectiveSpaceId,
+        },
+      );
+      const decision = authorizeRunAsAssignment({
+        runAsUserId: i.runAsUserId,
+        actor,
+        target,
+      });
+      if (!decision.ok) {
+        throw new Error(`Cannot set run-as: ${decision.reason}`);
+      }
+    }
+  }
+
   // Pass through to the manager Lambda. config is AWSJSON-typed in
   // GraphQL → arrives as a JSON string; the Lambda expects an object,
   // so parse here before forwarding. createScheduledJob has the same
   // shape; keep the conversion close to the resolver so the Lambda
   // contract stays uniform.
-  const i = args.input;
   const body: Record<string, unknown> = { triggerId: row.id };
   if (i.name !== undefined) body.name = i.name;
   if (i.description !== undefined) body.description = i.description;
@@ -103,6 +140,16 @@ export const updateScheduledJob = async (
     throw new Error(
       `Scheduled job update failed: ${result.error}. Retry — the DB row + EventBridge schedule may be out of sync until success.`,
     );
+  }
+
+  // run_as_user_id is orthogonal to the EventBridge schedule, so it is written
+  // directly (not via the manager Lambda) once the schedule side effect has
+  // succeeded. Only touched when the field is present in the input.
+  if (i.runAsUserId !== undefined) {
+    await db
+      .update(scheduledJobs)
+      .set({ run_as_user_id: i.runAsUserId ?? null })
+      .where(eq(scheduledJobs.id, row.id));
   }
 
   const [refreshed] = await db

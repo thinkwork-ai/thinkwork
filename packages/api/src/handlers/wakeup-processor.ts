@@ -41,6 +41,7 @@ import {
   costEvents,
   agentWorkspaceRuns,
   threadAttachments,
+  scheduledJobs,
 } from "@thinkwork/database-pg/schema";
 import {
   extractUsage,
@@ -49,6 +50,9 @@ import {
   notifyCostRecorded,
 } from "../lib/cost-recording.js";
 import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
+import { revalidateRunAsAtDispatch } from "../lib/scheduled-jobs/run-as-authz.js";
+import { resolveRunAsTargetMembership } from "../lib/scheduled-jobs/run-as-facts.js";
+import { createRunAsReaders } from "../lib/scheduled-jobs/run-as-readers.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { applyWorkspaceMcpPolicyFilter } from "../lib/plugins/gating.js";
 import {
@@ -825,6 +829,74 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     costOwnerUserId = currentUser ? invokerUserId : undefined;
   }
 
+  // THINK-302 U7 (R28/KTD-14): a scheduled job may declare a run-as user so the
+  // turn composes THAT user's capability scopes (and is cost-owned by them).
+  // Resolve it from the scheduled_jobs row keyed on this wakeup's trigger, then
+  // REVALIDATE membership at dispatch — a deactivated / removed run-as user
+  // drops the turn to root-only (never silently kept, never substituted). Runs
+  // before the budget check so cost is attributed to the effective identity.
+  // Byte-identical for jobs with no run_as_user_id (revalidate → no change).
+  {
+    let runAsTriggerId: string | null = null;
+    if (payload?.triggerId) {
+      runAsTriggerId = String(payload.triggerId);
+    } else if (wakeup.trigger_detail) {
+      const m = wakeup.trigger_detail.match(/trigger:([0-9a-f-]{36})/);
+      if (m) runAsTriggerId = m[1]!;
+    }
+    if (runAsTriggerId) {
+      const [job] = await db
+        .select({
+          run_as_user_id: scheduledJobs.run_as_user_id,
+          space_id: scheduledJobs.space_id,
+        })
+        .from(scheduledJobs)
+        .where(
+          and(
+            eq(scheduledJobs.id, runAsTriggerId),
+            eq(scheduledJobs.tenant_id, wakeup.tenant_id),
+          ),
+        );
+      if (job?.run_as_user_id) {
+        const target = await resolveRunAsTargetMembership(
+          createRunAsReaders(),
+          {
+            tenantId: wakeup.tenant_id,
+            runAsUserId: job.run_as_user_id,
+            spaceId: job.space_id ?? null,
+          },
+        );
+        const decision = revalidateRunAsAtDispatch({
+          runAsUserId: job.run_as_user_id,
+          target,
+        });
+        if (decision.runAsUserId) {
+          // Effective identity is the run-as user — seed cost owner + the
+          // CURRENT_USER_* fields from that user's row.
+          const effectiveRunAsUserId = decision.runAsUserId;
+          costOwnerUserId = effectiveRunAsUserId;
+          const [runAsUser] = await db
+            .select({ email: users.email, name: users.name })
+            .from(users)
+            .where(
+              and(
+                eq(users.id, effectiveRunAsUserId),
+                eq(users.tenant_id, wakeup.tenant_id),
+              ),
+            );
+          currentUserEmail = runAsUser?.email || "";
+          currentUserName = runAsUser?.name || "";
+        } else {
+          const reason =
+            "reason" in decision ? decision.reason : "run-as downgraded";
+          console.warn(
+            `[wakeup-processor] run-as downgraded to root-only for job ${runAsTriggerId}: ${reason ?? "run-as downgraded"}`,
+          );
+        }
+      }
+    }
+  }
+
   if (costOwnerUserId) {
     const budgetStatus = await checkUserBudgetAndPauseWork({
       tenantId: wakeup.tenant_id,
@@ -850,8 +922,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Resolve Bedrock guardrail: class-level → tenant default → none
   let guardrailPayload:
-    | { guardrailIdentifier: string; guardrailVersion: string }
-    | undefined;
+    { guardrailIdentifier: string; guardrailVersion: string } | undefined;
   if (agent.guardrail_id) {
     const [gr] = await db
       .select({
@@ -2567,8 +2638,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     ) {
       // Route response to email thread (create or reuse based on reply token context)
       const replyTokenContextId = payload?.replyTokenContextId as
-        | string
-        | undefined;
+        string | undefined;
       const emailSubject = (payload?.subject as string) || "(no subject)";
       let emailThreadId = replyTokenContextId || "";
 
