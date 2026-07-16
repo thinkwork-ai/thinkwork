@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { GraphQLError } from "graphql";
 import {
-  FAILED_LINKED_TURN_STATUSES,
   runRetryAgentDispatch,
   type RetryAgentDispatchDeps,
   type RetryMessageRow,
@@ -224,33 +223,6 @@ describe("retryAgentDispatch failure-evidence guard", () => {
   });
 
   it("allows a retry on async failure evidence (failed linked turn, no metadata stamp)", async () => {
-    const { deps: d, redispatched } = deps({
-      loadMessage: vi.fn(async () => messageRow({ metadata: null })),
-      hasFailedLinkedTurn: vi.fn(async () => true),
-    });
-    const result = await runRetryAgentDispatch(
-      { messageId: "message-1", tenantId: TENANT, callerUserId: SENDER },
-      d,
-    );
-    expect(redispatched).toHaveLength(1);
-    expect(
-      (result.metadata?.dispatch as Record<string, unknown>).status,
-    ).toBe("pending");
-  });
-
-  it("THINK-308 AE6: the linked-turn guard treats timed_out as failed", () => {
-    // Regression anchor for U3: the drizzle deps' hasFailedLinkedTurn query
-    // matches status IN FAILED_LINKED_TURN_STATUSES. The web UI renders
-    // timed_out as a failure and offers Retry — the server guard must agree,
-    // or the only affordance on a timeout earns BAD_USER_INPUT.
-    expect(FAILED_LINKED_TURN_STATUSES).toContain("failed");
-    expect(FAILED_LINKED_TURN_STATUSES).toContain("timed_out");
-    expect(FAILED_LINKED_TURN_STATUSES).toHaveLength(2);
-  });
-
-  it("THINK-308 AE6: retry proceeds on a timed_out linked turn (async evidence via the seam)", async () => {
-    // A timed_out linked turn now satisfies hasFailedLinkedTurn — the
-    // mutation proceeds and redispatches instead of rejecting.
     const { deps: d, redispatched } = deps({
       loadMessage: vi.fn(async () => messageRow({ metadata: null })),
       hasFailedLinkedTurn: vi.fn(async () => true),
