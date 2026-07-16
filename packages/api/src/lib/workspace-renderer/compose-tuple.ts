@@ -78,6 +78,7 @@ import {
   capabilityFolderName,
   connectionAssignmentRe,
   connectionMarkerRe,
+  mcpMarkerRe,
   skillAssignmentRe,
   skillMarkerRe,
   toolAssignmentRe,
@@ -284,6 +285,8 @@ const CONNECTION_ASSIGNMENT_RE = connectionAssignmentRe("root", {
   dualRead: true,
 });
 const TOOL_MARKER_RE = toolMarkerRe();
+/** `mcp/<slug>/MCP.md` first-class marker (THINK-302 U4). */
+const MCP_MARKER_RE = mcpMarkerRe();
 const TOOL_ASSIGNMENT_RE = toolAssignmentRe();
 /** Agent folder marker (subagent-folders U4) — same presence rule. */
 const AGENT_MARKER_RE = agentMarkerRe();
@@ -922,7 +925,7 @@ export async function renderWorkspaceTuple(
   // Capability folders (THINK-173 U2): presence = declared; the compile
   // step below decides active vs withheld from the signed sidecar.
   interface CapabilityFolderScan {
-    class: "connection" | "tool" | "agent";
+    class: "connection" | "tool" | "agent" | "mcp";
     /**
      * Actual folder name the definition marker matched under — during
      * the U15 dual-read window a connection scan may resolve from either
@@ -952,7 +955,7 @@ export async function renderWorkspaceTuple(
   }
   const capabilityFolderScans = new Map<string, CapabilityFolderScan>();
   const capabilityScan = (
-    klass: "connection" | "tool" | "agent",
+    klass: "connection" | "tool" | "agent" | "mcp",
     slug: string,
   ): CapabilityFolderScan => {
     const mapKey = `${klass}:${slug}`;
@@ -988,6 +991,16 @@ export async function renderWorkspaceTuple(
     const toolMarker = sourcePath.match(TOOL_MARKER_RE);
     if (toolMarker) {
       const scan = capabilityScan("tool", toolMarker[1]!);
+      scan.definitionKey = object.key;
+      scan.definitionEtag = object.etag ?? null;
+    }
+    // THINK-302 U4: mcp/<slug>/MCP.md is a first-class capability marker.
+    // Registry-only (no sidecar) — admission comes from a binding, so no
+    // MCP_ASSIGNMENT scan; the legacy mcp/<slug>/.assignment.json mirror
+    // stays a plain folder file (dual-read at dispatch until U9).
+    const mcpMarker = sourcePath.match(MCP_MARKER_RE);
+    if (mcpMarker) {
+      const scan = capabilityScan("mcp", mcpMarker[1]!);
       scan.definitionKey = object.key;
       scan.definitionEtag = object.etag ?? null;
     }
@@ -1039,6 +1052,16 @@ export async function renderWorkspaceTuple(
           });
         }
       }
+    }
+  }
+  // THINK-302 U4: an `mcp/<slug>/` folder is a grant ONLY when it carries
+  // an MCP.md marker. A folder with only the legacy `.assignment.json`
+  // mirror (or stray files) is not a grant — drop it so it never reaches
+  // compile as an invalid_definition withhold. (The legacy mirror is
+  // dual-read at dispatch via buildMcpConfigs until U9.)
+  for (const [key, scan] of capabilityFolderScans) {
+    if (scan.class === "mcp" && !scan.definitionKey) {
+      capabilityFolderScans.delete(key);
     }
   }
   // Skill trust gate (Composer U4/U5 honesty fix): routing rows may only
@@ -1300,17 +1323,21 @@ export async function renderWorkspaceTuple(
         const folderName =
           scan.class === "connection"
             ? (scan.folderName ?? capabilityFolderName("connection"))
-            : `${scan.class}s`;
+            : scan.class === "mcp"
+              ? "mcp" // `mcp/`, not `mcps/`
+              : `${scan.class}s`;
+        const markerFile =
+          scan.class === "connection"
+            ? "CONNECTION.md"
+            : scan.class === "agent"
+              ? "INSTRUCTIONS.md"
+              : scan.class === "mcp"
+                ? "MCP.md"
+                : "TOOL.md";
         return {
           class: scan.class,
           slug,
-          definitionPath: `${folderName}/${slug}/${
-            scan.class === "connection"
-              ? "CONNECTION.md"
-              : scan.class === "agent"
-                ? "INSTRUCTIONS.md"
-                : "TOOL.md"
-          }`,
+          definitionPath: `${folderName}/${slug}/${markerFile}`,
           definitionRaw,
           definitionEtag: scan.definitionEtag ?? null,
           sidecarRaw,
