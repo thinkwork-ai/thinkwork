@@ -394,6 +394,9 @@ interface ThreadTurnRow {
   total_cost?: number | null;
   context_snapshot?: unknown;
   created_at?: string | null;
+  // THINK-301 U6: retry linkage + server-derived recovery visibility.
+  origin_turn_id?: string | null;
+  recovery_pending?: boolean | null;
 }
 
 interface ThreadTurnGraphqlRow {
@@ -413,6 +416,9 @@ interface ThreadTurnGraphqlRow {
   totalCost?: number | null;
   contextSnapshot?: unknown;
   createdAt?: string | null;
+  // THINK-301 U6: retry linkage + server-derived recovery visibility.
+  originTurnId?: string | null;
+  recoveryPending?: boolean | null;
 }
 
 interface ThreadTurnsResult {
@@ -1070,9 +1076,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-    (optimisticThreadStart.expectAssistantResponse === false ||
-      threadTurns.length > 0 ||
-      hasDurableAssistantAfterLatestUser(thread)),
+      (optimisticThreadStart.expectAssistantResponse === false ||
+        threadTurns.length > 0 ||
+        hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -1270,9 +1276,9 @@ export function SpacesThreadDetailRoute({
     isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
   const shouldPollActiveAgentResult = Boolean(
     latestMessageAwaitsAssistant &&
-    (hasActiveAgentTurn ||
-      (effectiveOptimisticMessage &&
-        effectiveOptimisticMessage.expectAssistantResponse !== false)),
+      (hasActiveAgentTurn ||
+        (effectiveOptimisticMessage &&
+          effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
 
   useEffect(() => {
@@ -1510,11 +1516,11 @@ export function SpacesThreadDetailRoute({
   // rejects non-participants server-side; the UI matches it, review-pinned).
   const canEditThreadMode = Boolean(
     userId &&
-    routeThread?.participants?.some(
-      (participant) =>
-        (participant.participantType ?? "").toUpperCase() === "USER" &&
-        participant.userId === userId,
-    ),
+      routeThread?.participants?.some(
+        (participant) =>
+          (participant.participantType ?? "").toUpperCase() === "USER" &&
+          participant.userId === userId,
+      ),
   );
   const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
     () => ({
@@ -2809,7 +2815,12 @@ function toTaskThreadTurns(
   });
 }
 
-function toThreadTurnRows(rows: ThreadTurnGraphqlRow[]): ThreadTurnRow[] {
+// Exported for tests (THINK-301 U6): recoveryPending/originTurnId must
+// survive BOTH mapping hops — the fields are optional, so a missed hop
+// passes typecheck and only surfaces in the browser.
+export function toThreadTurnRows(
+  rows: ThreadTurnGraphqlRow[],
+): ThreadTurnRow[] {
   return rows.map((row) => ({
     id: row.id,
     thread_id: row.threadId ?? null,
@@ -2827,10 +2838,12 @@ function toThreadTurnRows(rows: ThreadTurnGraphqlRow[]): ThreadTurnRow[] {
     total_cost: row.totalCost ?? null,
     context_snapshot: row.contextSnapshot,
     created_at: row.createdAt ?? null,
+    origin_turn_id: row.originTurnId ?? null,
+    recovery_pending: row.recoveryPending ?? null,
   }));
 }
 
-function toTaskThreadTurnsFromRows(
+export function toTaskThreadTurnsFromRows(
   rows: ThreadTurnRow[],
   // Live mid-turn steps keyed by run_id (plan 2026-06-03-001 U6). Injected as
   // turn.events[] so groups stream in while running; on completion the existing
@@ -2859,6 +2872,11 @@ function toTaskThreadTurnsFromRows(
       error: row.error ?? null,
       errorCode: row.error_code ?? null,
       systemPrompt: row.system_prompt ?? null,
+      // THINK-301 U6: both fields must survive BOTH mapping hops — they are
+      // optional, so a missed hop passes typecheck and only surfaces in the
+      // browser as "recovering never renders" / "collapse never fires".
+      originTurnId: row.origin_turn_id ?? null,
+      recoveryPending: row.recovery_pending ?? null,
       // Carries workspace_projection for the per-turn Projected workspace
       // panel (plan 2026-06-12-002 U9).
       contextSnapshot: row.context_snapshot,
@@ -3043,9 +3061,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 

@@ -1985,6 +1985,7 @@ export const SettingsActivityThreadTurnsQuery = gql`
       contextSnapshot
       retryAttempt
       originTurnId
+      recoveryPending
       systemPrompt
       createdAt
     }

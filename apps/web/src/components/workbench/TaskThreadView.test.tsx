@@ -5779,3 +5779,152 @@ describe("TaskThreadView dispatch indicator", () => {
     expect(screen.queryByTestId("retry-dispatch-message-1")).toBeNull();
   });
 });
+
+// THINK-301 U6 (parent R9/R10/R5, AE1/AE2/AE4): silent-first recovery
+// surface — recovering renders benign, exhausted renders verbatim plain
+// copy + Retry, superseded origins collapse behind their successor.
+describe("TaskThreadView recovery surface (THINK-301 U6)", () => {
+  const RAW_STALL_ERROR = "Stall detected: no activity for 5 minutes";
+  const PLAIN_COPY = "This response took too long to complete.";
+
+  function recoveryThread(
+    turns: Array<Record<string, unknown>>,
+    senderId = "user-current",
+  ) {
+    return {
+      id: "thread-1",
+      title: "Recovery",
+      lifecycleStatus: "COMPLETED",
+      messages: [
+        {
+          id: "message-1",
+          role: "USER",
+          content: "@Agent please summarize",
+          createdAt: "2026-07-03T15:00:00Z",
+          sender: { type: "USER", id: senderId, displayName: "Sender" },
+        },
+      ],
+      turns,
+    } as never;
+  }
+
+  it("renders a timed_out turn with recovery pending as the benign working affordance (AE1/F1)", () => {
+    const { container } = render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={recoveryThread([
+          {
+            id: "turn-1",
+            status: "timed_out",
+            error: RAW_STALL_ERROR,
+            recoveryPending: true,
+            triggeringMessageId: "message-1",
+            startedAt: "2026-07-03T15:00:01Z",
+          },
+        ])}
+        onRetryDispatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Working…")).toBeTruthy();
+    expect(container.innerHTML).not.toContain("Stall detected");
+    expect(container.innerHTML).not.toContain("Timed out");
+    expect(screen.queryByText(/Agent dispatch failed/i)).toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(screen.queryByTestId("retry-dispatch-message-1")).toBeNull();
+  });
+
+  it("renders exhausted recovery as verbatim plain copy with Retry for the sender (AE2/F2)", async () => {
+    const onRetryDispatch = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={recoveryThread([
+          {
+            id: "turn-1",
+            status: "timed_out",
+            error: RAW_STALL_ERROR,
+            recoveryPending: false,
+            triggeringMessageId: "message-1",
+            startedAt: "2026-07-03T15:00:01Z",
+            finishedAt: "2026-07-03T15:06:01Z",
+          },
+        ])}
+        onRetryDispatch={onRetryDispatch}
+      />,
+    );
+
+    // Exact-string assertion: the copy renders verbatim, with no
+    // "Agent dispatch failed:" prefix and no raw internals anywhere.
+    expect(screen.getByText(PLAIN_COPY)).toBeTruthy();
+    expect(screen.queryByText(/Agent dispatch failed/i)).toBeNull();
+    expect(container.innerHTML).not.toContain("Stall detected");
+
+    const retry = screen.getByTestId("retry-dispatch-message-1");
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect(onRetryDispatch).toHaveBeenCalledWith("message-1"),
+    );
+  });
+
+  it("withholds the Retry control from a non-sender on exhausted recovery (AE2)", () => {
+    render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={recoveryThread(
+          [
+            {
+              id: "turn-1",
+              status: "timed_out",
+              error: RAW_STALL_ERROR,
+              recoveryPending: false,
+              triggeringMessageId: "message-1",
+              startedAt: "2026-07-03T15:00:01Z",
+            },
+          ],
+          "user-other",
+        )}
+        onRetryDispatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(PLAIN_COPY)).toBeTruthy();
+    expect(screen.queryByTestId("retry-dispatch-message-1")).toBeNull();
+  });
+
+  it("collapses a superseded origin behind its successor attempt (AE4/F3)", () => {
+    const { container } = render(
+      <TaskThreadView
+        currentUser={{ id: "user-current" }}
+        thread={recoveryThread([
+          {
+            id: "turn-origin",
+            status: "timed_out",
+            error: RAW_STALL_ERROR,
+            recoveryPending: false,
+            triggeringMessageId: "message-1",
+            startedAt: "2026-07-03T15:00:01Z",
+          },
+          {
+            id: "turn-successor",
+            status: "succeeded",
+            originTurnId: "turn-origin",
+            triggeringMessageId: "message-1",
+            startedAt: "2026-07-03T15:06:30Z",
+            finishedAt: "2026-07-03T15:07:00Z",
+            resultJson: { response: "Here is the summary." },
+          },
+        ])}
+        onRetryDispatch={vi.fn()}
+      />,
+    );
+
+    // Exactly one turn surface — the successor's — and no recovery trace.
+    expect(screen.getAllByLabelText("Turn activity")).toHaveLength(1);
+    expect(screen.getByText(/Worked for/)).toBeTruthy();
+    expect(container.innerHTML).not.toContain("Stall detected");
+    expect(container.innerHTML).not.toContain("Timed out");
+    expect(screen.queryByText(PLAIN_COPY)).toBeNull();
+    expect(screen.queryByTestId("retry-dispatch-message-1")).toBeNull();
+  });
+});

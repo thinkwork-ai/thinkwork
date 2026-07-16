@@ -114,8 +114,10 @@ import { Response } from "@/components/ai-elements/response";
 import {
   formatDuration,
   formatTurnHeader,
+  isRecoveringTurn,
   isRunningStatus,
 } from "@/components/workbench/turnHeader";
+import { collapseSupersededTurns } from "@/components/workbench/turn-collapse";
 import { useTurnElapsed } from "@/components/workbench/useTurnElapsed";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
 import type { JsonRenderActionSuccessHandler } from "@/components/workbench/json-render/use-json-render-action";
@@ -276,6 +278,18 @@ export interface TaskThreadTurn {
   error?: string | null;
   errorCode?: string | null;
   systemPrompt?: string | null;
+  /**
+   * THINK-301 U6 (parent R6): id of the origin turn this turn is a retry
+   * attempt for. An origin turn whose id appears as another turn's
+   * originTurnId collapses out of the thread (collapseSupersededTurns).
+   */
+  originTurnId?: string | null;
+  /**
+   * THINK-301 U6 (parent KTD3): server-derived recovery visibility — true
+   * while an open retry row exists for this turn. timed_out + recoveryPending
+   * renders the benign working affordance instead of a failure.
+   */
+  recoveryPending?: boolean | null;
   /** Raw ThreadTurn.contextSnapshot (AWSJSON) — carries workspace_projection. */
   contextSnapshot?: unknown;
   events?: TaskThreadEvent[];
@@ -637,14 +651,23 @@ export function TaskThreadView({
     };
   }, []);
 
+  // Superseded-origin collapse (THINK-301 U6, parent R5/R6): a turn that was
+  // retried after a stall hides behind its successor attempt everywhere this
+  // view consumes turns — pairing, response fallback, projections, cards —
+  // so each prompt shows exactly one final answer with no recovery trace.
+  // Operator/settings surfaces read the unfiltered list elsewhere.
+  const rawTurns = thread?.turns;
+  const turns = useMemo(
+    () => collapseSupersededTurns(rawTurns ?? []),
+    [rawTurns],
+  );
   // Most recent workspace projection across the thread — older turns'
   // AGENTS.md viewers label their (current-state) content as possibly
   // differing from that turn's render (plan 2026-06-12-002 U9). Memoized:
   // selecting re-parses every turn's contextSnapshot, which would otherwise
   // run on every streaming chunk render.
-  const turns = thread?.turns;
   const latestProjection = useMemo(
-    () => selectLatestProjection(turns ?? []),
+    () => selectLatestProjection(turns),
     [turns],
   );
 
@@ -695,7 +718,7 @@ export function TaskThreadView({
     return <TaskThreadState label={error ?? "Thread not found"} tone="error" />;
   }
 
-  const visibleMessages = withTurnResponseFallback(thread);
+  const visibleMessages = withTurnResponseFallback(thread, turns);
   const transcriptMessages = visibleMessages.filter(
     (message) => !isTaskQueueAssistantMessage(message),
   );
@@ -712,10 +735,7 @@ export function TaskThreadView({
     transcriptMessages,
     (message) => message.role.toUpperCase() === "USER",
   );
-  const turnByUserMessageId = mapTurnsToUserMessages(
-    transcriptMessages,
-    thread.turns ?? [],
-  );
+  const turnByUserMessageId = mapTurnsToUserMessages(transcriptMessages, turns);
   // Document cards (THINK-147) render inside the agent's reply message, next
   // to the byline — not as a floating block under the turn header. While the
   // reply hasn't landed yet (turn still streaming), the card anchors to the
@@ -735,7 +755,7 @@ export function TaskThreadView({
   // artifactId, from EVERY turn's cards (not just message-anchored ones) —
   // the docked panel re-resolves by it when the artifactId dangles.
   const documentIdByArtifactId = new Map<string, string>();
-  (thread.turns ?? []).forEach((turn) => {
+  turns.forEach((turn) => {
     for (const card of documentCardsForTurn(turn)) {
       if (card.documentId) {
         documentIdByArtifactId.set(card.artifactId, card.documentId);
@@ -2147,7 +2167,10 @@ function DispatchIndicator({
   onRetryDispatch?: (messageId: string) => Promise<void> | void;
 }) {
   const [retrying, setRetrying] = useState(false);
-  const { state, failureReason } = deriveDispatchIndicatorState(message, turn);
+  const { state, failureReason, failureKind } = deriveDispatchIndicatorState(
+    message,
+    turn,
+  );
 
   if (state === "pending") {
     // A turn surface (if any) already owns the running shimmer; only fill the
@@ -2183,9 +2206,14 @@ function DispatchIndicator({
       className="flex flex-wrap items-center gap-2 text-sm text-destructive"
     >
       <span>
-        {failureReason
-          ? `Agent dispatch failed: ${failureReason}`
-          : "Agent dispatch failed."}
+        {/* THINK-301 U6 (parent KTD4): timed_out copy is status-keyed plain
+            language and renders verbatim — no "Agent dispatch failed:"
+            framing, no raw turn.error internals. */}
+        {failureKind === "timed_out" && failureReason
+          ? failureReason
+          : failureReason
+            ? `Agent dispatch failed: ${failureReason}`
+            : "Agent dispatch failed."}
       </span>
       {isSender && onRetryDispatch ? (
         <Button
@@ -2227,7 +2255,12 @@ function ThreadTurnActivity({
   ) => Promise<void> | void;
 }) {
   const status = normalizeStatus(turn?.status);
-  const running = isRunningStatus(status);
+  // THINK-301 U6 (parent R9/AE3): a timed_out turn with recovery in flight
+  // renders exactly like a running one — "Working…" header, live elapsed
+  // timer continuing from the origin's startedAt (a frozen timer reads as a
+  // hung UI), no red. Exhausted recovery falls through to the terminal path.
+  const recovering = isRecoveringTurn(status, turn?.recoveryPending);
+  const running = isRunningStatus(status) || recovering;
   // One hook per turn surface (KTD3): live-elapsed only ticks while running,
   // freezes on terminal status, and is null for not-yet-started turns.
   const elapsedMs = useTurnElapsed(displayStartedAtForTurn(turn), running);
@@ -2529,8 +2562,12 @@ function withUserVisibleTurnTiming(
   };
 }
 
-function withTurnResponseFallback(thread: TaskThread): TaskThreadMessage[] {
-  const turns = thread.turns ?? [];
+function withTurnResponseFallback(
+  thread: TaskThread,
+  // Already collapse-filtered by the caller (THINK-301 U6) so a superseded
+  // origin turn never resurrects a synthetic response.
+  turns: TaskThreadTurn[],
+): TaskThreadMessage[] {
   if (turns.length === 0) return thread.messages;
 
   // The fallback exists for the brief window between a turn finishing and its
@@ -5159,11 +5196,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-    stringValue(payload.profileSlug) ||
-    stringValue(payload.profile_name) ||
-    stringValue(payload.profileName) ||
-    stringValue(payload.profile_run_id) ||
-    stringValue(payload.profileRunId),
+      stringValue(payload.profileSlug) ||
+      stringValue(payload.profile_name) ||
+      stringValue(payload.profileName) ||
+      stringValue(payload.profile_run_id) ||
+      stringValue(payload.profileRunId),
   );
 }
 

@@ -32,6 +32,8 @@ import {
   SpacesThreadDetailRoute,
   deriveThreadArtifacts,
   jsonRenderPartIdFromChunk,
+  toTaskThreadTurnsFromRows,
+  toThreadTurnRows,
 } from "./SpacesThreadDetailRoute";
 import {
   getOpenThreadArtifactId,
@@ -2038,3 +2040,60 @@ function renderHeaderTitleTrailing() {
 function queryState(data: unknown) {
   return { data, fetching: false, stale: false, hasNext: false };
 }
+
+// THINK-301 U6: recoveryPending/originTurnId must survive BOTH mapping hops
+// (GraphQL row → ThreadTurnRow → TaskThreadTurn). The fields are optional, so
+// a missed hop passes typecheck and only surfaces in the browser as
+// "recovering never renders" / "collapse never fires".
+describe("thread turn mapping hops carry recovery fields (THINK-301 U6)", () => {
+  it("carries recoveryPending and originTurnId end to end", () => {
+    const rows = toThreadTurnRows([
+      {
+        id: "turn-successor",
+        status: "succeeded",
+        originTurnId: "turn-origin",
+        recoveryPending: false,
+        createdAt: "2026-07-16T00:00:00Z",
+      },
+      {
+        id: "turn-origin",
+        status: "timed_out",
+        recoveryPending: true,
+        createdAt: "2026-07-16T00:00:00Z",
+      },
+    ]);
+    expect(rows[0]).toMatchObject({
+      origin_turn_id: "turn-origin",
+      recovery_pending: false,
+    });
+    expect(rows[1]).toMatchObject({
+      origin_turn_id: null,
+      recovery_pending: true,
+    });
+
+    const turns = toTaskThreadTurnsFromRows(rows);
+    expect(turns[0]).toMatchObject({
+      id: "turn-successor",
+      originTurnId: "turn-origin",
+      recoveryPending: false,
+    });
+    expect(turns[1]).toMatchObject({
+      id: "turn-origin",
+      originTurnId: null,
+      recoveryPending: true,
+    });
+  });
+
+  it("is null-safe for legacy rows that predate the fields", () => {
+    const turns = toTaskThreadTurnsFromRows(
+      toThreadTurnRows([
+        { id: "turn-legacy", status: "succeeded", createdAt: null },
+      ]),
+    );
+    expect(turns[0]).toMatchObject({
+      id: "turn-legacy",
+      originTurnId: null,
+      recoveryPending: null,
+    });
+  });
+});
