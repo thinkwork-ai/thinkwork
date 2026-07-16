@@ -168,6 +168,7 @@ import {
   type CapabilitiesManifestFile,
   type CapabilityManifestEntry,
 } from "./runtime/capabilities-json.js";
+import { formatWithheldCapabilitiesNotice } from "./runtime/withheld-capabilities-notice.js";
 import {
   createPiGoalExtensionFactory,
   extractGoalRunEvidence,
@@ -3541,6 +3542,17 @@ export async function handleInvocation(
   const attachmentPreamble = formatMessageAttachmentsPreamble(
     stagedAttachments.staged,
   );
+  // THINK-302 U13 (R30): surface withheld capabilities (drift, pending
+  // approval, gated, …) so the model reports "pending re-approval" instead
+  // of confabulating about a missing tool. Bounded + best-effort.
+  const withheldNotice = formatWithheldCapabilitiesNotice(
+    (capabilitiesManifest?.withheld ?? null) as ReadonlyArray<
+      Record<string, unknown>
+    > | null,
+  );
+  const systemPromptSuffix =
+    [attachmentPreamble, withheldNotice].filter(Boolean).join("\n\n") ||
+    undefined;
   const fileReadTool = buildFileReadTool(stagedAttachments.staged);
   if (fileReadTool) {
     bundle.tools.push(fileReadTool);
@@ -3796,7 +3808,7 @@ export async function handleInvocation(
           workspaceSkills,
           pinnedEmphasizedSlugs,
         ),
-        suffix: attachmentPreamble || undefined,
+        suffix: systemPromptSuffix,
         onComposed: (prompt) => {
           composedSystemPrompt = prompt;
         },
