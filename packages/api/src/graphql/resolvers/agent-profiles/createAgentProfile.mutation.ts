@@ -3,6 +3,7 @@ import { agentProfiles, db } from "../../utils.js";
 import {
   serializeAgentProfileFile,
   writeAgentProfileFileForTenant,
+  writeAgentProfileFolderForTenant,
 } from "../../../lib/agent-profile-workspace-files.js";
 import { normalizeExecutionControlsForStorage } from "../../../lib/agent-profile-loop-policy.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
@@ -118,6 +119,22 @@ export async function createAgentProfile(
       executionControls,
       spaceIds,
     }),
+  });
+  // Subagent-folders U12 (R22): every write also emits the folder form.
+  await writeAgentProfileFolderForTenant({
+    tenantId: args.tenantId,
+    slug,
+    source: {
+      slug,
+      name: input.name,
+      description: input.description,
+      routingGuidance: input.routingGuidance,
+      instructions: input.instructions,
+      modelId: input.modelId,
+      enabled: input.enabled ?? true,
+      toolPolicy,
+      executionControls,
+    },
   });
 
   return toAgentProfileGraphql(row);

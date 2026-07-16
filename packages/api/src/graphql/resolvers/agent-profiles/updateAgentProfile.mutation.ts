@@ -8,8 +8,10 @@ import {
 } from "../../utils.js";
 import {
   deleteAgentProfileFileForTenant,
+  deleteAgentProfileFolderInstructionsForTenant,
   serializeAgentProfileFile,
   writeAgentProfileFileForTenant,
+  writeAgentProfileFolderForTenant,
 } from "../../../lib/agent-profile-workspace-files.js";
 import { normalizeExecutionControlsForStorage } from "../../../lib/agent-profile-loop-policy.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
@@ -148,6 +150,10 @@ export async function updateAgentProfile(
       tenantId: args.tenantId,
       slug: String(existing.slug),
     });
+    await deleteAgentProfileFolderInstructionsForTenant({
+      tenantId: args.tenantId,
+      slug: String(existing.slug),
+    });
   }
   await writeAgentProfileFileForTenant({
     tenantId: args.tenantId,
@@ -166,6 +172,25 @@ export async function updateAgentProfile(
       executionControls: row.execution_controls ?? {},
       spaceIds: effectiveSpaceIds,
     }),
+  });
+  // Subagent-folders U12 (R22): every write also emits the folder form.
+  // The legacy file above keeps being written during the migration
+  // window; delete-on-write lands as a later cleanup once all four path
+  // gates are deployed dual-read.
+  await writeAgentProfileFolderForTenant({
+    tenantId: args.tenantId,
+    slug: finalSlug,
+    source: {
+      slug: finalSlug,
+      name: String(row.name),
+      description: nullableString(row.description),
+      routingGuidance: nullableString(row.routing_guidance),
+      instructions: String(row.instructions ?? ""),
+      modelId: String(row.model_id),
+      enabled: row.enabled !== false,
+      toolPolicy: row.tool_policy ?? {},
+      executionControls: row.execution_controls ?? {},
+    },
   });
 
   return toAgentProfileGraphql(row);

@@ -1,6 +1,9 @@
 import type { GraphQLContext } from "../../context.js";
 import { agentProfiles, and, db, eq } from "../../utils.js";
-import { deleteAgentProfileFileForTenant } from "../../../lib/agent-profile-workspace-files.js";
+import {
+  deleteAgentProfileFileForTenant,
+  deleteAgentProfileFolderInstructionsForTenant,
+} from "../../../lib/agent-profile-workspace-files.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   badInput,
@@ -42,6 +45,13 @@ export async function deleteAgentProfile(
       ),
     );
   await deleteAgentProfileFileForTenant({
+    tenantId: args.tenantId,
+    slug: String(existing.slug),
+  });
+  // Subagent-folders U12: remove the folder form too (INSTRUCTIONS.md
+  // only — grant folders wither at compile without their parent entry
+  // and are swept by the reconciler, never bulk-deleted here).
+  await deleteAgentProfileFolderInstructionsForTenant({
     tenantId: args.tenantId,
     slug: String(existing.slug),
   });

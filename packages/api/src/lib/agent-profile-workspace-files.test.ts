@@ -448,3 +448,67 @@ describe("space-local agent profile projection (plan 2026-06-12-002 U7)", () => 
     expect(dbState.deleteCalls).toHaveLength(0);
   });
 });
+
+describe("serializeAgentProfileFolderForm (subagent-folders U12)", () => {
+  it("emits strict folder form: description absorbs routingGuidance, no legacy fields", async () => {
+    const { serializeAgentProfileFolderForm } =
+      await import("./agent-profile-workspace-files.js");
+    const { parseAgentFolderInstructions } =
+      await import("./agent-folder-format.js");
+    const content = serializeAgentProfileFolderForm({
+      slug: "helper",
+      name: "Helper",
+      description: "Helps.",
+      routingGuidance: "Use often.",
+      instructions: "Help with things.",
+      modelId: "anthropic/claude-sonnet-5",
+      enabled: true,
+      toolPolicy: {
+        builtInTools: ["web-search"],
+        mcpServers: ["postgres-dev"],
+      },
+      executionControls: {
+        foreground: true,
+        maxSubagentDepth: 0,
+        maxTokens: 2000,
+        loopPolicy: {
+          mode: "closed",
+          enabled: true,
+          maxIterations: 1,
+          maxReviewLoops: 1,
+          reviewGate: true,
+          externalReviewerPolicy: "explicit",
+          failBehavior: "return_blocker",
+        },
+      },
+    });
+    const parsed = parseAgentFolderInstructions(
+      content,
+      "agents/helper/INSTRUCTIONS.md",
+    );
+    if (!parsed.valid) {
+      throw new Error(parsed.errors.map((e) => e.message).join("; "));
+    }
+    expect(parsed.parsed.description).toBe("Helps. Use often.");
+    expect(parsed.parsed.model).toBe("anthropic/claude-sonnet-5");
+    expect(parsed.parsed.builtInTools).toEqual(["web-search"]);
+    expect(parsed.parsed.execution.maxTokens).toBe(2000);
+    expect(parsed.parsed.instructions).toBe("Help with things.");
+    // Legacy-only keys never leak into the strict form.
+    expect(content).not.toContain("mcpServers");
+    expect(content).not.toContain("maxSubagentDepth");
+    expect(content).not.toContain("routingGuidance");
+  });
+
+  it("falls back to the display name when description and routingGuidance are absent", async () => {
+    const { serializeAgentProfileFolderForm } =
+      await import("./agent-profile-workspace-files.js");
+    const content = serializeAgentProfileFolderForm({
+      slug: "helper",
+      name: "Helper",
+      instructions: "Body.",
+      modelId: "m",
+    });
+    expect(content).toContain("description: Helper");
+  });
+});

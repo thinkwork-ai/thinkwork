@@ -162,10 +162,12 @@ import {
 } from "./src/lib/agents-md-persona-surgery.js";
 import {
   deleteAgentProfileProjectionForFile,
+  deleteAgentProfileProjectionFromFolderFile,
   deleteSpaceAgentProfileProjectionForFile,
   isAgentProfileWorkspacePath,
   isSpaceAgentProfileWorkspacePath,
   upsertAgentProfileProjectionFromFile,
+  upsertAgentProfileProjectionFromFolderFile,
   upsertSpaceAgentProfileProjectionFromFile,
 } from "./src/lib/agent-profile-workspace-files.js";
 import {
@@ -3012,6 +3014,27 @@ async function handlePut(
       }
     }
 
+    // Subagent-folders U12 — folder→DB projection shim: until U11
+    // retires the DB readers, folder-form INSTRUCTIONS.md writes refresh
+    // the agent_profiles row so flag-off tenants dispatch the edit on
+    // the next turn (the legacy projection above triggers only on
+    // agents/<slug>.md keys).
+    if (isAgentFolderInstructionsPath(cleanPath)) {
+      try {
+        await upsertAgentProfileProjectionFromFolderFile({
+          tenantId,
+          path: cleanPath,
+          content,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(400, {
+          ok: false,
+          error: `INSTRUCTIONS.md saved but projection refresh failed: ${message}`,
+        });
+      }
+    }
+
     if (isSkillMarkerPath(cleanPath)) {
       const refreshError = await refreshAgentAgentsMdSections(target, "PUT");
       if (refreshError) return refreshError;
@@ -3245,6 +3268,14 @@ async function handleDelete(
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
     if (isAgentProfileWorkspacePath(cleanPath)) {
       await deleteAgentProfileProjectionForFile({ tenantId, path: cleanPath });
+    }
+    if (isAgentFolderInstructionsPath(cleanPath)) {
+      // U12: deleting the folder's INSTRUCTIONS.md removes the central
+      // projection row — mirroring the legacy-file delete hook.
+      await deleteAgentProfileProjectionFromFolderFile({
+        tenantId,
+        path: cleanPath,
+      });
     }
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
