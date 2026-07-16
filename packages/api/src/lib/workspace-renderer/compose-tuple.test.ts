@@ -1991,6 +1991,10 @@ Firecrawl.
       now: () => new Date("2026-07-16T10:00:00.000Z"),
       capabilitySigner,
       capabilityVerifier,
+      // U5 flag-on scans the base seed's space skill (ratio-review) through
+      // the catalog trust gate — inject a fake so it never touches a real db.
+      trustGateResolver: async (args: { skillIds: string[] }) =>
+        new Set(args.skillIds),
     };
   }
 
@@ -2279,6 +2283,44 @@ Firecrawl.
     );
     const entries = readManifest(store).active.filter(
       (e) => e.slug === "shared-tool",
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.source_scope).toBe("user:user-1");
+  });
+
+  it("flag ON: a space skills/<slug>/ grant compiles with source_scope space:<id>", async () => {
+    // The base seed carries a space skill (ratio-review) with no agent-scope
+    // copy — flag-on scanning routes it through the catalog trust gate.
+    const store = seedWithScopeGrants({});
+    const repo = new RegistryRepository(true, []);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    const entry = readManifest(store).active.find(
+      (e) => e.slug === "ratio-review" && e.class === "skill",
+    );
+    expect(entry?.source_scope).toBe("space:space-1");
+  });
+
+  it("most-specific wins across scopes: a user skill supersedes the same slug at agent root", async () => {
+    const skillMd = `---\nname: shared-skill\ndescription: d\n---\nx.\n`;
+    const store = seedWithScopeGrants({
+      "tenants/acme/agents/finance-agent/skills/shared-skill/SKILL.md": skillMd,
+      "tenants/acme/users/eric/skills/shared-skill/SKILL.md": skillMd,
+    });
+    const repo = new RegistryRepository(true, []);
+    await renderWorkspaceTuple(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        userId: "user-1",
+      },
+      deps(store, repo),
+    );
+    const entries = readManifest(store).active.filter(
+      (e) => e.slug === "shared-skill" && e.class === "skill",
     );
     expect(entries).toHaveLength(1);
     expect(entries[0]!.source_scope).toBe("user:user-1");

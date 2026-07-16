@@ -61,6 +61,7 @@ import {
   computeCapabilityInputSignature,
   parseCapabilitiesManifest,
   bindingScanKey,
+  scopeSpecificity,
   type CapabilitiesManifest,
   type CapabilityFolderInput,
   type CompileBindingRow,
@@ -262,10 +263,11 @@ export function shouldRenderUserSourcePath(relPath: string): boolean {
   if (sourcePath === "USER.md" || sourcePath === "knowledge-pack.md") {
     return true;
   }
-  // THINK-302 U5 (R18): a user's workspace holds `tools/` and `mcp/`
-  // capability folders. Their marker + support files must be listed so the
-  // capability scan can compile them as user-scope grants.
-  if (/^(tools|mcp)\/[^/]+\//.test(sourcePath)) {
+  // THINK-302 U5 (R18): a user's workspace holds `skills/`, `tools/`, and
+  // `mcp/` capability folders. Their marker + support files must be listed so
+  // the capability scan compiles them as user-scope grants (skills route
+  // through the catalog trust gate, tools/mcp through registry bindings).
+  if (/^(skills|tools|mcp)\/[^/]+\//.test(sourcePath)) {
     return true;
   }
   return (
@@ -929,6 +931,14 @@ export async function renderWorkspaceTuple(
   );
   const skillAssignmentKeys = new Map<string, string>();
   const skillFolders: string[] = [];
+  // THINK-302 U5 (skills path): winning grant scope per skill slug, populated
+  // ONLY when the registry-trust flag is on. Flag-off tenants leave this empty
+  // so skill manifest entries carry no `source_scope` — byte-identical to the
+  // pre-U5 agent-only shape. Skills route through the catalog trust gate (not
+  // capability bindings), so their four-scope union lives here, separate from
+  // capabilityFolderScans; most-specific-wins is resolved at scan time.
+  const skillScopeRefs = new Map<string, string>();
+  const scopeUnionOn = tuple.capabilityRegistryTrust === true;
   // Capability folders (THINK-173 U2): presence = declared; the compile
   // step below decides active vs withheld from the signed sidecar.
   interface CapabilityFolderScan {
@@ -996,7 +1006,10 @@ export async function renderWorkspaceTuple(
   for (const object of agentSource.objects) {
     const sourcePath = runtimeSourcePath(object.relPath);
     const marker = sourcePath.match(SKILL_MARKER_RE);
-    if (marker) skillFolders.push(marker[1]!);
+    if (marker) {
+      skillFolders.push(marker[1]!);
+      if (scopeUnionOn) skillScopeRefs.set(marker[1]!, agentScopeRefEarly);
+    }
     const assignment = sourcePath.match(SKILL_ASSIGNMENT_RE);
     if (assignment) skillAssignmentKeys.set(assignment[1]!, object.key);
     const connectionMarker = sourcePath.match(CONNECTION_MARKER_RE);
@@ -1106,13 +1119,48 @@ export async function renderWorkspaceTuple(
   }
 
   // THINK-302 U5: space + user scope scanning. Spaces and users hold
-  // `tools/` and `mcp/` capability folders (R17/R18 — no connectors/,
-  // no agents/; space/user SKILLS route through the trust-gate path, a
-  // separate follow-up). Gated on the per-tenant registry-trust flag: the
-  // manifest is the additive union of all scanned scopes, and compile's
-  // most-specific-wins (U5a) resolves slug collisions. Flag-off tenants
-  // never scan these scopes, so their manifest is byte-identical.
-  if (tuple.capabilityRegistryTrust === true) {
+  // `skills/`, `tools/`, and `mcp/` capability folders (R17/R18 — no
+  // connectors/, no agents/). Tools + mcp route through capabilityFolderScans
+  // (registry bindings); skills route through the catalog trust-gate path
+  // (scanScopeSkills below). Gated on the per-tenant registry-trust flag: the
+  // manifest is the additive union of all scanned scopes, and most-specific-
+  // wins (compile U5a for tools/mcp, scan-time for skills) resolves slug
+  // collisions. Flag-off tenants never scan these scopes, so their manifest
+  // is byte-identical.
+  if (scopeUnionOn) {
+    const scanScopeSkills = (
+      objects: readonly SourceObject[],
+      scopeRef: string,
+    ): void => {
+      // A scope's own `.assignment.json` enabled-state wins when the scope
+      // wins the slug — resolve assignment keys first so a winning scope
+      // carries its enabled flag, not the previously-recorded scope's.
+      const scopeAssignmentKeys = new Map<string, string>();
+      for (const object of objects) {
+        const assignment = runtimeSourcePath(object.relPath).match(
+          SKILL_ASSIGNMENT_RE,
+        );
+        if (assignment) scopeAssignmentKeys.set(assignment[1]!, object.key);
+      }
+      for (const object of objects) {
+        const marker = runtimeSourcePath(object.relPath).match(SKILL_MARKER_RE);
+        if (!marker) continue;
+        const slug = marker[1]!;
+        const existing = skillScopeRefs.get(slug);
+        if (existing === undefined) skillFolders.push(slug);
+        if (
+          existing === undefined ||
+          scopeSpecificity(scopeRef) > scopeSpecificity(existing)
+        ) {
+          skillScopeRefs.set(slug, scopeRef);
+          const assignmentKey = scopeAssignmentKeys.get(slug);
+          if (assignmentKey) skillAssignmentKeys.set(slug, assignmentKey);
+          else skillAssignmentKeys.delete(slug);
+        }
+      }
+    };
+    scanScopeSkills(spaceSource.objects, spaceScopeRef);
+    if (userScopeRef) scanScopeSkills(userSource.objects, userScopeRef);
     const MCP_MARKER_RE_LOCAL = MCP_MARKER_RE;
     const scanScopeToolsMcp = (
       objects: readonly SourceObject[],
@@ -1287,6 +1335,9 @@ export async function renderWorkspaceTuple(
     slug: entry.slug,
     enabled: entry.enabled !== false,
     active: entry.active !== false,
+    // THINK-302 U5: winning grant scope (flag-off → undefined → no
+    // source_scope on the entry, byte-identical to the pre-U5 shape).
+    sourceScope: skillScopeRefs.get(entry.slug),
   }));
   const capabilityMcpPolicy = {
     allowedServers: effectivePolicy.mcpAllowedServers ?? null,
