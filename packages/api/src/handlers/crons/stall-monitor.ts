@@ -1,7 +1,8 @@
 /**
  * Cron: Stall Monitor (PRD-09 §9.2.4)
  *
- * Detects thread_turns stuck in 'running' for >5 minutes, marks them timed_out,
+ * Detects thread_turns stuck in 'running' beyond the stall threshold
+ * (STALL_THRESHOLD_MINUTES env var, default 5), marks them timed_out,
  * releases thread checkout, and inserts a retry_queue entry with backoff delay.
  *
  * Schedule: every 1 minute
@@ -15,7 +16,27 @@ import {
   type ProcessStaleMobileHandoffsDeps,
 } from "../../lib/mobile-turns/managed-dispatch.js";
 
-const STALL_THRESHOLD_MINUTES = 5;
+const DEFAULT_STALL_THRESHOLD_MINUTES = 5;
+
+/**
+ * Threshold is read per invocation (not at module load) so per-stage env
+ * changes and tests take effect without a rebuild. Anything that is not a
+ * finite positive integer falls back to the default — the return value is a
+ * validated number, which keeps the sql.raw interpolations below
+ * injection-safe.
+ */
+function resolveStallThresholdMinutes(): number {
+  const raw = process.env.STALL_THRESHOLD_MINUTES;
+  if (!raw) return DEFAULT_STALL_THRESHOLD_MINUTES;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    console.warn(
+      `[stall-monitor] Invalid STALL_THRESHOLD_MINUTES=${JSON.stringify(raw)}; using default ${DEFAULT_STALL_THRESHOLD_MINUTES}`,
+    );
+    return DEFAULT_STALL_THRESHOLD_MINUTES;
+  }
+  return parsed;
+}
 
 export interface StallMonitorDeps {
   processMobileHandoffs(deps?: ProcessStaleMobileHandoffsDeps): Promise<{
@@ -34,6 +55,7 @@ export async function runStallMonitor(
 ) {
   const db = getDb();
   const now = new Date();
+  const stallThresholdMinutes = resolveStallThresholdMinutes();
   const mobileHandoffs = await deps.processMobileHandoffs();
   if (
     mobileHandoffs.claimed > 0 ||
@@ -51,7 +73,7 @@ export async function runStallMonitor(
 		SELECT id, tenant_id, agent_id, thread_id, COALESCE(retry_attempt, 0) AS retry_attempt
 		FROM thread_turns
 		WHERE status = 'running'
-		  AND COALESCE(last_activity_at, started_at) < NOW() - INTERVAL '${sql.raw(String(STALL_THRESHOLD_MINUTES))} minutes'
+		  AND COALESCE(last_activity_at, started_at) < NOW() - INTERVAL '${sql.raw(String(stallThresholdMinutes))} minutes'
 	`);
 
   const stalledTurns = (result.rows || []) as Array<{
@@ -71,7 +93,7 @@ export async function runStallMonitor(
     // Mark the turn as timed_out
     await db.execute(sql`
 			UPDATE thread_turns
-			SET status = 'timed_out', finished_at = NOW(), error = 'Stall detected: no activity for ${sql.raw(String(STALL_THRESHOLD_MINUTES))} minutes'
+			SET status = 'timed_out', finished_at = NOW(), error = 'Stall detected: no activity for ${sql.raw(String(stallThresholdMinutes))} minutes'
 			WHERE id = ${turn.id}::uuid AND status = 'running'
 		`);
 
@@ -99,7 +121,7 @@ export async function runStallMonitor(
 				${nextAttempt},
 				'pending',
 				${scheduledAt.toISOString()}::timestamptz,
-				'Stall detected after ${sql.raw(String(STALL_THRESHOLD_MINUTES))} minutes',
+				'Stall detected after ${sql.raw(String(stallThresholdMinutes))} minutes',
 				${turn.id}::uuid,
 				NOW(),
 				NOW()
