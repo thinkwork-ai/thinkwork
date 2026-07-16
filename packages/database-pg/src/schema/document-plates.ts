@@ -73,6 +73,11 @@ export interface DocumentPlateSectionOverrideConfig {
  * - origin = 'platform_override': `sections`/`analyses` are tenant ADDITIONS
  *   layered onto the platform floor, and `sectionOverrides` patches floor
  *   sections by id. Removal of a floor entry is inexpressible by shape.
+ * - origin = 'platform_override' with `ownContract: true`: the tenant took
+ *   full ownership of the contract — `sections`/`analyses` are the FULL
+ *   contract (tenant semantics) and the platform floor no longer merges in.
+ *   Palette/identity layering is unchanged; Reset returns to the platform
+ *   definition by deleting the row.
  */
 export interface DocumentPlateConfig {
   displayName?: string;
@@ -90,6 +95,8 @@ export interface DocumentPlateConfig {
   analyses?: DocumentPlateAnalysisConfig[];
   /** Floor-section patches by platform section id (platform rows only). */
   sectionOverrides?: Record<string, DocumentPlateSectionOverrideConfig>;
+  /** Platform rows only: tenant owns the full contract; no floor merge. */
+  ownContract?: boolean;
 }
 
 export const documentPlates = pgTable(

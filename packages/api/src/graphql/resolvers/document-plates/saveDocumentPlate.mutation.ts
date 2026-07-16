@@ -38,6 +38,8 @@ interface SaveDocumentPlateInput {
   sections?: unknown;
   analyses?: unknown;
   sectionOverrides?: unknown;
+  /** Platform plates: sections/analyses are the FULL contract (ownership). */
+  ownContract?: boolean | null;
 }
 
 function text(v: string | null | undefined): string | undefined {
@@ -98,41 +100,63 @@ export async function saveDocumentPlate(
         `"${slug}" is a platform plate: palette overrides, hidden, and content-contract additions/overrides can be changed — identity fields and allowed directives cannot. Create a tenant plate to define new structure.`,
       );
     }
-    const floorSections = platform!.sections ?? [];
-    const floorAnalysisKeys = new Set(
-      (platform!.analyses ?? []).map((a) => a.key),
-    );
-    const sectionOverrides = boundedSectionOverrides(
-      input.sectionOverrides,
-      floorSections,
-    );
-    const floorIds = new Set(floorSections.map((s) => s.id));
-    for (const addition of sections ?? []) {
-      if (floorIds.has(addition.id)) {
-        throw badInput(
-          `sections: "${addition.id}" is a platform floor section and cannot be redefined (floor rule). Patch it via sectionOverrides instead.`,
-        );
-      }
-    }
-    for (const addition of analyses ?? []) {
-      if (floorAnalysisKeys.has(addition.key)) {
-        throw badInput(
-          `analyses: "${addition.key}" is a platform floor analysis and cannot be redefined (floor rule).`,
-        );
-      }
-    }
     origin = "platform_override";
-    config = {
-      ...(paletteLight && Object.keys(paletteLight).length > 0
-        ? { paletteLight }
-        : {}),
-      ...(paletteDark && Object.keys(paletteDark).length > 0
-        ? { paletteDark }
-        : {}),
-      ...(sections && sections.length > 0 ? { sections } : {}),
-      ...(analyses && analyses.length > 0 ? { analyses } : {}),
-      ...(sectionOverrides ? { sectionOverrides } : {}),
-    };
+    if (input.ownContract === true) {
+      // Full-ownership save: the payload IS the contract (tenant semantics);
+      // floor rules don't apply. sections: [] is meaningful (all removed), so
+      // store the arrays whenever the flag is set.
+      if (input.sectionOverrides !== undefined) {
+        throw badInput(
+          "sectionOverrides cannot be combined with ownContract — an owned contract carries its sections in full.",
+        );
+      }
+      config = {
+        ...(paletteLight && Object.keys(paletteLight).length > 0
+          ? { paletteLight }
+          : {}),
+        ...(paletteDark && Object.keys(paletteDark).length > 0
+          ? { paletteDark }
+          : {}),
+        ownContract: true,
+        sections: sections ?? [],
+        analyses: analyses ?? [],
+      };
+    } else {
+      const floorSections = platform!.sections ?? [];
+      const floorAnalysisKeys = new Set(
+        (platform!.analyses ?? []).map((a) => a.key),
+      );
+      const sectionOverrides = boundedSectionOverrides(
+        input.sectionOverrides,
+        floorSections,
+      );
+      const floorIds = new Set(floorSections.map((s) => s.id));
+      for (const addition of sections ?? []) {
+        if (floorIds.has(addition.id)) {
+          throw badInput(
+            `sections: "${addition.id}" is a platform floor section and cannot be redefined (floor rule). Patch it via sectionOverrides instead.`,
+          );
+        }
+      }
+      for (const addition of analyses ?? []) {
+        if (floorAnalysisKeys.has(addition.key)) {
+          throw badInput(
+            `analyses: "${addition.key}" is a platform floor analysis and cannot be redefined (floor rule).`,
+          );
+        }
+      }
+      config = {
+        ...(paletteLight && Object.keys(paletteLight).length > 0
+          ? { paletteLight }
+          : {}),
+        ...(paletteDark && Object.keys(paletteDark).length > 0
+          ? { paletteDark }
+          : {}),
+        ...(sections && sections.length > 0 ? { sections } : {}),
+        ...(analyses && analyses.length > 0 ? { analyses } : {}),
+        ...(sectionOverrides ? { sectionOverrides } : {}),
+      };
+    }
   } else {
     if (platform && !existingRow) {
       // Unreachable by construction (isPlatformPath covers it) — guard kept

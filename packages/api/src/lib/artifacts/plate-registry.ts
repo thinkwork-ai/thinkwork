@@ -550,17 +550,21 @@ function resolveFromLayers(input: {
     // a floor — config `sections`/`analyses` are tenant ADDITIONS and
     // `sectionOverrides` patches floor sections (tier raise-only) — so
     // platform contract improvements keep flowing to customized tenants.
-    // (Replaces THINK-183's wholesale per-key override for platform rows;
-    // tenant-origin rows above keep full-contract semantics.)
-    sections: mergeFloorSections(
-      platform.sections,
-      normalizeSectionOverrides(c.sectionOverrides),
-      normalizeSections(c.sections),
-    ),
-    analyses: mergeFloorAnalyses(
-      platform.analyses,
-      normalizeAnalyses(c.analyses),
-    ),
+    // With `ownContract: true` the tenant took full ownership: the stored
+    // contract IS the contract (tenant semantics) and the floor no longer
+    // merges in; Reset (row deletion) restores the platform definition.
+    sections:
+      c.ownContract === true
+        ? normalizeSections(c.sections)
+        : mergeFloorSections(
+            platform.sections,
+            normalizeSectionOverrides(c.sectionOverrides),
+            normalizeSections(c.sections),
+          ),
+    analyses:
+      c.ownContract === true
+        ? normalizeAnalyses(c.analyses)
+        : mergeFloorAnalyses(platform.analyses, normalizeAnalyses(c.analyses)),
     origin: "platform",
     hidden: row?.hidden ?? false,
     customized:
@@ -978,11 +982,13 @@ export function buildContractPreviewExemplar(
     [...enforced].reverse().find((s) => s.tier === "required-if-material") ??
     enforced.at(-1);
 
+  // Each section renders ITS OWN guidance as the body — the preview shows
+  // the operator what each section is for, not generic filler prose.
   const sectionBlocks = sections.map((section) => {
     if (section.id === demoTarget?.id) {
       return `\`\`\`tw:waiver\nsection: ${section.id}\nreason: ${WAIVER_DEMO_REASON}\n\`\`\``;
     }
-    return `## ${section.title}\n\nRepresentative content for this section. ${section.guidance}`;
+    return `## ${section.title}\n\n${section.guidance.trim() || "Representative content for this section."}`;
   });
 
   const markdownBody = `---
@@ -990,13 +996,9 @@ date: Q3 2026
 context: Contract preview — every declared section and analysis, in action
 ---
 
-## Where things stand
-
-This preview compiles the **${plate.displayName}** plate's full content contract: every declared section with representative content, every declared analysis computed by the platform from realistic sample data${demoTarget ? ", and one explicitly waived section so you can see how honest omission renders" : ""}.
+${sectionBlocks.join("\n\n")}
 
 ${analysisBlocks.join("\n\n")}
-
-${sectionBlocks.join("\n\n")}
 `;
 
   return {

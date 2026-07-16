@@ -11,7 +11,7 @@
  */
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import {
   Button,
   Input,
@@ -86,6 +86,18 @@ export function PlateAnalysisPicker({
     onChange(analyses.filter((row) => row.rowKey !== rowKey));
   }
 
+  /** Tenant rows reorder among themselves; floor rows keep platform order. */
+  function moveRow(rowKey: string, delta: -1 | 1) {
+    const movable = analyses.filter((r) => r.source === "tenant");
+    const fixed = analyses.filter((r) => r.source === "platform");
+    const idx = movable.findIndex((r) => r.rowKey === rowKey);
+    const target = idx + delta;
+    if (idx < 0 || target < 0 || target >= movable.length) return;
+    const next = [...movable];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    onChange([...fixed, ...next]);
+  }
+
   return (
     <div className="space-y-2" data-testid="plate-analyses">
       <div className="text-sm font-medium">Computed analyses</div>
@@ -124,17 +136,41 @@ export function PlateAnalysisPicker({
                   {template?.label ?? row.op}
                 </span>
                 {isFloor ? null : (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0 text-destructive"
-                    onClick={() => removeRow(row.rowKey)}
-                    aria-label="Remove analysis"
-                    data-testid="plate-analysis-remove"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0"
+                      onClick={() => moveRow(row.rowKey, -1)}
+                      aria-label="Move analysis up"
+                      data-testid="plate-analysis-move-up"
+                    >
+                      <ArrowUp className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0"
+                      onClick={() => moveRow(row.rowKey, 1)}
+                      aria-label="Move analysis down"
+                      data-testid="plate-analysis-move-down"
+                    >
+                      <ArrowDown className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 text-destructive"
+                      onClick={() => removeRow(row.rowKey)}
+                      aria-label="Remove analysis"
+                      data-testid="plate-analysis-remove"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </>
                 )}
               </div>
               {template ? (

@@ -41,6 +41,51 @@ function fakeStore(
 }
 
 describe("resolvePlate layering (KTD2)", () => {
+  it("ownContract: true — the stored contract IS the contract; floor does not merge in", async () => {
+    const store = fakeStore([
+      {
+        slug: "qbr",
+        origin: "platform_override",
+        config: {
+          ownContract: true,
+          sections: [
+            // One floor section renamed and re-tiered, the rest removed.
+            {
+              id: "business-outcomes",
+              title: "Outcomes (renamed)",
+              tier: "suggested",
+              guidance: "Own words.",
+            },
+            {
+              id: "custom-extras",
+              title: "Custom Extras",
+              tier: "required",
+              guidance: "Tenant addition.",
+            },
+          ],
+          analyses: [
+            {
+              key: "renamed-metric",
+              op: "ratio_pct",
+              presentation: { directive: "stats" },
+            },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const plate = (await resolvePlate(TENANT, "qbr", store))!;
+    expect(plate.sections?.map((s) => s.id)).toEqual([
+      "business-outcomes",
+      "custom-extras",
+    ]);
+    expect(plate.sections?.[0].title).toBe("Outcomes (renamed)");
+    // Tier is NOT clamped to the floor — ownership means no raise-only rule.
+    expect(plate.sections?.[0].tier).toBe("suggested");
+    expect(plate.analyses?.map((a) => a.key)).toEqual(["renamed-metric"]);
+    expect(plate.customized).toBe(true);
+  });
+
   it("platform slug with no rows resolves to platform values", async () => {
     const plate = await resolvePlate(TENANT, "qbr", fakeStore());
     expect(plate).not.toBeNull();
@@ -905,6 +950,12 @@ describe("contract preview exemplar (THINK-188 U3)", () => {
     // quota-attainment (also RIM but earlier) renders normally.
     expect(preview.markdownBody).toContain("## Quota Attainment");
     expect(preview.markdownBody).toContain("## Coaching Notes");
+    // Section bodies are the section's OWN guidance, not static filler.
+    expect(preview.markdownBody).toContain("not narrated from memory");
+    expect(preview.markdownBody).not.toContain(
+      "Representative content for this section",
+    );
+    expect(preview.markdownBody).not.toContain("## Where things stand");
     expect(preview.markdownBody).toContain("tw:waiver");
     expect(preview.markdownBody).toContain("section: pipeline-health");
     expect(preview.markdownBody).not.toContain("## Pipeline Health");

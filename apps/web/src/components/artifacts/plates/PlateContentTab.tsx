@@ -16,7 +16,6 @@ import { ArrowDown, ArrowUp, Plus, RotateCcw, Trash2 } from "lucide-react";
 import {
   Button,
   Input,
-  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -112,11 +111,6 @@ export function PlateContentTab({
     <div className="space-y-6" data-testid="plate-content-tab">
       <div className="space-y-2">
         <div className="text-sm font-medium">Sections</div>
-        <p className="text-xs text-muted-foreground">
-          {isPlatform
-            ? "These sections are enforced on every document in this plate. Adapt their guidance, raise a tier, or add your own sections below."
-            : "Documents in this plate must contain each required section (or explicitly waive it). Suggested sections guide without blocking."}
-        </p>
         {sections.length === 0 ? (
           <p
             className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground"
@@ -126,7 +120,7 @@ export function PlateContentTab({
             section to start shaping what belongs in this plate.
           </p>
         ) : null}
-        <div className="space-y-3">
+        <div className="divide-y divide-border">
           {sections.map((row, index) => (
             <SectionRow
               key={row.rowKey}
@@ -193,7 +187,7 @@ function SectionRow({
 
   return (
     <div
-      className="space-y-2 rounded-md border border-border p-3"
+      className="space-y-2 py-6 first:pt-0 last:pb-0"
       data-testid={`plate-section-row-${id || index}`}
     >
       <div className="flex items-center gap-2">
@@ -203,9 +197,30 @@ function SectionRow({
           placeholder="Section title (e.g. Pipeline Health)"
           disabled={isFloor}
           aria-describedby={isFloor ? lockNoteId : undefined}
-          className="h-8"
+          title={isFloor ? FLOOR_LOCK_EXPLANATION : undefined}
+          className="h-8 flex-[3]"
           data-testid="plate-section-title"
         />
+        <Select
+          value={row.tier}
+          onValueChange={(tier) => onChange({ tier: tier as PlateSectionTier })}
+        >
+          <SelectTrigger
+            className="h-8 flex-[2]"
+            aria-label="Tier"
+            aria-describedby={isFloor ? lockNoteId : undefined}
+            data-testid="plate-section-tier"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {tierOptions.map((tier) => (
+              <SelectItem key={tier} value={tier}>
+                {PLATE_SECTION_TIER_LABELS[tier]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {isFloor ? null : (
           <>
             <Button
@@ -245,9 +260,15 @@ function SectionRow({
         )}
       </div>
       {isFloor ? (
-        <p id={lockNoteId} className="text-[11px] text-muted-foreground">
+        <p id={lockNoteId} className="sr-only">
           {FLOOR_LOCK_EXPLANATION}
         </p>
+      ) : null}
+      {tierDiverged ? (
+        <DivergenceMarker
+          field="tier"
+          onRevert={() => onChange({ tier: row.baseline!.tier })}
+        />
       ) : null}
       {duplicate ? (
         <p
@@ -276,56 +297,22 @@ function SectionRow({
               }`}
         </p>
       ) : null}
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-        <Label className="text-xs text-muted-foreground">Tier</Label>
-        <div className="space-y-1">
-          <Select
-            value={row.tier}
-            onValueChange={(tier) =>
-              onChange({ tier: tier as PlateSectionTier })
-            }
-          >
-            <SelectTrigger
-              className="h-8 w-64"
-              aria-describedby={isFloor ? lockNoteId : undefined}
-              data-testid="plate-section-tier"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {tierOptions.map((tier) => (
-                <SelectItem key={tier} value={tier}>
-                  {PLATE_SECTION_TIER_LABELS[tier]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {tierDiverged ? (
-            <DivergenceMarker
-              field="tier"
-              onRevert={() => onChange({ tier: row.baseline!.tier })}
-            />
-          ) : null}
-        </div>
-        <Label className="self-start pt-1.5 text-xs text-muted-foreground">
-          Guidance
-        </Label>
-        <div className="space-y-1">
-          <Textarea
-            value={row.guidance}
-            onChange={(e) => onChange({ guidance: e.target.value })}
-            placeholder="What belongs in this section — the agent reads this when authoring."
-            rows={2}
-            className="text-xs"
-            data-testid="plate-section-guidance"
+      <div className="space-y-1">
+        <Textarea
+          value={row.guidance}
+          onChange={(e) => onChange({ guidance: e.target.value })}
+          placeholder="What belongs in this section — the agent reads this when authoring."
+          aria-label="Guidance"
+          rows={2}
+          className="text-xs"
+          data-testid="plate-section-guidance"
+        />
+        {guidanceDiverged ? (
+          <DivergenceMarker
+            field="guidance"
+            onRevert={() => onChange({ guidance: row.baseline!.guidance })}
           />
-          {guidanceDiverged ? (
-            <DivergenceMarker
-              field="guidance"
-              onRevert={() => onChange({ guidance: row.baseline!.guidance })}
-            />
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </div>
   );

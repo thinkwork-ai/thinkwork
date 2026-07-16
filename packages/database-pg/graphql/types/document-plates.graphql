@@ -92,6 +92,9 @@ input DocumentPlateDraftConfigInput {
   sections: AWSJSON
   analyses: AWSJSON
   sectionOverrides: AWSJSON
+  # Platform plates: sections/analyses are the FULL contract (tenant takes
+  # ownership; floor merge disabled). Ignored on tenant plates.
+  ownContract: Boolean
 }
 
 input SaveDocumentPlateInput {
@@ -112,6 +115,9 @@ input SaveDocumentPlateInput {
   sections: AWSJSON
   analyses: AWSJSON
   sectionOverrides: AWSJSON
+  # Platform plates: sections/analyses are the FULL contract (tenant takes
+  # ownership; floor merge disabled). Ignored on tenant plates.
+  ownContract: Boolean
 }
 
 input UpdateTenantDocumentPaletteInput {
