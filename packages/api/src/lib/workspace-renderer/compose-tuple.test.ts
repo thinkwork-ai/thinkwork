@@ -2106,4 +2106,59 @@ Firecrawl.
     const after = readManifest(store);
     expect(after.active.some((e) => e.slug === "firecrawl")).toBe(true);
   });
+
+  // THINK-302 U4b: mcp/<slug>/MCP.md scanned as a first-class `mcp` grant.
+  const MCP_MD = `---\nname: dagster\ndescription: Dagster MCP.\nserver: srv-ref\n---\nUse.\n`;
+
+  it("flag ON: an mcp/<slug>/MCP.md folder compiles to a class 'mcp' entry", async () => {
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/agents/finance-agent/mcp/dagster/MCP.md": {
+          content: MCP_MD,
+          lastModified: "2026-07-16T00:00:00.000Z",
+        },
+      }),
+    );
+    const repo = new RegistryRepository(true, [
+      {
+        scopeRef: "agent:agent-1",
+        class: "mcp",
+        slug: "dagster",
+        markerSha: definitionContentSha(MCP_MD),
+      },
+    ]);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    const manifest = readManifest(store);
+    const entry = manifest.active.find((e) => e.class === "mcp");
+    expect(entry).toMatchObject({
+      slug: "dagster",
+      class: "mcp",
+      source_scope: "agent:agent-1",
+    });
+  });
+
+  it("an mcp folder with only the legacy .assignment.json mirror is not a grant", async () => {
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/agents/finance-agent/mcp/legacy/.assignment.json": {
+          content: JSON.stringify({
+            slug: "legacy",
+            registryServerId: "srv-1",
+          }),
+          lastModified: "2026-07-16T00:00:00.000Z",
+        },
+      }),
+    );
+    const repo = new RegistryRepository(true, []);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    const manifest = readManifest(store);
+    expect(manifest.active.some((e) => e.class === "mcp")).toBe(false);
+    expect(manifest.withheld.some((e) => e.slug === "legacy")).toBe(false);
+  });
 });

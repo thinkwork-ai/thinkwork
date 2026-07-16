@@ -13,6 +13,7 @@ import {
   connectionAssignmentRe,
   connectionMarkerRe,
   mcpAssignmentRe,
+  mcpMarkerRe,
   skillAssignmentRe,
   skillMarkerRe,
   toolAssignmentRe,
@@ -47,8 +48,10 @@ describe("workspace-constants post-flip literal patterns (U15)", () => {
     );
     // The connectors flip is a compile-visible change — covered by the
     // CAPABILITY_COMPILE_REVISION 4→5 bump (rev 3→4 covered agents/).
+    // THINK-302 U4: `mcp` joins the folder-file scan (mcp/<slug>/MCP.md
+    // is a first-class grant); covered by the rev 5→6 bump.
     expect(capabilityFolderFileRe().source).toBe(
-      /^(connectors|tools|agents)\/([^/]+)\/(.+)$/.source,
+      /^(connectors|tools|mcp|agents)\/([^/]+)\/(.+)$/.source,
     );
   });
 
@@ -67,6 +70,12 @@ describe("workspace-constants post-flip literal patterns (U15)", () => {
     expect(mcpAssignmentRe().source).toBe(
       /^mcp\/([^/]+)\/\.assignment\.json$/.source,
     );
+  });
+
+  it("mcp first-class marker + class mapping (THINK-302 U4)", () => {
+    expect(mcpMarkerRe().source).toBe(/^mcp\/([^/]+)\/MCP\.md$/.source);
+    expect("mcp/dagster/MCP.md".match(mcpMarkerRe())?.[1]).toBe("dagster");
+    expect(capabilityClassFromFolderName("mcp")).toBe("mcp");
   });
 
   it("root folder names match the flipped key builders", () => {

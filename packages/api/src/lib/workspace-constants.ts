@@ -134,6 +134,11 @@ export function toolAssignmentRe(): RegExp {
   return new RegExp(`^${TOOLS_FOLDER}/([^/]+)/\\.assignment\\.json$`);
 }
 
+/** `mcp/<slug>/MCP.md` first-class capability marker (THINK-302 U4). */
+export function mcpMarkerRe(): RegExp {
+  return new RegExp(`^${WORKSPACE_MCP_FOLDER}/([^/]+)/MCP\\.md$`);
+}
+
 /** `agents/<slug>/INSTRUCTIONS.md` marker (subagent-folders U4). */
 export function agentMarkerRe(): RegExp {
   return new RegExp(`^${WORKSPACE_AGENTS_FOLDER}/([^/]+)/INSTRUCTIONS\\.md$`);
@@ -157,14 +162,15 @@ export function capabilityFolderFileRe(
   options: FolderPatternOptions = {},
 ): RegExp {
   return new RegExp(
-    `^(${connectionFolderPatternSource(scope, options)}|${TOOLS_FOLDER}|${WORKSPACE_AGENTS_FOLDER})/([^/]+)/(.+)$`,
+    `^(${connectionFolderPatternSource(scope, options)}|${TOOLS_FOLDER}|${WORKSPACE_MCP_FOLDER}|${WORKSPACE_AGENTS_FOLDER})/([^/]+)/(.+)$`,
   );
 }
 
 export function capabilityClassFromFolderName(
   folder: string,
-): "connection" | "tool" | "agent" | null {
+): "connection" | "tool" | "agent" | "mcp" | null {
   if (folder === TOOLS_FOLDER) return "tool";
+  if (folder === WORKSPACE_MCP_FOLDER) return "mcp";
   if (folder === WORKSPACE_AGENTS_FOLDER) return "agent";
   if (
     folder === ROOT_CONNECTIONS_FOLDER ||
