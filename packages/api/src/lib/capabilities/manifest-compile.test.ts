@@ -6,7 +6,10 @@ import {
   compileCapabilitiesManifest,
   computeCapabilityInputSignature,
   parseCapabilitiesManifest,
+  scopeSpecificity,
+  selectMostSpecificScope,
   type CapabilityFolderInput,
+  type CapabilityManifestEntry,
   type RegistryTrustInput,
 } from "./manifest-compile.js";
 import { legacyPrincipalRemediation } from "./definition-schemas.js";
@@ -1290,5 +1293,92 @@ describe("compile revision (THINK-302 U3)", () => {
       skills: [],
     });
     expect(signature).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("most-specific-scope-wins (THINK-302 U5 / R16 / KTD-4)", () => {
+  function entry(
+    slug: string,
+    klass: CapabilityManifestEntry["class"],
+    sourceScope?: string,
+  ): CapabilityManifestEntry {
+    return {
+      name: slug,
+      slug,
+      class: klass,
+      ...(sourceScope ? { source_scope: sourceScope } : {}),
+    };
+  }
+
+  it("ranks user > space > sub-agent > root; unknown/absent lowest", () => {
+    expect(scopeSpecificity("user:u1")).toBe(3);
+    expect(scopeSpecificity("space:s1")).toBe(2);
+    expect(scopeSpecificity("agent:a1/sub:helper")).toBe(1);
+    expect(scopeSpecificity("agent:a1")).toBe(0);
+    expect(scopeSpecificity(undefined)).toBe(-1);
+    expect(scopeSpecificity("weird")).toBe(-1);
+  });
+
+  it("keeps only the most specific scope on a (class, slug) collision", () => {
+    const result = selectMostSpecificScope([
+      entry("report", "skill", "agent:a1"),
+      entry("report", "skill", "user:u1"),
+      entry("report", "skill", "space:s1"),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.source_scope).toBe("user:u1");
+  });
+
+  it("does not collapse different slugs or classes", () => {
+    const result = selectMostSpecificScope([
+      entry("a", "skill", "agent:a1"),
+      entry("a", "tool", "user:u1"), // different class → distinct identity
+      entry("b", "skill", "space:s1"),
+    ]);
+    expect(result).toHaveLength(3);
+  });
+
+  it("passes through entries without a source_scope untouched (byte-identical single scope)", () => {
+    const entries = [
+      entry("web-search", "builtin"),
+      entry("sales", "skill"),
+      entry("firecrawl", "connection", "agent:a1"),
+    ];
+    expect(selectMostSpecificScope(entries)).toEqual(entries);
+  });
+
+  it("compile: a user-scoped grant supersedes the same slug at agent root", () => {
+    const connectionMd = (name: string) =>
+      `---\nname: ${name}\ndescription: Shared conn.\ntype: api\nurl: https://api.example.dev\noperations:\n  - read\n---\nShared.\n`;
+    const rootFolder = markerFolder({
+      klass: "connection",
+      slug: "shared-conn",
+      definition: connectionMd("shared-conn"),
+      scopeRef: "agent:agent-1",
+    });
+    const userFolder = markerFolder({
+      klass: "connection",
+      slug: "shared-conn",
+      definition: connectionMd("shared-conn"),
+      scopeRef: "user:user-9",
+    });
+    const bindings = new Map([
+      [
+        bindingScanKey("agent:agent-1", "connection", "shared-conn"),
+        bindingFor(rootFolder, { "CONNECTION.md": rootFolder.definitionRaw! }),
+      ],
+      [
+        bindingScanKey("user:user-9", "connection", "shared-conn"),
+        bindingFor(userFolder, { "CONNECTION.md": userFolder.definitionRaw! }),
+      ],
+    ]);
+    const { manifest } = registryCompile([rootFolder, userFolder], {
+      registryTrust: true,
+      bindings,
+    });
+    const entries = manifest.active.filter((e) => e.slug === "shared-conn");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.source_scope).toBe("user:user-9");
+    expect(manifest.withheld).toEqual([]);
   });
 });
