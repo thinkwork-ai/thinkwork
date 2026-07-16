@@ -4,6 +4,7 @@ import {
   db,
   and,
   eq,
+  inArray,
   messages,
   threads,
   threadTurns,
@@ -170,6 +171,15 @@ export async function runRetryAgentDispatch(
   return saved;
 }
 
+/**
+ * THINK-308 U3 (parent R8): linked-turn statuses that count as a failed
+ * dispatch for the async-evidence guard. `timed_out` is included because the
+ * web UI already renders timed-out turns as failures and offers Retry there —
+ * rejecting them server-side with BAD_USER_INPUT broke the one affordance
+ * shown on a timeout.
+ */
+export const FAILED_LINKED_TURN_STATUSES = ["failed", "timed_out"] as const;
+
 function drizzleRetryDeps(): RetryAgentDispatchDeps {
   return {
     async loadMessage({ messageId, tenantId }) {
@@ -208,7 +218,7 @@ function drizzleRetryDeps(): RetryAgentDispatchDeps {
           and(
             eq(threadTurns.tenant_id, tenantId),
             eq(threadTurns.triggering_message_id, messageId),
-            eq(threadTurns.status, "failed"),
+            inArray(threadTurns.status, [...FAILED_LINKED_TURN_STATUSES]),
           ),
         )
         .limit(1);

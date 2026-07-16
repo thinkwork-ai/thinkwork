@@ -5,6 +5,10 @@ const mocks = vi.hoisted(() => ({
   updateReturning: [] as Array<unknown[]>,
   selectRows: [] as Array<Record<string, unknown>>,
   threadOwnerRows: [] as Array<Array<Record<string, unknown>>>,
+  // THINK-308 U1 reconciliation reads, routed by selection shape:
+  turnStatusRows: [] as Array<Array<Record<string, unknown>>>,
+  successorRows: [] as Array<Array<Record<string, unknown>>>,
+  retryBlockerRows: [] as Array<Array<Record<string, unknown>>>,
   reconcileChangedFiles: vi.fn(),
   recordCostEvents: vi.fn(),
   recordTraceEvidence: vi.fn(),
@@ -41,12 +45,25 @@ vi.mock("@thinkwork/database-pg", () => ({
       },
     }),
     select: (selection?: Record<string, unknown>) => {
-      const rows = () =>
-        Promise.resolve(
-          selection && "userId" in selection
-            ? (mocks.threadOwnerRows.shift() ?? [])
-            : mocks.selectRows,
-        );
+      const rows = () => {
+        if (selection && "userId" in selection) {
+          return Promise.resolve(mocks.threadOwnerRows.shift() ?? []);
+        }
+        if (selection && "successorId" in selection) {
+          return Promise.resolve(mocks.successorRows.shift() ?? []);
+        }
+        if (selection && "blockingRetryRowId" in selection) {
+          return Promise.resolve(mocks.retryBlockerRows.shift() ?? []);
+        }
+        if (
+          selection &&
+          "status" in selection &&
+          "triggeringMessageId" in selection
+        ) {
+          return Promise.resolve(mocks.turnStatusRows.shift() ?? []);
+        }
+        return Promise.resolve(mocks.selectRows);
+      };
       const chain = {
         from: () => chain,
         where: () => chain,
@@ -175,14 +192,21 @@ beforeEach(() => {
   mocks.updateSets = [];
   mocks.selectRows = [];
   mocks.threadOwnerRows = [];
+  mocks.turnStatusRows = [];
+  mocks.successorRows = [];
+  mocks.retryBlockerRows = [];
   mocks.updateReturning = [
+    // finalized_at claim gate
     [
       {
         id: TURN_ID,
         runtimeType: "pi",
         contextSnapshot: null,
+        originTurnId: null,
       },
     ],
+    // THINK-308 U1: CAS-guarded succeeded write hits (turn still running)
+    [{ id: TURN_ID }],
   ];
   mocks.reconcileChangedFiles.mockReset();
   mocks.reconcileChangedFiles.mockResolvedValue({
@@ -709,6 +733,7 @@ describe("processFinalize reconcile seam", () => {
           },
         },
       ],
+      [{ id: TURN_ID }],
     ];
 
     await expect(
@@ -764,6 +789,7 @@ describe("processFinalize reconcile seam", () => {
           },
         },
       ],
+      [{ id: TURN_ID }],
     ];
 
     await expect(
@@ -1022,6 +1048,7 @@ describe("processFinalize reconcile seam", () => {
           },
         },
       ],
+      [{ id: TURN_ID }],
     ];
 
     await expect(
@@ -2588,6 +2615,319 @@ describe("processFinalize deferred-wakeup promotion", () => {
         response: { content: "done" },
       }),
     ).resolves.toMatchObject({ finalized: true });
+  });
+});
+
+describe("processFinalize timed_out reconciliation (THINK-308 U1/U2)", () => {
+  const payload = {
+    thread_turn_id: TURN_ID,
+    tenant_id: TENANT_ID,
+    agent_id: AGENT_ID,
+    thread_id: THREAD_ID,
+    duration_ms: 25,
+    status: "completed" as const,
+    response: { content: "late answer" },
+  };
+  const TRIGGERING_MESSAGE_ID = "66666666-6666-6666-6666-666666666666";
+  const ORIGIN_TURN_ID = "99999999-9999-9999-9999-999999999999";
+
+  const claimRow = (originTurnId: string | null = null) => [
+    {
+      id: TURN_ID,
+      runtimeType: "pi",
+      contextSnapshot: null,
+      originTurnId,
+    },
+  ];
+  const timedOutRow = (
+    triggeringMessageId: string | null = TRIGGERING_MESSAGE_ID,
+  ) => [
+    {
+      status: "timed_out",
+      triggeringMessageId,
+      createdAt: new Date("2026-07-16T12:00:00Z"),
+    },
+  ];
+  const reconciliationLog = (logSpy: { mock: { calls: unknown[][] } }) => {
+    const line = logSpy.mock.calls
+      .map((call) => call[0])
+      .find(
+        (value): value is string =>
+          typeof value === "string" &&
+          value.includes('"timeout_reconciliation"'),
+      );
+    return line ? (JSON.parse(line) as Record<string, unknown>) : null;
+  };
+  // The retry-row closure write is the only 2-key {status, updated_at} set.
+  const retryClosureSet = {
+    status: "succeeded",
+    updated_at: expect.any(Date),
+  };
+
+  it("AE3: a running turn takes the plain CAS hit — payload and notify as today", async () => {
+    const logSpy = vi.spyOn(console, "log");
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    const succeededSet = mocks.updateSets.find(
+      (value: any) => value?.status === "succeeded" && value?.result_json,
+    ) as Record<string, unknown>;
+    expect(succeededSet).toMatchObject({
+      status: "succeeded",
+      finished_at: expect.any(Date),
+      result_json: expect.objectContaining({ response: "late answer" }),
+      usage_json: expect.anything(),
+    });
+    // Byte-identical to the pre-guard payload: the CAS hit never clears
+    // error fields (only the reconciliation flip does).
+    expect(succeededSet).not.toHaveProperty("error");
+    expect(succeededSet).not.toHaveProperty("error_code");
+    expect(mocks.notifyThreadTurnUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: TURN_ID, status: "succeeded" }),
+    );
+    expect(reconciliationLog(logSpy)).toBeNull();
+    // originTurnId is null (the common case) → retry_queue never touched.
+    expect(mocks.updateSets).not.toContainEqual(retryClosureSet);
+    logSpy.mockRestore();
+  });
+
+  it("AE1: timed_out with a pending retry row and no successor flips to succeeded", async () => {
+    const logSpy = vi.spyOn(console, "log");
+    mocks.updateReturning = [
+      claimRow(),
+      [], // CAS miss — the stall monitor already flagged the turn
+      [{ id: "retry-row-1" }], // supersede lands on one pending row
+      [{ id: TURN_ID }], // guarded flip lands
+    ];
+    mocks.turnStatusRows = [timedOutRow()];
+    mocks.successorRows = [[]];
+    mocks.retryBlockerRows = [[]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    expect(mocks.updateSets).toContainEqual({
+      status: "superseded",
+      updated_at: expect.any(Date),
+    });
+    const flipSet = mocks.updateSets.find(
+      (value: any) => value?.status === "succeeded" && "error" in value,
+    ) as Record<string, unknown>;
+    expect(flipSet).toMatchObject({
+      status: "succeeded",
+      finished_at: expect.any(Date),
+      result_json: expect.objectContaining({ response: "late answer" }),
+      usage_json: expect.anything(),
+      error: null,
+      error_code: null,
+    });
+    expect(mocks.notifyThreadTurnUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: TURN_ID, status: "succeeded" }),
+    );
+    const line = logSpy.mock.calls
+      .map((call) => call[0])
+      .find(
+        (value): value is string =>
+          typeof value === "string" &&
+          value.includes('"timeout_reconciliation"'),
+      );
+    expect(line).toBeDefined();
+    expect(line).not.toContain("\n");
+    expect(JSON.parse(line as string)).toEqual({
+      event: "timeout_reconciliation",
+      turn_id: TURN_ID,
+      tenant_id: TENANT_ID,
+      thread_id: THREAD_ID,
+      outcome: "flipped_succeeded",
+      superseded_retry_rows: 1,
+      blocking_successor_turn_id: null,
+      blocking_retry_row_id: null,
+    });
+    logSpy.mockRestore();
+  });
+
+  it("flips when the turn has no triggering message (no sibling clause)", async () => {
+    mocks.updateReturning = [claimRow(), [], [], [{ id: TURN_ID }]];
+    mocks.turnStatusRows = [timedOutRow(null)];
+    mocks.successorRows = [[]];
+    mocks.retryBlockerRows = [[]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+    expect(mocks.notifyThreadTurnUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "succeeded" }),
+    );
+  });
+
+  it("AE2: a successor attempt turn defers — no status write, answer surfacing suppressed", async () => {
+    const logSpy = vi.spyOn(console, "log");
+    mocks.updateReturning = [claimRow(), [], []];
+    mocks.turnStatusRows = [timedOutRow()];
+    mocks.successorRows = [[{ successorId: "successor-turn-1" }]];
+    mocks.retryBlockerRows = [[]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: null,
+    });
+
+    expect(mocks.notifyThreadTurnUpdate).not.toHaveBeenCalled();
+    expect(mocks.insertAssistantMessage).not.toHaveBeenCalled();
+    expect(mocks.notifyNewMessage).not.toHaveBeenCalled();
+    expect(mocks.sendTurnCompletedPush).not.toHaveBeenCalled();
+    expect(mocks.sendThreadReplySlack).not.toHaveBeenCalled();
+    // finalized_at still stamps (R3) and end-of-turn promotion still runs.
+    expect(mocks.updateSets).toContainEqual({ finalized_at: expect.any(Date) });
+    expect(mocks.promoteNextDeferredWakeup).toHaveBeenCalledWith(
+      TENANT_ID,
+      THREAD_ID,
+    );
+    // Trace evidence still records (events/evidence complete on deferral).
+    expect(mocks.recordTraceEvidence).toHaveBeenCalled();
+    expect(reconciliationLog(logSpy)).toMatchObject({
+      outcome: "deferred_to_recovery",
+      blocking_successor_turn_id: "successor-turn-1",
+      blocking_retry_row_id: null,
+    });
+    logSpy.mockRestore();
+  });
+
+  it("AE2: a dispatched retry row defers the same way", async () => {
+    const logSpy = vi.spyOn(console, "log");
+    mocks.updateReturning = [claimRow(), [], []];
+    mocks.turnStatusRows = [timedOutRow()];
+    mocks.successorRows = [[]];
+    mocks.retryBlockerRows = [[{ blockingRetryRowId: "retry-row-2" }]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: null,
+    });
+
+    expect(mocks.notifyThreadTurnUpdate).not.toHaveBeenCalled();
+    expect(mocks.insertAssistantMessage).not.toHaveBeenCalled();
+    expect(reconciliationLog(logSpy)).toMatchObject({
+      outcome: "deferred_to_recovery",
+      blocking_successor_turn_id: null,
+      blocking_retry_row_id: "retry-row-2",
+    });
+    logSpy.mockRestore();
+  });
+
+  it("treats a lost flip race as deferred (zero rows from the guarded flip)", async () => {
+    const logSpy = vi.spyOn(console, "log");
+    mocks.updateReturning = [claimRow(), [], [], []]; // flip returns zero rows
+    mocks.turnStatusRows = [timedOutRow()];
+    mocks.successorRows = [[]];
+    mocks.retryBlockerRows = [[]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: null,
+    });
+
+    expect(mocks.notifyThreadTurnUpdate).not.toHaveBeenCalled();
+    expect(mocks.insertAssistantMessage).not.toHaveBeenCalled();
+    // Race losses log deferred with BOTH blocking fields null — the
+    // signature THINK-310's monitoring uses to tell them apart.
+    expect(reconciliationLog(logSpy)).toMatchObject({
+      outcome: "deferred_to_recovery",
+      blocking_successor_turn_id: null,
+      blocking_retry_row_id: null,
+    });
+    logSpy.mockRestore();
+  });
+
+  it("skips the status write for other terminal statuses and completes the rest", async () => {
+    const logSpy = vi.spyOn(console, "log");
+    mocks.updateReturning = [claimRow(), []];
+    mocks.turnStatusRows = [
+      [
+        {
+          status: "failed",
+          triggeringMessageId: null,
+          createdAt: new Date("2026-07-16T12:00:00Z"),
+        },
+      ],
+    ];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    expect(mocks.notifyThreadTurnUpdate).not.toHaveBeenCalled();
+    // No reconciliation for non-timed_out terminal states — no supersede.
+    expect(mocks.updateSets).not.toContainEqual(
+      expect.objectContaining({ status: "superseded" }),
+    );
+    expect(reconciliationLog(logSpy)).toBeNull();
+    // Rest of finalize completes: message inserted, finalized_at stamped.
+    expect(mocks.insertAssistantMessage).toHaveBeenCalled();
+    expect(mocks.updateSets).toContainEqual({ finalized_at: expect.any(Date) });
+    logSpy.mockRestore();
+  });
+
+  it("AE5: a retry attempt's landed succeeded write closes the origin's retry rows", async () => {
+    mocks.updateReturning = [claimRow(ORIGIN_TURN_ID), [{ id: TURN_ID }]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    expect(mocks.updateSets).toContainEqual(retryClosureSet);
+  });
+
+  it("AE5: closes origin retry rows when the succeeded write lands via the reconciliation flip", async () => {
+    mocks.updateReturning = [
+      claimRow(ORIGIN_TURN_ID),
+      [], // CAS miss
+      [], // no pending rows to supersede
+      [{ id: TURN_ID }], // flip lands
+    ];
+    mocks.turnStatusRows = [timedOutRow()];
+    mocks.successorRows = [[]];
+    mocks.retryBlockerRows = [[]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+    });
+
+    expect(mocks.updateSets).toContainEqual(retryClosureSet);
+  });
+
+  it("AE5: no retry-row closure when the succeeded write does not land", async () => {
+    mocks.updateReturning = [claimRow(ORIGIN_TURN_ID), [], []];
+    mocks.turnStatusRows = [timedOutRow()];
+    mocks.successorRows = [[{ successorId: "successor-turn-1" }]];
+    mocks.retryBlockerRows = [[]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: null,
+    });
+
+    expect(mocks.updateSets).not.toContainEqual(retryClosureSet);
+  });
+
+  it("AE4: an already-finalized turn no-ops at the claim gate before any status logic", async () => {
+    mocks.updateReturning = [[]];
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: false,
+    });
+
+    expect(mocks.notifyThreadTurnUpdate).not.toHaveBeenCalled();
+    expect(
+      mocks.updateSets.filter((value: any) => value?.status === "succeeded"),
+    ).toEqual([]);
   });
 });
 
