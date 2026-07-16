@@ -111,6 +111,7 @@ import {
   SettingsPiExtensionsQuery,
   SettingsSpacesListQuery,
   SettingsTenantMembersQuery,
+  SettingsUpdateAgentProfileMutation,
   SettingsWorkspacePreviewFileQuery,
 } from "@/lib/settings-queries";
 import {
@@ -467,6 +468,9 @@ export function SettingsCapabilities({
   const [, deleteAgentProfile] = useMutation(
     SettingsDeleteAgentProfileMutation,
   );
+  const [, updateAgentProfile] = useMutation(
+    SettingsUpdateAgentProfileMutation,
+  );
 
   const loading = inspection.fetching;
   // The refresh icon reflects only a user-initiated refresh — background
@@ -637,6 +641,44 @@ export function SettingsCapabilities({
       ),
     [profilesResult.data?.agentProfiles],
   );
+
+  // Disabled sub-agents flip the folder node's Disable action to Enable
+  // (subagent-folders U13 managed-folder grammar).
+  const disabledProfileSlugs = useMemo(
+    () =>
+      new Set(
+        (profilesResult.data?.agentProfiles ?? [])
+          .filter((profile) => profile.enabled === false)
+          .map((profile) => profile.slug),
+      ),
+    [profilesResult.data?.agentProfiles],
+  );
+
+  // Tree context-menu Disable/Enable on an agents/<slug>/ folder: the same
+  // updateAgentProfile mutation the Profiles sheet uses, then refetch so
+  // the folder state and menu label stay truthful.
+  async function setProfileEnabledFromTree(slug: string, enabled: boolean) {
+    if (!tenantId) return;
+    const match = (profilesResult.data?.agentProfiles ?? []).find(
+      (profile) => profile.slug === slug,
+    );
+    if (!match) return;
+    const result = await updateAgentProfile({
+      tenantId,
+      id: match.id,
+      input: { enabled },
+    });
+    if (result.error) {
+      toast.error(`Could not ${enabled ? "enable" : "disable"} ${match.name}`, {
+        description: result.error.message,
+      });
+      return;
+    }
+    toast.success(`${match.name} ${enabled ? "enabled" : "disabled"}`);
+    refetchProfiles({ requestPolicy: "network-only" });
+    refetchInspection({ requestPolicy: "network-only" });
+    setPreviewRefreshToken((token) => token + 1);
+  }
 
   const profileName = (profilesResult.data?.agentProfiles ?? []).find(
     (profile) => profile.id === agentProfileId,
@@ -1581,6 +1623,10 @@ export function SettingsCapabilities({
             }
           }}
           deletableProfileSlugs={deletableProfileSlugs}
+          disabledProfileSlugs={disabledProfileSlugs}
+          onSetAgentProfileEnabled={(slug, enabled) =>
+            void setProfileEnabledFromTree(slug, enabled)
+          }
         />
       </div>
 
