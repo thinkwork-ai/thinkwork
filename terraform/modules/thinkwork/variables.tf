@@ -865,18 +865,6 @@ variable "brain_dream_state_schedule_expression" {
   default     = "cron(0 5 * * ? *)"
 }
 
-variable "retry_dispatcher_enabled" {
-  description = "Enable the recurring retry-dispatcher schedule (THINK-307). Never enable on a stage before THINK-305, THINK-308, and THINK-309 are live there (parent plan deploy ordering); manual invokes work regardless."
-  type        = bool
-  default     = false
-}
-
-variable "stall_threshold_minutes" {
-  description = "Minutes of turn inactivity before the stall monitor marks a running turn timed_out; the retry dispatcher reads the same knob as its origin-freshness guard (THINK-306/THINK-307 — one knob, two consumers)."
-  type        = number
-  default     = 5
-}
-
 # ---------------------------------------------------------------------------
 # Naming / Buckets
 # ---------------------------------------------------------------------------
