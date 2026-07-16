@@ -62,6 +62,7 @@ import {
   parseCapabilitiesManifest,
   type CapabilitiesManifest,
   type CapabilityFolderInput,
+  type CompileBindingRow,
 } from "../capabilities/manifest-compile.js";
 import {
   resolveConfiguredCapabilitySigner,
@@ -1174,6 +1175,73 @@ export async function renderWorkspaceTuple(
     allowedServers: effectivePolicy.mcpAllowedServers ?? null,
     blockedServers: effectivePolicy.mcpBlockedServers ?? [],
   };
+
+  // THINK-302 U3b: registry-trust admission behind the per-tenant gate.
+  // At this unit a capability grant lives only at the agent root scope
+  // (U5 generalizes to space/user). Resolve the batched binding lookup
+  // BEFORE compile (and before the signature) so a DB-only approval —
+  // which changes no S3 object — folds into the recompile-skip signature.
+  const agentScopeRef = `agent:${tuple.agentId}`;
+  const registryTrustOn = tuple.capabilityRegistryTrust === true;
+  let registryInput:
+    | {
+        registryTrust: boolean;
+        bindings: Map<string, CompileBindingRow>;
+        bindingsUnavailable?: boolean;
+      }
+    | undefined;
+  let signatureBindings:
+    | Array<{ key: string; markerSha: string; attestationSha: string }>
+    | undefined;
+  if (registryTrustOn) {
+    const bindingKeys = [...capabilityFolderScans.entries()].map(
+      ([mapKey, scan]) => ({
+        scopeRef: agentScopeRef,
+        class: scan.class,
+        slug: mapKey.slice(mapKey.indexOf(":") + 1),
+      }),
+    );
+    const bindingsByKey = new Map<string, CompileBindingRow>();
+    let bindingsUnavailable = false;
+    if (repository.lookupCapabilityBindings && bindingKeys.length > 0) {
+      try {
+        const rows = await repository.lookupCapabilityBindings({
+          tenantId: tuple.tenantId,
+          keys: bindingKeys,
+        });
+        for (const row of rows) {
+          bindingsByKey.set(row.mapKey, {
+            marker_sha: row.markerSha,
+            folder_attestation_sha: row.folderAttestationSha,
+            files_etag_signature: row.filesEtagSignature,
+          });
+        }
+      } catch (error) {
+        // Fail closed: a lookup failure withholds every registry-trust
+        // entry as `unsigned` rather than crashing the whole render.
+        bindingsUnavailable = true;
+        console.error(
+          `[compose-tuple ${tuple.tenantId}/${tuple.agentSlug}] capability binding lookup failed — failing closed`,
+          error,
+        );
+      }
+    } else if (bindingKeys.length > 0) {
+      // The flag is on but this repository cannot look up bindings — treat
+      // as registry-unavailable (fail closed), never silent activation.
+      bindingsUnavailable = true;
+    }
+    registryInput = {
+      registryTrust: true,
+      bindings: bindingsByKey,
+      ...(bindingsUnavailable ? { bindingsUnavailable: true } : {}),
+    };
+    signatureBindings = [...bindingsByKey.entries()].map(([key, row]) => ({
+      key,
+      markerSha: row.marker_sha,
+      attestationSha: row.folder_attestation_sha,
+    }));
+  }
+
   const capabilityInputSignature = computeCapabilityInputSignature({
     capabilityObjects: [...capabilityFolderScans.entries()].flatMap(
       ([mapKey, scan]) => [
@@ -1188,6 +1256,7 @@ export async function renderWorkspaceTuple(
     ),
     skills: capabilitySkillEntries,
     mcpPolicy: capabilityMcpPolicy,
+    ...(signatureBindings ? { bindings: signatureBindings } : {}),
   });
   const existingCapabilitiesManifest = parseCapabilitiesManifest(
     existingCapabilitiesRaw,
@@ -1247,6 +1316,9 @@ export async function renderWorkspaceTuple(
           sidecarRaw,
           files: scan.files,
           ...(childGrants ? { childGrants } : {}),
+          // THINK-302 U3b: agent-root scope for registry admission (U5 adds
+          // space/user). Harmless when the registry gate is off (unused).
+          scopeRef: agentScopeRef,
         };
       }),
     );
@@ -1265,6 +1337,7 @@ export async function renderWorkspaceTuple(
       mcpPolicy: capabilityMcpPolicy,
       inputSignature: capabilityInputSignature,
       generatedAt: (deps.now?.() ?? new Date()).toISOString(),
+      ...(registryInput ? { registry: registryInput } : {}),
     });
     capabilitiesJson = compiled.json;
     capabilitiesManifest = compiled.manifest;

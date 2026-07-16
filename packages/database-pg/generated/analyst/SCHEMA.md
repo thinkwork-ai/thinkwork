@@ -3910,6 +3910,7 @@ Join hints:
 | issue_counter | integer | not null |
 | channel_counters | jsonb | not null |
 | wiki_compile_enabled | boolean | not null |
+| capability_registry_trust | boolean | not null |
 | sandbox_enabled | boolean | not null |
 | compliance_tier | text | not null |
 | sandbox_interpreter_public_id | text |  |

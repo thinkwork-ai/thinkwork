@@ -53,6 +53,16 @@ export const tenants = pgTable(
     wiki_compile_enabled: boolean("wiki_compile_enabled")
       .notNull()
       .default(false),
+    // THINK-302 KTD-8 registry-trust gate. Off for every tenant at migration
+    // time; flipped on per tenant (dev → TEI → McPherson) as the capability
+    // approval registry replaces per-folder sidecar signatures. When on, the
+    // render composes the capabilities manifest from scope-qualified
+    // capability_approvals bindings (with a sidecar-fallback dual-read for
+    // not-yet-backfilled grants); when off, the legacy sidecar path is
+    // unchanged. Read by the workspace renderer (compose-tuple).
+    capability_registry_trust: boolean("capability_registry_trust")
+      .notNull()
+      .default(false),
     // Sandbox (AgentCore Code Interpreter) kill switch. Default-true for
     // forward semantics: new tenants opt in. The Phase 1 migration sets this
     // to false on every pre-existing row in the same transaction so existing
