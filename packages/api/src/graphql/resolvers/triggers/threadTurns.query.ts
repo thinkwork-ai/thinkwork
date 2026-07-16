@@ -59,6 +59,13 @@ export const threadTurns_ = async (
       log_compressed: threadTurns.log_compressed,
       stdout_excerpt: threadTurns.stdout_excerpt,
       stderr_excerpt: threadTurns.stderr_excerpt,
+      // THINK-301 U6 (KTD-B): retry linkage + activity columns exist on the
+      // schema/type but were missing from this explicit select list, so
+      // originTurnId/retryAttempt resolved null on the exact path the web
+      // uses for the thread surface.
+      last_activity_at: threadTurns.last_activity_at,
+      retry_attempt: threadTurns.retry_attempt,
+      origin_turn_id: threadTurns.origin_turn_id,
       created_at: threadTurns.created_at,
       trigger_name: scheduledJobs.name,
     })
@@ -73,8 +80,8 @@ export const threadTurns_ = async (
   // request_id is `${turnId}:tool:${toolCallId}:model`.
   const requestIds = [
     ...new Set(
-      rows.flatMap((r) =>
-        [r.id, r.wakeup_request_id].filter(Boolean) as string[],
+      rows.flatMap(
+        (r) => [r.id, r.wakeup_request_id].filter(Boolean) as string[],
       ),
     ),
   ];
@@ -110,10 +117,7 @@ export const threadTurns_ = async (
         .where(
           and(
             eq(costEvents.tenant_id, args.tenantId),
-            inArray(
-              sql`${costEvents.metadata}->>'parent_request_id'`,
-              turnIds,
-            ),
+            inArray(sql`${costEvents.metadata}->>'parent_request_id'`, turnIds),
           ),
         )
         .groupBy(sql`${costEvents.metadata}->>'parent_request_id'`);
@@ -128,9 +132,7 @@ export const threadTurns_ = async (
 
   return rows.map((r) => {
     const directRequestIds = [
-      ...new Set(
-        [r.id, r.wakeup_request_id].filter(Boolean) as string[],
-      ),
+      ...new Set([r.id, r.wakeup_request_id].filter(Boolean) as string[]),
     ];
     const directCost = directRequestIds.reduce(
       (sum, requestId) => sum + (directCostByRequestId.get(requestId) ?? 0),

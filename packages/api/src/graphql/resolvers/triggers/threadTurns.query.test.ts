@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   rows: [] as Array<Array<Record<string, unknown>>>,
+  selects: [] as Array<Record<string, unknown> | undefined>,
 }));
 
 function queryChain() {
@@ -23,7 +24,10 @@ function queryChain() {
 
 vi.mock("../../utils.js", () => ({
   db: {
-    select: () => queryChain(),
+    select: (columns?: Record<string, unknown>) => {
+      mocks.selects.push(columns);
+      return queryChain();
+    },
   },
   eq: vi.fn((column, value) => ({ type: "eq", column, value })),
   and: vi.fn((...conditions) => ({ type: "and", conditions })),
@@ -64,6 +68,9 @@ vi.mock("../../utils.js", () => ({
     log_compressed: "thread_turns.log_compressed",
     stdout_excerpt: "thread_turns.stdout_excerpt",
     stderr_excerpt: "thread_turns.stderr_excerpt",
+    last_activity_at: "thread_turns.last_activity_at",
+    retry_attempt: "thread_turns.retry_attempt",
+    origin_turn_id: "thread_turns.origin_turn_id",
     created_at: "thread_turns.created_at",
   },
   costEvents: {
@@ -76,6 +83,8 @@ vi.mock("../../utils.js", () => ({
     wakeupRequestId: row.wakeup_request_id,
     runtimeType: row.runtime_type,
     status: row.status,
+    retryAttempt: row.retry_attempt,
+    originTurnId: row.origin_turn_id,
   }),
 }));
 
@@ -87,6 +96,7 @@ import { threadTurns_ } from "./threadTurns.query";
 
 beforeEach(() => {
   mocks.rows = [];
+  mocks.selects = [];
 });
 
 describe("threadTurns", () => {
@@ -173,5 +183,48 @@ describe("threadTurns", () => {
         totalCost: null,
       }),
     ]);
+  });
+
+  // THINK-301 U6 (KTD-B / AE7): the explicit select list omitted the retry
+  // linkage columns, so originTurnId/retryAttempt resolved null on the exact
+  // path the web uses despite existing on the schema and in the DB.
+  it("selects retry linkage + activity columns and maps them through (KTD-B regression)", async () => {
+    mocks.rows = [
+      [
+        {
+          id: "turn-2",
+          wakeup_request_id: null,
+          runtime_type: "pi",
+          status: "succeeded",
+          retry_attempt: 1,
+          origin_turn_id: "turn-1",
+        },
+      ],
+      [],
+      [],
+    ];
+
+    await expect(
+      threadTurns_(
+        null,
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        {} as never,
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "turn-2",
+        retryAttempt: 1,
+        originTurnId: "turn-1",
+      }),
+    ]);
+
+    const turnSelect = mocks.selects[0] ?? {};
+    expect(Object.keys(turnSelect)).toEqual(
+      expect.arrayContaining([
+        "last_activity_at",
+        "retry_attempt",
+        "origin_turn_id",
+      ]),
+    );
   });
 });

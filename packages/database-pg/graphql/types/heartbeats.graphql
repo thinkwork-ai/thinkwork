@@ -84,6 +84,11 @@ type ThreadTurn {
   lastActivityAt: AWSDateTime
   retryAttempt: Int
   originTurnId: ID
+  # THINK-301 U6 (KTD3): server-derived recovery visibility. True iff a
+  # retry_queue row with origin_turn_id = this turn's id exists in status
+  # pending or dispatched. Clients key the "recovering" surface off this,
+  # never off retry_queue inference or turn.error parsing.
+  recoveryPending: Boolean
   createdAt: AWSDateTime!
 }
 

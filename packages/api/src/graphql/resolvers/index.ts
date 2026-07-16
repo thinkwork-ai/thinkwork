@@ -280,6 +280,7 @@ import {
 import { memoryRecordTypeResolvers } from "./memory/types.js";
 import { wikiPageTypeResolvers } from "./wiki/index.js";
 import { routineExecutionTypeResolvers } from "./routines/types.js";
+import { threadTurnTypeResolvers } from "./triggers/types.js";
 import { tenantTypeResolvers } from "./core/types.js";
 import { knowledgeBaseTypeResolvers } from "./knowledge/types.js";
 
@@ -292,6 +293,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   AgentProfileSpaceAssignment: agentProfileSpaceAssignmentTypeResolvers,
   Thread: threadTypeResolvers,
   ThreadParticipant: threadParticipantTypeResolvers,
+  ThreadTurn: threadTurnTypeResolvers,
   Message: messageTypeResolvers,
   MessageMention: messageMentionTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,

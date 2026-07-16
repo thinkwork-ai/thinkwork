@@ -12,6 +12,7 @@ import { createMessageLoaders } from "./resolvers/messages/loaders.js";
 import { createCostLoaders } from "./resolvers/costs/loaders.js";
 import { createKnowledgeLoaders } from "./resolvers/knowledge/loaders.js";
 import { createMemoryLoaders } from "./resolvers/memory/loaders.js";
+import { createTriggerLoaders } from "./resolvers/triggers/loaders.js";
 
 export type DataLoaders = ReturnType<typeof createLoaders>;
 
@@ -24,5 +25,6 @@ export function createLoaders() {
     ...createCostLoaders(),
     ...createKnowledgeLoaders(),
     ...createMemoryLoaders(),
+    ...createTriggerLoaders(),
   };
 }
