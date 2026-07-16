@@ -58,6 +58,7 @@ import { registerMigrateFolderCanonCommand } from "./commands/migrate-folder-can
 import { registerMigrateAgentFoldersCommand } from "./commands/migrate-agent-folders.js";
 import { registerMigrateConnectorsCommand } from "./commands/migrate-connectors.js";
 import { registerCleanupSpaceHindsightBanksCommand } from "./commands/cleanup-space-hindsight-banks.js";
+import { stripForwardedSeparator } from "./lib/argv.js";
 
 const program = new Command();
 
@@ -173,4 +174,4 @@ for (const cmd of program.commands) {
   }
 }
 
-program.parse();
+program.parse(stripForwardedSeparator(process.argv));
