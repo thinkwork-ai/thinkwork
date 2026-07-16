@@ -62,21 +62,32 @@ describe("resolveTerraformRoot", () => {
 });
 
 describe("resolveTerraformRootForStage", () => {
-  it("prefers the cwd-derived root when it has a layout for the stage", () => {
+  it("prefers the registry-recorded dir even when cwd has its own layout", () => {
+    // Running destroy/deploy from inside the monorepo must not run terraform
+    // against the repo's examples/greenfield when the stage recorded where it
+    // actually lives (prod teardown, 2026-07-16).
     const repo = tempDir();
-    const terraformRoot = join(repo, "terraform");
-    const greenfield = join(terraformRoot, "examples", "greenfield");
+    const greenfield = join(repo, "terraform", "examples", "greenfield");
     mkdirSync(greenfield, { recursive: true });
     writeFileSync(join(greenfield, "main.tf"), "");
     const recorded = tempDir();
     writeFileSync(join(recorded, "main.tf"), "");
 
-    expect(resolveTerraformRootForStage("hci", recorded, repo)).toBe(
-      terraformRoot,
+    expect(resolveTerraformRootForStage("hci", recorded, repo)).toBe(recorded);
+  });
+
+  it("lets THINKWORK_TERRAFORM_DIR override the recorded dir", () => {
+    const configured = tempDir();
+    const recorded = tempDir();
+    writeFileSync(join(recorded, "main.tf"), "");
+    process.env.THINKWORK_TERRAFORM_DIR = configured;
+
+    expect(resolveTerraformRootForStage("hci", recorded, tempDir())).toBe(
+      configured,
     );
   });
 
-  it("falls back to the registry-recorded terraform dir when cwd has no layout", () => {
+  it("uses the registry-recorded terraform dir when cwd has no layout", () => {
     const start = tempDir();
     const recorded = tempDir();
     writeFileSync(join(recorded, "main.tf"), "");

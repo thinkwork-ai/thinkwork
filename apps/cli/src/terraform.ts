@@ -61,28 +61,29 @@ function isTerraformRoot(dir: string): boolean {
 }
 
 /**
- * Stage-aware root resolution. The cwd-derived root wins when it actually
- * contains a layout for this stage; otherwise fall back to the terraform dir
- * the environment registry recorded at `init`. Without the fallback,
- * `thinkwork destroy -s X` run from any unrelated directory errors with
- * "No Terraform layout found" even though init recorded exactly where X
- * lives (HCI teardown, 2026-07-02).
+ * Stage-aware root resolution. The environment registry's recorded terraform
+ * dir is authoritative when it still exists — `thinkwork init` recorded
+ * exactly where the stage lives. Preferring the cwd-derived root instead
+ * meant `thinkwork destroy -s <stage>` run from inside the monorepo ran
+ * terraform against the repo's examples/greenfield rather than the stage's
+ * real root, and silently switched that directory's workspace (prod
+ * teardown, 2026-07-16). The cwd-derived root remains the fallback for
+ * stages with no recorded dir (HCI teardown, 2026-07-02), and
+ * THINKWORK_TERRAFORM_DIR still overrides everything.
  */
 export function resolveTerraformRootForStage(
-  stage: string,
+  _stage: string,
   recordedDir: string | null | undefined,
   startDir = process.cwd(),
 ): string {
-  const cwdRoot = resolveTerraformRoot(startDir);
-  try {
-    resolveTierDir(cwdRoot, stage, "app");
-    return cwdRoot;
-  } catch {
-    if (recordedDir && existsSync(path.join(recordedDir, "main.tf"))) {
-      return recordedDir;
-    }
-    return cwdRoot;
+  if (
+    !process.env.THINKWORK_TERRAFORM_DIR &&
+    recordedDir &&
+    existsSync(path.join(recordedDir, "main.tf"))
+  ) {
+    return recordedDir;
   }
+  return resolveTerraformRoot(startDir);
 }
 
 /**
@@ -214,7 +215,8 @@ export function runTerraform(cwd: string, args: string[]): Promise<number> {
 }
 
 /**
- * Run terraform init if not already initialized.
+ * Run terraform init, refreshing a stale module cache when `.terraform/`
+ * already exists (a plain re-init reuses the recorded backend).
  *
  * With a `backend` target, init receives `-backend-config` args. Terraform
  * only applies backend config during init, and the historical short-circuit
@@ -238,10 +240,19 @@ export async function ensureInit(
     return;
   }
 
-  if (!backend) return;
-
   const recorded = readRecordedBackend(cwd);
-  if (backendMatches(recorded, backend)) return;
+  if (!backend || backendMatches(recorded, backend)) {
+    // `.terraform/` exists and the backend is unchanged — but the module
+    // cache can still be stale: a module added to the config after the last
+    // init fails every plan/destroy with "Module not installed" (prod
+    // teardown, 2026-07-16). A plain init reuses the recorded backend and
+    // installs anything missing.
+    const code = await runTerraform(cwd, ["init", "-input=false"]);
+    if (code !== 0) {
+      throw new Error("terraform init failed");
+    }
+    return;
+  }
 
   if (detectLocalStateOrphanRisk(cwd)) {
     throw new Error(
