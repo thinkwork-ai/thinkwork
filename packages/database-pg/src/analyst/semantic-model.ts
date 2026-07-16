@@ -45,6 +45,7 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   // THINK-280 capability runtime: broker/credential control-plane tables.
   // Bindings carry vault refs, external clients carry secret hashes, and
   // definition versions carry signature envelopes — none are analytics data.
+  "capability_approvals", // trust bindings: content shas + etag signatures
   "capability_credential_bindings", // credential_refs_json vault references
   "capability_definition_versions", // signature_json signing envelopes
   "capability_external_clients", // client_secret_hash bearer material
