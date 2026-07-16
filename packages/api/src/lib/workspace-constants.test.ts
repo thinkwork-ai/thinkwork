@@ -4,6 +4,7 @@ import {
   AGENT_CONNECTORS_FOLDER,
   agentAssignmentRe,
   agentMarkerRe,
+  LEGACY_ROOT_CONNECTIONS_FOLDER,
   ROOT_CONNECTIONS_FOLDER,
   TOOLS_FOLDER,
   capabilityClassFromFolderName,
@@ -19,12 +20,13 @@ import {
 } from "./workspace-constants.js";
 
 /**
- * Inert proof (plan U14): every builder must reproduce the exact pattern
- * its consumer carried before centralization. These snapshots are the
- * byte-identical-behavior contract — the U15 flip changes them
- * deliberately, with dual-read alternation landing in the same PR.
+ * U15 FLIP (plan R18/R19): these snapshots deliberately changed from the
+ * U14 "inert proof" — the root connection folder is now `connectors/`.
+ * Writers/key builders emit ONLY the new spelling; the `dualRead` regex
+ * variants accept both spellings during the rename window (until the
+ * per-tenant `migrate-connectors` mover has run everywhere).
  */
-describe("workspace-constants reproduce today's literal patterns", () => {
+describe("workspace-constants post-flip literal patterns (U15)", () => {
   it("skill markers (compose-tuple)", () => {
     expect(skillMarkerRe().source).toBe(/^skills\/([^/]+)\/SKILL\.md$/.source);
     expect(skillAssignmentRe().source).toBe(
@@ -32,21 +34,21 @@ describe("workspace-constants reproduce today's literal patterns", () => {
     );
   });
 
-  it("capability folder markers (compose-tuple)", () => {
+  it("capability folder markers emit the flipped connectors/ spelling", () => {
     expect(connectionMarkerRe().source).toBe(
-      /^connections\/([^/]+)\/CONNECTION\.md$/.source,
+      /^connectors\/([^/]+)\/CONNECTION\.md$/.source,
     );
     expect(connectionAssignmentRe().source).toBe(
-      /^connections\/([^/]+)\/\.assignment\.json$/.source,
+      /^connectors\/([^/]+)\/\.assignment\.json$/.source,
     );
     expect(toolMarkerRe().source).toBe(/^tools\/([^/]+)\/TOOL\.md$/.source);
     expect(toolAssignmentRe().source).toBe(
       /^tools\/([^/]+)\/\.assignment\.json$/.source,
     );
-    // U4 deliberately extends the folder-file scan with agents/ —
-    // covered by the CAPABILITY_COMPILE_REVISION 3→4 bump.
+    // The connectors flip is a compile-visible change — covered by the
+    // CAPABILITY_COMPILE_REVISION 4→5 bump (rev 3→4 covered agents/).
     expect(capabilityFolderFileRe().source).toBe(
-      /^(connections|tools|agents)\/([^/]+)\/(.+)$/.source,
+      /^(connectors|tools|agents)\/([^/]+)\/(.+)$/.source,
     );
   });
 
@@ -67,16 +69,60 @@ describe("workspace-constants reproduce today's literal patterns", () => {
     );
   });
 
-  it("root folder names match today's key builders", () => {
-    expect(capabilityFolderName("connection")).toBe("connections");
+  it("root folder names match the flipped key builders", () => {
+    expect(capabilityFolderName("connection")).toBe("connectors");
     expect(capabilityFolderName("tool")).toBe("tools");
-    expect(ROOT_CONNECTIONS_FOLDER).toBe("connections");
+    expect(ROOT_CONNECTIONS_FOLDER).toBe("connectors");
+    expect(LEGACY_ROOT_CONNECTIONS_FOLDER).toBe("connections");
     expect(TOOLS_FOLDER).toBe("tools");
   });
 });
 
+describe("dual-read window (U15 — R19)", () => {
+  it("marker regexes accept BOTH spellings with dualRead", () => {
+    const marker = connectionMarkerRe("root", { dualRead: true });
+    expect(marker.source).toBe(
+      /^connect(?:ion|or)s\/([^/]+)\/CONNECTION\.md$/.source,
+    );
+    expect("connectors/pg-dev/CONNECTION.md".match(marker)?.[1]).toBe("pg-dev");
+    expect("connections/pg-dev/CONNECTION.md".match(marker)?.[1]).toBe(
+      "pg-dev",
+    );
+    expect("connectionx/pg-dev/CONNECTION.md".match(marker)).toBeNull();
+
+    const assignment = connectionAssignmentRe("root", { dualRead: true });
+    expect("connections/pg-dev/.assignment.json".match(assignment)?.[1]).toBe(
+      "pg-dev",
+    );
+    expect("connectors/pg-dev/.assignment.json".match(assignment)?.[1]).toBe(
+      "pg-dev",
+    );
+  });
+
+  it("folder-file scan accepts both spellings and keeps group numbering", () => {
+    const re = capabilityFolderFileRe("root", { dualRead: true });
+    const legacy = "connections/pg-dev/SCHEMA.md".match(re);
+    expect(legacy?.[1]).toBe("connections");
+    expect(legacy?.[2]).toBe("pg-dev");
+    expect(legacy?.[3]).toBe("SCHEMA.md");
+    const current = "connectors/pg-dev/SCHEMA.md".match(re);
+    expect(current?.[1]).toBe("connectors");
+    expect(current?.[2]).toBe("pg-dev");
+    expect(current?.[3]).toBe("SCHEMA.md");
+  });
+
+  it("without dualRead, only the new spelling matches", () => {
+    expect(
+      "connections/pg-dev/CONNECTION.md".match(connectionMarkerRe()),
+    ).toBeNull();
+    expect(
+      "connectors/pg-dev/CONNECTION.md".match(connectionMarkerRe())?.[1],
+    ).toBe("pg-dev");
+  });
+});
+
 describe("scope-aware naming (plan KTD-6)", () => {
-  it("agent-scope connection grants spell connectors/ greenfield", () => {
+  it("agent-scope connection grants spell connectors/ (now scope-invariant)", () => {
     expect(capabilityFolderName("connection", "agent")).toBe("connectors");
     expect(AGENT_CONNECTORS_FOLDER).toBe("connectors");
     expect(connectionMarkerRe("agent").source).toBe(

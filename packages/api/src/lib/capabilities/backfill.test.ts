@@ -255,7 +255,7 @@ describe("runCapabilityFolderBackfill", () => {
     });
     const agent = report.agents[0]!;
     expect(agent.applied?.written.sort()).toEqual([
-      "connections/linear",
+      "connectors/linear",
       "tools/send-email",
     ]);
     expect(agent.applied?.errors).toEqual([
@@ -309,7 +309,7 @@ describe("runCapabilityFolderBackfill", () => {
     const agent = second.agents[0]!;
     expect(agent.applied?.written).toEqual([]);
     expect(agent.applied?.unchanged.sort()).toEqual([
-      "connections/linear",
+      "connectors/linear",
       "tools/send-email",
     ]);
     expect(s3.objects.get(definitionKey)).toBe(firstDefinition);
@@ -340,7 +340,7 @@ describe("runCapabilityFolderBackfill", () => {
       [...s3.objects.keys()].filter((key) => key.includes("/mcp/")),
     ).toEqual([]);
     expect(
-      [...s3.objects.keys()].some((key) => key.includes("/connections/")),
+      [...s3.objects.keys()].some((key) => key.includes("/connectors/")),
     ).toBe(true);
   });
 

@@ -589,9 +589,7 @@ describe("context-menu actions (item 4)", () => {
     await renderEditor();
     await screen.findByTestId("tree-node-Spaces/customer-success/notes.md");
     expect(
-      screen.queryByTestId(
-        "menu-open-source-Spaces/customer-success/notes.md",
-      ),
+      screen.queryByTestId("menu-open-source-Spaces/customer-success/notes.md"),
     ).toBeNull();
     expect(navigateMock).not.toHaveBeenCalled();
   });
@@ -810,9 +808,7 @@ describe("MCP server tree affordances (U9c, behind the compiled toggle)", () => 
     // the tree; the folder appears on the post-sync refetch.
     await renderEditor();
     expect(screen.queryByTestId("tree-node-connections/slack")).toBeNull();
-    expect(
-      document.querySelector('[data-testid^="tree-pending-"]'),
-    ).toBeNull();
+    expect(document.querySelector('[data-testid^="tree-pending-"]')).toBeNull();
   });
 
   it("an in-flight MCP detach dims the connections/<slug> folder (no badge)", async () => {
@@ -835,6 +831,25 @@ describe("MCP server tree affordances (U9c, behind the compiled toggle)", () => 
     expect(
       document.querySelector('[data-testid^="tree-removing-"]'),
     ).toBeNull();
+  });
+
+  it("U15 dual-read: an in-flight MCP detach also dims the flipped connectors/<slug> folder", async () => {
+    getManifestMock.mockResolvedValue(
+      manifest({
+        entries: [
+          ...ENTRIES,
+          {
+            path: "connectors/github/CONNECTION.md",
+            owner: "agent",
+            generated: false,
+            size: 240,
+          },
+        ],
+      }),
+    );
+    await renderEditor({ removingMcpSlug: "github" });
+    const node = await screen.findByTestId("tree-node-connectors/github");
+    expect(node.className).toContain("opacity-60");
   });
 
   it("the .assignment.json opens as a normal agent-source file", async () => {
@@ -1008,9 +1023,7 @@ describe("removing affordances (sync status itself lives in the host footer)", (
     expect(
       document.querySelector('[data-testid^="tree-removing-"]'),
     ).toBeNull();
-    expect(
-      document.querySelector('[data-testid^="tree-pending-"]'),
-    ).toBeNull();
+    expect(document.querySelector('[data-testid^="tree-pending-"]')).toBeNull();
   });
 });
 
@@ -1336,9 +1349,7 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     });
     await screen.findByTestId("tree-node-connections/firecrawl");
     // No revoke/raw-delete split — no raw ops at all on the managed folder.
-    expect(
-      screen.queryByTestId("menu-revoke-connection-firecrawl"),
-    ).toBeNull();
+    expect(screen.queryByTestId("menu-revoke-connection-firecrawl")).toBeNull();
     expect(
       screen.queryByTestId("menu-new-file-connections/firecrawl"),
     ).toBeNull();
@@ -1351,9 +1362,7 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     expect(screen.queryByTestId("menu-cut-connections/firecrawl")).toBeNull();
     // Remove: confirm dialog → severs the record, then deletes the files.
     fireEvent.click(screen.getByTestId("menu-remove-connection-firecrawl"));
-    expect(
-      screen.getByTestId("composer-delete-confirm"),
-    ).toBeTruthy();
+    expect(screen.getByTestId("composer-delete-confirm")).toBeTruthy();
     fireEvent.click(screen.getByTestId("composer-delete-confirm"));
     await waitFor(() => expect(removeMock).toHaveBeenCalledWith("firecrawl"));
     await waitFor(() =>
@@ -1528,8 +1537,6 @@ describe("Folder capability tree affordances (THINK-173 U9)", () => {
     });
     await screen.findByTestId("tree-node-tools/draft-x");
     expect(screen.queryByTestId("menu-approve-tool-draft-x")).toBeNull();
-    expect(
-      screen.queryByTestId("menu-remove-connection-firecrawl"),
-    ).toBeNull();
+    expect(screen.queryByTestId("menu-remove-connection-firecrawl")).toBeNull();
   });
 });

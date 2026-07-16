@@ -41,6 +41,7 @@ import {
 import {
   capabilityFolderName,
   WORKSPACE_SKILLS_FOLDER,
+  LEGACY_ROOT_CONNECTIONS_FOLDER,
 } from "../workspace-constants.js";
 
 export type CapabilityFolderClass = "connection" | "tool" | "agent";
@@ -266,6 +267,30 @@ async function writeSignedSidecar(input: {
 }
 
 /**
+ * U15 dual-read window: detach/removal must ALSO sweep the legacy
+ * `connections/<slug>/` spelling — otherwise a detach that only deletes
+ * the new `connectors/` keys would leave a stale legacy folder behind
+ * that every dual-read scanner (renderer, connection-assignments) still
+ * resolves, effectively resurrecting the attachment. S3 DeleteObject on
+ * a missing key is a no-op, so this is safe on already-moved workspaces.
+ */
+function legacyConnectionKeys(
+  targetPrefix: string,
+  klass: CapabilityFolderClass,
+  slug: string,
+  files: "sidecar" | "all",
+): string[] {
+  if (klass !== "connection") return [];
+  const legacyFolder = `${targetPrefix}${LEGACY_ROOT_CONNECTIONS_FOLDER}/${slug}`;
+  return files === "sidecar"
+    ? [`${legacyFolder}/${CAPABILITY_SIDECAR_FILE}`]
+    : [
+        `${legacyFolder}/${CAPABILITY_SIDECAR_FILE}`,
+        `${legacyFolder}/${CONNECTION_DEFINITION_FILE}`,
+      ];
+}
+
+/**
  * Detach = remove the SIDECAR only: the definition file remains as an
  * inert unsigned proposal (folder presence never activates anything, R3).
  */
@@ -277,6 +302,12 @@ export async function removeCapabilitySidecar(input: {
 }): Promise<FolderWriteResult> {
   return deleteKeys(input, [
     capabilitySidecarKey(input.targetPrefix, input.klass, input.slug),
+    ...legacyConnectionKeys(
+      input.targetPrefix,
+      input.klass,
+      input.slug,
+      "sidecar",
+    ),
   ]);
 }
 
@@ -290,6 +321,7 @@ export async function removeCapabilityFolder(input: {
   return deleteKeys(input, [
     capabilitySidecarKey(input.targetPrefix, input.klass, input.slug),
     capabilityDefinitionKey(input.targetPrefix, input.klass, input.slug),
+    ...legacyConnectionKeys(input.targetPrefix, input.klass, input.slug, "all"),
   ]);
 }
 

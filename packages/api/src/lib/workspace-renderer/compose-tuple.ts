@@ -74,6 +74,7 @@ import {
   agentMarkerRe,
   capabilityClassFromFolderName,
   capabilityFolderFileRe,
+  capabilityFolderName,
   connectionAssignmentRe,
   connectionMarkerRe,
   skillAssignmentRe,
@@ -270,9 +271,17 @@ export function shouldRenderUserSourcePath(relPath: string): boolean {
 const SKILL_MARKER_RE = skillMarkerRe();
 /** Per-assignment state file beside the marker (absent = enabled). */
 const SKILL_ASSIGNMENT_RE = skillAssignmentRe();
-/** Capability folder markers (THINK-173 U2) — same presence rule. */
-const CONNECTION_MARKER_RE = connectionMarkerRe();
-const CONNECTION_ASSIGNMENT_RE = connectionAssignmentRe();
+/**
+ * Capability folder markers (THINK-173 U2) — same presence rule.
+ * Connection patterns are DUAL-READ (subagent-folders U15): writers emit
+ * `connectors/` post-flip, but workspaces the `migrate-connectors` mover
+ * has not reached yet still carry legacy `connections/` folders — both
+ * spellings must resolve during the window.
+ */
+const CONNECTION_MARKER_RE = connectionMarkerRe("root", { dualRead: true });
+const CONNECTION_ASSIGNMENT_RE = connectionAssignmentRe("root", {
+  dualRead: true,
+});
 const TOOL_MARKER_RE = toolMarkerRe();
 const TOOL_ASSIGNMENT_RE = toolAssignmentRe();
 /** Agent folder marker (subagent-folders U4) — same presence rule. */
@@ -905,6 +914,15 @@ export async function renderWorkspaceTuple(
   // step below decides active vs withheld from the signed sidecar.
   interface CapabilityFolderScan {
     class: "connection" | "tool" | "agent";
+    /**
+     * Actual folder name the definition marker matched under — during
+     * the U15 dual-read window a connection scan may resolve from either
+     * `connectors/` or legacy `connections/`; diagnostics (definitionPath)
+     * must report the real location. When BOTH spellings carry the same
+     * slug the lexicographically later `connectors/` copy wins (S3
+     * listings are key-ordered), matching writer preference.
+     */
+    folderName?: string;
     definitionKey?: string;
     definitionEtag?: string | null;
     sidecarKey?: string;
@@ -936,7 +954,9 @@ export async function renderWorkspaceTuple(
     }
     return scan;
   };
-  const CAPABILITY_FOLDER_FILE_RE = capabilityFolderFileRe();
+  const CAPABILITY_FOLDER_FILE_RE = capabilityFolderFileRe("root", {
+    dualRead: true,
+  });
   for (const object of agentSource.objects) {
     const sourcePath = runtimeSourcePath(object.relPath);
     const marker = sourcePath.match(SKILL_MARKER_RE);
@@ -946,6 +966,7 @@ export async function renderWorkspaceTuple(
     const connectionMarker = sourcePath.match(CONNECTION_MARKER_RE);
     if (connectionMarker) {
       const scan = capabilityScan("connection", connectionMarker[1]!);
+      scan.folderName = sourcePath.slice(0, sourcePath.indexOf("/"));
       scan.definitionKey = object.key;
       scan.definitionEtag = object.etag ?? null;
     }
@@ -1188,10 +1209,17 @@ export async function renderWorkspaceTuple(
               })),
             )
           : undefined;
+        // Diagnostics path reports the REAL folder location: connection
+        // folders may still live under legacy `connections/` during the
+        // U15 dual-read window.
+        const folderName =
+          scan.class === "connection"
+            ? (scan.folderName ?? capabilityFolderName("connection"))
+            : `${scan.class}s`;
         return {
           class: scan.class,
           slug,
-          definitionPath: `${scan.class}s/${slug}/${
+          definitionPath: `${folderName}/${slug}/${
             scan.class === "connection"
               ? "CONNECTION.md"
               : scan.class === "agent"

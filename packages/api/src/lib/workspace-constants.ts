@@ -4,14 +4,19 @@
  *
  * One module owns the folder-name literals so the connections/→connectors/
  * rename (U15) is a constant flip plus a `CAPABILITY_COMPILE_REVISION`
- * bump instead of a scavenger hunt. Ships inert: every export reproduces
- * today's spellings byte-for-byte at root scope.
+ * bump instead of a scavenger hunt.
+ *
+ * U15 FLIPPED (R18/R19): the root plural is now `connectors/`. Writers
+ * emit the new spelling everywhere; READERS run a dual-read window — the
+ * regex builders accept `{ dualRead: true }` to match BOTH spellings
+ * (`connect(?:ion|or)s`) until the per-tenant mover
+ * (`thinkwork migrate-connectors`) has relocated every legacy
+ * `connections/` folder and the window closes in a follow-up cleanup.
  *
  * The connection-class name is SCOPE-AWARE (plan KTD-6): grant folders
- * inside a sub-agent folder (`agents/<slug>/connectors/<conn>/`) debut the
- * `connectors/` spelling greenfield (U5/U7), while the root plural stays
- * `connections/` until the U15 flip. Callers building child-grant keys
- * must pass scope "agent".
+ * inside a sub-agent folder (`agents/<slug>/connectors/<conn>/`) debuted
+ * the `connectors/` spelling greenfield (U5/U7); post-flip both scopes
+ * spell `connectors/`.
  */
 
 import {
@@ -27,14 +32,47 @@ export const WORKSPACE_MCP_FOLDER = "mcp";
 export const WORKSPACE_AGENTS_FOLDER = "agents";
 
 /**
- * Root spelling of the connection class. This is THE constant U15 flips
- * to "connectors" (with dual-read alternation in the reconciler/renderer
- * and a compile-revision bump in the same PR).
+ * Root spelling of the connection class. U15 flipped this to
+ * "connectors" (R18) — the flip PR ships dual-read alternation in the
+ * reconciler/renderer and a compile-revision bump (rev 4→5) alongside.
  */
-export const ROOT_CONNECTIONS_FOLDER = "connections";
+export const ROOT_CONNECTIONS_FOLDER = "connectors";
+
+/**
+ * Legacy root spelling, accepted by dual-read regexes during the rename
+ * window and swept by detach paths + the `migrate-connectors` mover.
+ * The `connections` DB table keeps its name — only the workspace folder
+ * renamed (R18).
+ */
+export const LEGACY_ROOT_CONNECTIONS_FOLDER = "connections";
 
 /** Child-scope spelling — greenfield `connectors/`, never `connections/`. */
 export const AGENT_CONNECTORS_FOLDER = "connectors";
+
+/**
+ * Regex source fragment matching BOTH connection-folder spellings
+ * (dual-read window, plan U15): `connect(?:ion|or)s`. Non-capturing so
+ * builders that embed it keep their existing group numbering.
+ */
+export const CONNECTION_FOLDER_DUAL_READ_SOURCE = "connect(?:ion|or)s";
+
+export interface FolderPatternOptions {
+  /**
+   * Accept BOTH `connections/` and `connectors/` (U15 dual-read window).
+   * Readers that scan existing workspaces pass true; writers and key
+   * builders never do — they always emit the new spelling.
+   */
+  dualRead?: boolean;
+}
+
+function connectionFolderPatternSource(
+  scope: CapabilityFolderScope,
+  options: FolderPatternOptions,
+): string {
+  return options.dualRead
+    ? CONNECTION_FOLDER_DUAL_READ_SOURCE
+    : capabilityFolderName("connection", scope);
+}
 
 export const TOOLS_FOLDER = "tools";
 
@@ -67,20 +105,22 @@ export function skillAssignmentRe(): RegExp {
   );
 }
 
-/** `<connections|connectors>/<slug>/CONNECTION.md` capability marker. */
+/** `connectors/<slug>/CONNECTION.md` capability marker (dual-read aware). */
 export function connectionMarkerRe(
   scope: CapabilityFolderScope = "root",
+  options: FolderPatternOptions = {},
 ): RegExp {
   return new RegExp(
-    `^${capabilityFolderName("connection", scope)}/([^/]+)/${CONNECTION_DEFINITION_FILE.replace(".", "\\.")}$`,
+    `^${connectionFolderPatternSource(scope, options)}/([^/]+)/${CONNECTION_DEFINITION_FILE.replace(".", "\\.")}$`,
   );
 }
 
 export function connectionAssignmentRe(
   scope: CapabilityFolderScope = "root",
+  options: FolderPatternOptions = {},
 ): RegExp {
   return new RegExp(
-    `^${capabilityFolderName("connection", scope)}/([^/]+)/\\.assignment\\.json$`,
+    `^${connectionFolderPatternSource(scope, options)}/([^/]+)/\\.assignment\\.json$`,
   );
 }
 
@@ -108,14 +148,16 @@ export function agentAssignmentRe(): RegExp {
 /**
  * Every capability-folder file (markers, entry scripts, support files)
  * for input-signature/etag scans:
- * `^(connections|tools|agents)/<slug>/<path>$`. Group 1 is the folder
+ * `^(connectors|tools|agents)/<slug>/<path>$`. Group 1 is the folder
  * name — map back to a class via `capabilityClassFromFolderName`.
+ * With `{ dualRead: true }` group 1 also matches legacy `connections`.
  */
 export function capabilityFolderFileRe(
   scope: CapabilityFolderScope = "root",
+  options: FolderPatternOptions = {},
 ): RegExp {
   return new RegExp(
-    `^(${capabilityFolderName("connection", scope)}|${TOOLS_FOLDER}|${WORKSPACE_AGENTS_FOLDER})/([^/]+)/(.+)$`,
+    `^(${connectionFolderPatternSource(scope, options)}|${TOOLS_FOLDER}|${WORKSPACE_AGENTS_FOLDER})/([^/]+)/(.+)$`,
   );
 }
 
@@ -124,7 +166,10 @@ export function capabilityClassFromFolderName(
 ): "connection" | "tool" | "agent" | null {
   if (folder === TOOLS_FOLDER) return "tool";
   if (folder === WORKSPACE_AGENTS_FOLDER) return "agent";
-  if (folder === ROOT_CONNECTIONS_FOLDER || folder === AGENT_CONNECTORS_FOLDER)
+  if (
+    folder === ROOT_CONNECTIONS_FOLDER ||
+    folder === LEGACY_ROOT_CONNECTIONS_FOLDER
+  )
     return "connection";
   return null;
 }

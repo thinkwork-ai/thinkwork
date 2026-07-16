@@ -1707,6 +1707,64 @@ Firecrawl.
     ).toBe(true);
   });
 
+  it("U15 dual-read: capability folders resolve under either spelling during the window", async () => {
+    // Same workspace carries a moved `connectors/` folder AND a legacy
+    // `connections/` folder the mover has not reached — BOTH compile.
+    const store = new FakeStore(
+      seedObjects({
+        "tenants/acme/agents/finance-agent/connectors/firecrawl/CONNECTION.md":
+          {
+            content: CONNECTION_MD,
+            lastModified: "2026-05-22T09:02:00.000Z",
+          },
+        "tenants/acme/agents/finance-agent/connectors/firecrawl/.assignment.json":
+          {
+            content: signedSidecarJson({
+              slug: "firecrawl",
+              klass: "connection",
+              definition: CONNECTION_MD,
+            }),
+            lastModified: "2026-05-22T09:02:00.000Z",
+          },
+        "tenants/acme/agents/finance-agent/connections/legacy-conn/CONNECTION.md":
+          {
+            content: CONNECTION_MD.replace(/firecrawl/g, "legacy-conn"),
+            lastModified: "2026-05-22T09:02:00.000Z",
+          },
+        "tenants/acme/agents/finance-agent/connections/legacy-conn/.assignment.json":
+          {
+            content: signedSidecarJson({
+              slug: "legacy-conn",
+              klass: "connection",
+              definition: CONNECTION_MD.replace(/firecrawl/g, "legacy-conn"),
+            }),
+            lastModified: "2026-05-22T09:02:00.000Z",
+          },
+      }),
+    );
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      capabilityDeps(store),
+    );
+    const manifest = JSON.parse(
+      store.puts.find((put) => put.key.endsWith("/capabilities.json"))!.content,
+    ) as {
+      active: Array<{ slug: string; class: string }>;
+      withheld: Array<{ slug: string; reason: string }>;
+    };
+    expect(
+      manifest.active.some(
+        (entry) => entry.slug === "firecrawl" && entry.class === "connection",
+      ),
+    ).toBe(true);
+    expect(
+      manifest.active.some(
+        (entry) => entry.slug === "legacy-conn" && entry.class === "connection",
+      ),
+    ).toBe(true);
+    expect(manifest.withheld).toEqual([]);
+  });
+
   it("KTD-7: a scratch write re-renders without re-reading capability bytes", async () => {
     const store = new FakeStore(capabilitySeed());
     const first = recordGets(store);

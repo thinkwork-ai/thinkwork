@@ -64,6 +64,7 @@ import {
   type CapabilityFolderWriteDeps,
 } from "./folder-write.js";
 import { removeLegacyMcpFolders } from "../mcp/assignment-state.js";
+import { capabilityFolderName } from "../workspace-constants.js";
 
 const LOG_PREFIX = "[capability-backfill]";
 
@@ -458,7 +459,7 @@ export async function runCapabilityFolderBackfill(
         (existing === entry.definition
           ? applied.unchanged
           : applied.written
-        ).push(`connections/${slug}`);
+        ).push(`${capabilityFolderName("connection")}/${slug}`);
       } else {
         applied.errors.push({ slug, reason: result.reason });
       }

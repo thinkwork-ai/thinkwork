@@ -442,7 +442,10 @@ export function isCompiledArtifactPath(path: string): boolean {
 
 function connectionSlugForFolder(node: TreeNode): string | null {
   if (!node.isFolder) return null;
-  const match = /^connections\/([^/]+)$/.exec(node.path);
+  // Dual-read window (subagent-folders U15): the workspace folder renamed
+  // connections/ → connectors/, but un-moved workspaces still show the
+  // legacy spelling until the migrate-connectors mover runs per tenant.
+  const match = /^connect(?:ion|or)s\/([^/]+)$/.exec(node.path);
   return match ? match[1] : null;
 }
 
@@ -863,7 +866,10 @@ export function ComposerWorkspaceEditor({
   // Attach/detach progress renders in the host's footer status (no ghost
   // nodes or per-node badges in the tree — the folder simply appears on the
   // post-sync refetch).
-  const tree = useMemo(() => buildPreviewTree(visibleEntries), [visibleEntries]);
+  const tree = useMemo(
+    () => buildPreviewTree(visibleEntries),
+    [visibleEntries],
+  );
 
   // Default state is COLLAPSED at EVERY depth — every folder starts closed, only
   // root files are visible; expanding a folder reveals its immediate children
@@ -891,7 +897,6 @@ export function ComposerWorkspaceEditor({
       return next;
     });
   }
-
 
   function renderNode(node: TreeNode, depth: number): React.ReactNode {
     const isCollapsed = collapsed.has(node.path);
@@ -983,9 +988,12 @@ export function ComposerWorkspaceEditor({
     // the editor for every layer it renders.
     const isSkillsRoot = node.isFolder && node.path === "skills";
     const isMcpRoot = node.isFolder && node.path === "mcp";
-    // connections/ is managed like skills/ and mcp/ — folders arrive via
+    // connectors/ is managed like skills/ and mcp/ — folders arrive via
     // the Add-connection picker or agent proposals, never raw file ops.
-    const isConnectionsRoot = node.isFolder && node.path === "connections";
+    // Dual-read (U15): legacy `connections` stays managed until moved.
+    const isConnectionsRoot =
+      node.isFolder &&
+      (node.path === "connectors" || node.path === "connections");
     const canDetachThis = Boolean(
       skillSlug && canManageSkills && onDetachSkill && !isRemoving,
     );
