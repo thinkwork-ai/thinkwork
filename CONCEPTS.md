@@ -415,6 +415,10 @@ One execution of a workflow: a `workflow_runs` record carrying versioned inputs,
 
 A typed unit in a workflow definition — `agent`, `routine`, `tool`, `approval`, `wait`, `http`, or `emit_event`. A routine step invokes the routine's existing engine unchanged; an approval or wait step suspends the run via task token until resolved.
 
+### Stall Clock
+
+The activity timestamp (`thread_turns.last_activity_at`, coalesced to `started_at`) the stall-monitor cron reads to decide whether a `running` turn is stuck. Activity means observed runtime liveness — mid-turn activity event batches and document emissions on the chat path, and the wakeup path's existing bump — not merely dispatch. A turn whose clock goes stale past the stall threshold is marked `timed_out` and enters automatic recovery (THINK-301).
+
 ### Delivery Step
 
 A typed workflow step that sends the workflow's maintained document to an operator-configured recipient list after the agent step finalizes: an email-safe inline rendering plus a share link to the living document (THINK-227). The operator-saved recipient list is the standing send grant (version-audited via automation versions); step outcomes — sent, failed, skipped when no new edition — are run evidence, and sends ride the outbound email ledger.
