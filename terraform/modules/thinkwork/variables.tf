@@ -359,6 +359,12 @@ variable "enable_hindsight" {
   default     = true
 }
 
+variable "enable_agentcore_harness" {
+  description = "Create the AgentCore Harness trial IAM surface (THINK-311 U4): the Harness microVM execution role plus the api Lambda's Harness create/invoke grants. Pure-IAM and ship-inert (no handler calls Harness until U5), so it defaults on. Never grants bedrock-agentcore:InvokeAgentRuntimeCommand."
+  type        = bool
+  default     = true
+}
+
 variable "enable_capability_broker" {
   description = "Enable the THINK-280 governed capability broker (private REST API + dedicated execute-api VPCE with private DNS disabled, DynamoDB session store, broker Lambda). Ship-inert: defaults OFF; U4 flips it on after the live negative-egress proof. The broker Lambda code also fails closed independent of this flag."
   type        = bool

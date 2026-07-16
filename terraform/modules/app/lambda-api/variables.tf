@@ -146,6 +146,12 @@ variable "kb_service_role_arn" {
   type        = string
 }
 
+variable "agentcore_harness_execution_role_arn" {
+  description = "AgentCore Harness execution role ARN (THINK-311 U4). Empty string (harness module disabled) omits the Harness invoker grants from the grouped ai policy."
+  type        = string
+  default     = ""
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN for custom API domain"
   type        = string
