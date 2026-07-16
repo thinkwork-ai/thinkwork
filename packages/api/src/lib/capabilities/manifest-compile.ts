@@ -280,9 +280,22 @@ export interface CapabilityFolderInput {
  * fails closed (every registry-trust entry withheld `unsigned`) instead
  * of silently activating nothing OR crashing the whole render.
  */
+/**
+ * The binding fields the compiler actually reads (THINK-302 U3b). A minimal
+ * structural subset of `CapabilityApprovalRow` so the renderer can supply
+ * lookup results without materializing the full DB row. `ReadonlyMap` keeps
+ * the value type covariant — a `Map<string, CapabilityApprovalRow>` (tests)
+ * assigns cleanly to `ReadonlyMap<string, CompileBindingRow>`.
+ */
+export interface CompileBindingRow {
+  marker_sha: string;
+  folder_attestation_sha: string;
+  files_etag_signature: string | null;
+}
+
 export interface RegistryTrustInput {
   registryTrust: boolean;
-  bindings: Map<string, CapabilityApprovalRow>;
+  bindings: ReadonlyMap<string, CompileBindingRow>;
   bindingsUnavailable?: boolean;
 }
 
@@ -305,7 +318,7 @@ export function bindingScanKey(
  * write/backfill time; compile's hot path uses the etag fast path.
  */
 function bindingMatches(
-  binding: CapabilityApprovalRow,
+  binding: CompileBindingRow,
   markerSha: string,
   files: Array<{ path: string; etag?: string | null }> | undefined,
 ): { ok: true } | { ok: false; detail: string } {

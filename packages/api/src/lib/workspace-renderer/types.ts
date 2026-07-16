@@ -32,6 +32,37 @@ export interface ResolvedWorkspaceRenderTuple {
   userId: string | null;
   userSlug: string | null;
   userName: string | null;
+  /**
+   * THINK-302 KTD-8 registry-trust gate for this tenant. When true, the
+   * capabilities manifest is composed from scope-qualified
+   * `capability_approvals` bindings (sidecar-fallback dual-read for
+   * not-yet-backfilled grants); absent/false = the legacy sidecar path.
+   * Optional so a test fake safely defaults to the legacy path; the live
+   * `resolve()` always populates it from the tenant row.
+   */
+  capabilityRegistryTrust?: boolean;
+}
+
+/**
+ * One scope-qualified binding-lookup key (THINK-302 U3b). Mirrors the
+ * approval-registry `BindingKey` shape without importing it into the renderer
+ * types layer.
+ */
+export interface CapabilityBindingLookupKey {
+  scopeRef: string;
+  class: string;
+  slug: string;
+}
+
+/**
+ * A resolved binding row surfaced to the renderer (the subset compile needs).
+ * `mapKey` is the caller-computed `${scopeRef} ${class} ${slug}` lookup key.
+ */
+export interface CapabilityBindingLookupRow {
+  mapKey: string;
+  markerSha: string;
+  folderAttestationSha: string;
+  filesEtagSignature: string | null;
 }
 
 export interface WorkspaceRuntimeOverrides {
@@ -82,6 +113,17 @@ export interface WorkspaceTupleRepository {
   listSavedCanvases?(
     tuple: ResolvedWorkspaceRenderTuple,
   ): Promise<WorkspaceCanvasIndexEntry[]>;
+  /**
+   * Batched latest-per-key capability-approval binding lookup (THINK-302
+   * U3b). Resolved BEFORE the render's compile pass so a DB-only approval is
+   * folded into the recompile-skip signature. Only consulted when the
+   * tenant's registry-trust gate is on. Optional + fail-closed: a caller that
+   * cannot look up bindings treats the render as registry-unavailable.
+   */
+  lookupCapabilityBindings?(input: {
+    tenantId: string;
+    keys: CapabilityBindingLookupKey[];
+  }): Promise<CapabilityBindingLookupRow[]>;
 }
 
 export interface WorkspaceCanvasIndexEntry {

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   capabilitySignerFromKey,
   capabilityVerifierFromKey,
+  definitionContentSha,
   signCapabilitySidecar,
 } from "../capabilities/sidecar-signing.js";
 import { WORKSPACE_ROUTING_MARKER } from "./agents-md-composer.js";
@@ -1898,5 +1899,211 @@ Firecrawl.
         expect.objectContaining({ slug: "firecrawl", reason: "disabled" }),
       ]),
     );
+  });
+});
+
+describe("renderWorkspaceTuple — registry-trust wiring (THINK-302 U3b)", () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const capabilitySigner = capabilitySignerFromKey(privateKey);
+  const capabilityVerifier = capabilityVerifierFromKey(publicKey);
+
+  const CONNECTION_MD = `---
+name: firecrawl
+description: Firecrawl API.
+type: api
+url: https://api.firecrawl.dev
+operations:
+  - scrape
+---
+Firecrawl.
+`;
+
+  function signedSidecarJson(): string {
+    const base = {
+      slug: "firecrawl",
+      class: "connection" as const,
+      updated_at: "2026-07-16T00:00:00.000Z",
+    };
+    const { signed_content_sha, signature } = signCapabilitySidecar({
+      signer: capabilitySigner,
+      sidecar: base,
+      definitionBytes: CONNECTION_MD,
+      signedBy: "operator:user-1",
+    });
+    return JSON.stringify({ ...base, signed_content_sha, signature });
+  }
+
+  function seed(withSidecar: boolean) {
+    const objects: Record<string, { content: string; lastModified?: string }> =
+      {
+        "tenants/acme/agents/finance-agent/connections/firecrawl/CONNECTION.md":
+          { content: CONNECTION_MD, lastModified: "2026-07-16T00:00:00.000Z" },
+      };
+    if (withSidecar) {
+      objects[
+        "tenants/acme/agents/finance-agent/connections/firecrawl/.assignment.json"
+      ] = {
+        content: signedSidecarJson(),
+        lastModified: "2026-07-16T00:00:00.000Z",
+      };
+    }
+    return new FakeStore(seedObjects(objects));
+  }
+
+  /** FakeRepository that records + serves capability-binding lookups. */
+  class RegistryRepository extends FakeRepository {
+    calls: Array<{ tenantId: string; keys: unknown[] }> = [];
+    constructor(
+      private readonly trust: boolean,
+      private readonly rows: Array<{
+        scopeRef: string;
+        class: string;
+        slug: string;
+        markerSha: string;
+      }> = [],
+      private readonly throws = false,
+    ) {
+      super({ ...TUPLE, capabilityRegistryTrust: trust });
+    }
+    async lookupCapabilityBindings(input: {
+      tenantId: string;
+      keys: Array<{ scopeRef: string; class: string; slug: string }>;
+    }) {
+      this.calls.push(input);
+      if (this.throws) throw new Error("db down");
+      return this.rows.map((row) => ({
+        mapKey: `${row.scopeRef} ${row.class} ${row.slug}`,
+        markerSha: row.markerSha,
+        folderAttestationSha: "b".repeat(64),
+        filesEtagSignature: null,
+      }));
+    }
+  }
+
+  function deps(
+    store: WorkspaceRendererObjectStore,
+    repository: FakeRepository,
+  ) {
+    return {
+      bucket: "workspace",
+      repository,
+      objectStore: store,
+      now: () => new Date("2026-07-16T10:00:00.000Z"),
+      capabilitySigner,
+      capabilityVerifier,
+    };
+  }
+
+  function readManifest(store: FakeStore) {
+    const put = [...store.puts]
+      .reverse()
+      .find((p) => p.key.endsWith("/capabilities.json"));
+    return JSON.parse(put!.content) as {
+      active: Array<{ slug: string; class: string; source_scope?: string }>;
+      withheld: Array<{ slug: string; reason: string }>;
+    };
+  }
+
+  const markerSha = definitionContentSha(CONNECTION_MD);
+  const boundRow = {
+    scopeRef: "agent:agent-1",
+    class: "connection",
+    slug: "firecrawl",
+    markerSha,
+  };
+
+  it("flag OFF: registry is never consulted; sidecar path admits (no source_scope)", async () => {
+    const store = seed(true);
+    const repo = new RegistryRepository(false);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    expect(repo.calls).toHaveLength(0);
+    const manifest = readManifest(store);
+    const entry = manifest.active.find((e) => e.slug === "firecrawl");
+    expect(entry).toBeDefined();
+    expect(entry!.source_scope).toBeUndefined();
+  });
+
+  it("flag ON + matching binding: connector active with source_scope agent:<id>", async () => {
+    const store = seed(false); // no sidecar — registry is the only trust
+    const repo = new RegistryRepository(true, [boundRow]);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    // Lookup was called with the connector's agent-scoped key.
+    expect(repo.calls).toHaveLength(1);
+    expect(repo.calls[0]!.keys).toContainEqual({
+      scopeRef: "agent:agent-1",
+      class: "connection",
+      slug: "firecrawl",
+    });
+    const manifest = readManifest(store);
+    const entry = manifest.active.find((e) => e.slug === "firecrawl");
+    expect(entry?.source_scope).toBe("agent:agent-1");
+    expect(manifest.withheld).toEqual([]);
+  });
+
+  it("flag ON + no binding + no sidecar: withheld unsigned", async () => {
+    const store = seed(false);
+    const repo = new RegistryRepository(true, []);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    const manifest = readManifest(store);
+    expect(manifest.active.some((e) => e.slug === "firecrawl")).toBe(false);
+    expect(manifest.withheld).toContainEqual(
+      expect.objectContaining({ slug: "firecrawl", reason: "unsigned" }),
+    );
+  });
+
+  it("flag ON + no binding + signed sidecar: dual-read fallback admits with source_scope", async () => {
+    const store = seed(true);
+    const repo = new RegistryRepository(true, []);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    const manifest = readManifest(store);
+    const entry = manifest.active.find((e) => e.slug === "firecrawl");
+    expect(entry?.source_scope).toBe("agent:agent-1");
+  });
+
+  it("flag ON + lookup throws: fails closed to unsigned", async () => {
+    const store = seed(true); // even with a sidecar, unavailable → withheld
+    const repo = new RegistryRepository(true, [boundRow], true);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    const manifest = readManifest(store);
+    expect(manifest.active.some((e) => e.slug === "firecrawl")).toBe(false);
+    expect(manifest.withheld).toContainEqual(
+      expect.objectContaining({ slug: "firecrawl", reason: "unsigned" }),
+    );
+  });
+
+  it("flag ON: a DB-only approval busts the recompile-skip signature", async () => {
+    // First render with no binding produces a withheld manifest; approving
+    // (a binding appears) with identical S3 bytes must recompile, not reuse.
+    const store = seed(false);
+    const noBinding = new RegistryRepository(true, []);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, noBinding),
+    );
+    const before = readManifest(store);
+    expect(before.active.some((e) => e.slug === "firecrawl")).toBe(false);
+
+    const bound = new RegistryRepository(true, [boundRow]);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, bound),
+    );
+    const after = readManifest(store);
+    expect(after.active.some((e) => e.slug === "firecrawl")).toBe(true);
   });
 });

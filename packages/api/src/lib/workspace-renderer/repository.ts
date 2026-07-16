@@ -13,7 +13,13 @@ import {
   CANVAS_LIVING_KIND,
   CANVAS_SNAPSHOT_KIND,
 } from "../artifacts/canvas-access.js";
+import {
+  lookupBindings,
+  type CapabilityScopeRef,
+} from "../capabilities/approval-registry.js";
 import type {
+  CapabilityBindingLookupKey,
+  CapabilityBindingLookupRow,
   ResolvedWorkspaceRenderTuple,
   WorkspaceCanvasIndexEntry,
   WorkspaceSpaceIndexEntry,
@@ -38,7 +44,11 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
     input: WorkspaceRenderTupleInput,
   ): Promise<ResolvedWorkspaceRenderTuple | null> {
     const [tenant] = await this.db
-      .select({ id: tenants.id, slug: tenants.slug })
+      .select({
+        id: tenants.id,
+        slug: tenants.slug,
+        capabilityRegistryTrust: tenants.capability_registry_trust,
+      })
       .from(tenants)
       .where(eq(tenants.id, input.tenantId));
     if (!tenant?.slug) return null;
@@ -139,7 +149,32 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       userId: resolvedUser?.id ?? input.userId ?? null,
       userSlug: resolvedUser?.slug ?? null,
       userName: resolvedUser?.name ?? null,
+      capabilityRegistryTrust: tenant.capabilityRegistryTrust === true,
     };
+  }
+
+  async lookupCapabilityBindings(input: {
+    tenantId: string;
+    keys: CapabilityBindingLookupKey[];
+  }): Promise<CapabilityBindingLookupRow[]> {
+    const found = await lookupBindings(this.db, {
+      tenantId: input.tenantId,
+      keys: input.keys.map((key) => ({
+        scopeRef: key.scopeRef as CapabilityScopeRef,
+        class: key.class,
+        slug: key.slug,
+      })),
+    });
+    const rows: CapabilityBindingLookupRow[] = [];
+    for (const [mapKey, row] of found.entries()) {
+      rows.push({
+        mapKey,
+        markerSha: row.marker_sha,
+        folderAttestationSha: row.folder_attestation_sha,
+        filesEtagSignature: row.files_etag_signature,
+      });
+    }
+    return rows;
   }
 
   async listAuthorizedSpaces(
