@@ -541,6 +541,75 @@ export const capabilityBrokerCalls = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// capability_approvals — scope-qualified definition-byte approval bindings
+// (THINK-302 U1). Replaces per-folder Ed25519 sidecar envelopes and the
+// script-trust signed report: a row authorizes SPECIFIC definition bytes
+// (marker sha + whole-folder attestation) at ONE scope. Identical bytes at
+// a different scope_ref are unauthorized until separately bound (AE10 —
+// copy-to-root escalation stays inert). Append-only history: re-approval of
+// new shas for the same (scope_ref, class, slug) inserts a new row; compile
+// trusts the latest binding per key.
+// ---------------------------------------------------------------------------
+
+export const capabilityApprovals = pgTable(
+  "capability_approvals",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    /**
+     * Binding location: `agent:<id>` (root), `agent:<id>/sub:<slug>`,
+     * `space:<id>`, or `user:<id>`. Part of the key — approval at one scope
+     * authorizes nothing anywhere else.
+     */
+    scope_ref: text("scope_ref").notNull(),
+    /** Capability class segment: 'skill' | 'tool' | 'connection' | 'mcp'. */
+    class: text("class").notNull(),
+    slug: text("slug").notNull(),
+    /** sha256 hex of the marker file bytes (frontmatter + body). */
+    marker_sha: text("marker_sha").notNull(),
+    /**
+     * Deterministic whole-folder manifest hash: sha256 over the sorted
+     * (folder-relative path, per-file content sha256) pairs. The approval
+     * authority — swapping any file in the folder is a drift.
+     */
+    folder_attestation_sha: text("folder_attestation_sha").notNull(),
+    /**
+     * Snapshot of the S3 ETag signature (sorted (path, etag) pairs, the
+     * script-trust digest) at binding time. Compile's zero-read fast path:
+     * listing etags unchanged ⇒ attestation holds without reading bytes;
+     * changed ⇒ re-read and recompute the content-sha attestation.
+     */
+    files_etag_signature: text("files_etag_signature"),
+    /** Registry definition row, where one exists (connection-class today). */
+    definition_id: uuid("definition_id").references(
+      () => capabilityDefinitions.id,
+      { onDelete: "set null" },
+    ),
+    /** CapabilitySignedBy provenance: operator:<id> | autonomous:<agentId> | backfill | … */
+    signed_by: text("signed_by").notNull(),
+    signed_at: timestamp("signed_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("idx_capability_approvals_lookup").on(
+      table.tenant_id,
+      table.scope_ref,
+      table.class,
+      table.slug,
+    ),
+    index("idx_capability_approvals_definition").on(table.definition_id),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
