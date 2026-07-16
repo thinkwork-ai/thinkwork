@@ -976,6 +976,37 @@ function resolveAttachedRowsFromFolderConnections(input: {
   const policySource = resolveAnalystPolicySource();
   const rows: McpJoinedRow[] = [];
   for (const entry of input.manifest.active) {
+    // THINK-302 U4c: first-class `mcp` grants (mcp/<slug>/MCP.md). The
+    // MCP.md `server` frontmatter is the tenant registry reference (id or
+    // slug); `enabledTools` is the tool allowlist. Secrets never enter the
+    // tree (R10) — they resolve from the joined tenant_mcp_servers row here,
+    // through the SAME U11 approval/url_hash gate + per-user auth loop the
+    // caller applies to every McpJoinedRow. Replaces the connectors→mcp
+    // mirror; the legacy mcp-type CONNECTION path below stays for the
+    // dual-read window until U9.
+    if (entry.class === "mcp") {
+      const ref = typeof entry.server === "string" ? entry.server : undefined;
+      const registry = ref
+        ? (registryById.get(ref) ?? registryBySlug.get(ref))
+        : undefined;
+      if (!registry) {
+        console.warn(
+          `${input.logPrefix} skipping mcp/${entry.slug}: no approved+enabled tenant registry row (server=${ref ?? "(missing)"})`,
+        );
+        continue;
+      }
+      const allow = Array.isArray(entry.enabledTools)
+        ? entry.enabledTools.filter(
+            (tool): tool is string => typeof tool === "string",
+          )
+        : [];
+      rows.push({
+        ...registry,
+        assignment_enabled: true,
+        assignment_config: allow.length > 0 ? { toolAllowlist: allow } : {},
+      });
+      continue;
+    }
     if (entry.class !== "connection") continue;
     if (entry.type !== "mcp") continue;
     const refId = entry.credentialRefs?.registryServerId;

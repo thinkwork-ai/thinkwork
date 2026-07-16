@@ -418,3 +418,89 @@ describe("buildMcpConfigs — folder-manifest resolution (THINK-173 U5)", () => 
     );
   });
 });
+
+// ── THINK-302 U4c: first-class `mcp` grants (mcp/<slug>/MCP.md) ──────────────
+
+function mcpEntry(
+  over: Partial<CapabilityManifestEntry> = {},
+): CapabilityManifestEntry {
+  return {
+    name: "test-server",
+    slug: "test-server",
+    class: "mcp",
+    server: "srv-1",
+    source_scope: "agent:agent-1",
+    ...over,
+  };
+}
+
+describe("buildMcpConfigs — first-class mcp grants (THINK-302 U4c)", () => {
+  it("resolves an mcp entry by its MCP.md server ref → tenant registry row", async () => {
+    const configs = await buildMcpConfigs("agent-1", null, "[test]", {
+      folderCapabilities: { manifest: manifest([mcpEntry()]) },
+    });
+    expect(configs).toEqual([
+      {
+        name: "test-server",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+      },
+    ]);
+  });
+
+  it("resolves an mcp entry by server SLUG when the ref is not a row id", async () => {
+    const configs = await buildMcpConfigs("agent-1", null, "[test]", {
+      folderCapabilities: {
+        manifest: manifest([mcpEntry({ server: "test-server" })]),
+      },
+    });
+    expect(configs).toHaveLength(1);
+    expect(configs[0]?.name).toBe("test-server");
+  });
+
+  it("enabledTools become the tool allowlist overlay", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({ tools: [{ name: "launch_run" }, { name: "get_run_status" }] }),
+    ]);
+    const configs = await buildMcpConfigs("agent-1", null, "[test]", {
+      folderCapabilities: {
+        manifest: manifest([mcpEntry({ enabledTools: ["launch_run"] })]),
+      },
+    });
+    expect(configs).toHaveLength(1);
+    expect(configs[0]?.tools).toEqual(["launch_run"]);
+  });
+
+  it("skips an mcp entry whose server ref has no approved+enabled registry row", async () => {
+    const configs = await buildMcpConfigs("agent-1", null, "[test]", {
+      folderCapabilities: {
+        manifest: manifest([mcpEntry({ server: "no-such-server" })]),
+      },
+    });
+    expect(configs).toEqual([]);
+  });
+
+  it("composes first-class mcp grants alongside legacy mcp-type connections", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow(),
+      baseRow({
+        mcp_server_id: "srv-2",
+        name: "Second",
+        slug: "second",
+        url: "https://mcp.example/b",
+      }),
+    ]);
+    const configs = await buildMcpConfigs("agent-1", null, "[test]", {
+      folderCapabilities: {
+        manifest: manifest([
+          connectionEntry(),
+          mcpEntry({ name: "second", slug: "second", server: "srv-2" }),
+        ]),
+      },
+    });
+    expect(configs.map((c) => c.name).sort()).toEqual([
+      "second",
+      "test-server",
+    ]);
+  });
+});
