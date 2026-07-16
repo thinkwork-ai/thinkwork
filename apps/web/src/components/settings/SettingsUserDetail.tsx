@@ -6,13 +6,20 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearch,
+} from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import {
   CheckIcon,
   CopyIcon,
+  FileText,
   KeyRoundIcon,
   MailIcon,
+  SlidersHorizontal,
   Trash2Icon,
 } from "lucide-react";
 import {
@@ -41,6 +48,7 @@ import {
   SelectValue,
   Switch,
   Textarea,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { AccountUsageSection } from "@/components/profile/AccountUsageSection";
@@ -71,7 +79,11 @@ export function SettingsUserDetail() {
   const { userId: memberId } = useParams({
     from: "/_authed/settings/users/$userId",
   });
+  const { file, view } = useSearch({
+    from: "/_authed/settings/users/$userId",
+  });
   const navigate = useNavigate();
+  const workspaceView = view === "workspace";
   const { tenantId, userId: callerUserId, role: callerRole } = useTenant();
 
   const [result, refetch] = useQuery({
@@ -101,13 +113,50 @@ export function SettingsUserDetail() {
     : result.fetching
       ? "User"
       : "User not found";
+  const viewToggle = (
+    <TooltipIconButton
+      asChild
+      type="button"
+      className="text-muted-foreground hover:text-foreground"
+      label={workspaceView ? "User details" : "Workspace files"}
+    >
+      {workspaceView ? (
+        <Link
+          to="/settings/users/$userId"
+          params={{ userId: memberId }}
+          search={{}}
+        >
+          <SlidersHorizontal className="size-4" />
+          <span className="sr-only">User details</span>
+        </Link>
+      ) : (
+        <Link
+          to="/settings/users/$userId"
+          params={{ userId: memberId }}
+          search={{ view: "workspace" }}
+        >
+          <FileText className="size-4" />
+          <span className="sr-only">Workspace files</span>
+        </Link>
+      )}
+    </TooltipIconButton>
+  );
+
   usePageHeaderActions({
     title: displayName,
-    breadcrumbs: [
-      { label: "Users", href: "/settings/users" },
-      { label: displayName },
-    ],
-    subtitle: user ? (user.email ?? undefined) : undefined,
+    breadcrumbs: workspaceView
+      ? [
+          { label: "Users", href: "/settings/users" },
+          {
+            label: displayName,
+            href: `/settings/users/${memberId}`,
+            search: {},
+          },
+          { label: "Files" },
+        ]
+      : [{ label: "Users", href: "/settings/users" }, { label: displayName }],
+    action: viewToggle,
+    actionKey: `user-detail:${memberId}:${workspaceView ? "workspace" : "detail"}`,
   });
 
   if (result.fetching && !result.data) {
@@ -130,6 +179,20 @@ export function SettingsUserDetail() {
     );
   }
 
+  if (workspaceView) {
+    return (
+      <div className="h-full min-h-0">
+        <ScopedWorkspaceEditor
+          target={{ userId: user.id }}
+          targetKey={`user:${user.id}`}
+          defaultOpenFile={file ?? "USER.md"}
+          bordered={false}
+          className="h-full"
+        />
+      </div>
+    );
+  }
+
   const isSelf = !!callerUserId && callerUserId === user.id;
   const callerIsOwner = callerRole === "owner";
   const canResendInvite =
@@ -140,6 +203,7 @@ export function SettingsUserDetail() {
     <SettingsPane>
       <SettingsPageTitle
         title={displayName}
+        description={user.email ?? undefined}
         badge={<Badge variant="secondary">{titleCase(member.status)}</Badge>}
         actions={
           <div className="flex flex-wrap items-start justify-end gap-2">
@@ -174,7 +238,7 @@ export function SettingsUserDetail() {
         onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
       <UserModelsSection userId={user.id} />
-      <UserWorkspaceSection userId={user.id} />
+      <UserWorkspaceSection memberId={memberId} />
       <DangerSection
         displayName={displayName}
         memberId={member.id}
@@ -188,23 +252,28 @@ export function SettingsUserDetail() {
 }
 
 /**
- * Embedded file editor over this user's workspace source. The client targets
- * `{ userId }` directly, so edits land under the user's own source tree —
- * never the consolidated multi-source view. Replaces the User/ slice of the
- * retired Settings → Workspace page.
+ * Pointer to the full-page workspace editor (THINK-302 U15, R25). The
+ * embedded fixed-height panel is replaced by the Space-style `view=workspace`
+ * swap — same ScopedWorkspaceEditor, full height, USER.md default-open.
  */
-function UserWorkspaceSection({ userId }: { userId: string }) {
+function UserWorkspaceSection({ memberId }: { memberId: string }) {
   return (
     <SettingsSection label="Workspace files">
-      <div className="h-[28rem]">
-        <ScopedWorkspaceEditor
-          target={{ userId }}
-          targetKey={`user:${userId}`}
-          defaultOpenFile="USER.md"
-          bordered={false}
-          className="h-full"
-        />
-      </div>
+      <SettingsRow
+        label="User workspace"
+        description="USER.md plus the user's capability folders, edited full-page."
+      >
+        <Button asChild type="button" variant="outline" size="sm">
+          <Link
+            to="/settings/users/$userId"
+            params={{ userId: memberId }}
+            search={{ view: "workspace" }}
+          >
+            <FileText className="mr-2 size-4" />
+            Open files
+          </Link>
+        </Button>
+      </SettingsRow>
     </SettingsSection>
   );
 }
