@@ -51,6 +51,7 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "capability_external_clients", // client_secret_hash bearer material
   "connect_providers", // OAuth provider config (may embed client secrets)
   "credentials", // encrypted_value — raw encrypted credentials
+  "pending_tool_approvals", // encrypted parked-call execution payload (THINK-302)
   "customer_deployment_sessions", // client_token_hash bearer material
   "email_provider_installs", // credential/webhook secret refs
   "email_reply_tokens", // bearer token hashes
