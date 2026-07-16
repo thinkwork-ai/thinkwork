@@ -110,9 +110,7 @@ async function discoverAgentWorkspacePrefixes(
     if (!options.tenantSlug) {
       throw new Error("--tenant is required when --agent is provided");
     }
-    return [
-      `tenants/${options.tenantSlug}/agents/${options.agentSlug}/workspace/`,
-    ];
+    return [`tenants/${options.tenantSlug}/agents/${options.agentSlug}/`];
   }
   const scanPrefix = options.tenantSlug
     ? `tenants/${options.tenantSlug}/agents/`
@@ -122,14 +120,14 @@ async function discoverAgentWorkspacePrefixes(
   for (const key of keys) {
     const relative = key.slice(scanPrefix.length);
     const match = options.tenantSlug
-      ? relative.match(/^([^/]+)\/workspace\//)
-      : relative.match(/^([^/]+)\/agents\/([^/]+)\/workspace\//);
+      ? relative.match(/^([^/]+)\/./)
+      : relative.match(/^([^/]+)\/agents\/([^/]+)\/./);
     const agentSlug = options.tenantSlug ? match?.[1] : match?.[2];
     if (!agentSlug || agentSlug === "_catalog") continue;
     prefixes.add(
       options.tenantSlug
-        ? `tenants/${options.tenantSlug}/agents/${agentSlug}/workspace/`
-        : `tenants/${match?.[1]}/agents/${agentSlug}/workspace/`,
+        ? `tenants/${options.tenantSlug}/agents/${agentSlug}/`
+        : `tenants/${match?.[1]}/agents/${agentSlug}/`,
     );
   }
   return [...prefixes].sort((left, right) => left.localeCompare(right));
@@ -276,7 +274,7 @@ function parseWorkspacePrefix(prefix: string): {
   tenantSlug: string;
   agentSlug: string;
 } {
-  const match = prefix.match(/^tenants\/([^/]+)\/agents\/([^/]+)\/workspace\//);
+  const match = prefix.match(/^tenants\/([^/]+)\/agents\/([^/]+)\/$/);
   if (!match?.[1] || !match[2]) {
     return { tenantSlug: "(unknown)", agentSlug: "(unknown)" };
   }

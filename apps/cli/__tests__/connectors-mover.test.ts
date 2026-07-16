@@ -40,7 +40,7 @@ class MemoryStore implements WorkspaceObjectStore {
   }
 }
 
-const PREFIX = "tenants/acme/agents/master/workspace/";
+const PREFIX = "tenants/acme/agents/master/";
 
 function seededStore(): MemoryStore {
   return new MemoryStore(
@@ -178,7 +178,7 @@ describe("moveConnectionsToConnectors", () => {
 
   it("workspaces that never had connections/ stay untouched (no tombstone)", async () => {
     const store = new MemoryStore(
-      new Map([["tenants/acme/agents/clean/workspace/AGENTS.md", "# Clean\n"]]),
+      new Map([["tenants/acme/agents/clean/AGENTS.md", "# Clean\n"]]),
     );
     const summary = await moveConnectionsToConnectors({
       tenantSlug: "acme",
@@ -189,7 +189,7 @@ describe("moveConnectionsToConnectors", () => {
     expect(store.writes).toEqual([]);
     expect(
       store.objects.has(
-        "tenants/acme/agents/clean/workspace/connections/README.md",
+        "tenants/acme/agents/clean/connections/README.md",
       ),
     ).toBe(false);
   });
@@ -198,10 +198,10 @@ describe("moveConnectionsToConnectors", () => {
     const store = new MemoryStore(
       new Map([
         [
-          "tenants/acme/agents/master/workspace/connections/a/CONNECTION.md",
+          "tenants/acme/agents/master/connections/a/CONNECTION.md",
           "a",
         ],
-        ["tenants/tei/agents/ops/workspace/connections/b/CONNECTION.md", "b"],
+        ["tenants/tei/agents/ops/connections/b/CONNECTION.md", "b"],
       ]),
     );
     const summary = await moveConnectionsToConnectors({
@@ -209,8 +209,8 @@ describe("moveConnectionsToConnectors", () => {
       store,
     });
     expect(summary.agentReports.map((report) => report.prefix)).toEqual([
-      "tenants/acme/agents/master/workspace/",
-      "tenants/tei/agents/ops/workspace/",
+      "tenants/acme/agents/master/",
+      "tenants/tei/agents/ops/",
     ]);
   });
 });
