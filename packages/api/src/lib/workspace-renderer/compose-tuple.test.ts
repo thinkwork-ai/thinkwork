@@ -2161,4 +2161,126 @@ Firecrawl.
     expect(manifest.active.some((e) => e.class === "mcp")).toBe(false);
     expect(manifest.withheld.some((e) => e.slug === "legacy")).toBe(false);
   });
+
+  // ── THINK-302 U5b: space + user scope scanning ────────────────────────────
+  const SPACE_TOOL_MD = `---\nname: space-tool\ndescription: Space tool.\nkind: script\nentry: run.sh\n---\nSpace tool.\n`;
+  const USER_MCP_MD = `---\nname: user-mcp\ndescription: User MCP.\nserver: srv-ref\n---\nUser MCP.\n`;
+
+  /** Seed alongside the agent connection so both scopes are present. */
+  function seedWithScopeGrants(extra: Record<string, string>): FakeStore {
+    const objects: Record<string, { content: string; lastModified?: string }> =
+      {};
+    for (const [k, content] of Object.entries(extra)) {
+      objects[k] = { content, lastModified: "2026-07-16T00:00:00.000Z" };
+    }
+    return new FakeStore(seedObjects(objects));
+  }
+
+  it("flag ON: a space tools/<slug>/TOOL.md compiles with source_scope space:<id>", async () => {
+    const store = seedWithScopeGrants({
+      "tenants/acme/spaces/board-pack/tools/space-tool/TOOL.md": SPACE_TOOL_MD,
+    });
+    const repo = new RegistryRepository(true, [
+      {
+        scopeRef: "space:space-1",
+        class: "tool",
+        slug: "space-tool",
+        markerSha: definitionContentSha(SPACE_TOOL_MD),
+      },
+    ]);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    // The lookup was asked about the space-scoped key.
+    expect(repo.calls[0]!.keys).toContainEqual({
+      scopeRef: "space:space-1",
+      class: "tool",
+      slug: "space-tool",
+    });
+    const entry = readManifest(store).active.find(
+      (e) => e.slug === "space-tool",
+    );
+    expect(entry?.source_scope).toBe("space:space-1");
+  });
+
+  it("flag ON: a user mcp/<slug>/MCP.md compiles with source_scope user:<id>", async () => {
+    const store = seedWithScopeGrants({
+      "tenants/acme/users/eric/mcp/user-mcp/MCP.md": USER_MCP_MD,
+    });
+    const repo = new RegistryRepository(true, [
+      {
+        scopeRef: "user:user-1",
+        class: "mcp",
+        slug: "user-mcp",
+        markerSha: definitionContentSha(USER_MCP_MD),
+      },
+    ]);
+    await renderWorkspaceTuple(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        userId: "user-1",
+      },
+      deps(store, repo),
+    );
+    const entry = readManifest(store).active.find((e) => e.slug === "user-mcp");
+    expect(entry?.source_scope).toBe("user:user-1");
+  });
+
+  it("flag OFF: space/user capability folders are never scanned (byte-identical)", async () => {
+    const store = seedWithScopeGrants({
+      "tenants/acme/spaces/board-pack/tools/space-tool/TOOL.md": SPACE_TOOL_MD,
+    });
+    const repo = new RegistryRepository(false);
+    await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      deps(store, repo),
+    );
+    expect(repo.calls).toHaveLength(0);
+    const manifest = readManifest(store);
+    // Not admitted AND not withheld — the scope was never scanned.
+    expect(manifest.active.some((e) => e.slug === "space-tool")).toBe(false);
+    expect(manifest.withheld.some((e) => e.slug === "space-tool")).toBe(false);
+  });
+
+  it("most-specific wins across scopes: a user tool supersedes the same slug at agent root", async () => {
+    const toolMd = (name: string) =>
+      `---\nname: ${name}\ndescription: d\nkind: script\nentry: run.sh\n---\nx.\n`;
+    const store = seedWithScopeGrants({
+      "tenants/acme/agents/finance-agent/tools/shared-tool/TOOL.md":
+        toolMd("shared-tool"),
+      "tenants/acme/users/eric/tools/shared-tool/TOOL.md":
+        toolMd("shared-tool"),
+    });
+    const repo = new RegistryRepository(true, [
+      {
+        scopeRef: "agent:agent-1",
+        class: "tool",
+        slug: "shared-tool",
+        markerSha: definitionContentSha(toolMd("shared-tool")),
+      },
+      {
+        scopeRef: "user:user-1",
+        class: "tool",
+        slug: "shared-tool",
+        markerSha: definitionContentSha(toolMd("shared-tool")),
+      },
+    ]);
+    await renderWorkspaceTuple(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        userId: "user-1",
+      },
+      deps(store, repo),
+    );
+    const entries = readManifest(store).active.filter(
+      (e) => e.slug === "shared-tool",
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.source_scope).toBe("user:user-1");
+  });
 });
