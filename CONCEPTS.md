@@ -153,9 +153,25 @@ The single operator surface for all agent configuration (Settings → Agent, rou
 
 Per-turn runtime evidence of what the agent actually received: which skills, tools, MCP servers, and extensions loaded, which were gated out, and why. The runtime-truth counterpart to the config-derived effective capability set; divergence between the two is a defect signal, and the manifest doubles as the action-time capability snapshot the compliance direction requires.
 
-### Connection
+### Connector (supersedes Connection as the workspace-folder concept)
 
-A workspace-native capability class superseding "MCP server" as the product concept: an external system the agent can reach, of type MCP or API, defined by `connections/<slug>/CONNECTION.md` plus a `.assignment.json` sidecar in the agent workspace. Presence declares the connection; only platform-signed sidecar state (operator action or trust-gate pass) activates it. Sidecars carry enabled state, `permissions.operations`, approval policy, and credential references — never secret values. Distinct from the legacy `connections` DB table (per-user OAuth rows), which becomes the per-principal satisfaction ledger behind this concept.
+A workspace-native capability class superseding "MCP server" as the product concept: an external system the agent can reach, of type MCP or API, defined by `connectors/<slug>/CONNECTION.md` plus a `.assignment.json` sidecar in the agent workspace. Presence declares the connector; only platform-signed sidecar state (operator action or trust-gate pass) activates it. Sidecars carry enabled state, `permissions.operations`, approval policy, and credential references — never secret values. The workspace folder was renamed from `connections/` to `connectors/` (subagent-folders program, 2026-07); readers dual-read both spellings during the migration window and a `connections/README.md` tombstone covers model-visible artifacts (memories, transcripts) that reference old paths. The legacy `connections` DB table (per-user OAuth rows) is deliberately NOT renamed — it becomes the per-principal satisfaction ledger behind this concept.
+
+### Agent Folder
+
+The one recursive shape an agent takes at any level of the workspace: `INSTRUCTIONS.md` (typed YAML frontmatter — required `description`, optional `model`/`enabled`/`builtInTools`/`execution` — above a pure-prose body) plus optional `skills/`, `connectors/`, and `.assignment.json`. Sub-agents are `agents/<slug>/` folders compiled into the capabilities manifest as class `agent`; the root workspace adopts the same anatomy with its instructions in root `INSTRUCTIONS.md` (formerly `AGENTS.md`) and the remaining canonical files (USER.md, SPACE.md, memory/, mcp.json, and peers) declared root-only slots. The `description` is passed verbatim as the delegation tool description. The format is strict from day one — no field aliases; the tolerant legacy `agents/<slug>.md` parser is frozen and retires with the migration. Supersedes the single-file Agent Profile definition; the `agent_profiles` DB projection retires through a per-agent authority flip.
+
+### Grants-by-Presence
+
+How a sub-agent gets capabilities: the presence of a grant folder inside its agent folder, never a frontmatter name-list. `agents/<slug>/connectors/<conn>/` holds only a platform-signed narrowing `.assignment.json` whose operations must be a subset of the root connector's grant (compile-enforced); `agents/<slug>/skills/<skill>/` holds a minimal signed marker referencing the root install. Definitions and credentials never copy down, so revoking the root connector withers every child grant with no child edit, and a dangling skill grant is visible absence at compile — the `SKILL_NOT_AVAILABLE`/`MCP_SERVER_NOT_AVAILABLE` runtime spawn-error class is retired for folder-format sub-agents. A deliberate deviation from Vercel Eve's copy-everything subagents, chosen for single-point revocation and drift-impossibility.
+
+### Sub-Agent Freshness
+
+Sub-agent definitions are compiled state: edits take effect at the next capabilities compile + workspace sync boundary, never mid-thread at the next dispatch. The manifest's agent entry pins the compiled `INSTRUCTIONS.md` etag; Pi verifies the synced file against the pin before spawning and skips the profile loudly on mismatch, so the fingerprint recorded on a run (the eval-comparability join key) is always truthful.
+
+### Eve Deviations (recorded)
+
+ThinkWork's workspace aligns with Vercel Eve's model (eve.dev/docs) with three deliberate deviations that future "align with Eve" passes must not churn back: (1) `connectors/` where Eve says `connections/` — dissolves the collision with the legacy `connections` DB table; (2) UPPERCASE marker files (`INSTRUCTIONS.md`, `SKILL.md`, `CONNECTION.md`) where Eve uses lowercase `instructions.md` — house style; (3) grants-by-presence with zero inheritance where Eve copies context into subagents (see Grants-by-Presence).
 
 ### Data Source (Analyst)
 
