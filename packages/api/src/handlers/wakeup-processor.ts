@@ -509,6 +509,45 @@ export async function resolveRetryTriggeringMessageId(
   }
 }
 
+/**
+ * THINK-307 R6 follow-up (V-A finding): resolve the user a retry-attempt turn
+ * runs as. Retry wakeups are system actors, so `invokerUserId` is undefined
+ * and the Pi runtime rejects the attempt with "missing required identity
+ * field(s): user_id" — automatic recovery would never work. The attempt
+ * re-runs the origin user's prompt on their behalf, so it inherits the sender
+ * of the origin turn's triggering user message. Returns null when the origin
+ * turn, its message link, or a human sender is missing, or when the lookup
+ * fails — non-retry system wakeups keep the R15 "no invoker" refusal.
+ */
+export async function resolveRetryOriginUserId(
+  executor: {
+    execute: (query: ReturnType<typeof sql>) => Promise<{ rows?: unknown[] }>;
+  },
+  originTurnId: string | undefined,
+): Promise<string | null> {
+  if (!originTurnId) return null;
+  try {
+    const result = await executor.execute(sql`
+			SELECT m.sender_id
+			FROM thread_turns t
+			JOIN messages m ON m.id = t.triggering_message_id
+			WHERE t.id = ${originTurnId}::uuid
+			  AND m.sender_type = 'user'
+			  AND m.sender_id IS NOT NULL
+		`);
+    const row = (result.rows || [])[0] as
+      | { sender_id: string | null }
+      | undefined;
+    return row?.sender_id ?? null;
+  } catch (err) {
+    console.error(
+      `[wakeup-processor] Failed to resolve origin user for retry of turn ${originTurnId}:`,
+      err,
+    );
+    return null;
+  }
+}
+
 export async function loadChatMessageAttachmentContext(input: {
   tenantId: string;
   threadId: string;
@@ -678,10 +717,16 @@ export function serviceIdentityForWebhookSpaceWakeup(input: {
 
 export function shouldInsertSyntheticWakeupUserMessage(input: {
   source: string;
+  reason?: string | null;
   payload: Record<string, unknown> | null;
 }): boolean {
   if (input.source === "chat_message") return false;
   if (input.source === "question_answer") return false;
+  // THINK-307 R6: a retry attempt re-runs the origin turn — the user's
+  // original message IS the visible input, and the recovered answer pairs to
+  // it via the inherited triggering_message_id. A synthetic "New message
+  // received" row would duplicate the prompt in the thread.
+  if (input.reason === "retry") return false;
   if (
     input.source === "webhook" &&
     input.payload?.openingMessageAlreadyPersisted === true
@@ -701,7 +746,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // Derive the honest invoker for this wakeup. Only "user" actors get a
   // CURRENT_USER_ID plumbed through; "system" and "agent" actors produce
   // undefined so the admin skill's R15 "no invoker" refusal triggers.
-  const invokerUserId =
+  // Exception: retry wakeups inherit the origin turn's user below (THINK-307
+  // R6) — the attempt re-runs that user's prompt on their behalf.
+  let invokerUserId =
     wakeup.requested_by_actor_type === "user" && wakeup.requested_by_actor_id
       ? wakeup.requested_by_actor_id
       : undefined;
@@ -762,6 +809,20 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   }
 
   const payload = wakeup.payload as Record<string, unknown> | null;
+
+  // THINK-307 R6: retry wakeups are system actors with no user identity, but
+  // the Pi runtime requires user_id for chat-thread turns — without this the
+  // recovery attempt 400s before it starts. Inherit the origin user.
+  if (!invokerUserId && wakeup.reason === "retry") {
+    invokerUserId =
+      (await resolveRetryOriginUserId(
+        db,
+        typeof payload?.originTurnId === "string"
+          ? payload.originTurnId
+          : undefined,
+      )) ?? undefined;
+  }
+
   const agentLoopPayload = normalizeAgentLoopWakeupPayload(payload);
   const runtimeType = normalizeAgentRuntimeType(
     agent.runtime ?? agent.template_runtime,
@@ -2103,6 +2164,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     runThreadId &&
     shouldInsertSyntheticWakeupUserMessage({
       source: wakeup.source,
+      reason: wakeup.reason,
       payload,
     })
   ) {
