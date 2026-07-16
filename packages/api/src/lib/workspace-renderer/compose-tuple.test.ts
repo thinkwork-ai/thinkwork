@@ -37,8 +37,6 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceKind: "custom",
   spaceAccessMode: "public",
   spacePrompt: "Prepare board reporting work.",
-  spaceToolPolicy: { blockedTools: ["send_email"] },
-  spaceMcpPolicy: { allowedServers: ["github"], blockedServers: ["prod-db"] },
   threadId: "thread-1",
   threadSlug: "thread-1",
   userId: "user-1",
@@ -53,8 +51,6 @@ const DEFAULT_SPACE_TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceName: "Default",
   spaceKind: "default",
   spacePrompt: null,
-  spaceToolPolicy: {},
-  spaceMcpPolicy: {},
 };
 
 interface FakeRepositoryOptions {

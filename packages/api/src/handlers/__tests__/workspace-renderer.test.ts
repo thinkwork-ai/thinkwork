@@ -20,8 +20,6 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceKind: "custom",
   spaceAccessMode: "public",
   spacePrompt: null,
-  spaceToolPolicy: { blockedTools: ["send_email"] },
-  spaceMcpPolicy: { blockedServers: ["prod-db"] },
   userId: null,
   userSlug: null,
   userName: null,

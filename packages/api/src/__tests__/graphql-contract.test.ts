@@ -213,10 +213,8 @@ describe("GraphQL Schema Contract", () => {
       );
     });
 
-    it("exposes contextual workroom configuration and MCP bindings", () => {
+    it("exposes contextual workroom configuration; space MCP bindings are retired (THINK-302 U6)", () => {
       const space = schema.getType("Space") as any;
-      const mcpBinding = schema.getType("SpaceMcpServer") as any;
-      const tenantMcpServer = schema.getType("SpaceTenantMcpServer") as any;
 
       expect(space?.toString()).toBe("Space");
       expect(space.getFields().icon.type.toString()).toBe("String");
@@ -225,6 +223,9 @@ describe("GraphQL Schema Contract", () => {
       expect(space.getFields().connectedDataConfig.type.toString()).toBe(
         "AWSJSON",
       );
+      // toolPolicy/mcpPolicy remain as readback of the (now inert) JSONB
+      // columns — U6 retires their dispatch INFLUENCE; the column DROP is a
+      // deferred migration.
       expect(space.getFields().toolPolicy.type.toString()).toBe("AWSJSON");
       expect(space.getFields().mcpPolicy.type.toString()).toBe("AWSJSON");
       expect(space.getFields().agentAvailabilityPolicy.type.toString()).toBe(
@@ -240,13 +241,11 @@ describe("GraphQL Schema Contract", () => {
       expect(space.getFields().renderDiagnostics.type.toString()).toBe(
         "AWSJSON",
       );
-      expect(space.getFields().mcpServers.type.toString()).toBe(
-        "[SpaceMcpServer!]!",
-      );
-      expect(mcpBinding.getFields().mcpServer.type.toString()).toBe(
-        "SpaceTenantMcpServer",
-      );
-      expect(tenantMcpServer.getFields().slug.type.toString()).toBe("String!");
+      // The space_mcp_servers GraphQL surface is retired — space capability
+      // scoping is expressed as folder grants, not a per-space MCP binding.
+      expect(space.getFields().mcpServers).toBeUndefined();
+      expect(schema.getType("SpaceMcpServer")).toBeUndefined();
+      expect(schema.getType("SpaceTenantMcpServer")).toBeUndefined();
     });
 
     it("exposes the per-Space email trigger mutation", () => {

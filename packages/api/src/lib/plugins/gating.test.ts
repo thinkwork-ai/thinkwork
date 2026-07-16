@@ -8,7 +8,6 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  applyWorkspaceMcpPolicyFilter,
   EMPTY_PLUGIN_GATE,
   FAIL_CLOSED_PLUGIN_GATE,
   isNamespacedPluginSkillPath,
@@ -261,45 +260,5 @@ describe("path helpers", () => {
     expect(pluginGateExcludesWorkspacePath(gate, "memory/MEMORY.md")).toBe(
       false,
     );
-  });
-});
-
-describe("applyWorkspaceMcpPolicyFilter (deduplicated dispatch chokepoint)", () => {
-  const configs = [
-    { name: "github" },
-    { name: "prod-db" },
-    { name: "lastmile--crm" },
-  ];
-
-  it("null policy passes everything through (no rendered workspace)", () => {
-    expect(applyWorkspaceMcpPolicyFilter(configs, null)).toEqual(configs);
-    expect(applyWorkspaceMcpPolicyFilter(configs, undefined)).toEqual(configs);
-  });
-
-  it("drops blocklisted servers", () => {
-    const filtered = applyWorkspaceMcpPolicyFilter(configs, {
-      mcpAllowedServers: null,
-      mcpBlockedServers: ["prod-db"],
-    });
-    expect(filtered.map((config) => config.name)).toEqual([
-      "github",
-      "lastmile--crm",
-    ]);
-  });
-
-  it("an allowlist drops everything not on it", () => {
-    const filtered = applyWorkspaceMcpPolicyFilter(configs, {
-      mcpAllowedServers: ["github"],
-      mcpBlockedServers: [],
-    });
-    expect(filtered.map((config) => config.name)).toEqual(["github"]);
-  });
-
-  it("blocklist wins over allowlist (matches the previous inline behavior)", () => {
-    const filtered = applyWorkspaceMcpPolicyFilter(configs, {
-      mcpAllowedServers: ["github", "prod-db"],
-      mcpBlockedServers: ["prod-db"],
-    });
-    expect(filtered.map((config) => config.name)).toEqual(["github"]);
   });
 });

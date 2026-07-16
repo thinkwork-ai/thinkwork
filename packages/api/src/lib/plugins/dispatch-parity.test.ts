@@ -4,8 +4,9 @@
  * payloads through separate code paths, and this seam has produced three
  * prior bugs. After U7 both paths flow through the SAME chokepoints:
  *
- *   MCP side   — buildMcpConfigs(agentId, { humanPairId, requesterUserId })
- *                followed by applyWorkspaceMcpPolicyFilter (gating.ts).
+ *   MCP side   — buildMcpConfigs(agentId, { humanPairId, requesterUserId }).
+ *                (THINK-302 U6 retired the dispatch-side TOOLS.md MCP policy
+ *                filter — configs now pass through directly.)
  *   Skills side — renderWorkspaceTuple → resolvePluginGate (gating.ts),
  *                which excludes plugin skill folders + CONTEXT.md routing
  *                entries from the hydrate manifest.
@@ -101,7 +102,7 @@ import {
   createPluginDispatchAuthResolver,
   type PluginDispatchAuthResolver,
 } from "./activation.js";
-import { applyWorkspaceMcpPolicyFilter, resolvePluginGate } from "./gating.js";
+import { resolvePluginGate } from "./gating.js";
 import {
   createInMemoryPluginEngineStore,
   createInMemoryPluginSecrets,
@@ -192,8 +193,6 @@ class PerUserFakeRepository implements WorkspaceTupleRepository {
       spaceKind: "default",
       spaceAccessMode: "public",
       spacePrompt: null,
-      spaceToolPolicy: {},
-      spaceMcpPolicy: {},
       threadId: input.threadId ?? null,
       threadSlug: input.threadSlug ?? input.threadId ?? null,
       userId: input.userId ?? null,
@@ -422,7 +421,7 @@ async function chatTurnSurface(
     { pluginAuth: pluginAuth() },
   );
   // chat-agent-invoke.ts effectiveMcpConfigs chokepoint (no TOOLS.md policy here)
-  const effectiveMcpConfigs = applyWorkspaceMcpPolicyFilter(mcpConfigs, null);
+  const effectiveMcpConfigs = mcpConfigs;
   const render = await renderSurface(objectStore, currentUserId, threadId);
   return {
     toolNames: effectiveMcpConfigs.map((config) => config.name).sort(),
@@ -453,7 +452,7 @@ async function wakeupTurnSurface(
     "[wakeup-processor]",
     { pluginAuth: pluginAuth() },
   );
-  const mcpConfigs = applyWorkspaceMcpPolicyFilter(mcpConfigsRaw, null);
+  const mcpConfigs = mcpConfigsRaw;
   const render = await renderSurface(
     objectStore,
     costOwnerUserId ?? null,
@@ -628,36 +627,27 @@ describe("dispatch parity — plugin activation gating (U7)", () => {
     }
   });
 
-  it("the shared MCP policy chokepoint applies TOOLS.md policy identically for both builders", async () => {
+  it("both builders resolve identical MCP configs (THINK-302 U6: no dispatch-side policy filter)", async () => {
     activate(ALICE);
     authenticateMcp();
-    const policy = {
-      mcpAllowedServers: null,
-      mcpBlockedServers: ["direct-server"],
-    };
 
-    const chatConfigs = applyWorkspaceMcpPolicyFilter(
-      await buildMcpConfigs(
-        AGENT,
-        { humanPairId: HUMAN_PAIR, requesterUserId: ALICE },
-        "[chat-agent-invoke]",
-        { pluginAuth: pluginAuth() },
-      ),
-      policy,
+    const chatConfigs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: ALICE },
+      "[chat-agent-invoke]",
+      { pluginAuth: pluginAuth() },
     );
-    const wakeupConfigs = applyWorkspaceMcpPolicyFilter(
-      await buildMcpConfigs(
-        AGENT,
-        { humanPairId: HUMAN_PAIR, requesterUserId: ALICE },
-        "[wakeup-processor]",
-        { pluginAuth: pluginAuth() },
-      ),
-      policy,
+    const wakeupConfigs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: ALICE },
+      "[wakeup-processor]",
+      { pluginAuth: pluginAuth() },
     );
 
-    expect(chatConfigs.map((config) => config.name)).toEqual(
-      wakeupConfigs.map((config) => config.name),
+    // The space TOOLS.md MCP policy filter is retired — both builders now
+    // consume the resolved configs directly, so parity is exact.
+    expect(chatConfigs.map((config) => config.name).sort()).toEqual(
+      wakeupConfigs.map((config) => config.name).sort(),
     );
-    expect(chatConfigs.map((config) => config.name)).toEqual(["lastmile--crm"]);
   });
 });

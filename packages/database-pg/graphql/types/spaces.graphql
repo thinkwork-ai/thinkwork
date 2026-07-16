@@ -80,7 +80,6 @@ type Space {
   renderDiagnostics: AWSJSON
   members: [SpaceMember!]!
   knowledgeBases: [SpaceKnowledgeBase!]!
-  mcpServers: [SpaceMcpServer!]!
   checklistTemplates: [SpaceChecklistTemplate!]!
   integrations: [SpaceIntegration!]!
   unreadThreadCount: Int!
@@ -97,33 +96,6 @@ type SpaceMember {
   user: User
   role: SpaceMemberRole!
   notificationPreference: SpaceNotificationPreference!
-  createdAt: AWSDateTime!
-  updatedAt: AWSDateTime!
-}
-
-type SpaceMcpServer {
-  id: ID!
-  tenantId: ID!
-  spaceId: ID!
-  mcpServerId: ID!
-  mcpServer: SpaceTenantMcpServer
-  enabled: Boolean!
-  config: AWSJSON
-  createdAt: AWSDateTime!
-  updatedAt: AWSDateTime!
-}
-
-type SpaceTenantMcpServer {
-  id: ID!
-  tenantId: ID!
-  name: String!
-  slug: String!
-  transport: String!
-  authType: String!
-  oauthProvider: String
-  tools: AWSJSON
-  enabled: Boolean!
-  status: String!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -230,13 +202,6 @@ input SetSpaceKnowledgeBasesInput {
   knowledgeBases: [SpaceKnowledgeBaseInput!]!
 }
 
-input SetSpaceToolsInput {
-  tenantId: ID!
-  spaceId: ID!
-  builtInToolSlugs: [String!]!
-  mcpServerIds: [ID!]!
-}
-
 input SetSpaceRuntimeOverridesInput {
   model: String
   guardrailId: ID
@@ -268,7 +233,6 @@ extend type Mutation {
   setSpaceKnowledgeBases(
     input: SetSpaceKnowledgeBasesInput!
   ): [SpaceKnowledgeBase!]!
-  setSpaceTools(input: SetSpaceToolsInput!): Space!
   addSpaceMember(spaceId: ID!, userId: ID!): SpaceMember!
   removeSpaceMember(spaceId: ID!, userId: ID!): Boolean!
   startCustomerOnboarding(

@@ -9,7 +9,6 @@ import {
 } from "./setSpaceEmailTriggers.mutation.js";
 import { setSpaceKnowledgeBases } from "./setSpaceKnowledgeBases.mutation.js";
 import { setSpaceRuntimeOverrides } from "./setSpaceRuntimeOverrides.mutation.js";
-import { setSpaceTools } from "./setSpaceTools.mutation.js";
 import { space } from "./space.query.js";
 import { spaces } from "./spaces.query.js";
 import { startCustomerOnboarding } from "./startCustomerOnboarding.mutation.js";
@@ -29,7 +28,6 @@ export const spaceMutations = {
   setSpaceEmailTriggers,
   setSpaceKnowledgeBases,
   setSpaceRuntimeOverrides,
-  setSpaceTools,
   startCustomerOnboarding,
   updateSpace,
   updateSpaceEmailTrigger,
@@ -38,6 +36,5 @@ export const spaceMutations = {
 export {
   spaceChecklistTemplateTypeResolvers,
   spaceMemberTypeResolvers,
-  spaceMcpServerTypeResolvers,
   spaceTypeResolvers,
 } from "./types.js";

@@ -6,51 +6,39 @@ import {
 } from "./effective-policy-composer.js";
 
 describe("composeWorkspacePolicy", () => {
-  it("unions agent and Space blocked tools", () => {
+  it("normalizes the agent blocked-tools list (THINK-302 U6: space policy retired)", () => {
     const policy = composeWorkspacePolicy({
-      agentBlockedTools: ["send_email", "browser_automation"],
-      spaceToolPolicy: {
-        blockedTools: ["execute_code", "send_email"],
-      },
+      agentBlockedTools: ["send_email", "browser_automation", "send_email"],
     });
 
-    expect(policy.blockedTools).toEqual([
-      "browser_automation",
-      "execute_code",
-      "send_email",
-    ]);
-    expect(policy.diagnostics).toContain(
+    // Deduplicated + sorted; no space contribution anymore.
+    expect(policy.blockedTools).toEqual(["browser_automation", "send_email"]);
+    expect(policy.diagnostics).not.toContain(
       "agent_and_space_blocked_tools_union_applied",
     );
   });
 
-  it("intersects allowed tools and lets blocked tools win", () => {
+  it("keeps the agent allowlist and lets blocked tools win", () => {
     const policy = composeWorkspacePolicy({
       agentAllowedTools: ["query_context", "send_email"],
-      spaceToolPolicy: {
-        allowedTools: ["query_context", "execute_code"],
-        blockedTools: ["query_context"],
-      },
+      agentBlockedTools: ["query_context"],
     });
 
-    expect(policy.allowedTools).toEqual(["query_context"]);
+    expect(policy.allowedTools).toEqual(["query_context", "send_email"]);
     expect(isToolAllowed(policy, "query_context")).toBe(false);
-    expect(isToolAllowed(policy, "send_email")).toBe(false);
+    expect(isToolAllowed(policy, "send_email")).toBe(true);
     expect(policy.diagnostics).toContain(
       "blocked_tools_take_precedence_over_allowed_tools",
     );
   });
 
-  it("normalizes MCP allow and block policy", () => {
+  it("MCP allow/block policy is always empty (space mcp_policy retired)", () => {
     const policy = composeWorkspacePolicy({
-      spaceMcpPolicy: {
-        allowedServers: ["github", "github", " slack "],
-        blockedServers: ["prod-db"],
-      },
+      agentBlockedTools: ["send_email"],
     });
 
-    expect(policy.mcpAllowedServers).toEqual(["github", "slack"]);
-    expect(policy.mcpBlockedServers).toEqual(["prod-db"]);
+    expect(policy.mcpAllowedServers).toBeNull();
+    expect(policy.mcpBlockedServers).toEqual([]);
   });
 
   it("composes model routing by source precedence while preserving distinct matches", () => {

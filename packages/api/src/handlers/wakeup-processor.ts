@@ -54,7 +54,6 @@ import { revalidateRunAsAtDispatch } from "../lib/scheduled-jobs/run-as-authz.js
 import { resolveRunAsTargetMembership } from "../lib/scheduled-jobs/run-as-facts.js";
 import { createRunAsReaders } from "../lib/scheduled-jobs/run-as-readers.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
-import { applyWorkspaceMcpPolicyFilter } from "../lib/plugins/gating.js";
 import {
   fingerprintInputsFromCapabilitiesManifest,
   parseCapabilitiesManifest,
@@ -1848,7 +1847,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     modelRouting: [],
     diagnostics: [],
   };
-  let effectiveMcpPolicy: EffectiveWorkspacePolicy | null = null;
   if (runSpaceId) {
     try {
       renderedWorkspace = await renderWorkspaceTupleForWakeup({
@@ -1870,7 +1868,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       });
       if (renderedWorkspace.rendered) {
         renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
-        effectiveMcpPolicy = renderedWorkspace.effectivePolicy ?? null;
         effectiveToolPolicy =
           renderedWorkspace.effectivePolicy ?? effectiveToolPolicy;
         effectiveBlockedTools =
@@ -2074,14 +2071,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       },
     },
   );
-  // Shared chokepoint (U7): the TOOLS.md MCP policy filter is the same
-  // function chat-agent-invoke applies — the two builders cannot drift.
-  // KTD-6 (THINK-173): the folder path's manifest already carries the
-  // policy verdict at render time, so it is not re-applied there.
-  const mcpConfigs =
-    agent.capability_folder_dispatch === true
-      ? mcpConfigsRaw
-      : applyWorkspaceMcpPolicyFilter(mcpConfigsRaw, effectiveMcpPolicy);
+  // THINK-302 U6 (R21): the space TOOLS.md MCP policy filter is retired
+  // (folder grants, not subtractive policy). Resolved configs pass through.
+  const mcpConfigs = mcpConfigsRaw;
 
   // Dispatch-control parity with chat-agent-invoke (plan 2026-06-12-002 U1):
   // agent_profiles / model routing resolve exactly the way the chat path

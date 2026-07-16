@@ -25,8 +25,6 @@ export interface ResolvedWorkspaceRenderTuple {
   spaceKind: string;
   spaceAccessMode: string;
   spacePrompt: string | null;
-  spaceToolPolicy: unknown;
-  spaceMcpPolicy: unknown;
   threadId?: string | null;
   threadSlug?: string | null;
   userId: string | null;
@@ -134,12 +132,7 @@ export interface WorkspaceCanvasIndexEntry {
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
 
 export type WorkspaceHydrateOwner =
-  | "agent"
-  | "space"
-  | "user"
-  | "thread_notes"
-  | "thread_goal"
-  | "system";
+  "agent" | "space" | "user" | "thread_notes" | "thread_goal" | "system";
 
 export interface WorkspaceHydrateSource {
   owner: Exclude<WorkspaceHydrateOwner, "system">;

@@ -64,7 +64,6 @@ import {
 } from "../lib/workspace-renderer/index.js";
 import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
-import { applyWorkspaceMcpPolicyFilter } from "../lib/plugins/gating.js";
 import { loadTrustedCatalogSkillIds } from "../lib/skill-trust/runtime-gate.js";
 // Post-AgentCore helpers — previously inline in this file; lifted into
 // the shared chat-finalize lib so chat-agent-finalize (the new HTTP
@@ -522,10 +521,7 @@ function isEffectiveWorkspacePolicy(
 }
 
 type ChatInvokeIdentitySource =
-  | "message_sender"
-  | "thread_creator"
-  | "computer_agent_human_pair"
-  | "none";
+  "message_sender" | "thread_creator" | "computer_agent_human_pair" | "none";
 
 export interface ChatInvokeIdentity {
   currentUserId: string;
@@ -1399,20 +1395,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         `[chat-agent-invoke] pinned skills requested=${pinnedSkillSlugs.length} message=${messagePinnedSkillSlugs.length} allowed=${pinnedSkillsConfig.length}`,
       );
     }
-    const effectiveMcpPolicy = renderedWorkspace.rendered
-      ? (renderedWorkspace.effectivePolicy ?? null)
-      : null;
-    // Shared chokepoint (U7): the TOOLS.md MCP policy filter is the same
-    // function the wakeup-processor applies — the two builders cannot
-    // drift. Plugin activation gating already happened inside
-    // buildMcpConfigs, keyed on the same currentUserId passed to the
-    // workspace render above.
-    // KTD-6 (THINK-173): the folder path's manifest already carries the
-    // TOOLS.md MCP policy verdict at render time — re-applying it here
-    // would double-filter; the legacy path keeps the dispatch-side check.
-    const policyFilteredMcpConfigs = runtimeConfig.capabilityFolderDispatch
-      ? mcpConfigs
-      : applyWorkspaceMcpPolicyFilter(mcpConfigs, effectiveMcpPolicy);
+    // THINK-302 U6 (R21): the space TOOLS.md MCP policy filter is retired —
+    // space capability scoping is folder grants, and the folder path's
+    // manifest already carries any policy verdict at render time. Resolved MCP
+    // configs pass through directly to the explicit-plugin-mention narrowing.
+    const policyFilteredMcpConfigs = mcpConfigs;
     const effectiveMcpConfigs = filterMcpConfigsForExplicitPluginMention(
       policyFilteredMcpConfigs,
       userMessage,

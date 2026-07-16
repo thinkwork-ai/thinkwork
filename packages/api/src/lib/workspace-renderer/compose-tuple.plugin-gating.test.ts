@@ -58,8 +58,6 @@ class FakeRepository implements WorkspaceTupleRepository {
       spaceKind: "default",
       spaceAccessMode: "public",
       spacePrompt: null,
-      spaceToolPolicy: {},
-      spaceMcpPolicy: {},
       threadId: "thread-1",
       threadSlug: "thread-1",
       userId: input.userId ?? null,

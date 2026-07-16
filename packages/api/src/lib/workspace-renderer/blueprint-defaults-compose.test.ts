@@ -46,8 +46,6 @@ const TUPLE: ResolvedWorkspaceRenderTuple = {
   spaceKind: "default",
   spaceAccessMode: "public",
   spacePrompt: null,
-  spaceToolPolicy: {},
-  spaceMcpPolicy: {},
   threadId: "thread-1",
   threadSlug: "thread-1",
   userId: "user-1",

@@ -256,44 +256,7 @@ export function pluginGateExcludesWorkspacePath(
   );
 }
 
-// ---------------------------------------------------------------------------
-// Dispatch-side shared chokepoint (consumed by BOTH payload builders)
-// ---------------------------------------------------------------------------
-
-/** Structural subset of EffectiveWorkspacePolicy the MCP filter needs. */
-export interface WorkspaceMcpPolicyView {
-  mcpAllowedServers: string[] | null;
-  mcpBlockedServers: string[];
-}
-
-/**
- * The single TOOLS.md MCP policy filter applied to resolved MCP configs
- * in BOTH dispatch paths (chat-agent-invoke and wakeup-processor).
- * Behavior-preserving extraction of the previously duplicated inline
- * filters: a server is dropped when the effective workspace policy
- * blocklists its name, or when an allowlist exists and omits it. A null
- * policy (no rendered workspace) passes everything through.
- *
- * Plugin activation gating for MCP does NOT live here — it is applied
- * upstream inside `buildMcpConfigs` (U6), keyed on the same
- * requesterUserId both builders pass. This filter is the shared
- * chokepoint that keeps the post-resolution policy pass from drifting
- * between the two builders.
- */
-export function applyWorkspaceMcpPolicyFilter<T extends { name: string }>(
-  configs: T[],
-  policy: WorkspaceMcpPolicyView | null | undefined,
-): T[] {
-  return configs.filter((config) => {
-    if (policy?.mcpBlockedServers.includes(config.name)) {
-      return false;
-    }
-    if (
-      policy?.mcpAllowedServers &&
-      !policy.mcpAllowedServers.includes(config.name)
-    ) {
-      return false;
-    }
-    return true;
-  });
-}
+// THINK-302 U6 (R21): the space TOOLS.md MCP policy filter
+// (`applyWorkspaceMcpPolicyFilter`) is retired — space capability scoping is
+// expressed as folder grants, not a subtractive dispatch filter. Both payload
+// builders now consume resolved MCP configs directly.
