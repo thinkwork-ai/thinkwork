@@ -25,7 +25,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { tenants } from "./core";
+import { tenants, users } from "./core";
 import { agents } from "./agents";
 import { routines } from "./routines";
 import { webhooks } from "./webhooks";
@@ -69,6 +69,16 @@ export const scheduledJobs = pgTable(
     next_run_at: timestamp("next_run_at", { withTimezone: true }),
     created_by_type: text("created_by_type"), // system | user | agent
     created_by_id: text("created_by_id"),
+    // THINK-302 U7 (R28/KTD-14): the identity a wakeup/scheduled turn runs
+    // AS, so it composes that user's + the run-in-space's capability scopes.
+    // NEVER inherits the creator's grants — a job with no run_as_user_id
+    // compiles root + sub-agent only. Set/cleared through an authorized
+    // surface (save-time: self-only for members, operator for others;
+    // dispatch-time revalidation drops stale grants). FK set-null so a
+    // deactivated user's jobs degrade to root-only rather than break.
+    run_as_user_id: uuid("run_as_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
