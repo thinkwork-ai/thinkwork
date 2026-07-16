@@ -169,6 +169,7 @@ export function versionToGql(
     descriptor: awsJson(row.descriptor_json),
     contractHashes: awsJson(row.contract_hashes_json),
     provenance: awsJson(row.provenance_json),
+    signature: awsJson(row.signature_json ?? null),
     sourceProposalId: row.source_proposal_id ?? null,
     admittedAt: iso(row.admitted_at),
     admittedByUserId: row.admitted_by_user_id ?? null,

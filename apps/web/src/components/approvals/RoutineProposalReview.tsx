@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
+  Bot,
   Check,
   Loader2,
   RefreshCw,
@@ -118,9 +119,12 @@ function compactJson(value: unknown): string {
 export function RoutineProposalReview({
   proposalId,
   tenantId,
+  readOnly = false,
 }: {
   proposalId: string;
   tenantId: string;
+  /** Hide the decision affordances (non-operator viewers). */
+  readOnly?: boolean;
 }) {
   const [{ data, fetching, error }, refetch] = useQuery<{
     routineProposal: Proposal | null;
@@ -301,7 +305,24 @@ export function RoutineProposalReview({
     status?: string;
     fixtures?: Array<{ path?: string; passed?: boolean; detail?: string }>;
   } | null;
-  const approvalEvidence = parseAwsJson(proposal.approvalEvidence);
+  const approvalEvidence = parseAwsJson(proposal.approvalEvidence) as {
+    promotionOutcome?: string;
+    commitSha?: string;
+    validatedSha?: string;
+    reason?: string;
+    hermetic?: {
+      status?: string;
+      fixtures?: Array<{ path?: string; passed?: boolean; detail?: string }>;
+    };
+  } | null;
+  // Stored gate result — "did the machine validate this code": green/red plus
+  // per-fixture detail, persisted at decision time in approvalEvidence.
+  const decidedGate = approvalEvidence?.hermetic ?? null;
+  // An approved-but-never-promoted proposal (e.g. an autonomous approval whose
+  // hermetic gate came back red): nothing activated, so the operator can still
+  // reject it to close out the bad machine approval.
+  const rejectableAfterApproval =
+    proposal.status === "approved" && !proposal.promotedCommitSha;
 
   return (
     <article
@@ -383,7 +404,7 @@ export function RoutineProposalReview({
         </div>
       ) : null}
 
-      {decidable ? (
+      {decidable && !readOnly ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -419,9 +440,9 @@ export function RoutineProposalReview({
             Reject
           </Button>
         </div>
-      ) : (
+      ) : decidable ? null : (
         <div
-          className="rounded-lg border border-border/70 px-3 py-2 text-sm"
+          className="space-y-2 rounded-lg border border-border/70 px-3 py-2 text-sm"
           data-testid="routine-proposal-decision"
         >
           {proposal.status === "approved" || proposal.status === "promoted" ? (
@@ -433,21 +454,27 @@ export function RoutineProposalReview({
               >
                 {proposal.approvalMode === "repair" ? (
                   <Wrench className="size-4 shrink-0" aria-hidden />
+                ) : proposal.approvalMode === "autonomous" ? (
+                  <Bot className="size-4 shrink-0" aria-hidden />
                 ) : (
                   <UserCheck className="size-4 shrink-0" aria-hidden />
                 )}
                 {proposal.approvalMode === "repair"
                   ? "Repair-approved (machine)"
-                  : "Operator-approved"}
+                  : proposal.approvalMode === "autonomous"
+                    ? "Self-approved (autonomous)"
+                    : "Operator-approved"}
               </p>
               <p className="text-xs text-muted-foreground">
                 {proposal.approvalMode === "repair"
                   ? "Published by the repair path with a structured-field diff and a green hermetic fixture run as evidence — no human decision."
-                  : `Approved by an operator${
-                      proposal.decidedByUserId
-                        ? ` (${proposal.decidedByUserId})`
-                        : ""
-                    }.`}
+                  : proposal.approvalMode === "autonomous"
+                    ? "Approved autonomously by the composing agent under the governed self-extension policy — no human decision. The hermetic fixture gate below is the machine evidence."
+                    : `Approved by an operator${
+                        proposal.decidedByUserId
+                          ? ` (${proposal.decidedByUserId})`
+                          : ""
+                      }.`}
                 {proposal.decidedAt
                   ? ` Decided ${new Date(proposal.decidedAt).toLocaleString()}.`
                   : ""}
@@ -456,17 +483,80 @@ export function RoutineProposalReview({
                 <p className="font-mono text-xs text-muted-foreground">
                   promoted commit {proposal.promotedCommitSha}
                 </p>
-              ) : null}
+              ) : (
+                <p
+                  className="text-xs text-amber-700 dark:text-amber-400"
+                  data-testid="routine-proposal-not-promoted"
+                >
+                  Not promoted — the approved bundle never became validated code
+                  {approvalEvidence?.promotionOutcome
+                    ? ` (${approvalEvidence.promotionOutcome})`
+                    : ""}
+                  .
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-muted-foreground">
               This proposal is {proposal.status} — no decision is available.
             </p>
           )}
+          {decidedGate ? (
+            <div
+              className="space-y-1"
+              data-testid="routine-proposal-decided-gate"
+            >
+              <p className="flex items-center gap-1.5 text-xs font-medium">
+                Hermetic fixture gate:
+                <StatusBadge
+                  status={
+                    decidedGate.status === "green"
+                      ? "admitted"
+                      : decidedGate.status === "red"
+                        ? "rejected"
+                        : (decidedGate.status ?? "unknown")
+                  }
+                />
+                <span className="text-muted-foreground">
+                  {decidedGate.status ?? "unknown"}
+                </span>
+              </p>
+              <ul className="space-y-0.5 text-xs">
+                {(decidedGate.fixtures ?? []).map((fixture, index) => (
+                  <li key={fixture.path ?? index} className="font-mono">
+                    {fixture.passed ? "✓" : "✗"} {fixture.path}
+                    {fixture.detail ? ` — ${fixture.detail}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {rejectableAfterApproval && !readOnly ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="gap-2"
+              disabled={busy}
+              onClick={(event) => {
+                rejectTriggerRef.current = event.currentTarget;
+                setRejectOpen(true);
+              }}
+              data-testid="routine-proposal-reject-approved"
+            >
+              <X className="size-4" />
+              Reject approved bundle
+            </Button>
+          ) : null}
           {approvalEvidence != null ? (
-            <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted/40 p-2 font-mono text-xs whitespace-pre-wrap">
-              {compactJson(approvalEvidence)}
-            </pre>
+            <details data-testid="routine-proposal-evidence-raw">
+              <summary className="cursor-pointer text-xs text-muted-foreground">
+                Raw approval evidence
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted/40 p-2 font-mono text-xs whitespace-pre-wrap">
+                {compactJson(approvalEvidence)}
+              </pre>
+            </details>
           ) : null}
         </div>
       )}

@@ -589,6 +589,19 @@ async function recordPromotionOutcome(
 
 const REJECTABLE_STATUSES = new Set(["draft", "submitted"]);
 
+/**
+ * A proposal the operator can still kill: any undecided one, plus an
+ * approved-but-NOT-promoted one (e.g. an autonomous approval whose hermetic
+ * gate came back red — nothing was activated, so rejection is safe and gives
+ * the operator a way to close out a bad machine approval). A promoted
+ * proposal is immutable history — its code is live; deactivation happens at
+ * the Routine, not here.
+ */
+function isRejectable(proposal: CapabilityRoutineProposalRow): boolean {
+  if (REJECTABLE_STATUSES.has(proposal.status)) return true;
+  return proposal.status === "approved" && proposal.promoted_commit_sha == null;
+}
+
 export async function rejectRoutineProposal(
   db: Db,
   input: {
@@ -610,7 +623,7 @@ export async function rejectRoutineProposal(
   if (!proposal || proposal.tenant_id !== input.tenantId) {
     return { outcome: "rejected", reason: "proposal_not_found" };
   }
-  if (!REJECTABLE_STATUSES.has(proposal.status)) {
+  if (!isRejectable(proposal)) {
     return { outcome: "rejected", reason: "proposal_already_decided" };
   }
   const [updated] = (await db

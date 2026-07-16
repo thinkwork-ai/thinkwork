@@ -33,7 +33,11 @@ export const CapabilityRuntimeCatalogQuery = graphql(`
         version
         lifecycle
         descriptorFingerprint
+        descriptor
+        provenance
+        signature
         admittedAt
+        admittedByUserId
         admissionMode
         admittedByAgentId
         operations {

@@ -571,3 +571,103 @@ describe("RoutineProposalReview promotion outcomes", () => {
     expect(detail.textContent).toContain("unexpected error");
   });
 });
+
+// ── governed-autonomy review (Self-Acquired workflow) ───────────────────────
+
+describe("RoutineProposalReview governed-autonomy review", () => {
+  it("renders an autonomous approval with the stored hermetic gate detail", () => {
+    setProposal({
+      status: "approved",
+      approvalMode: "autonomous",
+      decidedAt: "2026-07-15T02:00:00Z",
+      promotedCommitSha: null,
+      approvalEvidence: JSON.stringify({
+        promotionOutcome: "validation_failed",
+        hermetic: {
+          status: "red",
+          fixtures: [
+            { path: "fixtures/00.json", passed: false, detail: "mismatch" },
+          ],
+        },
+      }),
+    });
+    renderPanel();
+    expect(
+      screen.getByTestId("routine-proposal-approval-mode").textContent,
+    ).toContain("Self-approved (autonomous)");
+    expect(
+      screen.getByTestId("routine-proposal-not-promoted").textContent,
+    ).toContain("validation_failed");
+    const gate = screen.getByTestId("routine-proposal-decided-gate");
+    expect(gate.textContent).toContain("red");
+    expect(gate.textContent).toContain("✗ fixtures/00.json — mismatch");
+    // The raw evidence stays reachable for a from-first-principles audit.
+    expect(screen.getByTestId("routine-proposal-evidence-raw")).toBeTruthy();
+  });
+
+  it("lets the operator reject an approved-but-not-promoted proposal", async () => {
+    rejectMock.mockResolvedValue({
+      data: { rejectRoutineProposal: { outcome: "applied" } },
+    });
+    setProposal({
+      status: "approved",
+      approvalMode: "autonomous",
+      promotedCommitSha: null,
+      decidedAt: "2026-07-15T02:00:00Z",
+    });
+    renderPanel();
+    fireEvent.click(screen.getByTestId("routine-proposal-reject-approved"));
+    fireEvent.change(screen.getByTestId("routine-proposal-reject-reason"), {
+      target: { value: "bad autonomous approval" },
+    });
+    fireEvent.click(screen.getByTestId("routine-proposal-reject-confirm"));
+    await waitFor(() =>
+      expect(rejectMock).toHaveBeenCalledWith({
+        tenantId: "tenant-1",
+        proposalId: "prop-1",
+        reason: "bad autonomous approval",
+      }),
+    );
+  });
+
+  it("offers no reject affordance once a commit promoted", () => {
+    setProposal({
+      status: "promoted",
+      approvalMode: "autonomous",
+      promotedCommitSha: "abc123",
+      decidedAt: "2026-07-15T02:00:00Z",
+    });
+    renderPanel();
+    expect(screen.queryByTestId("routine-proposal-reject-approved")).toBeNull();
+  });
+
+  it("hides the approve/reject actions for a submitted proposal in read-only mode", () => {
+    setProposal();
+    render(
+      <RoutineProposalReview
+        proposalId="prop-1"
+        tenantId="tenant-1"
+        readOnly
+      />,
+    );
+    expect(screen.queryByTestId("routine-proposal-approve")).toBeNull();
+    expect(screen.queryByTestId("routine-proposal-reject")).toBeNull();
+  });
+
+  it("hides the approved-bundle reject in read-only mode", () => {
+    setProposal({
+      status: "approved",
+      approvalMode: "autonomous",
+      promotedCommitSha: null,
+      decidedAt: "2026-07-15T02:00:00Z",
+    });
+    render(
+      <RoutineProposalReview
+        proposalId="prop-1"
+        tenantId="tenant-1"
+        readOnly
+      />,
+    );
+    expect(screen.queryByTestId("routine-proposal-reject-approved")).toBeNull();
+  });
+});
