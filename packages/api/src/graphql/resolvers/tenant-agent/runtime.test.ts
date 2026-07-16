@@ -12,8 +12,9 @@ describe("parseAgentRuntimeInput", () => {
     expect(parseAgentRuntimeInput("PI")).toBe("pi");
   });
 
-  it("accepts the HARNESS runtime from the Agent-configuration dropdown (THINK-311)", () => {
-    expect(parseAgentRuntimeInput("HARNESS")).toBe("harness");
+  it("accepts the AGENTCORE runtime from the Agent-configuration dropdown (THINK-311)", () => {
+    expect(parseAgentRuntimeInput("AGENTCORE")).toBe("harness");
+    expect(parseAgentRuntimeInput("agentcore")).toBe("harness");
     expect(parseAgentRuntimeInput("harness")).toBe("harness");
   });
 
@@ -34,7 +35,8 @@ describe("agentRuntimeToGraphqlEnum", () => {
     expect(agentRuntimeToGraphqlEnum("strands")).toBe("FLUE");
   });
 
-  it("serializes harness rows as the HARNESS enum value (THINK-311)", () => {
-    expect(agentRuntimeToGraphqlEnum("harness")).toBe("HARNESS");
+  it("serializes internal harness rows as the AGENTCORE enum value (THINK-311)", () => {
+    expect(agentRuntimeToGraphqlEnum("harness")).toBe("AGENTCORE");
+    expect(agentRuntimeToGraphqlEnum("agentcore")).toBe("AGENTCORE");
   });
 });

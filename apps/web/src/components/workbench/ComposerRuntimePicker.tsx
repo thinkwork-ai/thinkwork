@@ -8,7 +8,7 @@ import {
 } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
 
-export type ComposerRuntimeValue = "pi" | "harness";
+export type ComposerRuntimeValue = "pi" | "agentcore";
 
 export interface ComposerRuntimePickerProps {
   value?: ComposerRuntimeValue;
@@ -19,10 +19,10 @@ export interface ComposerRuntimePickerProps {
 
 /**
  * Per-turn execution runtime picker (THINK-311 U5b). Pi is the default;
- * selecting "AWS Harness" sends `metadata.requestedRuntime = "harness"`
+ * selecting "AgentCore" sends `metadata.requestedRuntime = "agentcore"`
  * on the next message so ONLY that turn runs on the AWS AgentCore
- * Harness trial path. The dispatch enforces a stage-level trial gate —
- * on non-trial stages a Harness request fails visibly in the thread.
+ * Harness trial path. On a stage without the AgentCore runner the
+ * request fails visibly in the thread — never a silent Pi run.
  */
 export function ComposerRuntimePicker({
   value = "pi",
@@ -30,7 +30,7 @@ export function ComposerRuntimePicker({
   disabled = false,
   tone = "light",
 }: ComposerRuntimePickerProps) {
-  const isHarness = value === "harness";
+  const isAgentCore = value === "agentcore";
   return (
     <Select
       value={value}
@@ -41,8 +41,8 @@ export function ComposerRuntimePicker({
         type="button"
         aria-label="Select runtime"
         title={
-          isHarness
-            ? "This turn runs on AWS AgentCore Harness (trial)"
+          isAgentCore
+            ? "This turn runs on AWS AgentCore (trial)"
             : "Execution runtime for this turn"
         }
         className={cn(
@@ -50,11 +50,11 @@ export function ComposerRuntimePicker({
           tone === "dark"
             ? "text-white/70 hover:text-white"
             : "text-muted-foreground hover:text-foreground",
-          isHarness && "text-amber-500 hover:text-amber-400",
+          isAgentCore && "text-amber-500 hover:text-amber-400",
           disabled && "pointer-events-none opacity-45",
         )}
       >
-        <span className="truncate">{isHarness ? "AWS Harness" : "Pi"}</span>
+        <span className="truncate">{isAgentCore ? "AgentCore" : "Pi"}</span>
       </SelectTrigger>
       <SelectContent
         align="end"
@@ -75,13 +75,13 @@ export function ComposerRuntimePicker({
             </div>
           </SelectItem>
           <SelectItem
-            value="harness"
+            value="agentcore"
             className="rounded-lg py-1.5 pl-2 text-sm"
           >
             <div className="grid gap-0.5">
-              <span>AWS Harness</span>
+              <span>AgentCore</span>
               <span className="text-xs text-muted-foreground">
-                AgentCore Harness trial — this turn only
+                AWS AgentCore trial — this turn only
               </span>
             </div>
           </SelectItem>

@@ -424,7 +424,7 @@ describe("default agent routing", () => {
     expect(result).toMatchObject({ directInvoked: false, enqueued: false });
   });
 
-  it("forwards a per-turn harness request to direct chat invoke and REFUSES the wakeup fallback (THINK-311 U5b)", async () => {
+  it("forwards a per-turn agentcore request to direct chat invoke and REFUSES the wakeup fallback (THINK-311 U5b)", async () => {
     const repository = makeRepository({ agentId: "agent-1" });
     const invoked: unknown[] = [];
 
@@ -433,8 +433,8 @@ describe("default agent routing", () => {
         tenantId: "tenant-1",
         threadId: "thread-1",
         messageId: "message-1",
-        content: "run this on harness",
-        requestedRuntime: "harness",
+        content: "run this on agentcore",
+        requestedRuntime: "agentcore",
         sender: { type: "user", id: "user-1" },
       },
       repository,
@@ -447,7 +447,7 @@ describe("default agent routing", () => {
       async () => [],
       async () => [],
     );
-    expect(invoked[0]).toMatchObject({ requestedRuntime: "harness" });
+    expect(invoked[0]).toMatchObject({ requestedRuntime: "agentcore" });
 
     // Direct invoke unavailable → the wakeup fallback would run Pi
     // (silent fallback, R4) — the dispatch must throw, never enqueue.
@@ -458,8 +458,8 @@ describe("default agent routing", () => {
           tenantId: "tenant-1",
           threadId: "thread-1",
           messageId: "message-2",
-          content: "run this on harness",
-          requestedRuntime: "harness",
+          content: "run this on agentcore",
+          requestedRuntime: "agentcore",
           sender: { type: "user", id: "user-1" },
         },
         failingRepository,

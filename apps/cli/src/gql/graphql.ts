@@ -591,8 +591,8 @@ export type AgentProfileSpaceAssignment = {
 };
 
 export enum AgentRuntime {
+  Agentcore = "AGENTCORE",
   Flue = "FLUE",
-  Harness = "HARNESS",
 }
 
 export enum AgentStatus {

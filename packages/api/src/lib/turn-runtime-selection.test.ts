@@ -14,18 +14,21 @@ describe("requestedRuntimeFromMetadata", () => {
     expect(requestedRuntimeFromMetadata({ requestedRuntime: "PI" })).toBeNull();
   });
 
-  it("returns harness for the trial selector", () => {
+  it("returns agentcore for the trial selector (harness accepted as alias)", () => {
+    expect(
+      requestedRuntimeFromMetadata({ requestedRuntime: "agentcore" }),
+    ).toBe("agentcore");
+    expect(
+      requestedRuntimeFromMetadata({ requestedRuntime: "AgentCore" }),
+    ).toBe("agentcore");
     expect(requestedRuntimeFromMetadata({ requestedRuntime: "harness" })).toBe(
-      "harness",
-    );
-    expect(requestedRuntimeFromMetadata({ requestedRuntime: "Harness" })).toBe(
-      "harness",
+      "agentcore",
     );
   });
 
   it("throws on anything else instead of silently running Pi (R4)", () => {
     expect(() =>
-      requestedRuntimeFromMetadata({ requestedRuntime: "harness2" }),
+      requestedRuntimeFromMetadata({ requestedRuntime: "agentcore2" }),
     ).toThrow(InvalidRequestedRuntimeError);
     expect(() =>
       requestedRuntimeFromMetadata({ requestedRuntime: 42 }),

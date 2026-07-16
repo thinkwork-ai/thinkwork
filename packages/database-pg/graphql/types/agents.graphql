@@ -16,7 +16,7 @@ enum AgentStatus {
 
 enum AgentRuntime {
   FLUE
-  HARNESS
+  AGENTCORE
 }
 
 type Agent {

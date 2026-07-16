@@ -613,9 +613,9 @@ export function resolveTurnUseMemory(askMode?: boolean | null): boolean {
 
 /**
  * THINK-311 U5b: per-turn runtime selection. The composer's runtime
- * picker is the control — a "harness" request routes this turn to the
- * Harness runner. On a stage without the Harness infra the run fails
- * loudly downstream; it never silently falls back to Pi (R4).
+ * picker is the control — an "agentcore" request routes this turn to the
+ * AgentCore Harness runner. On a stage without the Harness infra the run
+ * fails loudly downstream; it never silently falls back to Pi (R4).
  */
 export function resolveChatInvocationRuntimeType(args: {
   configuredRuntimeType: AgentRuntimeType;
@@ -624,7 +624,7 @@ export function resolveChatInvocationRuntimeType(args: {
   computerTaskId?: string | null;
 }): AgentRuntimeType {
   const requested = (args.requestedRuntime ?? "").toLowerCase();
-  if (requested === "harness") {
+  if (requested === "agentcore" || requested === "harness") {
     return "harness";
   }
   if (requested && requested !== "pi") {

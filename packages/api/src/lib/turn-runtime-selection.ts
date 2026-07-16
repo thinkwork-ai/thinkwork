@@ -3,14 +3,13 @@
  *
  * The composer's runtime picker writes `metadata.requestedRuntime` on the
  * user message — the same channel as `requestedModelId`. Only the chat
- * dispatch honors it (KTD-7: the Harness trial is chat-only), and only
- * when the stage-level trial gate is enabled on chat-agent-invoke.
+ * dispatch honors it (KTD-7: the AgentCore trial is chat-only).
  */
 
 export class InvalidRequestedRuntimeError extends Error {
   constructor(public readonly value: string) {
     super(
-      `Invalid requestedRuntime "${value}". Expected "harness" (or omit for the agent's configured runtime).`,
+      `Invalid requestedRuntime "${value}". Expected "agentcore" (or omit for the agent's configured runtime).`,
     );
     this.name = "InvalidRequestedRuntimeError";
   }
@@ -18,12 +17,12 @@ export class InvalidRequestedRuntimeError extends Error {
 
 /**
  * Parse `metadata.requestedRuntime`. Absent / "pi" → null (configured
- * runtime applies). "harness" → "harness". Anything else throws — a
- * mistyped runtime request must never silently run Pi (R4).
+ * runtime applies). "agentcore" (alias "harness") → "agentcore". Anything
+ * else throws — a mistyped runtime request must never silently run Pi (R4).
  */
 export function requestedRuntimeFromMetadata(
   metadata: unknown,
-): "harness" | null {
+): "agentcore" | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return null;
   }
@@ -32,7 +31,8 @@ export function requestedRuntimeFromMetadata(
   if (typeof value === "string") {
     const normalized = value.toLowerCase();
     if (normalized === "pi") return null;
-    if (normalized === "harness") return "harness";
+    if (normalized === "agentcore" || normalized === "harness")
+      return "agentcore";
   }
   throw new InvalidRequestedRuntimeError(String(value));
 }

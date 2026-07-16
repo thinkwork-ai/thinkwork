@@ -190,9 +190,9 @@ export const sendMessage = async (
     modelId: i.modelId,
     metadata: parsedMetadata,
   });
-  // THINK-311 U5b: per-turn Harness trial selection from the composer's
+  // THINK-311 U5b: per-turn AgentCore trial selection from the composer's
   // runtime picker. Malformed values reject here — never silently Pi.
-  let requestedRuntime: "harness" | null = null;
+  let requestedRuntime: "agentcore" | null = null;
   try {
     requestedRuntime = requestedRuntimeFromMetadata(parsedMetadata);
   } catch (err) {
