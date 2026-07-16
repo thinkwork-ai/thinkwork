@@ -60,9 +60,33 @@ const {
   }>,
 }));
 
+const searchState: { view?: "workspace"; file?: string } = {};
+
 vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to,
+    params,
+    search,
+  }: {
+    children: React.ReactNode;
+    to: string;
+    params?: Record<string, string>;
+    search?: Record<string, string>;
+  }) => (
+    <a
+      href={`${params?.userId ? to.replace("$userId", params.userId) : to}${
+        search && Object.keys(search).length
+          ? `?${new URLSearchParams(search).toString()}`
+          : ""
+      }`}
+    >
+      {children}
+    </a>
+  ),
   useNavigate: () => navigateMock,
   useParams: () => ({ userId: "member-1" }),
+  useSearch: () => searchState,
 }));
 
 vi.mock("urql", () => ({
@@ -132,11 +156,13 @@ vi.mock("@/components/workspace-settings/ScopedWorkspaceEditor", () => ({
   ScopedWorkspaceEditor: (props: {
     target: Record<string, string>;
     targetKey: string;
+    defaultOpenFile?: string;
   }) => (
     <div
       data-testid="user-workspace-editor"
       data-target={JSON.stringify(props.target)}
       data-targetkey={props.targetKey}
+      data-default-open={props.defaultOpenFile}
     />
   ),
 }));
@@ -205,6 +231,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   cleanup();
+  searchState.view = undefined;
+  searchState.file = undefined;
 });
 
 describe("SettingsUserDetail role merge", () => {
@@ -234,18 +262,42 @@ describe("SettingsUserDetail role merge", () => {
     expect(section.getAttribute("data-user-id")).toBe("user-9");
   });
 
-  it("embeds the workspace editor scoped to this user's own source (AE6)", () => {
+  it("links to the full-page workspace view instead of embedding a panel (R25)", () => {
     seedMember();
+    render(<SettingsUserDetail />);
+
+    // The fixed-height embedded editor is gone from the detail view…
+    expect(screen.queryByTestId("user-workspace-editor")).toBeNull();
+    // …replaced by a pointer into the Space-style view=workspace swap.
+    expect(screen.getByText("Workspace files")).toBeTruthy();
+    const link = screen.getByText("Open files").closest("a");
+    expect(link?.getAttribute("href")).toBe(
+      "/settings/users/member-1?view=workspace",
+    );
+  });
+
+  it("renders the full-height editor with USER.md default-open on view=workspace (R25/AE6)", () => {
+    seedMember();
+    searchState.view = "workspace";
     render(<SettingsUserDetail />);
 
     const editor = screen.getByTestId("user-workspace-editor");
     // Single userId target — not the consolidated multi-source client — so
-    // edits land under this user's source tree.
+    // edits land under this user's source tree (AE6 posture unchanged).
     expect(JSON.parse(editor.getAttribute("data-target")!)).toEqual({
       userId: "user-9",
     });
     expect(editor.getAttribute("data-targetkey")).toBe("user:user-9");
-    expect(screen.getByText("Workspace files")).toBeTruthy();
+    expect(editor.getAttribute("data-default-open")).toBe("USER.md");
+    // Full-height swap: the detail sections are not rendered alongside.
+    expect(screen.queryByTestId("user-models-section")).toBeNull();
+    expect(editor.closest("div.h-full.min-h-0")).toBeTruthy();
+  });
+
+  it("renders the user's email below the name on the detail page (R26)", () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+    expect(screen.getByText("dana@example.com")).toBeTruthy();
   });
 
   it("disables the Role select for the caller's own membership", () => {
