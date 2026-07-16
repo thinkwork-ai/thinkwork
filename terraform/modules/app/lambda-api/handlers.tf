@@ -423,6 +423,9 @@ locals {
     "cron-retry-dispatcher" = {
       STALL_THRESHOLD_MINUTES = tostring(var.stall_threshold_minutes)
     }
+    "cron-stall-monitor" = {
+      STALL_THRESHOLD_MINUTES = tostring(var.stall_threshold_minutes)
+    }
     # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
     # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the
     # cluster ARN + the KB service role (passed at CreateKnowledgeBase time).
@@ -2470,7 +2473,7 @@ resource "aws_scheduler_schedule" "stall_monitor" {
   name                = "thinkwork-${var.stage}-stall-monitor"
   group_name          = "default"
   schedule_expression = "rate(1 minutes)"
-  state               = "ENABLED"
+  state               = var.stall_monitor_enabled ? "ENABLED" : "DISABLED"
 
   flexible_time_window {
     mode = "OFF"

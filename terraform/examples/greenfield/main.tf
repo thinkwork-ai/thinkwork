@@ -440,6 +440,12 @@ variable "stall_threshold_minutes" {
   default     = 5
 }
 
+variable "stall_monitor_enabled" {
+  description = "Enable the recurring stall-monitor schedule (THINK-306). Disabling is a declarative, deploy-safe alternative to console surgery."
+  type        = bool
+  default     = true
+}
+
 variable "requester_memory_dreaming_model_id" {
   description = "Bedrock Converse model id for requester memory REM reflection."
   type        = string
@@ -873,6 +879,7 @@ module "thinkwork" {
   brain_dream_state_enabled                     = var.brain_dream_state_enabled
   retry_dispatcher_enabled                      = var.retry_dispatcher_enabled
   stall_threshold_minutes                       = var.stall_threshold_minutes
+  stall_monitor_enabled                         = var.stall_monitor_enabled
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
   agentcore_memory_id                           = var.agentcore_memory_id

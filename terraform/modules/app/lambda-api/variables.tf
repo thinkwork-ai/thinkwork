@@ -250,6 +250,12 @@ variable "stall_threshold_minutes" {
   default     = 5
 }
 
+variable "stall_monitor_enabled" {
+  description = "Enable the recurring stall-monitor schedule (THINK-306). Disabling is a declarative, deploy-safe alternative to console surgery; the schedule resource still exists, in DISABLED state."
+  type        = bool
+  default     = true
+}
+
 variable "extension_proxy_signing_secret" {
   description = "Shared HMAC secret used by the generic Admin extension proxy to sign actor context for extension backends."
   type        = string
