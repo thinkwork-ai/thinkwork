@@ -1360,7 +1360,9 @@ export type CapabilityDefinition = {
 
 export type CapabilityDefinitionVersion = {
   __typename?: 'CapabilityDefinitionVersion';
+  admissionMode?: Maybe<Scalars['String']['output']>;
   admittedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  admittedByAgentId?: Maybe<Scalars['ID']['output']>;
   admittedByUserId?: Maybe<Scalars['ID']['output']>;
   contractHashes: Scalars['AWSJSON']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
@@ -1371,6 +1373,7 @@ export type CapabilityDefinitionVersion = {
   lifecycle: Scalars['String']['output'];
   operations: Array<CapabilityOperationView>;
   provenance: Scalars['AWSJSON']['output'];
+  signature?: Maybe<Scalars['AWSJSON']['output']>;
   sourceProposalId?: Maybe<Scalars['ID']['output']>;
   version: Scalars['Int']['output'];
 };
@@ -2377,6 +2380,7 @@ export type DocumentPlateDraftConfigInput = {
   analyses?: InputMaybe<Scalars['AWSJSON']['input']>;
   displayName?: InputMaybe<Scalars['String']['input']>;
   eyebrow?: InputMaybe<Scalars['String']['input']>;
+  ownContract?: InputMaybe<Scalars['Boolean']['input']>;
   paletteDark?: InputMaybe<Scalars['AWSJSON']['input']>;
   paletteLight?: InputMaybe<Scalars['AWSJSON']['input']>;
   sectionOverrides?: InputMaybe<Scalars['AWSJSON']['input']>;
@@ -9894,6 +9898,7 @@ export type SaveDocumentPlateInput = {
   displayName?: InputMaybe<Scalars['String']['input']>;
   eyebrow?: InputMaybe<Scalars['String']['input']>;
   hidden?: InputMaybe<Scalars['Boolean']['input']>;
+  ownContract?: InputMaybe<Scalars['Boolean']['input']>;
   paletteDark?: InputMaybe<Scalars['AWSJSON']['input']>;
   paletteLight?: InputMaybe<Scalars['AWSJSON']['input']>;
   sectionOverrides?: InputMaybe<Scalars['AWSJSON']['input']>;

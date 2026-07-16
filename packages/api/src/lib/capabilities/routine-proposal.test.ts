@@ -491,6 +491,44 @@ describe("rejectRoutineProposal", () => {
     expect(rowsFor(capabilityRoutineProposals)[0].status).toBe("rejected");
   });
 
+  it("rejects an approved-but-not-promoted proposal (kill a bad autonomous approval)", async () => {
+    const { db, rowsFor } = fakeDb();
+    rowsFor(capabilityRoutineProposals).push({
+      id: "p",
+      tenant_id: TENANT,
+      status: "approved",
+      promoted_commit_sha: null,
+      approval_mode: "autonomous",
+      payload_json: {},
+    });
+    const res = await rejectRoutineProposal(db, {
+      tenantId: TENANT,
+      proposalId: "p",
+      adminUserId: ADMIN,
+    });
+    expect(res.outcome).toBe("applied");
+    expect(rowsFor(capabilityRoutineProposals)[0].status).toBe("rejected");
+  });
+
+  it("will not reject an approved proposal whose commit promoted", async () => {
+    const { db, rowsFor } = fakeDb();
+    rowsFor(capabilityRoutineProposals).push({
+      id: "p",
+      tenant_id: TENANT,
+      status: "approved",
+      promoted_commit_sha: "abc123",
+      payload_json: {},
+    });
+    const res = await rejectRoutineProposal(db, {
+      tenantId: TENANT,
+      proposalId: "p",
+      adminUserId: ADMIN,
+    });
+    expect(res.outcome).toBe("rejected");
+    expect(res.reason).toBe("proposal_already_decided");
+    expect(rowsFor(capabilityRoutineProposals)[0].status).toBe("approved");
+  });
+
   it("will not re-decide an already-promoted proposal", async () => {
     const { db, rowsFor } = fakeDb();
     rowsFor(capabilityRoutineProposals).push({

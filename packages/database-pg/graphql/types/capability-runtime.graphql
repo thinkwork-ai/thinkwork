@@ -44,6 +44,10 @@ type CapabilityDefinitionVersion {
   contractHashes: AWSJSON!
   # Official-source provenance + research evidence references.
   provenance: AWSJSON!
+  # Platform signature envelope over the canonical descriptor —
+  # { algorithm, payloadHash, signature, signed_by, signed_at }. Audit
+  # metadata only; no key material crosses this boundary.
+  signature: AWSJSON
   sourceProposalId: ID
   admittedAt: AWSDateTime
   admittedByUserId: ID
