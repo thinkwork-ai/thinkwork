@@ -57,6 +57,7 @@ import { registerEnterpriseCommand } from "./commands/enterprise.js";
 import { registerMigrateFolderCanonCommand } from "./commands/migrate-folder-canon.js";
 import { registerMigrateAgentFoldersCommand } from "./commands/migrate-agent-folders.js";
 import { registerMigrateConnectorsCommand } from "./commands/migrate-connectors.js";
+import { registerSidecarRetirementMoverCommand } from "./commands/sidecar-retirement-mover.js";
 import { registerCleanupSpaceHindsightBanksCommand } from "./commands/cleanup-space-hindsight-banks.js";
 import { stripForwardedSeparator } from "./lib/argv.js";
 
@@ -159,6 +160,7 @@ registerEnterpriseCommand(program);
 registerMigrateFolderCanonCommand(program);
 registerMigrateAgentFoldersCommand(program);
 registerMigrateConnectorsCommand(program);
+registerSidecarRetirementMoverCommand(program);
 registerCleanupSpaceHindsightBanksCommand(program);
 
 // Wiki (Compounding Memory) pipeline controls — admin-only.
