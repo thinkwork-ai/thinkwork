@@ -1483,7 +1483,7 @@ operator can revoke it at any time.
  *     when — and only when — its live content is byte-identical to a
  *     previously shipped default version (see `src/historical.ts`).
  */
-export const DEFAULTS_VERSION = 37;
+export const DEFAULTS_VERSION = 38;
 
 // ---------------------------------------------------------------------------
 // Aggregator
@@ -1497,6 +1497,80 @@ export const DEFAULTS_VERSION = 37;
  * Ordering is not load-bearing but matches the plan's R1 requirement order
  * for readability.
  */
+
+// ---------------------------------------------------------------------------
+// Built-in sub-agent folders (subagent-folders plan 2026-07-15-001 U7 — R5)
+//
+// The four built-in profiles exist as agents/<slug>/INSTRUCTIONS.md folder
+// trees (strict agent-folder format: required description, builtInTools
+// surface config, sparse execution overrides). Grants-by-presence: the
+// analyst's postgres-dev connector grant is NOT shipped here — a signed
+// narrowing sidecar cannot be static content; the analyst source
+// registration flow materializes agents/analyst/connectors/postgres-dev/
+// per tenant. DB seeds remain in place until U11 (intentional dual truth
+// during the window).
+// ---------------------------------------------------------------------------
+
+const AGENT_RESEARCH_INSTRUCTIONS_MD = `---
+description: >-
+  Delegates focused research, source finding, and synthesis. Use for web,
+  document, and knowledge-gathering subtasks that need citations or source
+  comparison.
+builtInTools:
+  - web-search
+  - web-extract
+---
+
+Research the assigned question, cite the sources you used, and return a concise answer with relevant evidence.
+`;
+
+const AGENT_CODING_INSTRUCTIONS_MD = `---
+description: >-
+  Delegates code inspection, implementation, and test tasks. Use for software
+  engineering subtasks in Spaces where coding work is allowed.
+builtInTools:
+  - execute_code
+  - bash
+---
+
+Inspect the relevant files, make scoped code recommendations or changes, and report verification clearly.
+`;
+
+const AGENT_ANALYST_INSTRUCTIONS_MD = `---
+description: >-
+  Delegates data analysis, metric review, and structured reporting. Use for
+  data, spreadsheet, CRM, database, SQL, and quantitative analysis subtasks.
+builtInTools:
+  - execute_code
+  - file_read
+execution:
+  maxQueriesPerRun: 12
+  costBudgetUsd: 0.5
+---
+
+Analyze the assigned data or tool results with code when useful, state assumptions, and return decision-ready findings.
+
+When a registered data source is available (a connections/<slug>/ folder with a query tool): ALWAYS read connections/<slug>/SCHEMA.md before writing SQL — only tables and columns listed there are granted, and it carries join hints and enum legends. Write one read-only statement per query call; a rejected query returns the verbatim database error — fix the SQL and retry. Prefer aggregated queries (GROUP BY) sized for presentation; large results land as a CSV file path in the tool result — analyze it with execute_code (pandas) instead of asking for raw rows.
+
+Present quantitative answers as GenUI live components: emit_json_render_ui with chart/table components bound to your query results (pass sourceToolCallId so widgets stay refreshable). Never paste ASCII/markdown tables of raw rows into your reply. If emission validation fails (for example the 50-row component cap), re-aggregate to a coarser grain and retry.
+`;
+
+const AGENT_REVIEWER_INSTRUCTIONS_MD = `---
+description: >-
+  Reviews agent outputs for quality, correctness, and completeness. Use before
+  final response when an answer, artifact, or delegated result needs a quality
+  gate, or when the parent Agent is uncertain whether the output is good
+  enough.
+execution:
+  reviewGate: true
+  maxReviewLoops: 2
+  loopPolicy:
+    externalReviewerPolicy: never
+---
+
+Review the candidate agent output against the user's request and available evidence. Return a concise verdict with one of: pass, revise, or fail. If the output should not be sent, explain exactly what must change and give actionable feedback for the parent Agent to improve it. Do not rewrite the full answer unless asked; focus on decision-quality review.
+`;
+
 export const CANONICAL_FILE_NAMES = [
   "USER.md",
   "SPACE.md",
@@ -1534,6 +1608,10 @@ export const CANONICAL_FILE_NAMES = [
   "skills/skill-creator/scripts/utils.py",
   "skills/skill-creator/SKILL.md",
   "skills/skill-creator/UPSTREAM.json",
+  "agents/research/INSTRUCTIONS.md",
+  "agents/coding/INSTRUCTIONS.md",
+  "agents/analyst/INSTRUCTIONS.md",
+  "agents/reviewer/INSTRUCTIONS.md",
 ] as const;
 
 export type CanonicalFileName = (typeof CANONICAL_FILE_NAMES)[number];
@@ -1587,6 +1665,10 @@ const CONTENT: Record<CanonicalFileName, string> = {
   "skills/skill-creator/scripts/utils.py": SKILL_CREATOR_SCRIPTS_UTILS,
   "skills/skill-creator/SKILL.md": SKILL_CREATOR_SKILL,
   "skills/skill-creator/UPSTREAM.json": SKILL_CREATOR_UPSTREAM,
+  "agents/research/INSTRUCTIONS.md": AGENT_RESEARCH_INSTRUCTIONS_MD,
+  "agents/coding/INSTRUCTIONS.md": AGENT_CODING_INSTRUCTIONS_MD,
+  "agents/analyst/INSTRUCTIONS.md": AGENT_ANALYST_INSTRUCTIONS_MD,
+  "agents/reviewer/INSTRUCTIONS.md": AGENT_REVIEWER_INSTRUCTIONS_MD,
   // END GENERATED SKILL_CREATOR_CONTENT
 };
 

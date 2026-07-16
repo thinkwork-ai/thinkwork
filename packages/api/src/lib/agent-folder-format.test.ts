@@ -295,3 +295,28 @@ describe("normalizeAgentFolderExecution", () => {
     );
   });
 });
+
+describe("builtInTools frontmatter (subagent-folders U7)", () => {
+  it("round-trips the built-in tool surface", () => {
+    const source = serializeAgentFolderInstructions({
+      slug: "research",
+      description: "Researcher",
+      builtInTools: ["web-search", "web-extract"],
+      instructions: "Research.",
+    });
+    const result = parseAgentFolderInstructions(
+      source,
+      "agents/research/INSTRUCTIONS.md",
+    );
+    if (!result.valid) throw new Error("expected valid");
+    expect(result.parsed.builtInTools).toEqual(["web-search", "web-extract"]);
+  });
+
+  it("rejects non-string entries", () => {
+    const result = parseAgentFolderInstructions(
+      "---\ndescription: X\nbuiltInTools:\n  - web-search\n  - 3\n---\n\nBody\n",
+      "agents/research/INSTRUCTIONS.md",
+    );
+    expect(result.valid).toBe(false);
+  });
+});

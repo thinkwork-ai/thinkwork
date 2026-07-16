@@ -127,6 +127,8 @@ export interface CapabilityManifestEntry {
   /** Agent entries only (subagent-folders U4). */
   model?: string;
   execution?: Record<string, unknown>;
+  /** Built-in tool surface config from INSTRUCTIONS.md frontmatter (U7). */
+  builtInTools?: string[];
   /**
    * Resolved child grant surface (subagent-folders U5 — R10-R13).
    * Presence-based: `agents/<slug>/skills|connectors/<child>/` folders,
@@ -783,6 +785,9 @@ function agentEntry(
     class: "agent",
     description: config.description,
     ...(config.model ? { model: config.model } : {}),
+    ...(config.builtInTools && config.builtInTools.length > 0
+      ? { builtInTools: config.builtInTools }
+      : {}),
     execution: config.execution as unknown as Record<string, unknown>,
     instructionsEtag,
     grants: grantSurface.grants,

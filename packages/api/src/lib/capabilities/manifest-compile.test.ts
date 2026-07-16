@@ -857,3 +857,22 @@ Postgres.
     expect(entry?.withheldGrants).toBeUndefined();
   });
 });
+
+describe("agent entry builtInTools (subagent-folders U7)", () => {
+  it("carries the built-in tool surface onto the manifest entry", () => {
+    const { manifest } = compile([
+      {
+        class: "agent",
+        slug: "research",
+        definitionPath: "agents/research/INSTRUCTIONS.md",
+        definitionRaw:
+          "---\ndescription: Researcher\nbuiltInTools:\n  - web-search\n---\n\nResearch.\n",
+        definitionEtag: "e1",
+        sidecarRaw: null,
+        files: [{ path: "INSTRUCTIONS.md", etag: "e1" }],
+      },
+    ]);
+    const entry = manifest.active.find((e) => e.class === "agent");
+    expect(entry?.builtInTools).toEqual(["web-search"]);
+  });
+});

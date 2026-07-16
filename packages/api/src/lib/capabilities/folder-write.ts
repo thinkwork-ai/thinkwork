@@ -38,7 +38,10 @@ import {
   type CapabilitySignedBy,
   type CapabilitySigner,
 } from "./sidecar-signing.js";
-import { capabilityFolderName } from "../workspace-constants.js";
+import {
+  capabilityFolderName,
+  WORKSPACE_SKILLS_FOLDER,
+} from "../workspace-constants.js";
 
 export type CapabilityFolderClass = "connection" | "tool" | "agent";
 
@@ -404,6 +407,71 @@ export async function resignCapabilityFolderSidecarIfPresent(input: {
     signedBy: input.signedBy,
     deps: input.deps,
   });
+}
+
+/**
+ * Write a sub-agent CHILD GRANT sidecar (subagent-folders U7 — R10/R12):
+ * `agents/<agentProfileSlug>/<connectors|skills>/<slug>/.assignment.json`.
+ * There is no definition file in a grant folder (definitions never copy
+ * down), so the sidecar signs over EMPTY definition bytes — the sidecar
+ * IS the grant (see AGENT_CHILD_GRANT_SIGNING_BYTES in manifest-compile).
+ * Child connection grants debut the greenfield `connectors/` spelling.
+ */
+export async function putAgentChildGrantSidecar(input: {
+  targetPrefix: string;
+  agentProfileSlug: string;
+  childClass: "connection" | "skill";
+  slug: string;
+  /** Connector grants: the narrowed operation allowlist. */
+  operations?: string[];
+  signedBy: CapabilitySignedBy;
+  deps?: CapabilityFolderWriteDeps;
+}): Promise<FolderWriteResult> {
+  const deps = input.deps ?? {};
+  const bucket = deps.bucket ?? workspaceBucket();
+  if (!bucket) return { ok: false, reason: "bucket_unconfigured" };
+  const s3 = deps.s3 ?? s3Client();
+  const signer =
+    deps.signer !== undefined
+      ? deps.signer
+      : await resolveConfiguredCapabilitySigner();
+  if (!signer) return { ok: false, reason: "signing_unavailable" };
+
+  const folder =
+    input.childClass === "skill"
+      ? WORKSPACE_SKILLS_FOLDER
+      : capabilityFolderName("connection", "agent");
+  const base: Record<string, unknown> = {
+    slug: input.slug,
+    class: input.childClass,
+    updated_at: new Date().toISOString(),
+    ...(input.operations
+      ? { permissions: { operations: input.operations } }
+      : {}),
+  };
+  const { signed_content_sha, signature } = signCapabilitySidecar({
+    signer,
+    sidecar: base,
+    definitionBytes: "",
+    signedBy: input.signedBy,
+  });
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: `${input.targetPrefix}agents/${input.agentProfileSlug}/${folder}/${input.slug}/${CAPABILITY_SIDECAR_FILE}`,
+        Body: `${JSON.stringify({ ...base, signed_content_sha, signature }, null, 2)}\n`,
+        ContentType: "application/json",
+      }),
+    );
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "write_failed",
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**
