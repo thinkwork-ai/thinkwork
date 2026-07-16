@@ -524,6 +524,9 @@ locals {
           # wiki-bootstrap-import: bootstrapJournalImport admin mutation
           # Event-invokes this for the long-running ingest path.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-bootstrap-import",
+          # harness-runner: chat-agent-invoke Event-invokes this for chat
+          # turns routed to the AWS AgentCore runtime (THINK-311 trial).
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-harness-runner",
           # ontology-scan: startOntologySuggestionScan Event-invokes this
           # after inserting a durable scan job row.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-ontology-scan",
