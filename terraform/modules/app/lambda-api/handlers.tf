@@ -406,13 +406,10 @@ locals {
     # knowledge_graph_search tool; the per-agent tool policy gates on top.
     "chat-agent-invoke" = {
       KNOWLEDGE_GRAPH_TOOL_ENABLED = tostring(var.knowledge_graph_tool_enabled)
-      # THINK-311 U5: makes resolveRuntimeFunctionName's "harness" branch
-      # resolvable — a harness-flagged agent's turn dispatches to the
-      # harness-runner Lambda; without this env the branch throws
-      # RuntimeNotProvisionedError (the U2 inert behavior). Composed
-      # statically (same convention as function_name below) to avoid a
-      # resource self-reference cycle through this env map.
-      HARNESS_RUNNER_FUNCTION_NAME = "thinkwork-${var.stage}-api-harness-runner"
+      # THINK-311 U5: no HARNESS_RUNNER_FUNCTION_NAME env — derivable
+      # thinkwork-<stage>-api-* names never ride env (R1/R10 identity-only
+      # rule); resolveRuntimeFunctionName derives it from STAGE at call
+      # time, exactly like workspace-renderer.
     }
     # THINK-311 U5: CreateHarness requires the execution role ARN (U4
     # module output; empty string when the harness module is disabled —

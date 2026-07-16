@@ -799,6 +799,10 @@ describe("chat-agent-invoke runtime routing", () => {
 
   it("fails a harness-flagged agent's turn loudly while the runner is unprovisioned (THINK-311 U2, AE2)", async () => {
     vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "");
+    // No override AND no stage identity → the derivation fallback cannot
+    // resolve either; the branch throws RuntimeNotProvisionedError.
+    vi.stubEnv("STAGE", "");
+    vi.stubEnv("STACK_NAME", "");
     mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
       tenantId: "tenant-1",
       agentId: "agent-1",
