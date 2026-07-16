@@ -29,13 +29,17 @@
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { splitFrontmatter } from "../skill-md-parser.js";
+import { splitFrontmatter, parseSkillMdInternal } from "../skill-md-parser.js";
 import {
   APPROVAL_POLICIES,
   CAPABILITY_SLUG_PATTERN,
+  parseConnectionDefinition,
   scanForSecretValues,
   type ApprovalPolicy,
   type CapabilityDefinitionError,
+  type CapabilityDescriptorIdentity,
+  type ConnectionPrincipalType,
+  type ConnectionType,
 } from "./definition-schemas.js";
 
 /** Shared behavioral-config keys accepted on every marker class. */
@@ -479,4 +483,338 @@ export function serializeMcpDefinition(input: McpMarkerSerializeInput): string {
   const yaml = stringifyYaml(frontmatter, { collectionStyle: "block" }).trim();
   const body = (input.body ?? "").trim();
   return body ? `---\n${yaml}\n---\n\n${body}\n` : `---\n${yaml}\n---\n`;
+}
+
+/**
+ * The shared per-grant behavioral-config fields, emitted in the canonical
+ * order every marker class uses: `approval` (elided when the `never` default),
+ * `operations`, `rate_limit_rpm`, `model_override`, `config` (key-sorted).
+ * Reference-only by contract — the writers pass reference strings, never
+ * secret values (same posture as `serializeMcpDefinition`).
+ */
+function markerConfigFields(input: {
+  approval?: ApprovalPolicy;
+  operations?: string[];
+  rateLimitRpm?: number;
+  modelOverride?: string;
+  config?: Record<string, string>;
+}): Record<string, unknown> {
+  return {
+    ...(input.approval && input.approval !== "never"
+      ? { approval: input.approval }
+      : {}),
+    ...(input.operations && input.operations.length > 0
+      ? { operations: input.operations.map((op) => op.trim()) }
+      : {}),
+    ...(input.rateLimitRpm !== undefined
+      ? { rate_limit_rpm: input.rateLimitRpm }
+      : {}),
+    ...(input.modelOverride?.trim()
+      ? { model_override: input.modelOverride.trim() }
+      : {}),
+    ...(input.config && Object.keys(input.config).length > 0
+      ? {
+          config: Object.fromEntries(
+            Object.entries(input.config).sort(([a], [b]) =>
+              a < b ? -1 : a > b ? 1 : 0,
+            ),
+          ),
+        }
+      : {}),
+  };
+}
+
+/**
+ * Passthrough frontmatter fields (catalog metadata, shadow refs, and anything
+ * else an author put on the marker) preserved VERBATIM, top-level key-sorted
+ * for byte-stability, with the class-owned + config keys removed so the
+ * serializer never double-emits a field it already placed in canonical order.
+ */
+function passthroughFields(
+  internal: Record<string, unknown> | undefined,
+  ownedKeys: readonly string[],
+): Record<string, unknown> {
+  if (!internal) return {};
+  const owned = new Set(ownedKeys);
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(internal).sort()) {
+    if (owned.has(key)) continue;
+    const value = internal[key];
+    if (value === undefined) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+const CONNECTION_OWNED_KEYS = [
+  "name",
+  "description",
+  "type",
+  "principal_type",
+  "url",
+  "operations",
+  "auth",
+  "capability_ref",
+  "approval",
+  "rate_limit_rpm",
+  "model_override",
+  "config",
+] as const;
+
+export interface ConnectionMarkerSerializeInput {
+  name: string;
+  description: string;
+  type: ConnectionType;
+  /** Default `app` — elided from the frontmatter when it is the default. */
+  principalType?: ConnectionPrincipalType;
+  url?: string;
+  operations?: string[];
+  auth?: Record<string, unknown>;
+  /** Shadow descriptor identity (`capability_ref`), preserved when present. */
+  capabilityRef?: CapabilityDescriptorIdentity;
+  /** Per-grant behavioral config merged into the marker (KTD-10). */
+  approval?: ApprovalPolicy;
+  rateLimitRpm?: number;
+  modelOverride?: string;
+  config?: Record<string, string>;
+  /** Remaining frontmatter fields, preserved verbatim. */
+  internal?: Record<string, unknown>;
+  /** The prose body, preserved. */
+  body?: string;
+}
+
+/**
+ * Byte-stable `CONNECTION.md` serialization mirroring
+ * {@link serializeMcpDefinition}: fixed key order, block YAML, `principal_type`
+ * elided when the `app` default, `approval: never` elided, sorted `config`,
+ * verbatim passthrough of any remaining frontmatter, single trailing newline.
+ * Round-trips through `parseConnectionDefinition`. Merges the per-grant config
+ * onto an existing marker's fields while preserving its body.
+ */
+export function serializeConnectionDefinition(
+  input: ConnectionMarkerSerializeInput,
+): string {
+  const fields: Record<string, unknown> = {
+    name: input.name.trim(),
+    description: input.description.trim(),
+    type: input.type,
+    ...(input.principalType && input.principalType !== "app"
+      ? { principal_type: input.principalType }
+      : {}),
+    ...(input.url?.trim() ? { url: input.url.trim() } : {}),
+    ...(input.operations && input.operations.length > 0
+      ? { operations: input.operations.map((op) => op.trim()) }
+      : {}),
+    ...(input.auth && Object.keys(input.auth).length > 0
+      ? { auth: input.auth }
+      : {}),
+    ...(input.capabilityRef &&
+    (input.capabilityRef.twcap || input.capabilityRef.descriptor_fingerprint)
+      ? {
+          capability_ref: {
+            ...(input.capabilityRef.twcap
+              ? { twcap: input.capabilityRef.twcap }
+              : {}),
+            ...(input.capabilityRef.descriptor_fingerprint
+              ? {
+                  descriptor_fingerprint:
+                    input.capabilityRef.descriptor_fingerprint,
+                }
+              : {}),
+          },
+        }
+      : {}),
+    ...markerConfigFields(input),
+    ...passthroughFields(input.internal, CONNECTION_OWNED_KEYS),
+  };
+  const yaml = stringifyYaml(fields, { collectionStyle: "block" }).trim();
+  const body = (input.body ?? "").trim();
+  return body ? `---\n${yaml}\n---\n\n${body}\n` : `---\n${yaml}\n---\n`;
+}
+
+const SKILL_OWNED_KEYS = [
+  "name",
+  "description",
+  "allowed-tools",
+  "execution",
+  "approval",
+  "operations",
+  "rate_limit_rpm",
+  "model_override",
+  "config",
+] as const;
+
+export interface SkillMarkerSerializeInput {
+  name: string;
+  description: string;
+  /** Advisory `allowed-tools` list, preserved when present. */
+  allowedTools?: string[];
+  /** `script` | `context`; elided when absent (defaults to `context`). */
+  execution?: string | null;
+  /** Per-grant behavioral config merged into the marker (KTD-10). */
+  approval?: ApprovalPolicy;
+  operations?: string[];
+  rateLimitRpm?: number;
+  modelOverride?: string;
+  config?: Record<string, string>;
+  /** Remaining frontmatter fields (catalog metadata), preserved verbatim. */
+  internal?: Record<string, unknown>;
+  /** The prose body, preserved. */
+  body?: string;
+}
+
+/**
+ * Byte-stable `SKILL.md` serialization mirroring
+ * {@link serializeMcpDefinition}: fixed key order, block YAML, `approval: never`
+ * elided, sorted `config`, verbatim passthrough of catalog metadata, single
+ * trailing newline. Round-trips through `parseSkillMd` (name/description/
+ * execution/allowed-tools recovered; the per-grant config keys land on
+ * `parsed.internal`). Merges the per-grant config onto an existing SKILL.md's
+ * fields while preserving its body.
+ */
+export function serializeSkillDefinition(
+  input: SkillMarkerSerializeInput,
+): string {
+  const fields: Record<string, unknown> = {
+    name: input.name.trim(),
+    description: input.description.trim(),
+    ...(input.allowedTools && input.allowedTools.length > 0
+      ? { "allowed-tools": input.allowedTools.map((tool) => tool.trim()) }
+      : {}),
+    ...(input.execution ? { execution: input.execution } : {}),
+    ...markerConfigFields(input),
+    ...passthroughFields(input.internal, SKILL_OWNED_KEYS),
+  };
+  const yaml = stringifyYaml(fields, { collectionStyle: "block" }).trim();
+  const body = (input.body ?? "").trim();
+  return body ? `---\n${yaml}\n---\n\n${body}\n` : `---\n${yaml}\n---\n`;
+}
+
+/** Per-grant behavioral config merged onto a marker's frontmatter (KTD-10). */
+export interface MarkerConfigMerge {
+  approval?: ApprovalPolicy;
+  operations?: string[];
+  rateLimitRpm?: number;
+  modelOverride?: string;
+  config?: Record<string, string>;
+}
+
+/** Marker classes that carry a definition file the merge can patch. */
+export type MarkerClass = "connection" | "tool" | "agent" | "skill";
+
+/**
+ * Generic frontmatter patch for classes without a bespoke serializer
+ * (`tool`/`agent`): overlay the shared behavioral-config keys onto the
+ * existing frontmatter, preserving the body. `approval: never` is removed
+ * (absence is the default); the remaining keys are set only when provided.
+ * Deterministic for a given (source, merge) pair.
+ */
+function patchGenericFrontmatter(
+  source: string,
+  merge: MarkerConfigMerge,
+): string {
+  const split = splitFrontmatter(source);
+  const body = (split?.body ?? source).trim();
+  let record: Record<string, unknown> = {};
+  if (split) {
+    try {
+      const parsed = parseYaml(split.yaml);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        record = parsed as Record<string, unknown>;
+      }
+    } catch {
+      record = {};
+    }
+  }
+  const next: Record<string, unknown> = { ...record };
+  if (merge.approval !== undefined) {
+    if (merge.approval === "never") delete next.approval;
+    else next.approval = merge.approval;
+  }
+  if (merge.operations && merge.operations.length > 0) {
+    next.operations = merge.operations.map((op) => op.trim());
+  }
+  if (merge.rateLimitRpm !== undefined)
+    next.rate_limit_rpm = merge.rateLimitRpm;
+  if (merge.modelOverride?.trim()) {
+    next.model_override = merge.modelOverride.trim();
+  }
+  if (merge.config && Object.keys(merge.config).length > 0) {
+    next.config = Object.fromEntries(
+      Object.entries(merge.config).sort(([a], [b]) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      ),
+    );
+  }
+  const yaml = stringifyYaml(next, { collectionStyle: "block" }).trim();
+  return body ? `---\n${yaml}\n---\n\n${body}\n` : `---\n${yaml}\n---\n`;
+}
+
+/**
+ * Merge per-grant behavioral config into a marker's frontmatter, dispatching
+ * to the class-specific byte-stable serializer where one exists
+ * (`connection` → {@link serializeConnectionDefinition}, `skill` →
+ * {@link serializeSkillDefinition}) and to the generic patch otherwise. The
+ * result is the marker bytes the approval registry pins (`marker_sha`).
+ */
+export function mergeMarkerConfig(
+  source: string,
+  klass: MarkerClass,
+  merge: MarkerConfigMerge,
+): string {
+  if (klass === "connection") {
+    const parsed = parseConnectionDefinition(source, "CONNECTION.md");
+    if (parsed.valid) {
+      const def = parsed.parsed;
+      return serializeConnectionDefinition({
+        name: def.name,
+        description: def.description,
+        type: def.type,
+        principalType: def.principalType,
+        url: def.url,
+        operations:
+          merge.operations && merge.operations.length > 0
+            ? merge.operations
+            : def.operations,
+        auth: def.auth,
+        capabilityRef: def.descriptor_identity,
+        approval: merge.approval,
+        rateLimitRpm: merge.rateLimitRpm,
+        modelOverride: merge.modelOverride,
+        config: merge.config,
+        internal: def.internal,
+        body: def.body,
+      });
+    }
+    return patchGenericFrontmatter(source, merge);
+  }
+  if (klass === "skill") {
+    const parsed = parseSkillMdInternal(source, "SKILL.md");
+    if (parsed.valid && parsed.parsed.frontmatterPresent) {
+      const data = parsed.parsed.data;
+      const name = typeof data.name === "string" ? data.name : "";
+      const description =
+        typeof data.description === "string" ? data.description : "";
+      const allowed = data["allowed-tools"];
+      if (name && description) {
+        return serializeSkillDefinition({
+          name,
+          description,
+          allowedTools: Array.isArray(allowed)
+            ? (allowed.filter((t) => typeof t === "string") as string[])
+            : undefined,
+          execution: parsed.parsed.execution,
+          approval: merge.approval,
+          operations: merge.operations,
+          rateLimitRpm: merge.rateLimitRpm,
+          modelOverride: merge.modelOverride,
+          config: merge.config,
+          internal: data,
+          body: parsed.parsed.body,
+        });
+      }
+    }
+    return patchGenericFrontmatter(source, merge);
+  }
+  return patchGenericFrontmatter(source, merge);
 }

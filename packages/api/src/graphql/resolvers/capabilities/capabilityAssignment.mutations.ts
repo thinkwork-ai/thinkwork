@@ -47,6 +47,11 @@ import {
   tenantMcpServers,
 } from "../../utils.js";
 import { piExtensionAssignments } from "@thinkwork/database-pg/schema";
+import {
+  capabilityRegistryTrustEnabled,
+  type RegistryBindingContext,
+} from "../../../lib/capabilities/registry-trust-flag.js";
+import { severBinding } from "../../../lib/capabilities/approval-registry.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { emitAuditEvent } from "../../../lib/compliance/emit.js";
@@ -376,6 +381,7 @@ async function skillProfileMutation(
   mode: MutationMode,
   input: CapabilityMutationGqlInput,
   signedBy: `operator:${string}`,
+  registryTrust: boolean,
 ): Promise<ClassOutcome> {
   const {
     agentChildGrantExists,
@@ -410,6 +416,14 @@ async function skillProfileMutation(
     childClass: "skill" as const,
     slug,
   };
+  const registry: RegistryBindingContext | undefined = registryTrust
+    ? {
+        db,
+        tenantId: input.tenantId,
+        scopeRef: `agent:${target.agentId}/sub:${profile.slug}`,
+        signedBy,
+      }
+    : undefined;
   const exists = await agentChildGrantExists(grantInput);
   if (exists === null) throw new Error("WORKSPACE_BUCKET is not configured");
   if (mode === "grant" ? exists : !exists) {
@@ -417,7 +431,7 @@ async function skillProfileMutation(
   }
   const result =
     mode === "grant"
-      ? await putAgentChildGrantSidecar({ ...grantInput, signedBy })
+      ? await putAgentChildGrantSidecar({ ...grantInput, signedBy, registry })
       : await removeAgentChildGrantSidecar(grantInput);
   if (!result.ok) {
     throw new Error(
@@ -425,6 +439,14 @@ async function skillProfileMutation(
         "detail" in result && result.detail ? ` (${result.detail})` : ""
       }`,
     );
+  }
+  if (mode === "detach" && registry) {
+    await severBinding(db, {
+      tenantId: input.tenantId,
+      scopeRef: registry.scopeRef,
+      class: "skill",
+      slug,
+    });
   }
   return {
     outcome: "applied",
@@ -479,12 +501,21 @@ async function mcpAgentMutation(
   target: AgentTarget,
   audit: (spec: AuditSpec) => Parameters<typeof emitAuditEvent>[1],
   signedBy: `operator:${string}`,
+  registryTrust: boolean,
 ): Promise<ClassOutcome> {
   const server = await resolveTenantMcpServer(
     input.tenantId,
     input.capabilityRef.trim(),
   );
   const itemId = server.slug ?? server.name;
+  const registry: RegistryBindingContext | undefined = registryTrust
+    ? {
+        db,
+        tenantId: input.tenantId,
+        scopeRef: `agent:${target.agentId}`,
+        signedBy,
+      }
+    : undefined;
 
   // Post-retirement (THINK-173 U11 follow-up) the workspace files ARE the
   // assignment state — no `agent_mcp_servers` row exists behind them. The
@@ -568,6 +599,22 @@ async function mcpAgentMutation(
         { extensions: { code: "INTERNAL_SERVER_ERROR" } },
       );
     }
+    if (registry) {
+      // Sever both bindings the grant may have recorded: the first-class
+      // `mcp/<slug>/MCP.md` (class 'mcp') and the connection projection.
+      await severBinding(db, {
+        tenantId: input.tenantId,
+        scopeRef: registry.scopeRef,
+        class: "mcp",
+        slug: itemId,
+      });
+      await severBinding(db, {
+        tenantId: input.tenantId,
+        scopeRef: registry.scopeRef,
+        class: "connection",
+        slug: generated.slug,
+      });
+    }
     return {
       outcome: "applied" as const,
       auditEmitted: false,
@@ -610,12 +657,15 @@ async function mcpAgentMutation(
   // agent's single record is the signed connection sidecar, and writing
   // the mirror would resurrect folders the THINK-190 migration removed.
   if (!flipped) {
-    const materialized = await materializeMcpAssignmentFolder({
-      targetPrefix: target.targetPrefix,
-      registryServerId: server.id,
-      tenantId: input.tenantId,
-      agentConfig: nextConfig,
-    });
+    const materialized = await materializeMcpAssignmentFolder(
+      {
+        targetPrefix: target.targetPrefix,
+        registryServerId: server.id,
+        tenantId: input.tenantId,
+        agentConfig: nextConfig,
+      },
+      registry ? { registry } : {},
+    );
     if (!materialized) {
       throw new GraphQLError(
         `failed to grant MCP server '${itemId}': workspace assignment write failed`,
@@ -642,6 +692,7 @@ async function mcpAgentMutation(
       config: { registryServerId: server.id },
     },
     signedBy,
+    registry,
   });
   if (!written.ok) {
     throw new GraphQLError(
@@ -686,11 +737,20 @@ async function folderCapabilityMutation(
   target: AgentTarget,
   klass: "connection" | "tool",
   signedBy: `operator:${string}`,
+  registryTrust: boolean,
 ): Promise<ClassOutcome> {
   const slug = input.capabilityRef.trim();
   if (!slug) throw badInput("capabilityRef (folder slug) is required");
   const { signExistingCapabilityFolder, removeCapabilitySidecar } =
     await import("../../../lib/capabilities/folder-write.js");
+  const registry: RegistryBindingContext | undefined = registryTrust
+    ? {
+        db,
+        tenantId: input.tenantId,
+        scopeRef: `agent:${target.agentId}`,
+        signedBy,
+      }
+    : undefined;
 
   if (mode === "detach") {
     const removed = await removeCapabilitySidecar({
@@ -703,6 +763,14 @@ async function folderCapabilityMutation(
         `failed to detach ${klass} '${slug}': ${removed.reason}`,
         { extensions: { code: "INTERNAL_SERVER_ERROR" } },
       );
+    }
+    if (registry) {
+      await severBinding(db, {
+        tenantId: input.tenantId,
+        scopeRef: registry.scopeRef,
+        class: klass,
+        slug,
+      });
     }
     return {
       outcome: "applied",
@@ -760,6 +828,7 @@ async function folderCapabilityMutation(
       ...(trust ? { trust } : {}),
     },
     signedBy,
+    registry,
   });
   if (!signed.ok) {
     if (signed.reason === "definition_missing") {
@@ -797,6 +866,7 @@ async function mcpProfileMutation(
   mode: MutationMode,
   input: CapabilityMutationGqlInput,
   signedBy: `operator:${string}`,
+  registryTrust: boolean,
 ): Promise<ClassOutcome> {
   const {
     agentChildGrantExists,
@@ -825,6 +895,14 @@ async function mcpProfileMutation(
     childClass: "connection" as const,
     slug,
   };
+  const registry: RegistryBindingContext | undefined = registryTrust
+    ? {
+        db,
+        tenantId: input.tenantId,
+        scopeRef: `agent:${target.agentId}/sub:${profile.slug}`,
+        signedBy,
+      }
+    : undefined;
   const exists = await agentChildGrantExists(grantInput);
   if (exists === null) throw new Error("WORKSPACE_BUCKET is not configured");
   if (mode === "grant" ? exists : !exists) {
@@ -832,7 +910,7 @@ async function mcpProfileMutation(
   }
   const result =
     mode === "grant"
-      ? await putAgentChildGrantSidecar({ ...grantInput, signedBy })
+      ? await putAgentChildGrantSidecar({ ...grantInput, signedBy, registry })
       : await removeAgentChildGrantSidecar(grantInput);
   if (!result.ok) {
     throw new Error(
@@ -840,6 +918,14 @@ async function mcpProfileMutation(
         "detail" in result && result.detail ? ` (${result.detail})` : ""
       }`,
     );
+  }
+  if (mode === "detach" && registry) {
+    await severBinding(db, {
+      tenantId: input.tenantId,
+      scopeRef: registry.scopeRef,
+      class: "connection",
+      slug,
+    });
   }
   return {
     outcome: "applied",
@@ -999,6 +1085,14 @@ async function executeCapabilityMutation(
     scope === "agent"
       ? await resolveAgentTarget(rawInput.tenantId, rawInput.agentId)
       : null;
+  // THINK-302 U8: when the tenant's registry-trust flag is ON, grants record a
+  // scope-qualified capability_approvals binding + marker frontmatter (no
+  // sidecar) and detaches sever the binding. OFF (every tenant today) ⇒ the
+  // legacy signed-sidecar path, byte-identical.
+  const registryTrust = await capabilityRegistryTrustEnabled(
+    db,
+    rawInput.tenantId,
+  );
 
   const auditBase = (spec: AuditSpec) => ({
     tenantId: rawInput.tenantId,
@@ -1026,7 +1120,12 @@ async function executeCapabilityMutation(
   if (capabilityClass === "skill" && scope === "agent") {
     result = await skillAgentMutation(mode, rawInput, agentTarget!);
   } else if (capabilityClass === "skill") {
-    result = await skillProfileMutation(mode, rawInput, `operator:${actorId}`);
+    result = await skillProfileMutation(
+      mode,
+      rawInput,
+      `operator:${actorId}`,
+      registryTrust,
+    );
   } else if (capabilityClass === "mcp_server" && scope === "agent") {
     result = await mcpAgentMutation(
       mode,
@@ -1034,9 +1133,15 @@ async function executeCapabilityMutation(
       agentTarget!,
       auditBase,
       `operator:${actorId}`,
+      registryTrust,
     );
   } else if (capabilityClass === "mcp_server") {
-    result = await mcpProfileMutation(mode, rawInput, `operator:${actorId}`);
+    result = await mcpProfileMutation(
+      mode,
+      rawInput,
+      `operator:${actorId}`,
+      registryTrust,
+    );
   } else if (capabilityClass === "connection" || capabilityClass === "tool") {
     result = await folderCapabilityMutation(
       mode,
@@ -1044,6 +1149,7 @@ async function executeCapabilityMutation(
       agentTarget!,
       capabilityClass,
       `operator:${actorId}`,
+      registryTrust,
     );
   } else {
     result = await piExtensionMutation(mode, rawInput, scope, ctx);
@@ -1075,8 +1181,8 @@ async function executeCapabilityMutation(
   const itemClass = capabilityClass;
   const items =
     (inspection.predicted?.items as
-      | Array<{ capabilityClass: string; capabilityId: string }>
-      | undefined) ?? [];
+      Array<{ capabilityClass: string; capabilityId: string }> | undefined) ??
+    [];
   const item =
     items.find(
       (candidate) =>

@@ -21,6 +21,7 @@
  * still serves readers.
  */
 
+import { createHash } from "node:crypto";
 import {
   GetObjectCommand,
   PutObjectCommand,
@@ -29,6 +30,8 @@ import {
 import { getConfig } from "@thinkwork/runtime-config";
 import { db, eq, and } from "../../graphql/utils.js";
 import { agents, tenants } from "../../graphql/utils.js";
+import type { MarkerConfigMerge } from "../capabilities/marker-frontmatter.js";
+import type { RegistryBindingContext } from "../capabilities/registry-trust-flag.js";
 
 export const SKILL_ASSIGNMENT_STATE_FILE = ".assignment.json";
 
@@ -166,6 +169,13 @@ export async function patchSkillAssignmentState(
     patch: SkillAssignmentPatch;
     /** Skip the agent lookup when the caller already has the prefix. */
     targetPrefix?: string;
+    /**
+     * Registry-trust (flag-ON) branch: when present, the per-grant config is
+     * merged into `skills/<slug>/SKILL.md` frontmatter and a scope-qualified
+     * `capability_approvals` binding is recorded — NO `.assignment.json` is
+     * written. Absent = legacy sidecar path, byte-identical to pre-THINK-302.
+     */
+    registry?: RegistryBindingContext;
   },
   deps: { s3?: S3Client; bucket?: string } = {},
 ): Promise<boolean> {
@@ -175,6 +185,10 @@ export async function patchSkillAssignmentState(
     const targetPrefix =
       input.targetPrefix ?? (await resolveAgentWorkspacePrefix(input.agentId));
     if (!targetPrefix) return false;
+
+    if (input.registry) {
+      return await writeSkillRegistryBinding(input, targetPrefix, bucket, deps);
+    }
 
     const existing = input.patch.replace
       ? null
@@ -213,6 +227,113 @@ export async function patchSkillAssignmentState(
   } catch (err) {
     console.error(
       `[skill-assignment-state] write failed for ${input.slug} (DB row remains authoritative):`,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
+}
+
+/** `skills/<slug>/SKILL.md` marker path (the installed-skill definition). */
+function skillMarkerKey(targetPrefix: string, slug: string): string {
+  return `${targetPrefix}skills/${slug}/SKILL.md`;
+}
+
+/** Build the marker config merge from a skill assignment patch. */
+function skillMergeFromPatch(patch: SkillAssignmentPatch): MarkerConfigMerge {
+  const config: Record<string, string> = {};
+  if (patch.configMerge) {
+    for (const [key, value] of Object.entries(patch.configMerge)) {
+      if (typeof value === "string") config[key] = value;
+    }
+  }
+  const ops =
+    patch.permissions && Array.isArray(patch.permissions.operations)
+      ? (patch.permissions.operations as unknown[]).filter(
+          (op): op is string => typeof op === "string",
+        )
+      : undefined;
+  return {
+    ...(Object.keys(config).length > 0 ? { config } : {}),
+    ...(ops && ops.length > 0 ? { operations: ops } : {}),
+    ...(patch.rate_limit_rpm != null
+      ? { rateLimitRpm: patch.rate_limit_rpm }
+      : {}),
+    ...(patch.model_override ? { modelOverride: patch.model_override } : {}),
+  };
+}
+
+/**
+ * Registry-trust (flag-ON) skill grant: merge the per-grant config into the
+ * installed `skills/<slug>/SKILL.md` frontmatter, record a scope-qualified
+ * binding over the marker sha + folder attestation, write NO `.assignment.json`.
+ * Best-effort like its legacy sibling: returns false (after a loud log) on any
+ * failure, never throws.
+ */
+async function writeSkillRegistryBinding(
+  input: {
+    agentId: string;
+    slug: string;
+    patch: SkillAssignmentPatch;
+    registry?: RegistryBindingContext;
+  },
+  targetPrefix: string,
+  bucket: string,
+  deps: { s3?: S3Client; bucket?: string },
+): Promise<boolean> {
+  const registry = input.registry!;
+  const client = deps.s3 ?? s3Client();
+  const key = skillMarkerKey(targetPrefix, input.slug);
+  let existing: string;
+  try {
+    const resp = await client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    existing = (await resp.Body?.transformToString()) ?? "";
+  } catch (err) {
+    console.error(
+      `[skill-assignment-state] registry grant: SKILL.md missing for ${input.slug}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
+  // Lazy-load the registry deps: this ON branch is inert until a tenant flips
+  // the flag, and a static import would pull the drizzle schema barrel into
+  // every transitive importer of this widely-used module (tripping suites that
+  // globally mock drizzle-orm).
+  const [{ mergeMarkerConfig }, { computeFolderAttestation, recordBinding }] =
+    await Promise.all([
+      import("../capabilities/marker-frontmatter.js"),
+      import("../capabilities/approval-registry.js"),
+    ]);
+  const markerBytes = mergeMarkerConfig(
+    existing,
+    "skill",
+    skillMergeFromPatch(input.patch),
+  );
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: markerBytes,
+        ContentType: "text/markdown; charset=utf-8",
+      }),
+    );
+    await recordBinding(registry.db, {
+      tenantId: registry.tenantId,
+      scopeRef: registry.scopeRef,
+      class: "skill",
+      slug: input.slug,
+      markerSha: createHash("sha256").update(markerBytes).digest("hex"),
+      folderAttestationSha: computeFolderAttestation([
+        { path: "SKILL.md", content: markerBytes },
+      ]),
+      signedBy: registry.signedBy,
+    });
+    return true;
+  } catch (err) {
+    console.error(
+      `[skill-assignment-state] registry grant write failed for ${input.slug}:`,
       err instanceof Error ? err.message : err,
     );
     return false;

@@ -22,6 +22,7 @@
  * migration snapshot stays hygienic until the table is dropped.
  */
 
+import { createHash } from "node:crypto";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -39,6 +40,13 @@ import {
   tenants,
   tenantMcpServers,
 } from "../../graphql/utils.js";
+import { serializeMcpDefinition } from "../capabilities/marker-frontmatter.js";
+import {
+  computeFolderAttestation,
+  recordBinding,
+} from "../capabilities/approval-registry.js";
+import { capabilityRegistryTrustEnabled } from "../capabilities/registry-trust-flag.js";
+import type { RegistryBindingContext } from "../capabilities/registry-trust-flag.js";
 
 export const MCP_ASSIGNMENT_STATE_FILE = ".assignment.json";
 
@@ -161,6 +169,71 @@ function workspaceBucket(): string | null {
 export interface McpAssignmentStateDeps {
   s3?: Pick<S3Client, "send">;
   bucket?: string;
+  /**
+   * Registry-trust (flag-ON) branch: when present, the server attachment is
+   * written as an `mcp/<slug>/MCP.md` marker with a scope-qualified
+   * `capability_approvals` binding — NO `.assignment.json`. Absent = legacy
+   * `.assignment.json` mirror, byte-identical to pre-THINK-302.
+   */
+  registry?: RegistryBindingContext;
+}
+
+/** MCP.md marker path for a server slug. */
+function mcpMarkerKey(targetPrefix: string, slug: string): string {
+  return `${targetPrefix}mcp/${slug}/MCP.md`;
+}
+
+/**
+ * Registry-trust (flag-ON) MCP grant: write the `mcp/<slug>/MCP.md` marker
+ * (references only — server = registry id, secrets stay platform-side) and
+ * record a scope-qualified binding. Returns false (loud log) on failure.
+ */
+async function writeMcpRegistryBinding(
+  targetPrefix: string,
+  state: McpAssignmentState,
+  registry: RegistryBindingContext,
+  bucket: string,
+  s3: Pick<S3Client, "send">,
+): Promise<boolean> {
+  const config: Record<string, string> = {};
+  if (state.transport) config.transport = state.transport;
+  if (state.authType) config.authType = state.authType;
+  if (state.secretRef) config.secretRef = state.secretRef;
+  const markerBytes = serializeMcpDefinition({
+    name: state.slug,
+    description: `${state.name} — MCP connection (platform-managed).`,
+    server: state.registryServerId,
+    enabledTools: state.enabledTools,
+    ...(Object.keys(config).length > 0 ? { config } : {}),
+  });
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: mcpMarkerKey(targetPrefix, state.slug),
+        Body: markerBytes,
+        ContentType: "text/markdown; charset=utf-8",
+      }),
+    );
+    await recordBinding(registry.db, {
+      tenantId: registry.tenantId,
+      scopeRef: registry.scopeRef,
+      class: "mcp",
+      slug: state.slug,
+      markerSha: createHash("sha256").update(markerBytes).digest("hex"),
+      folderAttestationSha: computeFolderAttestation([
+        { path: "MCP.md", content: markerBytes },
+      ]),
+      signedBy: registry.signedBy,
+    });
+    return true;
+  } catch (err) {
+    console.error(
+      `[mcp-assignment-state] registry grant write failed for ${state.slug}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
 }
 
 /**
@@ -299,8 +372,18 @@ export async function writeMcpAssignmentState(
 ): Promise<boolean> {
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return false;
+  const s3 = deps.s3 ?? s3Client();
+  if (deps.registry) {
+    return writeMcpRegistryBinding(
+      targetPrefix,
+      state,
+      deps.registry,
+      bucket,
+      s3,
+    );
+  }
   try {
-    await (deps.s3 ?? s3Client()).send(
+    await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: mcpAssignmentStateKey(targetPrefix, state.slug),
@@ -428,11 +511,30 @@ export async function materializeMcpAssignmentFoldersForAgents(
 ): Promise<number> {
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return 0;
+  // Registry-trust (flag-ON): the provisioner is the reconciler authority, so
+  // each per-agent grant records an `agent:<id>`-scoped binding + MCP.md marker
+  // instead of the legacy `.assignment.json` mirror. Off = unchanged.
+  const registryTrust =
+    deps.registry !== undefined
+      ? true
+      : await capabilityRegistryTrustEnabled(db, input.tenantId);
   let written = 0;
   for (const agentId of input.agentIds) {
     if (await agentUsesFolderDispatch(agentId)) continue;
     const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
     if (!targetPrefix) continue;
+    const perAgentDeps: McpAssignmentStateDeps = registryTrust
+      ? {
+          ...deps,
+          bucket,
+          registry: deps.registry ?? {
+            db,
+            tenantId: input.tenantId,
+            scopeRef: `agent:${agentId}`,
+            signedBy: "plugin-reconciler",
+          },
+        }
+      : { ...deps, bucket };
     if (
       await materializeMcpAssignmentFolder(
         {
@@ -440,7 +542,7 @@ export async function materializeMcpAssignmentFoldersForAgents(
           registryServerId: input.registryServerId,
           tenantId: input.tenantId,
         },
-        { ...deps, bucket },
+        perAgentDeps,
       )
     ) {
       written += 1;

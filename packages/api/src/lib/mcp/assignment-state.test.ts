@@ -240,9 +240,7 @@ describe("removeLegacyMcpFolders (THINK-190 flip scrub)", () => {
     const removed = await removeLegacyMcpFolders(PREFIX, DEPS);
     expect(removed).toEqual(["github", "gmail"]);
     expect(await listWorkspaceMcpSlugs(PREFIX, DEPS)).toEqual([]);
-    expect(store.get(`${PREFIX}connections/github/CONNECTION.md`)).toBe(
-      "kept",
-    );
+    expect(store.get(`${PREFIX}connections/github/CONNECTION.md`)).toBe("kept");
     expect(await removeLegacyMcpFolders(PREFIX, DEPS)).toEqual([]);
   });
 });
@@ -271,5 +269,62 @@ describe("materializeMcpAssignmentFolder (grant target)", () => {
     expect(ok).toBe(true);
     const read = await readMcpAssignmentState(PREFIX, "github", DEPS);
     expect(read).toMatchObject({ slug: "github", enabledTools: ["a"] });
+  });
+});
+
+// THINK-302 U8 — registry-trust (flag-ON): the attachment becomes an
+// `mcp/<slug>/MCP.md` marker + capability_approvals binding; NO `.assignment.json`.
+describe("registry-trust (flag ON) MCP grant", () => {
+  function fakeRegistryDb() {
+    const inserts: Array<Record<string, unknown>> = [];
+    const db = {
+      insert: () => ({
+        values: (values: Record<string, unknown>) => ({
+          returning: async () => {
+            inserts.push(values);
+            return [{ id: "b1", ...values }];
+          },
+        }),
+      }),
+    };
+    return { db, inserts };
+  }
+
+  it("writes MCP.md marker + records a binding, no .assignment.json", async () => {
+    const { db, inserts } = fakeRegistryDb();
+    const state = buildMcpAssignmentState({
+      registry: {
+        id: "srv-1",
+        slug: "github",
+        name: "GitHub",
+        transport: "streamable-http",
+        auth_type: "tenant_api_key",
+        auth_config: { secretRef: "arn:aws:secretsmanager:...:github" },
+      },
+      agentConfig: { toolAllowlist: ["issues_read"] },
+    });
+    const ok = await writeMcpAssignmentState(PREFIX, state, {
+      ...DEPS,
+      registry: {
+        db: db as never,
+        tenantId: "t1",
+        scopeRef: "agent:a1",
+        signedBy: "operator:u1",
+      },
+    });
+    expect(ok).toBe(true);
+    // No legacy .assignment.json; a first-class MCP.md instead.
+    expect(store.has(mcpAssignmentStateKey(PREFIX, "github"))).toBe(false);
+    const marker = store.get(`${PREFIX}mcp/github/MCP.md`)!;
+    expect(marker).toContain("server: srv-1");
+    expect(marker).toContain("secretRef");
+    // References only — never the raw endpoint/credential value beyond the ref.
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({
+      tenant_id: "t1",
+      scope_ref: "agent:a1",
+      class: "mcp",
+      slug: "github",
+    });
   });
 });
