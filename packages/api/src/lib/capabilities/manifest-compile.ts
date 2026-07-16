@@ -56,6 +56,10 @@ import {
   type AgentFolderConfig,
 } from "../agent-folder-format.js";
 import type { CapabilityApprovalRow } from "./approval-registry.js";
+import {
+  parseMcpDefinition,
+  type McpMarkerDefinition,
+} from "./marker-frontmatter.js";
 
 export const CAPABILITIES_MANIFEST_VERSION = 1;
 /**
@@ -110,7 +114,7 @@ export interface CapabilityManifestEntry {
   name: string;
   /** Folder slug (identity). */
   slug: string;
-  class: "builtin" | "skill" | "connection" | "tool" | "agent";
+  class: "builtin" | "skill" | "connection" | "tool" | "agent" | "mcp";
   description?: string;
   /** Tool entries only. */
   kind?: ToolKind;
@@ -174,6 +178,16 @@ export interface CapabilityManifestEntry {
    * byte-identical; present under registry trust.
    */
   source_scope?: string;
+  /**
+   * mcp entries only (THINK-302 U4). The tenant MCP registry reference
+   * (`tenant_mcp_servers` row id or slug) the dispatch bridge resolves the
+   * endpoint + credential from — secrets never enter the tree (R10). The
+   * `mcp/<slug>/` folder IS the grant, replacing the compiled connector→mcp
+   * mirror (R3).
+   */
+  server?: string;
+  /** mcp entries only: enabled tool allowlist. Absent = every server tool. */
+  enabledTools?: string[];
 }
 
 export interface AgentChildGrant {
@@ -204,7 +218,7 @@ export interface AgentChildGrantInput {
 
 export interface WithheldCapabilityEntry {
   slug: string;
-  class: "connection" | "tool" | "agent";
+  class: "connection" | "tool" | "agent" | "mcp";
   reason: WithheldReason;
   detail?: string;
 }
@@ -224,7 +238,7 @@ export interface CapabilitiesManifest {
 }
 
 export interface CapabilityFolderInput {
-  class: "connection" | "tool" | "agent";
+  class: "connection" | "tool" | "agent" | "mcp";
   slug: string;
   definitionPath: string;
   definitionRaw: string | null;
@@ -411,6 +425,7 @@ export function compileCapabilitiesManifest(
     sidecar: CapabilityAssignmentSidecar;
     sourceScope?: string;
   }> = [];
+  const activeMcp: Array<{ definition: McpMarkerDefinition }> = [];
   // THINK-302 U3: winning source scope per admitted entry name (R16).
   // At U3 a slug is unique across the single agent-root scope; U5's
   // most-specific-wins dedup populates this before compile.
@@ -442,6 +457,19 @@ export function compileCapabilitiesManifest(
           sourceScopeByName.set(
             admittedAgent.config.slug,
             admittedAgent.sourceScope,
+          );
+        }
+      }
+      continue;
+    }
+    if (folder.class === "mcp") {
+      const admittedMcp = admitMcpFolder(folder, withheld, input.registry);
+      if (admittedMcp) {
+        activeMcp.push({ definition: admittedMcp.definition });
+        if (admittedMcp.sourceScope) {
+          sourceScopeByName.set(
+            admittedMcp.definition.name,
+            admittedMcp.sourceScope,
           );
         }
       }
@@ -605,6 +633,8 @@ export function compileCapabilitiesManifest(
       connectionEntry(connection.definition, connection.sidecar),
     ),
     ...survivingTools.map((tool) => toolEntry(tool.definition)),
+    // THINK-302 U4: mcp/<slug>/ grants as first-class `mcp` entries.
+    ...activeMcp.map((mcp) => mcpEntry(mcp.definition)),
     // Pass 2b (subagent-folders U5): resolve each agent's child grant
     // surface against the post-policy ACTIVE connections and the skill
     // scan — grant failures become visible absence on the entry, never
@@ -921,6 +951,92 @@ function admitFolder(
     definition,
     sidecar,
     ...(registry?.registryTrust ? { sourceScope: folder.scopeRef } : {}),
+  };
+}
+
+/**
+ * Admit an `mcp/<slug>/MCP.md` folder (THINK-302 U4 — R1/R2/R3). mcp is a
+ * first-class registry-trusted capability class: the folder IS the grant,
+ * replacing the compiled connector→mcp mirror. Admission is registry-only
+ * (a bound MCP.md over marker sha + folder attestation) — there is no
+ * legacy signed-sidecar path for mcp folders; the old `McpAssignmentState`
+ * mirror is dual-read at dispatch (buildMcpConfigs), not here, until U9.
+ */
+function admitMcpFolder(
+  folder: CapabilityFolderInput,
+  withheld: WithheldCapabilityEntry[],
+  registry: RegistryTrustInput | undefined,
+): { definition: McpMarkerDefinition; sourceScope?: string } | null {
+  const reject = (reason: WithheldReason, detail?: string) => {
+    withheld.push({
+      slug: folder.slug,
+      class: "mcp",
+      reason,
+      ...(detail ? { detail } : {}),
+    });
+    return null;
+  };
+
+  if (folder.definitionRaw === null) {
+    return reject("invalid_definition", "MCP.md unreadable");
+  }
+  const parsed = parseMcpDefinition(
+    folder.definitionRaw,
+    folder.definitionPath,
+  );
+  if (!parsed.valid) {
+    return reject(
+      "invalid_definition",
+      parsed.errors[0]?.message ?? "MCP.md failed validation",
+    );
+  }
+  const definition = parsed.parsed;
+  if (definition.name !== folder.slug) {
+    return reject(
+      "invalid_definition",
+      `MCP.md name '${definition.name}' does not match folder slug '${folder.slug}'`,
+    );
+  }
+
+  // Registry-only admission (no legacy sidecar path for mcp).
+  if (!registry?.registryTrust)
+    return reject("unsigned", "mcp requires registry trust");
+  if (registry.bindingsUnavailable) {
+    return reject("unsigned", "approval registry lookup unavailable");
+  }
+  const scopeRef = folder.scopeRef;
+  if (!scopeRef) {
+    return reject("unsigned", "no scope reference for registry admission");
+  }
+  const binding = registry.bindings.get(
+    bindingScanKey(scopeRef, "mcp", folder.slug),
+  );
+  if (!binding) return reject("unsigned");
+  const match = bindingMatches(
+    binding,
+    definitionContentSha(folder.definitionRaw),
+    folder.files,
+  );
+  if (!match.ok) return reject("definition_drift", match.detail);
+  if (definition.approval && definition.approval !== "never") {
+    return reject("approval_gated", `approval policy '${definition.approval}'`);
+  }
+  return { definition, sourceScope: scopeRef };
+}
+
+function mcpEntry(definition: McpMarkerDefinition): CapabilityManifestEntry {
+  return {
+    name: definition.name,
+    slug: definition.name,
+    class: "mcp",
+    description: definition.description,
+    server: definition.server,
+    ...(definition.enabledTools && definition.enabledTools.length > 0
+      ? { enabledTools: definition.enabledTools }
+      : {}),
+    ...(definition.operations && definition.operations.length > 0
+      ? { operations: definition.operations }
+      : {}),
   };
 }
 
