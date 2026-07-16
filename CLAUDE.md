@@ -15,6 +15,7 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentC
 - `packages/agentcore-pi` — active AgentCore Pi runtime (Bedrock models, MCP tools, Docker image)
 - `packages/agentcore` — tenant-router + auth-agent (separate AgentCore image)
 - Tenant S3 skill catalogs — per-tenant folders at `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; installed skills materialize into workspace `skills/<slug>/` folders
+- Agent workspace anatomy (subagent-folders program 2026-07): one recursive shape — `INSTRUCTIONS.md` + `skills/` + `connectors/` + `agents/` at every level. Sub-agents are `agents/<slug>/` folders (strict frontmatter, required `description`) compiled into the capabilities manifest; grants are folder presence with signed narrowing sidecars, never frontmatter lists. Root instructions live in `INSTRUCTIONS.md` (AGENTS.md dual-read window); `connections/` renamed `connectors/` (DB table NOT renamed). See CONCEPTS.md → Agent Folder / Grants-by-Presence / Eve Deviations.
 - `packages/workspace-defaults` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
 - `terraform/modules/{foundation,data,app,thinkwork}` — three-tier Terraform Registry modules (`thinkwork-ai/thinkwork/aws`)
 - `docs/` — Astro Starlight docs site; also holds `plans/`, `brainstorms/`, `solutions/` — prior-session institutional knowledge worth grepping before starting non-trivial work.

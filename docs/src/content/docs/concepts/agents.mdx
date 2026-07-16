@@ -46,7 +46,7 @@ The tenant platform agent owns defaults that should be true across the tenant:
 - Default monthly budget.
 - Default sandbox behavior.
 - Baseline workspace files.
-- Root `AGENTS.md` routing and specialist folders.
+- Root `INSTRUCTIONS.md` routing (formerly `AGENTS.md`) and specialist folders.
 
 These are tenant defaults, not project details. If a Space needs a different model, guardrail, budget, paused state, sandbox mode, tool set, email channel, or memory scope, configure the Space instead.
 
@@ -69,7 +69,7 @@ Folder specialists are authored under `workspaces/<slug>/`. A specialist can be 
 
 Use a folder specialist when the platform agent needs a durable specialty such as research, triage, QA, drafting, finance review, or customer onboarding. Use a Space when the difference is access, audience, project context, channel, memory, or runtime policy.
 
-The root `AGENTS.md` is the routing map. A row such as this makes the specialist available:
+The root `INSTRUCTIONS.md` (formerly `AGENTS.md`) is the routing map. A row such as this makes the specialist available:
 
 ```md
 | Task                     | Go to                | Read                           | Skills            |
@@ -108,7 +108,7 @@ Every new turn resolves current configuration. In-flight turns keep the files an
 | Put it here                | When it is about                                                                 |
 | -------------------------- | -------------------------------------------------------------------------------- |
 | Tenant Agent config        | Tenant-wide model, budget, sandbox, and broad role                               |
-| Root `AGENTS.md`           | Routing, identity, folder map, and specialist ownership                          |
+| Root `INSTRUCTIONS.md`     | Routing, identity, folder map, and specialist ownership (formerly `AGENTS.md`)   |
 | Root `CONTEXT.md`          | General responsibilities that apply before a specialist or Space narrows context |
 | `workspaces/<slug>/`       | Durable specialist instructions and resources                                    |
 | Space workspace            | Project, team, customer, channel, or workflow context                            |

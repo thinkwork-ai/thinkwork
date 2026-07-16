@@ -35,22 +35,24 @@ The result is not "no architecture." The folder tree is the architecture.
 
 The tenant platform agent has a root workspace. These files form the baseline:
 
-| Path                                    | Role                                                                 |
-| --------------------------------------- | -------------------------------------------------------------------- |
-| `AGENTS.md`                             | Identity, routing map, specialist ownership, generated file map      |
-| `CONTEXT.md`                            | General responsibilities and operating context                       |
-| `GUARDRAILS.md`                         | Safety and policy baseline; pinned for explicit review               |
-| `USER.md`                               | Server-managed requester profile rendered from the user/profile rows |
-| `SPACE.md`                              | Rendered active Space context                                        |
-| `MEMORY_GUIDE.md`                       | How the runtime should use memory tools and workspace notes          |
-| `TOOLS.md`                              | Tool-surface guidance                                                |
-| `mcp.json`                              | MCP server configuration metadata                                    |
-| `memory/lessons.md`                     | Editable workspace lessons                                           |
-| `memory/preferences.md`                 | Editable workspace preferences                                       |
-| `memory/contacts.md`                    | Editable workspace contacts                                          |
-| `skills/<slug>/SKILL.md`                | Installed capability packages                                        |
-| `workspaces/<slug>/CONTEXT.md`          | Specialist folder context                                            |
-| `workspaces/<slug>/workspaces/<child>/` | Nested specialist folder                                             |
+| Path                                    | Role                                                                                                     |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `INSTRUCTIONS.md`                       | Identity, routing map, specialist ownership, generated file map (formerly `AGENTS.md`; dual-read window) |
+| `CONTEXT.md`                            | General responsibilities and operating context                                                           |
+| `GUARDRAILS.md`                         | Safety and policy baseline; pinned for explicit review                                                   |
+| `USER.md`                               | Server-managed requester profile rendered from the user/profile rows                                     |
+| `SPACE.md`                              | Rendered active Space context                                                                            |
+| `MEMORY_GUIDE.md`                       | How the runtime should use memory tools and workspace notes                                              |
+| `TOOLS.md`                              | Tool-surface guidance                                                                                    |
+| `mcp.json`                              | MCP server configuration metadata                                                                        |
+| `memory/lessons.md`                     | Editable workspace lessons                                                                               |
+| `memory/preferences.md`                 | Editable workspace preferences                                                                           |
+| `memory/contacts.md`                    | Editable workspace contacts                                                                              |
+| `skills/<slug>/SKILL.md`                | Installed capability packages                                                                            |
+| `connectors/<slug>/CONNECTION.md`       | Connector definitions + signed sidecars (formerly `connections/`)                                        |
+| `agents/<slug>/INSTRUCTIONS.md`         | Sub-agent folders — the same anatomy, one level down                                                     |
+| `workspaces/<slug>/CONTEXT.md`          | Specialist folder context                                                                                |
+| `workspaces/<slug>/workspaces/<child>/` | Nested specialist folder                                                                                 |
 
 `SOUL.md`, `IDENTITY.md`, `PLATFORM.md`, and `CAPABILITIES.md` are retired legacy files. Their remaining content was migrated into `AGENTS.md` and the current policy/tool files.
 
@@ -96,7 +98,7 @@ For a normal managed turn, ThinkWork composes context from:
 The five prompt-shaping files are loaded in a stable order:
 
 ```text
-AGENTS.md
+INSTRUCTIONS.md   (falls back to AGENTS.md during the migration window)
 CONTEXT.md
 GUARDRAILS.md
 SPACE.md
@@ -104,6 +106,28 @@ USER.md
 ```
 
 Other files are available as workspace resources or tool configuration. The model should not need every file for every turn. Folder structure keeps unrelated instructions out of the context window.
+
+## Sub-agent folders
+
+Sub-agents use the identical anatomy one level down. An `agents/<slug>/` folder holds an `INSTRUCTIONS.md` whose YAML frontmatter carries the typed config — a required `description` (passed verbatim as the delegation tool description), plus optional `model`, `enabled`, `builtInTools`, and `execution` overrides — above a pure-prose instruction body:
+
+```text
+agents/
+  analyst/
+    INSTRUCTIONS.md          # frontmatter + prose; description required
+    .assignment.json         # optional platform state (disabled / pending)
+    skills/
+      crm/.assignment.json   # signed reference to the root install
+    connectors/
+      postgres-dev/
+        .assignment.json     # signed narrowing grant (operations ⊆ root)
+```
+
+Grants are folder presence, never frontmatter lists. A child connector grant carries only a platform-signed narrowing sidecar — definitions and credentials never copy down, so revoking the root connector withers every child grant automatically, and a dangling skill grant is a visible absence at compile time rather than a runtime spawn error.
+
+Sub-agent folders compile into the capabilities manifest as first-class `agent` entries with content-addressed fingerprints. Edits apply at the next compile + sync boundary, never mid-thread: the runtime verifies the synced `INSTRUCTIONS.md` against the compiled pin before spawning, so the fingerprint recorded on a run is always truthful. Nesting (`agents/` inside an agent folder) is rejected at admission in this program.
+
+Governance is per-capability, not per-tree: approving a sub-agent does not bulk-approve its grants; each grant folder is independently signed and revocable through the governance feed. Operator edits through platform surfaces re-sign automatically; agent-authored edits surface as drift for one-click approve/revert.
 
 ## What folders are not
 
