@@ -48,7 +48,7 @@ export async function runStallMonitor(
   // Find turns stuck in 'running' beyond the stall threshold.
   // Uses last_activity_at if set, otherwise falls back to started_at.
   const result = await db.execute(sql`
-		SELECT id, tenant_id, agent_id, thread_id, COALESCE(retry_attempt, 0) AS retry_attempt
+		SELECT id, tenant_id, agent_id, thread_id, runtime_type, COALESCE(retry_attempt, 0) AS retry_attempt
 		FROM thread_turns
 		WHERE status = 'running'
 		  AND COALESCE(last_activity_at, started_at) < NOW() - INTERVAL '${sql.raw(String(STALL_THRESHOLD_MINUTES))} minutes'
@@ -59,6 +59,7 @@ export async function runStallMonitor(
     tenant_id: string;
     agent_id: string;
     thread_id: string | null;
+    runtime_type: string | null;
     retry_attempt: number;
   }>;
 
@@ -82,6 +83,21 @@ export async function runStallMonitor(
 				SET checkout_run_id = NULL, updated_at = NOW()
 				WHERE id = ${turn.thread_id}::uuid AND checkout_run_id = ${turn.id}
 			`);
+    }
+
+    // THINK-311 KTD-9: harness-trial turns are timed out and their thread
+    // checkout released (above — a dead trial turn must never wedge the
+    // thread), but they are NEVER enqueued for retry — the retry
+    // dispatcher re-executes through the wakeup path, which resolves to
+    // Pi, and that re-dispatch would be the silent Pi fallback R4
+    // forbids. The harness runner's keepalive bumps last_activity_at, so
+    // only genuinely dead harness turns land here.
+    if (turn.runtime_type === "harness") {
+      console.log(
+        `[stall-monitor] harness turn ${turn.id} timed out; retry enqueue skipped (THINK-311 R4)`,
+      );
+      processed++;
+      continue;
     }
 
     // Insert retry_queue entry with backoff delay

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   HarnessChatDispatchOnlyError,
   normalizeAgentRuntimeType,
@@ -63,6 +63,10 @@ describe("resolveRuntimeFunctionName", () => {
     ).toThrow(RuntimeNotProvisionedError);
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("resolves the harness runner for the harness runtime, never the Pi function", () => {
     expect(
       resolveRuntimeFunctionName("harness", {
@@ -72,7 +76,17 @@ describe("resolveRuntimeFunctionName", () => {
     ).toBe("thinkwork-dev-harness-runner");
   });
 
+  it("derives the harness runner name from STAGE when no override is set (R1/R10)", () => {
+    vi.stubEnv("STAGE", "dev");
+    expect(
+      resolveRuntimeFunctionName("harness", {
+        AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
+      }),
+    ).toBe("thinkwork-dev-api-harness-runner");
+  });
+
   it("fails loudly while the harness runner is unprovisioned (inert phase)", () => {
+    vi.stubEnv("STAGE", "");
     // The Pi function being configured must NOT rescue a harness-flagged
     // agent — that would be the silent fallback R4 forbids.
     expect(() =>

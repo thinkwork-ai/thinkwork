@@ -1,4 +1,4 @@
-import { getConfig } from "@thinkwork/runtime-config";
+import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
 
 export type AgentRuntimeType = "strands" | "pi" | "harness";
 
@@ -70,15 +70,20 @@ export function resolveRuntimeFunctionName(
   if (normalizedRuntimeType === "harness") {
     // THINK-311 (KTD-4): the harness runner is the only function this
     // branch can resolve — the Pi function below is structurally
-    // unreachable for a harness-flagged agent. While the runner is not
-    // provisioned (U2 inert phase), this throws and the turn fails setup.
+    // unreachable for a harness-flagged agent. An explicit env/config
+    // override wins; otherwise the name derives from stage identity
+    // (R1/R10: derivable thinkwork-<stage>-api-* names never ride env),
+    // mirroring workspace-renderer. With no override and no STAGE this
+    // throws and the turn fails setup loudly.
     const harnessFunctionName =
       env.HARNESS_RUNNER_FUNCTION_NAME ??
       getConfig("HARNESS_RUNNER_FUNCTION_NAME");
-    if (!harnessFunctionName) {
+    if (harnessFunctionName) return harnessFunctionName;
+    try {
+      return deriveFunctionName("harness-runner");
+    } catch {
       throw new RuntimeNotProvisionedError("harness");
     }
-    return harnessFunctionName;
   }
 
   const functionName =
