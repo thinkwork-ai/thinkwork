@@ -417,6 +417,12 @@ locals {
     "brain-dream-state" = {
       BRAIN_DREAM_STATE_ENABLED = tostring(var.brain_dream_state_enabled)
     }
+    # THINK-307 KTD2: the origin-freshness guard reads the same stall
+    # threshold as the stall monitor — one operational knob, two consumers,
+    # no drift between "stalled" and "recovered".
+    "cron-retry-dispatcher" = {
+      STALL_THRESHOLD_MINUTES = tostring(var.stall_threshold_minutes)
+    }
     # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
     # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the
     # cluster ARN + the KB service role (passed at CreateKnowledgeBase time).
@@ -689,6 +695,10 @@ resource "aws_lambda_function" "handler" {
     # dispatch can withhold a failing/stale connection loudly.
     "analyst-connection-reconciler",
     "cron-stall-monitor",
+    # THINK-307: drains retry_queue rows the stall monitor enqueues. Built by
+    # scripts/build-lambdas.sh since PRD-09 but first registered here; its
+    # schedule ships DISABLED (var.retry_dispatcher_enabled default false).
+    "cron-retry-dispatcher",
     "webhook-crm-opportunity",
     "webhook-task-event",
     "workspace-files",
@@ -2469,6 +2479,47 @@ resource "aws_scheduler_schedule" "stall_monitor" {
   target {
     arn      = aws_lambda_function.handler["cron-stall-monitor"].arn
     role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Retry dispatcher — drains retry_queue rows the stall monitor enqueues and
+# re-runs genuinely stalled turns (THINK-307). First-ever scheduling of this
+# handler; state is var-driven and defaults DISABLED — never enable on a
+# stage before THINK-305/308/309 are live there (parent plan deploy ordering).
+# The 1-minute rate is fixed by design: the queue's own scheduled_at does the
+# pacing. Scheduler retries stay at 0 — the next 1-minute tick IS the retry.
+# ---------------------------------------------------------------------------
+
+# Lambda async retries are disabled (mirrors memory-retraction-drainer): the
+# claim is a CAS UPDATE so a duplicate invocation only picks up new rows, and
+# the next 1-minute tick is the retry.
+resource "aws_lambda_function_event_invoke_config" "retry_dispatcher" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["cron-retry-dispatcher"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
+resource "aws_scheduler_schedule" "retry_dispatcher" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-retry-dispatcher"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = var.retry_dispatcher_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["cron-retry-dispatcher"].arn
+    role_arn = aws_iam_role.scheduler.arn
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
   }
 }
 

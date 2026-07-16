@@ -1156,6 +1156,8 @@ module "api" {
   requester_memory_dreaming_model_id            = var.requester_memory_dreaming_model_id
   brain_dream_state_enabled                     = var.brain_dream_state_enabled
   brain_dream_state_schedule_expression         = var.brain_dream_state_schedule_expression
+  retry_dispatcher_enabled                      = var.retry_dispatcher_enabled
+  stall_threshold_minutes                       = var.stall_threshold_minutes
   # Per-user OAuth client credentials — fed to Secrets Manager in
   # app/lambda-api/oauth-secrets.tf. Reuses the same google_oauth_client_*
   # tfvars that already flow to the Cognito federated-signin module.

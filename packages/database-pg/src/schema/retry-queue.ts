@@ -30,7 +30,7 @@ export const retryQueue = pgTable(
     thread_id: uuid("thread_id").references(() => threads.id),
     attempt: integer("attempt").notNull().default(1),
     max_attempts: integer("max_attempts").notNull().default(5),
-    status: text("status").notNull().default("pending"), // pending | dispatched | succeeded | exhausted
+    status: text("status").notNull().default("pending"), // pending | dispatched | succeeded | exhausted | superseded
     scheduled_at: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     last_error: text("last_error"),
     origin_turn_id: uuid("origin_turn_id"),
