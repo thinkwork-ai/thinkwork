@@ -27,6 +27,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 }));
 
 import { DrizzleWorkspaceTupleRepository } from "./repository.js";
+import { bindingScanKey } from "../capabilities/manifest-compile.js";
 import type { ResolvedWorkspaceRenderTuple } from "./types.js";
 
 const TENANT_ID = "tenant-1";
@@ -85,5 +86,43 @@ describe("listSpaceParticipants slug derivation (THNK-10 fetchable Users/<slug>/
     expect(participants).toEqual([
       { id: "user-4", name: "Ada Lovelace", slug: "ada-lovelace" },
     ]);
+  });
+});
+
+describe("lookupCapabilityBindings key format (THINK-302 registry-trust)", () => {
+  it("emits mapKey in the compile's bindingScanKey format, not the NUL bindingMapKey", async () => {
+    const repo = new DrizzleWorkspaceTupleRepository();
+    rowsQueue.push([
+      {
+        id: "b1",
+        tenant_id: TENANT_ID,
+        scope_ref: "agent:agent-1",
+        class: "connection",
+        slug: "twenty--crm",
+        marker_sha: "m".repeat(64),
+        folder_attestation_sha: "f".repeat(64),
+        files_etag_signature: null,
+        signed_at: new Date("2026-07-16T00:00:00Z"),
+        created_at: new Date("2026-07-16T00:00:00Z"),
+      },
+    ]);
+
+    const rows = await repo.lookupCapabilityBindings({
+      tenantId: TENANT_ID,
+      keys: [
+        { scopeRef: "agent:agent-1", class: "connection", slug: "twenty--crm" },
+      ],
+    });
+
+    // The compiler looks bindings up with bindingScanKey. The repository MUST
+    // emit that exact key — the internal lookupBindings Map is keyed by the
+    // NUL-separated bindingMapKey, and passing that through silently missed
+    // every registry grant, withholding it as an `unsigned` proposal.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.mapKey).toBe(
+      bindingScanKey("agent:agent-1", "connection", "twenty--crm"),
+    );
+    expect(rows[0]!.mapKey).toBe("agent:agent-1 connection twenty--crm");
+    expect(rows[0]!.mapKey).not.toContain("\u0000");
   });
 });

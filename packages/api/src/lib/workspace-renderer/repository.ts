@@ -17,6 +17,7 @@ import {
   lookupBindings,
   type CapabilityScopeRef,
 } from "../capabilities/approval-registry.js";
+import { bindingScanKey } from "../capabilities/manifest-compile.js";
 import type {
   CapabilityBindingLookupKey,
   CapabilityBindingLookupRow,
@@ -164,9 +165,15 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       })),
     });
     const rows: CapabilityBindingLookupRow[] = [];
-    for (const [mapKey, row] of found.entries()) {
+    for (const row of found.values()) {
+      // THINK-302: emit the COMPILE's lookup-key format (`bindingScanKey`,
+      // space-separated). `lookupBindings` keys its internal Map with
+      // `bindingMapKey` (NUL-separated) for dedup; compose-tuple stores these
+      // rows under `row.mapKey` and the compiler looks them up with
+      // `bindingScanKey`. The two key formats MUST agree or every registry
+      // grant misses its binding and compiles to an `unsigned` proposal.
       rows.push({
-        mapKey,
+        mapKey: bindingScanKey(row.scope_ref, row.class, row.slug),
         markerSha: row.marker_sha,
         folderAttestationSha: row.folder_attestation_sha,
         filesEtagSignature: row.files_etag_signature,
