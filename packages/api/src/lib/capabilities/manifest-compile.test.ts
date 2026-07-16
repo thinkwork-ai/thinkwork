@@ -1,18 +1,26 @@
 import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  bindingScanKey,
   CAPABILITY_COMPILE_REVISION,
   compileCapabilitiesManifest,
   computeCapabilityInputSignature,
   parseCapabilitiesManifest,
   type CapabilityFolderInput,
+  type RegistryTrustInput,
 } from "./manifest-compile.js";
 import { legacyPrincipalRemediation } from "./definition-schemas.js";
 import {
   capabilitySignerFromKey,
   capabilityVerifierFromKey,
+  definitionContentSha,
   signCapabilitySidecar,
 } from "./sidecar-signing.js";
+import {
+  computeFolderAttestation,
+  type CapabilityApprovalRow,
+} from "./approval-registry.js";
+import { filesEtagSignature } from "./script-trust.js";
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const signer = capabilitySignerFromKey(privateKey);
@@ -878,12 +886,299 @@ describe("agent entry builtInTools (subagent-folders U7)", () => {
   });
 });
 
-describe("compile revision (U15)", () => {
-  it("rev 5 pins the connectors/ flip — the bump feeds the input signature so every previously rendered manifest recompiles", () => {
+// ── THINK-302 U3: registry-trust admission ──────────────────────────────────
+
+const AGENT_SCOPE = "agent:agent-1";
+
+/** A bare marker folder (no sidecar) — the flag-on end state. */
+function markerFolder(input: {
+  klass: "connection" | "tool" | "agent";
+  slug: string;
+  definition: string;
+  scopeRef?: string;
+  extraFiles?: Array<{ path: string; content: string; etag: string }>;
+}): CapabilityFolderInput {
+  const definitionPath =
+    input.klass === "agent"
+      ? `agents/${input.slug}/INSTRUCTIONS.md`
+      : `${input.klass}s/${input.slug}/${
+          input.klass === "connection" ? "CONNECTION.md" : "TOOL.md"
+        }`;
+  const markerName = definitionPath.split("/").pop()!;
+  const files = [
+    { path: markerName, etag: `"etag-${input.slug}-marker"` },
+    ...(input.extraFiles ?? []).map((f) => ({ path: f.path, etag: f.etag })),
+  ];
+  return {
+    class: input.klass,
+    slug: input.slug,
+    definitionPath,
+    definitionRaw: input.definition,
+    definitionEtag: `"etag-${input.slug}-marker"`,
+    sidecarRaw: null,
+    scopeRef: input.scopeRef ?? AGENT_SCOPE,
+    files,
+  };
+}
+
+/** Build the binding a marker folder would need to be admitted. */
+function bindingFor(
+  folder: CapabilityFolderInput,
+  markerContents: Record<string, string>,
+): CapabilityApprovalRow {
+  const attestationFiles = (folder.files ?? []).map((f) => ({
+    path: f.path,
+    content: markerContents[f.path] ?? "",
+  }));
+  return {
+    id: `binding-${folder.slug}`,
+    tenant_id: agent.tenantId,
+    scope_ref: folder.scopeRef!,
+    class: folder.class,
+    slug: folder.slug,
+    marker_sha: definitionContentSha(folder.definitionRaw!),
+    folder_attestation_sha: computeFolderAttestation(attestationFiles),
+    files_etag_signature: filesEtagSignature(folder.files ?? []),
+    definition_id: null,
+    signed_by: "operator:eric",
+    signed_at: new Date("2026-07-16T00:00:00Z"),
+    created_at: new Date("2026-07-16T00:00:00Z"),
+  } as CapabilityApprovalRow;
+}
+
+function registryCompile(
+  folders: CapabilityFolderInput[],
+  registry: RegistryTrustInput,
+) {
+  return compileCapabilitiesManifest({
+    agent,
+    folders,
+    skills: [],
+    verifier,
+    signer,
+    inputSignature: "sig-1",
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    registry,
+  });
+}
+
+describe("registry-trust admission (THINK-302 U3)", () => {
+  const scrapeMarker = `---\nname: scrape-api\ndescription: Scrape API.\ntype: api\nurl: https://api.example.dev\noperations:\n  - scrape\n---\nScrape connection.\n`;
+
+  function boundSetup(overrides?: { approval?: string; definition?: string }) {
+    const definition =
+      overrides?.definition ??
+      (overrides?.approval
+        ? scrapeMarker.replace(
+            "operations:",
+            `approval: ${overrides.approval}\noperations:`,
+          )
+        : scrapeMarker);
+    const folder = markerFolder({
+      klass: "connection",
+      slug: "scrape-api",
+      definition,
+    });
+    const binding = bindingFor(folder, {
+      "CONNECTION.md": definition,
+    });
+    const bindings = new Map<string, CapabilityApprovalRow>([
+      [bindingScanKey(AGENT_SCOPE, "connection", "scrape-api"), binding],
+    ]);
+    return { folder, binding, bindings };
+  }
+
+  it("admits a bound marker folder with no sidecar and stamps source_scope", () => {
+    const { folder, bindings } = boundSetup();
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings,
+    });
+    const entry = manifest.active.find((e) => e.slug === "scrape-api");
+    expect(entry).toBeTruthy();
+    expect(entry!.source_scope).toBe(AGENT_SCOPE);
+    expect(manifest.withheld).toEqual([]);
+  });
+
+  it("withholds an unbound marker folder as unsigned (AE1)", () => {
+    const { folder } = boundSetup();
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings: new Map(),
+    });
+    expect(manifest.active.some((e) => e.slug === "scrape-api")).toBe(false);
+    expect(manifest.withheld).toEqual([
+      { slug: "scrape-api", class: "connection", reason: "unsigned" },
+    ]);
+  });
+
+  it("withholds definition_drift when the marker bytes changed after binding", () => {
+    const { folder, bindings } = boundSetup();
+    const drifted = {
+      ...folder,
+      definitionRaw: folder.definitionRaw!.replace(
+        "Scrape connection.",
+        "Scrape connection (edited).",
+      ),
+    };
+    const { manifest } = registryCompile([drifted], {
+      registryTrust: true,
+      bindings,
+    });
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({
+        slug: "scrape-api",
+        reason: "definition_drift",
+        detail: expect.stringContaining("marker"),
+      }),
+    ]);
+  });
+
+  it("AE3/attestation: a non-marker folder file edit (script swap) drifts", () => {
+    const definition = `---\nname: runner\ndescription: d\nkind: script\nentry: run.sh\n---\nRunner.\n`;
+    const folder = markerFolder({
+      klass: "tool",
+      slug: "runner",
+      definition,
+      extraFiles: [
+        {
+          path: "run.sh",
+          content: "#!/bin/sh\necho ok",
+          etag: '"etag-run-v1"',
+        },
+      ],
+    });
+    const binding = bindingFor(folder, {
+      "TOOL.md": definition,
+      "run.sh": "#!/bin/sh\necho ok",
+    });
+    const bindings = new Map([
+      [bindingScanKey(AGENT_SCOPE, "tool", "runner"), binding],
+    ]);
+    // Same marker, but run.sh re-uploaded with a new etag → attestation flips.
+    const swapped = {
+      ...folder,
+      files: folder.files!.map((f) =>
+        f.path === "run.sh" ? { ...f, etag: '"etag-run-v2"' } : f,
+      ),
+    };
+    const { manifest } = registryCompile([swapped], {
+      registryTrust: true,
+      bindings,
+    });
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({
+        slug: "runner",
+        reason: "definition_drift",
+        detail: expect.stringContaining("folder contents"),
+      }),
+    ]);
+  });
+
+  it("AE10 copy-to-root: bytes bound at space scope do not admit at agent scope", () => {
+    const { folder } = boundSetup();
+    // Binding exists, but only for space:<id> — the agent-scope lookup misses.
+    const spaceBinding = bindingFor(
+      { ...folder, scopeRef: "space:space-9" },
+      { "CONNECTION.md": folder.definitionRaw! },
+    );
+    const bindings = new Map([
+      [
+        bindingScanKey("space:space-9", "connection", "scrape-api"),
+        spaceBinding,
+      ],
+    ]);
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings,
+    });
+    expect(manifest.active.some((e) => e.slug === "scrape-api")).toBe(false);
+    expect(manifest.withheld[0]!.reason).toBe("unsigned");
+  });
+
+  it("keeps the approval_gated withhold under registry trust (pre-U12)", () => {
+    const { folder, bindings } = boundSetup({ approval: "always" });
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings,
+    });
+    expect(manifest.active.some((e) => e.slug === "scrape-api")).toBe(false);
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({
+        slug: "scrape-api",
+        reason: "approval_gated",
+      }),
+    ]);
+  });
+
+  it("fails closed to unsigned when the binding lookup was unavailable", () => {
+    const { folder } = boundSetup();
+    const { manifest } = registryCompile([folder], {
+      registryTrust: true,
+      bindings: new Map(),
+      bindingsUnavailable: true,
+    });
+    expect(manifest.withheld).toEqual([
+      expect.objectContaining({
+        slug: "scrape-api",
+        reason: "unsigned",
+        detail: expect.stringContaining("registry lookup unavailable"),
+      }),
+    ]);
+  });
+
+  it("dual-read: an unbound marker WITH a signed sidecar still admits via fallback", () => {
+    // A not-yet-backfilled grant keeps its signed sidecar; registry trust on
+    // but no binding → the compiler verifies the legacy sidecar.
+    const folder = signedFolder({
+      klass: "connection",
+      slug: "firecrawl",
+      definition: connectionMd,
+    });
+    const { manifest } = registryCompile(
+      [{ ...folder, scopeRef: AGENT_SCOPE }],
+      { registryTrust: true, bindings: new Map() },
+    );
+    const entry = manifest.active.find((e) => e.slug === "firecrawl");
+    expect(entry).toBeTruthy();
+    // Fallback path stamps the scope too.
+    expect(entry!.source_scope).toBe(AGENT_SCOPE);
+  });
+
+  it("input signature folds in bound shas so a DB-only approval busts the skip cache", () => {
+    const { folder, binding } = boundSetup();
+    const base = computeCapabilityInputSignature({
+      capabilityObjects: (folder.files ?? []).map((f) => ({
+        key: `connection:scrape-api/${f.path}`,
+        etag: f.etag,
+      })),
+      skills: [],
+    });
+    const withBinding = computeCapabilityInputSignature({
+      capabilityObjects: (folder.files ?? []).map((f) => ({
+        key: `connection:scrape-api/${f.path}`,
+        etag: f.etag,
+      })),
+      skills: [],
+      bindings: [
+        {
+          key: bindingScanKey(AGENT_SCOPE, "connection", "scrape-api"),
+          markerSha: binding.marker_sha,
+          attestationSha: binding.folder_attestation_sha,
+        },
+      ],
+    });
+    // Same S3 etags, different registry state → different signature.
+    expect(withBinding).not.toBe(base);
+  });
+});
+
+describe("compile revision (THINK-302 U3)", () => {
+  it("rev 6 pins registry-trust admission — the bump feeds the input signature so every previously rendered manifest recompiles", () => {
     // Deliberate pin: bump this expectation ONLY alongside a real
     // compile-behavior change (each bump forces a fleet-wide recompile
     // and an eval-fingerprint discontinuity announcement).
-    expect(CAPABILITY_COMPILE_REVISION).toBe(5);
+    expect(CAPABILITY_COMPILE_REVISION).toBe(6);
     // The revision is part of the signature payload: identical inputs
     // yield a signature that can only match manifests compiled at the
     // same revision.

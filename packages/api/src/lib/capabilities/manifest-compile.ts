@@ -44,6 +44,7 @@ import {
 } from "./definition-schemas.js";
 import {
   canonicalizePayload,
+  definitionContentSha,
   verifyCapabilitySidecar,
   type CapabilitySignatureEnvelope,
   type CapabilitySigner,
@@ -54,6 +55,7 @@ import {
   parseAgentFolderInstructions,
   type AgentFolderConfig,
 } from "../agent-folder-format.js";
+import type { CapabilityApprovalRow } from "./approval-registry.js";
 
 export const CAPABILITIES_MANIFEST_VERSION = 1;
 /**
@@ -74,7 +76,14 @@ export const CAPABILITIES_MANIFEST_VERSION = 1;
 // R18/R19) — the renderer scans both spellings during the dual-read
 // window and writers emit connectors/; previously rendered manifests
 // must recompile so folders resolve under either spelling post-flip.
-export const CAPABILITY_COMPILE_REVISION = 5;
+// rev 6: registry-trust admission (THINK-302 U3) — trust moves from the
+// per-folder signed sidecar to scope-qualified `capability_approvals`
+// bindings (marker sha + folder etag attestation); active entries carry
+// source_scope, and the input signature folds in the bound shas so a
+// DB-only approval busts the S3-etag recompile-skip cache. Gated behind
+// the per-tenant registryTrust flag; off = the rev-5 sidecar path
+// (dual-read window, binding-absence fallback).
+export const CAPABILITY_COMPILE_REVISION = 6;
 export const CAPABILITIES_LATEST_PATH = "capabilities.json";
 
 export function capabilitiesManifestPath(fingerprint: string): string {
@@ -158,6 +167,13 @@ export interface CapabilityManifestEntry {
    */
   twcap?: string;
   descriptor_fingerprint?: string;
+  /**
+   * Winning scope for this entry (THINK-302 U3/U5, R16). `agent:<id>` is
+   * the agent root; sub-agent/space/user scopes arrive with U5. Absent on
+   * a rev-5 (sidecar-path) compile so pre-U3 manifest bodies stay
+   * byte-identical; present under registry trust.
+   */
+  source_scope?: string;
 }
 
 export interface AgentChildGrant {
@@ -231,6 +247,67 @@ export interface CapabilityFolderInput {
    * `files_etag_signature`.
    */
   files?: Array<{ path: string; etag?: string | null }>;
+  /**
+   * Binding location for registry-trust admission (THINK-302 U3, KTD-1).
+   * `agent:<id>` at the agent root; sub-agent/space/user scopes arrive
+   * with U5. Absent = agent-root default resolved by the compiler from
+   * the `agent` input.
+   */
+  scopeRef?: string;
+}
+
+/**
+ * Registry-trust inputs (THINK-302 U3). When `registryTrust` is on, the
+ * compiler admits from scope-qualified `capability_approvals` bindings
+ * instead of per-folder sidecar signatures. `bindings` is the batched
+ * latest-per-key lookup resolved BEFORE the render transaction (pg-pool
+ * held-connection precedent), keyed `${scopeRef}:${class}:${slug}`. A
+ * lookup that failed upstream sets `bindingsUnavailable` so the compiler
+ * fails closed (every registry-trust entry withheld `unsigned`) instead
+ * of silently activating nothing OR crashing the whole render.
+ */
+export interface RegistryTrustInput {
+  registryTrust: boolean;
+  bindings: Map<string, CapabilityApprovalRow>;
+  bindingsUnavailable?: boolean;
+}
+
+/** Map key for a scope-qualified binding lookup — shared by compile + signature. */
+export function bindingScanKey(
+  scopeRef: string,
+  klass: string,
+  slug: string,
+): string {
+  return `${scopeRef} ${klass} ${slug}`;
+}
+
+/**
+ * Whether the folder's current marker sha + folder etag signature match
+ * the bound shas. The marker sha is a true content check (definition
+ * bytes are always in hand); the etag signature is the zero-read folder
+ * check (flips on any folder-file change — a pure re-upload of identical
+ * bytes is the rare fail-closed false positive, re-approved once). The
+ * content-sha `folder_attestation_sha` is the stored authority, bound at
+ * write/backfill time; compile's hot path uses the etag fast path.
+ */
+function bindingMatches(
+  binding: CapabilityApprovalRow,
+  markerSha: string,
+  files: Array<{ path: string; etag?: string | null }> | undefined,
+): { ok: true } | { ok: false; detail: string } {
+  if (binding.marker_sha.toLowerCase() !== markerSha.toLowerCase()) {
+    return { ok: false, detail: "marker bytes changed since approval" };
+  }
+  if (files && binding.files_etag_signature) {
+    const current = filesEtagSignature(files);
+    if (current !== binding.files_etag_signature) {
+      return {
+        ok: false,
+        detail: "folder contents changed since approval",
+      };
+    }
+  }
+  return { ok: true };
 }
 
 export interface CompileCapabilitiesManifestInput {
@@ -253,6 +330,13 @@ export interface CompileCapabilitiesManifestInput {
   signer: CapabilitySigner | null;
   inputSignature: string;
   generatedAt: string;
+  /**
+   * Registry-trust admission (THINK-302 U3). Absent = the rev-5 sidecar
+   * path unchanged. Present with `registryTrust: true` = admit from
+   * scope-qualified bindings; binding-absence with a sidecar present
+   * falls back to sidecar verification (dual-read, logged loudly).
+   */
+  registry?: RegistryTrustInput;
 }
 
 /**
@@ -269,6 +353,18 @@ export function computeCapabilityInputSignature(input: {
     allowedServers: string[] | null;
     blockedServers: string[];
   } | null;
+  /**
+   * Latest bound (marker sha, folder attestation sha) per scanned
+   * `${scopeRef}:${class}:${slug}` (THINK-302 U3). Folds registry state
+   * into the recompile-skip cache key so a DB-only approval — which
+   * changes no S3 object — still busts the etag-only skip and recompiles.
+   * Absent/empty under the rev-5 sidecar path (byte-identical signature).
+   */
+  bindings?: Array<{
+    key: string;
+    markerSha: string;
+    attestationSha: string;
+  }>;
 }): string {
   const canonical = canonicalizePayload({
     v: CAPABILITIES_MANIFEST_VERSION,
@@ -278,6 +374,17 @@ export function computeCapabilityInputSignature(input: {
       .sort((a, b) => (a[0]! < b[0]! ? -1 : 1)),
     skills: [...input.skills].sort((a, b) => a.slug.localeCompare(b.slug)),
     extensionToolNames: [...(input.extensionToolNames ?? [])].sort(),
+    ...(input.bindings && input.bindings.length > 0
+      ? {
+          bindings: [...input.bindings]
+            .map((binding) => [
+              binding.key,
+              binding.markerSha,
+              binding.attestationSha,
+            ])
+            .sort((a, b) => (a[0]! < b[0]! ? -1 : 1)),
+        }
+      : {}),
     mcpPolicy: input.mcpPolicy
       ? {
           allowedServers: input.mcpPolicy.allowedServers
@@ -297,11 +404,17 @@ export function compileCapabilitiesManifest(
   const activeConnections: Array<{
     definition: ConnectionDefinition;
     sidecar: CapabilityAssignmentSidecar;
+    sourceScope?: string;
   }> = [];
   const candidateTools: Array<{
     definition: ToolDefinition;
     sidecar: CapabilityAssignmentSidecar;
+    sourceScope?: string;
   }> = [];
+  // THINK-302 U3: winning source scope per admitted entry name (R16).
+  // At U3 a slug is unique across the single agent-root scope; U5's
+  // most-specific-wins dedup populates this before compile.
+  const sourceScopeByName = new Map<string, string>();
 
   // Pass 1 — per-folder admission: definition validity, sidecar
   // signature + drift (R3/R18), enabled, approval (v1 blunt gate), and
@@ -313,22 +426,44 @@ export function compileCapabilitiesManifest(
   }> = [];
   for (const folder of input.folders) {
     if (folder.class === "agent") {
-      const admittedAgent = admitAgentFolder(folder, input.verifier, withheld);
+      const admittedAgent = admitAgentFolder(
+        folder,
+        input.verifier,
+        withheld,
+        input.registry,
+      );
       if (admittedAgent) {
         activeAgents.push({
-          ...admittedAgent,
+          config: admittedAgent.config,
+          instructionsEtag: admittedAgent.instructionsEtag,
           childGrants: folder.childGrants ?? [],
         });
+        if (admittedAgent.sourceScope) {
+          sourceScopeByName.set(
+            admittedAgent.config.slug,
+            admittedAgent.sourceScope,
+          );
+        }
       }
       continue;
     }
-    const admitted = admitFolder(folder, input.verifier, withheld);
+    const admitted = admitFolder(
+      folder,
+      input.verifier,
+      withheld,
+      input.registry,
+      input.generatedAt,
+    );
     if (!admitted) continue;
+    if (admitted.sourceScope) {
+      sourceScopeByName.set(admitted.definition.name, admitted.sourceScope);
+    }
     if (folder.class === "connection") {
       activeConnections.push(
         admitted as {
           definition: ConnectionDefinition;
           sidecar: CapabilityAssignmentSidecar;
+          sourceScope?: string;
         },
       );
     } else {
@@ -336,6 +471,7 @@ export function compileCapabilitiesManifest(
         admitted as {
           definition: ToolDefinition;
           sidecar: CapabilityAssignmentSidecar;
+          sourceScope?: string;
         },
       );
     }
@@ -487,6 +623,15 @@ export function compileCapabilitiesManifest(
     ),
   ];
 
+  // THINK-302 U3 (R16/R20): stamp the winning source scope on entries that
+  // were admitted via a registry binding. Under the rev-5 sidecar path
+  // `sourceScopeByName` is empty, so the manifest body stays byte-identical
+  // (additive field, KTD-3).
+  for (const entry of active) {
+    const scope = sourceScopeByName.get(entry.slug);
+    if (scope) entry.source_scope = scope;
+  }
+
   const body = {
     version: CAPABILITIES_MANIFEST_VERSION,
     agent: {
@@ -544,13 +689,78 @@ function toolClaimSource(kind: ToolKind): CapabilityToolSource {
   }
 }
 
+/**
+ * Read a marker frontmatter field bagged in the definition's `internal`
+ * record (the connection/tool parsers stash unknown keys there). Under
+ * registry trust the retired sidecar fields (`approval`, `operations`,
+ * `config`) live on the marker; U9 backfill populates them for existing
+ * grants, so a pre-backfill marker simply has no field and defaults apply.
+ */
+function markerInternal(
+  definition: ConnectionDefinition | ToolDefinition,
+): Record<string, unknown> {
+  const internal = (definition as { internal?: unknown }).internal;
+  return internal && typeof internal === "object"
+    ? (internal as Record<string, unknown>)
+    : {};
+}
+
+function readMarkerApproval(
+  definition: ConnectionDefinition | ToolDefinition,
+): "never" | "once" | "always" | undefined {
+  const raw = markerInternal(definition).approval;
+  if (raw === "never" || raw === "once" || raw === "always") return raw;
+  return undefined;
+}
+
+/**
+ * Synthesize a sidecar-shaped record from a registry-approved marker so
+ * the downstream entry builders (which read sidecar.permissions/config/
+ * approval) work unchanged. Minimal by design: U9 backfill merges the full
+ * retired-sidecar field set into markers; U3 carries approval + operations
+ * + config, which is all the flag-on state needs before U8/U9.
+ */
+function synthesizeRegistrySidecar(
+  definition: ConnectionDefinition | ToolDefinition,
+  klass: "connection" | "tool",
+  approval: "never" | "once" | "always" | undefined,
+  generatedAt: string,
+): CapabilityAssignmentSidecar {
+  const internal = markerInternal(definition);
+  const operations =
+    klass === "connection"
+      ? (definition as ConnectionDefinition).operations
+      : Array.isArray(internal.operations)
+        ? (internal.operations as unknown[]).filter(
+            (op): op is string => typeof op === "string",
+          )
+        : undefined;
+  const config =
+    internal.config && typeof internal.config === "object"
+      ? (internal.config as Record<string, unknown>)
+      : undefined;
+  return {
+    slug: definition.name,
+    class: klass,
+    ...(approval ? { approval } : {}),
+    ...(operations && operations.length > 0
+      ? { permissions: { operations } }
+      : {}),
+    ...(config ? { config } : {}),
+    updated_at: generatedAt,
+  } as CapabilityAssignmentSidecar;
+}
+
 function admitFolder(
   folder: CapabilityFolderInput,
   verifier: CapabilityVerifier | null,
   withheld: WithheldCapabilityEntry[],
+  registry: RegistryTrustInput | undefined,
+  generatedAt: string,
 ): {
   definition: ConnectionDefinition | ToolDefinition;
   sidecar: CapabilityAssignmentSidecar;
+  sourceScope?: string;
 } | null {
   const reject = (reason: WithheldReason, detail?: string) => {
     withheld.push({
@@ -580,6 +790,52 @@ function admitFolder(
     return reject(
       "invalid_definition",
       `definition name '${definition.name}' does not match folder slug '${folder.slug}'`,
+    );
+  }
+
+  // Registry-trust admission (THINK-302 U3, KTD-1/KTD-2). Trust comes from
+  // a scope-qualified `capability_approvals` binding over marker sha +
+  // folder attestation, NOT the sidecar signature. Binding-absence with a
+  // sidecar present falls through to the sidecar path (dual-read window).
+  if (registry?.registryTrust) {
+    if (registry.bindingsUnavailable) {
+      return reject("unsigned", "approval registry lookup unavailable");
+    }
+    const scopeRef = folder.scopeRef;
+    if (!scopeRef) {
+      return reject("unsigned", "no scope reference for registry admission");
+    }
+    const binding = registry.bindings.get(
+      bindingScanKey(scopeRef, folder.class, folder.slug),
+    );
+    if (binding) {
+      const match = bindingMatches(
+        binding,
+        definitionContentSha(folder.definitionRaw),
+        folder.files,
+      );
+      if (!match.ok) return reject("definition_drift", match.detail);
+      const approval = readMarkerApproval(definition);
+      if (approval && approval !== "never") {
+        return reject("approval_gated", `approval policy '${approval}'`);
+      }
+      return {
+        definition,
+        sidecar: synthesizeRegistrySidecar(
+          definition,
+          folder.class as "connection" | "tool",
+          approval,
+          generatedAt,
+        ),
+        sourceScope: scopeRef,
+      };
+    }
+    // No binding: an unbound folder with no sidecar is an unapproved
+    // proposal (AE1) — withheld. A sidecar present means a not-yet-
+    // backfilled grant; fall through to the sidecar path (dual-read).
+    if (folder.sidecarRaw === null) return reject("unsigned");
+    console.warn(
+      `[capability-compile] sidecar_fallback scope=${scopeRef} class=${folder.class} slug=${folder.slug} — no registry binding, verifying legacy sidecar`,
     );
   }
 
@@ -661,7 +917,11 @@ function admitFolder(
       return reject("trust_gate", "trust report lacks a files signature");
     }
   }
-  return { definition, sidecar };
+  return {
+    definition,
+    sidecar,
+    ...(registry?.registryTrust ? { sourceScope: folder.scopeRef } : {}),
+  };
 }
 
 /**
@@ -677,7 +937,12 @@ function admitAgentFolder(
   folder: CapabilityFolderInput,
   verifier: CapabilityVerifier | null,
   withheld: WithheldCapabilityEntry[],
-): { config: AgentFolderConfig; instructionsEtag: string | null } | null {
+  registry: RegistryTrustInput | undefined,
+): {
+  config: AgentFolderConfig;
+  instructionsEtag: string | null;
+  sourceScope?: string;
+} | null {
   const reject = (reason: WithheldReason, detail?: string) => {
     withheld.push({
       slug: folder.slug,
@@ -716,6 +981,48 @@ function admitAgentFolder(
       "invalid_definition",
       `instructions path slug '${config.slug}' does not match folder slug '${folder.slug}'`,
     );
+  }
+
+  // Registry-trust admission (THINK-302 U3): an `agents/<slug>/` folder is
+  // trusted by a scope-qualified binding over INSTRUCTIONS.md + folder
+  // attestation. When a binding EXISTS it decides active/drift/gated; when
+  // ABSENT the folder falls through to the legacy optional-sidecar path
+  // (which also carries the "no sidecar = operator-authored, enabled"
+  // convention) so the dual-read window never withholds an existing
+  // sub-agent that has not been backfilled yet.
+  if (registry?.registryTrust) {
+    if (registry.bindingsUnavailable) {
+      return reject("unsigned", "approval registry lookup unavailable");
+    }
+    const scopeRef = folder.scopeRef;
+    if (!scopeRef) {
+      return reject("unsigned", "no scope reference for registry admission");
+    }
+    const binding = registry.bindings.get(
+      bindingScanKey(scopeRef, "agent", folder.slug),
+    );
+    if (binding) {
+      const match = bindingMatches(
+        binding,
+        definitionContentSha(folder.definitionRaw),
+        folder.files,
+      );
+      if (!match.ok) return reject("definition_drift", match.detail);
+      if (config.approval && config.approval !== "never") {
+        return reject("approval_gated", `approval policy '${config.approval}'`);
+      }
+      if (!config.enabled) return reject("disabled");
+      return {
+        config,
+        instructionsEtag: folder.definitionEtag ?? null,
+        sourceScope: scopeRef,
+      };
+    }
+    if (folder.sidecarRaw !== null) {
+      console.warn(
+        `[capability-compile] sidecar_fallback scope=${scopeRef} class=agent slug=${folder.slug} — no registry binding, verifying legacy sidecar`,
+      );
+    }
   }
 
   // Optional sidecar (R7): absent = enabled, operator-authored, nothing
@@ -772,7 +1079,11 @@ function admitAgentFolder(
   }
 
   if (!config.enabled) return reject("disabled");
-  return { config, instructionsEtag: folder.definitionEtag ?? null };
+  return {
+    config,
+    instructionsEtag: folder.definitionEtag ?? null,
+    ...(registry?.registryTrust ? { sourceScope: folder.scopeRef } : {}),
+  };
 }
 
 function agentEntry(
