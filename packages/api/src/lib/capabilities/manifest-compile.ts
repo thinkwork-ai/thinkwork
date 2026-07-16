@@ -70,7 +70,11 @@ export const CAPABILITIES_MANIFEST_VERSION = 1;
 // rev 4: agents/<slug>/ folders are admitted as class "agent" entries
 // (subagent-folders U4) — previously rendered manifests must recompile
 // so existing agent folders reach the manifest.
-export const CAPABILITY_COMPILE_REVISION = 4;
+// rev 5: connections/ → connectors/ root rename (subagent-folders U15,
+// R18/R19) — the renderer scans both spellings during the dual-read
+// window and writers emit connectors/; previously rendered manifests
+// must recompile so folders resolve under either spelling post-flip.
+export const CAPABILITY_COMPILE_REVISION = 5;
 export const CAPABILITIES_LATEST_PATH = "capabilities.json";
 
 export function capabilitiesManifestPath(fingerprint: string): string {

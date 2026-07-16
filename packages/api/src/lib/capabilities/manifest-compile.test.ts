@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  CAPABILITY_COMPILE_REVISION,
   compileCapabilitiesManifest,
   computeCapabilityInputSignature,
   parseCapabilitiesManifest,
@@ -874,5 +875,22 @@ describe("agent entry builtInTools (subagent-folders U7)", () => {
     ]);
     const entry = manifest.active.find((e) => e.class === "agent");
     expect(entry?.builtInTools).toEqual(["web-search"]);
+  });
+});
+
+describe("compile revision (U15)", () => {
+  it("rev 5 pins the connectors/ flip — the bump feeds the input signature so every previously rendered manifest recompiles", () => {
+    // Deliberate pin: bump this expectation ONLY alongside a real
+    // compile-behavior change (each bump forces a fleet-wide recompile
+    // and an eval-fingerprint discontinuity announcement).
+    expect(CAPABILITY_COMPILE_REVISION).toBe(5);
+    // The revision is part of the signature payload: identical inputs
+    // yield a signature that can only match manifests compiled at the
+    // same revision.
+    const signature = computeCapabilityInputSignature({
+      capabilityObjects: [],
+      skills: [],
+    });
+    expect(signature).toMatch(/^[0-9a-f]{64}$/);
   });
 });

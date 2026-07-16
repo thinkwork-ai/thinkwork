@@ -1,10 +1,10 @@
 /**
  * Analyst workspace connection folder (THINK-228 U5, KTD5).
  *
- * Materializes `connections/postgres-dev/` into every tenant agent's
+ * Materializes `connectors/postgres-dev/` into every tenant agent's
  * workspace SOURCE prefix: the signed CONNECTION.md definition (via the
  * standard capability folder write path) plus the generated semantic
- * model as a sibling `SCHEMA.md`. Files under `connections/<slug>/**`
+ * model as a sibling `SCHEMA.md`. Files under `connectors/<slug>/**`
  * already materialize into the rendered agent workspace and feed the
  * capability input signature — no renderer changes. No CONTEXT.md slot is
  * connection-aware today, so CONNECTION.md's prose points the analyst at
@@ -96,7 +96,7 @@ function s3Client(): Pick<S3Client, "send"> {
 }
 
 export interface MaterializeResult {
-  /** Workspace-relative files written per agent, e.g. connections/postgres-dev/CONNECTION.md */
+  /** Workspace-relative files written per agent, e.g. connectors/postgres-dev/CONNECTION.md */
   files: string[];
   agents: number;
   skipped: Array<{ agentId: string; reason: string }>;
@@ -248,13 +248,13 @@ export async function materializeAnalystConnectionFolder(input: {
 
   // Dual-write the legacy `mcp/<slug>/.assignment.json` attachment record for
   // non-folder-dispatch agents (the helper skips flipped agents internally).
-  // The signed `connections/<slug>/` folder above is only the ATTACHMENT
+  // The signed `connectors/<slug>/` folder above is only the ATTACHMENT
   // source for folder-dispatch agents; a flag-off agent resolves its MCP
   // fleet from `mcp/<slug>/` files (mcp-configs.ts), so without this write
   // the analyst source's query tool never attaches for it and the model can
   // read SCHEMA.md but not execute — exactly the managed-MCP dual-write
   // pattern (managed-mcp-applications.ts). Analyst Data Source registration
-  // previously wrote only `connections/`, leaving the source unusable on the
+  // previously wrote only the connection folder, leaving the source unusable on the
   // default (un-flipped) platform agent.
   await materializeMcpAssignmentFoldersForAgents(
     {

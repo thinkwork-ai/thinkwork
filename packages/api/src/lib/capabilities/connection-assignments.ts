@@ -2,7 +2,7 @@
  * Connection-sidecar assignment reads (THINK-190).
  *
  * For agents on `capability_folder_dispatch`, the signed
- * `connections/<slug>/.assignment.json` sidecar IS the MCP assignment
+ * `connectors/<slug>/.assignment.json` sidecar IS the MCP assignment
  * record — the legacy `mcp/<slug>/.assignment.json` mirror is retired for
  * them (its readers repoint here; the U11 backfill scrubs the folders).
  * Every consumer only ever needed three fields — `config.registryServerId`,
@@ -32,6 +32,8 @@ import {
 import {
   CAPABILITY_SIDECAR_FILE,
   capabilityFolderName,
+  connectionAssignmentRe,
+  LEGACY_ROOT_CONNECTIONS_FOLDER,
 } from "../workspace-constants.js";
 
 export {
@@ -46,7 +48,7 @@ const LOG_PREFIX = "[connection-assignments]";
 
 /** The assignment-record view of one MCP-type connection sidecar. */
 export interface ConnectionAssignmentRecord {
-  /** The `connections/<slug>/` folder name. */
+  /** The `connectors/<slug>/` (or legacy `connections/<slug>/`) folder name. */
   slug: string;
   /** `tenant_mcp_servers.id` reference from `config.registryServerId`. */
   registryServerId: string;
@@ -86,7 +88,12 @@ function workspaceBucket(): string | null {
   }
 }
 
-const CONNECTION_SIDECAR_RE = /^connections\/([^/]+)\/\.assignment\.json$/;
+// Dual-read window (subagent-folders U15): sidecars may live under the
+// flipped `connectors/` folder OR a legacy `connections/` folder the
+// mover has not reached yet. `connectors/` wins per slug.
+const CONNECTION_SIDECAR_RE = connectionAssignmentRe("root", {
+  dualRead: true,
+});
 
 function recordFromSidecar(
   slug: string,
@@ -120,7 +127,9 @@ function recordFromSidecar(
 }
 
 /** Read ONE connection sidecar as an assignment record; null when absent,
- * unreadable, or not an MCP-type (no registryServerId) connection. */
+ * unreadable, or not an MCP-type (no registryServerId) connection.
+ * Dual-read (U15): prefers `connectors/<slug>/`, falls back to a legacy
+ * `connections/<slug>/` sidecar during the rename window. */
 export async function readConnectionAssignment(
   targetPrefix: string,
   slug: string,
@@ -128,25 +137,30 @@ export async function readConnectionAssignment(
 ): Promise<ConnectionAssignmentRecord | null> {
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return null;
-  const key = `${targetPrefix}${capabilityFolderName("connection")}/${slug}/${CAPABILITY_SIDECAR_FILE}`;
-  try {
-    const resp = await (deps.s3 ?? s3Client()).send(
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-    );
-    const raw = (await resp.Body?.transformToString()) ?? "";
-    const parsed = parseCapabilitySidecar(raw, key);
-    if (!parsed.valid) return null;
-    return recordFromSidecar(slug, parsed.parsed);
-  } catch (err) {
-    const name = (err as { name?: string })?.name;
-    if (name !== "NoSuchKey" && name !== "NotFound") {
+  for (const folder of [
+    capabilityFolderName("connection"),
+    LEGACY_ROOT_CONNECTIONS_FOLDER,
+  ]) {
+    const key = `${targetPrefix}${folder}/${slug}/${CAPABILITY_SIDECAR_FILE}`;
+    try {
+      const resp = await (deps.s3 ?? s3Client()).send(
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+      );
+      const raw = (await resp.Body?.transformToString()) ?? "";
+      const parsed = parseCapabilitySidecar(raw, key);
+      if (!parsed.valid) return null;
+      return recordFromSidecar(slug, parsed.parsed);
+    } catch (err) {
+      const name = (err as { name?: string })?.name;
+      if (name === "NoSuchKey" || name === "NotFound") continue;
       console.warn(
         `${LOG_PREFIX} read failed for ${slug}:`,
         err instanceof Error ? err.message : err,
       );
+      return null;
     }
-    return null;
   }
+  return null;
 }
 
 /**
@@ -162,37 +176,44 @@ export async function listConnectionAssignments(
   const bucket = deps.bucket ?? workspaceBucket();
   if (!bucket) return null;
   const client = deps.s3 ?? s3Client();
-  const prefix = `${targetPrefix}${capabilityFolderName("connection")}/`;
-  const slugs: string[] = [];
-  let continuationToken: string | undefined;
-  try {
-    do {
-      const resp = await client.send(
-        new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-        }),
+  // Dual-read window (U15): list BOTH folder prefixes; per-slug the
+  // readConnectionAssignment fallback already prefers `connectors/`.
+  const slugs = new Set<string>();
+  for (const folder of [
+    capabilityFolderName("connection"),
+    LEGACY_ROOT_CONNECTIONS_FOLDER,
+  ]) {
+    const prefix = `${targetPrefix}${folder}/`;
+    let continuationToken: string | undefined;
+    try {
+      do {
+        const resp = await client.send(
+          new ListObjectsV2Command({
+            Bucket: bucket,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+          }),
+        );
+        for (const obj of resp.Contents ?? []) {
+          if (!obj.Key?.startsWith(targetPrefix)) continue;
+          const rel = obj.Key.slice(targetPrefix.length);
+          const match = rel.match(CONNECTION_SIDECAR_RE);
+          if (match?.[1]) slugs.add(match[1]);
+        }
+        continuationToken = resp.IsTruncated
+          ? resp.NextContinuationToken
+          : undefined;
+      } while (continuationToken);
+    } catch (err) {
+      console.warn(
+        `${LOG_PREFIX} list failed under ${prefix}:`,
+        err instanceof Error ? err.message : err,
       );
-      for (const obj of resp.Contents ?? []) {
-        if (!obj.Key?.startsWith(targetPrefix)) continue;
-        const rel = obj.Key.slice(targetPrefix.length);
-        const match = rel.match(CONNECTION_SIDECAR_RE);
-        if (match?.[1]) slugs.push(match[1]);
-      }
-      continuationToken = resp.IsTruncated
-        ? resp.NextContinuationToken
-        : undefined;
-    } while (continuationToken);
-  } catch (err) {
-    console.warn(
-      `${LOG_PREFIX} list failed under ${prefix}:`,
-      err instanceof Error ? err.message : err,
-    );
-    return null;
+      return null;
+    }
   }
   const records: ConnectionAssignmentRecord[] = [];
-  for (const slug of slugs.sort()) {
+  for (const slug of [...slugs].sort()) {
     const record = await readConnectionAssignment(targetPrefix, slug, {
       ...deps,
       bucket,

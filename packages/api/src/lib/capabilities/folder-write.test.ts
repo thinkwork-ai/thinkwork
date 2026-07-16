@@ -179,6 +179,58 @@ describe("putCapabilityFolder + removal semantics", () => {
     });
     expect(s3.objects.has(defKey)).toBe(false);
   });
+
+  it("U15: key builders emit connectors/ for the connection class", () => {
+    expect(capabilityDefinitionKey(PREFIX, "connection", "gh")).toBe(
+      `${PREFIX}connectors/gh/CONNECTION.md`,
+    );
+    expect(capabilitySidecarKey(PREFIX, "connection", "gh")).toBe(
+      `${PREFIX}connectors/gh/.assignment.json`,
+    );
+  });
+
+  it("U15: connection removal sweeps BOTH spellings so a detach during the dual-read window leaves no stale legacy folder", async () => {
+    const newDef = capabilityDefinitionKey(PREFIX, "connection", "gh");
+    const newSide = capabilitySidecarKey(PREFIX, "connection", "gh");
+    const legacyDef = `${PREFIX}connections/gh/CONNECTION.md`;
+    const legacySide = `${PREFIX}connections/gh/.assignment.json`;
+    const otherLegacy = `${PREFIX}connections/other/CONNECTION.md`;
+    const s3 = fakeS3({
+      [newDef]: DEFINITION,
+      [newSide]: "{}",
+      [legacyDef]: DEFINITION,
+      [legacySide]: "{}",
+      [otherLegacy]: DEFINITION,
+    });
+    const removed = await removeCapabilityFolder({
+      targetPrefix: PREFIX,
+      klass: "connection",
+      slug: "gh",
+      deps: { s3: s3 as any, bucket: "b" },
+    });
+    expect(removed).toEqual({ ok: true });
+    expect(s3.objects.has(newDef)).toBe(false);
+    expect(s3.objects.has(newSide)).toBe(false);
+    expect(s3.objects.has(legacyDef)).toBe(false);
+    expect(s3.objects.has(legacySide)).toBe(false);
+    // Other folders (hand-authored or unrelated slugs) stay untouched.
+    expect(s3.objects.has(otherLegacy)).toBe(true);
+  });
+
+  it("U15: sidecar-only detach also sweeps the legacy sidecar", async () => {
+    const legacySide = `${PREFIX}connections/gh/.assignment.json`;
+    const legacyDef = `${PREFIX}connections/gh/CONNECTION.md`;
+    const s3 = fakeS3({ [legacySide]: "{}", [legacyDef]: DEFINITION });
+    await removeCapabilitySidecar({
+      targetPrefix: PREFIX,
+      klass: "connection",
+      slug: "gh",
+      deps: { s3: s3 as any, bucket: "b" },
+    });
+    expect(s3.objects.has(legacySide)).toBe(false);
+    // Definition stays as an inert proposal — sidecar-only semantics.
+    expect(s3.objects.has(legacyDef)).toBe(true);
+  });
 });
 
 describe("connectionDefinitionFromRegistryRow", () => {

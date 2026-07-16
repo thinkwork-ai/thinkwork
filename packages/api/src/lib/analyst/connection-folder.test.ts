@@ -3,7 +3,7 @@
  *
  * Integration-level per the plan: folder-write mechanics (signing
  * internals) are covered upstream in folder-write.test.ts — here we
- * assert composition: both files land under connections/postgres-dev/,
+ * assert composition: both files land under connectors/postgres-dev/ (U15 flip),
  * the sidecar is enabled + signed, and re-materializing with a changed
  * SCHEMA.md updates the workspace copy and re-signs the definition.
  */
@@ -109,7 +109,7 @@ describe("analyst connection folder (U5)", () => {
     expect(result.agents).toBe(2);
     expect(result.skipped).toEqual([]);
     for (const agent of ["agent-1", "agent-2"]) {
-      const base = `tenants/acme/agents/${agent}/connections/postgres-dev/`;
+      const base = `tenants/acme/agents/${agent}/connectors/postgres-dev/`;
       expect(s3.objects.get(`${base}CONNECTION.md`)).toContain(
         "[SCHEMA.md](./SCHEMA.md)",
       );
@@ -148,7 +148,7 @@ describe("analyst connection folder (U5)", () => {
       db: mockDb as never,
       deps: { s3: s3 as never, bucket: "bucket", signer },
     });
-    const base = "tenants/acme/agents/agent-1/connections/postgres-dev/";
+    const base = "tenants/acme/agents/agent-1/connectors/postgres-dev/";
     const firstSidecar = JSON.parse(s3.objects.get(`${base}.assignment.json`)!);
 
     selectQueue.push([ROW], [{ id: "agent-1" }]);

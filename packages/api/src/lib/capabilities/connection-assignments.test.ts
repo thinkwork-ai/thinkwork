@@ -153,3 +153,62 @@ describe("listConnectionAssignments", () => {
     expect(await listConnectionAssignments(PREFIX, DEPS)).toBeNull();
   });
 });
+
+describe("U15 dual-read window (connectors/ flip)", () => {
+  it("reads a sidecar from connectors/ and falls back to legacy connections/", async () => {
+    store.set(
+      `${PREFIX}connectors/github/.assignment.json`,
+      sidecar({ slug: "github" }),
+    );
+    expect(
+      (await readConnectionAssignment(PREFIX, "github", DEPS))
+        ?.registryServerId,
+    ).toBe("srv-1");
+
+    store.clear();
+    store.set(
+      `${PREFIX}connections/github/.assignment.json`,
+      sidecar({ slug: "github", config: { registryServerId: "srv-legacy" } }),
+    );
+    expect(
+      (await readConnectionAssignment(PREFIX, "github", DEPS))
+        ?.registryServerId,
+    ).toBe("srv-legacy");
+  });
+
+  it("prefers the connectors/ sidecar when both spellings carry the slug", async () => {
+    store.set(
+      `${PREFIX}connectors/github/.assignment.json`,
+      sidecar({ slug: "github", config: { registryServerId: "srv-new" } }),
+    );
+    store.set(
+      `${PREFIX}connections/github/.assignment.json`,
+      sidecar({ slug: "github", config: { registryServerId: "srv-stale" } }),
+    );
+    const record = await readConnectionAssignment(PREFIX, "github", DEPS);
+    expect(record?.registryServerId).toBe("srv-new");
+  });
+
+  it("lists across BOTH prefixes, deduped per slug with connectors/ winning", async () => {
+    store.set(
+      `${PREFIX}connectors/linear/.assignment.json`,
+      sidecar({ slug: "linear", config: { registryServerId: "srv-2" } }),
+    );
+    store.set(
+      `${PREFIX}connections/github/.assignment.json`,
+      sidecar({ slug: "github" }),
+    );
+    // Same slug both spellings: the connectors/ record wins.
+    store.set(
+      `${PREFIX}connections/linear/.assignment.json`,
+      sidecar({ slug: "linear", config: { registryServerId: "srv-stale" } }),
+    );
+    const records = await listConnectionAssignments(PREFIX, DEPS);
+    expect(
+      records?.map((record) => [record.slug, record.registryServerId]),
+    ).toEqual([
+      ["github", "srv-1"],
+      ["linear", "srv-2"],
+    ]);
+  });
+});

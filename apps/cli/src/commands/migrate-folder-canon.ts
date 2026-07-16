@@ -79,7 +79,7 @@ function resolveMode(opts: Record<string, unknown>): FolderCanonMode {
   return selected[0] ?? "dry-run";
 }
 
-function resolveWorkspaceBucketFromLambda(stage: string): string | null {
+export function resolveWorkspaceBucketFromLambda(stage: string): string | null {
   for (const functionName of [
     `thinkwork-${stage}-api-workspace-files`,
     `thinkwork-${stage}-api-graphql-http`,

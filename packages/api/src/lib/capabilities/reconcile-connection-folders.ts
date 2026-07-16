@@ -16,6 +16,17 @@
  * never clobbered. Removal happens on the explicit detach/uninstall
  * paths, which know the exact registry server being removed.
  *
+ * U15 connectors/ flip: writes land under the flipped `connectors/`
+ * spelling (via the workspace-constants key builders inside
+ * folder-write). Because these writers derive purely from the
+ * `tenant_mcp_servers` registry (keyed by slug/id, never by S3 path)
+ * and are upsert-only, they can never RESURRECT a legacy
+ * `connections/<slug>/` folder the `migrate-connectors` mover deleted —
+ * there is no path-shaped record to re-point ("sever" = ship this
+ * writer flip before the mover deletes). Removal sweeps BOTH spellings
+ * (folder-write's legacy sweep) so a detach during the window cannot
+ * leave a stale dual-read-visible legacy folder behind.
+ *
  * Best-effort like the mcp/ state-file writes: failures log and never
  * fail the provisioning flow they ride — the next backfill/reconcile
  * converges the folder.
