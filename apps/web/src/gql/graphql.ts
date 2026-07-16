@@ -11434,6 +11434,7 @@ export type ThreadTurn = {
   invocationSource: Scalars['String']['output'];
   lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
   originTurnId?: Maybe<Scalars['ID']['output']>;
+  recoveryPending?: Maybe<Scalars['Boolean']['output']>;
   resultJson?: Maybe<Scalars['AWSJSON']['output']>;
   retryAttempt?: Maybe<Scalars['Int']['output']>;
   routineId?: Maybe<Scalars['ID']['output']>;
