@@ -8,6 +8,9 @@ import {
   eq,
 } from "../../utils.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
+import { authorizeRunAsAssignment } from "../../../lib/scheduled-jobs/run-as-authz.js";
+import { resolveRunAsAuthzInputs } from "../../../lib/scheduled-jobs/run-as-facts.js";
+import { createRunAsReaders } from "../../../lib/scheduled-jobs/run-as-readers.js";
 
 export const createScheduledJob = async (
   _parent: any,
@@ -37,6 +40,31 @@ export const createScheduledJob = async (
     }
   }
 
+  // THINK-302 U7 (R28/KTD-14): authorize run-as at save time. Self-assignment
+  // is allowed for any member; assigning another user requires a tenant
+  // operator, and the target must be an active member (of a private
+  // run-in-space too). Fail-closed when the actor identity is unknown.
+  const runAsUserId: string | null = i.runAsUserId ?? null;
+  if (runAsUserId !== null) {
+    const actorUserId = caller?.userId ?? null;
+    if (!actorUserId) {
+      throw new Error("run-as requires an authenticated caller");
+    }
+    const { actor, target } = await resolveRunAsAuthzInputs(
+      createRunAsReaders(),
+      {
+        tenantId: i.tenantId,
+        actorUserId,
+        runAsUserId,
+        spaceId: i.spaceId || null,
+      },
+    );
+    const decision = authorizeRunAsAssignment({ runAsUserId, actor, target });
+    if (!decision.ok) {
+      throw new Error(`Cannot set run-as: ${decision.reason}`);
+    }
+  }
+
   const config = parseConfig(i.config);
   const scheduleType = i.scheduleType ?? null;
 
@@ -58,6 +86,7 @@ export const createScheduledJob = async (
       enabled: true,
       created_by_type: createdByType,
       created_by_id: createdById,
+      run_as_user_id: runAsUserId,
     })
     .returning();
   if (row.schedule_type && row.schedule_expression) {
