@@ -566,6 +566,55 @@ export function compileCapabilitiesManifest(
     }
   }
 
+  // THINK-302 U5 (R16/KTD-4): resolve same-slug cross-scope grants by
+  // most-specific-wins BEFORE the collision/name-claim and binding passes.
+  // Two grants of the same (class, slug) at different scopes are the SAME
+  // capability — the more specific scope supersedes; without this the R10
+  // tool-name collision pass would wrongly withhold one as a `collision`.
+  // Applied per admitted-item list (each list is a single class); items
+  // with no sourceScope (legacy sidecar path) never collide across scopes.
+  const dedupByScope = <T extends { sourceScope?: string }>(
+    items: T[],
+    nameOf: (item: T) => string,
+  ): T[] => {
+    const bestSpec = new Map<string, number>();
+    for (const item of items) {
+      if (!item.sourceScope) continue;
+      const name = nameOf(item);
+      const spec = scopeSpecificity(item.sourceScope);
+      const prev = bestSpec.get(name);
+      if (prev === undefined || spec > prev) bestSpec.set(name, spec);
+    }
+    const emitted = new Set<string>();
+    return items.filter((item) => {
+      if (!item.sourceScope) return true;
+      const name = nameOf(item);
+      if (scopeSpecificity(item.sourceScope) !== bestSpec.get(name)) {
+        return false;
+      }
+      if (emitted.has(name)) return false;
+      emitted.add(name);
+      return true;
+    });
+  };
+  {
+    const dedupedConnections = dedupByScope(
+      activeConnections,
+      (c) => c.definition.name,
+    );
+    activeConnections.length = 0;
+    activeConnections.push(...dedupedConnections);
+    const dedupedTools = dedupByScope(candidateTools, (t) => t.definition.name);
+    candidateTools.length = 0;
+    candidateTools.push(...dedupedTools);
+    const dedupedMcp = dedupByScope(activeMcp, (m) => m.definition.name);
+    activeMcp.length = 0;
+    activeMcp.push(...dedupedMcp);
+    const dedupedAgents = dedupByScope(activeAgents, (a) => a.config.slug);
+    activeAgents.length = 0;
+    activeAgents.push(...dedupedAgents);
+  }
+
   // Policy pass (KTD-6): the workspace MCP policy withholds connections
   // at render so dispatch does not re-filter on the folder path.
   const policy = input.mcpPolicy ?? null;
@@ -1417,8 +1466,7 @@ function resolveAgentChildGrants(input: {
         ? root.definition.operations
         : null);
     const permissions = sidecar.permissions as
-      | { operations?: unknown }
-      | undefined;
+      { operations?: unknown } | undefined;
     const requested = Array.isArray(permissions?.operations)
       ? (permissions.operations as string[])
       : null;

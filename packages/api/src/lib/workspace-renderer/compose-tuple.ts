@@ -60,6 +60,7 @@ import {
   compileCapabilitiesManifest,
   computeCapabilityInputSignature,
   parseCapabilitiesManifest,
+  bindingScanKey,
   type CapabilitiesManifest,
   type CapabilityFolderInput,
   type CompileBindingRow,
@@ -259,6 +260,12 @@ export function shouldRenderSpaceSourcePath(relPath: string): boolean {
 export function shouldRenderUserSourcePath(relPath: string): boolean {
   const sourcePath = runtimeSourcePath(relPath);
   if (sourcePath === "USER.md" || sourcePath === "knowledge-pack.md") {
+    return true;
+  }
+  // THINK-302 U5 (R18): a user's workspace holds `tools/` and `mcp/`
+  // capability folders. Their marker + support files must be listed so the
+  // capability scan can compile them as user-scope grants.
+  if (/^(tools|mcp)\/[^/]+\//.test(sourcePath)) {
     return true;
   }
   return (
@@ -927,6 +934,14 @@ export async function renderWorkspaceTuple(
   interface CapabilityFolderScan {
     class: "connection" | "tool" | "agent" | "mcp";
     /**
+     * Grant scope (THINK-302 U5): `agent:<id>` at the agent root,
+     * `space:<id>` / `user:<id>` for space/user grants. The scan map key is
+     * `bindingScanKey(scopeRef, class, slug)` so it matches the registry
+     * lookup key directly.
+     */
+    scopeRef: string;
+    slug: string;
+    /**
      * Actual folder name the definition marker matched under — during
      * the U15 dual-read window a connection scan may resolve from either
      * `connectors/` or legacy `connections/`; diagnostics (definitionPath)
@@ -954,14 +969,23 @@ export async function renderWorkspaceTuple(
     }>;
   }
   const capabilityFolderScans = new Map<string, CapabilityFolderScan>();
+  // THINK-302 U5: grant scopes. `agent:<id>` is the agent root; U5 adds
+  // `space:<id>` and `user:<id>` (space/user hold tool + mcp grants only,
+  // R17/R18). Space/user scanning is gated on the per-tenant registry-trust
+  // flag so a flag-off tenant is byte-identical (space/user folders carry no
+  // sidecar, so scanning them flag-off would only ever withhold `unsigned`).
+  const agentScopeRefEarly = `agent:${tuple.agentId}`;
+  const spaceScopeRef = `space:${tuple.spaceId}`;
+  const userScopeRef = tuple.userId ? `user:${tuple.userId}` : null;
   const capabilityScan = (
+    scopeRef: string,
     klass: "connection" | "tool" | "agent" | "mcp",
     slug: string,
   ): CapabilityFolderScan => {
-    const mapKey = `${klass}:${slug}`;
+    const mapKey = bindingScanKey(scopeRef, klass, slug);
     let scan = capabilityFolderScans.get(mapKey);
     if (!scan) {
-      scan = { class: klass, files: [] };
+      scan = { class: klass, scopeRef, slug, files: [] };
       capabilityFolderScans.set(mapKey, scan);
     }
     return scan;
@@ -977,20 +1001,28 @@ export async function renderWorkspaceTuple(
     if (assignment) skillAssignmentKeys.set(assignment[1]!, object.key);
     const connectionMarker = sourcePath.match(CONNECTION_MARKER_RE);
     if (connectionMarker) {
-      const scan = capabilityScan("connection", connectionMarker[1]!);
+      const scan = capabilityScan(
+        agentScopeRefEarly,
+        "connection",
+        connectionMarker[1]!,
+      );
       scan.folderName = sourcePath.slice(0, sourcePath.indexOf("/"));
       scan.definitionKey = object.key;
       scan.definitionEtag = object.etag ?? null;
     }
     const connectionAssignment = sourcePath.match(CONNECTION_ASSIGNMENT_RE);
     if (connectionAssignment) {
-      const scan = capabilityScan("connection", connectionAssignment[1]!);
+      const scan = capabilityScan(
+        agentScopeRefEarly,
+        "connection",
+        connectionAssignment[1]!,
+      );
       scan.sidecarKey = object.key;
       scan.sidecarEtag = object.etag ?? null;
     }
     const toolMarker = sourcePath.match(TOOL_MARKER_RE);
     if (toolMarker) {
-      const scan = capabilityScan("tool", toolMarker[1]!);
+      const scan = capabilityScan(agentScopeRefEarly, "tool", toolMarker[1]!);
       scan.definitionKey = object.key;
       scan.definitionEtag = object.etag ?? null;
     }
@@ -1000,25 +1032,33 @@ export async function renderWorkspaceTuple(
     // stays a plain folder file (dual-read at dispatch until U9).
     const mcpMarker = sourcePath.match(MCP_MARKER_RE);
     if (mcpMarker) {
-      const scan = capabilityScan("mcp", mcpMarker[1]!);
+      const scan = capabilityScan(agentScopeRefEarly, "mcp", mcpMarker[1]!);
       scan.definitionKey = object.key;
       scan.definitionEtag = object.etag ?? null;
     }
     const agentMarker = sourcePath.match(AGENT_MARKER_RE);
     if (agentMarker) {
-      const scan = capabilityScan("agent", agentMarker[1]!);
+      const scan = capabilityScan(agentScopeRefEarly, "agent", agentMarker[1]!);
       scan.definitionKey = object.key;
       scan.definitionEtag = object.etag ?? null;
     }
     const agentAssignment = sourcePath.match(AGENT_ASSIGNMENT_RE);
     if (agentAssignment) {
-      const scan = capabilityScan("agent", agentAssignment[1]!);
+      const scan = capabilityScan(
+        agentScopeRefEarly,
+        "agent",
+        agentAssignment[1]!,
+      );
       scan.sidecarKey = object.key;
       scan.sidecarEtag = object.etag ?? null;
     }
     const toolAssignment = sourcePath.match(TOOL_ASSIGNMENT_RE);
     if (toolAssignment) {
-      const scan = capabilityScan("tool", toolAssignment[1]!);
+      const scan = capabilityScan(
+        agentScopeRefEarly,
+        "tool",
+        toolAssignment[1]!,
+      );
       scan.sidecarKey = object.key;
       scan.sidecarEtag = object.etag ?? null;
     }
@@ -1034,7 +1074,7 @@ export async function renderWorkspaceTuple(
     // retrigger the compile.
     if (folderFile && folderFile[3] !== ".assignment.json") {
       const klass = capabilityClassFromFolderName(folderFile[1]!) ?? "tool";
-      const scan = capabilityScan(klass, folderFile[2]!);
+      const scan = capabilityScan(agentScopeRefEarly, klass, folderFile[2]!);
       scan.files.push({
         path: folderFile[3]!,
         etag: object.etag ?? null,
@@ -1064,6 +1104,60 @@ export async function renderWorkspaceTuple(
       capabilityFolderScans.delete(key);
     }
   }
+
+  // THINK-302 U5: space + user scope scanning. Spaces and users hold
+  // `tools/` and `mcp/` capability folders (R17/R18 — no connectors/,
+  // no agents/; space/user SKILLS route through the trust-gate path, a
+  // separate follow-up). Gated on the per-tenant registry-trust flag: the
+  // manifest is the additive union of all scanned scopes, and compile's
+  // most-specific-wins (U5a) resolves slug collisions. Flag-off tenants
+  // never scan these scopes, so their manifest is byte-identical.
+  if (tuple.capabilityRegistryTrust === true) {
+    const MCP_MARKER_RE_LOCAL = MCP_MARKER_RE;
+    const scanScopeToolsMcp = (
+      objects: readonly SourceObject[],
+      scopeRef: string,
+    ): void => {
+      for (const object of objects) {
+        const sourcePath = runtimeSourcePath(object.relPath);
+        const toolMarker = sourcePath.match(TOOL_MARKER_RE);
+        if (toolMarker) {
+          const scan = capabilityScan(scopeRef, "tool", toolMarker[1]!);
+          scan.definitionKey = object.key;
+          scan.definitionEtag = object.etag ?? null;
+        }
+        const mcpMarker = sourcePath.match(MCP_MARKER_RE_LOCAL);
+        if (mcpMarker) {
+          const scan = capabilityScan(scopeRef, "mcp", mcpMarker[1]!);
+          scan.definitionKey = object.key;
+          scan.definitionEtag = object.etag ?? null;
+        }
+        // Support files (tools/<slug>/run.sh, etc.) feed the signature +
+        // attestation for space/user tool/mcp folders, mirroring the agent
+        // scan. connectors/agents folder names are ignored at these scopes.
+        const folderFile = sourcePath.match(CAPABILITY_FOLDER_FILE_RE);
+        if (folderFile && folderFile[3] !== ".assignment.json") {
+          const klass = capabilityClassFromFolderName(folderFile[1]!);
+          if (klass === "tool" || klass === "mcp") {
+            const scan = capabilityScan(scopeRef, klass, folderFile[2]!);
+            scan.files.push({
+              path: folderFile[3]!,
+              etag: object.etag ?? null,
+            });
+          }
+        }
+      }
+    };
+    scanScopeToolsMcp(spaceSource.objects, spaceScopeRef);
+    if (userScopeRef) scanScopeToolsMcp(userSource.objects, userScopeRef);
+    // Re-run the markerless-mcp prune across the newly added scopes.
+    for (const [key, scan] of capabilityFolderScans) {
+      if (scan.class === "mcp" && !scan.definitionKey) {
+        capabilityFolderScans.delete(key);
+      }
+    }
+  }
+
   // Skill trust gate (Composer U4/U5 honesty fix): routing rows may only
   // reference skills the runtime will actually load. Consult the SAME
   // predicate resolve-agent-runtime-config applies — catalog skills must
@@ -1199,12 +1293,12 @@ export async function renderWorkspaceTuple(
     blockedServers: effectivePolicy.mcpBlockedServers ?? [],
   };
 
-  // THINK-302 U3b: registry-trust admission behind the per-tenant gate.
-  // At this unit a capability grant lives only at the agent root scope
-  // (U5 generalizes to space/user). Resolve the batched binding lookup
-  // BEFORE compile (and before the signature) so a DB-only approval —
-  // which changes no S3 object — folds into the recompile-skip signature.
-  const agentScopeRef = `agent:${tuple.agentId}`;
+  // THINK-302 U3b/U5: registry-trust admission behind the per-tenant gate.
+  // Grants span the agent root plus (U5) space + user scopes. Resolve the
+  // batched binding lookup BEFORE compile (and before the signature) so a
+  // DB-only approval — which changes no S3 object — folds into the
+  // recompile-skip signature. Keys come from each scan's own scope.
+  const agentScopeRef = agentScopeRefEarly;
   const registryTrustOn = tuple.capabilityRegistryTrust === true;
   let registryInput:
     | {
@@ -1217,13 +1311,11 @@ export async function renderWorkspaceTuple(
     | Array<{ key: string; markerSha: string; attestationSha: string }>
     | undefined;
   if (registryTrustOn) {
-    const bindingKeys = [...capabilityFolderScans.entries()].map(
-      ([mapKey, scan]) => ({
-        scopeRef: agentScopeRef,
-        class: scan.class,
-        slug: mapKey.slice(mapKey.indexOf(":") + 1),
-      }),
-    );
+    const bindingKeys = [...capabilityFolderScans.values()].map((scan) => ({
+      scopeRef: scan.scopeRef,
+      class: scan.class,
+      slug: scan.slug,
+    }));
     const bindingsByKey = new Map<string, CompileBindingRow>();
     let bindingsUnavailable = false;
     if (repository.lookupCapabilityBindings && bindingKeys.length > 0) {
@@ -1294,8 +1386,8 @@ export async function renderWorkspaceTuple(
     capabilitiesManifest = existingCapabilitiesManifest;
   } else {
     const folders: CapabilityFolderInput[] = await Promise.all(
-      [...capabilityFolderScans.entries()].map(async ([mapKey, scan]) => {
-        const slug = mapKey.slice(mapKey.indexOf(":") + 1);
+      [...capabilityFolderScans.values()].map(async (scan) => {
+        const slug = scan.slug;
         const [definitionRaw, sidecarRaw] = await Promise.all([
           scan.definitionKey
             ? objectStore.getText({ bucket, key: scan.definitionKey })
@@ -1343,9 +1435,10 @@ export async function renderWorkspaceTuple(
           sidecarRaw,
           files: scan.files,
           ...(childGrants ? { childGrants } : {}),
-          // THINK-302 U3b: agent-root scope for registry admission (U5 adds
-          // space/user). Harmless when the registry gate is off (unused).
-          scopeRef: agentScopeRef,
+          // THINK-302 U3b/U5: each folder carries its own grant scope
+          // (agent root, space, or user) for registry admission + the
+          // manifest's source_scope. Unused when the registry gate is off.
+          scopeRef: scan.scopeRef,
         };
       }),
     );
