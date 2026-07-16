@@ -9,7 +9,10 @@ import {
   resolveAgentRuntimeConfig,
   type AgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
-import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js";
+import {
+  HarnessChatDispatchOnlyError,
+  resolveRuntimeFunctionName,
+} from "../resolve-runtime-function-name.js";
 import { resolveCurrentCapabilitiesManifest } from "../capabilities/current-manifest.js";
 
 // Import from the leaf module (used internally below) and re-export so
@@ -457,6 +460,12 @@ async function invokeAgentCoreForEvalOnce(input: {
       ? { currentUserId: input.replayRequesterUserId }
       : {}),
   });
+  // THINK-311 (KTD-7): the Harness trial is chat-dispatch only — evals of
+  // a harness-flagged agent fail explicitly rather than resolving the
+  // harness runner (out of trial scope) or silently running Pi (R4).
+  if (runtimeConfig.runtimeType === "harness") {
+    throw new HarnessChatDispatchOnlyError("eval");
+  }
   const agentcoreFunctionName = resolveRuntimeFunctionName(
     runtimeConfig.runtimeType,
   );

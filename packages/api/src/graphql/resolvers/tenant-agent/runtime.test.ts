@@ -11,6 +11,14 @@ describe("parseAgentRuntimeInput", () => {
     expect(parseAgentRuntimeInput("FLUE")).toBe("pi");
     expect(parseAgentRuntimeInput("PI")).toBe("pi");
   });
+
+  it("rejects the harness trial selector on the GraphQL write path (THINK-311)", () => {
+    // The trial flag is flipped by an operator via SQL on the trial stage
+    // only — never through the product API.
+    expect(() => parseAgentRuntimeInput("HARNESS")).toThrow(
+      "Invalid agent runtime",
+    );
+  });
 });
 
 describe("agentRuntimeToGraphqlEnum", () => {
@@ -21,5 +29,9 @@ describe("agentRuntimeToGraphqlEnum", () => {
 
   it("serializes legacy strands runtime rows through the deployed Pi enum", () => {
     expect(agentRuntimeToGraphqlEnum("strands")).toBe("FLUE");
+  });
+
+  it("serializes harness-flagged rows through the deployed enum so agent queries keep working (THINK-311)", () => {
+    expect(agentRuntimeToGraphqlEnum("harness")).toBe("FLUE");
   });
 });

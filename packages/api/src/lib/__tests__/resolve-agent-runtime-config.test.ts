@@ -920,8 +920,23 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.runtimeType).toBe("pi");
   });
 
-  it("defaults unknown runtime values to pi", async () => {
+  it("rejects unknown runtime values loudly instead of coercing to pi (THINK-311 R4)", async () => {
     stageAgentRow({ runtime: "unknown" });
+    stageTemplateRow({ runtime: "pi" });
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
+    rowsQueue.push([]); // kbs
+    await expect(
+      resolveAgentRuntimeConfig({
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+      }),
+    ).rejects.toThrow('Unknown agent runtime selector "unknown"');
+  });
+
+  it("resolves the harness trial selector (THINK-311 U2)", async () => {
+    stageAgentRow({ runtime: "harness" });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
@@ -931,7 +946,10 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("pi");
+    expect(cfg.runtimeType).toBe("harness");
+    // The harness trial value must not flip the dormant strands-only
+    // context-engine gate on.
+    expect(cfg.contextEngineEnabled).toBe(false);
   });
 
   it("honors the template blocked_tools filter", async () => {

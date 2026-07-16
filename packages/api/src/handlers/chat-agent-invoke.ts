@@ -1443,6 +1443,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       `[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${effectiveSkillsConfig.length} mcp=${effectiveMcpConfigs.length}`,
     );
 
+    // THINK-311 (KTD-1/KTD-4): the runtime selector resolves exactly one
+    // engine's function name. For a harness-flagged agent this returns the
+    // harness runner (U5) — the Pi function is structurally unreachable —
+    // and while the runner is unprovisioned it throws
+    // RuntimeNotProvisionedError, failing the turn setup loudly (R4: no
+    // silent Pi fallback; AE2's structural half).
     const agentcoreFunctionName = resolveRuntimeFunctionName(runtimeType);
 
     let workflowSkill: unknown = undefined;
@@ -1561,14 +1567,17 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         isAnyToolAllowed(...toolPolicyAliases("send_email"))
           ? { ...runtimeConfig.sendEmailConfig, threadId }
           : undefined,
+      // Strands-only legacy gates (always false since Pi became the sole
+      // runtime). THINK-311: written as `=== "strands"` so the "harness"
+      // trial value cannot flip this dormant capability on.
       context_engine_enabled:
-        runtimeConfig.runtimeType !== "pi" &&
+        runtimeConfig.runtimeType === "strands" &&
         runtimeConfig.contextEngineEnabled &&
         isAnyToolAllowed(...toolPolicyAliases("context_engine"))
           ? true
           : undefined,
       context_engine_config:
-        runtimeConfig.runtimeType !== "pi" &&
+        runtimeConfig.runtimeType === "strands" &&
         isAnyToolAllowed(...toolPolicyAliases("context_engine"))
           ? runtimeConfig.contextEngineConfig
           : undefined,

@@ -859,7 +859,10 @@ export async function resolveAgentRuntimeConfig(
         }
       : undefined;
   const contextEngineEnabled =
-    runtimeType !== "pi" &&
+    // Strands-only legacy gate (always false since Pi became the sole
+    // runtime). THINK-311: written as `=== "strands"` so the "harness"
+    // trial value cannot flip this dormant capability on.
+    runtimeType === "strands" &&
     templateContextEngineEnabled &&
     !blockedTools.includes("query_context") &&
     !blockedTools.includes("context_engine");

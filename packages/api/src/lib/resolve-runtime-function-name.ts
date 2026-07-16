@@ -1,16 +1,57 @@
 import { getConfig } from "@thinkwork/runtime-config";
 
-export type AgentRuntimeType = "strands" | "pi";
+export type AgentRuntimeType = "strands" | "pi" | "harness";
 
 export class RuntimeNotProvisionedError extends Error {
   constructor(public readonly runtimeType: AgentRuntimeType) {
-    super("Pi runtime not yet provisioned in this stage.");
+    super(
+      runtimeType === "harness"
+        ? "Harness runtime not yet provisioned in this stage."
+        : "Pi runtime not yet provisioned in this stage.",
+    );
     this.name = "RuntimeNotProvisionedError";
   }
 }
 
-export function normalizeAgentRuntimeType(_value: unknown): AgentRuntimeType {
-  return "pi";
+/**
+ * THINK-311 (R4): an unrecognized `agents.runtime` value must fail the
+ * dispatch loudly instead of silently coercing to Pi — a mistyped trial
+ * flag ("harness2") running Pi would be exactly the silent fallback the
+ * trial forbids.
+ */
+export class UnknownAgentRuntimeTypeError extends Error {
+  constructor(public readonly value: string) {
+    super(
+      `Unknown agent runtime selector "${value}". Expected "pi" (or legacy "strands"/"flue") or the trial value "harness".`,
+    );
+    this.name = "UnknownAgentRuntimeTypeError";
+  }
+}
+
+/**
+ * THINK-311 (KTD-7): the Harness trial covers chat-originated turns only.
+ * Wakeup, retry, eval, and skill-run dispatch of a harness-flagged agent
+ * is a declared explicit failure, never a silent Pi run.
+ */
+export class HarnessChatDispatchOnlyError extends Error {
+  constructor(public readonly channel: string) {
+    super(
+      `Agent runtime "harness" is trial-scoped to chat dispatch; ${channel} dispatch is not supported.`,
+    );
+    this.name = "HarnessChatDispatchOnlyError";
+  }
+}
+
+// Every value the GraphQL write path has ever accepted (see
+// parseAgentRuntimeInput) plus empty string; all run Pi today.
+const LEGACY_PI_RUNTIME_VALUES = new Set(["pi", "strands", "flue", ""]);
+
+export function normalizeAgentRuntimeType(value: unknown): AgentRuntimeType {
+  if (value == null) return "pi";
+  const normalized = String(value).toLowerCase();
+  if (normalized === "harness") return "harness";
+  if (LEGACY_PI_RUNTIME_VALUES.has(normalized)) return "pi";
+  throw new UnknownAgentRuntimeTypeError(String(value));
 }
 
 export function resolveRuntimeFunctionName(
@@ -18,11 +59,28 @@ export function resolveRuntimeFunctionName(
   env: Partial<
     Pick<
       NodeJS.ProcessEnv,
-      "AGENTCORE_FUNCTION_NAME" | "AGENTCORE_PI_FUNCTION_NAME"
+      | "AGENTCORE_FUNCTION_NAME"
+      | "AGENTCORE_PI_FUNCTION_NAME"
+      | "HARNESS_RUNNER_FUNCTION_NAME"
     >
   > = process.env,
 ): string {
   const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
+
+  if (normalizedRuntimeType === "harness") {
+    // THINK-311 (KTD-4): the harness runner is the only function this
+    // branch can resolve — the Pi function below is structurally
+    // unreachable for a harness-flagged agent. While the runner is not
+    // provisioned (U2 inert phase), this throws and the turn fails setup.
+    const harnessFunctionName =
+      env.HARNESS_RUNNER_FUNCTION_NAME ??
+      getConfig("HARNESS_RUNNER_FUNCTION_NAME");
+    if (!harnessFunctionName) {
+      throw new RuntimeNotProvisionedError("harness");
+    }
+    return harnessFunctionName;
+  }
+
   const functionName =
     env.AGENTCORE_PI_FUNCTION_NAME ?? getConfig("AGENTCORE_PI_FUNCTION_NAME");
 

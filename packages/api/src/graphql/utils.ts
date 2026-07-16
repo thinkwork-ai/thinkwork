@@ -151,6 +151,7 @@ import {
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import {
+  HarnessChatDispatchOnlyError,
   normalizeAgentRuntimeType,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
@@ -585,6 +586,12 @@ async function getSkillRunInvokeFnName(
   runtimeType: AgentRuntimeType,
 ): Promise<string | null> {
   const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
+  // THINK-311 (KTD-7): the Harness trial is chat-dispatch only — a
+  // harness-flagged agent's skill runs fail explicitly (caught by
+  // invokeSkillRun's error envelope), never silently run on Pi.
+  if (normalizedRuntimeType === "harness") {
+    throw new HarnessChatDispatchOnlyError("skill_run");
+  }
   if (_skillRunInvokeFnName[normalizedRuntimeType] !== undefined) {
     return _skillRunInvokeFnName[normalizedRuntimeType] ?? null;
   }
