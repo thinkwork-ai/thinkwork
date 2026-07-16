@@ -19,8 +19,19 @@ export type DispatchIndicatorState =
   | "none"
   | "pending"
   | "running"
+  | "recovering"
   | "completed"
   | "failed";
+
+/**
+ * THINK-301 U6 (parent KTD4): the copy rendered for an exhausted-recovery
+ * `timed_out` turn. Keyed off status only — the raw `turn.error` internals
+ * ("Stall detected: no activity for 5 minutes") stay in the DB for operators
+ * and never reach the DOM. Rendered verbatim (no "Agent dispatch failed:"
+ * prefix).
+ */
+export const TIMED_OUT_FAILURE_COPY =
+  "This response took too long to complete.";
 
 export interface DispatchMetadata {
   status: string | null;
@@ -37,12 +48,23 @@ export interface DispatchIndicatorMessageLike {
 export interface DispatchIndicatorTurnLike {
   status?: string | null;
   error?: string | null;
+  /**
+   * THINK-301 U6 (parent KTD3): server-derived recovery visibility — true
+   * while an open retry row exists for this turn. Never inferred client-side.
+   */
+  recoveryPending?: boolean | null;
 }
 
 export interface DispatchIndicatorDerivation {
   state: DispatchIndicatorState;
   /** Human-readable failure detail; null unless state === "failed". */
   failureReason: string | null;
+  /**
+   * How `failureReason` should render: "timed_out" copy is status-keyed and
+   * renders verbatim; "dispatch" keeps the "Agent dispatch failed:" framing.
+   * Null unless state === "failed".
+   */
+  failureKind: "dispatch" | "timed_out" | null;
 }
 
 // Running/active turn statuses — the turn surface shows "Working…"/"Queued…".
@@ -55,8 +77,10 @@ const RUNNING_TURN_STATUSES = new Set([
 const COMPLETED_TURN_STATUSES = new Set(["completed", "succeeded"]);
 // A turn that ended in a failure the sender can act on. `cancelled` is a
 // deliberate stop (no retry affordance) and is intentionally excluded — its
-// own turn surface renders "Cancelled after …".
-const FAILED_TURN_STATUSES = new Set(["failed", "timed_out"]);
+// own turn surface renders "Cancelled after …". `timed_out` is handled
+// separately (THINK-301 U6): recovery-in-flight renders as working, and
+// exhausted recovery renders status-keyed plain copy instead of turn.error.
+const FAILED_TURN_STATUSES = new Set(["failed"]);
 
 function toRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
@@ -115,33 +139,51 @@ export function deriveDispatchIndicatorState(
   turn?: DispatchIndicatorTurnLike | null,
 ): DispatchIndicatorDerivation {
   if (String(message.role ?? "").toUpperCase() !== "USER") {
-    return { state: "none", failureReason: null };
+    return { state: "none", failureReason: null, failureKind: null };
   }
 
   const dispatch = readMessageDispatch(message.metadata);
 
   if (turn) {
     const status = normalizeStatus(turn.status);
+    if (status === "timed_out") {
+      // THINK-301 U6 (parent R9/R10, KTD4): recovery in flight renders as a
+      // benign working state; exhausted recovery renders plain status-keyed
+      // copy. turn.error never feeds the rendered reason for timed_out.
+      if (turn.recoveryPending) {
+        return { state: "recovering", failureReason: null, failureKind: null };
+      }
+      return {
+        state: "failed",
+        failureReason: TIMED_OUT_FAILURE_COPY,
+        failureKind: "timed_out",
+      };
+    }
     if (FAILED_TURN_STATUSES.has(status)) {
       return {
         state: "failed",
         failureReason: trimmedOrNull(turn.error) ?? dispatch?.reason ?? null,
+        failureKind: "dispatch",
       };
     }
     if (COMPLETED_TURN_STATUSES.has(status)) {
-      return { state: "completed", failureReason: null };
+      return { state: "completed", failureReason: null, failureKind: null };
     }
     if (RUNNING_TURN_STATUSES.has(status)) {
-      return { state: "running", failureReason: null };
+      return { state: "running", failureReason: null, failureKind: null };
     }
     // skipped / cancelled / unknown turn status → defer to the metadata stamp.
   }
 
   if (dispatch?.status === "failed") {
-    return { state: "failed", failureReason: dispatch.reason };
+    return {
+      state: "failed",
+      failureReason: dispatch.reason,
+      failureKind: "dispatch",
+    };
   }
   if (dispatch?.status === "pending") {
-    return { state: "pending", failureReason: null };
+    return { state: "pending", failureReason: null, failureKind: null };
   }
-  return { state: "none", failureReason: null };
+  return { state: "none", failureReason: null, failureKind: null };
 }

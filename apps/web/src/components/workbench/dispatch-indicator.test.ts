@@ -5,7 +5,10 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { deriveDispatchIndicatorState } from "./dispatch-indicator";
+import {
+  deriveDispatchIndicatorState,
+  TIMED_OUT_FAILURE_COPY,
+} from "./dispatch-indicator";
 import { mapTurnsToUserMessages } from "./TaskThreadView";
 import type { TaskThreadMessage, TaskThreadTurn } from "./TaskThreadView";
 
@@ -105,13 +108,14 @@ describe("deriveDispatchIndicatorState", () => {
   it("returns none for a non-user message", () => {
     expect(
       deriveDispatchIndicatorState({ role: "ASSISTANT" }, undefined),
-    ).toEqual({ state: "none", failureReason: null });
+    ).toEqual({ state: "none", failureReason: null, failureKind: null });
   });
 
   it("returns none for a plain user message with no turn and no dispatch stamp", () => {
     expect(deriveDispatchIndicatorState(userMessage("m1", ""))).toEqual({
       state: "none",
       failureReason: null,
+      failureKind: null,
     });
   });
 
@@ -134,7 +138,11 @@ describe("deriveDispatchIndicatorState", () => {
         message,
         turn("t", "", { status: "failed", error: "boom" }),
       ),
-    ).toEqual({ state: "failed", failureReason: "boom" });
+    ).toEqual({
+      state: "failed",
+      failureReason: "boom",
+      failureKind: "dispatch",
+    });
   });
 
   it("derives failed from a synchronous metadata stamp when there is no turn", () => {
@@ -151,6 +159,7 @@ describe("deriveDispatchIndicatorState", () => {
     expect(deriveDispatchIndicatorState(message)).toEqual({
       state: "failed",
       failureReason: "default dispatch error: invoke rejected",
+      failureKind: "dispatch",
     });
   });
 
@@ -159,6 +168,71 @@ describe("deriveDispatchIndicatorState", () => {
       metadata: JSON.stringify({ dispatch: { status: "pending", attempt: 2 } }),
     });
     expect(deriveDispatchIndicatorState(message).state).toBe("pending");
+  });
+
+  // THINK-301 U6 (parent R9/R10/KTD4): timed_out splits on server-derived
+  // recoveryPending — recovering renders benign, exhausted renders plain
+  // status-keyed copy, and turn.error never reaches the derivation output.
+  it("derives recovering for timed_out with recoveryPending true (AE1)", () => {
+    expect(
+      deriveDispatchIndicatorState(
+        userMessage("m1", ""),
+        turn("t", "", {
+          status: "timed_out",
+          error: "Stall detected: no activity for 5 minutes",
+          recoveryPending: true,
+        }),
+      ),
+    ).toEqual({ state: "recovering", failureReason: null, failureKind: null });
+  });
+
+  it("derives plain-copy failed for timed_out without recovery pending (AE2)", () => {
+    // Q1-resolved copy, asserted verbatim: rendered with no prefix.
+    expect(TIMED_OUT_FAILURE_COPY).toBe(
+      "This response took too long to complete.",
+    );
+    for (const recoveryPending of [false, undefined, null]) {
+      const derivation = deriveDispatchIndicatorState(
+        userMessage("m1", ""),
+        turn("t", "", {
+          status: "timed_out",
+          error: "Stall detected: no activity for 5 minutes",
+          recoveryPending,
+        }),
+      );
+      expect(derivation).toEqual({
+        state: "failed",
+        failureReason: TIMED_OUT_FAILURE_COPY,
+        failureKind: "timed_out",
+      });
+      expect(JSON.stringify(derivation)).not.toContain("Stall detected");
+    }
+  });
+
+  it("keeps the existing turn.error reason chain for non-stall failed turns even when recoveryPending is set (AE5)", () => {
+    expect(
+      deriveDispatchIndicatorState(
+        userMessage("m1", ""),
+        turn("t", "", {
+          status: "failed",
+          error: "boom",
+          recoveryPending: true,
+        }),
+      ),
+    ).toEqual({
+      state: "failed",
+      failureReason: "boom",
+      failureKind: "dispatch",
+    });
+  });
+
+  it("keeps cancelled excluded from failure treatment (R8)", () => {
+    expect(
+      deriveDispatchIndicatorState(
+        userMessage("m1", ""),
+        turn("t", "", { status: "cancelled", error: "stopped" }),
+      ).state,
+    ).toBe("none");
   });
 
   it("lets the linked turn status win over a pending metadata stamp", () => {

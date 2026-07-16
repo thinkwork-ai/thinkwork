@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatDuration,
   formatTurnHeader,
+  isRecoveringTurn,
   isRunningStatus,
 } from "./turnHeader";
 
@@ -86,5 +87,30 @@ describe("isRunningStatus", () => {
     ]) {
       expect(isRunningStatus(s)).toBe(false);
     }
+  });
+});
+
+// THINK-301 U6 (parent R9/AE3): recovery-in-flight renders the working
+// affordance; exhausted recovery keeps the plain terminal label.
+describe("isRecoveringTurn", () => {
+  it("is true only for timed_out with recoveryPending === true", () => {
+    expect(isRecoveringTurn("timed_out", true)).toBe(true);
+    expect(isRecoveringTurn("TIMED_OUT", true)).toBe(true);
+    expect(isRecoveringTurn("timed_out", false)).toBe(false);
+    expect(isRecoveringTurn("timed_out", null)).toBe(false);
+    expect(isRecoveringTurn("timed_out", undefined)).toBe(false);
+    expect(isRecoveringTurn("failed", true)).toBe(false);
+    expect(isRecoveringTurn("running", true)).toBe(false);
+    expect(isRecoveringTurn(null, true)).toBe(false);
+  });
+
+  it("recovering renders Working… via the running header path; exhausted keeps Timed out", () => {
+    // A recovering turn is passed isRunning=true by the surface, so the
+    // header is the live working label — no raw internals.
+    expect(formatTurnHeader("timed_out", true, 4000)).toBe("Working…");
+    // Exhausted recovery (not running) keeps the plain terminal label.
+    expect(formatTurnHeader("timed_out", false, 4000)).toBe(
+      "Timed out after 4s",
+    );
   });
 });

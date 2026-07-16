@@ -75,3 +75,20 @@ const RUNNING_STATUSES = new Set(["running", "pending", "queued", "claimed"]);
 export function isRunningStatus(status: string | null | undefined): boolean {
   return RUNNING_STATUSES.has((status ?? "").toLowerCase().trim());
 }
+
+/**
+ * THINK-301 U6 (parent R9/AE3): a `timed_out` turn whose recovery is still
+ * in flight (server-derived `recoveryPending`) renders as the normal working
+ * affordance — "Working…" header, live elapsed timer, no red — instead of
+ * "Timed out after …". Exhausted recovery (recoveryPending false/absent)
+ * keeps the plain terminal label.
+ */
+export function isRecoveringTurn(
+  status: string | null | undefined,
+  recoveryPending: boolean | null | undefined,
+): boolean {
+  return (
+    (status ?? "").toLowerCase().trim() === "timed_out" &&
+    recoveryPending === true
+  );
+}
