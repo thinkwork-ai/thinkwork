@@ -968,6 +968,14 @@ describe("jump-to-cause (KTD-5)", () => {
         generated: true,
       }),
     ).toEqual({ kind: "space", file: "CONTEXT.md" });
+    // THINK-302 U6: the active Space mounts at the singular `Space/` root.
+    expect(
+      causeOf({
+        path: "Space/CONTEXT.md",
+        owner: "space",
+        generated: false,
+      }),
+    ).toEqual({ kind: "space", file: "CONTEXT.md" });
     expect(
       causeOf({ path: "User/USER.md", owner: "user", generated: false }),
     ).toEqual({ kind: "user" });
