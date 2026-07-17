@@ -13,7 +13,42 @@ Plan: `docs/plans/2026-07-16-002-feat-agentcore-harness-trial-plan.md`. This doc
 
 ## Verdict
 
-_Pending U6 — the live trial has not run yet._
+**Conditional no-go (2026-07-17): AgentCore Harness is a PROVEN, qualified alternate runtime — but the platform agent stays on Pi.** The trial ran live on dev (tenant `sleek-squirrel-230`, agent `thinkwork` `c1e4434f`), driven end-to-end through the web UI at :5175, and demonstrated both required legs:
+
+1. **Green chat turn on Harness** — thread `e4d8ce9a-7830-40b2-ad9a-f1a2ed725927`, turn `ab30da9d-bb3a-4821-b522-178815bd191c`: `runtime_type='harness'`, `status='succeeded'`, response rendered in the UI with attributed usage (4,503 in / 19 out, $0.0167), cost_events rows `llm` ($0.0138) + `agentcore_compute` ($0.0029), and the full `diagnostics.harness` evidence block.
+2. **Document emission through the real artifact pipeline** — thread `a2295971`, artifact **`a22da845-c6f5-5675-a74c-68c2cc5a73bd` "777 Automotive — Q2 2026 Quarterly Business Review"**, emitted by the harness turn via the projected `emit_document` inline_function and `handleDocumentEmission` (one frontmatter warning; document `dd91ea9e`).
+
+**Evidence triple**: manifest fingerprint `ee890f38d13f3e2f8a41c64c53b0be0bd616536dc799ff5ced433309d2432336`, harness version `3` (harness `tw_thinkwork_1c4877fd31-p2JXbCllgP`, since deleted), artifact id `a22da845-c6f5-5675-a74c-68c2cc5a73bd`. Projection fingerprint `a00f02797ac2e9026e7433f800bd67b96c6dcaafdca9fd007e3076c84871ac4c`, config fingerprint `9dc3b8b8424ca40b9e8747cbf6c6af11c4e9972f233b01fcee055d08fcd31cd0`.
+
+R4 held throughout: eleven failure iterations each surfaced loudly in-thread with a precise reason; zero silent Pi fallbacks.
+
+### Why not adopt for the platform agent
+
+- **The product's differentiators are loop behavior**: workspace-native semantics (filesystem-is-the-agent), plates/emission contract, contract spine, governed delegation, Pi extensions, Hindsight memory. Each needs a Harness adapter; emit_document (the simplest) required discovering an undocumented relay protocol.
+- **Memory-model conflict**: each Harness owns a session memory; ThinkWork memory is workspace + Hindsight, space-scoped. Two sources of truth.
+- **v1 sharpness** (all hit live, all fixed): five undocumented IAM requirements, wrapped control-plane responses, multi-message stream framing, assistant-message-resend relay protocol, ~3-minute first-provision (exceeds a 120s READY poll), and **session poisoning** — one malformed relay permanently corrupts the thread-scoped session memory with no repair API.
+
+### What the trial changed upstream (architecture decisions, 2026-07-17)
+
+- **`InvokeHarness` supports per-invocation overrides** (`tools`, `skills`, `allowedTools`, `systemPrompt`, `model`, `actorId` — SDK 3.1089). Per-call dynamic capability injection is native; the "config is version-level only" assumption is dead. This upgrades Harness to a credible executor for sub-agents/bounded agents.
+- **Adopt AgentCore Identity + Gateway as the authorization/tool plane, loop-agnostic** (next architecture program): one super-agent ceiling per tenant agent; per-user/space/role enforcement at the tool plane with identity tokens against the THINK-302 registry; Gateway semantic tool search for context-rot control. Never per-principal harness/config multiplication.
+- **Layer split confirmed**: Eve folder anatomy = authoring/context plane (proved loop-portable — the projection compiled the same workspace onto a different runtime with a truthful fingerprint); registry + Identity + Gateway = enforcement plane. Workspace files stop pretending to be the enforcement surface (THINK-302 direction, extended).
+
+### Disposition
+
+- UI retired (PR #3886): composer runtime picker removed; AgentCore option removed from the Agent-config Runtime dropdown (enum value `AGENTCORE` retained in schema).
+- Backend spine kept inert and tested as the shelved qualified-alternate: selector seam (#3862/#3872), projection (#3863/#3876/#3878), runner (#3867/#3884/#3885), IAM (#3875/#3880/#3883, conditional on the `agentcore-harness` module), DB constraint (#3874). Nothing dispatches to it without `requestedRuntime`, which no UI sends.
+- Dev AWS cleanup done: 3 temp IAM grants removed; dev harness deleted (auto-provisioned runtime/memory swept with it; orphaned memory checked).
+- Re-evaluate in ~2 quarters, or earlier if AWS ships identity-forwarded MCP calls / documented relay protocol, or Pi ops tax (image pinning, stall-monitor-class bugs) escalates.
+
+### Harness integration protocol notes (hard-won, keep)
+
+1. Control-plane responses wrap the document under a `harness` key (`{harness:{...},$metadata}`); ListHarnesses summaries are unwrapped.
+2. `CreateHarness` provisions a backing AgentRuntime, WorkloadIdentity, **and Memory on behalf of the caller** — all three authorize against the _calling_ role (TagResource for tag-on-create too); the _execution_ role needs the memory data-plane (`ListEvents` etc. on `memory/harness_tw_*`).
+3. One `InvokeHarness` stream carries many messages (internal builtin rounds); `contentBlockIndex` restarts per message.
+4. The stream-ending assistant message (caller-fulfilled toolUse) is **not persisted** to session memory — the caller must resend it ahead of the toolResult message or Bedrock rejects the continuation ("toolResult blocks exceed toolUse blocks").
+5. First provision ≈3 min (READY poll must tolerate it or treat as retriable); subsequent turns reuse in seconds.
+6. `model_catalog.provider` is vendor metadata, not the inference channel — gate models by Bedrock id shape.
 
 ## Reference-run dossier (U1)
 
