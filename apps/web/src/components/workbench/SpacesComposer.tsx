@@ -17,10 +17,6 @@ import {
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
 import {
-  ComposerRuntimePicker,
-  type ComposerRuntimeValue,
-} from "@/components/workbench/ComposerRuntimePicker";
-import {
   GoalModeDialog,
   GoalModeToggle,
 } from "@/components/workbench/GoalModeControls";
@@ -106,13 +102,6 @@ interface SpacesComposerProps {
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
   onSelectedModelChange?: (modelId: string) => void;
-  /**
-   * THINK-311 U5b: per-turn execution runtime. Rendered only when
-   * `onSelectedRuntimeChange` is provided (the parent owns the state and
-   * writes metadata.requestedRuntime on send).
-   */
-  selectedRuntime?: ComposerRuntimeValue;
-  onSelectedRuntimeChange?: (runtime: ComposerRuntimeValue) => void;
   disabled?: boolean;
   isSubmitting?: boolean;
   error?: string | null;
@@ -145,8 +134,6 @@ export function SpacesComposer({
   approvedModels,
   selectedModelId,
   onSelectedModelChange,
-  selectedRuntime = "pi",
-  onSelectedRuntimeChange,
   disabled = false,
   isSubmitting = false,
   error,
@@ -556,13 +543,6 @@ export function SpacesComposer({
                 onValueChange={onSelectedModelChange}
                 disabled={disabled || isSubmitting || !effectiveAgentEnabled}
               />
-              {onSelectedRuntimeChange ? (
-                <ComposerRuntimePicker
-                  value={selectedRuntime}
-                  onValueChange={onSelectedRuntimeChange}
-                  disabled={disabled || isSubmitting || !effectiveAgentEnabled}
-                />
-              ) : null}
               <PromptInputSpeechButton
                 textareaRef={
                   textareaRef as React.RefObject<HTMLTextAreaElement | null>
