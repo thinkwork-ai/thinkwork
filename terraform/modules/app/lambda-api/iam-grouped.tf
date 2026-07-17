@@ -925,6 +925,12 @@ locals {
           "bedrock-agentcore:ListHarnessEndpoints",
           "bedrock-agentcore:ListHarnesses",
           "bedrock-agentcore:ListHarnessVersions",
+          # CreateHarness carries fingerprint tags; tagging on create
+          # requires TagResource (harness-runner also reconciles tags on
+          # UpdateHarness).
+          "bedrock-agentcore:TagResource",
+          "bedrock-agentcore:UntagResource",
+          "bedrock-agentcore:ListTagsForResource",
         ]
         Resource = "*"
       },
