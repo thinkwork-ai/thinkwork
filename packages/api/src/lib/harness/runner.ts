@@ -269,6 +269,15 @@ interface AssembledToolUse {
 interface AssembledSegment {
   text: string;
   toolUses: AssembledToolUse[];
+  /**
+   * The final assistant message's content blocks in stream order (text +
+   * toolUse), reconstructed for the continuation call: the harness does
+   * NOT persist the stream-ending assistant message to session memory —
+   * the caller must resend it ahead of the toolResult message, or the
+   * reconstructed conversation pairs a toolResult with no toolUse
+   * (observed live: ValidationException at the relay index).
+   */
+  finalAssistantContent: Array<Record<string, unknown>>;
   stopReason: string | null;
   usage: {
     inputTokens: number;
@@ -322,6 +331,7 @@ async function assembleStream(
   const segment: AssembledSegment = {
     text: "",
     toolUses: [],
+    finalAssistantContent: [],
     stopReason: null,
     usage: {
       inputTokens: 0,
@@ -423,7 +433,10 @@ async function assembleStream(
   for (const [, block] of [...(lastAssistant?.blocks.entries() ?? [])].sort(
     (a, b) => a[0] - b[0],
   )) {
-    if (block.kind !== "toolUse") continue;
+    if (block.kind === "text") {
+      if (block.text) segment.finalAssistantContent.push({ text: block.text });
+      continue;
+    }
     if (!block.toolUseId || !block.name) continue;
     let input: unknown = undefined;
     let parseError: string | undefined;
@@ -442,6 +455,13 @@ async function assembleStream(
       input,
       inputRaw: block.inputJson,
       parseError,
+    });
+    segment.finalAssistantContent.push({
+      toolUse: {
+        toolUseId: block.toolUseId,
+        name: block.name,
+        input: input ?? {},
+      },
     });
   }
   return segment;
@@ -769,7 +789,13 @@ export async function runHarnessTurn(
             },
           });
         }
-        nextMessages = [{ role: "user", content: resultBlocks }];
+        nextMessages = [
+          // Resend the stream-ending assistant message — the harness does
+          // not persist it to session memory; without it the toolResult
+          // below has no toolUse to pair with.
+          { role: "assistant", content: segment.finalAssistantContent },
+          { role: "user", content: resultBlocks },
+        ];
         continue;
       }
 

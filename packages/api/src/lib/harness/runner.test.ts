@@ -211,9 +211,16 @@ describe("runHarnessTurn — happy path", () => {
       role: string;
       content: Array<Record<string, unknown>>;
     }>;
-    expect(followUp).toHaveLength(1);
-    expect(followUp[0].role).toBe("user");
-    expect(followUp[0].content[0].toolResult).toMatchObject({
+    // The continuation resends the stream-ending assistant message (the
+    // harness never persists it) followed by the toolResult user message.
+    expect(followUp).toHaveLength(2);
+    expect(followUp[0].role).toBe("assistant");
+    expect(followUp[0].content[0].toolUse).toMatchObject({
+      toolUseId: "tool-1",
+      name: "emit_document",
+    });
+    expect(followUp[1].role).toBe("user");
+    expect(followUp[1].content[0].toolResult).toMatchObject({
       toolUseId: "tool-1",
       status: "success",
     });
@@ -312,9 +319,17 @@ describe("runHarnessTurn — happy path", () => {
       role: string;
       content: Array<Record<string, unknown>>;
     }>;
-    // Exactly ONE toolResult — for emit_document, never the builtin.
+    // Assistant resend carries ONLY the final assistant message's toolUse,
+    // and exactly ONE toolResult follows — never the builtin's.
+    expect(followUp[0].role).toBe("assistant");
     expect(followUp[0].content).toHaveLength(1);
-    expect(followUp[0].content[0].toolResult).toMatchObject({
+    expect(followUp[0].content[0].toolUse).toMatchObject({
+      toolUseId: "tool-9",
+      name: "emit_document",
+    });
+    expect(followUp[1].role).toBe("user");
+    expect(followUp[1].content).toHaveLength(1);
+    expect(followUp[1].content[0].toolResult).toMatchObject({
       toolUseId: "tool-9",
       status: "success",
     });
@@ -365,7 +380,7 @@ describe("runHarnessTurn — happy path", () => {
       deps.invocations[1].messages as Array<{
         content: Array<Record<string, unknown>>;
       }>
-    )[0].content[0].toolResult as Record<string, unknown>;
+    )[1].content[0].toolResult as Record<string, unknown>;
     expect(firstResult.status).toBe("error");
     expect(JSON.stringify(firstResult.content)).toContain("ANALYSIS_INVALID");
     const harness = (
@@ -511,7 +526,7 @@ describe("runHarnessTurn — explicit failures (AE2/KTD-4)", () => {
       deps.invocations[1].messages as Array<{
         content: Array<Record<string, unknown>>;
       }>
-    )[0].content[0].toolResult as Record<string, unknown>;
+    )[1].content[0].toolResult as Record<string, unknown>;
     expect(toolResult.status).toBe("error");
     expect(JSON.stringify(toolResult.content)).toContain(
       "malformed tool input",
