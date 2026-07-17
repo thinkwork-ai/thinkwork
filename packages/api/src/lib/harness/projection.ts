@@ -293,14 +293,6 @@ export function projectHarnessConfig(
       detail: `${surface.piExtensionCount} Pi extension(s) are assigned; extension tools are Pi-runtime code with no Harness analogue`,
     });
   }
-  if (surface.sandboxConfigured) {
-    return reject({
-      kind: "adapter_unimplemented",
-      capability: "sandbox_execute_code",
-      detail:
-        "agent has a sandbox template; Harness offers agentCoreCodeInterpreter but the trial adapter does not project it",
-    });
-  }
   if (surface.browserAutomationEnabled) {
     return reject({
       kind: "adapter_unimplemented",
@@ -357,6 +349,11 @@ export function projectHarnessConfig(
 
   // --- Trial-scope toggles: recorded, not fatal (dossier-bounded) --------
   const toggleExclusions: Array<[boolean, string, string]> = [
+    // Sandbox is baseline agent config ({environment: default-public} on
+    // every agent), so it is trial-scope excluded rather than fatal —
+    // Harness offers agentCoreCodeInterpreter but the trial adapter does
+    // not project it; an execute_code attempt has no tool to call.
+    [surface.sandboxConfigured, "sandbox_execute_code", "sandbox template"],
     [surface.sendEmailEnabled, "send_email", "platform callback tool"],
     [surface.webSearchEnabled, "web_search", "credentialed platform tool"],
     [surface.webExtractEnabled, "web_extract", "credentialed platform tool"],
