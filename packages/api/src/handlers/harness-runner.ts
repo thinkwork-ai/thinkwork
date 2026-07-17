@@ -96,7 +96,23 @@ function toSdkHarnessFields(
   };
 }
 
-function readIdentity(response: Record<string, unknown>): EnsuredHarness {
+/**
+ * Control-plane responses wrap the harness document under a `harness` key
+ * (`{harness: {...}, $metadata}`) — observed live on CreateHarness with
+ * SDK 3.1088; summaries in ListHarnesses are unwrapped. Normalize both.
+ */
+export function unwrapHarness(
+  response: Record<string, unknown>,
+): Record<string, unknown> {
+  const inner = response.harness;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    return inner as Record<string, unknown>;
+  }
+  return response;
+}
+
+export function readIdentity(raw: Record<string, unknown>): EnsuredHarness {
+  const response = unwrapHarness(raw);
   const harnessId = String(response.harnessId ?? response.id ?? "");
   const harnessArn = String(response.harnessArn ?? response.arn ?? "");
   const harnessVersion = String(
@@ -104,7 +120,7 @@ function readIdentity(response: Record<string, unknown>): EnsuredHarness {
   );
   if (!harnessId || !harnessArn) {
     throw new Error(
-      `Harness control-plane response missing identity fields: ${JSON.stringify(Object.keys(response))}`,
+      `Harness control-plane response missing identity fields: ${JSON.stringify(Object.keys(raw))}`,
     );
   }
   return { harnessId, harnessArn, harnessVersion };
@@ -134,7 +150,7 @@ async function ensureHarness(
     );
     identity = readIdentity({
       ...existing,
-      ...(updated as unknown as Record<string, unknown>),
+      ...unwrapHarness(updated as unknown as Record<string, unknown>),
     });
   } else {
     const created = await controlClient.send(
@@ -149,9 +165,11 @@ async function ensureHarness(
   // Wait for READY — InvokeHarness against a CREATING/UPDATING harness fails.
   const deadline = Date.now() + HARNESS_READY_TIMEOUT_MS;
   for (;;) {
-    const got = (await controlClient.send(
-      new GetHarnessCommand({ harnessId: identity.harnessId } as never),
-    )) as unknown as Record<string, unknown>;
+    const got = unwrapHarness(
+      (await controlClient.send(
+        new GetHarnessCommand({ harnessId: identity.harnessId } as never),
+      )) as unknown as Record<string, unknown>,
+    );
     const status = String(got.status ?? "");
     if (status === "READY" || status === "ACTIVE") {
       return readIdentity({ ...identity, ...got });
