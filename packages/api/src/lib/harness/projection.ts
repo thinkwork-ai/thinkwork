@@ -59,6 +59,21 @@ export interface HarnessCapabilitySurface {
   attachmentCount: number;
 }
 
+/**
+ * Bedrock model ids are `<vendor>.<model>` with an optional regional
+ * inference-profile prefix (`us.` / `eu.` / `apac.`), e.g.
+ * `anthropic.claude-fable-5`, `us.anthropic.claude-sonnet-4-6`,
+ * `us.anthropic.claude-haiku-4-5-20251001-v1:0` — or a full Bedrock ARN
+ * (custom/imported models and inference profiles).
+ */
+const BEDROCK_MODEL_ID = /^(?:[a-z]{2,4}\.)?[a-z0-9-]+\.[a-z0-9][a-z0-9.:_-]*$/;
+
+export function isBedrockModelId(modelId: string | null): boolean {
+  if (!modelId) return false;
+  if (modelId.startsWith("arn:aws:bedrock:")) return true;
+  return BEDROCK_MODEL_ID.test(modelId);
+}
+
 export interface HarnessProjectionInput {
   tenantId: string;
   agentId: string;
@@ -68,8 +83,10 @@ export interface HarnessProjectionInput {
   /** Agent's resolved model id. Absent → rejection, never a default. */
   modelId: string | null;
   /**
-   * Model catalog provider for `modelId`. Only "bedrock" projects; the
-   * trial does not carry ThinkWork's non-Bedrock credentials into Harness.
+   * Model catalog provider for `modelId` — VENDOR metadata ("anthropic",
+   * "amazon", ...), recorded as evidence only. All ThinkWork inference is
+   * Bedrock-served; the projection gate tests the model id's Bedrock
+   * shape instead (see BEDROCK_MODEL_ID).
    */
   modelProvider: string | null;
   /** Post-policy skills (the Pi payload's `skills`/`effectiveSkillsConfig`). */
@@ -318,12 +335,12 @@ export function projectHarnessConfig(
         "agent has no configured model; the projection never substitutes a default",
     });
   }
-  if (input.modelProvider !== "bedrock") {
+  if (!isBedrockModelId(input.modelId)) {
     return reject({
       kind: "harness_unsupported",
-      capability: `model_provider:${input.modelProvider ?? "unknown"}`,
+      capability: `model_id:${input.modelId}`,
       detail:
-        "only Bedrock-provider models project; the trial does not carry ThinkWork's external model credentials into Harness",
+        "model id is not a Bedrock model/inference-profile id; the trial does not carry ThinkWork's external model credentials into Harness",
     });
   }
   if (!input.systemPrompt.trim()) {

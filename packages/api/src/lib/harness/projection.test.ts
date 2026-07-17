@@ -254,18 +254,34 @@ describe("projectHarnessConfig — AE2 rejections name the capability", () => {
     });
   });
 
-  it("rejects non-Bedrock model providers", () => {
+  it("rejects non-Bedrock model ids", () => {
     const result = projectHarnessConfig({
       ...referenceInput(),
-      modelProvider: "openai",
+      modelId: "gpt-4o",
     });
     expect(result).toEqual({
       ok: false,
       rejection: expect.objectContaining({
         kind: "harness_unsupported",
-        capability: "model_provider:openai",
+        capability: "model_id:gpt-4o",
       }),
     });
+  });
+
+  it("accepts Bedrock model ids regardless of catalog vendor metadata", () => {
+    const inferenceProfile = projectHarnessConfig({
+      ...referenceInput(),
+      modelId: "us.anthropic.claude-sonnet-4-6",
+      modelProvider: "anthropic",
+    });
+    expect(inferenceProfile.ok).toBe(true);
+    const arn = projectHarnessConfig({
+      ...referenceInput(),
+      modelId:
+        "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6",
+      modelProvider: "anthropic",
+    });
+    expect(arn.ok).toBe(true);
   });
 
   it("rejects plain-http MCP endpoints", () => {
