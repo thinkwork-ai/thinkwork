@@ -54,6 +54,10 @@ describe("workspace renderer prefixes", () => {
     expect(workspacePathOwner("Spaces/board-pack/docs/customer.md")).toBe(
       "space",
     );
+    // THINK-302 U6: the active Space hydrates under the singular `Space/`
+    // root — its SPACE.md/CONTEXT.md and subtrees classify as space-owned.
+    expect(workspacePathOwner("Space/SPACE.md")).toBe("space");
+    expect(workspacePathOwner("Space/CONTEXT.md")).toBe("space");
     expect(workspacePathOwner("Space/docs/customer.md")).toBe("space");
     expect(workspacePathOwner("User/USER.md")).toBe("user");
     expect(workspacePathOwner("User/memory/preferences.md")).toBe("user");
