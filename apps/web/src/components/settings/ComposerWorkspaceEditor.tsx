@@ -285,11 +285,18 @@ export function causeOf(entry: ComposerPreviewEntry): JumpCause {
   if (segments[0] === "skills" && segments.length > 1) {
     return { kind: "skill", slug: segments[1] };
   }
-  if (entry.owner === "space" || segments[0] === "Spaces") {
+  if (
+    entry.owner === "space" ||
+    segments[0] === "Space" ||
+    segments[0] === "Spaces"
+  ) {
+    // THINK-302 U6: active `Space/<file>` strips 1 segment; `Spaces/<slug>/<file>` strips 2.
     const file =
-      segments[0] === "Spaces" && segments.length > 2
-        ? segments.slice(2).join("/")
-        : null;
+      segments[0] === "Space" && segments.length > 1
+        ? segments.slice(1).join("/")
+        : segments[0] === "Spaces" && segments.length > 2
+          ? segments.slice(2).join("/")
+          : null;
     return { kind: "space", file };
   }
   if (
@@ -342,15 +349,21 @@ export function resolveSource(
     return null;
   }
   const segments = entry.path.split("/");
-  const isSpace = entry.owner === "space" || segments[0] === "Spaces";
+  const isSpace =
+    entry.owner === "space" ||
+    segments[0] === "Space" ||
+    segments[0] === "Spaces";
   const isUser =
     entry.owner === "user" || segments[0] === "User" || segments[0] === "Users";
   if (isSpace) {
     const spaceId = result?.spaceId ?? fallbackSpaceId;
+    // THINK-302 U6: active `Space/` strips 1 segment; `Spaces/<slug>/` strips 2.
     const sourceFile =
-      segments[0] === "Spaces" && segments.length > 2
-        ? segments.slice(2).join("/")
-        : entry.path;
+      segments[0] === "Space"
+        ? segments.slice(1).join("/")
+        : segments[0] === "Spaces" && segments.length > 2
+          ? segments.slice(2).join("/")
+          : entry.path;
     if (!spaceId || !sourceFile) return null;
     return {
       target: { spaceId },
@@ -406,6 +419,8 @@ function formatBytes(value: number): string {
  * (`Spaces/`, `User/`, `Users/`) are unchanged — this is purely the tree label.
  */
 const MOUNT_DISPLAY_ALIAS: Record<string, string> = {
+  // THINK-302 U6: the active Space mounts at the singular `Space/` root.
+  Space: "space",
   Spaces: "spaces",
   User: "user",
   Users: "users",
@@ -530,6 +545,13 @@ export function resolvePathSource(
   } | null,
 ): PathSource | null {
   const seg = path.split("/");
+  // THINK-302 U6: the active Space mounts at singular `Space/` (implicit slug,
+  // strip 1 segment); non-active Spaces stay `Spaces/<slug>/` (strip 2).
+  if (seg[0] === "Space") {
+    const spaceId = ids?.spaceId;
+    if (!spaceId) return null;
+    return { target: { spaceId }, rel: seg.slice(1).join("/"), layer: "space" };
+  }
   if (seg[0] === "Spaces") {
     const spaceId = ids?.spaceId;
     if (!spaceId) return null;
