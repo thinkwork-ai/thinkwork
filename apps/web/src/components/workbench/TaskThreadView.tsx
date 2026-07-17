@@ -77,10 +77,6 @@ import {
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
 import {
-  ComposerRuntimePicker,
-  type ComposerRuntimeValue,
-} from "@/components/workbench/ComposerRuntimePicker";
-import {
   GoalModeDialog,
   GoalModeToggle,
 } from "@/components/workbench/GoalModeControls";
@@ -316,9 +312,6 @@ interface TaskThreadViewProps {
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
   onSelectedModelChange?: (modelId: string) => void;
-  /** THINK-311 U5b: per-turn runtime picker (rendered when handler given). */
-  selectedRuntime?: ComposerRuntimeValue;
-  onSelectedRuntimeChange?: (runtime: ComposerRuntimeValue) => void;
   /**
    * Server-derived Thread Mode (THINK-136 R1). When present it drives the
    * composer's agent-toggle default; absent (legacy data) falls back to the
@@ -595,8 +588,6 @@ export function TaskThreadView({
   approvedModels,
   selectedModelId,
   onSelectedModelChange,
-  selectedRuntime,
-  onSelectedRuntimeChange,
   currentUser,
   onSendFollowUp,
   threadMode,
@@ -879,8 +870,6 @@ export function TaskThreadView({
                   approvedModels={approvedModels}
                   selectedModelId={selectedModelId}
                   onSelectedModelChange={onSelectedModelChange}
-                  selectedRuntime={selectedRuntime}
-                  onSelectedRuntimeChange={onSelectedRuntimeChange}
                   threadMessages={thread.messages}
                   currentUserId={currentUser?.id ?? null}
                   serverMode={threadMode}
@@ -3391,8 +3380,6 @@ function FollowUpComposer({
   approvedModels,
   selectedModelId,
   onSelectedModelChange,
-  selectedRuntime,
-  onSelectedRuntimeChange,
 }: {
   threadId: string;
   taskQueue?: ActiveTaskQueue | null;
@@ -3416,8 +3403,6 @@ function FollowUpComposer({
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
   onSelectedModelChange?: (modelId: string) => void;
-  selectedRuntime?: ComposerRuntimeValue;
-  onSelectedRuntimeChange?: (runtime: ComposerRuntimeValue) => void;
 }) {
   const composer = useComposerState(null);
   const textareaRef = useRef<SkillTokenInputHandle | null>(null);
@@ -3846,13 +3831,6 @@ function FollowUpComposer({
                 onValueChange={onSelectedModelChange}
                 disabled={disabled || isSending || !effectiveAgentEnabled}
               />
-              {onSelectedRuntimeChange ? (
-                <ComposerRuntimePicker
-                  value={selectedRuntime}
-                  onValueChange={onSelectedRuntimeChange}
-                  disabled={disabled || isSending || !effectiveAgentEnabled}
-                />
-              ) : null}
               <PromptInputSpeechButton
                 textareaRef={
                   textareaRef as React.RefObject<HTMLTextAreaElement | null>
