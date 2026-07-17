@@ -329,7 +329,7 @@ function compatibleHydrateManifest(
           readOnly: false,
         },
         {
-          path: "Spaces/board-pack/CONTEXT.md",
+          path: "Space/CONTEXT.md",
           owner: "space",
           sourceKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
           sourcePrefix: "tenants/acme/spaces/board-pack/",
@@ -337,7 +337,7 @@ function compatibleHydrateManifest(
           readOnly: false,
         },
         {
-          path: "Spaces/board-pack/knowledge/board.md",
+          path: "Space/knowledge/board.md",
           owner: "space",
           sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
           sourcePrefix: "tenants/acme/spaces/board-pack/",
@@ -345,7 +345,7 @@ function compatibleHydrateManifest(
           readOnly: false,
         },
         {
-          path: "Spaces/board-pack/plans/kickoff.md",
+          path: "Space/plans/kickoff.md",
           owner: "space",
           sourceKey: "tenants/acme/spaces/board-pack/plans/kickoff.md",
           sourcePrefix: "tenants/acme/spaces/board-pack/",
@@ -484,22 +484,22 @@ describe("renderWorkspaceTuple", () => {
         }),
         expect.objectContaining({
           owner: "space",
-          path: "Spaces/board-pack/CONTEXT.md",
+          path: "Space/CONTEXT.md",
           sourceKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
         }),
         expect.objectContaining({
           owner: "space",
-          path: "Spaces/board-pack/plans/kickoff.md",
+          path: "Space/plans/kickoff.md",
           sourceKey: "tenants/acme/spaces/board-pack/plans/kickoff.md",
         }),
         expect.objectContaining({
           owner: "space",
-          path: "Spaces/board-pack/knowledge/board.md",
+          path: "Space/knowledge/board.md",
           sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
         }),
         expect.objectContaining({
           owner: "space",
-          path: "Spaces/board-pack/skills/ratio-review/SKILL.md",
+          path: "Space/skills/ratio-review/SKILL.md",
           sourceKey:
             "tenants/acme/spaces/board-pack/skills/ratio-review/SKILL.md",
         }),
@@ -535,7 +535,7 @@ describe("renderWorkspaceTuple", () => {
         expect.objectContaining({ path: "spaces/old/SPACE.md" }),
         expect.objectContaining({ path: "Agent/AGENTS.md" }),
         expect.objectContaining({ path: "Agent/workspace/LEGACY.md" }),
-        expect.objectContaining({ path: "Spaces/board-pack/TOOLS.md" }),
+        expect.objectContaining({ path: "Space/TOOLS.md" }),
         expect.objectContaining({ path: "User/TOOLS.md" }),
         expect.objectContaining({
           path: "User/memory/.snapshots/run-1/memory.md",
@@ -603,7 +603,7 @@ describe("renderWorkspaceTuple", () => {
       renderedPrefix: "tenants/acme/threads/thread-1/",
       files: expect.arrayContaining([
         expect.objectContaining({
-          path: "Spaces/board-pack/knowledge/board.md",
+          path: "Space/knowledge/board.md",
           sourceKey: "tenants/acme/spaces/board-pack/knowledge/board.md",
         }),
       ]),
@@ -617,7 +617,7 @@ describe("renderWorkspaceTuple", () => {
     expect(markerIndex).toBeGreaterThan(0);
     expect(composed.slice(0, markerIndex)).toContain("Root routing.");
     expect(composed).toContain(
-      "- Board Pack — `Spaces/board-pack/` (active, hydrated)",
+      "- Board Pack — `Space/` (active, hydrated)",
     );
     expect(composed).toContain("- Eric — `User/` (acting user, hydrated)");
     // The baseline fixture carries a stale legacy generated section
@@ -1119,7 +1119,7 @@ modelRouting:
     ]);
     expect(result.hydrateManifest.files).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: "Spaces/board-pack/TOOLS.md" }),
+        expect.objectContaining({ path: "Space/TOOLS.md" }),
         expect.objectContaining({ path: "User/TOOLS.md" }),
       ]),
     );
@@ -1272,7 +1272,7 @@ modelRouting:
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: "Spaces/board-pack/CONTEXT.md",
+          path: "Space/CONTEXT.md",
           sourceKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
         }),
       ]),
@@ -1423,7 +1423,7 @@ modelRouting:
     expect(result.hydrateManifest.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          path: "Spaces/board-pack/CONTEXT.md",
+          path: "Space/CONTEXT.md",
           sourceKey: "tenants/acme/spaces/board-pack/CONTEXT.md",
           etag: '"space-v2"',
           lastModified: "2026-05-22T10:30:00.000Z",
@@ -1573,7 +1573,7 @@ modelRouting:
         expect.objectContaining({ path: "Thread/PROGRESS.md" }),
         expect.objectContaining({ path: "Thread/TASKS.md" }),
         expect.objectContaining({
-          path: "Spaces/board-pack/CONTEXT.md",
+          path: "Space/CONTEXT.md",
           owner: "space",
         }),
       ]),
@@ -1612,7 +1612,7 @@ modelRouting:
       store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
     expect(composed).toContain(WORKSPACE_ROUTING_MARKER);
     expect(composed).toContain(
-      "- Default — `Spaces/default/` (active, hydrated)",
+      "- Default — `Space/` (active, hydrated)",
     );
     expect(composed).not.toContain("### User");
     expect(composed).not.toContain("### Active Space Participants");

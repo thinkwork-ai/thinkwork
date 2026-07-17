@@ -380,7 +380,11 @@ function policySourcePath(input: {
     case "agent":
       return TOOLS_MD;
     case "space":
-      return `Spaces/${runtimeFolderSegment(input.tuple.spaceSlug)}/${TOOLS_MD}`;
+      // The active Space renders under the singular `Space/` root (THINK-302
+      // U6): one active Space per turn, mirroring the acting user's `User/`.
+      // Non-active authorized Spaces stay addressable as `Spaces/<slug>/`
+      // fetch pointers in the routing section (see composeAgentsMd below).
+      return `Space/${TOOLS_MD}`;
     case "workspace":
       return `${input.workspacePath}/${TOOLS_MD}`;
     case "user":
@@ -515,7 +519,10 @@ function hydratePathForSource(
     case "user":
       return `User/${sourcePath}`;
     case "space":
-      return `Spaces/${runtimeFolderSegment(tuple.spaceSlug)}/${sourcePath}`;
+      // Active-Space files hydrate under the singular `Space/` root (no
+      // `<slug>/` nesting) — THINK-302 U6. Only the active Space is hydrated,
+      // so the slug is implicit, just like `User/` for the acting user.
+      return `Space/${sourcePath}`;
     case "thread_goal":
       return `Thread/${sourcePath}`;
     case "thread_notes":
@@ -748,7 +755,12 @@ function renderGeneratedAgentsMd(input: {
     baseline: input.baseline,
     spaces: normalizedSpaces.map((space) => ({
       name: space.name,
-      folderPath: `Spaces/${runtimeFolderSegment(space.slug)}/`,
+      // The active Space mounts at the singular writable `Space/` root;
+      // other authorized Spaces stay `Spaces/<slug>/` fetch pointers
+      // (mirrors `User/` vs `Users/<slug>/`) — THINK-302 U6.
+      folderPath: space.isActive
+        ? "Space/"
+        : `Spaces/${runtimeFolderSegment(space.slug)}/`,
       accessMode: space.accessMode,
       isActive: space.isActive,
     })),

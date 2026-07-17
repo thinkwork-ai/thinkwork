@@ -186,7 +186,7 @@ export function composeAgentsMd(input: ComposeAgentsMdInput): string {
       ? "- **Default Space:** yes; use user-scoped context as the primary long-term memory boundary."
       : "- **Default Space:** no; prefer Space-scoped context for this turn unless a tool explicitly requests user scope.",
     "",
-    "Read the top-level SPACE.md before relying on Space-specific assumptions. Active Space files live under space/; the spaces/<slug>/ copy preserves authored-source provenance during the transition.",
+    "Read the top-level SPACE.md before relying on Space-specific assumptions. The active Space's files live under the singular `Space/` root; other authorized Spaces are fetchable under `Spaces/<slug>/`.",
   ].filter((line): line is string => line !== null);
 
   const renderedSection = `${section.join("\n")}\n`;
