@@ -79,6 +79,27 @@ resource "aws_iam_role_policy" "harness_execution" {
         }
       },
       {
+        # Each Harness auto-provisions a session memory
+        # (memory/harness_tw_*) and reads/writes it at runtime as this
+        # execution role — observed live: AccessDenied on ListEvents from
+        # the harness microVM. Data-plane only, scoped to harness memories.
+        Sid    = "HarnessSessionMemoryDataPlane"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:ListEvents",
+          "bedrock-agentcore:GetEvent",
+          "bedrock-agentcore:CreateEvent",
+          "bedrock-agentcore:DeleteEvent",
+          "bedrock-agentcore:ListSessions",
+          "bedrock-agentcore:ListActors",
+          "bedrock-agentcore:ListMemoryRecords",
+          "bedrock-agentcore:RetrieveMemoryRecords",
+          "bedrock-agentcore:GetMemoryRecord",
+          "bedrock-agentcore:GetMemory",
+        ]
+        Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:memory/harness_tw_*"
+      },
+      {
         # Harness containers log to the service-managed bedrock-agentcore
         # log-group namespace, mirroring the agentcore-pi role's runtimes
         # grant.
