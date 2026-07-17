@@ -254,6 +254,72 @@ describe("runHarnessTurn — happy path", () => {
     ]);
   });
 
+  it("relays toolResults ONLY for the final assistant message's toolUses (internal builtin rounds excluded)", async () => {
+    // One stream, three messages: the harness fulfilled a builtin tool
+    // internally (assistant toolUse + user toolResult), then ended the
+    // stream on an assistant emit_document toolUse. Relaying a result for
+    // the builtin too corrupts the Bedrock conversation ("toolResult
+    // blocks exceed toolUse blocks" — observed live, THINK-311 turn #12).
+    const multiMessage: HarnessStreamEvent[] = [
+      { messageStart: { role: "assistant" } },
+      {
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: {
+            toolUse: { toolUseId: "builtin-1", name: "memory_search" },
+          },
+        },
+      },
+      {
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { toolUse: { input: "{}" } },
+        },
+      },
+      { contentBlockStop: { contentBlockIndex: 0 } },
+      { messageStop: { stopReason: "tool_use" } },
+      { messageStart: { role: "user" } },
+      { contentBlockStart: { contentBlockIndex: 0 } },
+      { contentBlockStop: { contentBlockIndex: 0 } },
+      { messageStop: { stopReason: "tool_result" } },
+      { messageStart: { role: "assistant" } },
+      {
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: { toolUse: { toolUseId: "tool-9", name: "emit_document" } },
+        },
+      },
+      {
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { toolUse: { input: JSON.stringify(EMIT_INPUT) } },
+        },
+      },
+      { contentBlockStop: { contentBlockIndex: 0 } },
+      { messageStop: { stopReason: "tool_use" } },
+      { metadata: { usage: { inputTokens: 80, outputTokens: 15 } } },
+    ];
+    const deps = makeDeps([
+      stream(multiMessage),
+      stream(textEvents("Published.")),
+    ]);
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.emissions).toHaveLength(1);
+    const followUp = deps.invocations[1].messages as Array<{
+      role: string;
+      content: Array<Record<string, unknown>>;
+    }>;
+    // Exactly ONE toolResult — for emit_document, never the builtin.
+    expect(followUp[0].content).toHaveLength(1);
+    expect(followUp[0].content[0].toolResult).toMatchObject({
+      toolUseId: "tool-9",
+      status: "success",
+    });
+  });
+
   it("relays emission rejections as error tool results and lets the model retry", async () => {
     const deps = makeDeps(
       [
