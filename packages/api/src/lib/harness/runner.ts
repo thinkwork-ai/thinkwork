@@ -288,20 +288,37 @@ export class HarnessStreamError extends Error {
   }
 }
 
+type AssembledBlock = {
+  kind: "text" | "toolUse";
+  text: string;
+  toolUseId?: string;
+  name?: string;
+  inputJson: string;
+};
+
+type AssembledMessage = {
+  role: string;
+  blocks: Map<number, AssembledBlock>;
+};
+
 async function assembleStream(
   stream: AsyncIterable<HarnessStreamEvent>,
   onActivity: () => void,
 ): Promise<AssembledSegment> {
-  const blocks = new Map<
-    number,
-    {
-      kind: "text" | "toolUse";
-      text: string;
-      toolUseId?: string;
-      name?: string;
-      inputJson: string;
+  // One InvokeHarness stream can carry SEVERAL messages: the harness runs
+  // its internal loop (built-in tool use + tool results) and only ends the
+  // stream when the CALLER must act. contentBlockIndex restarts per
+  // message, so blocks must be tracked per message — a single flat map
+  // leaks internally-fulfilled toolUses into the caller relay, and Bedrock
+  // then rejects the continuation with "toolResult blocks exceed toolUse
+  // blocks of previous turn" (observed live, THINK-311 turn #12).
+  const messages: AssembledMessage[] = [];
+  const currentMessage = (): AssembledMessage => {
+    if (messages.length === 0) {
+      messages.push({ role: "assistant", blocks: new Map() });
     }
-  >();
+    return messages[messages.length - 1];
+  };
   const segment: AssembledSegment = {
     text: "",
     toolUses: [],
@@ -333,8 +350,16 @@ async function assembleStream(
         `${event.validationException.reason ?? "ValidationException"}: ${event.validationException.message ?? ""}`,
       );
     }
+    if (event.messageStart) {
+      messages.push({
+        role: event.messageStart.role ?? "assistant",
+        blocks: new Map(),
+      });
+      continue;
+    }
     if (event.contentBlockStart) {
       const { contentBlockIndex, start } = event.contentBlockStart;
+      const blocks = currentMessage().blocks;
       if (start?.toolUse) {
         blocks.set(contentBlockIndex, {
           kind: "toolUse",
@@ -354,6 +379,7 @@ async function assembleStream(
     }
     if (event.contentBlockDelta) {
       const { contentBlockIndex, delta } = event.contentBlockDelta;
+      const blocks = currentMessage().blocks;
       const block = blocks.get(contentBlockIndex) ?? {
         kind: "text" as const,
         text: "",
@@ -379,11 +405,25 @@ async function assembleStream(
       segment.usage.cacheWriteTokens += usage.cacheWriteInputTokens ?? 0;
     }
   }
-  for (const [, block] of [...blocks.entries()].sort((a, b) => a[0] - b[0])) {
-    if (block.kind === "text") {
-      segment.text += block.text;
-      continue;
+  // Visible text: concatenation of every assistant message's text blocks.
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const [, block] of [...message.blocks.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
+      if (block.kind === "text") segment.text += block.text;
     }
+  }
+  // Caller-fulfilled toolUses: ONLY the final assistant message's — the
+  // stream ends exactly where the harness needs the caller; everything
+  // earlier was fulfilled inside the harness loop.
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant");
+  for (const [, block] of [...(lastAssistant?.blocks.entries() ?? [])].sort(
+    (a, b) => a[0] - b[0],
+  )) {
+    if (block.kind !== "toolUse") continue;
     if (!block.toolUseId || !block.name) continue;
     let input: unknown = undefined;
     let parseError: string | undefined;
