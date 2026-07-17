@@ -187,13 +187,27 @@ describe("projectHarnessConfig — AE2 rejections name the capability", () => {
     });
   });
 
+  it("excludes a baseline sandbox template as trial scope instead of rejecting", () => {
+    const input = referenceInput();
+    input.capabilitySurface = {
+      ...input.capabilitySurface,
+      sandboxConfigured: true,
+    };
+    const result = projectHarnessConfig(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.evidence.exclusions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capability: "sandbox_execute_code",
+          disposition: "not_projected_trial_scope",
+        }),
+      ]),
+    );
+  });
+
   it.each([
     [{ piExtensionCount: 2 }, "harness_unsupported", "pi_extensions"],
-    [
-      { sandboxConfigured: true },
-      "adapter_unimplemented",
-      "sandbox_execute_code",
-    ],
     [
       { browserAutomationEnabled: true },
       "adapter_unimplemented",
