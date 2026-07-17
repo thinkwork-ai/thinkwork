@@ -931,6 +931,24 @@ locals {
           "bedrock-agentcore:TagResource",
           "bedrock-agentcore:UntagResource",
           "bedrock-agentcore:ListTagsForResource",
+          # CreateHarness provisions a backing AgentRuntime and a workload
+          # identity ON BEHALF OF the caller — both authorize against the
+          # calling role, not the harness execution role (observed live:
+          # AccessDenied on CreateAgentRuntime, then the harness itself
+          # landed CREATE_FAILED on CreateWorkloadIdentity).
+          "bedrock-agentcore:CreateAgentRuntime",
+          "bedrock-agentcore:CreateAgentRuntimeEndpoint",
+          "bedrock-agentcore:GetAgentRuntime",
+          "bedrock-agentcore:GetAgentRuntimeEndpoint",
+          "bedrock-agentcore:ListAgentRuntimes",
+          "bedrock-agentcore:ListAgentRuntimeVersions",
+          "bedrock-agentcore:ListAgentRuntimeEndpoints",
+          "bedrock-agentcore:UpdateAgentRuntime",
+          "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+          "bedrock-agentcore:CreateWorkloadIdentity",
+          "bedrock-agentcore:GetWorkloadIdentity",
+          "bedrock-agentcore:UpdateWorkloadIdentity",
+          "bedrock-agentcore:ListWorkloadIdentities",
         ]
         Resource = "*"
       },
