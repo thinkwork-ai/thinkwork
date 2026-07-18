@@ -652,42 +652,71 @@ output "analyst_egress_ip" {
   value       = var.analyst_lambda_vpc_egress ? module.vpc.nat_gateway_public_ip : null
 }
 
-# THINK-311 U4 — AgentCore Harness trial. U5's harness-runner wires this into
-# its handler environment; graphql-http deliberately gets NO new env var (the
-# grouped-env 4KB ceiling, see project_graphql_http_env_4kb_ceiling).
+# AgentCore Harness managed runtime outputs. Rollout-era `*_proof_*` aliases
+# remain below so existing automation can migrate without replacing resources.
 output "agentcore_harness_execution_role_arn" {
   description = "Execution role ARN Harness microVMs assume (CreateHarness executionRoleArn). Empty when enable_agentcore_harness is false."
   value       = module.agentcore_harness.execution_role_arn
 }
 
+output "agentcore_harness_arn" {
+  description = "Managed tenant/profile AgentCore Harness ARN. Empty when the managed runtime is disabled."
+  value       = module.agentcore_harness.managed_harness_arn
+}
+
+output "agentcore_harness_endpoint_arn" {
+  description = "Named version-pinned managed AgentCore Harness endpoint ARN."
+  value       = module.agentcore_harness.managed_endpoint_arn
+}
+
+output "agentcore_harness_endpoint_name" {
+  description = "Named managed AgentCore Harness endpoint qualifier."
+  value       = module.agentcore_harness.managed_endpoint_name
+}
+
+output "agentcore_harness_version" {
+  description = "Attested immutable AgentCore Harness version served by the managed endpoint."
+  value       = module.agentcore_harness.managed_target_version
+}
+
+output "agentcore_harness_status" {
+  description = "Safe server readiness state for the managed AgentCore Harness runtime."
+  value       = module.agentcore_harness.managed_status
+}
+
+output "agentcore_harness_configuration_fingerprint" {
+  description = "Non-secret fingerprint of the managed AgentCore Harness configuration ceiling."
+  value       = module.agentcore_harness.managed_configuration_fingerprint
+}
+
 output "agentcore_harness_proof_arn" {
-  description = "One pilot tenant/profile Harness ARN. Empty when the proof is disabled."
-  value       = module.agentcore_harness.proof_harness_arn
+  description = "Deprecated: use agentcore_harness_arn."
+  value       = module.agentcore_harness.managed_harness_arn
 }
 
 output "agentcore_harness_proof_endpoint_arn" {
-  description = "Named version-pinned pilot Harness endpoint ARN."
-  value       = module.agentcore_harness.proof_endpoint_arn
+  description = "Deprecated: use agentcore_harness_endpoint_arn."
+  value       = module.agentcore_harness.managed_endpoint_arn
 }
 
 output "agentcore_harness_proof_endpoint_name" {
-  description = "Named pilot Harness endpoint qualifier."
-  value       = module.agentcore_harness.proof_endpoint_name
+  description = "Deprecated: use agentcore_harness_endpoint_name."
+  value       = module.agentcore_harness.managed_endpoint_name
 }
 
 output "agentcore_harness_proof_version" {
-  description = "Attested immutable Harness version served by the proof endpoint."
-  value       = module.agentcore_harness.proof_target_version
+  description = "Deprecated: use agentcore_harness_version."
+  value       = module.agentcore_harness.managed_target_version
 }
 
 output "agentcore_harness_proof_status" {
-  description = "Safe server readiness state for the multiplayer Harness proof."
-  value       = module.agentcore_harness.proof_status
+  description = "Deprecated: use agentcore_harness_status."
+  value       = module.agentcore_harness.managed_status
 }
 
 output "agentcore_harness_proof_configuration_fingerprint" {
-  description = "Non-secret stable Harness ceiling fingerprint."
-  value       = module.agentcore_harness.proof_configuration_fingerprint
+  description = "Deprecated: use agentcore_harness_configuration_fingerprint."
+  value       = module.agentcore_harness.managed_configuration_fingerprint
 }
 
 output "agentcore_turn_assertion_issuer" {

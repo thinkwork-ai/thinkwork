@@ -1379,22 +1379,42 @@ output "analyst_egress_ip" {
 }
 
 output "agentcore_harness_proof_arn" {
-  description = "One pilot tenant/profile Harness ARN."
+  description = "Deprecated: use agentcore_harness_arn."
   value       = module.thinkwork.agentcore_harness_proof_arn
 }
 
+output "agentcore_harness_arn" {
+  description = "Managed tenant/profile AgentCore Harness ARN."
+  value       = module.thinkwork.agentcore_harness_arn
+}
+
+output "agentcore_harness_endpoint_name" {
+  description = "Named version-pinned managed AgentCore Harness qualifier."
+  value       = module.thinkwork.agentcore_harness_endpoint_name
+}
+
+output "agentcore_harness_version" {
+  description = "Attested immutable managed AgentCore Harness version."
+  value       = module.thinkwork.agentcore_harness_version
+}
+
+output "agentcore_harness_status" {
+  description = "Safe managed AgentCore Harness readiness state."
+  value       = module.thinkwork.agentcore_harness_status
+}
+
 output "agentcore_harness_proof_endpoint_name" {
-  description = "Named version-pinned Harness qualifier."
+  description = "Deprecated: use agentcore_harness_endpoint_name."
   value       = module.thinkwork.agentcore_harness_proof_endpoint_name
 }
 
 output "agentcore_harness_proof_version" {
-  description = "Attested immutable Harness version."
+  description = "Deprecated: use agentcore_harness_version."
   value       = module.thinkwork.agentcore_harness_proof_version
 }
 
 output "agentcore_harness_proof_status" {
-  description = "Safe managed Harness proof readiness state."
+  description = "Deprecated: use agentcore_harness_status."
   value       = module.thinkwork.agentcore_harness_proof_status
 }
 

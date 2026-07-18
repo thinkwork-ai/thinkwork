@@ -7,7 +7,7 @@ import {
   loadTenantAgentForGraphql,
   parseJsonInput,
 } from "./shared.js";
-import { readHarnessReadiness } from "../../../lib/harness/proof-profile.js";
+import { readHarnessReadiness } from "../../../lib/harness/managed-profile.js";
 import { GraphQLError } from "graphql";
 
 interface UpdateTenantAgentInput {

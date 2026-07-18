@@ -20,7 +20,7 @@ import {
   harnessManagedThreadEnrollments,
   tenants,
 } from "../../utils.js";
-import { readHarnessReadiness } from "../../../lib/harness/proof-profile.js";
+import { readHarnessReadiness } from "../../../lib/harness/managed-profile.js";
 
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda

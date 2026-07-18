@@ -1,5 +1,5 @@
 variable "enabled" {
-  description = "Create the AgentCore Harness trial IAM surface (THINK-311 U4). Pure-IAM and inert — nothing invokes Harness until U5 — so it defaults on; flip off to remove the role without touching root variables."
+  description = "Create the AgentCore Harness execution IAM surface. The role is independent of whether a managed tenant/profile runtime is enabled."
   type        = bool
   default     = true
 }
@@ -24,20 +24,20 @@ variable "bucket_name" {
   type        = string
 }
 
-variable "multiplayer_proof_enabled" {
-  description = "Reconcile the one-tenant managed multiplayer Harness profile. The base IAM role may remain enabled while this is false."
+variable "managed_runtime_enabled" {
+  description = "Reconcile the managed tenant/profile AgentCore Harness runtime. The base IAM role may remain enabled while this is false."
   type        = bool
   default     = false
 }
 
-variable "pilot_tenant_slug" {
-  description = "Explicit non-production tenant slug whose skill prefix and Harness profile are admitted."
+variable "tenant_slug" {
+  description = "Tenant slug whose skill prefix and managed Harness profile are admitted."
   type        = string
   default     = ""
 
   validation {
-    condition     = var.pilot_tenant_slug == "" || can(regex("^[a-z0-9][a-z0-9-]{0,47}$", var.pilot_tenant_slug))
-    error_message = "pilot_tenant_slug must be a lowercase slug up to 48 characters."
+    condition     = var.tenant_slug == "" || can(regex("^[a-z0-9][a-z0-9-]{0,47}$", var.tenant_slug))
+    error_message = "tenant_slug must be a lowercase slug up to 48 characters."
   }
 }
 
@@ -90,7 +90,7 @@ variable "oauth_return_url" {
 }
 
 variable "model_id" {
-  description = "Safe baseline Bedrock model for the pilot Harness profile. Per-turn trusted projection may narrow/replace it."
+  description = "Safe baseline Bedrock model for the managed Harness profile. Per-turn trusted projection may narrow/replace it."
   type        = string
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }

@@ -39,7 +39,7 @@ import {
 } from "../lib/harness/runner.js";
 import { handleDocumentEmission } from "../lib/artifacts/document-emission.js";
 import { processFinalize } from "../lib/chat-finalize/process-finalize.js";
-import { requireHarnessManagedProfile } from "../lib/harness/proof-profile.js";
+import { requireHarnessManagedProfile } from "../lib/harness/managed-profile.js";
 import {
   abandonFreshHarnessTurn,
   prepareFreshHarnessTurn,

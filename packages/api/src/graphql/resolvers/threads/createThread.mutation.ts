@@ -40,7 +40,7 @@ import {
   PlatformAgentNotFoundError,
   resolveTenantPlatformAgent,
 } from "../../../lib/agents/tenant-platform-agent.js";
-import { requireHarnessManagedProfile } from "../../../lib/harness/proof-profile.js";
+import { requireHarnessManagedProfile } from "../../../lib/harness/managed-profile.js";
 import {
   defaultThreadRuntimeFromConfig,
   pinThreadRuntimeMetadata,

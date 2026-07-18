@@ -109,6 +109,8 @@ export function harnessManagedProfileParameterName(
   stage: string,
   tenantSlug: string,
 ): string {
+  // HARNESS_PROOF_PROFILE_PARAMETER_NAME remains a rollout-only compatibility
+  // alias for stacks deployed before the managed tenant-scoped profile path.
   const explicit =
     process.env.AGENTCORE_HARNESS_PROFILE_PARAMETER_NAME?.trim() ||
     process.env.HARNESS_PROOF_PROFILE_PARAMETER_NAME?.trim();
@@ -117,7 +119,7 @@ export function harnessManagedProfileParameterName(
   );
 }
 
-function legacyHarnessProfileParameterName(stage: string): string {
+function legacySingleTenantProfileParameterName(stage: string): string {
   return `/thinkwork/${stage}/agentcore-harness-proof-profile`;
 }
 
@@ -166,7 +168,7 @@ export async function readHarnessReadiness(
       !process.env.HARNESS_PROOF_PROFILE_PARAMETER_NAME?.trim()
     ) {
       raw = await deps.getParameter(
-        legacyHarnessProfileParameterName(deps.stage),
+        legacySingleTenantProfileParameterName(deps.stage),
       );
     }
   } catch {
