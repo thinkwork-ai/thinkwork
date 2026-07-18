@@ -1556,15 +1556,40 @@ jobs:
             "${TF_VAR_ARGS[@]}"
           terraform show -json "$plan_file" > "$plan_json"
 
-          destructive_count=$(jq '[
+          # Reconciliation-only terraform_data resources deliberately replace
+          # themselves to rerun an idempotent create provisioner. They have no
+          # destroy provisioner and own no external object, so their state-row
+          # replacement is not a destructive infrastructure action. Keep the
+          # allowlist exact; stable identity resources remain protected.
+          reconcile_only_addresses='[
+            "module.thinkwork.module.agentcore_harness.terraform_data.managed_multiplayer_harness_configuration[0]",
+            "module.thinkwork.module.agentcore_proof_gateway.terraform_data.gateway_configuration[0]"
+          ]'
+          destructive_count=$(jq --argjson safe "$reconcile_only_addresses" '[
             .resource_changes[]?
             | select(.change.actions | index("delete"))
+            | select((.address as $address | $safe | index($address)) == null)
           ] | length' "$plan_json")
-          if [ "$destructive_count" -gt 0 ]; then
-            echo "Terraform plan contains ${destructive_count} delete/replace action(s):"
-            jq -r '
+          reconcile_count=$(jq --argjson safe "$reconcile_only_addresses" '[
+            .resource_changes[]?
+            | select(.change.actions | index("delete"))
+            | select(.address as $address | $safe | index($address))
+          ] | length' "$plan_json")
+          if [ "$reconcile_count" -gt 0 ]; then
+            echo "Terraform plan contains ${reconcile_count} reconciliation-only state replacement(s):"
+            jq -r --argjson safe "$reconcile_only_addresses" '
               .resource_changes[]?
               | select(.change.actions | index("delete"))
+              | select(.address as $address | $safe | index($address))
+              | "- \(.address): \(.change.actions | join("/"))"
+            ' "$plan_json"
+          fi
+          if [ "$destructive_count" -gt 0 ]; then
+            echo "Terraform plan contains ${destructive_count} delete/replace action(s):"
+            jq -r --argjson safe "$reconcile_only_addresses" '
+              .resource_changes[]?
+              | select(.change.actions | index("delete"))
+              | select((.address as $address | $safe | index($address)) == null)
               | "- \(.address): \(.change.actions | join("/"))"
             ' "$plan_json"
             allow_destructive="${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive_terraform == true }}"
