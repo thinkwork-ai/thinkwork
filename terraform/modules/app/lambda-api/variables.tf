@@ -135,6 +135,11 @@ variable "appsync_api_url" {
   type        = string
 }
 
+variable "appsync_api_id" {
+  description = "AppSync subscriptions API ID used as the subscription-ticket audience"
+  type        = string
+}
+
 variable "appsync_api_key" {
   description = "AppSync API key"
   type        = string
@@ -842,6 +847,24 @@ variable "capability_signing_public_key" {
 
 variable "capability_signing_private_key_secret" {
   description = "Secrets Manager name holding the Ed25519 private signing key. Empty disables signing (grants fail loudly with signing_unavailable)."
+  type        = string
+  default     = ""
+}
+
+variable "subscription_ticket_signing_key_id" {
+  description = "Active Ed25519 subscription-ticket signing key ID."
+  type        = string
+  default     = ""
+}
+
+variable "subscription_ticket_public_keys" {
+  description = "JSON verifier keyring for AppSync subscription tickets; contains public material only."
+  type        = string
+  default     = "[]"
+}
+
+variable "subscription_ticket_private_key_secret" {
+  description = "Secrets Manager name holding the isolated subscription-ticket Ed25519 private key."
   type        = string
   default     = ""
 }

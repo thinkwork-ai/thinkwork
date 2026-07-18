@@ -1,4 +1,4 @@
-import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
+import { publishAppSyncMutation } from "../lib/appsync-iam-publisher.js";
 
 /**
  * AppSync subscription notifications.
@@ -9,35 +9,11 @@ import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 // can boot before env injection, and tests set env after import — capturing at
 // module load locks in stale/empty values. See feedback_vitest_env_capture_timing
 // + project_agentcore_deploy_race_env.
-function appsyncConfig(): { endpoint: string; apiKey: string } {
-  return {
-    endpoint: getConfig("APPSYNC_ENDPOINT") || "",
-    apiKey: getAppsyncApiKey(),
-  };
-}
-
 async function postToAppSync(
   mutation: string,
   variables: Record<string, unknown>,
 ): Promise<void> {
-  const { endpoint, apiKey } = appsyncConfig();
-  if (!endpoint || !apiKey) return;
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify({ query: mutation, variables }),
-    });
-    const body = await response.text();
-    if (!response.ok || body.includes('"errors"')) {
-      console.error(`[notify] AppSync error: ${response.status} ${body}`);
-    }
-  } catch (err) {
-    console.error(`[notify] AppSync fetch error:`, err);
-  }
+  await publishAppSyncMutation(mutation, variables);
 }
 
 export async function notifyThreadUpdate(payload: {

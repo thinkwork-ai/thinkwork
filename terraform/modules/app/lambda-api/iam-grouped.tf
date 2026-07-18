@@ -105,6 +105,30 @@ locals {
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*/plugin-tokens/*"
       },
+      # Backend notification publishing is IAM-only. Scope the shared API
+      # execution role to the twelve NONE-resolver mutation fields; end-user
+      # identity-pool credentials have no AppSync grant.
+      {
+        Sid    = "PublishAppSyncNotifications"
+        Effect = "Allow"
+        Action = ["appsync:GraphQL"]
+        Resource = [
+          for field in [
+            "notifyAgentStatus",
+            "notifyNewMessage",
+            "notifyHeartbeatActivity",
+            "notifyThreadActivity",
+            "notifyThreadUpdate",
+            "notifyInboxItemUpdate",
+            "notifyThreadTurnUpdate",
+            "notifyThreadTurnStep",
+            "notifyOrgUpdate",
+            "notifyCostRecorded",
+            "notifyEvalRunUpdate",
+            "notifyWorkspaceAccessRevoked",
+          ] : "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}/types/Mutation/fields/${field}"
+        ]
+      },
       # (was inline policy "s3-access" — the workspace bucket)
       {
         Effect = "Allow"

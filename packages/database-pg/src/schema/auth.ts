@@ -86,6 +86,18 @@ export const AUTH_CUTOVER_RUN_STATUSES = [
   "failed",
 ] as const;
 
+export const AUTH_SUBSCRIPTION_TICKET_KINDS = [
+  "connect",
+  "registration",
+] as const;
+
+export const AUTH_SUBSCRIPTION_TICKET_STATUSES = [
+  "issued",
+  "consumed",
+  "expired",
+  "revoked",
+] as const;
+
 export const authProviderResources = pgTable(
   "auth_provider_resources",
   {
@@ -588,6 +600,108 @@ export const authIdentityProofs = pgTable(
   (table) => [
     uniqueIndex("uq_auth_identity_proofs_digest").on(table.proof_digest),
     index("idx_auth_identity_proofs_identity").on(table.user_auth_identity_id),
+  ],
+);
+
+/**
+ * One-use AppSync Lambda-authorization tickets. Only the nonce digest is
+ * persisted: the signed bearer token and its signature never enter Postgres.
+ */
+export const authSubscriptionTickets = pgTable(
+  "auth_subscription_tickets",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    nonce_digest: text("nonce_digest").notNull(),
+    kind: text("kind").notNull(),
+    status: text("status").notNull().default("issued"),
+    stage: text("stage").notNull(),
+    appsync_api_id: text("appsync_api_id").notNull(),
+    key_id: text("key_id").notNull(),
+    cognito_issuer: text("cognito_issuer").notNull(),
+    cognito_sub: text("cognito_sub").notNull(),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    auth_route_client_id: uuid("auth_route_client_id")
+      .notNull()
+      .references(() => authRouteClients.id, { onDelete: "restrict" }),
+    operation_name: text("operation_name"),
+    operation_hash: text("operation_hash"),
+    resource_kind: text("resource_kind"),
+    resource_id: text("resource_id"),
+    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumed_at: timestamp("consumed_at", { withTimezone: true }),
+    revoked_at: timestamp("revoked_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_auth_subscription_tickets_nonce").on(table.nonce_digest),
+    index("idx_auth_subscription_tickets_principal").on(
+      table.cognito_issuer,
+      table.cognito_sub,
+      table.status,
+    ),
+    index("idx_auth_subscription_tickets_expiry").on(
+      table.status,
+      table.expires_at,
+    ),
+    check(
+      "auth_subscription_tickets_kind_allowed",
+      sql`${table.kind} IN ('connect', 'registration')`,
+    ),
+    check(
+      "auth_subscription_tickets_status_allowed",
+      sql`${table.status} IN ('issued', 'consumed', 'expired', 'revoked')`,
+    ),
+    check(
+      "auth_subscription_tickets_operation_shape",
+      sql`(${table.kind} = 'connect' AND ${table.operation_name} IS NULL AND ${table.operation_hash} IS NULL) OR (${table.kind} = 'registration' AND ${table.operation_name} IS NOT NULL AND ${table.operation_hash} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** Durable requests to disconnect already-open, now-revoked subscriptions. */
+export const authSubscriptionInvalidations = pgTable(
+  "auth_subscription_invalidations",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "restrict" }),
+    user_id: uuid("user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    resource_kind: text("resource_kind").notNull(),
+    resource_id: text("resource_id"),
+    reason: text("reason").notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    available_at: timestamp("available_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    processed_at: timestamp("processed_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("idx_auth_subscription_invalidations_pending").on(
+      table.status,
+      table.available_at,
+    ),
+    check(
+      "auth_subscription_invalidations_status_allowed",
+      sql`${table.status} IN ('pending', 'processing', 'complete', 'failed')`,
+    ),
   ],
 );
 

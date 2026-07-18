@@ -937,6 +937,7 @@ module "appsync" {
 
   stage               = var.stage
   region              = var.region
+  account_id          = var.account_id
   user_pool_id        = module.cognito.user_pool_id
   subscription_schema = local.subscription_schema
 }
@@ -1012,11 +1013,34 @@ resource "aws_secretsmanager_secret_version" "capability_signing_key" {
   secret_string = tls_private_key.capability_signing.private_key_pem
 }
 
+# AppSync subscription tickets use a separate key and domain from capability
+# envelopes. The authorizer receives only the public key; ticket issuance
+# resolves the private key by secret name at runtime.
+resource "tls_private_key" "subscription_ticket_signing" {
+  algorithm = "ED25519"
+}
+
+resource "aws_secretsmanager_secret" "subscription_ticket_signing_key" {
+  name        = "thinkwork/${var.stage}/subscription-ticket-signing-key"
+  description = "Ed25519 private key signing one-use AppSync subscription tickets."
+}
+
+resource "aws_secretsmanager_secret_version" "subscription_ticket_signing_key" {
+  secret_id     = aws_secretsmanager_secret.subscription_ticket_signing_key.id
+  secret_string = tls_private_key.subscription_ticket_signing.private_key_pem
+}
+
 module "api" {
   source = "../app/lambda-api"
 
   capability_signing_public_key         = tls_private_key.capability_signing.public_key_pem
   capability_signing_private_key_secret = aws_secretsmanager_secret.capability_signing_key.name
+  subscription_ticket_signing_key_id    = "${var.stage}-subscription-v1"
+  subscription_ticket_public_keys = jsonencode([{
+    keyId     = "${var.stage}-subscription-v1"
+    publicKey = tls_private_key.subscription_ticket_signing.public_key_pem
+  }])
+  subscription_ticket_private_key_secret = aws_secretsmanager_secret.subscription_ticket_signing_key.name
 
   stage      = var.stage
   account_id = var.account_id
@@ -1123,6 +1147,7 @@ module "api" {
   mobile_client_id    = module.cognito.mobile_client_id
   cognito_auth_domain = module.cognito.auth_domain
 
+  appsync_api_id  = module.appsync.graphql_api_id
   appsync_api_url = module.appsync.graphql_api_url
   appsync_api_key = module.appsync.graphql_api_key
 

@@ -6,7 +6,8 @@
  *   2. Check budget policies and pause agents if exceeded
  */
 
-import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
+import { getConfig } from "@thinkwork/runtime-config";
+import { publishAppSyncMutation } from "./appsync-iam-publisher.js";
 import { eq, and, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -437,10 +438,6 @@ export async function checkBudgetAndPause(
 // AppSync subscription notification
 // ---------------------------------------------------------------------------
 
-function appsyncEndpoint(): string {
-  return getConfig("APPSYNC_ENDPOINT", "");
-}
-
 export async function notifyCostRecorded(payload: {
   tenantId: string;
   agentId?: string | null;
@@ -452,10 +449,6 @@ export async function notifyCostRecorded(payload: {
   amountUsd: number;
   model: string | null;
 }): Promise<void> {
-  const endpoint = appsyncEndpoint();
-  const apiKey = getAppsyncApiKey();
-  if (!endpoint || !apiKey) return;
-
   const mutation = `
 		mutation NotifyCostRecorded(
 			$tenantId: ID!
@@ -493,22 +486,5 @@ export async function notifyCostRecorded(payload: {
 		}
 	`;
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify({ query: mutation, variables: payload }),
-    });
-    const responseBody = await response.text();
-    if (!response.ok || responseBody.includes('"errors"')) {
-      console.error(
-        `[cost] AppSync notifyCostRecorded issue: ${response.status} ${responseBody}`,
-      );
-    }
-  } catch (err) {
-    console.error(`[cost] AppSync notifyCostRecorded error:`, err);
-  }
+  await publishAppSyncMutation(mutation, payload);
 }

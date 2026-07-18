@@ -18,6 +18,7 @@ import {
 } from "@thinkwork/runtime-config";
 import { randomBytes } from "crypto";
 import { jsonSafePreview } from "../lib/json-safe-text.js";
+import { publishAppSyncMutation } from "../lib/appsync-iam-publisher.js";
 import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -4218,9 +4219,6 @@ async function notifyThreadTurnUpdate(payload: {
   status: string;
   triggerName: string | null;
 }): Promise<void> {
-  const appsyncApiKey = getAppsyncApiKey();
-  if (!appsyncEndpoint() || !appsyncApiKey) return;
-
   const mutation = `
 		mutation NotifyThreadTurnUpdate(
 			$runId: ID!
@@ -4252,27 +4250,7 @@ async function notifyThreadTurnUpdate(payload: {
 		}
 	`;
 
-  try {
-    const response = await fetch(appsyncEndpoint(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": appsyncApiKey,
-      },
-      body: JSON.stringify({ query: mutation, variables: payload }),
-    });
-    const responseBody = await response.text();
-    if (!response.ok || responseBody.includes('"errors"')) {
-      console.error(
-        `[wakeup-processor] AppSync notifyThreadTurnUpdate issue: ${response.status} ${responseBody}`,
-      );
-    }
-  } catch (err) {
-    console.error(
-      `[wakeup-processor] AppSync notifyThreadTurnUpdate error:`,
-      err,
-    );
-  }
+  await publishAppSyncMutation(mutation, payload);
 }
 
 async function notifyNewMessage(payload: {
@@ -4284,14 +4262,6 @@ async function notifyNewMessage(payload: {
   senderType: string;
   senderId: string;
 }): Promise<void> {
-  const appsyncApiKey = getAppsyncApiKey();
-  if (!appsyncEndpoint() || !appsyncApiKey) {
-    console.warn(
-      `[wakeup-processor] AppSync not configured, skipping notification`,
-    );
-    return;
-  }
-
   const mutation = `
 		mutation NotifyNewMessage(
 			$messageId: ID!
@@ -4329,30 +4299,10 @@ async function notifyNewMessage(payload: {
 		}
 	`;
 
-  try {
-    const response = await fetch(appsyncEndpoint(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": appsyncApiKey,
-      },
-      body: JSON.stringify({
-        query: mutation,
-        variables: {
-          ...payload,
-          ownerType:
-            payload.senderType === "assistant" ? "agent" : payload.senderType,
-          ownerId: payload.senderId,
-        },
-      }),
-    });
-    const responseBody = await response.text();
-    if (!response.ok || responseBody.includes('"errors"')) {
-      console.error(
-        `[wakeup-processor] AppSync notify issue: ${response.status} ${responseBody}`,
-      );
-    }
-  } catch (err) {
-    console.error(`[wakeup-processor] AppSync notify error:`, err);
-  }
+  await publishAppSyncMutation(mutation, {
+    ...payload,
+    ownerType:
+      payload.senderType === "assistant" ? "agent" : payload.senderType,
+    ownerId: payload.senderId,
+  });
 }

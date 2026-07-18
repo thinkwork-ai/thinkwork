@@ -1,29 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// notify.ts reads these at module load; set before the dynamic import below.
-process.env.APPSYNC_ENDPOINT = "https://appsync.test/graphql";
-process.env.APPSYNC_API_KEY = "test-key";
-
-const fetchSpy = vi.fn(
-  async (_url: string, _init?: RequestInit) =>
-    new Response("{}", { status: 200 }),
+const publishSpy = vi.hoisted(() =>
+  vi.fn(async (_query: string, _variables: Record<string, unknown>) => true),
 );
-vi.stubGlobal("fetch", fetchSpy);
+vi.mock("../lib/appsync-iam-publisher.js", () => ({
+  publishAppSyncMutation: publishSpy,
+}));
 
 const { notifyThreadActivity, notifyThreadTurnStep } =
   await import("./notify.js");
 
 function lastBody() {
-  const call = fetchSpy.mock.calls.at(-1)!;
-  const init = call[1]!;
-  return JSON.parse(init.body as string) as {
-    query: string;
-    variables: Record<string, unknown>;
-  };
+  const call = publishSpy.mock.calls.at(-1)!;
+  return { query: call[0], variables: call[1] };
 }
 
 describe("notifyThreadActivity", () => {
-  beforeEach(() => fetchSpy.mockClear());
+  beforeEach(() => publishSpy.mockClear());
 
   it("posts a notifyThreadActivity mutation carrying every payload field", async () => {
     await notifyThreadActivity({
@@ -40,7 +33,7 @@ describe("notifyThreadActivity", () => {
       shouldNotify: true,
     });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(publishSpy).toHaveBeenCalledTimes(1);
     const { query, variables } = lastBody();
     expect(query).toContain("notifyThreadActivity");
     expect(query).toContain("$authorType: String!");
@@ -84,7 +77,7 @@ describe("notifyThreadActivity", () => {
 });
 
 describe("notifyThreadTurnStep", () => {
-  beforeEach(() => fetchSpy.mockClear());
+  beforeEach(() => publishSpy.mockClear());
 
   it("posts a notifyThreadTurnStep mutation with JSON-stringified payload + int seq", async () => {
     await notifyThreadTurnStep({
@@ -99,7 +92,7 @@ describe("notifyThreadTurnStep", () => {
       createdAt: "2026-06-03T00:00:00.000Z",
     });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(publishSpy).toHaveBeenCalledTimes(1);
     const { query, variables } = lastBody();
     expect(query).toContain("notifyThreadTurnStep");
     expect(query).toContain("$payload: AWSJSON");
@@ -135,7 +128,7 @@ describe("notifyThreadTurnStep", () => {
   });
 
   it("is best-effort — swallows an AppSync fetch failure", async () => {
-    fetchSpy.mockRejectedValueOnce(new Error("network down"));
+    publishSpy.mockResolvedValueOnce(false);
     await expect(
       notifyThreadTurnStep({
         runId: "r1",

@@ -22,7 +22,7 @@ export function setAuthToken(token: string | null) {
 // AppSync real-time WebSocket — single shared connection with multiplexed subs
 // ---------------------------------------------------------------------------
 
-function getAuthHeader() {
+function getAppSyncHeader(authorizationToken: string) {
   const config = getPlatformConfig();
   // AppSync WS auth requires the *regular* API host (not realtime host)
   // e.g. "xyz.appsync-api.us-east-1.amazonaws.com" not "xyz.appsync-realtime-api..."
@@ -33,9 +33,49 @@ function getAuthHeader() {
           .replace("ws://", "http://"),
       ).host.replace(".appsync-realtime-api.", ".appsync-api.")
     : new URL(config.graphqlUrl).host;
-  return cachedToken
-    ? { Authorization: cachedToken, host: appsyncHost }
-    : { "x-api-key": config.graphqlApiKey, host: appsyncHost };
+  return { Authorization: authorizationToken, host: appsyncHost };
+}
+
+function subscriptionOperationName(query: string): string {
+  return query.match(/\bsubscription\s+([_A-Za-z][_0-9A-Za-z]*)/)?.[1] ?? "";
+}
+
+async function requestSubscriptionTicket(input: {
+  kind: "connect" | "registration";
+  query?: string;
+  variables?: Record<string, unknown>;
+}): Promise<string> {
+  if (!cachedToken) throw new Error("Sign in to use realtime updates");
+  const config = getPlatformConfig();
+  const endpoint = new URL(config.apiUrl || config.graphqlHttpUrl);
+  endpoint.pathname = "/api/auth/subscription-ticket";
+  endpoint.search = "";
+  const requestedTenantId =
+    typeof input.variables?.tenantId === "string"
+      ? input.variables.tenantId
+      : undefined;
+  const response = await fetch(endpoint.toString(), {
+    method: "POST",
+    headers: { Authorization: cachedToken, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kind: input.kind,
+      ...(requestedTenantId ? { tenantId: requestedTenantId } : {}),
+      ...(input.kind === "registration"
+        ? {
+            operationName: subscriptionOperationName(input.query ?? ""),
+            query: input.query,
+            variables: input.variables ?? {},
+          }
+        : {}),
+    }),
+  });
+  if (!response.ok)
+    throw new Error("Realtime authorization is temporarily unavailable");
+  const body = (await response.json()) as { token?: unknown };
+  if (typeof body.token !== "string" || !body.token.startsWith("twsub1_")) {
+    throw new Error("Realtime authorization response was invalid");
+  }
+  return body.token;
 }
 
 type Sink = {
@@ -46,6 +86,7 @@ type Sink = {
 
 let sharedWs: WebSocket | null = null;
 let wsReady = false;
+let connectionPromise: Promise<void> | null = null;
 const pendingStarts: Array<() => void> = [];
 const activeSubs = new Map<string, Sink>();
 let connectionTimeoutMs = 300000;
@@ -67,6 +108,8 @@ function ensureConnection(): Promise<void> {
     return Promise.resolve();
   }
 
+  if (connectionPromise) return connectionPromise;
+
   if (sharedWs && sharedWs.readyState === WebSocket.CONNECTING) {
     return new Promise((resolve) => pendingStarts.push(resolve));
   }
@@ -78,128 +121,137 @@ function ensureConnection(): Promise<void> {
   }
   wsReady = false;
 
-  return new Promise((resolve, reject) => {
-    const config = getPlatformConfig();
-    if (!config.graphqlWsUrl) {
-      reject(new Error("GraphQL WebSocket URL not configured"));
-      return;
-    }
-    const authHeader = getAuthHeader();
-    const headerB64 = btoa(JSON.stringify(authHeader));
-    const payloadB64 = btoa(JSON.stringify({}));
-    const url = `${config.graphqlWsUrl}?header=${encodeURIComponent(headerB64)}&payload=${encodeURIComponent(payloadB64)}`;
+  const opening = new Promise<void>((resolve, reject) => {
+    void (async () => {
+      const config = getPlatformConfig();
+      if (!config.graphqlWsUrl) {
+        reject(new Error("GraphQL WebSocket URL not configured"));
+        return;
+      }
+      const connectTicket = await requestSubscriptionTicket({
+        kind: "connect",
+      });
+      const authHeader = getAppSyncHeader(connectTicket);
+      const headerB64 = btoa(JSON.stringify(authHeader));
+      const payloadB64 = btoa(JSON.stringify({}));
+      const url = `${config.graphqlWsUrl}?header=${encodeURIComponent(headerB64)}&payload=${encodeURIComponent(payloadB64)}`;
 
-    try {
-      sharedWs = new WebSocket(url, ["graphql-ws"]);
-    } catch (err) {
-      reject(err);
-      return;
-    }
+      try {
+        sharedWs = new WebSocket(url, ["graphql-ws"]);
+      } catch (err) {
+        reject(err);
+        return;
+      }
 
-    pendingStarts.push(resolve);
+      pendingStarts.push(resolve);
 
-    sharedWs.onopen = () => {
-      // console.log("[AppSync WS] Connected, sending connection_init");
-      sharedWs?.send(JSON.stringify({ type: "connection_init" }));
-    };
+      sharedWs.onopen = () => {
+        // console.log("[AppSync WS] Connected, sending connection_init");
+        sharedWs?.send(JSON.stringify({ type: "connection_init" }));
+      };
 
-    sharedWs.onmessage = (event) => {
-      const msg = JSON.parse(event.data as string);
+      sharedWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data as string);
 
-      switch (msg.type) {
-        case "connection_ack":
-          console.log(
-            "[AppSync WS] Connection acknowledged, timeout:",
-            msg.payload?.connectionTimeoutMs,
-          );
-          connectionTimeoutMs = msg.payload?.connectionTimeoutMs || 300000;
-          wsReady = true;
-          resetKaTimer();
-          // Flush pending subscription starts
-          const fns = pendingStarts.splice(0);
-          fns.forEach((fn) => fn());
-          break;
+        switch (msg.type) {
+          case "connection_ack":
+            console.log(
+              "[AppSync WS] Connection acknowledged, timeout:",
+              msg.payload?.connectionTimeoutMs,
+            );
+            connectionTimeoutMs = msg.payload?.connectionTimeoutMs || 300000;
+            wsReady = true;
+            resetKaTimer();
+            // Flush pending subscription starts
+            const fns = pendingStarts.splice(0);
+            fns.forEach((fn) => fn());
+            break;
 
-        case "ka":
-          resetKaTimer();
-          break;
+          case "ka":
+            resetKaTimer();
+            break;
 
-        case "data":
-          console.log(
-            "[AppSync WS] Data received for sub:",
-            msg.id,
-            "active:",
-            activeSubs.has(msg.id),
-            "payload:",
-            JSON.stringify(msg.payload).slice(0, 200),
-          );
-          if (msg.id && activeSubs.has(msg.id)) {
-            activeSubs.get(msg.id)!.next(msg.payload);
-          }
-          break;
+          case "data":
+            console.log(
+              "[AppSync WS] Data received for sub:",
+              msg.id,
+              "active:",
+              activeSubs.has(msg.id),
+              "payload:",
+              JSON.stringify(msg.payload).slice(0, 200),
+            );
+            if (msg.id && activeSubs.has(msg.id)) {
+              activeSubs.get(msg.id)!.next(msg.payload);
+            }
+            break;
 
-        case "error":
-          if (msg.id && activeSubs.has(msg.id)) {
-            // Non-nullable field errors from subscriptions are benign (e.g. null messageId on
-            // NewMessageEvent when a notify mutation fires with empty payload). Log and ignore
-            // instead of killing the subscription.
-            const errors = msg.payload?.errors ?? msg.payload;
-            const isNullFieldError =
-              Array.isArray(errors) &&
-              errors.every(
-                (e: any) =>
-                  typeof e?.message === "string" &&
-                  e.message.includes(
-                    "Cannot return null for non-nullable type",
-                  ),
-              );
-            if (isNullFieldError) {
-              console.warn(
-                "[AppSync WS] Ignoring null-field subscription error for sub:",
-                msg.id,
-              );
-            } else {
-              console.error("[AppSync WS] Subscription error:", msg.payload);
-              activeSubs.get(msg.id)!.error(msg.payload);
+          case "error":
+            if (msg.id && activeSubs.has(msg.id)) {
+              // Non-nullable field errors from subscriptions are benign (e.g. null messageId on
+              // NewMessageEvent when a notify mutation fires with empty payload). Log and ignore
+              // instead of killing the subscription.
+              const errors = msg.payload?.errors ?? msg.payload;
+              const isNullFieldError =
+                Array.isArray(errors) &&
+                errors.every(
+                  (e: any) =>
+                    typeof e?.message === "string" &&
+                    e.message.includes(
+                      "Cannot return null for non-nullable type",
+                    ),
+                );
+              if (isNullFieldError) {
+                console.warn(
+                  "[AppSync WS] Ignoring null-field subscription error for sub:",
+                  msg.id,
+                );
+              } else {
+                console.error("[AppSync WS] Subscription error:", msg.payload);
+                activeSubs.get(msg.id)!.error(msg.payload);
+                activeSubs.delete(msg.id);
+              }
+            }
+            break;
+
+          case "complete":
+            if (msg.id && activeSubs.has(msg.id)) {
+              activeSubs.get(msg.id)!.complete();
               activeSubs.delete(msg.id);
             }
-          }
-          break;
+            break;
 
-        case "complete":
-          if (msg.id && activeSubs.has(msg.id)) {
-            activeSubs.get(msg.id)!.complete();
-            activeSubs.delete(msg.id);
-          }
-          break;
+          case "connection_error":
+            console.error(
+              "[AppSync WS] Connection error:",
+              JSON.stringify(msg.payload),
+            );
+            wsReady = false;
+            // Reject all pending
+            const rejects = pendingStarts.splice(0);
+            rejects.forEach((fn) => fn()); // resolve them anyway, they'll fail on send
+            break;
+        }
+      };
 
-        case "connection_error":
-          console.error(
-            "[AppSync WS] Connection error:",
-            JSON.stringify(msg.payload),
-          );
-          wsReady = false;
-          // Reject all pending
-          const rejects = pendingStarts.splice(0);
-          rejects.forEach((fn) => fn()); // resolve them anyway, they'll fail on send
-          break;
-      }
-    };
+      sharedWs.onerror = (err) => {
+        console.error("[AppSync WS] WebSocket error:", err);
+        wsReady = false;
+      };
 
-    sharedWs.onerror = (err) => {
-      console.error("[AppSync WS] WebSocket error:", err);
-      wsReady = false;
-    };
-
-    sharedWs.onclose = () => {
-      wsReady = false;
-      if (kaTimer) clearTimeout(kaTimer);
-      // Notify all active subscribers
-      activeSubs.forEach((sink) => sink.complete());
-      activeSubs.clear();
-      sharedWs = null;
-    };
+      sharedWs.onclose = () => {
+        wsReady = false;
+        if (kaTimer) clearTimeout(kaTimer);
+        // Notify all active subscribers
+        activeSubs.forEach((sink) => sink.complete());
+        activeSubs.clear();
+        sharedWs = null;
+      };
+    })().catch(reject);
   });
+  connectionPromise = opening.finally(() => {
+    connectionPromise = null;
+  });
+  return connectionPromise;
 }
 
 function createAppSyncSubscription(request: {
@@ -214,12 +266,17 @@ function createAppSyncSubscription(request: {
       activeSubs.set(subId, sink);
 
       ensureConnection()
-        .then(() => {
+        .then(async () => {
           if (stopped) {
             activeSubs.delete(subId);
             return;
           }
-          const authHeader = getAuthHeader();
+          const registrationTicket = await requestSubscriptionTicket({
+            kind: "registration",
+            query: request.query,
+            variables: request.variables || {},
+          });
+          const authHeader = getAppSyncHeader(registrationTicket);
           const startMsg = {
             id: subId,
             type: "start",
@@ -324,6 +381,7 @@ export function reconnectSubscriptions() {
     sharedWs.close();
     sharedWs = null;
     wsReady = false;
+    connectionPromise = null;
   }
 }
 

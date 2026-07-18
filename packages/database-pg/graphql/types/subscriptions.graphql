@@ -7,7 +7,7 @@
 # Event payload types
 # ────────────────────────────────────────────────────────────────────
 
-type AgentStatusEvent {
+type AgentStatusEvent @aws_iam {
   agentId: ID!
   tenantId: ID!
   status: String!
@@ -15,7 +15,7 @@ type AgentStatusEvent {
   updatedAt: AWSDateTime!
 }
 
-type NewMessageEvent {
+type NewMessageEvent @aws_iam {
   messageId: ID!
   threadId: ID!
   tenantId: ID!
@@ -28,7 +28,7 @@ type NewMessageEvent {
   createdAt: AWSDateTime!
 }
 
-type HeartbeatActivityEvent {
+type HeartbeatActivityEvent @aws_iam {
   heartbeatId: ID!
   tenantId: ID!
   status: String!
@@ -36,7 +36,7 @@ type HeartbeatActivityEvent {
   createdAt: AWSDateTime!
 }
 
-type ThreadUpdateEvent {
+type ThreadUpdateEvent @aws_iam {
   threadId: ID!
   tenantId: ID!
   status: String!
@@ -44,7 +44,7 @@ type ThreadUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type ThreadActivityEvent {
+type ThreadActivityEvent @aws_iam {
   userId: ID!
   tenantId: ID!
   threadId: ID!
@@ -58,7 +58,7 @@ type ThreadActivityEvent {
   shouldNotify: Boolean
 }
 
-type InboxItemStatusEvent {
+type InboxItemStatusEvent @aws_iam {
   inboxItemId: ID!
   tenantId: ID!
   status: String!
@@ -66,7 +66,7 @@ type InboxItemStatusEvent {
   updatedAt: AWSDateTime!
 }
 
-type ThreadTurnUpdateEvent {
+type ThreadTurnUpdateEvent @aws_iam {
   runId: ID!
   triggerId: ID
   tenantId: ID!
@@ -81,7 +81,7 @@ type ThreadTurnUpdateEvent {
 # render live (tool/skill/phase steps in Phase 1, coalesced text deltas in
 # Phase 2) without a refetch. seq gives total order; payload carries the
 # step detail (AWSJSON). Subscribe by threadId.
-type ThreadTurnStepEvent {
+type ThreadTurnStepEvent @aws_iam {
   runId: ID!
   threadId: ID!
   tenantId: ID!
@@ -95,7 +95,7 @@ type ThreadTurnStepEvent {
   createdAt: AWSDateTime!
 }
 
-type OrgUpdateEvent {
+type OrgUpdateEvent @aws_iam {
   tenantId: ID!
   changeType: String!
   entityType: String
@@ -103,7 +103,7 @@ type OrgUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type CostRecordedEvent {
+type CostRecordedEvent @aws_iam {
   tenantId: ID!
   agentId: ID
   agentName: String
@@ -116,7 +116,7 @@ type CostRecordedEvent {
   updatedAt: AWSDateTime!
 }
 
-type EvalRunUpdateEvent {
+type EvalRunUpdateEvent @aws_iam {
   runId: ID!
   tenantId: ID!
   agentId: ID
@@ -129,7 +129,7 @@ type EvalRunUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type WorkspaceAccessRevokedEvent {
+type WorkspaceAccessRevokedEvent @aws_iam {
   tenantId: ID!
   spaceId: ID!
   userId: ID!
@@ -150,7 +150,7 @@ extend type Mutation {
     tenantId: ID!
     status: String!
     name: String!
-  ): AgentStatusEvent
+  ): AgentStatusEvent @aws_iam
 
   notifyNewMessage(
     messageId: ID!
@@ -162,21 +162,21 @@ extend type Mutation {
     senderId: ID
     ownerType: String
     ownerId: ID
-  ): NewMessageEvent
+  ): NewMessageEvent @aws_iam
 
   notifyHeartbeatActivity(
     heartbeatId: ID!
     tenantId: ID!
     status: String!
     message: String
-  ): HeartbeatActivityEvent
+  ): HeartbeatActivityEvent @aws_iam
 
   notifyThreadUpdate(
     threadId: ID!
     tenantId: ID!
     status: String!
     title: String!
-  ): ThreadUpdateEvent
+  ): ThreadUpdateEvent @aws_iam
 
   notifyThreadActivity(
     userId: ID!
@@ -190,14 +190,14 @@ extend type Mutation {
     createdAt: AWSDateTime
     mentioned: Boolean
     shouldNotify: Boolean
-  ): ThreadActivityEvent
+  ): ThreadActivityEvent @aws_iam
 
   notifyInboxItemUpdate(
     inboxItemId: ID!
     tenantId: ID!
     status: String!
     title: String
-  ): InboxItemStatusEvent
+  ): InboxItemStatusEvent @aws_iam
 
   notifyThreadTurnUpdate(
     runId: ID!
@@ -207,7 +207,7 @@ extend type Mutation {
     agentId: ID
     status: String!
     triggerName: String
-  ): ThreadTurnUpdateEvent
+  ): ThreadTurnUpdateEvent @aws_iam
 
   notifyThreadTurnStep(
     runId: ID!
@@ -221,14 +221,14 @@ extend type Mutation {
     message: String
     payload: AWSJSON
     createdAt: AWSDateTime!
-  ): ThreadTurnStepEvent
+  ): ThreadTurnStepEvent @aws_iam
 
   notifyOrgUpdate(
     tenantId: ID!
     changeType: String!
     entityType: String
     entityId: ID
-  ): OrgUpdateEvent
+  ): OrgUpdateEvent @aws_iam
 
   notifyCostRecorded(
     tenantId: ID!
@@ -240,7 +240,7 @@ extend type Mutation {
     eventType: String!
     amountUsd: Float!
     model: String
-  ): CostRecordedEvent
+  ): CostRecordedEvent @aws_iam
 
   notifyEvalRunUpdate(
     runId: ID!
@@ -252,14 +252,14 @@ extend type Mutation {
     failed: Int
     passRate: Float
     errorMessage: String
-  ): EvalRunUpdateEvent
+  ): EvalRunUpdateEvent @aws_iam
 
   notifyWorkspaceAccessRevoked(
     tenantId: ID!
     spaceId: ID!
     userId: ID!
     revokedAt: AWSDateTime!
-  ): WorkspaceAccessRevokedEvent
+  ): WorkspaceAccessRevokedEvent @aws_iam
 }
 
 # ────────────────────────────────────────────────────────────────────

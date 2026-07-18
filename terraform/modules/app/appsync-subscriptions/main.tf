@@ -18,21 +18,26 @@
 
 resource "aws_appsync_graphql_api" "subscriptions" {
   name                = "thinkwork-${var.stage}-subscriptions"
-  authentication_type = "API_KEY"
+  authentication_type = "AWS_LAMBDA"
   xray_enabled        = false
 
   schema = var.subscription_schema
+
+  lambda_authorizer_config {
+    authorizer_uri                   = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-appsync-subscription-authorizer"
+    authorizer_result_ttl_in_seconds = 0
+    identity_validation_expression   = "^twsub1_[A-Za-z0-9_-]+$"
+  }
 
   additional_authentication_provider {
     authentication_type = "AWS_IAM"
   }
 
+  # Migration-only provider: no schema field carries @aws_api_key, so the
+  # extant key cannot publish or register. U14 cleanup removes the provider,
+  # resource, outputs, and all config propagation after deployed drain proof.
   additional_authentication_provider {
-    authentication_type = "AMAZON_COGNITO_USER_POOLS"
-
-    user_pool_config {
-      user_pool_id = var.user_pool_id
-    }
+    authentication_type = "API_KEY"
   }
 
   tags = {

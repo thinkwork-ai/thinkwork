@@ -49,19 +49,23 @@ describe("AppSync realtime URL wiring", () => {
     "wss://abc123.appsync-realtime-api.us-east-1.amazonaws.com/graphql";
 
   it("uses the explicit realtime URL while authorizing against the GraphQL host", () => {
-    const url = buildAppSyncRealtimeUrl(graphqlUrl, realtimeUrl, "test-key");
+    const url = buildAppSyncRealtimeUrl(
+      graphqlUrl,
+      realtimeUrl,
+      "twsub1_connect",
+    );
 
     expect(url).toContain(
       "abc123.appsync-realtime-api.us-east-1.amazonaws.com",
     );
     expect(decodedHeader(url)).toEqual({
       host: "abc123.appsync-api.us-east-1.amazonaws.com",
-      "x-api-key": "test-key",
+      Authorization: "twsub1_connect",
     });
   });
 
   it("derives the realtime endpoint when only the GraphQL URL is configured", () => {
-    const url = buildAppSyncRealtimeUrl(graphqlUrl, "", "test-key");
+    const url = buildAppSyncRealtimeUrl(graphqlUrl, "", "twsub1_connect");
 
     expect(url).toContain(
       "abc123.appsync-realtime-api.us-east-1.amazonaws.com",

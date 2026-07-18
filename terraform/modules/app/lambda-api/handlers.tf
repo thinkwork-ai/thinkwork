@@ -63,8 +63,12 @@ locals {
     # THINK-173: PUBLIC verification key (not a secret) + the NAME of the
     # private-key secret (resolved via runtime-config's secret loader —
     # the PEM itself never enters the env or the String document).
-    CAPABILITY_SIGNING_PUBLIC_KEY         = var.capability_signing_public_key
-    CAPABILITY_SIGNING_PRIVATE_KEY_SECRET = var.capability_signing_private_key_secret
+    CAPABILITY_SIGNING_PUBLIC_KEY          = var.capability_signing_public_key
+    CAPABILITY_SIGNING_PRIVATE_KEY_SECRET  = var.capability_signing_private_key_secret
+    SUBSCRIPTION_TICKET_SIGNING_KEY_ID     = var.subscription_ticket_signing_key_id
+    SUBSCRIPTION_TICKET_PUBLIC_KEYS        = var.subscription_ticket_public_keys
+    SUBSCRIPTION_TICKET_PRIVATE_KEY_SECRET = var.subscription_ticket_private_key_secret
+    APPSYNC_API_ID                         = var.appsync_api_id
     # THINK-229 U3/KTD5 — the analyst policy-source enforcement flip.
     # "row" (default) keeps sidecar policy shadow-only; "sidecar" makes the
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
@@ -770,6 +774,8 @@ resource "aws_lambda_function" "handler" {
     "deployment-sessions",
     "auth-me",
     "auth-revoke",
+    "auth-subscription-ticket",
+    "appsync-subscription-authorizer",
     "public-auth-options",
     "auth-provider-reconcile",
     "workos-auth",
@@ -1764,6 +1770,8 @@ locals {
       "OPTIONS /api/auth/me"                                                    = "auth-me"
       "POST /api/auth/revoke"                                                   = "auth-revoke"
       "OPTIONS /api/auth/revoke"                                                = "auth-revoke"
+      "POST /api/auth/subscription-ticket"                                      = "auth-subscription-ticket"
+      "OPTIONS /api/auth/subscription-ticket"                                   = "auth-subscription-ticket"
       "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
       "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 
@@ -1999,6 +2007,16 @@ resource "aws_apigatewayv2_route" "handler" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = each.key
   target    = "integrations/${aws_apigatewayv2_integration.handler[each.key].id}"
+}
+
+resource "aws_lambda_permission" "appsync_subscription_authorizer" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  statement_id  = "AllowAppSyncSubscriptionAuthorization"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.handler["appsync-subscription-authorizer"].function_name
+  principal     = "appsync.amazonaws.com"
+  source_arn    = "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}"
 }
 
 resource "aws_lambda_permission" "handler_apigw" {

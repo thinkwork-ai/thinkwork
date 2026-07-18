@@ -4,6 +4,9 @@ export interface ThinkworkConfig {
   apiBaseUrl: string;
   graphqlUrl: string;
   graphqlWsUrl?: string;
+  /** Explicit selected tenant for realtime ticket admission. */
+  tenantId?: string;
+  /** @deprecated AppSync subscriptions use one-use IAM/Lambda auth tickets. */
   graphqlApiKey?: string;
   cognito: {
     userPoolId: string;

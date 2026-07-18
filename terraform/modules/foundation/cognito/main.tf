@@ -747,21 +747,6 @@ resource "aws_iam_role" "authenticated" {
   })
 }
 
-resource "aws_iam_role_policy" "authenticated_appsync" {
-  count = local.create ? 1 : 0
-  name  = "appsync-access"
-  role  = aws_iam_role.authenticated[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "appsync:GraphQL"
-      Resource = "*"
-    }]
-  })
-}
-
 resource "aws_cognito_identity_pool_roles_attachment" "main" {
   count            = local.create ? 1 : 0
   identity_pool_id = aws_cognito_identity_pool.main[0].id

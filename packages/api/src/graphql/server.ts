@@ -28,6 +28,7 @@ import {
 // graphql-js validation passes — it has no runtime effect in graphql-yoga.
 const APPSYNC_DIRECTIVE_DEFS = `
 directive @aws_subscribe(mutations: [String!]!) on FIELD_DEFINITION
+directive @aws_iam on OBJECT | FIELD_DEFINITION
 `;
 
 function loadSchemaFiles(): string {

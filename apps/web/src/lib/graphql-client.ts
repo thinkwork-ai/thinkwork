@@ -24,10 +24,6 @@ function graphqlWsUrl(): string {
   return readRuntimeEnv("VITE_GRAPHQL_WS_URL");
 }
 
-function graphqlApiKey(): string {
-  return readRuntimeEnv("VITE_GRAPHQL_API_KEY");
-}
-
 // Token provider — called on every request so Cognito can refresh expired tokens.
 // AuthContext sets this to auth.getIdToken after sign-in.
 let tokenProvider: (() => Promise<string | null>) | null = null;
@@ -56,12 +52,9 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 export function startTokenRefresh() {
   if (refreshTimer) return;
   void refreshCachedToken();
-  refreshTimer = setInterval(
-    async () => {
-      await refreshCachedToken();
-    },
-    TOKEN_REFRESH_INTERVAL_MS,
-  );
+  refreshTimer = setInterval(async () => {
+    await refreshCachedToken();
+  }, TOKEN_REFRESH_INTERVAL_MS);
 }
 
 export function stopTokenRefresh() {
@@ -141,18 +134,18 @@ export function buildAppSyncAuthHost(
 export function buildAppSyncRealtimeUrl(
   graphqlUrl = graphqlAppsyncUrl(),
   realtimeUrl = graphqlWsUrl(),
-  apiKey = graphqlApiKey(),
+  authorizationToken = "",
 ): string {
   const host = buildAppSyncAuthHost(graphqlUrl, realtimeUrl);
   const websocketUrl = realtimeUrl
     ? normalizeWebSocketUrl(realtimeUrl)
     : deriveRealtimeUrl(graphqlUrl);
-  if (!host || !websocketUrl || !apiKey) return "";
+  if (!host || !websocketUrl || !authorizationToken) return "";
 
   const header = btoa(
     JSON.stringify({
       host,
-      "x-api-key": apiKey,
+      Authorization: authorizationToken,
     }),
   );
 
@@ -191,18 +184,32 @@ class AppSyncSubscriptionClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private kaTimer: ReturnType<typeof setTimeout> | null = null;
 
-  connect() {
-    const url = buildAppSyncRealtimeUrl();
-    if (!url) return;
+  private connecting = false;
+
+  async connect() {
+    if (this.connecting || this.ws?.readyState === WebSocket.CONNECTING) return;
+    this.connecting = true;
+    let url: string;
+    try {
+      const ticket = await requestSubscriptionTicket({ kind: "connect" });
+      url = buildAppSyncRealtimeUrl(undefined, undefined, ticket);
+      if (!url) throw new Error("Realtime endpoint is not configured");
+    } catch {
+      this.connecting = false;
+      this.scheduleReconnect();
+      return;
+    }
 
     try {
       this.ws = new WebSocket(url, ["graphql-ws"]);
     } catch {
+      this.connecting = false;
       this.scheduleReconnect();
       return;
     }
 
     this.ws.onopen = () => {
+      this.connecting = false;
       this.ws?.send(JSON.stringify({ type: "connection_init" }));
     };
 
@@ -214,7 +221,7 @@ class AppSyncSubscriptionClient {
           this.connected = true;
           this.resetKaTimer(msg.payload?.connectionTimeoutMs || 300000);
           for (const [id, sub] of this.subs) {
-            this.sendStart(id, sub.query, sub.variables);
+            void this.sendStart(id, sub.query, sub.variables);
           }
           break;
         }
@@ -247,6 +254,7 @@ class AppSyncSubscriptionClient {
     };
 
     this.ws.onclose = () => {
+      this.connecting = false;
       this.connected = false;
       this.scheduleReconnect();
     };
@@ -267,11 +275,11 @@ class AppSyncSubscriptionClient {
     if (this.reconnectTimer) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      void this.connect();
     }, 3000);
   }
 
-  private sendStart(
+  private async sendStart(
     id: string,
     query: string,
     variables: Record<string, unknown>,
@@ -279,6 +287,19 @@ class AppSyncSubscriptionClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
     const host = buildAppSyncAuthHost();
+    let ticket: string;
+    try {
+      ticket = await requestSubscriptionTicket({
+        kind: "registration",
+        query,
+        variables,
+      });
+    } catch (cause) {
+      this.subs.get(id)?.sink.error(cause);
+      return;
+    }
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.subs.has(id))
+      return;
     this.ws.send(
       JSON.stringify({
         id,
@@ -288,7 +309,7 @@ class AppSyncSubscriptionClient {
           extensions: {
             authorization: {
               host,
-              "x-api-key": graphqlApiKey(),
+              Authorization: ticket,
             },
           },
         },
@@ -301,9 +322,9 @@ class AppSyncSubscriptionClient {
     this.subs.set(id, { query, variables, sink });
 
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      if (!this.ws) this.connect();
+      if (!this.ws) void this.connect();
     } else if (this.connected) {
-      this.sendStart(id, query, variables);
+      void this.sendStart(id, query, variables);
     }
 
     return () => {
@@ -313,6 +334,50 @@ class AppSyncSubscriptionClient {
       }
     };
   }
+}
+
+function subscriptionOperationName(query: string): string {
+  return query.match(/\bsubscription\s+([_A-Za-z][_0-9A-Za-z]*)/)?.[1] ?? "";
+}
+
+async function requestSubscriptionTicket(input: {
+  kind: "connect" | "registration";
+  query?: string;
+  variables?: Record<string, unknown>;
+}): Promise<string> {
+  if (!currentTenantId || !cachedToken || isExpiredJwt(cachedToken)) {
+    throw new Error(
+      "Sign in and select an environment to use realtime updates",
+    );
+  }
+  const url = new URL(graphqlHttpUrl());
+  url.pathname = "/api/auth/subscription-ticket";
+  url.search = "";
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: cachedToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      kind: input.kind,
+      tenantId: currentTenantId,
+      ...(input.kind === "registration"
+        ? {
+            operationName: subscriptionOperationName(input.query ?? ""),
+            query: input.query,
+            variables: input.variables ?? {},
+          }
+        : {}),
+    }),
+  });
+  if (!response.ok)
+    throw new Error("Realtime authorization is temporarily unavailable");
+  const body = (await response.json()) as { token?: unknown };
+  if (typeof body.token !== "string" || !body.token.startsWith("twsub1_")) {
+    throw new Error("Realtime authorization response was invalid");
+  }
+  return body.token;
 }
 
 const appSyncClient = new AppSyncSubscriptionClient();

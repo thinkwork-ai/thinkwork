@@ -12,17 +12,13 @@
  * file in the lift; that belongs in a follow-up.
  */
 
-import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
 import { validateMcpAppPart } from "@thinkwork/pi-runtime-core";
 import { validateThreadJsonRenderPart } from "@thinkwork/thread-json-render";
+import { publishAppSyncMutation } from "../appsync-iam-publisher.js";
 
 const db = getDb();
-
-function appsyncEndpoint(): string {
-  return getConfig("APPSYNC_ENDPOINT", "");
-}
 
 export const GENERIC_AGENT_ERROR_MESSAGE =
   "I'm sorry, I encountered an error processing your request. Please try again.";
@@ -139,15 +135,6 @@ export async function notifyNewMessage(payload: {
   senderType: string;
   senderId: string;
 }): Promise<void> {
-  const endpoint = appsyncEndpoint();
-  const apiKey = getAppsyncApiKey();
-  if (!endpoint || !apiKey) {
-    console.warn(
-      `[chat-finalize] AppSync not configured, skipping notification`,
-    );
-    return;
-  }
-
   const mutation = `
     mutation NotifyNewMessage(
       $messageId: ID!
@@ -185,44 +172,12 @@ export async function notifyNewMessage(payload: {
     }
   `;
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        query: mutation,
-        variables: {
-          ...payload,
-          ownerType:
-            payload.senderType === "assistant" ? "agent" : payload.senderType,
-          ownerId: payload.senderId,
-        },
-      }),
-    });
-
-    const responseBody = await response.text();
-    if (!response.ok) {
-      console.error(
-        `[chat-finalize] AppSync notify failed: ${response.status} ${responseBody}`,
-      );
-    } else {
-      // Log GraphQL errors even on HTTP 200
-      if (responseBody.includes('"errors"')) {
-        console.error(
-          `[chat-finalize] AppSync notify GraphQL errors: ${responseBody}`,
-        );
-      } else {
-        console.log(
-          `[chat-finalize] AppSync notifyNewMessage sent for ${payload.messageId}`,
-        );
-      }
-    }
-  } catch (err) {
-    console.error(`[chat-finalize] AppSync notify error:`, err);
-  }
+  await publishAppSyncMutation(mutation, {
+    ...payload,
+    ownerType:
+      payload.senderType === "assistant" ? "agent" : payload.senderType,
+    ownerId: payload.senderId,
+  });
 }
 
 export async function notifyThreadTurnUpdate(payload: {
@@ -233,10 +188,6 @@ export async function notifyThreadTurnUpdate(payload: {
   status: string;
   triggerName: string | null;
 }): Promise<void> {
-  const endpoint = appsyncEndpoint();
-  const apiKey = getAppsyncApiKey();
-  if (!endpoint || !apiKey) return;
-
   const mutation = `
     mutation NotifyThreadTurnUpdate(
       $runId: ID!
@@ -265,18 +216,7 @@ export async function notifyThreadTurnUpdate(payload: {
     }
   `;
 
-  try {
-    await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify({ query: mutation, variables: payload }),
-    });
-  } catch (err) {
-    console.error(`[chat-finalize] notifyThreadTurnUpdate error:`, err);
-  }
+  await publishAppSyncMutation(mutation, payload);
 }
 
 export async function markComputerTaskFailedFromFinalize(_input: {

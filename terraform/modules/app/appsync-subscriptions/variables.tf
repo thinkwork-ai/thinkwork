@@ -8,6 +8,11 @@ variable "region" {
   type        = string
 }
 
+variable "account_id" {
+  description = "AWS account ID hosting the AppSync authorizer Lambda"
+  type        = string
+}
+
 variable "user_pool_id" {
   description = "Cognito user pool ID for authentication"
   type        = string
