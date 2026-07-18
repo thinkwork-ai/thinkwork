@@ -255,6 +255,34 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       }}}},
       responses: {"200": {description: "Sanitized permissioned Brain context"}}
     }},
+    "/agentcore/capabilities/workspace/skills/list": {post: {
+      operationId: "list_workspace_skills",
+      summary: "List the exact participant current authorized ThinkWork workspace skills",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"}
+        }
+      }}}},
+      responses: {"200": {description: "Current canonical authorized skill index"}}
+    }},
+    "/agentcore/capabilities/workspace/skills/load": {post: {
+      operationId: "load_workspace_skill",
+      summary: "Load one currently authorized ThinkWork SKILL.md as the exact turn participant",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "skill"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          skill: {type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"}
+        }
+      }}}},
+      responses: {
+        "200": {description: "Bounded authorized skill body"},
+        "403": {description: "Skill is not currently authorized"}
+      }
+    }},
     "/agentcore/capabilities/email/send": {post: {
       operationId: "send_email",
       summary: "Send or request approval for one idempotent policy-governed email",
@@ -364,6 +392,8 @@ permit(
     AgentCore::Action::"${TARGET_NAME}___web_search",
     AgentCore::Action::"${TARGET_NAME}___web_extract",
     AgentCore::Action::"${TARGET_NAME}___query_brain",
+    AgentCore::Action::"${TARGET_NAME}___list_workspace_skills",
+    AgentCore::Action::"${TARGET_NAME}___load_workspace_skill",
     AgentCore::Action::"${TARGET_NAME}___send_email"
   ],
   resource == AgentCore::Gateway::"${gateway_arn}"
@@ -390,6 +420,8 @@ when {
         action == AgentCore::Action::"${TARGET_NAME}___web_search" ||
         action == AgentCore::Action::"${TARGET_NAME}___web_extract" ||
         action == AgentCore::Action::"${TARGET_NAME}___query_brain" ||
+        action == AgentCore::Action::"${TARGET_NAME}___list_workspace_skills" ||
+        action == AgentCore::Action::"${TARGET_NAME}___load_workspace_skill" ||
         action == AgentCore::Action::"${TARGET_NAME}___send_email"
       ) &&
       context.input.tenant_id == principal.getTag("tenant_id")

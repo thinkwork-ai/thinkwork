@@ -394,6 +394,41 @@ describe("normalizeHarnessWireEvent", () => {
 });
 
 describe("runHarnessTurn — happy path", () => {
+  it("projects only the current turn authorized skill ids as an advisory index", async () => {
+    const deps = makeDeps([
+      stream(textEvents("I used the current instructions.")),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        skills: [
+          {
+            skillId: "document-composer",
+            s3Key:
+              "tenants/tei/agents/thinkwork-agent/skills/document-composer",
+            secretRef: "must-not-project",
+          },
+          {
+            skillId: "customer-qbr",
+            s3Key: "tenants/tei/spaces/default/skills/customer-qbr",
+          },
+          { skillId: "../invalid", s3Key: "tenants/tei/private" },
+        ],
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    const messages = JSON.stringify(deps.invocations[0]?.messages);
+    expect(messages).toContain(
+      "authorized_workspace_skills=customer-qbr,document-composer",
+    );
+    expect(messages).not.toContain("must-not-project");
+    expect(messages).not.toContain("tenants/tei");
+    expect(messages).not.toContain("../invalid");
+  });
+
   it("fulfills emit_document and finalizes completed with the evidence triple", async () => {
     const deps = makeDeps([
       stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),

@@ -31,8 +31,15 @@ import { sendDirectRoutineEmail } from "./email-send.js";
 import { getContextEngineService } from "../lib/context-engine/service.js";
 import type { ContextEngineResponse } from "../lib/context-engine/types.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
+import { CAPABILITY_SLUG_PATTERN } from "../lib/capabilities/definition-schemas.js";
 import { validateTemplateContextEngine } from "../lib/templates/context-engine-config.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
+import {
+  listAuthorizedWorkspaceSkills,
+  loadAuthorizedWorkspaceSkill,
+  type AuthorizedWorkspaceSkill,
+  type WorkspaceSkillAccessErrorCode,
+} from "../lib/harness/workspace-tools.js";
 import {
   appendToolExecutionStarted,
   appendToolExecutionTerminal,
@@ -43,6 +50,10 @@ import {
 
 const BRAIN_PATH = "/agentcore/capabilities/brain/query";
 const EMAIL_PATH = "/agentcore/capabilities/email/send";
+const WORKSPACE_SKILLS_LIST_PATH =
+  "/agentcore/capabilities/workspace/skills/list";
+const WORKSPACE_SKILLS_LOAD_PATH =
+  "/agentcore/capabilities/workspace/skills/load";
 const MAX_BODY_BYTES = 80 * 1024;
 const MAX_QUERY_CHARS = 2_000;
 const MAX_EMAIL_SUBJECT_CHARS = 500;
@@ -61,6 +72,11 @@ interface EmailBody {
   subject?: unknown;
   content?: unknown;
   body?: unknown;
+}
+
+interface WorkspaceSkillBody {
+  tenant_id?: unknown;
+  skill?: unknown;
 }
 
 interface PlatformAccess {
@@ -99,6 +115,21 @@ export interface HarnessPlatformToolsDeps {
     body: string;
     idempotencyKey: string;
   }): Promise<Record<string, unknown>>;
+  listWorkspaceSkills(context: HarnessCapabilityContext): Promise<{
+    manifestFingerprint: string;
+    skills: AuthorizedWorkspaceSkill[];
+  }>;
+  loadWorkspaceSkill(
+    context: HarnessCapabilityContext,
+    slug: string,
+  ): Promise<
+    AuthorizedWorkspaceSkill & {
+      content: string;
+      contentSha256: string;
+      sizeBytes: number;
+      manifestFingerprint: string;
+    }
+  >;
   claimEmail(input: EmailClaimInput): Promise<EmailClaim>;
   finishEmail(input: {
     context: HarnessCapabilityContext;
@@ -121,7 +152,12 @@ export function createHarnessPlatformToolsHandler(
     const path = event.rawPath || event.requestContext.http.path;
     if (
       event.requestContext.http.method !== "POST" ||
-      (path !== BRAIN_PATH && path !== EMAIL_PATH)
+      ![
+        BRAIN_PATH,
+        EMAIL_PATH,
+        WORKSPACE_SKILLS_LIST_PATH,
+        WORKSPACE_SKILLS_LOAD_PATH,
+      ].includes(path)
     ) {
       return response(404, { error: "not_found" });
     }
@@ -148,9 +184,12 @@ export function createHarnessPlatformToolsHandler(
     if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
       return response(413, { error: "request_too_large" });
     }
-    let body: BrainBody | EmailBody;
+    let body: BrainBody | EmailBody | WorkspaceSkillBody;
     try {
-      body = JSON.parse(rawBody || "{}") as BrainBody | EmailBody;
+      body = JSON.parse(rawBody || "{}") as
+        | BrainBody
+        | EmailBody
+        | WorkspaceSkillBody;
     } catch {
       console.warn("[harness-platform-tools] Invalid Gateway body encoding", {
         path,
@@ -170,24 +209,43 @@ export function createHarnessPlatformToolsHandler(
     const parsed =
       path === BRAIN_PATH
         ? parseBrainBody(body as BrainBody)
-        : parseEmailBody(body as EmailBody);
+        : path === EMAIL_PATH
+          ? parseEmailBody(body as EmailBody)
+          : path === WORKSPACE_SKILLS_LOAD_PATH
+            ? parseWorkspaceSkillBody(body as WorkspaceSkillBody)
+            : ({ ok: true, value: {} } as ParseResult<Record<string, never>>);
     if (!parsed.ok) return response(400, { error: parsed.error });
 
     const context = await deps.resolveCanonicalContext(claims);
     if (!context) {
       return response(403, { error: "canonical_turn_not_authorized" });
     }
-    const access = await deps.resolveAccess(context);
     const isBrain = path === BRAIN_PATH;
-    if ((isBrain && !access.brain) || (!isBrain && !access.email)) {
-      return response(403, {
-        error: isBrain ? "brain_not_authorized" : "send_email_not_authorized",
-      });
+    const isEmail = path === EMAIL_PATH;
+    if (isBrain || isEmail) {
+      const access = await deps.resolveAccess(context);
+      if ((isBrain && !access.brain) || (isEmail && !access.email)) {
+        return response(403, {
+          error: isBrain ? "brain_not_authorized" : "send_email_not_authorized",
+        });
+      }
     }
 
-    return isBrain
-      ? runBrain(deps, context, event, parsed.value as ParsedBrain)
-      : runEmail(deps, context, event, parsed.value as ParsedEmail);
+    if (isBrain) {
+      return runBrain(deps, context, event, parsed.value as ParsedBrain);
+    }
+    if (isEmail) {
+      return runEmail(deps, context, event, parsed.value as ParsedEmail);
+    }
+    if (path === WORKSPACE_SKILLS_LIST_PATH) {
+      return runWorkspaceSkillList(deps, context, event);
+    }
+    return runWorkspaceSkillLoad(
+      deps,
+      context,
+      event,
+      parsed.value as ParsedWorkspaceSkill,
+    );
   };
 }
 
@@ -240,6 +298,148 @@ async function runBrain(
     });
     return response(502, { error: "brain_query_failed" });
   }
+}
+
+async function runWorkspaceSkillList(
+  deps: HarnessPlatformToolsDeps,
+  context: HarnessCapabilityContext,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const startedAt = deps.now();
+  const correlation = correlationFor({
+    context,
+    event,
+    operation: "workspace.skills.list",
+    policyRevision: deps.policyRevision,
+    idempotencyKey: event.requestContext.requestId,
+    credentialOwnerAlias: null,
+  });
+  await appendToolExecutionStarted(deps.ledgerStore, {
+    ...correlation,
+    input: {},
+    inputAllowPaths: [],
+  });
+  try {
+    const result = await deps.listWorkspaceSkills(context);
+    await appendToolExecutionTerminal(deps.ledgerStore, {
+      ...correlation,
+      status: "completed",
+      output: { skillCount: result.skills.length },
+      outputAllowPaths: ["skillCount"],
+      durationMs: Math.max(0, deps.now() - startedAt),
+    });
+    return response(200, result);
+  } catch (error) {
+    return finishWorkspaceSkillError(
+      deps,
+      correlation,
+      startedAt,
+      error,
+      "workspace_skill_source_unavailable",
+    );
+  }
+}
+
+async function runWorkspaceSkillLoad(
+  deps: HarnessPlatformToolsDeps,
+  context: HarnessCapabilityContext,
+  event: APIGatewayProxyEventV2,
+  input: ParsedWorkspaceSkill,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const startedAt = deps.now();
+  const correlation = correlationFor({
+    context,
+    event,
+    operation: "workspace.skills.load",
+    policyRevision: deps.policyRevision,
+    idempotencyKey: event.requestContext.requestId,
+    credentialOwnerAlias: null,
+  });
+  await appendToolExecutionStarted(deps.ledgerStore, {
+    ...correlation,
+    input: { slug: input.skill },
+    inputAllowPaths: ["slug"],
+  });
+  try {
+    const result = await deps.loadWorkspaceSkill(context, input.skill);
+    await appendToolExecutionTerminal(deps.ledgerStore, {
+      ...correlation,
+      status: "completed",
+      output: {
+        slug: result.slug,
+        scope: result.scope,
+        sizeBytes: result.sizeBytes,
+        contentSha256: result.contentSha256,
+        manifestFingerprint: result.manifestFingerprint,
+      },
+      outputAllowPaths: [
+        "slug",
+        "scope",
+        "sizeBytes",
+        "contentSha256",
+        "manifestFingerprint",
+      ],
+      durationMs: Math.max(0, deps.now() - startedAt),
+    });
+    return response(200, result);
+  } catch (error) {
+    return finishWorkspaceSkillError(
+      deps,
+      correlation,
+      startedAt,
+      error,
+      "workspace_skill_source_unavailable",
+    );
+  }
+}
+
+async function finishWorkspaceSkillError(
+  deps: HarnessPlatformToolsDeps,
+  correlation: ToolExecutionCorrelation,
+  startedAt: number,
+  error: unknown,
+  fallbackCode: WorkspaceSkillAccessErrorCode,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const code = workspaceSkillErrorCode(error) ?? fallbackCode;
+  await appendToolExecutionTerminal(deps.ledgerStore, {
+    ...correlation,
+    status: "failed",
+    output: {},
+    outputAllowPaths: [],
+    error: { code },
+    errorAllowPaths: ["code"],
+    durationMs: Math.max(0, deps.now() - startedAt),
+  });
+  if (!workspaceSkillErrorCode(error)) {
+    console.error("[harness-platform-tools] Workspace skill access failed", {
+      tenantId: correlation.tenantId,
+      turnId: correlation.turnId,
+      errorType: error instanceof Error ? error.name : "unknown",
+    });
+  }
+  return response(workspaceSkillErrorStatus(code), { error: code });
+}
+
+function workspaceSkillErrorCode(
+  error: unknown,
+): WorkspaceSkillAccessErrorCode | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return code === "invalid_workspace_skill" ||
+    code === "workspace_skill_not_authorized" ||
+    code === "workspace_skill_source_unavailable" ||
+    code === "workspace_skill_too_large" ||
+    code === "workspace_skill_content_blocked"
+    ? code
+    : null;
+}
+
+function workspaceSkillErrorStatus(code: WorkspaceSkillAccessErrorCode) {
+  if (code === "invalid_workspace_skill") return 400;
+  if (code === "workspace_skill_not_authorized") return 403;
+  if (code === "workspace_skill_too_large") return 413;
+  if (code === "workspace_skill_content_blocked") return 422;
+  return 503;
 }
 
 async function runEmail(
@@ -356,7 +556,7 @@ function correlationFor(input: {
   operation: string;
   policyRevision: string;
   idempotencyKey: string;
-  credentialOwnerAlias: string;
+  credentialOwnerAlias: string | null;
 }): ToolExecutionCorrelation {
   return {
     tenantId: input.context.tenantId,
@@ -575,6 +775,10 @@ interface ParsedEmail {
   body: string;
 }
 
+interface ParsedWorkspaceSkill {
+  skill: string;
+}
+
 type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 function parseBrainBody(body: BrainBody): ParseResult<ParsedBrain> {
@@ -634,6 +838,18 @@ function parseEmailBody(body: EmailBody): ParseResult<ParsedEmail> {
       body: content.trim(),
     },
   };
+}
+
+function parseWorkspaceSkillBody(
+  body: WorkspaceSkillBody,
+): ParseResult<ParsedWorkspaceSkill> {
+  if (
+    typeof body.skill !== "string" ||
+    !CAPABILITY_SLUG_PATTERN.test(body.skill)
+  ) {
+    return { ok: false, error: "invalid_workspace_skill" };
+  }
+  return { ok: true, value: { skill: body.skill } };
 }
 
 function digestEmailInput(input: ParsedEmail): string {
@@ -777,6 +993,8 @@ const deployedHandler = createHarnessPlatformToolsHandler({
   resolveAccess: resolvePlatformAccess,
   queryBrain,
   sendEmail,
+  listWorkspaceSkills: listAuthorizedWorkspaceSkills,
+  loadWorkspaceSkill: loadAuthorizedWorkspaceSkill,
   claimEmail,
   finishEmail,
   ledgerStore: drizzleToolExecutionLedgerStore(),
