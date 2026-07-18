@@ -169,8 +169,12 @@ async function* invokeHarnessWithBearer(input: {
       response.headers.get("x-amzn-requestid") ??
       response.headers.get("x-amz-request-id") ??
       "unknown";
+    const responseDetail = await response
+      .text()
+      .then((body) => body.replace(/\s+/g, " ").trim().slice(0, 1_000))
+      .catch(() => "");
     throw new Error(
-      `Harness Bearer invocation failed with HTTP ${response.status} (request ${requestId})`,
+      `Harness Bearer invocation failed with HTTP ${response.status} (request ${requestId})${responseDetail ? `: ${responseDetail}` : ""}`,
     );
   }
 

@@ -65,7 +65,7 @@ export interface DispatchDefaultAgentTurnInput {
    * dispatch — the wakeup fallback resolves the runtime from the agent
    * row (Pi), so an agentcore-requested turn must never ride it (R4).
    */
-  requestedRuntime?: "agentcore" | null;
+  requestedRuntime?: "pi" | "agentcore" | null;
   requestedProfileSlug?: string | null;
   goalMode?: RuntimeGoalMode | null;
   skillCreatorCommand?: SkillCreatorCommandMetadata | null;
@@ -125,7 +125,7 @@ export interface DefaultAgentChatInvoke {
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   requestedModelId?: string;
   /** THINK-311 U5b: per-turn AgentCore trial selection (chat path only). */
-  requestedRuntime?: "agentcore";
+  requestedRuntime?: "pi" | "agentcore";
   requestedProfileSlug?: string;
   goalMode?: RuntimeGoalMode;
   skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
@@ -224,8 +224,8 @@ export async function dispatchDefaultAgentChatTurn(
     ...(input.requestedModelId
       ? { requestedModelId: input.requestedModelId }
       : {}),
-    ...(input.requestedRuntime === "agentcore"
-      ? { requestedRuntime: "agentcore" as const }
+    ...(input.requestedRuntime
+      ? { requestedRuntime: input.requestedRuntime }
       : {}),
     ...(input.requestedProfileSlug
       ? { requestedProfileSlug: input.requestedProfileSlug }

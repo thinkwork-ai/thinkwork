@@ -5,13 +5,20 @@ import {
 } from "./turn-runtime-selection.js";
 
 describe("requestedRuntimeFromMetadata", () => {
-  it("returns null for absent metadata, absent key, empty, and pi", () => {
+  it("returns null only when no runtime is pinned", () => {
     expect(requestedRuntimeFromMetadata(undefined)).toBeNull();
     expect(requestedRuntimeFromMetadata(null)).toBeNull();
     expect(requestedRuntimeFromMetadata({})).toBeNull();
     expect(requestedRuntimeFromMetadata({ requestedRuntime: "" })).toBeNull();
-    expect(requestedRuntimeFromMetadata({ requestedRuntime: "pi" })).toBeNull();
-    expect(requestedRuntimeFromMetadata({ requestedRuntime: "PI" })).toBeNull();
+  });
+
+  it("returns an explicit Pi pin", () => {
+    expect(requestedRuntimeFromMetadata({ requestedRuntime: "pi" })).toBe(
+      "pi",
+    );
+    expect(requestedRuntimeFromMetadata({ requestedRuntime: "PI" })).toBe(
+      "pi",
+    );
   });
 
   it("returns agentcore for the trial selector (harness accepted as alias)", () => {

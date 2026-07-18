@@ -174,7 +174,7 @@ export async function createHarnessProofThread(
         identifier: `THINK-${counter.nextNumber}`,
         title,
         workspace_folder_name: folder,
-        status: "active",
+        status: "backlog",
         channel: "manual",
         mode_override: "multiplayer",
         created_by_type: "user",

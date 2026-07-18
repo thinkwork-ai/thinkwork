@@ -624,6 +624,9 @@ export function resolveChatInvocationRuntimeType(args: {
   computerTaskId?: string | null;
 }): AgentRuntimeType {
   const requested = (args.requestedRuntime ?? "").toLowerCase();
+  if (requested === "pi") {
+    return "pi";
+  }
   if (requested === "agentcore" || requested === "harness") {
     return "harness";
   }

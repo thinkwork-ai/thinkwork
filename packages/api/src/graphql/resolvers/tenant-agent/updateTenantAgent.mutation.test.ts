@@ -23,10 +23,6 @@ vi.mock("../../utils.js", () => {
       runtime: col("agents.runtime"),
       runtime_config: col("agents.runtime_config"),
     },
-    harnessManagedThreadEnrollments: {
-      tenant_id: col("harness_managed_thread_enrollments.tenant_id"),
-      status: col("harness_managed_thread_enrollments.status"),
-    },
     tenants: {
       id: col("tenants.id"),
       slug: col("tenants.slug"),
@@ -78,6 +74,12 @@ vi.mock("./shared.js", () => ({
     typeof value === "string" ? JSON.parse(value) : value,
 }));
 
+vi.mock("../../../lib/harness/proof-profile.js", () => ({
+  readHarnessProofReadiness: vi.fn(() =>
+    Promise.resolve({ ready: true, reasonCode: "ready" }),
+  ),
+}));
+
 describe("updateTenantAgent", () => {
   beforeEach(() => {
     resetMocks();
@@ -120,5 +122,51 @@ describe("updateTenantAgent", () => {
     expect(updateSets[0]).toHaveProperty("updated_at");
     expect(updateSets[0]).toHaveProperty("budget_paused_at");
     expect(result).toMatchObject({ id: "agent-platform" });
+  });
+
+  it("treats the legacy Harness runtime field as a new-thread default", async () => {
+    const { updateTenantAgent } =
+      await import("./updateTenantAgent.mutation.js");
+
+    await updateTenantAgent(
+      null,
+      {
+        tenantId: "tenant-1",
+        input: {
+          runtime: "AGENTCORE",
+          runtimeConfig: JSON.stringify({ defaultSpaceId: "space-1" }),
+        },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updateSets).toHaveLength(1);
+    expect(updateSets[0]).toMatchObject({
+      runtime: "pi",
+      runtime_config: {
+        defaultSpaceId: "space-1",
+        defaultThreadRuntime: "harness",
+      },
+    });
+  });
+
+  it("changes the new-thread default back to Pi without restoring enrollments", async () => {
+    const { updateTenantAgent } =
+      await import("./updateTenantAgent.mutation.js");
+
+    await updateTenantAgent(
+      null,
+      {
+        tenantId: "tenant-1",
+        input: { runtime: "FLUE" },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updateSets).toHaveLength(1);
+    expect(updateSets[0]).toMatchObject({
+      runtime: "pi",
+      runtime_config: { defaultThreadRuntime: "pi" },
+    });
   });
 });

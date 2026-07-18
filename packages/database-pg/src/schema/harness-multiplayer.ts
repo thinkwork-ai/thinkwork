@@ -60,7 +60,7 @@ export const harnessManagedThreadEnrollments = pgTable(
       table.tenant_id,
       table.thread_id,
     ),
-    uniqueIndex("uq_harness_enrollment_active_profile")
+    index("idx_harness_enrollment_active_profile")
       .on(table.tenant_id, table.trust_profile)
       .where(sql`${table.status} = 'active'`),
     check(

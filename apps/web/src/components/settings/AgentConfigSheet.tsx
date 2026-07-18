@@ -5,7 +5,6 @@
 // route cutover retires it.
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "urql";
-import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   Button,
@@ -34,7 +33,6 @@ import { useTenant } from "@/context/TenantContext";
 import {
   SettingsTenantAgentQuery,
   SettingsDeploymentStatusQuery,
-  SettingsCreateHarnessProofThreadMutation,
   SettingsTenantGoalBudgetQuery,
   SettingsTenantModelCatalogQuery,
   SettingsUpdateTenantAgentMutation,
@@ -62,7 +60,6 @@ export function AgentConfigSection({
   spaces: AgentConfigSpaceOption[];
 }) {
   const { tenantId, isOperator } = useTenant();
-  const navigate = useNavigate();
   const [agentResult] = useQuery({
     query: SettingsTenantAgentQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -83,9 +80,6 @@ export function AgentConfigSection({
     pause: !isOperator,
   });
   const [saveState, save] = useMutation(SettingsUpdateTenantAgentMutation);
-  const [proofThreadState, createProofThread] = useMutation(
-    SettingsCreateHarnessProofThreadMutation,
-  );
   const [goalBudgetSaveState, saveGoalBudget] = useMutation(
     SettingsUpdateTenantGoalBudgetMutation,
   );
@@ -97,14 +91,17 @@ export function AgentConfigSection({
   const [goalTokenBudget, setGoalTokenBudget] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmHarness, setConfirmHarness] = useState(false);
-  const [proofThreadId, setProofThreadId] = useState<string | null>(null);
 
   const agent = agentResult.data?.agent;
 
   useEffect(() => {
     if (agent) {
       const config = parseJson<JsonRecord>(agent.runtimeConfig, {});
-      setRuntime(agent.runtime);
+      setRuntime(
+        stringOrNull(config.defaultThreadRuntime) === "harness"
+          ? AgentRuntime.Agentcore
+          : AgentRuntime.Flue,
+      );
       setModel(agent.model ?? null);
       setRuntimeConfig(config);
       setDefaultSpaceId(stringOrNull(config.defaultSpaceId));
@@ -122,11 +119,6 @@ export function AgentConfigSection({
   const goalBudgetValid = validGoalTokenBudgetOrEmpty(goalTokenBudget);
   const harnessProof =
     deploymentResult.data?.deploymentStatus.agentcoreHarnessProof;
-  useEffect(() => {
-    if (harnessProof?.activeThreadId) {
-      setProofThreadId(harnessProof.activeThreadId);
-    }
-  }, [harnessProof?.activeThreadId]);
   const runtimeOptions: Array<{
     value: AgentRuntime;
     label: string;
@@ -137,7 +129,7 @@ export function AgentConfigSection({
       ? [
           {
             value: AgentRuntime.Agentcore,
-            label: "AgentCore Harness (proof)",
+            label: "AgentCore Harness",
             disabled: harnessProof?.ready !== true,
           },
         ]
@@ -156,51 +148,34 @@ export function AgentConfigSection({
     return result;
   }
 
-  async function activateHarnessProof() {
-    if (!tenantId || !harnessProof?.ready) return;
-    setErrorMsg(null);
-    const selected = await persist({ runtime: AgentRuntime.Agentcore });
-    if (!selected || selected.error) {
-      setRuntime(agent?.runtime ?? AgentRuntime.Flue);
-      setConfirmHarness(false);
-      return;
+  async function saveDefaultThreadRuntime(next: AgentRuntime) {
+    const nextRuntimeConfig = {
+      ...runtimeConfig,
+      defaultThreadRuntime:
+        next === AgentRuntime.Agentcore ? "harness" : "pi",
+    };
+    const previous = runtime;
+    setRuntime(next);
+    setRuntimeConfig(nextRuntimeConfig);
+    const saved = await persist({ runtimeConfig: nextRuntimeConfig });
+    if (!saved || saved.error) {
+      setRuntime(previous);
+      setRuntimeConfig(runtimeConfig);
+      return false;
     }
-    setRuntime(AgentRuntime.Agentcore);
-    const bootstrapped = await createProofThread({ tenantId });
-    if (bootstrapped.error) {
-      const bootstrapMessage = bootstrapped.error.message;
-      const restored = await persist({ runtime: AgentRuntime.Flue });
-      if (!restored || restored.error) {
-        setErrorMsg(
-          `${bootstrapMessage}. Automatic Pi restoration also failed; use Restore prior runtime before sending messages.`,
-        );
-      } else {
-        setRuntime(AgentRuntime.Flue);
-        setProofThreadId(null);
-        setErrorMsg(
-          `${bootstrapMessage}. Pi was restored automatically; no tenant messages were routed to Harness.`,
-        );
-      }
-      setConfirmHarness(false);
-      return;
-    }
-    const threadId = bootstrapped.data?.createHarnessProofThread.threadId;
-    if (threadId) setProofThreadId(threadId);
-    setConfirmHarness(false);
     toast.success(
-      bootstrapped.data?.createHarnessProofThread.created
-        ? "Harness proof thread created"
-        : "Harness proof thread ready",
+      next === AgentRuntime.Agentcore
+        ? "New Composer threads will use AgentCore Harness"
+        : "New Composer threads will use Pi",
     );
+    return true;
   }
 
-  async function restorePriorRuntime() {
+  async function activateHarnessDefault() {
+    if (!tenantId || !harnessProof?.ready) return;
     setErrorMsg(null);
-    const restored = await persist({ runtime: AgentRuntime.Flue });
-    if (!restored || restored.error) return;
-    setRuntime(AgentRuntime.Flue);
-    setProofThreadId(null);
-    toast.success("Pi runtime restored");
+    await saveDefaultThreadRuntime(AgentRuntime.Agentcore);
+    setConfirmHarness(false);
   }
 
   async function persistDefaultSpace(spaceId: string) {
@@ -247,7 +222,7 @@ export function AgentConfigSection({
     >
       <SettingsRow
         label="Runtime"
-        description="Execution runtime that powers this tenant's parent Agent."
+        description="Default runtime for new Composer threads. Existing threads keep their pinned runtime."
       >
         <Select
           value={runtime ?? undefined}
@@ -257,10 +232,9 @@ export function AgentConfigSection({
               setConfirmHarness(true);
               return;
             }
-            setRuntime(next);
-            void persist({ runtime: next });
+            void saveDefaultThreadRuntime(next);
           }}
-          disabled={saveState.fetching || proofThreadState.fetching}
+          disabled={saveState.fetching}
         >
           <SelectTrigger className="w-60">
             <SelectValue placeholder="Select runtime" />
@@ -283,51 +257,23 @@ export function AgentConfigSection({
             data-testid="harness-proof-readiness"
           >
             {harnessProof?.ready
-              ? `AgentCore Harness (proof) ready · version ${harnessProof.liveVersion ?? "unknown"} · ${harnessProof.sessionStrategy ?? "unknown"} sessions`
-              : `AgentCore Harness (proof) unavailable · ${harnessProof?.reasonCode ?? (deploymentResult.fetching ? "checking" : "status_unavailable")}`}
+              ? `AgentCore Harness ready · version ${harnessProof.liveVersion ?? "unknown"} · ${harnessProof.sessionStrategy ?? "unknown"} sessions`
+              : `AgentCore Harness unavailable · ${harnessProof?.reasonCode ?? (deploymentResult.fetching ? "checking" : "status_unavailable")}`}
           </div>
         )}
-        {isOperator && runtime === AgentRuntime.Agentcore ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {proofThreadId ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() =>
-                  void navigate({
-                    to: "/threads/$id",
-                    params: { id: proofThreadId },
-                  })
-                }
-              >
-                Open proof thread
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => void restorePriorRuntime()}
-              disabled={saveState.fetching}
-            >
-              Restore prior runtime
-            </Button>
-          </div>
-        ) : null}
       </SettingsRow>
 
       <AlertDialog open={confirmHarness} onOpenChange={setConfirmHarness}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Use AgentCore Harness for this tenant?
+              Use AgentCore Harness for new threads?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This temporarily changes the tenant-wide default Agent runtime.
-              Only the enrolled direct-chat proof thread is accepted; all
-              automation and non-enrolled threads fail closed with no Pi
-              fallback. ThinkWork will create or reopen the proof thread after
-              selection.
+              This changes only the default for future Composer threads.
+              Existing Pi and Harness threads keep their pinned runtimes and
+              continue in parallel. Create a normal new thread after saving to
+              use Harness.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -337,13 +283,11 @@ export function AgentConfigSection({
             <AlertDialogAction
               onClick={(event) => {
                 event.preventDefault();
-                void activateHarnessProof();
+                void activateHarnessDefault();
               }}
-              disabled={saveState.fetching || proofThreadState.fetching}
+              disabled={saveState.fetching}
             >
-              {saveState.fetching || proofThreadState.fetching
-                ? "Preparing proof…"
-                : "Select Harness and create thread"}
+              {saveState.fetching ? "Saving…" : "Save Harness default"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

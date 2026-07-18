@@ -4,7 +4,6 @@ import {
   and,
   db,
   eq,
-  harnessManagedThreadEnrollments,
   tenants,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
@@ -69,6 +68,16 @@ export async function updateTenantAgent(
   if (i.systemPrompt !== undefined) updates.system_prompt = i.systemPrompt;
   if (i.runtime !== undefined) {
     const runtime = parseAgentRuntimeInput(i.runtime);
+    const currentConfig =
+      currentAgent?.runtimeConfig &&
+      typeof currentAgent.runtimeConfig === "object" &&
+      !Array.isArray(currentAgent.runtimeConfig)
+        ? (currentAgent.runtimeConfig as Record<string, unknown>)
+        : {};
+    const requestedConfig =
+      i.runtimeConfig !== undefined
+        ? parseJsonInput(i.runtimeConfig)
+        : currentConfig;
     if (runtime === "harness") {
       const [tenant] = await db
         .select({ slug: tenants.slug })
@@ -87,32 +96,21 @@ export async function updateTenantAgent(
           },
         );
       }
-      const currentConfig =
-        currentAgent?.runtimeConfig &&
-        typeof currentAgent.runtimeConfig === "object" &&
-        !Array.isArray(currentAgent.runtimeConfig)
-          ? (currentAgent.runtimeConfig as Record<string, unknown>)
-          : {};
-      const requestedConfig =
-        i.runtimeConfig !== undefined
-          ? parseJsonInput(i.runtimeConfig)
-          : currentConfig;
-      updates.runtime_config = {
-        ...(requestedConfig &&
-        typeof requestedConfig === "object" &&
-        !Array.isArray(requestedConfig)
-          ? (requestedConfig as Record<string, unknown>)
-          : {}),
-        harnessProof: {
-          priorRuntime:
-            currentAgent?.runtime && currentAgent.runtime !== "harness"
-              ? currentAgent.runtime
-              : "pi",
-          selectedAt: new Date().toISOString(),
-        },
-      };
     }
-    updates.runtime = runtime;
+    // The Settings selector chooses the runtime for NEW Composer threads.
+    // Existing threads carry an immutable metadata pin, so changing this
+    // default must never replace the platform agent runtime or restore active
+    // Harness enrollments. Keeping the platform agent on Pi also protects old
+    // clients that still send the deprecated tenant-wide `runtime` field.
+    updates.runtime = "pi";
+    updates.runtime_config = {
+      ...(requestedConfig &&
+      typeof requestedConfig === "object" &&
+      !Array.isArray(requestedConfig)
+        ? (requestedConfig as Record<string, unknown>)
+        : {}),
+      defaultThreadRuntime: runtime === "harness" ? "harness" : "pi",
+    };
   }
   if (i.adapterType !== undefined) updates.adapter_type = i.adapterType;
   if (i.adapterConfig !== undefined)
@@ -160,21 +158,6 @@ export async function updateTenantAgent(
 
   if (!row) {
     throw new Error(`Platform agent not found for tenant: ${args.tenantId}`);
-  }
-  if (
-    i.runtime !== undefined &&
-    parseAgentRuntimeInput(i.runtime) !== "harness" &&
-    currentAgent?.runtime === "harness"
-  ) {
-    await db
-      .update(harnessManagedThreadEnrollments)
-      .set({ status: "restored", restored_at: new Date() })
-      .where(
-        and(
-          eq(harnessManagedThreadEnrollments.tenant_id, args.tenantId),
-          eq(harnessManagedThreadEnrollments.status, "active"),
-        ),
-      );
   }
   return loadTenantAgentForGraphql(args.tenantId);
 }

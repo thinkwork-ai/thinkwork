@@ -15,6 +15,7 @@ import {
   threadTurns,
   threadTurnEvents,
   threadParticipants,
+  harnessManagedThreadEnrollments,
   threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
@@ -39,6 +40,11 @@ import {
   PlatformAgentNotFoundError,
   resolveTenantPlatformAgent,
 } from "../../../lib/agents/tenant-platform-agent.js";
+import { requireHarnessProofProfile } from "../../../lib/harness/proof-profile.js";
+import {
+  defaultThreadRuntimeFromConfig,
+  pinThreadRuntimeMetadata,
+} from "../../../lib/harness/thread-runtime-policy.js";
 import {
   CUSTOMER_ONBOARDING_TEMPLATE_KEY,
   CustomerOnboardingWorkflowError,
@@ -174,8 +180,14 @@ export const createThread = async (
     });
   }
 
-  const threadAgentId =
-    i.agentId ?? (await resolveDefaultThreadAgentId(i.tenantId));
+  let platformAgent: Awaited<ReturnType<typeof resolveTenantPlatformAgent>> | null =
+    null;
+  try {
+    platformAgent = await resolveTenantPlatformAgent(i.tenantId);
+  } catch (error) {
+    if (!(error instanceof PlatformAgentNotFoundError)) throw error;
+  }
+  const threadAgentId = i.agentId ?? platformAgent?.id ?? null;
 
   // PRD-09 §9.4.4: Agent-created thread validation
   if (createdByType === "agent" && createdById) {
@@ -189,6 +201,23 @@ export const createThread = async (
   }
 
   const channel = (i.channel?.toLowerCase() ?? "manual") as string;
+  const pinnedRuntime =
+    createdByType === "user" &&
+    channel === "chat" &&
+    platformAgent &&
+    threadAgentId === platformAgent.id
+      ? defaultThreadRuntimeFromConfig(platformAgent.runtime_config)
+      : "pi";
+  let harnessProfile: Awaited<ReturnType<typeof requireHarnessProofProfile>> | null =
+    null;
+  if (pinnedRuntime === "harness") {
+    const [tenant] = await db
+      .select({ slug: tenants.slug })
+      .from(tenants)
+      .where(eq(tenants.id, i.tenantId))
+      .limit(1);
+    harnessProfile = await requireHarnessProofProfile(tenant?.slug ?? "");
+  }
   const CHANNEL_PREFIX: Record<string, string> = {
     schedule: "AUTO",
     email: "EMAIL",
@@ -279,7 +308,10 @@ export const createThread = async (
           created_by_type: createdByType,
           created_by_id: createdById,
           labels: i.labels ? JSON.parse(i.labels) : undefined,
-          metadata: i.metadata ? JSON.parse(i.metadata) : undefined,
+          metadata: pinThreadRuntimeMetadata(
+            parseJsonObject(i.metadata),
+            pinnedRuntime,
+          ),
           due_at: i.dueAt ? new Date(i.dueAt) : undefined,
           created_at: openingMessageCreatedAt ?? undefined,
           updated_at: openingMessageCreatedAt ?? undefined,
@@ -302,6 +334,22 @@ export const createThread = async (
 
       if (participantRows.length > 0) {
         await tx.insert(threadParticipants).values(participantRows);
+      }
+
+      if (harnessProfile && createdById) {
+        await tx.insert(harnessManagedThreadEnrollments).values({
+          tenant_id: i.tenantId,
+          thread_id: threadRow.id,
+          logical_agent_id: threadAgentId!,
+          trust_profile: "default",
+          harness_arn: harnessProfile.harnessArn,
+          qualifier: harnessProfile.endpointName,
+          resolved_version: harnessProfile.liveVersion,
+          session_strategy: "fresh",
+          prior_runtime: "pi",
+          status: "active",
+          enrolled_by_user_id: createdById,
+        });
       }
 
       let firstMsgId: string | null = null;
@@ -560,6 +608,8 @@ export const createThread = async (
         messageId: firstMessageId,
         content: i.firstMessage,
         requestedModelId,
+        requestedRuntime:
+          pinnedRuntime === "harness" ? "agentcore" : "pi",
         requestedProfileSlug,
         sender: { type: createdByType, id: createdById },
       });
@@ -570,15 +620,6 @@ export const createThread = async (
 
   return threadToCamel(row);
 };
-
-async function resolveDefaultThreadAgentId(tenantId: string) {
-  try {
-    return (await resolveTenantPlatformAgent(tenantId)).id;
-  } catch (error) {
-    if (error instanceof PlatformAgentNotFoundError) return null;
-    throw error;
-  }
-}
 
 async function createCustomerOnboardingThreadFromSpaceTrigger(input: {
   input: any;

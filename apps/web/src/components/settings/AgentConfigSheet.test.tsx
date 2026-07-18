@@ -142,7 +142,7 @@ describe("AgentConfigSection", () => {
     expect(screen.getByText("Default model")).toBeTruthy();
     expect(screen.getByText("Goal token budget")).toBeTruthy();
     expect(
-      screen.getByText(/AgentCore Harness \(proof\) ready · version 4/),
+      screen.getByText(/AgentCore Harness ready · version 4/),
     ).toBeTruthy();
     expect(
       (screen.getByLabelText("Goal token budget") as HTMLInputElement).value,
@@ -194,40 +194,33 @@ describe("AgentConfigSection", () => {
     expect(screen.getByText("(model catalog unavailable)")).toBeTruthy();
   });
 
-  it("restores Pi when proof-thread bootstrap fails after Harness selection", async () => {
-    executeMutationMock.mockImplementation((key) => {
-      if (key === "SettingsCreateHarnessProofThread") {
-        return { error: new Error("proof bootstrap failed") };
-      }
-      return { data: {} };
-    });
+  it("saves Harness as the default only for future Composer threads", async () => {
+    executeMutationMock.mockReturnValue({ data: {} });
     render(<AgentConfigSection spaces={SPACES} />);
 
     fireEvent.click(screen.getAllByRole("combobox")[0]);
     fireEvent.click(
       await screen.findByRole("option", {
-        name: "AgentCore Harness (proof)",
+        name: "AgentCore Harness",
       }),
     );
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Select Harness and create thread",
+        name: "Save Harness default",
       }),
     );
 
-    expect(
-      await screen.findByText(/Pi was restored automatically/),
-    ).toBeTruthy();
-    expect(executeMutationMock).toHaveBeenNthCalledWith(
-      1,
-      "UpdateTenantAgent",
-      { tenantId: "tenant-1", input: { runtime: "AGENTCORE" } },
-    );
-    expect(executeMutationMock).toHaveBeenNthCalledWith(
-      3,
-      "UpdateTenantAgent",
-      { tenantId: "tenant-1", input: { runtime: "FLUE" } },
-    );
+    expect(executeMutationMock).toHaveBeenCalledTimes(1);
+    expect(executeMutationMock).toHaveBeenCalledWith("UpdateTenantAgent", {
+      tenantId: "tenant-1",
+      input: {
+        runtimeConfig: {
+          defaultSpaceId: "space-1",
+          defaultThreadRuntime: "harness",
+        },
+      },
+    });
+    expect(screen.queryByText("Open proof thread")).toBeNull();
   });
 });
 

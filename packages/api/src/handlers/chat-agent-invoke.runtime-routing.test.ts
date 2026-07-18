@@ -202,6 +202,18 @@ beforeEach(() => {
 });
 
 describe("chat-agent-invoke runtime routing", () => {
+  it("honors an explicit Pi thread pin while the configured runtime is Harness", async () => {
+    const { resolveChatInvocationRuntimeType } =
+      await import("./chat-agent-invoke.js");
+
+    expect(
+      resolveChatInvocationRuntimeType({
+        configuredRuntimeType: "harness",
+        requestedRuntime: "pi",
+      }),
+    ).toBe("pi");
+  });
+
   it("dispatches Computer-backed Pi agent turns to the Pi AgentCore runtime", async () => {
     const { handler } = await import("./chat-agent-invoke.js");
 

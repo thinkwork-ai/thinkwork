@@ -18,6 +18,10 @@ const migration = readFileSync(
   join(HERE, "..", "drizzle", "0261_managed_harness_multiplayer.sql"),
   "utf8",
 );
+const parallelThreadsMigration = readFileSync(
+  join(HERE, "..", "drizzle", "0262_parallel_harness_threads.sql"),
+  "utf8",
+);
 
 describe("managed multiplayer Harness schema", () => {
   it("pins the proof to fresh-per-turn sessions", () => {
@@ -33,6 +37,16 @@ describe("managed multiplayer Harness schema", () => {
     expect(migration).toContain("CHECK (session_strategy = 'fresh')");
     expect(migration).toContain("CHECK (generation = 1)");
     expect(migration).not.toContain("ready','running");
+  });
+
+  it("allows multiple normal threads to share one tenant Harness", () => {
+    expect(parallelThreadsMigration).toContain(
+      "DROP INDEX IF EXISTS public.uq_harness_enrollment_active_profile",
+    );
+    expect(parallelThreadsMigration).toContain(
+      "CREATE INDEX IF NOT EXISTS idx_harness_enrollment_active_profile",
+    );
+    expect(parallelThreadsMigration).not.toContain("CREATE UNIQUE INDEX");
   });
 
   it("keeps the ordered event ledger content-free", () => {

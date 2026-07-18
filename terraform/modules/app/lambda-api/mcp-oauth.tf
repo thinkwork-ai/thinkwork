@@ -9,7 +9,12 @@ locals {
   agentcore_turn_assertion_keys = {
     for version, key in aws_kms_key.agentcore_turn_assertion : version => {
       key_id = key.arn
-      kid    = "thinkwork-${var.stage}-agentcore-turn-${version}"
+      # A version label alone is not globally unique: destroying and
+      # reprovisioning v1 creates different RSA material while downstream JWT
+      # validators may still cache the old public key under the same kid.
+      # Bind the kid to the immutable KMS key id so a reprovision is observed
+      # as a real key rotation instead of an invalid-signature outage.
+      kid = "thinkwork-${var.stage}-agentcore-turn-${version}-${substr(key.key_id, 0, 8)}"
     }
   }
   agentcore_turn_assertion_active_key = try(

@@ -24,8 +24,8 @@ import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-t
 import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
 import {
   InvalidRequestedRuntimeError,
-  requestedRuntimeFromMetadata,
 } from "../../../lib/turn-runtime-selection.js";
+import { requestedRuntimeForTurn } from "../../../lib/harness/thread-runtime-policy.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
@@ -114,6 +114,7 @@ export const sendMessage = async (
       title: threads.title,
       status: threads.status,
       mode_override: threads.mode_override,
+      metadata: threads.metadata,
     })
     .from(threads)
     .where(eq(threads.id, i.threadId));
@@ -192,9 +193,9 @@ export const sendMessage = async (
   });
   // THINK-311 U5b: per-turn AgentCore trial selection from the composer's
   // runtime picker. Malformed values reject here — never silently Pi.
-  let requestedRuntime: "agentcore" | null = null;
+  let requestedRuntime: "pi" | "agentcore" | null = null;
   try {
-    requestedRuntime = requestedRuntimeFromMetadata(parsedMetadata);
+    requestedRuntime = requestedRuntimeForTurn(parsedMetadata, thread.metadata);
   } catch (err) {
     if (err instanceof InvalidRequestedRuntimeError) {
       throw new GraphQLError(err.message, {
