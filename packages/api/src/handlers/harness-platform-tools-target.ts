@@ -643,6 +643,11 @@ function sanitizeEmailResult(result: Record<string, unknown>) {
       ? { conversationId: result.conversationId }
       : {}),
     ...(typeof result.inboxItemId === "string" ? { inboxItemId: result.inboxItemId } : {}),
+    ...(typeof result.approvalUrl === "string"
+      ? { approvalUrl: result.approvalUrl }
+      : typeof result.inboxItemId === "string"
+        ? { approvalUrl: `/approvals/${result.inboxItemId}` }
+        : {}),
     ...(typeof result.reasonCode === "string" ? { reasonCode: result.reasonCode } : {}),
   };
 }

@@ -99,6 +99,7 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
       status: "pending_review",
       conversationId: "conversation-1",
       inboxItemId: "inbox-1",
+      approvalUrl: "/approvals/inbox-1",
     })),
     claimEmail: vi.fn<HarnessPlatformToolsDeps["claimEmail"]>(async () => ({
       state: "claimed",
@@ -167,6 +168,7 @@ describe("Harness governed platform tools target", () => {
       status: "pending_review",
       conversationId: "conversation-1",
       inboxItemId: "inbox-1",
+      approvalUrl: "/approvals/inbox-1",
     });
     expect(deps.claimEmail).toHaveBeenCalledWith(
       expect.objectContaining({

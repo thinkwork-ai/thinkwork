@@ -183,6 +183,7 @@ describe("email-send direct routine invocation", () => {
       status: "pending_review",
       conversationId: "conversation-routine",
       inboxItemId: "inbox-routine",
+      approvalUrl: "/approvals/inbox-routine",
     });
     expect(evaluateOutboundPolicyMock).toHaveBeenCalledWith({
       db: expect.anything(),
@@ -263,6 +264,7 @@ describe("email-send HTTP agent invocation", () => {
     const result = await handler(
       emailSendEvent({
         agentId,
+        requestingUserId: "user-1",
         to: "recipient@example.com",
         subject: "Quarterly close",
         body: "Here is the brief.",
@@ -284,6 +286,7 @@ describe("email-send HTTP agent invocation", () => {
         providerInstallId: "provider-1",
         provider: "ses",
         agentId,
+        requestingUserId: "user-1",
         from: "finance@acme.thinkwork.ai",
         to: ["recipient@example.com"],
         subject: "Quarterly close",
@@ -466,6 +469,7 @@ describe("email-send HTTP agent invocation", () => {
       status: "pending_review",
       conversationId: "conversation-1",
       inboxItemId: "inbox-1",
+      approvalUrl: "/approvals/inbox-1",
     });
     expect(mockSesSend).not.toHaveBeenCalled();
     expect(insertedReplyTokens).toHaveLength(0);

@@ -116,6 +116,7 @@ export function createSendEmailExtension(
       const inboundFrom = asString(config.inboundFrom);
       const inboundBody = asString(config.inboundBody);
       const currentUserEmail = asString(options.payload.current_user_email);
+      const requestingUserId = asString(options.payload.user_id);
       const turnContext = objectValue(options.payload.turn_context);
       const activeSpaceTenantSlug =
         asString(turnContext.spaceTenantSlug) ||
@@ -225,6 +226,9 @@ export function createSendEmailExtension(
             spaceTenantSlug: activeSpaceTenantSlug,
             spaceSlug: activeSpaceSlug,
           };
+          if (requestingUserId) {
+            requestPayload.requestingUserId = requestingUserId;
+          }
           const threadId = asString(typedParams.thread_id) || defaultThreadId;
           if (threadId) requestPayload.threadId = threadId;
           if (inReplyTo) requestPayload.inReplyTo = inReplyTo;
@@ -254,12 +258,13 @@ export function createSendEmailExtension(
           >;
           const status = asString(result.status);
           const pendingReview = status === "pending_review";
+          const approvalUrl = asString(result.approvalUrl);
           return {
             content: [
               {
                 type: "text",
                 text: pendingReview
-                  ? `Email draft for ${recipients.join(", ")} is pending human review.`
+                  ? `Email draft for ${recipients.join(", ")} is pending human review.${approvalUrl ? ` Review and approve: ${approvalUrl}` : ""}`
                   : `Email sent to ${recipients.join(", ")}.`,
               },
             ],

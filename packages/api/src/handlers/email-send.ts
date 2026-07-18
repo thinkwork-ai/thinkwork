@@ -33,6 +33,8 @@ const emailChannel = createEmailChannelService();
 
 interface SendEmailRequest {
   agentId: string;
+  /** Exact authenticated turn participant supplied by the managed runtime. */
+  requestingUserId?: string;
   to: string;
   subject: string;
   body: string;
@@ -346,6 +348,7 @@ export async function handler(
       providerInstallId: policy.providerInstallId,
       provider: policy.provider,
       agentId: agent.id,
+      requestingUserId: req.requestingUserId ?? null,
       spaceId,
       threadId: req.threadId ?? null,
       from: emailAddress,
@@ -360,6 +363,7 @@ export async function handler(
           status: "pending_review",
           conversationId: approval.conversationId,
           inboxItemId: approval.inboxItemId,
+          approvalUrl: `/approvals/${approval.inboxItemId}`,
         }),
       };
     }
@@ -584,6 +588,7 @@ async function sendRoutineChannelEmail(input: {
           status: "pending_review",
           conversationId: approval.conversationId,
           inboxItemId: approval.inboxItemId,
+          approvalUrl: `/approvals/${approval.inboxItemId}`,
         }),
       };
     }
