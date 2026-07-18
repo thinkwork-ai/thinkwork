@@ -98,6 +98,7 @@ function deps() {
     ),
     callTool: vi.fn(async () => ({
       content: [{ type: "text", text: "provider result" }],
+      isError: false,
     })),
     ledgerStore: {
       append: vi.fn(async (row) => {
@@ -165,6 +166,218 @@ describe("Harness capability MCP target", () => {
     );
   });
 
+  it("collapses universal MCP catalog discovery into relevant direct tools", async () => {
+    const injected = deps();
+    injected.listTools.mockResolvedValueOnce([
+      { name: "get_tool_catalog", inputSchema: { type: "object" } },
+      { name: "learn_tools", inputSchema: { type: "object" } },
+      { name: "execute_tool", inputSchema: { type: "object" } },
+    ]);
+    injected.callTool
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              catalog: {
+                DATABASE_CRUD: [
+                  {
+                    name: "find_many_opportunities",
+                    description: "Search opportunity records",
+                  },
+                  {
+                    name: "find_many_people",
+                    description: "Search people records",
+                  },
+                ],
+              },
+            }),
+          },
+        ],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              tools: [
+                {
+                  name: "find_many_opportunities",
+                  description: "Search opportunity records",
+                  inputSchema: {
+                    $schema: "https://json-schema.org/draft/2020-12/schema",
+                    type: "object",
+                    properties: {
+                      name: {
+                        type: "string",
+                        pattern: "secretly-enormous-provider-regex",
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
+          },
+        ],
+        isError: false,
+      });
+    const handler = createHarnessCapabilityMcpHandler(injected);
+
+    const response = await handler(
+      event(
+        "/agentcore/capabilities/mcp/tools/list",
+        capabilityBody({
+          connector: "twenty--crm",
+          query: "List the last five open opportunities",
+        }),
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body!)).toEqual({
+      connector: "twenty--crm",
+      tools: [
+        {
+          name: "find_many_opportunities",
+          description: "Search opportunity records",
+          inputSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+          },
+        },
+      ],
+    });
+    expect(injected.callTool).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ name: "twenty--crm" }),
+      "get_tool_catalog",
+      { categories: ["DATABASE_CRUD"] },
+      CONTEXT,
+    );
+    expect(injected.callTool).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ name: "twenty--crm" }),
+      "learn_tools",
+      {
+        toolNames: ["find_many_opportunities"],
+        aspects: ["description", "schema"],
+      },
+      CONTEXT,
+    );
+  });
+
+  it("maps an authorized direct facade tool back through execute_tool", async () => {
+    const injected = deps();
+    injected.listTools.mockResolvedValueOnce([
+      { name: "get_tool_catalog", inputSchema: { type: "object" } },
+      { name: "learn_tools", inputSchema: { type: "object" } },
+      { name: "execute_tool", inputSchema: { type: "object" } },
+    ]);
+    injected.callTool
+      .mockResolvedValueOnce({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              catalog: {
+                DATABASE_CRUD: [
+                  {
+                    name: "find_many_opportunities",
+                    description: "Search opportunity records",
+                  },
+                ],
+              },
+            }),
+          },
+        ],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "provider result" }],
+        isError: false,
+      });
+    const handler = createHarnessCapabilityMcpHandler(injected);
+
+    const response = await handler(
+      event(
+        "/agentcore/capabilities/mcp/tools/call",
+        capabilityBody({
+          connector: "twenty--crm",
+          query: "List the last five open opportunities",
+          tool: "find_many_opportunities",
+          arguments: { limit: 5 },
+        }),
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body!)).toMatchObject({
+      connector: "twenty--crm",
+      tool: "find_many_opportunities",
+    });
+    expect(injected.callTool).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "twenty--crm" }),
+      "execute_tool",
+      {
+        toolName: "find_many_opportunities",
+        arguments: { limit: 5 },
+      },
+      CONTEXT,
+    );
+  });
+
+  it("rejects a direct facade tool that the current connector catalog does not expose", async () => {
+    const injected = deps();
+    injected.listTools.mockResolvedValueOnce([
+      { name: "get_tool_catalog", inputSchema: { type: "object" } },
+      { name: "learn_tools", inputSchema: { type: "object" } },
+      { name: "execute_tool", inputSchema: { type: "object" } },
+    ]);
+    injected.callTool.mockResolvedValueOnce({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            catalog: {
+              DATABASE_CRUD: [
+                {
+                  name: "find_many_opportunities",
+                  description: "Search opportunity records",
+                },
+              ],
+            },
+          }),
+        },
+      ],
+      isError: false,
+    });
+    const handler = createHarnessCapabilityMcpHandler(injected);
+
+    const response = await handler(
+      event(
+        "/agentcore/capabilities/mcp/tools/call",
+        capabilityBody({
+          connector: "twenty--crm",
+          query: "Delete everything",
+          tool: "delete_everything",
+          arguments: {},
+        }),
+      ),
+    );
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body!)).toEqual({
+      error: "tool_not_available",
+    });
+    expect(injected.callTool).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "execute_tool",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it("does not disclose server tools excluded by the participant assignment", async () => {
     const injected = deps();
     injected.resolveMcpConfigs.mockResolvedValueOnce([
@@ -213,6 +426,7 @@ describe("Harness capability MCP target", () => {
       tool: "get_tool_catalog",
       result: {
         content: [{ type: "text", text: "provider result" }],
+        isError: false,
       },
     });
     expect(injected.resolveCanonicalContext).toHaveBeenCalledTimes(1);

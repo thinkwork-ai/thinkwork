@@ -169,10 +169,11 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       operationId: "list_connector_tools",
       summary: "List the current participant authorized tools for one ThinkWork connector",
       requestBody: {required: true, content: {"application/json": {schema: {
-        type: "object", additionalProperties: false, required: ["tenant_id", "connector"],
+        type: "object", additionalProperties: false, required: ["tenant_id", "connector", "query"],
         properties: {
           tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
-          connector: {type: "string", description: "Connector name from the trusted turn context"}
+          connector: {type: "string", description: "Connector name from the trusted turn context"},
+          query: {type: "string", description: "The connector task, used to return only relevant direct tools"}
         }
       }}}},
       responses: {"200": {description: "Authorized connector tool definitions"}}
@@ -182,10 +183,11 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Call one currently authorized ThinkWork connector tool as the exact turn participant",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "connector", "tool", "arguments"],
+        required: ["tenant_id", "connector", "query", "tool", "arguments"],
         properties: {
           tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           connector: {type: "string", description: "Connector name from the trusted turn context"},
+          query: {type: "string", description: "The same user task passed to list_connector_tools"},
           tool: {type: "string", description: "Tool name returned by list_connector_tools"},
           arguments: {type: "object", additionalProperties: true}
         }

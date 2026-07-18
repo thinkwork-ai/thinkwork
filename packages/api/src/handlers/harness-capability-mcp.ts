@@ -28,6 +28,7 @@ import { buildMcpConfigs, type McpServerConfig } from "../lib/mcp-configs.js";
 import {
   mcpCallTool,
   mcpListTools,
+  textFromMcpContent,
   type McpToolDefinition,
 } from "../lib/mcp-client-call.js";
 import type { CapabilitiesManifest } from "../lib/capabilities/manifest-compile.js";
@@ -43,8 +44,14 @@ const LIST_PATH = "/agentcore/capabilities/mcp/tools/list";
 const CALL_PATH = "/agentcore/capabilities/mcp/tools/call";
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_TOOLS = 200;
+const MAX_DISCOVERY_QUERY_CHARS = 1_000;
+const MAX_DISCOVERY_RESULTS = 3;
+const CATALOG_CACHE_TTL_MS = 2 * 60_000;
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9_.:/-]{0,127}$/;
 const ACCEPTED_RUNTIME_TYPES = new Set(["agentcore", "harness"]);
+const UNIVERSAL_CATALOG_TOOL = "get_tool_catalog";
+const UNIVERSAL_LEARN_TOOL = "learn_tools";
+const UNIVERSAL_EXECUTE_TOOL = "execute_tool";
 
 export interface HarnessCapabilityClaims {
   sub: string;
@@ -69,6 +76,7 @@ export interface HarnessCapabilityContext {
 interface ListBody {
   tenant_id: string;
   connector: string;
+  query?: string;
 }
 
 interface CallBody extends ListBody {
@@ -96,6 +104,18 @@ export interface HarnessCapabilityMcpDeps {
   policyRevision: string;
   now(): number;
 }
+
+interface CatalogEntry {
+  name: string;
+  description?: string;
+}
+
+interface CatalogCacheEntry {
+  expiresAt: number;
+  entries: CatalogEntry[];
+}
+
+const catalogCache = new Map<string, CatalogCacheEntry>();
 
 export function createHarnessCapabilityMcpHandler(
   deps: HarnessCapabilityMcpDeps,
@@ -146,6 +166,14 @@ export function createHarnessCapabilityMcpHandler(
     }
     if (!isIdentifier(body.connector)) {
       return response(400, { error: "invalid_connector" });
+    }
+    if (
+      body.query !== undefined &&
+      (typeof body.query !== "string" ||
+        body.query.trim().length === 0 ||
+        body.query.length > MAX_DISCOVERY_QUERY_CHARS)
+    ) {
+      return response(400, { error: "invalid_discovery_query" });
     }
     if (body.tenant_id !== claims.tenant_id) {
       return response(403, { error: "tenant_context_mismatch" });
@@ -228,7 +256,11 @@ export function createHarnessCapabilityMcpHandler(
         );
         return response(404, { error: "connector_not_available" });
       }
-      if (call && !isToolAssigned(probeConfig, call.tool)) {
+      if (
+        call &&
+        !isToolAssigned(probeConfig, call.tool) &&
+        !canUseUniversalFacade(probeConfig, call)
+      ) {
         await finish(
           "failed",
           { connector: probeConfig.name, tool: call.tool },
@@ -250,14 +282,26 @@ export function createHarnessCapabilityMcpHandler(
         return response(404, { error: "connector_not_available" });
       }
       if (isList) {
-        const tools = (await deps.listTools(config))
-          .filter((tool) => isToolAssigned(probeConfig, tool.name))
-          .slice(0, MAX_TOOLS)
-          .map((tool) => ({
-            name: tool.name,
-            ...(tool.description ? { description: tool.description } : {}),
-            inputSchema: tool.inputSchema ?? { type: "object" },
-          }));
+        const currentTools = await deps.listTools(config);
+        const facadeTools = body.query
+          ? await discoverUniversalFacadeTools({
+              config,
+              probeConfig,
+              currentTools,
+              query: body.query,
+              context,
+              callTool: deps.callTool,
+              now: deps.now,
+            })
+          : null;
+        const authorizedTools =
+          facadeTools ??
+          currentTools.filter((tool) => isToolAssigned(probeConfig, tool.name));
+        const tools = authorizedTools.slice(0, MAX_TOOLS).map((tool) => ({
+          name: tool.name,
+          ...(tool.description ? { description: tool.description } : {}),
+          inputSchema: tool.inputSchema ?? { type: "object" },
+        }));
         await finish(
           "completed",
           { connector: config.name, toolCount: tools.length },
@@ -267,11 +311,40 @@ export function createHarnessCapabilityMcpHandler(
       }
       if (!call) throw new Error("validated call body is missing");
       const currentTools = await deps.listTools(config);
-      const exposedByServer = currentTools.some(
+      const exposedDirectly = currentTools.some(
         (definition) => definition.name === call.tool,
       );
       const exposedByAssignment = isToolAssigned(probeConfig, call.tool);
-      if (!exposedByServer || !exposedByAssignment) {
+      const universalFacade =
+        !exposedDirectly &&
+        canUseUniversalFacade(probeConfig, call) &&
+        hasUniversalFacade(currentTools);
+      let providerTool = call.tool;
+      let providerArguments = call.arguments;
+      if (universalFacade) {
+        const catalog = await loadUniversalCatalog({
+          config,
+          context,
+          query: call.query!,
+          callTool: deps.callTool,
+          now: deps.now,
+        });
+        if (!catalog.some((entry) => entry.name === call.tool)) {
+          await finish(
+            "failed",
+            { connector: config.name, tool: call.tool },
+            ["connector", "tool"],
+            "tool_not_available",
+          );
+          return response(404, { error: "tool_not_available" });
+        }
+        providerTool = UNIVERSAL_EXECUTE_TOOL;
+        providerArguments = {
+          toolName: call.tool,
+          arguments: call.arguments,
+        };
+      }
+      if ((!exposedDirectly || !exposedByAssignment) && !universalFacade) {
         await finish(
           "failed",
           { connector: config.name, tool: call.tool },
@@ -282,8 +355,8 @@ export function createHarnessCapabilityMcpHandler(
       }
       const result = await deps.callTool(
         config,
-        call.tool,
-        call.arguments,
+        providerTool,
+        providerArguments,
         context,
       );
       const resultShape = summarizeToolResult(config.name, call.tool, result);
@@ -323,6 +396,229 @@ export function createHarnessCapabilityMcpHandler(
       return response(502, { error: "connector_operation_failed" });
     }
   };
+}
+
+function canUseUniversalFacade(
+  config: McpServerConfig,
+  call: CallBody,
+): boolean {
+  return Boolean(
+    call.query?.trim() && isToolAssigned(config, UNIVERSAL_EXECUTE_TOOL),
+  );
+}
+
+function hasUniversalFacade(tools: McpToolDefinition[]): boolean {
+  const names = new Set(tools.map((tool) => tool.name));
+  return (
+    names.has(UNIVERSAL_CATALOG_TOOL) &&
+    names.has(UNIVERSAL_LEARN_TOOL) &&
+    names.has(UNIVERSAL_EXECUTE_TOOL)
+  );
+}
+
+async function discoverUniversalFacadeTools(input: {
+  config: McpServerConfig;
+  probeConfig: McpServerConfig;
+  currentTools: McpToolDefinition[];
+  query: string;
+  context: HarnessCapabilityContext;
+  callTool: HarnessCapabilityMcpDeps["callTool"];
+  now: () => number;
+}): Promise<McpToolDefinition[] | null> {
+  if (
+    !hasUniversalFacade(input.currentTools) ||
+    !isToolAssigned(input.probeConfig, UNIVERSAL_CATALOG_TOOL) ||
+    !isToolAssigned(input.probeConfig, UNIVERSAL_LEARN_TOOL) ||
+    !isToolAssigned(input.probeConfig, UNIVERSAL_EXECUTE_TOOL)
+  ) {
+    return null;
+  }
+  const catalog = await loadUniversalCatalog(input);
+  const candidates = rankCatalogEntries(catalog, input.query).slice(
+    0,
+    MAX_DISCOVERY_RESULTS,
+  );
+  if (candidates.length === 0) return null;
+  const learned = await input.callTool(
+    input.config,
+    UNIVERSAL_LEARN_TOOL,
+    {
+      toolNames: candidates.map((candidate) => candidate.name),
+      aspects: ["description", "schema"],
+    },
+    input.context,
+  );
+  const parsed = parseJsonToolResult(learned);
+  const tools = Array.isArray(parsed?.tools) ? parsed.tools : [];
+  const allowed = new Set(candidates.map((candidate) => candidate.name));
+  return tools
+    .filter(isRecord)
+    .filter((tool) => typeof tool.name === "string" && allowed.has(tool.name))
+    .map((tool) => ({
+      name: String(tool.name),
+      ...(typeof tool.description === "string"
+        ? { description: tool.description.slice(0, 1_000) }
+        : {}),
+      inputSchema: compactSchema(tool.inputSchema),
+    }));
+}
+
+async function loadUniversalCatalog(input: {
+  config: McpServerConfig;
+  context: HarnessCapabilityContext;
+  query: string;
+  callTool: HarnessCapabilityMcpDeps["callTool"];
+  now: () => number;
+}): Promise<CatalogEntry[]> {
+  const key = [
+    input.context.tenantId,
+    input.context.userId,
+    input.context.agentId,
+    input.config.name,
+  ].join(":");
+  const cached = catalogCache.get(key);
+  if (cached && cached.expiresAt > input.now()) return cached.entries;
+
+  const categories = inferCatalogCategories(input.query);
+  const result = await input.callTool(
+    input.config,
+    UNIVERSAL_CATALOG_TOOL,
+    categories.length > 0 ? { categories } : {},
+    input.context,
+  );
+  const parsed = parseJsonToolResult(result);
+  const catalog = isRecord(parsed?.catalog) ? parsed.catalog : {};
+  const entries = Object.values(catalog)
+    .flatMap((value) => (Array.isArray(value) ? value : []))
+    .filter(isRecord)
+    .filter((entry) => isIdentifier(entry.name))
+    .map((entry) => ({
+      name: String(entry.name),
+      ...(typeof entry.description === "string"
+        ? { description: entry.description }
+        : {}),
+    }));
+  catalogCache.set(key, {
+    expiresAt: input.now() + CATALOG_CACHE_TTL_MS,
+    entries,
+  });
+  return entries;
+}
+
+function parseJsonToolResult(result: unknown): Record<string, unknown> | null {
+  if (isRecord(result) && result.isError === true) return null;
+  const content = isRecord(result) ? result.content : result;
+  const text = textFromMcpContent(content).trim();
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function inferCatalogCategories(query: string): string[] {
+  const normalized = query.toLowerCase();
+  if (/\b(workflow|automation)\b/.test(normalized)) return ["WORKFLOW"];
+  if (/\b(dashboard|chart|visuali[sz])/.test(normalized)) {
+    return ["DASHBOARD", "VIEW"];
+  }
+  if (/\b(webhook)\b/.test(normalized)) return ["WEBHOOK"];
+  if (/\b(metadata|schema|field|object type)\b/.test(normalized)) {
+    return ["METADATA"];
+  }
+  return ["DATABASE_CRUD"];
+}
+
+function rankCatalogEntries(
+  entries: CatalogEntry[],
+  query: string,
+): CatalogEntry[] {
+  const queryTokens = tokenize(query);
+  const normalized = query.toLowerCase();
+  const preferredPrefix = /\b(create|add|new)\b/.test(normalized)
+    ? "create_"
+    : /\b(update|change|edit|modify)\b/.test(normalized)
+      ? "update_"
+      : /\b(delete|remove)\b/.test(normalized)
+        ? "delete_"
+        : /\b(list|show|find|search|last|latest|open|many)\b/.test(normalized)
+          ? "find_many_"
+          : "";
+  return (
+    entries
+      .map((entry) => {
+        const nameTokens = tokenize(entry.name);
+        const descriptionTokens = tokenize(entry.description ?? "");
+        let semanticScore = 0;
+        for (const token of queryTokens) {
+          if (nameTokens.has(token)) semanticScore += 12;
+          if (descriptionTokens.has(token)) semanticScore += 2;
+        }
+        const intentScore =
+          preferredPrefix && entry.name.startsWith(preferredPrefix) ? 8 : 0;
+        return { entry, semanticScore, score: semanticScore + intentScore };
+      })
+      // An intent prefix (for example find_many_) breaks ties but must never
+      // make every object in a large CRM catalog look relevant.
+      .filter(({ semanticScore }) => semanticScore > 0)
+      .sort(
+        (a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name),
+      )
+      .map(({ entry }) => entry)
+  );
+}
+
+function tokenize(value: string): Set<string> {
+  const stop = new Set([
+    "a",
+    "an",
+    "and",
+    "can",
+    "for",
+    "from",
+    "in",
+    "me",
+    "of",
+    "on",
+    "please",
+    "the",
+    "to",
+    "you",
+  ]);
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean)
+      .map((token) =>
+        token.endsWith("ies") && token.length > 4
+          ? `${token.slice(0, -3)}y`
+          : token.endsWith("s") && token.length > 3
+            ? token.slice(0, -1)
+            : token,
+      )
+      .filter((token) => token.length > 1 && !stop.has(token)),
+  );
+}
+
+function compactSchema(value: unknown, depth = 0): unknown {
+  if (depth > 12) return {};
+  if (Array.isArray(value)) {
+    return value.slice(0, 100).map((item) => compactSchema(item, depth + 1));
+  }
+  if (!isRecord(value)) return value;
+  const compact: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "$schema" || key === "pattern" || key === "examples") continue;
+    if (key === "description" && typeof child === "string") {
+      compact[key] = child.slice(0, 300);
+      continue;
+    }
+    compact[key] = compactSchema(child, depth + 1);
+  }
+  return compact;
 }
 
 export async function resolveHarnessCapabilityContext(
@@ -416,6 +712,51 @@ async function resolveMcpConfigsForHarness(
   context: HarnessCapabilityContext,
   tokenMode: "probe" | "resolve",
 ): Promise<McpServerConfig[]> {
+  const projection = await resolveHarnessMcpProjection(context);
+  if (!projection) return [];
+
+  return buildMcpConfigs(
+    context.agentId,
+    {
+      requesterUserId: context.userId,
+      humanPairId: context.userId,
+    },
+    "[harness-capability-mcp]",
+    {
+      ...(projection.folderCapabilities
+        ? { folderCapabilities: projection.folderCapabilities }
+        : {}),
+      ...(tokenMode === "probe" ? { tokenMode: "probe" as const } : {}),
+    },
+  );
+}
+
+interface HarnessMcpProjection {
+  folderCapabilities?: { manifest: CapabilitiesManifest | null };
+}
+
+// A canonical context object is created once per target request and shared by
+// the probe and credential-resolution phases. Cache only on that object so the
+// expensive workspace render runs once inside the request, while a subsequent
+// Gateway request still re-reads current canonical state and assignments.
+const harnessMcpProjectionByRequest = new WeakMap<
+  HarnessCapabilityContext,
+  Promise<HarnessMcpProjection | null>
+>();
+
+function resolveHarnessMcpProjection(
+  context: HarnessCapabilityContext,
+): Promise<HarnessMcpProjection | null> {
+  const existing = harnessMcpProjectionByRequest.get(context);
+  if (existing) return existing;
+  const pending = loadHarnessMcpProjection(context);
+  harnessMcpProjectionByRequest.set(context, pending);
+  return pending;
+}
+
+async function loadHarnessMcpProjection(
+  context: HarnessCapabilityContext,
+): Promise<HarnessMcpProjection | null> {
   const db = getDb();
   const [agent] = await db
     .select({
@@ -430,11 +771,11 @@ async function resolveMcpConfigsForHarness(
       ),
     )
     .limit(1);
-  if (!agent) return [];
+  if (!agent) return null;
 
   let folderCapabilities: { manifest: CapabilitiesManifest | null } | undefined;
   if (agent.capabilityFolderDispatch === true) {
-    if (!context.spaceId) return [];
+    if (!context.spaceId) return null;
     const { renderWorkspaceTuple } = await import(
       "../lib/workspace-renderer/compose-tuple.js"
     );
@@ -451,19 +792,7 @@ async function resolveMcpConfigsForHarness(
       manifest: rendered.capabilities?.manifest ?? null,
     };
   }
-
-  return buildMcpConfigs(
-    context.agentId,
-    {
-      requesterUserId: context.userId,
-      humanPairId: context.userId,
-    },
-    "[harness-capability-mcp]",
-    {
-      ...(folderCapabilities ? { folderCapabilities } : {}),
-      ...(tokenMode === "probe" ? { tokenMode: "probe" as const } : {}),
-    },
-  );
+  return folderCapabilities ? { folderCapabilities } : {};
 }
 
 function targetFor(config: McpServerConfig) {
