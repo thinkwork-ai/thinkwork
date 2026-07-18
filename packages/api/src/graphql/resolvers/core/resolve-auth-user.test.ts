@@ -161,7 +161,7 @@ describe("resolveCallerFromAuth", () => {
     expect(errSpy.mock.calls[0]?.[0]).toContain("23505");
   });
 
-  it("does not backfill when an email-matched row already has a cognito_sub (verified email)", async () => {
+  it("currently accepts a verified email match even when another Cognito subject already owns the row", async () => {
     // Already-linked row: step 1 misses for THIS sub, step 2 misses, email
     // matches a row that another sub already owns. We must not overwrite it,
     // and (per KTD-5/A2) the IS NULL guard would no-op anyway.

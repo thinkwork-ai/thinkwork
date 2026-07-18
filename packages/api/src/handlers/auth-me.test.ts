@@ -87,4 +87,31 @@ describe("auth-me pendingClaim", () => {
     expect(body.pendingClaim).toBeUndefined();
     expect(body.tenantId).toBe("t-1");
   });
+
+  it("currently resolves an existing account by email without checking the Cognito subject", async () => {
+    authenticateMock.mockResolvedValue({
+      authType: "cognito",
+      principalId: "different-cognito-subject",
+      email: "Service@HomeCareIntel.com",
+      emailVerified: true,
+      tenantId: null,
+    });
+    selectQueue.push([
+      {
+        id: "user-1",
+        email: "service@homecareintel.com",
+        tenant_id: "t-1",
+        cognito_sub: "original-cognito-subject",
+      },
+    ]);
+    selectQueue.push([{ role: "owner", status: "active" }]);
+
+    const result = await handler(getEvent());
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body ?? "{}")).toMatchObject({
+      userId: "user-1",
+      tenantId: "t-1",
+      role: "owner",
+    });
+  });
 });

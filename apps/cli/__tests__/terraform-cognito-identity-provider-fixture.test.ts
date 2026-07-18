@@ -11,6 +11,24 @@ function read(path: string): string {
 }
 
 describe("Cognito identity provider Terraform fixture", () => {
+  it("documents the current shared-provider and shared-auth-flow client posture", () => {
+    const main = read("terraform/modules/foundation/cognito/main.tf");
+
+    expect(
+      main.match(
+        /supported_identity_providers\s*=\s*local\.identity_providers/g,
+      ),
+    ).toHaveLength(2);
+    expect(main).toMatch(/\["COGNITO"\]/);
+    expect(main).toMatch(/aws_cognito_identity_provider\.google/);
+    expect(main).toMatch(/keys\(local\.oidc_identity_providers\)/);
+    expect(main).toMatch(/keys\(local\.saml_identity_providers\)/);
+    expect(main).toMatch(/"ALLOW_CUSTOM_AUTH"/);
+    expect(main).toMatch(/"ALLOW_USER_PASSWORD_AUTH"/);
+    expect(main).toMatch(/"ALLOW_USER_SRP_AUTH"/);
+    expect(main).toMatch(/"ALLOW_REFRESH_TOKEN_AUTH"/);
+  });
+
   it("declares OIDC and SAML providers in the foundation Cognito module", () => {
     const vars = read("terraform/modules/foundation/cognito/variables.tf");
     const main = read("terraform/modules/foundation/cognito/main.tf");
