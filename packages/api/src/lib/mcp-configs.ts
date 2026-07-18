@@ -172,6 +172,15 @@ export interface BuildMcpConfigsDeps {
    */
   tokenMode?: "resolve" | "probe";
   /**
+   * Optional runtime-specific custody for direct/plugin per-user OAuth.
+   *
+   * A resolver that supports a server is authoritative for that server: the
+   * legacy user_mcp_tokens + Secrets Manager path is never consulted. This is
+   * how the managed AgentCore runtime uses Identity Token Vault without
+   * duplicating grant state locally, while Pi keeps its existing resolver.
+   */
+  userOAuth?: ExternalUserOAuthResolver;
+  /**
    * Optional diagnostics collector (U1): when present, every server this
    * builder skips is recorded with its enumerated reason. Orthogonal to
    * tokenMode; runtime callers pass neither.
@@ -216,6 +225,26 @@ export interface BuildMcpConfigsDeps {
    * string the capability inspector shows.
    */
   withheldNotices?: Array<{ slug: string; detail: string }>;
+}
+
+export interface ExternalUserOAuthServer {
+  mcpServerId: string;
+  name: string;
+  slug: string;
+  url: string;
+  managementSource: string;
+}
+
+export interface ExternalUserOAuthResolver {
+  supports(server: ExternalUserOAuthServer): boolean;
+  probe(input: {
+    userId: string;
+    server: ExternalUserOAuthServer;
+  }): Promise<"active" | "expired" | "missing">;
+  resolve(input: {
+    userId: string;
+    server: ExternalUserOAuthServer;
+  }): Promise<string | undefined>;
 }
 
 /**
@@ -270,6 +299,50 @@ const db = getDb();
 
 function normalizeServerUrl(url: string): string {
   return url.replace(/\/+$/, "");
+}
+
+function externalUserOAuthServer(mcp: McpJoinedRow): ExternalUserOAuthServer {
+  return {
+    mcpServerId: mcp.mcp_server_id,
+    name: mcp.name,
+    slug: mcp.slug,
+    url: mcp.url,
+    managementSource: mcp.management_source,
+  };
+}
+
+async function probePerUserOAuth(
+  userId: string,
+  mcp: McpJoinedRow,
+  resolver?: ExternalUserOAuthResolver,
+): Promise<"active" | "expired" | "missing"> {
+  const server = externalUserOAuthServer(mcp);
+  if (resolver?.supports(server)) {
+    return resolver.probe({ userId, server });
+  }
+  return probeUserMcpTokenStatus({
+    userId,
+    mcpServerId: mcp.mcp_server_id,
+  });
+}
+
+async function resolvePerUserOAuth(
+  userId: string,
+  mcp: McpJoinedRow,
+  logPrefix: string,
+  resolver?: ExternalUserOAuthResolver,
+  fallbackLabel?: string,
+): Promise<string | undefined> {
+  const server = externalUserOAuthServer(mcp);
+  if (resolver?.supports(server)) {
+    return resolver.resolve({ userId, server });
+  }
+  return resolveUserMcpBearerToken({
+    userId,
+    mcp,
+    logPrefix,
+    ...(fallbackLabel ? { fallbackLabel } : {}),
+  });
 }
 
 export async function buildMcpConfigs(
@@ -563,10 +636,11 @@ export async function buildMcpConfigs(
       let pluginHeaders: Record<string, string> | undefined;
       if (mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") {
         if (probe) {
-          const status = await probeUserMcpTokenStatus({
-            userId: requesterUserId,
-            mcpServerId: mcp.mcp_server_id,
-          });
+          const status = await probePerUserOAuth(
+            requesterUserId,
+            mcp,
+            deps.userOAuth,
+          );
           if (status === "missing") {
             dropDiag(
               mcp,
@@ -579,12 +653,13 @@ export async function buildMcpConfigs(
           includedPluginUrls.add(normalizeServerUrl(mcp.url));
           continue;
         }
-        pluginToken = await resolveUserMcpBearerToken({
-          userId: requesterUserId,
+        pluginToken = await resolvePerUserOAuth(
+          requesterUserId,
           mcp,
           logPrefix,
-          fallbackLabel: "for plugin-registered MCP server",
-        });
+          deps.userOAuth,
+          "for plugin-registered MCP server",
+        );
         if (!pluginToken) {
           dropDiag(
             mcp,
@@ -836,10 +911,11 @@ export async function buildMcpConfigs(
           );
           continue;
         }
-        const status = await probeUserMcpTokenStatus({
-          userId: directOAuthUserId,
-          mcpServerId: mcp.mcp_server_id,
-        });
+        const status = await probePerUserOAuth(
+          directOAuthUserId,
+          mcp,
+          deps.userOAuth,
+        );
         if (status === "missing") {
           dropDiag(
             mcp,
@@ -868,11 +944,12 @@ export async function buildMcpConfigs(
     ) {
       const directOAuthUserId = requesterUserId ?? humanPairId;
       if (directOAuthUserId) {
-        token = await resolveUserMcpBearerToken({
-          userId: directOAuthUserId,
+        token = await resolvePerUserOAuth(
+          directOAuthUserId,
           mcp,
           logPrefix,
-        });
+          deps.userOAuth,
+        );
       }
     }
 

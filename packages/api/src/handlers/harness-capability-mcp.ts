@@ -24,8 +24,12 @@ import {
   verifyProofProviderAccessToken,
   type AccessTokenClaims,
 } from "@thinkwork/lambda/agentcore-proof-oauth-provider";
-import { buildMcpConfigs, type McpServerConfig } from "../lib/mcp-configs.js";
-import { resolveAgentCoreUserOAuthAccessToken } from "../lib/harness/agentcore-user-oauth.js";
+import {
+  buildMcpConfigs,
+  type ExternalUserOAuthResolver,
+  type McpServerConfig,
+} from "../lib/mcp-configs.js";
+import { getAgentCoreUserOAuth } from "../lib/harness/agentcore-user-oauth.js";
 import {
   mcpCallTool,
   mcpListTools,
@@ -746,17 +750,23 @@ async function resolveMcpConfigsForHarness(
         ? { folderCapabilities: projection.folderCapabilities }
         : {}),
       ...(tokenMode === "probe" ? { tokenMode: "probe" as const } : {}),
+      userOAuth: agentCoreTwentyUserOAuth,
     },
   );
-  if (tokenMode === "probe") return configs;
-
-  const twenty = configs.find((config) => config.name === "twenty--crm");
-  if (!twenty) return configs;
-  const token = await resolveAgentCoreUserOAuthAccessToken(context.userId);
-  return configs.map((config) =>
-    config === twenty ? { ...config, auth: { type: "bearer", token } } : config,
-  );
+  return configs;
 }
+
+const agentCoreTwentyUserOAuth: ExternalUserOAuthResolver = {
+  supports: (server) => server.slug === "twenty--crm",
+  probe: async ({ userId }) => {
+    const result = await getAgentCoreUserOAuth({ userId });
+    return result.status === "connected" ? "active" : "missing";
+  },
+  resolve: async ({ userId }) => {
+    const result = await getAgentCoreUserOAuth({ userId });
+    return result.status === "connected" ? result.accessToken : undefined;
+  },
+};
 
 interface HarnessMcpProjection {
   folderCapabilities?: { manifest: CapabilitiesManifest | null };
