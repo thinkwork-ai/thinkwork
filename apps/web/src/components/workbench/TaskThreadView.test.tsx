@@ -102,6 +102,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 import {
   actionRowsForTurn,
   deriveCardRenderedArtifacts,
+  formatTokenUsage,
   normalizePersistedParts,
   TaskThreadView,
 } from "./TaskThreadView";
@@ -114,6 +115,19 @@ afterEach(() => {
   tenantMock.isOperator = false;
   tenantMock.roleResolved = true;
   resetThreadArtifactPanels();
+});
+
+describe("turn token usage disclosure", () => {
+  it("shows cache writes that materially contribute to turn cost", () => {
+    expect(
+      formatTokenUsage({
+        input_tokens: 3,
+        output_tokens: 23,
+        cached_read_tokens: 400,
+        cached_write_tokens: 27_525,
+      }),
+    ).toBe("3 in / 23 out / 400 cache read / 27.5K cache write");
+  });
 });
 
 function getThinkingDisclosure(index = 0): HTMLElement {

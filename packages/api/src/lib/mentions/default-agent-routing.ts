@@ -66,6 +66,12 @@ export interface DispatchDefaultAgentTurnInput {
    * row (Pi), so an agentcore-requested turn must never ride it (R4).
    */
   requestedRuntime?: "pi" | "agentcore" | null;
+  /**
+   * Explicit agent selected by an @mention. This keeps interactive mention
+   * turns on the same direct-invoke path as default-agent chat without
+   * rewriting the thread's durable default-agent assignment.
+   */
+  agentIdOverride?: string | null;
   requestedProfileSlug?: string | null;
   goalMode?: RuntimeGoalMode | null;
   skillCreatorCommand?: SkillCreatorCommandMetadata | null;
@@ -165,17 +171,21 @@ export async function dispatchDefaultAgentChatTurn(
   resolveAttachments: DispatchMessageAttachmentResolver = defaultAttachmentResolver,
   resolvePinnedSkills: DispatchPinnedSkillsResolver = defaultPinnedSkillsResolver,
 ) {
-  const defaultAgent = await repository.loadDefaultAgent({
-    tenantId: input.tenantId,
-    threadId: input.threadId,
-  });
+  const defaultAgent = input.agentIdOverride
+    ? { agentId: input.agentIdOverride }
+    : await repository.loadDefaultAgent({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+      });
   if (!defaultAgent) return null;
 
-  await repository.assignThreadDefaultAgent({
-    tenantId: input.tenantId,
-    threadId: input.threadId,
-    agentId: defaultAgent.agentId,
-  });
+  if (!input.agentIdOverride) {
+    await repository.assignThreadDefaultAgent({
+      tenantId: input.tenantId,
+      threadId: input.threadId,
+      agentId: defaultAgent.agentId,
+    });
+  }
 
   // Resolve uploaded-file attachments the message references so the agent can
   // read them on the direct-invoke path. The wakeup-processor fallback already
@@ -283,6 +293,28 @@ export async function dispatchDefaultAgentChatTurn(
     directInvoked: false,
     ...fallback,
   };
+}
+
+/**
+ * Direct interactive dispatch for an explicitly mentioned agent. In
+ * particular, an AgentCore Harness-pinned turn must use this path: the
+ * minute-polled wakeup processor resolves the runtime from the durable agent
+ * row and can otherwise silently execute Pi.
+ */
+export async function dispatchMentionedAgentChatTurn(
+  input: DispatchDefaultAgentTurnInput & { agentId: string },
+  repository?: DefaultAgentRoutingRepository,
+  executor?: DefaultAgentChatExecutor,
+  resolveAttachments?: DispatchMessageAttachmentResolver,
+  resolvePinnedSkills?: DispatchPinnedSkillsResolver,
+) {
+  return dispatchDefaultAgentChatTurn(
+    { ...input, agentIdOverride: input.agentId },
+    repository,
+    executor,
+    resolveAttachments,
+    resolvePinnedSkills,
+  );
 }
 
 export async function dispatchDefaultAgentTurn(

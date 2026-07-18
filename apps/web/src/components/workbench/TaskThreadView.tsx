@@ -5641,11 +5641,23 @@ function formatTurnDuration(turn: TaskThreadTurn) {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-function formatTokenUsage(usage: Record<string, unknown>) {
+export function formatTokenUsage(usage: Record<string, unknown>) {
   const input = Number(usage.input_tokens ?? usage.inputTokens ?? 0);
   const output = Number(usage.output_tokens ?? usage.outputTokens ?? 0);
-  if (!input && !output) return null;
-  return `${formatCount(input)} in / ${formatCount(output)} out`;
+  const cachedRead = Number(
+    usage.cached_read_tokens ?? usage.cachedReadTokens ?? 0,
+  );
+  const cachedWrite = Number(
+    usage.cached_write_tokens ?? usage.cachedWriteTokens ?? 0,
+  );
+  if (!input && !output && !cachedRead && !cachedWrite) return null;
+  return [
+    `${formatCount(input)} in / ${formatCount(output)} out`,
+    cachedRead ? `${formatCount(cachedRead)} cache read` : null,
+    cachedWrite ? `${formatCount(cachedWrite)} cache write` : null,
+  ]
+    .filter(Boolean)
+    .join(" / ");
 }
 
 function formatCount(value: number) {
