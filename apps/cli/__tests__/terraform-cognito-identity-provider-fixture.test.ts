@@ -29,6 +29,40 @@ describe("Cognito identity provider Terraform fixture", () => {
     expect(main).toMatch(/"ALLOW_REFRESH_TOKEN_AUTH"/);
   });
 
+  it("creates isolated local, Google, Microsoft, and tenant-Entra route clients", () => {
+    const vars = read("terraform/modules/foundation/cognito/variables.tf");
+    const main = read("terraform/modules/foundation/cognito/main.tf");
+    const outputs = read("terraform/modules/foundation/cognito/outputs.tf");
+
+    expect(vars).toMatch(/variable "microsoft_oauth_client_id"/);
+    expect(vars).toMatch(/variable "tenant_entra_connections"/);
+    expect(main).toMatch(
+      /resource "aws_cognito_identity_provider" "microsoft_organizations"/,
+    );
+    expect(main).toMatch(
+      /oidc_issuer\s*=\s*"https:\/\/login\.microsoftonline\.com\/organizations\/v2\.0"/,
+    );
+    expect(main).toMatch(/"custom:entra_tenant_id"\s*=\s*"tid"/);
+    expect(main).toMatch(/"custom:entra_object_id"\s*=\s*"oid"/);
+    expect(main).toMatch(
+      /resource "aws_cognito_user_pool_client" "auth_route"/,
+    );
+    expect(main).toMatch(/provider_names\s*=\s*\["COGNITO"\]/);
+    expect(main).toMatch(/provider_names\s*=\s*\["Google"\]/);
+    expect(main).toMatch(/provider_names\s*=\s*\["MicrosoftOrganizations"\]/);
+    expect(main).toMatch(
+      /explicit_auth_flows\s*=\s*\["ALLOW_REFRESH_TOKEN_AUTH"\]/,
+    );
+    expect(main).toMatch(
+      /explicit_auth_flows\s*=\s*\["ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"\]/,
+    );
+    expect(main).toMatch(/generate_secret\s*=\s*false/);
+    expect(main).toMatch(/allowed_oauth_flows\s*=\s*\["code"\]/);
+    expect(main).toMatch(/enable_token_revocation\s*=\s*true/);
+    expect(outputs).toMatch(/output "auth_route_clients"/);
+    expect(outputs).not.toMatch(/client_secret/);
+  });
+
   it("declares OIDC and SAML providers in the foundation Cognito module", () => {
     const vars = read("terraform/modules/foundation/cognito/variables.tf");
     const main = read("terraform/modules/foundation/cognito/main.tf");
@@ -54,12 +88,21 @@ describe("Cognito identity provider Terraform fixture", () => {
 
     expect(vars).toMatch(/variable "oidc_identity_providers"/);
     expect(vars).toMatch(/variable "saml_identity_providers"/);
+    expect(vars).toMatch(/variable "microsoft_oauth_client_id"/);
+    expect(vars).toMatch(/variable "tenant_entra_connections"/);
     expect(main).toMatch(
       /oidc_identity_providers\s*=\s*var\.oidc_identity_providers/,
     );
     expect(main).toMatch(
       /saml_identity_providers\s*=\s*var\.saml_identity_providers/,
     );
+    expect(main).toMatch(
+      /microsoft_oauth_client_id\s*=\s*var\.microsoft_oauth_client_id/,
+    );
+    expect(main).toMatch(
+      /tenant_entra_connections\s*=\s*var\.tenant_entra_connections/,
+    );
     expect(outputs).toMatch(/output "identity_provider_names"/);
+    expect(outputs).toMatch(/output "auth_route_clients"/);
   });
 });

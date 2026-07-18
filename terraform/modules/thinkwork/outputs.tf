@@ -28,6 +28,15 @@ output "identity_provider_names" {
   value       = module.cognito.identity_provider_names
 }
 
+output "auth_route_clients" {
+  description = "Safe Cognito app-client manifest for local, Google, Microsoft, and tenant Entra routes."
+  value       = module.cognito.auth_route_clients
+}
+
+output "microsoft_identity_provider_name" {
+  value = module.cognito.microsoft_identity_provider_name
+}
+
 output "kms_key_arn" {
   value = module.kms.key_arn
 }

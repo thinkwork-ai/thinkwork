@@ -72,6 +72,17 @@ db_password = "CHANGE_ME_strong_password_here"
 # Google OAuth (optional — leave empty to skip Google social login)
 # google_oauth_client_id     = ""
 # google_oauth_client_secret = ""
+# microsoft_oauth_client_id     = ""
+# microsoft_oauth_client_secret = "" # Supply securely; never commit a real value.
+
+# Tenant-specific Entra IdPs are reconciled by `thinkwork enterprise
+# identity-provider`; Terraform receives safe provider metadata only.
+# tenant_entra_connections = [{
+#   connection_key = "microsoft:tenant:00000000-0000-4000-8000-000000000000"
+#   tenant_id      = "00000000-0000-4000-8000-000000000000"
+#   provider_name  = "Entra_0000000000004000_ab12cd34"
+#   display_name   = "Example organization"
+# }]
 
 # Cognito trigger Lambdas (optional — leave empty if not using custom auth logic)
 # pre_signup_lambda_zip           = "./lambdas/cognito-pre-signup.zip"

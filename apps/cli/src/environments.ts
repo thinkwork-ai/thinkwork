@@ -62,8 +62,11 @@ export interface EnterpriseDeploymentConfig {
   releaseVersion: string;
   releaseManifestUrl: string;
   identityProvider?: {
-    type: "google" | "oidc" | "saml";
+    type: "google" | "entra" | "oidc" | "saml";
     providerName: string;
+    clientId?: string;
+    tenantId?: string;
+    connectionKey?: string;
     secretRequired: boolean;
     issuerUrl?: string;
     discoveryUrl?: string;

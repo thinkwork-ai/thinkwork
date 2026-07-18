@@ -736,19 +736,23 @@ module "cognito" {
   stage  = var.stage
   region = var.region
 
-  create_cognito            = var.create_cognito
-  existing_user_pool_id     = var.existing_user_pool_id
-  existing_user_pool_arn    = var.existing_user_pool_arn
-  existing_admin_client_id  = var.existing_admin_client_id
-  existing_mobile_client_id = var.existing_mobile_client_id
-  existing_identity_pool_id = var.existing_identity_pool_id
+  create_cognito              = var.create_cognito
+  existing_user_pool_id       = var.existing_user_pool_id
+  existing_user_pool_arn      = var.existing_user_pool_arn
+  existing_admin_client_id    = var.existing_admin_client_id
+  existing_mobile_client_id   = var.existing_mobile_client_id
+  existing_identity_pool_id   = var.existing_identity_pool_id
+  existing_auth_route_clients = var.existing_auth_route_clients
 
-  google_oauth_client_id     = var.google_oauth_client_id
-  google_oauth_client_secret = var.google_oauth_client_secret
-  oidc_identity_providers    = var.oidc_identity_providers
-  saml_identity_providers    = var.saml_identity_providers
-  pre_signup_lambda_zip      = var.pre_signup_lambda_zip
-  custom_auth_lambda_zip     = var.cognito_custom_auth_lambda_zip
+  google_oauth_client_id        = var.google_oauth_client_id
+  google_oauth_client_secret    = var.google_oauth_client_secret
+  microsoft_oauth_client_id     = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret = var.microsoft_oauth_client_secret
+  tenant_entra_connections      = var.tenant_entra_connections
+  oidc_identity_providers       = var.oidc_identity_providers
+  saml_identity_providers       = var.saml_identity_providers
+  pre_signup_lambda_zip         = var.pre_signup_lambda_zip
+  custom_auth_lambda_zip        = var.cognito_custom_auth_lambda_zip
   # Remote custom auth is part of the pinned enterprise release bundle. Keep
   # the shared artifact bucket inert for direct module consumers that have not
   # opted into required release artifacts; local zip configuration remains an
@@ -790,8 +794,7 @@ module "cognito" {
     local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}", "https://${local.legacy_end_user_app_domain}/auth/callback"] : []),
     local.customer_domain_web_enabled ? ["https://${var.customer_domain}", "https://${var.customer_domain}/auth/callback"] : [],
     local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : []),
-    ["http://localhost:5180", "http://localhost:5180/auth/callback"],
-    var.desktop_callback_urls
+    ["http://localhost:5180", "http://localhost:5180/auth/callback"]
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
@@ -799,10 +802,11 @@ module "cognito" {
     local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}"] : []),
     local.customer_domain_web_enabled ? ["https://${var.customer_domain}"] : [],
     local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}"] : []),
-    ["http://localhost:5180"],
-    var.desktop_callback_urls
+    ["http://localhost:5180"]
   ))
   desktop_callback_urls = var.desktop_callback_urls
+  cli_callback_urls     = var.cli_callback_urls
+  cli_logout_urls       = var.cli_logout_urls
   mobile_callback_urls  = var.mobile_callback_urls
   mobile_logout_urls    = var.mobile_logout_urls
 }

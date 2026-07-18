@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildTenantEntraProviderName,
+  buildTenantEntraSecretName,
   buildEnterpriseIdentityProviderPlan,
   parseIdentityProviderType,
 } from "../src/commands/enterprise/identity-provider.js";
@@ -17,6 +19,54 @@ const SAML_XML = `<?xml version="1.0"?>
 </EntityDescriptor>`;
 
 describe("enterprise identity provider bootstrap validation", () => {
+  it("builds deterministic tenant-Entra safe metadata without retaining its secret", () => {
+    const tenantId = "00000000-0000-4000-8000-000000000123";
+    const plan = buildEnterpriseIdentityProviderPlan({
+      type: "entra",
+      tenantId,
+      clientId: "entra-client-id",
+      clientSecret: "tenant-super-secret",
+    });
+
+    expect(plan).toEqual(
+      expect.objectContaining({
+        type: "entra",
+        providerName: buildTenantEntraProviderName(tenantId),
+        clientId: "entra-client-id",
+        tenantId,
+        connectionKey: `microsoft:tenant:${tenantId}`,
+        issuerUrl: `https://login.microsoftonline.com/${tenantId}/v2.0`,
+        attributeMapping: expect.objectContaining({
+          username: "sub",
+          tenantId: "tid",
+          objectId: "oid",
+        }),
+      }),
+    );
+    expect(plan?.providerName).toMatch(/^Entra_[a-f0-9]{16}_[a-f0-9]{8}$/);
+    expect(buildTenantEntraSecretName("dev", tenantId)).toBe(
+      `thinkwork/dev/auth/entra/${tenantId}`,
+    );
+    expect(JSON.stringify(plan)).not.toContain("tenant-super-secret");
+  });
+
+  it("rejects shared or malformed Microsoft authorities as tenant Entra", () => {
+    for (const tenantId of [
+      "common",
+      "organizations",
+      "consumers",
+      "not-a-guid",
+    ]) {
+      expect(() =>
+        buildEnterpriseIdentityProviderPlan({
+          type: "entra",
+          tenantId,
+          clientId: "client",
+          clientSecret: "secret",
+        }),
+      ).toThrow(/tenant ID must be a GUID/);
+    }
+  });
   it("builds a sanitized Google plan without exposing the client secret", () => {
     const plan = buildEnterpriseIdentityProviderPlan({
       type: "google",
@@ -131,6 +181,7 @@ describe("enterprise identity provider bootstrap validation", () => {
 
   it("parses provider type names", () => {
     expect(parseIdentityProviderType("OIDC")).toBe("oidc");
+    expect(parseIdentityProviderType("ENTRA")).toBe("entra");
     expect(parseIdentityProviderType(undefined)).toBeUndefined();
     expect(() => parseIdentityProviderType("ldap")).toThrow(
       /Invalid identity provider/,

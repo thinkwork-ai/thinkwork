@@ -32,3 +32,24 @@ output "identity_provider_names" {
   description = "Supported Cognito identity providers for created app clients."
   value       = local.identity_providers
 }
+
+output "auth_route_clients" {
+  description = "Safe app-client-to-route manifest. Contains no upstream provider secrets."
+  value = local.create ? {
+    for key, client in aws_cognito_user_pool_client.auth_route : key => {
+      client_id           = client.id
+      route_key           = local.auth_routes[key].route_key
+      client_family       = local.auth_routes[key].client_family
+      provider_names      = local.auth_routes[key].provider_names
+      explicit_auth_flows = local.auth_routes[key].explicit_auth_flows
+      callback_urls       = distinct(local.auth_routes[key].callback_urls)
+      logout_urls         = distinct(local.auth_routes[key].logout_urls)
+      lifecycle_state     = "native"
+    }
+  } : var.existing_auth_route_clients
+}
+
+output "microsoft_identity_provider_name" {
+  description = "Direct Microsoft organizations Cognito provider name, or null when not configured."
+  value       = var.microsoft_oauth_client_id != "" ? "MicrosoftOrganizations" : null
+}

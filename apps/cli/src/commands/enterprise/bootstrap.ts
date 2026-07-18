@@ -401,11 +401,12 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
     .option("--lock-table <table>", "Terraform state lock table")
     .option(
       "--identity-provider <type>",
-      "Identity provider type: google, oidc, saml, or none",
+      "Identity provider type: entra, google, oidc, saml, or none",
     )
     .option("--idp-provider-name <name>", "OIDC/SAML provider name")
     .option("--idp-client-id <id>", "OIDC/Google client ID")
     .option("--idp-client-secret <secret>", "OIDC/Google client secret")
+    .option("--idp-tenant-id <guid>", "Microsoft Entra tenant GUID")
     .option("--idp-issuer-url <url>", "OIDC issuer URL")
     .option("--idp-discovery-url <url>", "OIDC discovery document URL")
     .option("--idp-authorize-url <url>", "OIDC authorization endpoint URL")
@@ -449,6 +450,7 @@ export function registerEnterpriseBootstrapCommand(program: Command): void {
           idpProviderName?: string;
           idpClientId?: string;
           idpClientSecret?: string;
+          idpTenantId?: string;
           idpIssuerUrl?: string;
           idpDiscoveryUrl?: string;
           idpAuthorizeUrl?: string;
@@ -575,6 +577,7 @@ function resolveIdentityProviderOptions(opts: {
   idpProviderName?: string;
   idpClientId?: string;
   idpClientSecret?: string;
+  idpTenantId?: string;
   idpIssuerUrl?: string;
   idpDiscoveryUrl?: string;
   idpAuthorizeUrl?: string;
@@ -597,6 +600,7 @@ function resolveIdentityProviderOptions(opts: {
     providerName: opts.idpProviderName,
     clientId: opts.idpClientId,
     clientSecret: opts.idpClientSecret,
+    tenantId: opts.idpTenantId,
     issuerUrl: opts.idpIssuerUrl,
     discoveryUrl: opts.idpDiscoveryUrl,
     authorizeUrl: opts.idpAuthorizeUrl,

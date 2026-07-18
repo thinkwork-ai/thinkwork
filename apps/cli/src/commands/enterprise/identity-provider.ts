@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 export const ENTERPRISE_IDENTITY_PROVIDER_TYPES = [
   "none",
   "google",
+  "entra",
   "oidc",
   "saml",
 ] as const;
@@ -15,6 +16,7 @@ export interface EnterpriseIdentityProviderInput {
   providerName?: string;
   clientId?: string;
   clientSecret?: string;
+  tenantId?: string;
   issuerUrl?: string;
   discoveryUrl?: string;
   authorizeUrl?: string;
@@ -34,6 +36,9 @@ export interface EnterpriseIdentityProviderInput {
 export interface EnterpriseIdentityProviderPlan {
   type: Exclude<EnterpriseIdentityProviderType, "none">;
   providerName: string;
+  clientId?: string;
+  tenantId?: string;
+  connectionKey?: string;
   secretRequired: boolean;
   issuerUrl?: string;
   discoveryUrl?: string;
@@ -46,6 +51,8 @@ export interface EnterpriseIdentityProviderPlan {
     email: string;
     name: string;
     username: string;
+    tenantId?: string;
+    objectId?: string;
   };
   metadataUrl?: string;
   metadataXmlSha256?: string;
@@ -61,6 +68,8 @@ export function buildEnterpriseIdentityProviderPlan(
   switch (input.type) {
     case "google":
       return buildGooglePlan(input);
+    case "entra":
+      return buildTenantEntraPlan(input);
     case "oidc":
       return buildOidcPlan(input);
     case "saml":
@@ -97,10 +106,75 @@ function buildGooglePlan(
   return {
     type: "google",
     providerName: "Google",
+    clientId: input.clientId!.trim(),
     secretRequired: true,
     issuerUrl: "https://accounts.google.com",
     scopes: ["openid", "email", "profile"],
     attributeMapping: defaultAttributeMapping(input),
+  };
+}
+
+const ENTRA_TENANT_GUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function buildTenantEntraProviderName(tenantId: string): string {
+  const normalized = tenantId.toLowerCase();
+  if (!ENTRA_TENANT_GUID_RE.test(normalized)) {
+    throw new Error(
+      "Microsoft Entra tenant ID must be a GUID; common, consumers, and organizations authorities are not tenant connections.",
+    );
+  }
+  const compact = normalized.replaceAll("-", "");
+  return `Entra_${compact.slice(0, 16)}_${sha256(normalized).slice(0, 8)}`;
+}
+
+export function buildTenantEntraSecretName(
+  stage: string,
+  tenantId: string,
+): string {
+  if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(stage)) {
+    throw new Error(
+      "Stage must contain lowercase letters, numbers, or hyphens.",
+    );
+  }
+  buildTenantEntraProviderName(tenantId);
+  return `thinkwork/${stage}/auth/entra/${tenantId.toLowerCase()}`;
+}
+
+function buildTenantEntraPlan(
+  input: EnterpriseIdentityProviderInput,
+): EnterpriseIdentityProviderPlan {
+  const tenantId = requireValue(
+    input.tenantId,
+    "Microsoft Entra identity provider requires --idp-tenant-id.",
+  ).toLowerCase();
+  const providerName = buildTenantEntraProviderName(tenantId);
+  const clientId = requireValue(
+    input.clientId,
+    "Microsoft Entra identity provider requires client ID.",
+  );
+  requireValue(
+    input.clientSecret,
+    "Microsoft Entra identity provider requires client secret.",
+  );
+  const issuerUrl = `https://login.microsoftonline.com/${tenantId}/v2.0`;
+  return {
+    type: "entra",
+    providerName,
+    clientId,
+    tenantId,
+    connectionKey: `microsoft:tenant:${tenantId}`,
+    secretRequired: true,
+    issuerUrl,
+    discoveryUrl: `${issuerUrl}/.well-known/openid-configuration`,
+    scopes: ["openid", "email", "profile"],
+    attributeMapping: {
+      email: "preferred_username",
+      name: "name",
+      username: "sub",
+      tenantId: "tid",
+      objectId: "oid",
+    },
   };
 }
 
@@ -141,6 +215,7 @@ function buildOidcPlan(
   return {
     type: "oidc",
     providerName,
+    clientId: input.clientId!.trim(),
     secretRequired: true,
     issuerUrl,
     discoveryUrl,
@@ -186,7 +261,13 @@ function buildSamlPlan(
   };
 }
 
-function defaultAttributeMapping(input: EnterpriseIdentityProviderInput) {
+function defaultAttributeMapping(input: EnterpriseIdentityProviderInput): {
+  email: string;
+  name: string;
+  username: string;
+  tenantId?: string;
+  objectId?: string;
+} {
   return {
     email: input.emailAttribute ?? "email",
     name: input.nameAttribute ?? "name",

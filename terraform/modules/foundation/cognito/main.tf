@@ -25,6 +25,77 @@ locals {
   saml_identity_providers = {
     for provider in var.saml_identity_providers : provider.provider_name => provider
   }
+  auth_client_families = {
+    web = {
+      callback_urls      = [for url in var.admin_callback_urls : url if !strcontains(url, ":42010/")]
+      logout_urls        = var.admin_logout_urls
+      refresh_token_days = 30
+    }
+    mobile = {
+      callback_urls      = var.mobile_callback_urls
+      logout_urls        = var.mobile_logout_urls
+      refresh_token_days = 90
+    }
+    desktop = {
+      callback_urls      = var.desktop_callback_urls
+      logout_urls        = var.desktop_callback_urls
+      refresh_token_days = 30
+    }
+    cli = {
+      callback_urls      = var.cli_callback_urls
+      logout_urls        = var.cli_logout_urls
+      refresh_token_days = 30
+    }
+  }
+  static_auth_routes = merge(
+    {
+      for family, config in local.auth_client_families : "${family}:local" => {
+        route_key           = "local"
+        client_family       = family
+        provider_names      = ["COGNITO"]
+        explicit_auth_flows = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    },
+    var.google_oauth_client_id != "" ? {
+      for family, config in local.auth_client_families : "${family}:google" => {
+        route_key           = "google"
+        client_family       = family
+        provider_names      = ["Google"]
+        explicit_auth_flows = ["ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    } : {},
+    var.microsoft_oauth_client_id != "" ? {
+      for family, config in local.auth_client_families : "${family}:microsoft" => {
+        route_key           = "microsoft"
+        client_family       = family
+        provider_names      = ["MicrosoftOrganizations"]
+        explicit_auth_flows = ["ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    } : {},
+  )
+  tenant_auth_routes = merge({}, [
+    for connection in var.tenant_entra_connections : {
+      for family, config in local.auth_client_families : "${family}:entra:${lower(connection.tenant_id)}" => {
+        route_key           = "entra-${replace(lower(connection.tenant_id), "-", "")}"
+        client_family       = family
+        provider_names      = [connection.provider_name]
+        explicit_auth_flows = ["ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    }
+  ]...)
+  auth_routes = merge(local.static_auth_routes, local.tenant_auth_routes)
 }
 
 resource "terraform_data" "custom_auth_artifact_validation" {
@@ -214,6 +285,30 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   schema {
+    name                = "entra_tenant_id"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+
+    string_attribute_constraints {
+      min_length = 0
+      max_length = 36
+    }
+  }
+
+  schema {
+    name                = "entra_object_id"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+
+    string_attribute_constraints {
+      min_length = 0
+      max_length = 36
+    }
+  }
+
+  schema {
     name                = "tenant_id"
     attribute_data_type = "String"
     required            = false
@@ -304,13 +399,97 @@ resource "aws_cognito_identity_provider" "google" {
   }
 }
 
+resource "aws_cognito_identity_provider" "microsoft_organizations" {
+  count         = local.create && var.microsoft_oauth_client_id != "" ? 1 : 0
+  user_pool_id  = aws_cognito_user_pool.main[0].id
+  provider_name = "MicrosoftOrganizations"
+  provider_type = "OIDC"
+
+  provider_details = {
+    client_id                 = var.microsoft_oauth_client_id
+    client_secret             = var.microsoft_oauth_client_secret
+    authorize_scopes          = "openid email profile"
+    oidc_issuer               = "https://login.microsoftonline.com/organizations/v2.0"
+    token_request_method      = "POST"
+    attributes_request_method = "GET"
+  }
+
+  attribute_mapping = {
+    # Entra v2 does not guarantee an `email` claim for every work/school
+    # account. `preferred_username` is the supported sign-in hint and keeps
+    # Cognito's required email attribute populated without treating it as an
+    # authorization boundary.
+    email                    = "preferred_username"
+    name                     = "name"
+    username                 = "sub"
+    "custom:entra_tenant_id" = "tid"
+    "custom:entra_object_id" = "oid"
+  }
+}
+
 locals {
   identity_providers = concat(
     var.google_oauth_client_id != "" ? ["Google"] : [],
+    var.microsoft_oauth_client_id != "" ? ["MicrosoftOrganizations"] : [],
     keys(local.oidc_identity_providers),
     keys(local.saml_identity_providers),
     ["COGNITO"]
   )
+}
+
+################################################################################
+# Route-specific public app clients
+################################################################################
+
+resource "aws_cognito_user_pool_client" "auth_route" {
+  for_each = local.create ? local.auth_routes : {}
+
+  name         = "Thinkwork-${title(each.value.client_family)}-${title(each.value.route_key)}"
+  user_pool_id = aws_cognito_user_pool.main[0].id
+
+  generate_secret                      = false
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  explicit_auth_flows                  = each.value.explicit_auth_flows
+  supported_identity_providers         = each.value.provider_names
+  callback_urls                        = distinct(each.value.callback_urls)
+  logout_urls                          = distinct(each.value.logout_urls)
+  enable_token_revocation              = true
+  prevent_user_existence_errors        = "ENABLED"
+  access_token_validity                = 1
+  id_token_validity                    = 1
+  refresh_token_validity               = each.value.refresh_token_days
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
+
+  read_attributes = [
+    "email",
+    "email_verified",
+    "name",
+    "custom:tenant_id",
+    "custom:entra_tenant_id",
+    "custom:entra_object_id",
+  ]
+
+  write_attributes = [
+    "email",
+    "name",
+    "custom:tenant_id",
+    "custom:entra_tenant_id",
+    "custom:entra_object_id",
+  ]
+
+  depends_on = [
+    aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.microsoft_organizations,
+    aws_cognito_identity_provider.oidc,
+    aws_cognito_identity_provider.saml,
+  ]
 }
 
 resource "aws_cognito_identity_provider" "oidc" {
@@ -364,7 +543,7 @@ resource "aws_cognito_identity_provider" "saml" {
 
 resource "aws_cognito_user_pool_client" "admin" {
   count        = local.create ? 1 : 0
-  name         = "ThinkworkAdmin"
+  name         = "ThinkworkAdminLegacy"
   user_pool_id = aws_cognito_user_pool.main[0].id
 
   allowed_oauth_flows_user_pool_client = true
@@ -380,8 +559,8 @@ resource "aws_cognito_user_pool_client" "admin" {
 
   supported_identity_providers = local.identity_providers
 
-  callback_urls = distinct(concat(var.admin_callback_urls, var.desktop_callback_urls))
-  logout_urls   = distinct(concat(var.admin_logout_urls, var.desktop_callback_urls))
+  callback_urls = distinct(concat(var.admin_callback_urls, var.desktop_callback_urls, var.cli_callback_urls))
+  logout_urls   = distinct(concat(var.admin_logout_urls, var.desktop_callback_urls, var.cli_logout_urls))
 
   access_token_validity  = 1
   id_token_validity      = 1
@@ -419,7 +598,7 @@ resource "aws_cognito_user_pool_client" "admin" {
 
 resource "aws_cognito_user_pool_client" "mobile" {
   count        = local.create ? 1 : 0
-  name         = "ThinkworkMobile"
+  name         = "ThinkworkMobileLegacy"
   user_pool_id = aws_cognito_user_pool.main[0].id
 
   explicit_auth_flows = [
@@ -481,6 +660,15 @@ resource "aws_cognito_identity_pool" "main" {
     client_id               = aws_cognito_user_pool_client.admin[0].id
     provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
     server_side_token_check = false
+  }
+
+  dynamic "cognito_identity_providers" {
+    for_each = aws_cognito_user_pool_client.auth_route
+    content {
+      client_id               = cognito_identity_providers.value.id
+      provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
+      server_side_token_check = true
+    }
   }
 
   cognito_identity_providers {

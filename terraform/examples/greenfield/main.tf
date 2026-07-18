@@ -328,6 +328,30 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  description = "Microsoft Entra application client ID for direct Cognito organizations login"
+  type        = string
+  default     = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  description = "Microsoft Entra application client secret for direct Cognito organizations login"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "tenant_entra_connections" {
+  description = "Safe tenant-specific Entra provider metadata. Secret values must never be placed in tfvars."
+  type = list(object({
+    connection_key = string
+    tenant_id      = string
+    provider_name  = string
+    display_name   = string
+  }))
+  default = []
+}
+
 variable "pre_signup_lambda_zip" {
   description = "Path to the Cognito pre-signup Lambda zip"
   type        = string
@@ -835,6 +859,9 @@ module "thinkwork" {
   n8n_certificate_arn                         = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
   google_oauth_client_id                      = var.google_oauth_client_id
   google_oauth_client_secret                  = var.google_oauth_client_secret
+  microsoft_oauth_client_id                   = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret               = var.microsoft_oauth_client_secret
+  tenant_entra_connections                    = var.tenant_entra_connections
   pre_signup_lambda_zip                       = var.pre_signup_lambda_zip
   cognito_custom_auth_lambda_zip              = var.cognito_custom_auth_lambda_zip
   lambda_zips_dir                             = var.lambda_zips_dir

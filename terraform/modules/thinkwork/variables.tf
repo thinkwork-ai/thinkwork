@@ -51,22 +51,38 @@ variable "google_oauth_client_secret" {
 }
 
 variable "microsoft_oauth_client_id" {
-  description = "Microsoft OAuth client ID reserved for future Cognito/OAuth wiring. Accepted here so deployment-control-plane generated wrappers stay forward-compatible."
+  description = "Microsoft Entra application client ID for direct Cognito organizations OIDC login."
   type        = string
   default     = ""
 }
 
 variable "microsoft_oauth_client_secret" {
-  description = "Microsoft OAuth client secret reserved for future Cognito/OAuth wiring."
+  description = "Microsoft Entra application client secret for direct Cognito organizations OIDC login."
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "microsoft_oauth_tenant" {
-  description = "Microsoft OAuth tenant reserved for future Cognito/OAuth wiring."
+  description = "Microsoft authority for the shared work/school route. Only organizations is supported; tenant-specific GUID authorities use tenant_entra_connections."
   type        = string
   default     = "organizations"
+
+  validation {
+    condition     = var.microsoft_oauth_tenant == "organizations"
+    error_message = "microsoft_oauth_tenant must be organizations; use tenant_entra_connections for tenant-GUID Entra routes."
+  }
+}
+
+variable "tenant_entra_connections" {
+  description = "Safe tenant-specific Entra provider metadata. Secrets are reconciled outside Terraform and are never accepted here."
+  type = list(object({
+    connection_key = string
+    tenant_id      = string
+    provider_name  = string
+    display_name   = string
+  }))
+  default = []
 }
 
 variable "oidc_identity_providers" {
@@ -319,6 +335,21 @@ variable "existing_mobile_client_id" {
 variable "existing_identity_pool_id" {
   type    = string
   default = null
+}
+
+variable "existing_auth_route_clients" {
+  description = "Safe route-client manifest for BYO Cognito pools."
+  type = map(object({
+    client_id           = string
+    route_key           = string
+    client_family       = string
+    provider_names      = list(string)
+    explicit_auth_flows = list(string)
+    callback_urls       = list(string)
+    logout_urls         = list(string)
+    lifecycle_state     = string
+  }))
+  default = {}
 }
 
 variable "create_database" {
@@ -1025,6 +1056,22 @@ variable "desktop_callback_urls" {
     "thinkwork://oauth/callback",
     "thinkwork-dev://oauth/callback",
     "thinkwork-canary://oauth/callback",
+  ]
+}
+
+variable "cli_callback_urls" {
+  type = list(string)
+  default = [
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
+  ]
+}
+
+variable "cli_logout_urls" {
+  type = list(string)
+  default = [
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
   ]
 }
 

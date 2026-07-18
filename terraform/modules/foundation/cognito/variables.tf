@@ -128,6 +128,40 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  description = "Microsoft Entra application client ID for the direct organizations OIDC route"
+  type        = string
+  default     = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  description = "Microsoft Entra application client secret for the direct organizations OIDC route"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "tenant_entra_connections" {
+  description = "Safe metadata for tenant-specific Entra OIDC providers reconciled before Terraform creates their route clients. Contains no upstream secret values."
+  type = list(object({
+    connection_key = string
+    tenant_id      = string
+    provider_name  = string
+    display_name   = string
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for connection in var.tenant_entra_connections :
+      can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", connection.tenant_id)) &&
+      can(regex("^Entra_[a-f0-9]{16}_[a-f0-9]{8}$", connection.provider_name)) &&
+      connection.connection_key != "" && connection.display_name != ""
+    ])
+    error_message = "Every tenant Entra connection must use a GUID tenant_id, a deterministic Entra_<tenant>_<hash> provider name, and non-empty safe labels."
+  }
+}
+
 variable "oidc_identity_providers" {
   description = "Additional Cognito OIDC identity providers. Secrets should be sourced from Secrets Manager/SSM by the caller, not committed to tfvars."
   type = list(object({
@@ -226,6 +260,39 @@ variable "desktop_callback_urls" {
     "thinkwork-dev://oauth/callback",
     "thinkwork-canary://oauth/callback",
   ]
+}
+
+variable "cli_callback_urls" {
+  description = "OAuth loopback callbacks reserved for the CLI client family."
+  type        = list(string)
+  default = [
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
+  ]
+}
+
+variable "cli_logout_urls" {
+  description = "OAuth loopback logout destinations reserved for the CLI client family."
+  type        = list(string)
+  default = [
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
+  ]
+}
+
+variable "existing_auth_route_clients" {
+  description = "Safe route-client manifest when using a BYO Cognito pool. Keys use <family>:<route>."
+  type = map(object({
+    client_id           = string
+    route_key           = string
+    client_family       = string
+    provider_names      = list(string)
+    explicit_auth_flows = list(string)
+    callback_urls       = list(string)
+    logout_urls         = list(string)
+    lifecycle_state     = string
+  }))
+  default = {}
 }
 
 variable "mobile_callback_urls" {
