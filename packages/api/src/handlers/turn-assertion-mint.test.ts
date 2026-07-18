@@ -25,7 +25,7 @@ function deps(
       participantId: "alice",
       sessionGeneration: 3,
       spaceId: "space-1",
-      runtimeType: "harness",
+      runtimeType: "agentcore",
       status: "running",
     })),
     sign: vi.fn(async (message) =>
@@ -137,7 +137,7 @@ describe("turn-assertion-mint handler", () => {
         participantId: "alice",
         sessionGeneration: 1,
         spaceId: null,
-        runtimeType: "harness",
+        runtimeType: "agentcore",
         status: "succeeded",
       },
     ],

@@ -76,7 +76,7 @@ export async function createHarnessProofThread(
         extensions: { code: "NOT_FOUND" },
       });
     }
-    if (agent.runtime !== "harness") {
+    if (agent.runtime !== "agentcore" && agent.runtime !== "harness") {
       throw new GraphQLError(
         "Select AgentCore Harness (proof) before creating the proof thread",
         { extensions: { code: "HARNESS_PROOF_NOT_SELECTED" } },
@@ -123,8 +123,9 @@ export async function createHarnessProofThread(
         threadId: existing.threadId,
         created: false,
         state: existing.status,
-        priorRuntime:
-          existing.priorRuntime === "harness" ? "AGENTCORE" : "FLUE",
+        priorRuntime: ["agentcore", "harness"].includes(existing.priorRuntime)
+          ? "AGENTCORE"
+          : "FLUE",
       };
     }
 
@@ -142,7 +143,7 @@ export async function createHarnessProofThread(
         : {};
     const priorRuntime =
       typeof harnessProofConfig.priorRuntime === "string" &&
-      harnessProofConfig.priorRuntime !== "harness"
+      !["agentcore", "harness"].includes(harnessProofConfig.priorRuntime)
         ? harnessProofConfig.priorRuntime
         : "pi";
 
@@ -229,7 +230,9 @@ export async function createHarnessProofThread(
       threadId: thread.id,
       created: true,
       state: "active",
-      priorRuntime: priorRuntime === "harness" ? "AGENTCORE" : "FLUE",
+      priorRuntime: ["agentcore", "harness"].includes(priorRuntime)
+        ? "AGENTCORE"
+        : "FLUE",
     };
   });
 }

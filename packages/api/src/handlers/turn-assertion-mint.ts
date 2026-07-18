@@ -68,7 +68,8 @@ export function createTurnAssertionMintHandler(deps: TurnAssertionMintDeps) {
       !trusted ||
       trusted.tenantId !== event.tenantId ||
       trusted.turnId !== event.turnId ||
-      trusted.runtimeType !== "harness" ||
+      (trusted.runtimeType !== "agentcore" &&
+        trusted.runtimeType !== "harness") ||
       trusted.status !== "running" ||
       !trusted.agentId ||
       !trusted.threadId ||

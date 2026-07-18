@@ -1,6 +1,6 @@
 import { requestedRuntimeFromMetadata } from "../turn-runtime-selection.js";
 
-export type PinnedThreadRuntime = "pi" | "harness";
+export type PinnedThreadRuntime = "pi" | "agentcore";
 export type RequestedTurnRuntime = "pi" | "agentcore";
 
 function objectRecord(value: unknown): Record<string, unknown> {
@@ -15,7 +15,7 @@ export function defaultThreadRuntimeFromConfig(
   const value = objectRecord(runtimeConfig).defaultThreadRuntime;
   return typeof value === "string" &&
     ["harness", "agentcore"].includes(value.toLowerCase())
-    ? "harness"
+    ? "agentcore"
     : "pi";
 }
 
@@ -25,7 +25,7 @@ export function pinThreadRuntimeMetadata(
 ): Record<string, unknown> {
   return {
     ...objectRecord(metadata),
-    requestedRuntime: runtime === "harness" ? "agentcore" : "pi",
+    requestedRuntime: runtime,
   };
 }
 

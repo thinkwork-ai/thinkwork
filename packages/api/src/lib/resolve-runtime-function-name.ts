@@ -1,12 +1,12 @@
 import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
 
-export type AgentRuntimeType = "strands" | "pi" | "harness";
+export type AgentRuntimeType = "strands" | "pi" | "agentcore";
 
 export class RuntimeNotProvisionedError extends Error {
   constructor(public readonly runtimeType: AgentRuntimeType) {
     super(
-      runtimeType === "harness"
-        ? "Harness runtime not yet provisioned in this stage."
+      runtimeType === "agentcore"
+        ? "AgentCore Harness runtime not yet provisioned in this stage."
         : "Pi runtime not yet provisioned in this stage.",
     );
     this.name = "RuntimeNotProvisionedError";
@@ -22,7 +22,7 @@ export class RuntimeNotProvisionedError extends Error {
 export class UnknownAgentRuntimeTypeError extends Error {
   constructor(public readonly value: string) {
     super(
-      `Unknown agent runtime selector "${value}". Expected "pi" (or legacy "strands"/"flue") or the trial value "harness".`,
+      `Unknown agent runtime selector "${value}". Expected "pi" (or legacy "strands"/"flue") or "agentcore".`,
     );
     this.name = "UnknownAgentRuntimeTypeError";
   }
@@ -36,7 +36,7 @@ export class UnknownAgentRuntimeTypeError extends Error {
 export class HarnessChatDispatchOnlyError extends Error {
   constructor(public readonly channel: string) {
     super(
-      `Agent runtime "harness" is trial-scoped to chat dispatch; ${channel} dispatch is not supported.`,
+      `Agent runtime "agentcore" is trial-scoped to chat dispatch; ${channel} dispatch is not supported.`,
     );
     this.name = "HarnessChatDispatchOnlyError";
   }
@@ -49,7 +49,10 @@ const LEGACY_PI_RUNTIME_VALUES = new Set(["pi", "strands", "flue", ""]);
 export function normalizeAgentRuntimeType(value: unknown): AgentRuntimeType {
   if (value == null) return "pi";
   const normalized = String(value).toLowerCase();
-  if (normalized === "harness") return "harness";
+  // `harness` was persisted by the dev proof. Keep it as a read alias while
+  // returning the canonical application identifier for every caller.
+  if (normalized === "agentcore" || normalized === "harness")
+    return "agentcore";
   if (LEGACY_PI_RUNTIME_VALUES.has(normalized)) return "pi";
   throw new UnknownAgentRuntimeTypeError(String(value));
 }
@@ -67,7 +70,7 @@ export function resolveRuntimeFunctionName(
 ): string {
   const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
 
-  if (normalizedRuntimeType === "harness") {
+  if (normalizedRuntimeType === "agentcore") {
     // THINK-311 (KTD-4): the harness runner is the only function this
     // branch can resolve — the Pi function below is structurally
     // unreachable for a harness-flagged agent. An explicit env/config
@@ -82,7 +85,7 @@ export function resolveRuntimeFunctionName(
     try {
       return deriveFunctionName("harness-runner");
     } catch {
-      throw new RuntimeNotProvisionedError("harness");
+      throw new RuntimeNotProvisionedError("agentcore");
     }
   }
 

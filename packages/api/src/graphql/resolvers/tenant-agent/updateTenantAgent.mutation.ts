@@ -1,11 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import {
-  agents,
-  and,
-  db,
-  eq,
-  tenants,
-} from "../../utils.js";
+import { agents, and, db, eq, tenants } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { parseAgentRuntimeInput } from "./runtime.js";
 import {
@@ -78,7 +72,7 @@ export async function updateTenantAgent(
       i.runtimeConfig !== undefined
         ? parseJsonInput(i.runtimeConfig)
         : currentConfig;
-    if (runtime === "harness") {
+    if (runtime === "agentcore") {
       const [tenant] = await db
         .select({ slug: tenants.slug })
         .from(tenants)
@@ -109,7 +103,7 @@ export async function updateTenantAgent(
       !Array.isArray(requestedConfig)
         ? (requestedConfig as Record<string, unknown>)
         : {}),
-      defaultThreadRuntime: runtime === "harness" ? "harness" : "pi",
+      defaultThreadRuntime: runtime === "agentcore" ? "agentcore" : "pi",
     };
   }
   if (i.adapterType !== undefined) updates.adapter_type = i.adapterType;

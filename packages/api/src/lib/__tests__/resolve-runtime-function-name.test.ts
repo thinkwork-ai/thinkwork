@@ -21,8 +21,10 @@ describe("normalizeAgentRuntimeType", () => {
   });
 
   it("recognizes the harness trial selector (THINK-311)", () => {
-    expect(normalizeAgentRuntimeType("harness")).toBe("harness");
-    expect(normalizeAgentRuntimeType("HARNESS")).toBe("harness");
+    expect(normalizeAgentRuntimeType("agentcore")).toBe("agentcore");
+    expect(normalizeAgentRuntimeType("AGENTCORE")).toBe("agentcore");
+    expect(normalizeAgentRuntimeType("harness")).toBe("agentcore");
+    expect(normalizeAgentRuntimeType("HARNESS")).toBe("agentcore");
   });
 
   it("fails loudly on unknown runtime selectors instead of silently running Pi", () => {
@@ -69,7 +71,7 @@ describe("resolveRuntimeFunctionName", () => {
 
   it("resolves the harness runner for the harness runtime, never the Pi function", () => {
     expect(
-      resolveRuntimeFunctionName("harness", {
+      resolveRuntimeFunctionName("agentcore", {
         AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
         HARNESS_RUNNER_FUNCTION_NAME: "thinkwork-dev-harness-runner",
       }),
@@ -79,7 +81,7 @@ describe("resolveRuntimeFunctionName", () => {
   it("derives the harness runner name from STAGE when no override is set (R1/R10)", () => {
     vi.stubEnv("STAGE", "dev");
     expect(
-      resolveRuntimeFunctionName("harness", {
+      resolveRuntimeFunctionName("agentcore", {
         AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
       }),
     ).toBe("thinkwork-dev-api-harness-runner");
@@ -90,19 +92,19 @@ describe("resolveRuntimeFunctionName", () => {
     // The Pi function being configured must NOT rescue a harness-flagged
     // agent — that would be the silent fallback R4 forbids.
     expect(() =>
-      resolveRuntimeFunctionName("harness", {
+      resolveRuntimeFunctionName("agentcore", {
         AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
         HARNESS_RUNNER_FUNCTION_NAME: "",
       }),
     ).toThrow(RuntimeNotProvisionedError);
     try {
-      resolveRuntimeFunctionName("harness", {
+      resolveRuntimeFunctionName("agentcore", {
         AGENTCORE_PI_FUNCTION_NAME: "thinkwork-dev-agentcore-pi",
       });
       expect.unreachable("harness resolution must throw while unprovisioned");
     } catch (err) {
       expect(err).toBeInstanceOf(RuntimeNotProvisionedError);
-      expect((err as RuntimeNotProvisionedError).runtimeType).toBe("harness");
+      expect((err as RuntimeNotProvisionedError).runtimeType).toBe("agentcore");
       expect((err as Error).message).toContain("Harness runtime");
     }
   });

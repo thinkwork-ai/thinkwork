@@ -216,7 +216,7 @@ describe("AgentConfigSection", () => {
       input: {
         runtimeConfig: {
           defaultSpaceId: "space-1",
-          defaultThreadRuntime: "harness",
+          defaultThreadRuntime: "agentcore",
         },
       },
     });

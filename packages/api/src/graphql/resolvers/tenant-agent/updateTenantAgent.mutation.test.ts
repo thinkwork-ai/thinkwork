@@ -86,8 +86,9 @@ describe("updateTenantAgent", () => {
   });
 
   it("updates the tenant platform agent baseline after admin authorization", async () => {
-    const { updateTenantAgent } =
-      await import("./updateTenantAgent.mutation.js");
+    const { updateTenantAgent } = await import(
+      "./updateTenantAgent.mutation.js"
+    );
 
     const result = await updateTenantAgent(
       null,
@@ -125,8 +126,9 @@ describe("updateTenantAgent", () => {
   });
 
   it("treats the legacy Harness runtime field as a new-thread default", async () => {
-    const { updateTenantAgent } =
-      await import("./updateTenantAgent.mutation.js");
+    const { updateTenantAgent } = await import(
+      "./updateTenantAgent.mutation.js"
+    );
 
     await updateTenantAgent(
       null,
@@ -145,14 +147,15 @@ describe("updateTenantAgent", () => {
       runtime: "pi",
       runtime_config: {
         defaultSpaceId: "space-1",
-        defaultThreadRuntime: "harness",
+        defaultThreadRuntime: "agentcore",
       },
     });
   });
 
   it("changes the new-thread default back to Pi without restoring enrollments", async () => {
-    const { updateTenantAgent } =
-      await import("./updateTenantAgent.mutation.js");
+    const { updateTenantAgent } = await import(
+      "./updateTenantAgent.mutation.js"
+    );
 
     await updateTenantAgent(
       null,

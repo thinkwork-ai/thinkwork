@@ -182,7 +182,7 @@ export async function processFinalize(
     if (
       !payload.claim.harness_session_id ||
       !payload.claim.harness_participant_user_id ||
-      payloadRuntimeType !== "harness"
+      (payloadRuntimeType !== "agentcore" && payloadRuntimeType !== "harness")
     ) {
       throw new Error("Harness finalize claim is incomplete");
     }

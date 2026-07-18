@@ -98,7 +98,9 @@ export function AgentConfigSection({
     if (agent) {
       const config = parseJson<JsonRecord>(agent.runtimeConfig, {});
       setRuntime(
-        stringOrNull(config.defaultThreadRuntime) === "harness"
+        ["agentcore", "harness"].includes(
+          stringOrNull(config.defaultThreadRuntime) ?? "",
+        )
           ? AgentRuntime.Agentcore
           : AgentRuntime.Flue,
       );
@@ -152,7 +154,7 @@ export function AgentConfigSection({
     const nextRuntimeConfig = {
       ...runtimeConfig,
       defaultThreadRuntime:
-        next === AgentRuntime.Agentcore ? "harness" : "pi",
+        next === AgentRuntime.Agentcore ? "agentcore" : "pi",
     };
     const previous = runtime;
     setRuntime(next);

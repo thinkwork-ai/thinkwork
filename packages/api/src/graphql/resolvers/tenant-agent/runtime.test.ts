@@ -13,9 +13,9 @@ describe("parseAgentRuntimeInput", () => {
   });
 
   it("accepts the AGENTCORE runtime from the Agent-configuration dropdown (THINK-311)", () => {
-    expect(parseAgentRuntimeInput("AGENTCORE")).toBe("harness");
-    expect(parseAgentRuntimeInput("agentcore")).toBe("harness");
-    expect(parseAgentRuntimeInput("harness")).toBe("harness");
+    expect(parseAgentRuntimeInput("AGENTCORE")).toBe("agentcore");
+    expect(parseAgentRuntimeInput("agentcore")).toBe("agentcore");
+    expect(parseAgentRuntimeInput("harness")).toBe("agentcore");
   });
 
   it("still rejects unknown runtimes", () => {

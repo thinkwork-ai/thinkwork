@@ -936,7 +936,7 @@ describe("resolveAgentRuntimeConfig", () => {
   });
 
   it("resolves the harness trial selector (THINK-311 U2)", async () => {
-    stageAgentRow({ runtime: "harness" });
+    stageAgentRow({ runtime: "agentcore" });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
@@ -946,7 +946,7 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("harness");
+    expect(cfg.runtimeType).toBe("agentcore");
     // The harness trial value must not flip the dormant strands-only
     // context-engine gate on.
     expect(cfg.contextEngineEnabled).toBe(false);

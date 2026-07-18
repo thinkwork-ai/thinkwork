@@ -10,7 +10,7 @@
  * Lifecycle: maximum_retry_attempts=0 in terraform (async-retry
  * idempotency) — a crashed run must never re-execute a turn; the stall
  * monitor times out abandoned turns without retry-queue re-dispatch
- * (runtime_type='harness' exclusion) and releases the thread checkout.
+ * (runtime_type='agentcore' exclusion) and releases the thread checkout.
  */
 
 import { eq, and, sql } from "drizzle-orm";

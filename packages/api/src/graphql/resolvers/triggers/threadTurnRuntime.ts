@@ -7,7 +7,10 @@ function asObject(value: unknown): Record<string, unknown> | null {
 function normalizeRuntimeType(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  if (!trimmed) return null;
+  // Normalize proof-era persisted rows at the read boundary. New writes use
+  // `agentcore`, but old dev evidence may still contain `harness`.
+  return trimmed.toLowerCase() === "harness" ? "agentcore" : trimmed;
 }
 
 function normalizeModel(value: unknown): string | null {

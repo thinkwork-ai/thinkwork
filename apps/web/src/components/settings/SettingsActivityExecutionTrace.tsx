@@ -130,6 +130,8 @@ function formatRuntimeType(runtimeType: unknown): string | null {
   if (!normalized) return null;
   if (normalized === "pi" || normalized === "flue" || normalized === "strands")
     return "Pi";
+  if (normalized === "agentcore" || normalized === "harness")
+    return "AgentCore Harness";
   return runtimeType.trim().toUpperCase();
 }
 
@@ -1195,10 +1197,10 @@ function mergeRouteEvidence(
 function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
   return Boolean(
     event.routeModelId ||
-    event.routeStatus ||
-    event.routeInputTokens != null ||
-    event.routeOutputTokens != null ||
-    event.routeCostUsd != null,
+      event.routeStatus ||
+      event.routeInputTokens != null ||
+      event.routeOutputTokens != null ||
+      event.routeCostUsd != null,
   );
 }
 

@@ -180,8 +180,9 @@ export const createThread = async (
     });
   }
 
-  let platformAgent: Awaited<ReturnType<typeof resolveTenantPlatformAgent>> | null =
-    null;
+  let platformAgent: Awaited<
+    ReturnType<typeof resolveTenantPlatformAgent>
+  > | null = null;
   try {
     platformAgent = await resolveTenantPlatformAgent(i.tenantId);
   } catch (error) {
@@ -208,9 +209,10 @@ export const createThread = async (
     threadAgentId === platformAgent.id
       ? defaultThreadRuntimeFromConfig(platformAgent.runtime_config)
       : "pi";
-  let harnessProfile: Awaited<ReturnType<typeof requireHarnessProofProfile>> | null =
-    null;
-  if (pinnedRuntime === "harness") {
+  let harnessProfile: Awaited<
+    ReturnType<typeof requireHarnessProofProfile>
+  > | null = null;
+  if (pinnedRuntime === "agentcore") {
     const [tenant] = await db
       .select({ slug: tenants.slug })
       .from(tenants)
@@ -608,8 +610,7 @@ export const createThread = async (
         messageId: firstMessageId,
         content: i.firstMessage,
         requestedModelId,
-        requestedRuntime:
-          pinnedRuntime === "harness" ? "agentcore" : "pi",
+        requestedRuntime: pinnedRuntime,
         requestedProfileSlug,
         sender: { type: createdByType, id: createdById },
       });

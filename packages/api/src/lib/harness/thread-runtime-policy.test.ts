@@ -15,15 +15,15 @@ describe("Harness thread runtime policy", () => {
   it("selects Harness only for a stored future-thread preference", () => {
     expect(
       defaultThreadRuntimeFromConfig({ defaultThreadRuntime: "harness" }),
-    ).toBe("harness");
+    ).toBe("agentcore");
     expect(
       defaultThreadRuntimeFromConfig({ defaultThreadRuntime: "agentcore" }),
-    ).toBe("harness");
+    ).toBe("agentcore");
   });
 
   it("pins each normal thread without discarding caller metadata", () => {
     expect(
-      pinThreadRuntimeMetadata({ source: "composer" }, "harness"),
+      pinThreadRuntimeMetadata({ source: "composer" }, "agentcore"),
     ).toEqual({ source: "composer", requestedRuntime: "agentcore" });
     expect(pinThreadRuntimeMetadata(undefined, "pi")).toEqual({
       requestedRuntime: "pi",

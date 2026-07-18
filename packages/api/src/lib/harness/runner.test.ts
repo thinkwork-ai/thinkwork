@@ -311,7 +311,7 @@ describe("runHarnessTurn — happy path", () => {
     expect(finalize).toMatchObject({
       thread_turn_id: "turn-1",
       status: "completed",
-      runtime_type: "harness",
+      runtime_type: "agentcore",
       agent_model: "moonshotai.kimi-k2.5",
       cost_owner_user_id: "user-1",
       changed_files: [],
@@ -684,7 +684,7 @@ describe("runHarnessTurn — turn lifecycle (KTD-9)", () => {
     expect(deps.finalizePayloads).toHaveLength(1);
     expect(deps.finalizePayloads[0]).toMatchObject({
       status: "failed",
-      runtime_type: "harness",
+      runtime_type: "agentcore",
     });
     expect(deps.finalizePayloads[0].error_message).toContain(
       "ValidationException",

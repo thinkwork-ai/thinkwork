@@ -628,7 +628,7 @@ export function resolveChatInvocationRuntimeType(args: {
     return "pi";
   }
   if (requested === "agentcore" || requested === "harness") {
-    return "harness";
+    return "agentcore";
   }
   if (requested && requested !== "pi") {
     // Mistyped runtime request → loud failure, never a silent Pi run (R4).
@@ -1065,7 +1065,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
                   }
                 : {}),
               ...(event.requestedRuntime
-                ? { requested_runtime: event.requestedRuntime }
+                ? { requested_runtime: runtimeType }
                 : {}),
               agent_slug: agentSlug || undefined,
               space_id: spaceId || undefined,

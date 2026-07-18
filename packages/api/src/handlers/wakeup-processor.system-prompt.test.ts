@@ -217,13 +217,13 @@ describe("wakeup processor system prompt capture", () => {
     vi.stubEnv("AGENTCORE_PI_FUNCTION_NAME", "thinkwork-dev-agentcore-pi");
     vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "thinkwork-dev-harness-runner");
 
-    const result = await invokeAgentCore({ message: "wake up" }, "harness");
+    const result = await invokeAgentCore({ message: "wake up" }, "agentcore");
 
     expect(result).toMatchObject({
       ok: false,
       status: 501,
       result: {
-        runtime_type: "harness",
+        runtime_type: "agentcore",
         error: expect.stringContaining("trial-scoped to chat dispatch"),
       },
     });

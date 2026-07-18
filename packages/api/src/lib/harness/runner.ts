@@ -647,7 +647,7 @@ export async function runHarnessTurn(
       cost_owner_user_id: turn.costOwnerUserId,
       user_message: turn.userMessage.slice(0, 2000),
       agent_model: turn.modelId,
-      runtime_type: "harness",
+      runtime_type: "agentcore",
       agent_slug: turn.agentSlug,
       agent_name: turn.agentName,
       duration_ms: now() - startedAt,
@@ -657,7 +657,7 @@ export async function runHarnessTurn(
       composed_system_prompt: composedSystemPrompt,
       response: {
         content: fields.content ?? "",
-        runtime: "harness",
+        runtime: "agentcore",
         tool_invocations: toolInvocations,
         tools_called: [
           ...new Set(toolInvocations.map((t) => String(t.tool_name ?? ""))),
