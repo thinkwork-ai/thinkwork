@@ -124,7 +124,7 @@ variable "agentcore_multiplayer_proof_tenant_slug" {
 }
 
 variable "agentcore_multiplayer_proof_owner_allowlist" {
-  description = "Comma-separated non-production user IDs enrolled in the exact-user proof."
+  description = "Comma-separated non-production subjects for the manual authorization-code and mixed-disclosure fixtures. Signed OBO turn participants do not require registration here."
   type        = string
   default     = ""
 }

@@ -268,7 +268,6 @@ export function verifyProofProviderAccessToken(
     audience: string;
     secret: string;
     nowSeconds: number;
-    allowedOwners?: ReadonlySet<string>;
   },
 ): AccessTokenClaims {
   const [headerPart, payloadPart, signaturePart, extra] = token.split(".");
@@ -291,7 +290,10 @@ export function verifyProofProviderAccessToken(
     claims.iss !== normalizeIssuer(args.issuer) ||
     claims.aud !== args.audience ||
     claims.token_class !== "agentcore_proof_provider" ||
-    !(args.allowedOwners ?? DEFAULT_PROOF_OWNERS).has(claims.sub) ||
+    // The authorization-code fixture applies its owner allowlist before it
+    // issues this token. OBO tokens instead inherit their exact subject from
+    // a verified KMS-signed turn assertion, so reapplying the fixture list
+    // here would turn ordinary tenant membership into Terraform enrollment.
     !claims.scope.split(" ").includes(PROOF_SCOPE) ||
     !Number.isInteger(claims.iat) ||
     !Number.isInteger(claims.exp) ||
@@ -460,7 +462,6 @@ async function exchangeProofSubjectToken(args: {
   keyId: string;
   kid: string;
   nowSeconds: number;
-  allowedOwners: ReadonlySet<string>;
 }): Promise<string> {
   const scopes = args.requestedScope.split(" ");
   if (scopes.includes(PROOF_SCOPE)) {
@@ -471,7 +472,6 @@ async function exchangeProofSubjectToken(args: {
       requiredScope: GATEWAY_SCOPE,
       expectedTokenClass: "agentcore_proof_obo",
       nowSeconds: args.nowSeconds,
-      allowedOwners: args.allowedOwners,
     });
     return signAccessToken(
       {
@@ -496,7 +496,6 @@ async function exchangeProofSubjectToken(args: {
     purpose: "harness_invoke",
     requiredScope: "harness:invoke",
     nowSeconds: args.nowSeconds,
-    allowedOwners: args.allowedOwners,
   });
   const gatewayClaims = {
     iss: args.assertionIssuer,
@@ -537,7 +536,7 @@ async function exchangeProofSubjectToken(args: {
   return `${signingInput}.${encodeBase64Url(result.Signature)}`;
 }
 
-async function verifyProofSubjectToken(
+export async function verifyProofSubjectToken(
   token: string,
   args: {
     issuer: string;
@@ -546,7 +545,6 @@ async function verifyProofSubjectToken(
     requiredScope: string;
     expectedTokenClass?: string;
     nowSeconds: number;
-    allowedOwners: ReadonlySet<string>;
   },
 ): Promise<ProofSubjectClaims> {
   const [encodedHeader, encodedClaims, encodedSignature, extra] =
@@ -571,7 +569,11 @@ async function verifyProofSubjectToken(
     !claims.scope.split(" ").includes(args.requiredScope) ||
     (args.expectedTokenClass !== undefined &&
       claims.token_class !== args.expectedTokenClass) ||
-    !args.allowedOwners.has(claims.sub) ||
+    // Participant admission happens at the trusted mint boundary: it reads
+    // the canonical running Harness turn and triggering human message before
+    // KMS signs these claims. Signature + issuer/audience/purpose/scope below
+    // are the authority; the Alice/Bob OAuth-code fixture is not a user
+    // registry for multiplayer Harness turns.
     claims.participant_id !== claims.sub ||
     !Number.isInteger(claims.iat) ||
     !Number.isInteger(claims.exp) ||
@@ -631,7 +633,6 @@ export async function handler(event: APIGatewayProxyEventV2) {
         keyId: requiredEnv("AGENTCORE_TURN_ASSERTION_KMS_KEY_ID"),
         kid: requiredEnv("AGENTCORE_TURN_ASSERTION_KID"),
         nowSeconds: Math.floor(Date.now() / 1000),
-        allowedOwners,
       }),
   })(event);
 }

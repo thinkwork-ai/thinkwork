@@ -92,6 +92,52 @@ async function aliceAccessToken(): Promise<string> {
   return JSON.parse(token.body!).access_token;
 }
 
+async function participantAccessToken(owner: string): Promise<string> {
+  let sequence = 0;
+  const provider = createProofOauthProviderHandler({
+    issuer: ISSUER,
+    clientId: "client",
+    clientSecret: SECRET,
+    nowSeconds: () => NOW,
+    randomToken: () => `random-${++sequence}`,
+    allowedOwners: new Set(["alice", "bob", owner]),
+  });
+  const authorize = await provider(
+    event(
+      "GET",
+      "/agentcore-proof/oauth/authorize",
+      {},
+      {
+        client_id: "client",
+        redirect_uri: "https://identity.example.test/callback",
+        response_type: "code",
+        scope: "owner.read",
+        state: "state",
+        proof_owner: owner,
+      },
+    ),
+  );
+  const code = new URL(authorize.headers?.location as string).searchParams.get(
+    "code",
+  )!;
+  const token = await provider(
+    event(
+      "POST",
+      "/agentcore-proof/oauth/token",
+      {
+        authorization: `Basic ${Buffer.from(`client:${SECRET}`).toString("base64")}`,
+      },
+      undefined,
+      new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: "https://identity.example.test/callback",
+      }).toString(),
+    ),
+  );
+  return JSON.parse(token.body!).access_token;
+}
+
 describe("AgentCore identity boundary target", () => {
   afterEach(() => vi.unstubAllEnvs());
 
@@ -118,6 +164,26 @@ describe("AgentCore identity boundary target", () => {
       harmlessValue: "fixture-alice",
     });
     expect(response.body).not.toMatch(/private|SECRET_SENTINEL/);
+  });
+
+  it("accepts an exact-user provider token for a tenant participant outside the manual fixture", async () => {
+    const participantId = "33333333-3333-4333-8333-333333333333";
+    const response = await target(
+      event(
+        "GET",
+        "/agentcore-proof/target/owner",
+        {
+          authorization: `Bearer ${await participantAccessToken(participantId)}`,
+        },
+        { requested_owner: participantId },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body!)).toEqual({
+      ownerAlias: participantId,
+      harmlessValue: `fixture-${participantId}`,
+    });
   });
 
   it("rejects direct turn tokens and caller identity overrides", async () => {

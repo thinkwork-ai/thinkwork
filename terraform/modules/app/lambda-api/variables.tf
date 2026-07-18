@@ -205,7 +205,7 @@ variable "agentcore_proof_oauth_client_secret" {
 }
 
 variable "agentcore_proof_owner_allowlist" {
-  description = "Comma-separated synthetic or non-production user subjects allowed by the THINK-316 proof provider."
+  description = "Comma-separated synthetic subjects used by the THINK-316 manual authorization-code and mixed-disclosure fixtures. Signed OBO turn participants do not require registration here."
   type        = string
   default     = ""
 }

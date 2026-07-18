@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { generateKeyPairSync, sign } from "node:crypto";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import {
   createProofOauthProviderHandler,
   handler as deployedProviderHandler,
   proofOwnerAllowlistFromEnv,
   verifyProofProviderAccessToken,
+  verifyProofSubjectToken,
 } from "../agentcore-proof-oauth-provider.js";
 
 const ISSUER = "https://api.example.test/agentcore-proof/oauth";
@@ -63,7 +65,76 @@ function handler() {
 }
 
 describe("AgentCore proof OAuth provider", () => {
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("accepts a valid signed Harness assertion for a tenant participant outside the manual fixture", async () => {
+    const participantId = "33333333-3333-4333-8333-333333333333";
+    const assertionIssuer = "https://api.example.test/agentcore";
+    const audience = "urn:thinkwork:harness";
+    const kid = "proof-key-v1";
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+    });
+    const encodedHeader = Buffer.from(
+      JSON.stringify({ alg: "RS256", kid, typ: "JWT" }),
+    ).toString("base64url");
+    const encodedClaims = Buffer.from(
+      JSON.stringify({
+        iss: assertionIssuer,
+        aud: audience,
+        sub: participantId,
+        iat: NOW,
+        exp: NOW + 300,
+        tenant_id: "tenant-1",
+        agent_id: "agent-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        participant_id: participantId,
+        session_generation: 1,
+        purpose: "harness_invoke",
+        scope: "harness:invoke",
+      }),
+    ).toString("base64url");
+    const signingInput = `${encodedHeader}.${encodedClaims}`;
+    const signature = sign(
+      "RSA-SHA256",
+      Buffer.from(signingInput),
+      privateKey,
+    ).toString("base64url");
+    const jwk = publicKey.export({ format: "jwk" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith("/.well-known/openid-configuration")) {
+          return {
+            ok: true,
+            json: async () => ({ jwks_uri: `${assertionIssuer}/jwks` }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({ keys: [{ ...jwk, kid }] }),
+        };
+      }),
+    );
+
+    await expect(
+      verifyProofSubjectToken(`${signingInput}.${signature}`, {
+        issuer: assertionIssuer,
+        audience,
+        purpose: "harness_invoke",
+        requiredScope: "harness:invoke",
+        nowSeconds: NOW,
+      }),
+    ).resolves.toMatchObject({
+      sub: participantId,
+      participant_id: participantId,
+    });
+  });
 
   it("runs an authorization-code exchange and issues a distinct owner token", async () => {
     const invoke = handler();

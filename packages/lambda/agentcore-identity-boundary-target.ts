@@ -53,7 +53,6 @@ export function createIdentityBoundaryTargetHandler(
         audience: deps.audience,
         secret: deps.clientSecret,
         nowSeconds: deps.nowSeconds(),
-        allowedOwners: deps.allowedOwners,
       });
       const requestedOwner =
         event.queryStringParameters?.requested_owner?.trim().toLowerCase() ??
