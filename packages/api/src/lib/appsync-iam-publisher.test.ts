@@ -31,6 +31,7 @@ describe("AppSync IAM publisher", () => {
           region: "us-east-1",
           credentials,
           fetchImpl: fetchImpl as typeof fetch,
+          suppressor: async () => false,
         },
       ),
     ).resolves.toBe(true);
@@ -81,5 +82,51 @@ describe("AppSync IAM publisher", () => {
       "sensitive detail",
     );
     errorSpy.mockRestore();
+  });
+
+  it("suppresses all tenant delivery while revocation invalidation is pending", async () => {
+    const fetchImpl = vi.fn();
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    await expect(
+      publishAppSyncMutation(
+        "mutation { notifyNewMessage }",
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        {
+          endpoint:
+            "https://api-id.appsync-api.us-east-1.amazonaws.com/graphql",
+          region: "us-east-1",
+          credentials,
+          fetchImpl: fetchImpl as typeof fetch,
+          suppressor: async () => true,
+        },
+      ),
+    ).resolves.toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledOnce();
+    warnSpy.mockRestore();
+  });
+
+  it("allows the invalidation mutation itself to bypass suppression", async () => {
+    const fetchImpl = vi.fn(async () => new Response('{"data":{}}'));
+    const suppressor = vi.fn(async () => true);
+    await expect(
+      publishAppSyncMutation(
+        "mutation { invalidateSubscription }",
+        { tenantId: "tenant-1" },
+        {
+          endpoint:
+            "https://api-id.appsync-api.us-east-1.amazonaws.com/graphql",
+          region: "us-east-1",
+          credentials,
+          fetchImpl: fetchImpl as typeof fetch,
+          suppressor,
+          skipSuppression: true,
+        },
+      ),
+    ).resolves.toBe(true);
+    expect(suppressor).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });

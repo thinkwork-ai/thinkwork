@@ -776,6 +776,7 @@ resource "aws_lambda_function" "handler" {
     "auth-revoke",
     "auth-subscription-ticket",
     "appsync-subscription-authorizer",
+    "subscription-invalidation",
     "public-auth-options",
     "auth-provider-reconcile",
     "workos-auth",
@@ -2091,6 +2092,32 @@ resource "aws_scheduler_schedule" "wakeup_processor" {
   target {
     arn      = aws_lambda_function.handler["wakeup-processor"].arn
     role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# Replays durable authorization-revocation invalidations. The worker owns its
+# retry state in Aurora and suppresses tenant realtime fan-out until AppSync
+# confirms every sensitive subscription class has been invalidated.
+resource "aws_scheduler_schedule" "subscription_invalidation" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-subscription-invalidation"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["subscription-invalidation"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ limit = 25 })
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
   }
 }
 

@@ -29,6 +29,7 @@ import {
 const APPSYNC_DIRECTIVE_DEFS = `
 directive @aws_subscribe(mutations: [String!]!) on FIELD_DEFINITION
 directive @aws_iam on OBJECT | FIELD_DEFINITION
+directive @aws_lambda on OBJECT | FIELD_DEFINITION
 `;
 
 function loadSchemaFiles(): string {

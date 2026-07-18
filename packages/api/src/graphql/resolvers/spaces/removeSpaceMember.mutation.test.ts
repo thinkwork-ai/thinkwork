@@ -4,6 +4,7 @@ const {
   authCalls,
   deletes,
   deleteResults,
+  invalidations,
   notifications,
   selectQueue,
   resetMocks,
@@ -12,18 +13,21 @@ const {
   const deletes: unknown[] = [];
   const deleteResults: unknown[][] = [];
   const notifications: unknown[] = [];
+  const invalidations: unknown[] = [];
   const selectQueue: unknown[][] = [];
   return {
     authCalls,
     deletes,
     deleteResults,
     notifications,
+    invalidations,
     selectQueue,
     resetMocks: () => {
       authCalls.length = 0;
       deletes.length = 0;
       deleteResults.length = 0;
       notifications.length = 0;
+      invalidations.length = 0;
       selectQueue.length = 0;
     },
   };
@@ -31,6 +35,31 @@ const {
 
 vi.mock("../../utils.js", () => {
   const col = (name: string) => ({ name });
+  const selectResult = () => {
+    const result = Promise.resolve(selectQueue.shift() ?? []);
+    return Object.assign(result, { for: () => result });
+  };
+  const database = {
+    select: () => ({
+      from: () => ({
+        where: selectResult,
+      }),
+    }),
+    delete: () => ({
+      where: (clause: unknown) => {
+        deletes.push(clause);
+        return {
+          returning: () => Promise.resolve(deleteResults.shift() ?? []),
+        };
+      },
+    }),
+    insert: () => ({
+      values: (value: unknown) => {
+        invalidations.push(value);
+        return Promise.resolve();
+      },
+    }),
+  };
   return {
     spaces: {
       id: col("spaces.id"),
@@ -44,24 +73,18 @@ vi.mock("../../utils.js", () => {
       role: col("space_members.role"),
     },
     db: {
-      select: () => ({
-        from: () => ({
-          where: () => Promise.resolve(selectQueue.shift() ?? []),
-        }),
-      }),
-      delete: () => ({
-        where: (clause: unknown) => {
-          deletes.push(clause);
-          return {
-            returning: () => Promise.resolve(deleteResults.shift() ?? []),
-          };
-        },
-      }),
+      ...database,
+      transaction: (callback: (tx: typeof database) => unknown) =>
+        callback(database),
     },
     and: (...items: unknown[]) => ({ and: items }),
     eq: (left: unknown, right: unknown) => ({ eq: [left, right] }),
   };
 });
+
+vi.mock("@thinkwork/database-pg/schema", () => ({
+  authSubscriptionInvalidations: { name: "auth_subscription_invalidations" },
+}));
 
 vi.mock("drizzle-orm", () => ({
   ne: (left: unknown, right: unknown) => ({ ne: [left, right] }),
@@ -108,6 +131,14 @@ describe("removeSpaceMember", () => {
       spaceId: "space-1",
       userId: "user-2",
     });
+    expect(invalidations).toEqual([
+      {
+        tenant_id: "tenant-1",
+        user_id: "user-2",
+        resource_kind: "space_membership",
+        reason: "space_membership_removed",
+      },
+    ]);
     expect(authCalls[0]).toEqual([
       { auth: { authType: "cognito" } },
       "tenant-1",
@@ -130,6 +161,7 @@ describe("removeSpaceMember", () => {
     });
     expect(deletes).toEqual([]);
     expect(notifications).toEqual([]);
+    expect(invalidations).toEqual([]);
   });
 
   it("returns false when the user is not a member", async () => {

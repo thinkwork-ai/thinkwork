@@ -383,6 +383,8 @@ build_handler "auth-subscription-ticket" \
   "$REPO_ROOT/packages/api/src/handlers/auth-subscription-ticket.ts"
 build_handler "appsync-subscription-authorizer" \
   "$REPO_ROOT/packages/api/src/handlers/appsync-subscription-authorizer.ts"
+build_handler "subscription-invalidation" \
+  "$REPO_ROOT/packages/api/src/handlers/subscription-invalidation.ts"
 
 build_handler "extension-proxy" \
   "$REPO_ROOT/packages/api/src/handlers/extension-proxy.ts"

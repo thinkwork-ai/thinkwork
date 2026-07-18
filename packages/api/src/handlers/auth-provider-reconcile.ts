@@ -21,6 +21,7 @@ import {
   authProviderResources,
   authReconciliationSets,
   authRouteClients,
+  authSubscriptionInvalidations,
   tenantAuthHosts,
   tenantAuthProviderReferences,
 } from "@thinkwork/database-pg/schema";
@@ -378,6 +379,20 @@ export async function reconcileAuthProviderMetadata(
               updated_at: new Date(),
             },
           });
+
+        if (
+          binding.status !== "enabled" ||
+          connection.lifecycleState === "denied"
+        ) {
+          await tx.insert(authSubscriptionInvalidations).values({
+            tenant_id: binding.tenantId,
+            resource_kind: "tenant_auth_policy",
+            reason:
+              connection.lifecycleState === "denied"
+                ? "auth_connection_denied"
+                : "auth_connection_disabled",
+          });
+        }
 
         for (const hostname of binding.hostnames) {
           await tx

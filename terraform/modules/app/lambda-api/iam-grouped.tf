@@ -126,6 +126,7 @@ locals {
             "notifyCostRecorded",
             "notifyEvalRunUpdate",
             "notifyWorkspaceAccessRevoked",
+            "invalidateSubscription",
           ] : "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}/types/Mutation/fields/${field}"
         ]
       },

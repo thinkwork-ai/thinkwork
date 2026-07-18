@@ -8,6 +8,13 @@ export interface AppSyncIamPublisherOptions {
   region?: string;
   fetchImpl?: typeof fetch;
   credentials?: ConstructorParameters<typeof SignatureV4>[0]["credentials"];
+  skipSuppression?: boolean;
+  suppressor?: (input: {
+    tenantId: string;
+    userId?: string | null;
+    resourceKind?: string | null;
+    resourceId?: string | null;
+  }) => Promise<boolean>;
 }
 
 /**
@@ -23,6 +30,40 @@ export async function publishAppSyncMutation(
   const configuredRegion =
     options.region ?? getConfig("AWS_REGION", process.env.AWS_REGION ?? "");
   if (!endpoint) return false;
+  if (!options.skipSuppression && typeof variables.tenantId === "string") {
+    const resourceKind =
+      typeof variables.threadId === "string"
+        ? "thread"
+        : typeof variables.userId === "string"
+          ? "user"
+          : "tenant";
+    const resourceId =
+      resourceKind === "thread"
+        ? (variables.threadId as string)
+        : resourceKind === "user"
+          ? (variables.userId as string)
+          : (variables.tenantId as string);
+    const suppressor =
+      options.suppressor ??
+      (await import("./subscription-invalidation.js"))
+        .shouldSuppressSubscriptionDelivery;
+    if (
+      await suppressor({
+        tenantId: variables.tenantId,
+        userId: typeof variables.userId === "string" ? variables.userId : null,
+        resourceKind,
+        resourceId,
+      })
+    ) {
+      console.warn(
+        "[appsync-iam-publisher] notification suppressed during revocation",
+        {
+          resourceKind,
+        },
+      );
+      return false;
+    }
+  }
   const url = new URL(endpoint);
   const region =
     configuredRegion ||

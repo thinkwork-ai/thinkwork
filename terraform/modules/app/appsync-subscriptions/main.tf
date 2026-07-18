@@ -89,6 +89,20 @@ locals {
     "notifyEvalRunUpdate",
     "notifyWorkspaceAccessRevoked",
   ]
+  subscription_scopes = {
+    onAgentStatusChanged     = { argument = "tenantId", kind = "tenant" }
+    onNewMessage             = { argument = "threadId", kind = "thread" }
+    onHeartbeatActivity      = { argument = "tenantId", kind = "tenant" }
+    onThreadUpdated          = { argument = "tenantId", kind = "tenant" }
+    onThreadActivity         = { argument = "userId", kind = "user" }
+    onInboxItemStatusChanged = { argument = "tenantId", kind = "tenant" }
+    onThreadTurnUpdated      = { argument = "tenantId", kind = "tenant" }
+    onThreadTurnStep         = { argument = "threadId", kind = "thread" }
+    onOrgUpdated             = { argument = "tenantId", kind = "tenant" }
+    onCostRecorded           = { argument = "tenantId", kind = "tenant" }
+    onEvalRunUpdated         = { argument = "tenantId", kind = "tenant" }
+    onWorkspaceAccessRevoked = { argument = "userId", kind = "user" }
+  }
 }
 
 resource "aws_appsync_resolver" "notifications" {
@@ -116,6 +130,113 @@ resource "aws_appsync_resolver" "notifications" {
     #end
     $util.toJson($result)
   EOF
+}
+
+################################################################################
+# Subscription registration filters + active-connection invalidation
+################################################################################
+
+resource "aws_appsync_resolver" "subscription_admission" {
+  for_each = local.subscription_scopes
+
+  api_id      = aws_appsync_graphql_api.subscriptions.id
+  type        = "Subscription"
+  field       = each.key
+  data_source = aws_appsync_datasource.none.name
+
+  runtime {
+    name            = "APPSYNC_JS"
+    runtime_version = "1.0.0"
+  }
+
+  code = <<-JS
+    import { util, extensions } from '@aws-appsync/utils';
+
+    export function request() {
+      return { payload: null };
+    }
+
+    export function response(ctx) {
+      const identity = (ctx.identity && ctx.identity.resolverContext) || {};
+      const tenantId = identity.tenantId;
+      const userId = identity.stableUserId;
+      const resourceKind = identity.resourceKind;
+      const resourceId = identity.resourceId;
+      if (!tenantId || !userId || !resourceKind || !resourceId) {
+        util.unauthorized();
+      }
+
+      extensions.setSubscriptionFilter(util.transform.toSubscriptionFilter({
+        ${each.value.argument}: { eq: ctx.args.${each.value.argument} },
+      }));
+      extensions.setSubscriptionInvalidationFilter({
+        filterGroup: [
+          { filters: [
+            { fieldName: 'scope', operator: 'eq', value: 'tenant' },
+            { fieldName: 'tenantId', operator: 'eq', value: tenantId },
+          ]},
+          { filters: [
+            { fieldName: 'scope', operator: 'eq', value: 'user' },
+            { fieldName: 'tenantId', operator: 'eq', value: tenantId },
+            { fieldName: 'userId', operator: 'eq', value: userId },
+          ]},
+          { filters: [
+            { fieldName: 'scope', operator: 'eq', value: 'resource' },
+            { fieldName: 'tenantId', operator: 'eq', value: tenantId },
+            { fieldName: 'userId', operator: 'eq', value: userId },
+            { fieldName: 'resourceKind', operator: 'eq', value: resourceKind },
+            { fieldName: 'resourceId', operator: 'eq', value: resourceId },
+          ]},
+        ],
+      });
+      return null;
+    }
+  JS
+}
+
+resource "aws_appsync_resolver" "subscription_invalidation" {
+  api_id      = aws_appsync_graphql_api.subscriptions.id
+  type        = "Mutation"
+  field       = "invalidateSubscription"
+  data_source = aws_appsync_datasource.none.name
+
+  runtime {
+    name            = "APPSYNC_JS"
+    runtime_version = "1.0.0"
+  }
+
+  code = <<-JS
+    import { util, extensions } from '@aws-appsync/utils';
+
+    const fields = {
+      ON_AGENT_STATUS_CHANGED: 'onAgentStatusChanged',
+      ON_NEW_MESSAGE: 'onNewMessage',
+      ON_HEARTBEAT_ACTIVITY: 'onHeartbeatActivity',
+      ON_THREAD_UPDATED: 'onThreadUpdated',
+      ON_THREAD_ACTIVITY: 'onThreadActivity',
+      ON_INBOX_ITEM_STATUS_CHANGED: 'onInboxItemStatusChanged',
+      ON_THREAD_TURN_UPDATED: 'onThreadTurnUpdated',
+      ON_THREAD_TURN_STEP: 'onThreadTurnStep',
+      ON_ORG_UPDATED: 'onOrgUpdated',
+      ON_COST_RECORDED: 'onCostRecorded',
+      ON_EVAL_RUN_UPDATED: 'onEvalRunUpdated',
+      ON_WORKSPACE_ACCESS_REVOKED: 'onWorkspaceAccessRevoked',
+    };
+
+    export function request(ctx) {
+      return { payload: { ...ctx.args, subscriptionField: fields[ctx.args.subscriptionField] } };
+    }
+
+    export function response(ctx) {
+      const payload = ctx.result;
+      if (!payload.subscriptionField) util.error('Invalid subscription field');
+      extensions.invalidateSubscriptions({
+        subscriptionField: payload.subscriptionField,
+        payload,
+      });
+      return payload;
+    }
+  JS
 }
 
 ################################################################################
