@@ -25,6 +25,7 @@ import {
   type AccessTokenClaims,
 } from "@thinkwork/lambda/agentcore-proof-oauth-provider";
 import { buildMcpConfigs, type McpServerConfig } from "../lib/mcp-configs.js";
+import { resolveAgentCoreUserOAuthAccessToken } from "../lib/harness/agentcore-user-oauth.js";
 import {
   mcpCallTool,
   mcpListTools,
@@ -733,7 +734,7 @@ async function resolveMcpConfigsForHarness(
   const projection = await resolveHarnessMcpProjection(context);
   if (!projection) return [];
 
-  return buildMcpConfigs(
+  const configs = await buildMcpConfigs(
     context.agentId,
     {
       requesterUserId: context.userId,
@@ -746,6 +747,14 @@ async function resolveMcpConfigsForHarness(
         : {}),
       ...(tokenMode === "probe" ? { tokenMode: "probe" as const } : {}),
     },
+  );
+  if (tokenMode === "probe") return configs;
+
+  const twenty = configs.find((config) => config.name === "twenty--crm");
+  if (!twenty) return configs;
+  const token = await resolveAgentCoreUserOAuthAccessToken(context.userId);
+  return configs.map((config) =>
+    config === twenty ? { ...config, auth: { type: "bearer", token } } : config,
   );
 }
 
@@ -794,9 +803,8 @@ async function loadHarnessMcpProjection(
   let folderCapabilities: { manifest: CapabilitiesManifest | null } | undefined;
   if (agent.capabilityFolderDispatch === true) {
     if (!context.spaceId) return null;
-    const { renderWorkspaceTuple } = await import(
-      "../lib/workspace-renderer/compose-tuple.js"
-    );
+    const { renderWorkspaceTuple } =
+      await import("../lib/workspace-renderer/compose-tuple.js");
     const rendered = await renderWorkspaceTuple(
       {
         tenantId: context.tenantId,
@@ -855,15 +863,15 @@ function hasCompleteTurnTuple(
 ): claims is HarnessCapabilityClaims {
   return Boolean(
     claims &&
-      claims.sub &&
-      claims.participant_id &&
-      claims.sub === claims.participant_id &&
-      claims.tenant_id &&
-      claims.agent_id &&
-      claims.thread_id &&
-      claims.turn_id &&
-      Number.isInteger(claims.session_generation) &&
-      claims.session_generation > 0,
+    claims.sub &&
+    claims.participant_id &&
+    claims.sub === claims.participant_id &&
+    claims.tenant_id &&
+    claims.agent_id &&
+    claims.thread_id &&
+    claims.turn_id &&
+    Number.isInteger(claims.session_generation) &&
+    claims.session_generation > 0,
   );
 }
 

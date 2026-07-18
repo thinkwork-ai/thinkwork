@@ -14,6 +14,16 @@ describe("AgentCore turn assertion Terraform fixture", () => {
   const handlers = read("terraform/modules/app/lambda-api/handlers.tf");
   const oauth = read("terraform/modules/app/lambda-api/mcp-oauth.tf");
   const groupedIam = read("terraform/modules/app/lambda-api/iam-grouped.tf");
+  const identity = read("terraform/modules/app/agentcore-identity/main.tf");
+  const identityReconciler = read(
+    "terraform/modules/app/agentcore-identity/scripts/reconcile_twenty_identity.sh",
+  );
+  const twentyClientBootstrap = read(
+    "terraform/modules/app/agentcore-identity/scripts/bootstrap_twenty_oauth_client.sh",
+  );
+  const twentyProviderReconciler = read(
+    "terraform/modules/app/agentcore-identity/scripts/reconcile_twenty_provider.mjs",
+  );
   const build = read("scripts/build-lambdas.sh");
 
   it("keeps mint authority on a direct-invoke Lambda with a sibling role", () => {
@@ -76,6 +86,42 @@ describe("AgentCore turn assertion Terraform fixture", () => {
     );
     expect(oauth).toMatch(
       /resource "aws_kms_key" "agentcore_turn_assertion" \{\s*for_each\s*=\s*var\.enable_agentcore_multiplayer_proof \? toset\(var\.agentcore_turn_assertion_key_versions\) : toset\(\[\]\)/,
+    );
+  });
+
+  it("provisions Twenty as a separate confidential AgentCore Identity provider", () => {
+    expect(identity).toContain("twenty_credential_provider_name");
+    expect(identity).toContain(
+      'resource "aws_secretsmanager_secret" "twenty_oauth_client"',
+    );
+    expect(identity).toContain("TWENTY_CLIENT_SECRET_ARN");
+    expect(identity).toContain(
+      'resource "terraform_data" "twenty_identity_lifecycle"',
+    );
+    expect(identity).toContain(
+      "depends_on = [\n    terraform_data.identity_lifecycle",
+    );
+    expect(twentyClientBootstrap).toContain("createApplicationRegistration");
+    expect(twentyClientBootstrap).toContain("oAuthRedirectUris");
+    expect(twentyClientBootstrap).toContain("TWENTY_ADMIN_TOKEN_SECRET_ARN");
+    expect(twentyClientBootstrap).not.toContain("/oauth/register");
+    expect(twentyProviderReconciler).toContain(
+      'clientAuthenticationMethod: "CLIENT_SECRET_POST"',
+    );
+    expect(twentyProviderReconciler).toContain(
+      'clientSecretSource: "EXTERNAL"',
+    );
+    expect(twentyProviderReconciler).toContain("clientSecretConfig");
+    expect(identityReconciler).toContain("TWENTY_CLIENT_SECRET_ARN");
+    expect(identityReconciler).not.toContain("/oauth/register");
+    expect(identityReconciler).not.toMatch(
+      /printf[^\n]*(?:client_secret|clientSecret)/,
+    );
+    expect(twentyClientBootstrap).not.toMatch(
+      /printf[^\n]*(?:client_secret|clientSecret)/,
+    );
+    expect(groupedIam).toContain(
+      '"bedrock-agentcore:CompleteResourceTokenAuth"',
     );
   });
 });

@@ -927,13 +927,16 @@ locals {
         Effect = "Allow"
         Action = [
           "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
+          "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
           "bedrock-agentcore:GetResourceOauth2Token",
+          "bedrock-agentcore:CompleteResourceTokenAuth",
         ]
         Resource = [
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default",
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default/workload-identity/thinkwork-${var.stage}-multiplayer-proof",
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default",
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default/oauth2credentialprovider/thinkwork-${var.stage}-proof-oauth",
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default/oauth2credentialprovider/thinkwork-${var.stage}-twenty-crm",
         ]
       },
     ] : [],

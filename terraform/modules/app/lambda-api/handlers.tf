@@ -293,6 +293,12 @@ locals {
         }
       ])
     }
+    "skills" = {
+      AGENTCORE_IDENTITY_WORKLOAD_NAME          = "thinkwork-${var.stage}-multiplayer-proof"
+      AGENTCORE_TWENTY_CREDENTIAL_PROVIDER_NAME = "thinkwork-${var.stage}-twenty-crm"
+      AGENTCORE_USER_OAUTH_RETURN_URL           = "${local.mcp_oauth_api_base_url}/api/skills/mcp-oauth/agentcore/complete"
+      AGENTCORE_TWENTY_OAUTH_RESOURCE           = "https://crm.thinkwork.ai/mcp"
+    }
     "turn-assertion-mint" = {
       AGENTCORE_TURN_ASSERTION_ISSUER     = local.agentcore_turn_assertion_issuer
       AGENTCORE_HARNESS_AUDIENCE          = local.agentcore_harness_audience
@@ -317,9 +323,12 @@ locals {
       AGENTCORE_PROOF_OWNER_ALLOWLIST     = var.agentcore_proof_owner_allowlist
     }
     "harness-capability-mcp" = {
-      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
-      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_GATEWAY_POLICY_REVISION   = "mcp-list-call-v2-tenant-admission"
+      AGENTCORE_PROOF_OAUTH_ISSUER              = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
+      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET       = var.agentcore_proof_oauth_client_secret
+      AGENTCORE_GATEWAY_POLICY_REVISION         = "mcp-list-call-v2-tenant-admission"
+      AGENTCORE_IDENTITY_WORKLOAD_NAME          = "thinkwork-${var.stage}-multiplayer-proof"
+      AGENTCORE_TWENTY_CREDENTIAL_PROVIDER_NAME = "thinkwork-${var.stage}-twenty-crm"
+      AGENTCORE_TWENTY_OAUTH_RESOURCE           = "https://crm.thinkwork.ai/mcp"
     }
     "harness-code-interpreter-target" = {
       AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"

@@ -59,6 +59,12 @@ export type RuntimeMcpTool = {
   inputSchema?: unknown;
 };
 
+export type AgentCoreOAuthStatus =
+  | "connected"
+  | "authorization_required"
+  | "in_progress"
+  | "failed";
+
 async function request<T>(
   path: string,
   options: {
@@ -308,6 +314,27 @@ export async function resolveMcpOAuthAuthorizeUrl(input: {
   }
 
   return (body as { authorizeUrl: string }).authorizeUrl;
+}
+
+export function getAgentCoreOAuthStatus(
+  tenantSlug: string,
+): Promise<{ status: AgentCoreOAuthStatus }> {
+  return request("/api/skills/mcp-oauth/agentcore/status", { tenantSlug });
+}
+
+export function startAgentCoreOAuth(
+  tenantSlug: string,
+  returnTo: string,
+): Promise<{
+  status: AgentCoreOAuthStatus;
+  authorizationUrl?: string;
+  sessionUri?: string;
+}> {
+  const params = new URLSearchParams({ returnTo });
+  return request(`/api/skills/mcp-oauth/agentcore/start?${params}`, {
+    method: "POST",
+    tenantSlug,
+  });
 }
 
 export function isManagedMcpServer(server: McpServer): boolean {

@@ -253,9 +253,13 @@ module "identity" {
   enabled             = true
   stage               = "${var.stage}-think316"
   region              = var.region
+  account_id          = data.aws_caller_identity.current.account_id
   oauth_issuer        = local.oauth_issuer
   oauth_client_id     = "${local.prefix}-client"
   oauth_client_secret = random_password.oauth_client_secret.result
+  user_federation_return_urls = [
+    "${aws_apigatewayv2_api.proof.api_endpoint}/api/skills/mcp-oauth/agentcore/complete",
+  ]
 
   depends_on = [aws_apigatewayv2_route.proof]
 }

@@ -1352,9 +1352,13 @@ module "agentcore_proof_identity" {
   enabled             = var.enable_agentcore_multiplayer_proof
   stage               = var.stage
   region              = var.region
+  account_id          = var.account_id
   oauth_issuer        = module.api.agentcore_proof_oauth_issuer
   oauth_client_id     = "thinkwork-${var.stage}-agentcore-proof"
   oauth_client_secret = var.enable_agentcore_multiplayer_proof ? random_password.agentcore_proof_oauth_client_secret[0].result : ""
+  user_federation_return_urls = [
+    "${module.api.api_endpoint}/api/skills/mcp-oauth/agentcore/complete",
+  ]
 }
 
 module "agentcore_proof_gateway" {
