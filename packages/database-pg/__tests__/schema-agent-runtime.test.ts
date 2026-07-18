@@ -28,6 +28,10 @@ const migration0257 = readFileSync(
   join(HERE, "..", "drizzle", "0257_agents_runtime_allow_harness.sql"),
   "utf-8",
 );
+const migration0263 = readFileSync(
+  join(HERE, "..", "drizzle", "0263_agentcore_runtime_identifier.sql"),
+  "utf-8",
+);
 
 describe("agent runtime selector schema", () => {
   it("defaults agents to the Pi runtime", () => {
@@ -121,6 +125,19 @@ describe("agent runtime selector schema", () => {
     );
     expect(migration0257).toContain(
       "CHECK (runtime IN ('strands', 'flue', 'pi', 'harness'))",
+    );
+  });
+
+  it("canonicalizes the proof runtime token to agentcore", () => {
+    expect(migration0263).toMatch(
+      /--\s*creates-constraint:\s*public\.agents\.agents_runtime_check\b/,
+    );
+    expect(migration0263).toContain("SET runtime = 'agentcore'");
+    expect(migration0263).toContain("SET runtime_type = 'agentcore'");
+    expect(migration0263).toContain("'{requestedRuntime}'");
+    expect(migration0263).toContain("'{defaultThreadRuntime}'");
+    expect(migration0263).toContain(
+      "CHECK (runtime IN ('strands', 'flue', 'pi', 'agentcore'))",
     );
   });
 });

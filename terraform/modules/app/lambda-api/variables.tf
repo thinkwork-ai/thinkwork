@@ -147,7 +147,65 @@ variable "kb_service_role_arn" {
 }
 
 variable "agentcore_harness_execution_role_arn" {
-  description = "AgentCore Harness execution role ARN (THINK-311 U4). Empty string (harness module disabled) omits the Harness invoker grants from the grouped ai policy."
+  description = "Legacy Harness execution-role input retained for module compatibility. Request-path PassRole/control-plane grants were removed by THINK-316 U2."
+  type        = string
+  default     = ""
+}
+
+variable "enable_agentcore_harness_invocation" {
+  description = "Grant only the Harness data-plane invocation actions to the request path. Harness control-plane permissions remain outside Lambda."
+  type        = bool
+  default     = false
+}
+
+variable "enable_agentcore_multiplayer_proof" {
+  description = "Enable the non-production THINK-316 AgentCore Identity/Gateway/Harness proof surfaces. Defaults off and never changes ordinary Pi routing."
+  type        = bool
+  default     = false
+}
+
+variable "agentcore_turn_assertion_key_versions" {
+  description = "One or two published AgentCore assertion KMS key versions. Use two only during the bounded rotation overlap."
+  type        = list(string)
+  default     = ["v1"]
+
+  validation {
+    condition = (
+      length(var.agentcore_turn_assertion_key_versions) >= 1 &&
+      length(var.agentcore_turn_assertion_key_versions) <= 2 &&
+      length(distinct(var.agentcore_turn_assertion_key_versions)) == length(var.agentcore_turn_assertion_key_versions) &&
+      alltrue([for version in var.agentcore_turn_assertion_key_versions : can(regex("^[a-z0-9][a-z0-9-]{0,15}$", version))])
+    )
+    error_message = "agentcore_turn_assertion_key_versions must contain one or two unique lowercase version labels."
+  }
+}
+
+variable "agentcore_turn_assertion_active_key_version" {
+  description = "Published AgentCore assertion key version used for new signatures."
+  type        = string
+  default     = "v1"
+
+  validation {
+    condition     = contains(var.agentcore_turn_assertion_key_versions, var.agentcore_turn_assertion_active_key_version)
+    error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
+  }
+}
+
+variable "agentcore_proof_oauth_client_id" {
+  description = "Synthetic OAuth client id used only by the THINK-316 proof provider."
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_proof_oauth_client_secret" {
+  description = "Synthetic OAuth client secret used only by the THINK-316 proof provider and boundary target."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "agentcore_proof_owner_allowlist" {
+  description = "Comma-separated synthetic subjects used by the THINK-316 manual authorization-code and mixed-disclosure fixtures. Signed OBO turn participants do not require registration here."
   type        = string
   default     = ""
 }

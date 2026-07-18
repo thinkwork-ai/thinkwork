@@ -95,6 +95,7 @@ describe("U7 capability extensions", () => {
         threadId: "thread-1",
       },
       payload: {
+        user_id: "user-1",
         current_user_email: "eric@example.com",
         tenant_slug: "acme",
         turn_context: { spaceSlug: "finance" },
@@ -122,6 +123,7 @@ describe("U7 capability extensions", () => {
       spaceTenantSlug: "acme",
       spaceSlug: "finance",
       threadId: "thread-1",
+      requestingUserId: "user-1",
     });
     expect((result.content?.[0] as { text: string }).text).toContain(
       "Email sent",
@@ -171,6 +173,7 @@ describe("U7 capability extensions", () => {
         status: "pending_review",
         conversationId: "conversation-1",
         inboxItemId: "inbox-1",
+        approvalUrl: "/approvals/inbox-1",
       }),
     );
     const { api, tools } = makeFakeApi();
@@ -203,6 +206,9 @@ describe("U7 capability extensions", () => {
 
     expect((result.content?.[0] as { text: string }).text).toContain(
       "pending human review",
+    );
+    expect((result.content?.[0] as { text: string }).text).toContain(
+      "/approvals/inbox-1",
     );
     expect(result.details).toMatchObject({
       ok: false,

@@ -66,6 +66,15 @@ import {
 } from "../lib/builtin-tools/web-search.js";
 import { runFirecrawlScrape } from "../lib/builtin-tools/web-extract.js";
 import { pluginOAuthAuthorize, pluginOAuthCallback } from "./plugin-oauth.js";
+import { signObject, verifyObject } from "../lib/mcp-oauth/state.js";
+import {
+  completeAgentCoreUserOAuth,
+  getAgentCoreUserOAuth,
+} from "../lib/harness/agentcore-user-oauth.js";
+import {
+  agentCoreOAuthPrincipalMatches,
+  agentCoreOAuthSessionUri,
+} from "../lib/harness/agentcore-oauth-callback.js";
 
 export { loadTenantBuiltinTools };
 
@@ -97,8 +106,19 @@ export async function handler(
   const path = event.rawPath;
 
   // MCP OAuth endpoints are public (browser redirects, no Bearer token)
-  if (path.startsWith("/api/skills/mcp-oauth/")) {
+  if (
+    path.startsWith("/api/skills/mcp-oauth/") &&
+    path !== "/api/skills/mcp-oauth/agentcore/start" &&
+    path !== "/api/skills/mcp-oauth/agentcore/status" &&
+    !(path === "/api/skills/mcp-oauth/agentcore/complete" && method === "POST")
+  ) {
     try {
+      if (
+        path === "/api/skills/mcp-oauth/agentcore/complete" &&
+        method === "GET"
+      ) {
+        return agentCoreOAuthBrowserReturn(event);
+      }
       if (path === "/api/skills/mcp-oauth/authorize" && method === "GET") {
         return mcpOAuthAuthorize(event);
       }
@@ -130,6 +150,19 @@ export async function handler(
   if (!auth) return unauthorized();
 
   try {
+    if (path === "/api/skills/mcp-oauth/agentcore/start" && method === "POST") {
+      return agentCoreOAuthStart(event);
+    }
+    if (path === "/api/skills/mcp-oauth/agentcore/status" && method === "GET") {
+      return agentCoreOAuthStatus(event);
+    }
+    if (
+      path === "/api/skills/mcp-oauth/agentcore/complete" &&
+      method === "POST"
+    ) {
+      return agentCoreOAuthComplete(event);
+    }
+
     // GET /api/skills/plugin-oauth/authorize — app-level plugin activation
     // (plan U6). Authenticated: the activating user is the CANONICAL
     // caller bound from the auth principal; a userId query param is never
@@ -414,9 +447,8 @@ export async function handler(
       } catch {
         return error("invalid JSON body", 400);
       }
-      const { runCapabilityFolderBackfill } = await import(
-        "../lib/capabilities/backfill.js"
-      );
+      const { runCapabilityFolderBackfill } =
+        await import("../lib/capabilities/backfill.js");
       const report = await runCapabilityFolderBackfill({
         tenantId,
         apply: body.apply === true,
@@ -803,6 +835,177 @@ export async function handler(
 // ---------------------------------------------------------------------------
 // MCP OAuth — RFC 9728 discovery + proxy authorize/callback
 // ---------------------------------------------------------------------------
+
+type AgentCoreOAuthState = Record<string, unknown> & {
+  kind: "agentcore-twenty-user-federation";
+  userId: string;
+  tenantId: string;
+  returnTo?: string;
+};
+
+async function agentCoreOAuthPrincipal(
+  event: APIGatewayProxyEventV2,
+): Promise<
+  | { ok: true; userId: string; tenantId: string }
+  | { ok: false; response: APIGatewayProxyStructuredResultV2 }
+> {
+  const tenant =
+    event.headers["x-tenant-id"] ?? event.headers["x-tenant-slug"] ?? "";
+  if (!tenant) {
+    return { ok: false, response: error("x-tenant-id header required", 400) };
+  }
+  const verdict = await requireTenantMembership(event, tenant, {
+    requiredRoles: ["owner", "admin", "member"],
+  });
+  if (!verdict.ok) {
+    return { ok: false, response: error(verdict.reason, verdict.status) };
+  }
+  if (!verdict.userId) {
+    return {
+      ok: false,
+      response: error("Exact signed-in user required", 403),
+    };
+  }
+  return {
+    ok: true,
+    userId: verdict.userId,
+    tenantId: verdict.tenantId,
+  };
+}
+
+async function agentCoreOAuthStart(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const principal = await agentCoreOAuthPrincipal(event);
+  if (!principal.ok) return principal.response;
+  const requestedReturnTo = event.queryStringParameters?.returnTo;
+  const returnTo = requestedReturnTo
+    ? normalizeMcpOAuthReturnTo(requestedReturnTo)
+    : undefined;
+  if (requestedReturnTo && !returnTo) {
+    return error("Invalid AgentCore OAuth return URL", 400);
+  }
+  const state = signObject<AgentCoreOAuthState>(
+    {
+      kind: "agentcore-twenty-user-federation",
+      userId: principal.userId,
+      tenantId: principal.tenantId,
+      ...(returnTo ? { returnTo } : {}),
+    },
+    getApiAuthSecret(),
+  );
+  const result = await getAgentCoreUserOAuth({
+    userId: principal.userId,
+    customState: state,
+    forceAuthentication: true,
+  });
+  if (result.status === "connected") {
+    return json({ status: "connected" });
+  }
+  if (result.status === "failed") {
+    return error("AgentCore authorization could not be started", 502);
+  }
+  return json(result, 202);
+}
+
+async function agentCoreOAuthStatus(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const principal = await agentCoreOAuthPrincipal(event);
+  if (!principal.ok) return principal.response;
+  const result = await getAgentCoreUserOAuth({ userId: principal.userId });
+  return json(
+    result.status === "connected"
+      ? { status: "connected" }
+      : { status: result.status },
+  );
+}
+
+function verifiedAgentCoreOAuthState(signedState: string): AgentCoreOAuthState {
+  const state = verifyObject<AgentCoreOAuthState>(
+    signedState,
+    getApiAuthSecret(),
+  );
+  if (
+    state.kind !== "agentcore-twenty-user-federation" ||
+    !state.userId ||
+    !state.tenantId
+  ) {
+    throw new Error("Invalid AgentCore OAuth state");
+  }
+  return state;
+}
+
+async function agentCoreOAuthBrowserReturn(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const query = event.queryStringParameters ?? {};
+  const sessionUri = agentCoreOAuthSessionUri(query);
+  const signedState = query.customState ?? query.custom_state ?? query.state;
+  if (!sessionUri || !signedState) {
+    return error(
+      "AgentCore OAuth session binding parameters are required",
+      400,
+    );
+  }
+  let state: AgentCoreOAuthState;
+  try {
+    state = verifiedAgentCoreOAuthState(signedState);
+  } catch {
+    return error("Invalid or expired AgentCore OAuth state", 403);
+  }
+  if (!state.returnTo)
+    return error("AgentCore OAuth return URL is required", 400);
+  const location = new URL(state.returnTo);
+  location.searchParams.set("agentcoreOAuth", "pending");
+  location.searchParams.set("agentcoreSessionId", sessionUri);
+  location.searchParams.set("agentcoreState", signedState);
+  return {
+    statusCode: 302,
+    headers: { Location: location.toString(), "Cache-Control": "no-store" },
+    body: "",
+  };
+}
+
+async function agentCoreOAuthComplete(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const principal = await agentCoreOAuthPrincipal(event);
+  if (!principal.ok) return principal.response;
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return error("Invalid JSON body", 400);
+  }
+  const sessionUri =
+    typeof body.sessionId === "string" ? body.sessionId : undefined;
+  const signedState = typeof body.state === "string" ? body.state : undefined;
+  if (!sessionUri || !signedState) {
+    return error(
+      "AgentCore OAuth session binding parameters are required",
+      400,
+    );
+  }
+  let state: AgentCoreOAuthState;
+  try {
+    state = verifiedAgentCoreOAuthState(signedState);
+  } catch {
+    return error("Invalid or expired AgentCore OAuth state", 403);
+  }
+  if (
+    !agentCoreOAuthPrincipalMatches({
+      stateUserId: state.userId,
+      stateTenantId: state.tenantId,
+      principalUserId: principal.userId,
+      principalTenantId: principal.tenantId,
+    })
+  ) {
+    return error("AgentCore OAuth user session does not match", 403);
+  }
+  await completeAgentCoreUserOAuth({ userId: principal.userId, sessionUri });
+  return json({ status: "connected" });
+}
 
 /**
  * Step 1: Browser redirect. Discovers the MCP server's OAuth endpoints,
@@ -1623,9 +1826,8 @@ async function mcpDeleteServer(
   // Bucket-gated; null (no DB read) in DB-mocked tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } = await import(
-      "../lib/mcp/assignment-state.js"
-    );
+    const { snapshotMcpServerAttachment } =
+      await import("../lib/mcp/assignment-state.js");
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId,
       registryServerId: serverId,
@@ -1760,13 +1962,11 @@ async function mcpDeleteServer(
 
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } = await import(
-        "../lib/mcp/assignment-state.js"
-      );
+      const { removeMcpAssignmentFoldersForAgents } =
+        await import("../lib/mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
-      const { removeConnectionFoldersForAgents } = await import(
-        "../lib/capabilities/reconcile-connection-folders.js"
-      );
+      const { removeConnectionFoldersForAgents } =
+        await import("../lib/capabilities/reconcile-connection-folders.js");
       await removeConnectionFoldersForAgents({
         agentIds: folderSnapshot.agentIds,
         registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
@@ -2648,9 +2848,8 @@ async function readAgentMcpAssignments(agentId: string): Promise<Array<{
     // THINK-190: the connection sidecar is the single assignment record.
     // Synthesize the state shape callers consume (enabled/enabledTools);
     // display fields come from the registry join below either way.
-    const { listConnectionAssignments } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { listConnectionAssignments } =
+      await import("../lib/capabilities/connection-assignments.js");
     const records = await listConnectionAssignments(targetPrefix);
     if (records === null) return null;
     for (const record of records) {
@@ -2789,9 +2988,8 @@ async function mcpAssignToAgent(
     : null;
   let existed = false;
   if (flipped && connectionSlug) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     existed =
       (await readConnectionAssignment(targetPrefix, connectionSlug)) != null;
   } else if (folderSlug != null) {
@@ -2815,9 +3013,8 @@ async function mcpAssignToAgent(
   // For a flipped agent this write IS the assignment, so its failure is
   // the request's failure; for un-flipped it stays a best-effort shadow.
   try {
-    const { writeConnectionFoldersForAgents } = await import(
-      "../lib/capabilities/reconcile-connection-folders.js"
-    );
+    const { writeConnectionFoldersForAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
     const allowlist = (config as { toolAllowlist?: unknown } | null)
       ?.toolAllowlist;
     await writeConnectionFoldersForAgents({
@@ -2842,9 +3039,8 @@ async function mcpAssignToAgent(
     // The shared writer is best-effort by contract (it swallows per-agent
     // failures), but for a flipped agent this write IS the assignment —
     // read the record back and fail the request if it did not land.
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     const landed = connectionSlug
       ? await readConnectionAssignment(targetPrefix, connectionSlug)
       : null;
@@ -2884,9 +3080,8 @@ async function mcpUnassignFromAgent(
   const flipped = await agentUsesFolderDispatch(agentId);
   const connectionSlug = folderSlug.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   if (flipped) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     const existing = await readConnectionAssignment(
       targetPrefix,
       connectionSlug,
@@ -2908,9 +3103,8 @@ async function mcpUnassignFromAgent(
   // Remove the signed connection folder — the record itself for a flipped
   // agent (verified below), a Composer-detach-parity shadow otherwise.
   try {
-    const { removeConnectionFoldersForAgents } = await import(
-      "../lib/capabilities/reconcile-connection-folders.js"
-    );
+    const { removeConnectionFoldersForAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
     await removeConnectionFoldersForAgents({
       agentIds: [agentId],
       registry: { slug: serverRow.slug, name: serverRow.name },
@@ -2922,9 +3116,8 @@ async function mcpUnassignFromAgent(
     );
   }
   if (flipped) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     if (await readConnectionAssignment(targetPrefix, connectionSlug)) {
       return error("Failed to remove MCP assignment from agent workspace", 500);
     }
@@ -3084,9 +3277,8 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } = await import(
-        "@aws-sdk/client-secrets-manager"
-      );
+      const { SecretsManagerClient, DeleteSecretCommand } =
+        await import("@aws-sdk/client-secrets-manager");
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -3142,9 +3334,8 @@ async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } = await import(
-    "@thinkwork/database-pg/schema"
-  );
+  const { agents, userMcpTokens } =
+    await import("@thinkwork/database-pg/schema");
 
   // Find all agents paired with this user. Agent assignments describe runtime
   // availability, but enabled tenant OAuth connectors also need to be
@@ -3948,9 +4139,8 @@ async function invokeAgentcoreRunSkill(payload: {
   if (!fnName)
     return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes

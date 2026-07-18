@@ -38,7 +38,8 @@ describe("createThread opening message mention routing", () => {
   });
 
   it("binds new threads to the tenant platform agent by default", () => {
-    expect(source).toContain("resolveDefaultThreadAgentId");
+    expect(source).toContain("resolveTenantPlatformAgent");
+    expect(source).toContain("platformAgent?.id ?? null");
     expect(source).toContain("const threadAgentId =");
     expect(source).toContain("agent_id: threadAgentId ?? undefined");
   });

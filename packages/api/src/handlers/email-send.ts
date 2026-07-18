@@ -33,6 +33,8 @@ const emailChannel = createEmailChannelService();
 
 interface SendEmailRequest {
   agentId: string;
+  /** Exact authenticated turn participant supplied by the managed runtime. */
+  requestingUserId?: string;
   to: string;
   subject: string;
   body: string;
@@ -46,11 +48,12 @@ interface SendEmailRequest {
   quotedBody?: string;
 }
 
-interface DirectSendEmailRequest {
+export interface DirectSendEmailRequest {
   tenantId?: string;
   routineId?: string;
   executionId?: string;
   agentId?: string;
+  requestingUserId?: string;
   spaceId?: string;
   threadId?: string;
   to?: string[] | string;
@@ -59,6 +62,7 @@ interface DirectSendEmailRequest {
   body?: string;
   bodyFormat?: "text" | "html" | "markdown";
   source?: string;
+  idempotencyKey?: string;
 }
 
 function isHttpEvent(event: unknown): event is APIGatewayProxyEventV2 {
@@ -344,6 +348,7 @@ export async function handler(
       providerInstallId: policy.providerInstallId,
       provider: policy.provider,
       agentId: agent.id,
+      requestingUserId: req.requestingUserId ?? null,
       spaceId,
       threadId: req.threadId ?? null,
       from: emailAddress,
@@ -358,6 +363,7 @@ export async function handler(
           status: "pending_review",
           conversationId: approval.conversationId,
           inboxItemId: approval.inboxItemId,
+          approvalUrl: `/approvals/${approval.inboxItemId}`,
         }),
       };
     }
@@ -413,7 +419,7 @@ function deriveSpaceAddressFromRequest(req: SendEmailRequest): string | null {
   return deriveSpaceAddress({ tenantSlug, spaceSlug });
 }
 
-async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
+export async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
   const recipients = parseRecipients(req.to);
   const cc = parseRecipients(req.cc);
   const subject = req.subject?.trim() ?? "";
@@ -567,6 +573,7 @@ async function sendRoutineChannelEmail(input: {
       providerInstallId: policy.providerInstallId,
       provider: policy.provider,
       agentId,
+      requestingUserId: input.req.requestingUserId ?? null,
       spaceId,
       threadId: input.req.threadId ?? null,
       from: fromAddress,
@@ -581,6 +588,7 @@ async function sendRoutineChannelEmail(input: {
           status: "pending_review",
           conversationId: approval.conversationId,
           inboxItemId: approval.inboxItemId,
+          approvalUrl: `/approvals/${approval.inboxItemId}`,
         }),
       };
     }
@@ -595,6 +603,7 @@ async function sendRoutineChannelEmail(input: {
     to: input.recipients,
     cc: input.cc,
     subject: input.subject,
+    idempotencyKey: input.req.idempotencyKey,
     text: rendered
       ? rendered.text
       : input.req.bodyFormat === "html"

@@ -20,8 +20,23 @@ vi.mock("../../utils.js", () => {
       id: col("agents.id"),
       tenant_id: col("agents.tenant_id"),
       is_platform_default: col("agents.is_platform_default"),
+      runtime: col("agents.runtime"),
+      runtime_config: col("agents.runtime_config"),
+    },
+    tenants: {
+      id: col("tenants.id"),
+      slug: col("tenants.slug"),
     },
     db: {
+      select: () => {
+        const chain = {
+          from: () => chain,
+          where: () => chain,
+          limit: () =>
+            Promise.resolve([{ runtime: "pi", runtimeConfig: null }]),
+        };
+        return chain;
+      },
       update: () => ({
         set: (updates: Record<string, unknown>) => {
           updateSets.push(updates);
@@ -59,14 +74,21 @@ vi.mock("./shared.js", () => ({
     typeof value === "string" ? JSON.parse(value) : value,
 }));
 
+vi.mock("../../../lib/harness/proof-profile.js", () => ({
+  readHarnessProofReadiness: vi.fn(() =>
+    Promise.resolve({ ready: true, reasonCode: "ready" }),
+  ),
+}));
+
 describe("updateTenantAgent", () => {
   beforeEach(() => {
     resetMocks();
   });
 
   it("updates the tenant platform agent baseline after admin authorization", async () => {
-    const { updateTenantAgent } =
-      await import("./updateTenantAgent.mutation.js");
+    const { updateTenantAgent } = await import(
+      "./updateTenantAgent.mutation.js"
+    );
 
     const result = await updateTenantAgent(
       null,
@@ -101,5 +123,53 @@ describe("updateTenantAgent", () => {
     expect(updateSets[0]).toHaveProperty("updated_at");
     expect(updateSets[0]).toHaveProperty("budget_paused_at");
     expect(result).toMatchObject({ id: "agent-platform" });
+  });
+
+  it("treats the legacy Harness runtime field as a new-thread default", async () => {
+    const { updateTenantAgent } = await import(
+      "./updateTenantAgent.mutation.js"
+    );
+
+    await updateTenantAgent(
+      null,
+      {
+        tenantId: "tenant-1",
+        input: {
+          runtime: "AGENTCORE",
+          runtimeConfig: JSON.stringify({ defaultSpaceId: "space-1" }),
+        },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updateSets).toHaveLength(1);
+    expect(updateSets[0]).toMatchObject({
+      runtime: "pi",
+      runtime_config: {
+        defaultSpaceId: "space-1",
+        defaultThreadRuntime: "agentcore",
+      },
+    });
+  });
+
+  it("changes the new-thread default back to Pi without restoring enrollments", async () => {
+    const { updateTenantAgent } = await import(
+      "./updateTenantAgent.mutation.js"
+    );
+
+    await updateTenantAgent(
+      null,
+      {
+        tenantId: "tenant-1",
+        input: { runtime: "FLUE" },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updateSets).toHaveLength(1);
+    expect(updateSets[0]).toMatchObject({
+      runtime: "pi",
+      runtime_config: { defaultThreadRuntime: "pi" },
+    });
   });
 });

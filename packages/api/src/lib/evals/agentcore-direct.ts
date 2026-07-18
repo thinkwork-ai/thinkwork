@@ -463,7 +463,7 @@ async function invokeAgentCoreForEvalOnce(input: {
   // THINK-311 (KTD-7): the Harness trial is chat-dispatch only — evals of
   // a harness-flagged agent fail explicitly rather than resolving the
   // harness runner (out of trial scope) or silently running Pi (R4).
-  if (runtimeConfig.runtimeType === "harness") {
+  if (runtimeConfig.runtimeType === "agentcore") {
     throw new HarnessChatDispatchOnlyError("eval");
   }
   const agentcoreFunctionName = resolveRuntimeFunctionName(

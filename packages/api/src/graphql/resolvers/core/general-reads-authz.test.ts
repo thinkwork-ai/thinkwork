@@ -27,8 +27,14 @@ vi.mock("./resolve-auth-user.js", () => ({
 
 vi.mock("../../utils.js", () => ({
   db: { select: mockSelect },
+  and: vi.fn((...items: unknown[]) => ({ items })),
   eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
-  tenants: { id: "tenants.id" },
+  harnessManagedThreadEnrollments: {
+    thread_id: "harness_managed_thread_enrollments.thread_id",
+    tenant_id: "harness_managed_thread_enrollments.tenant_id",
+    status: "harness_managed_thread_enrollments.status",
+  },
+  tenants: { id: "tenants.id", slug: "tenants.slug" },
   tenantMembers: { tenant_id: "tenant_members.tenant_id" },
   snakeToCamel: (row: Record<string, unknown>) => row,
 }));

@@ -182,6 +182,90 @@ function expectZeroSideEffects() {
 }
 
 describe("probe mode: per-user OAuth (AE2 substrate)", () => {
+  it("uses authoritative external custody without requiring a legacy token row", async () => {
+    const probe = vi.fn(async () => "active" as const);
+    const resolve = vi.fn();
+    const configs = await buildMcpConfigs(
+      AGENT_ID,
+      { humanPairId: null, requesterUserId: USER_ID },
+      "[test]",
+      {
+        tokenMode: "probe",
+        userOAuth: {
+          supports: (server) => server.slug === "github",
+          probe,
+          resolve,
+        },
+      },
+    );
+
+    expect(configs).toEqual([
+      expect.objectContaining({ name: "github", tokenStatus: "active" }),
+    ]);
+    expect(probe).toHaveBeenCalledWith({
+      userId: USER_ID,
+      server: expect.objectContaining({
+        mcpServerId: "server-1",
+        slug: "github",
+      }),
+    });
+    expect(mockRowsForUserToken).not.toHaveBeenCalled();
+    expect(resolve).not.toHaveBeenCalled();
+    expectZeroSideEffects();
+  });
+
+  it("does not fall back to a legacy token when authoritative custody reports missing", async () => {
+    mockRowsForUserToken.mockReturnValue([activeTokenRow()]);
+    const configs = await buildMcpConfigs(
+      AGENT_ID,
+      { humanPairId: null, requesterUserId: USER_ID },
+      "[test]",
+      {
+        tokenMode: "probe",
+        userOAuth: {
+          supports: () => true,
+          probe: async () => "missing",
+          resolve: vi.fn(),
+        },
+      },
+    );
+
+    expect(configs).toEqual([]);
+    expect(mockRowsForUserToken).not.toHaveBeenCalled();
+    expectZeroSideEffects();
+  });
+
+  it("resolves the runtime bearer only through authoritative external custody", async () => {
+    mockRowsForUserToken.mockReturnValue([activeTokenRow()]);
+    const resolve = vi.fn(async () => "agentcore-vault-token");
+    const configs = await buildMcpConfigs(
+      AGENT_ID,
+      { humanPairId: null, requesterUserId: USER_ID },
+      "[test]",
+      {
+        userOAuth: {
+          supports: () => true,
+          probe: vi.fn(),
+          resolve,
+        },
+      },
+    );
+
+    expect(configs).toEqual([
+      expect.objectContaining({
+        name: "github",
+        auth: { type: "bearer", token: "agentcore-vault-token" },
+      }),
+    ]);
+    expect(resolve).toHaveBeenCalledWith({
+      userId: USER_ID,
+      server: expect.objectContaining({ slug: "github" }),
+    });
+    expect(mockRowsForUserToken).not.toHaveBeenCalled();
+    expect(mockSmSend).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("active token → included with tokenStatus=active, no auth material, zero side effects", async () => {
     mockRowsForUserToken.mockReturnValue([activeTokenRow()]);
     const { configs } = await probeBuild({

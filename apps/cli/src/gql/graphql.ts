@@ -276,6 +276,19 @@ export type AgentCapabilityInput = {
   enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
+export type AgentCoreHarnessProofStatus = {
+  __typename?: "AgentCoreHarnessProofStatus";
+  activeThreadId?: Maybe<Scalars["ID"]["output"]>;
+  checkedAt: Scalars["AWSDateTime"]["output"];
+  endpointName?: Maybe<Scalars["String"]["output"]>;
+  expectedVersion?: Maybe<Scalars["String"]["output"]>;
+  liveVersion?: Maybe<Scalars["String"]["output"]>;
+  ready: Scalars["Boolean"]["output"];
+  reasonCode: Scalars["String"]["output"];
+  sessionStrategy?: Maybe<Scalars["String"]["output"]>;
+  state: Scalars["String"]["output"];
+};
+
 export type AgentCostSummary = {
   __typename?: "AgentCostSummary";
   agentId?: Maybe<Scalars["ID"]["output"]>;
@@ -2312,6 +2325,7 @@ export type DeploymentStatus = {
   __typename?: "DeploymentStatus";
   accountId?: Maybe<Scalars["String"]["output"]>;
   adminUrl?: Maybe<Scalars["String"]["output"]>;
+  agentcoreHarnessProof: AgentCoreHarnessProofStatus;
   agentcoreStatus?: Maybe<Scalars["String"]["output"]>;
   apiEndpoint?: Maybe<Scalars["String"]["output"]>;
   appsyncRealtimeUrl?: Maybe<Scalars["String"]["output"]>;
@@ -3041,6 +3055,14 @@ export type HandleJsonRenderActionInput = {
   sourceMessageId: Scalars["ID"]["input"];
   specHash: Scalars["String"]["input"];
   threadId: Scalars["ID"]["input"];
+};
+
+export type HarnessProofThreadResult = {
+  __typename?: "HarnessProofThreadResult";
+  created: Scalars["Boolean"]["output"];
+  priorRuntime: AgentRuntime;
+  state: Scalars["String"]["output"];
+  threadId: Scalars["ID"]["output"];
 };
 
 export type HeartbeatActivityEvent = {
@@ -4495,6 +4517,7 @@ export type Mutation = {
   createEvalProfile: EvalProfile;
   createEvalTestCase: EvalTestCase;
   createExternalCapabilityClient: CapabilityRuntimeMutationResult;
+  createHarnessProofThread: HarnessProofThreadResult;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
   createQuickAction: UserQuickAction;
@@ -5194,6 +5217,10 @@ export type MutationCreateEvalTestCaseArgs = {
 
 export type MutationCreateExternalCapabilityClientArgs = {
   input: CreateExternalCapabilityClientInput;
+};
+
+export type MutationCreateHarnessProofThreadArgs = {
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationCreateInboxItemArgs = {
@@ -10563,6 +10590,8 @@ export type Thread = {
   createdByType?: Maybe<Scalars["String"]["output"]>;
   dueAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   goal?: Maybe<ThreadGoal>;
+  /** True only for an explicitly enrolled managed Harness proof thread. */
+  harnessProof: Scalars["Boolean"]["output"];
   id: Scalars["ID"]["output"];
   identifier?: Maybe<Scalars["String"]["output"]>;
   isBlocked: Scalars["Boolean"]["output"];

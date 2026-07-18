@@ -137,6 +137,7 @@ type DeploymentStatus {
   appsyncRealtimeUrl: String
   hindsightEndpoint: String
   agentcoreStatus: String
+  agentcoreHarnessProof: AgentCoreHarnessProofStatus!
   hindsightEnabled: Boolean!
   managedMemoryEnabled: Boolean!
   twentyProvisioned: Boolean!
@@ -150,6 +151,25 @@ type DeploymentStatus {
   twentyAlbArn: String
   twentyTargetGroupArn: String
   managedApplications: [ManagedApplicationDeployment!]!
+}
+
+type AgentCoreHarnessProofStatus {
+  state: String!
+  ready: Boolean!
+  reasonCode: String!
+  endpointName: String
+  expectedVersion: String
+  liveVersion: String
+  sessionStrategy: String
+  activeThreadId: ID
+  checkedAt: AWSDateTime!
+}
+
+type HarnessProofThreadResult {
+  threadId: ID!
+  created: Boolean!
+  state: String!
+  priorRuntime: AgentRuntime!
 }
 
 type ManagedApplicationDeployment {
@@ -562,6 +582,7 @@ extend type Query {
 }
 
 extend type Mutation {
+  createHarnessProofThread(tenantId: ID!): HarnessProofThreadResult!
   bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!

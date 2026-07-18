@@ -92,7 +92,7 @@ export async function runStallMonitor(
     // Pi, and that re-dispatch would be the silent Pi fallback R4
     // forbids. The harness runner's keepalive bumps last_activity_at, so
     // only genuinely dead harness turns land here.
-    if (turn.runtime_type === "harness") {
+    if (turn.runtime_type === "agentcore" || turn.runtime_type === "harness") {
       console.log(
         `[stall-monitor] harness turn ${turn.id} timed out; retry enqueue skipped (THINK-311 R4)`,
       );

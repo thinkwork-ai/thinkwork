@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { agents, and, db, eq } from "../../utils.js";
+import { agents, and, db, eq, tenants } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { parseAgentRuntimeInput } from "./runtime.js";
 import {
@@ -7,6 +7,8 @@ import {
   loadTenantAgentForGraphql,
   parseJsonInput,
 } from "./shared.js";
+import { readHarnessProofReadiness } from "../../../lib/harness/proof-profile.js";
+import { GraphQLError } from "graphql";
 
 interface UpdateTenantAgentInput {
   name?: string | null;
@@ -40,16 +42,74 @@ export async function updateTenantAgent(
   const i = args.input ?? {};
   await assertTenantGuardrail(args.tenantId, i.guardrailId);
 
+  const [currentAgent] = await db
+    .select({
+      runtime: agents.runtime,
+      runtimeConfig: agents.runtime_config,
+    })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.tenant_id, args.tenantId),
+        eq(agents.is_platform_default, true),
+      ),
+    )
+    .limit(1);
+
   const updates: Record<string, unknown> = { updated_at: new Date() };
   if (i.name !== undefined) updates.name = i.name;
   if (i.role !== undefined) updates.role = i.role;
   if (i.systemPrompt !== undefined) updates.system_prompt = i.systemPrompt;
-  if (i.runtime !== undefined)
-    updates.runtime = parseAgentRuntimeInput(i.runtime);
+  if (i.runtime !== undefined) {
+    const runtime = parseAgentRuntimeInput(i.runtime);
+    const currentConfig =
+      currentAgent?.runtimeConfig &&
+      typeof currentAgent.runtimeConfig === "object" &&
+      !Array.isArray(currentAgent.runtimeConfig)
+        ? (currentAgent.runtimeConfig as Record<string, unknown>)
+        : {};
+    const requestedConfig =
+      i.runtimeConfig !== undefined
+        ? parseJsonInput(i.runtimeConfig)
+        : currentConfig;
+    if (runtime === "agentcore") {
+      const [tenant] = await db
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, args.tenantId))
+        .limit(1);
+      const readiness = await readHarnessProofReadiness(tenant?.slug ?? null);
+      if (!readiness.ready) {
+        throw new GraphQLError(
+          `AgentCore Harness proof is unavailable (${readiness.reasonCode})`,
+          {
+            extensions: {
+              code: "HARNESS_PROOF_NOT_READY",
+              reasonCode: readiness.reasonCode,
+            },
+          },
+        );
+      }
+    }
+    // The Settings selector chooses the runtime for NEW Composer threads.
+    // Existing threads carry an immutable metadata pin, so changing this
+    // default must never replace the platform agent runtime or restore active
+    // Harness enrollments. Keeping the platform agent on Pi also protects old
+    // clients that still send the deprecated tenant-wide `runtime` field.
+    updates.runtime = "pi";
+    updates.runtime_config = {
+      ...(requestedConfig &&
+      typeof requestedConfig === "object" &&
+      !Array.isArray(requestedConfig)
+        ? (requestedConfig as Record<string, unknown>)
+        : {}),
+      defaultThreadRuntime: runtime === "agentcore" ? "agentcore" : "pi",
+    };
+  }
   if (i.adapterType !== undefined) updates.adapter_type = i.adapterType;
   if (i.adapterConfig !== undefined)
     updates.adapter_config = parseJsonInput(i.adapterConfig);
-  if (i.runtimeConfig !== undefined)
+  if (i.runtimeConfig !== undefined && updates.runtime_config === undefined)
     updates.runtime_config = parseJsonInput(i.runtimeConfig);
   if (i.model !== undefined) updates.model = i.model;
   if (i.guardrailId !== undefined) updates.guardrail_id = i.guardrailId;

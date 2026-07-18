@@ -175,6 +175,63 @@ export async function processFinalize(
       sql`COALESCE(${threadTurns.context_snapshot} #>> '{mobile_turn,ownership}', 'mobile') = ${payload.claim.context_owner}`,
     );
   }
+  if (
+    payload.claim?.harness_session_id ||
+    payload.claim?.harness_participant_user_id
+  ) {
+    if (
+      !payload.claim.harness_session_id ||
+      !payload.claim.harness_participant_user_id ||
+      (payloadRuntimeType !== "agentcore" && payloadRuntimeType !== "harness")
+    ) {
+      throw new Error("Harness finalize claim is incomplete");
+    }
+    claimConditions.push(
+      sql`EXISTS (
+        SELECT 1
+        FROM harness_participant_sessions hs
+        JOIN harness_managed_thread_enrollments he
+          ON he.id = hs.enrollment_id
+         AND he.tenant_id = hs.tenant_id
+         AND he.thread_id = hs.thread_id
+         AND he.status = 'active'
+         AND he.qualifier = hs.qualifier
+         AND he.resolved_version = hs.resolved_version
+        JOIN thread_participants hp
+          ON hp.tenant_id = hs.tenant_id
+         AND hp.thread_id = hs.thread_id
+         AND hp.participant_type = 'user'
+         AND hp.user_id = hs.participant_user_id
+        JOIN thread_turns ht
+          ON ht.id = hs.turn_id
+         AND ht.tenant_id = hs.tenant_id
+         AND ht.thread_id = hs.thread_id
+        JOIN messages hm
+          ON hm.id = ht.triggering_message_id
+         AND hm.tenant_id = hs.tenant_id
+         AND hm.thread_id = hs.thread_id
+         AND hm.role = 'user'
+         AND hm.sender_id = hs.participant_user_id
+        WHERE hs.id = ${payload.claim.harness_session_id}::uuid
+          AND hs.tenant_id = ${tenantId}::uuid
+          AND hs.thread_id = ${threadId}::uuid
+          AND hs.turn_id = ${turnId}::uuid
+          AND hs.participant_user_id = ${payload.claim.harness_participant_user_id}::uuid
+          AND hs.state = 'finalizing'
+          AND hs.base_fingerprint <> ''
+          AND hs.participant_fingerprint <> ''
+          AND coalesce(hm.metadata->>'visibility', 'public') = 'public'
+          AND coalesce(hm.metadata->>'disclosure_status', 'published') NOT IN ('withheld', 'confirmation_required')
+          AND NOT EXISTS (
+            SELECT 1 FROM thread_public_events hpe
+            WHERE hpe.tenant_id = hs.tenant_id
+              AND hpe.thread_id = hs.thread_id
+              AND hpe.id > hs.captured_high_water
+              AND hpe.event_kind = 'invalidate'
+          )
+      )`,
+    );
+  }
   const claimed = await db
     .update(threadTurns)
     .set({

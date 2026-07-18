@@ -250,6 +250,7 @@ export interface TaskThread {
   status?: string | null;
   lifecycleStatus?: string | null;
   costSummary?: number | null;
+  harnessProof?: boolean;
   messages: TaskThreadMessage[];
   turns?: TaskThreadTurn[];
 }
@@ -788,6 +789,14 @@ export function TaskThreadView({
                   data-testid="thread-conversation-column"
                   className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
                 >
+                  {thread.harnessProof ? (
+                    <div
+                      className="w-fit rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-200"
+                      data-testid="harness-proof-thread-badge"
+                    >
+                      Harness proof
+                    </div>
+                  ) : null}
                   {transcriptMessages.length === 0 ? (
                     <ThinkingRow
                       title="Working…"
@@ -2265,7 +2274,12 @@ function ThreadTurnActivity({
   const elapsedLabel =
     running && elapsedMs != null ? formatDuration(elapsedMs) : null;
   const failureDetail =
-    status === "failed" ? turn.error || "No error detail was provided." : null;
+    status === "failed"
+      ? turn.errorCode === "harness_proof_thread_required" ||
+        turn.error?.includes("harness_proof_thread_required")
+        ? "This thread is not enrolled for the AgentCore Harness proof. Open Agent configuration to create or open the proof thread, or restore Pi. No runtime fallback was used."
+        : turn.error || "No error detail was provided."
+      : null;
 
   // Per-turn flag-for-evaluation affordance (U7): completed turns only,
   // and only when the host wired the (operator-gated) callback.
@@ -5586,7 +5600,9 @@ function sourceKey(value: unknown) {
 function turnSummary(turn: TaskThreadTurn, usage: Record<string, unknown>) {
   const parts = [
     formatInvocationSource(turn.invocationSource),
-    stringValue(turn.model),
+    // The requested UI model can differ from the immutable managed Harness
+    // model. Finalized usage is the authoritative provider/model attribution.
+    stringValue(usage.model) || stringValue(turn.model),
     formatTurnStatus(turn.status),
     formatTurnDuration(turn),
     formatTokenUsage(usage),
@@ -5627,11 +5643,23 @@ function formatTurnDuration(turn: TaskThreadTurn) {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-function formatTokenUsage(usage: Record<string, unknown>) {
+export function formatTokenUsage(usage: Record<string, unknown>) {
   const input = Number(usage.input_tokens ?? usage.inputTokens ?? 0);
   const output = Number(usage.output_tokens ?? usage.outputTokens ?? 0);
-  if (!input && !output) return null;
-  return `${formatCount(input)} in / ${formatCount(output)} out`;
+  const cachedRead = Number(
+    usage.cached_read_tokens ?? usage.cachedReadTokens ?? 0,
+  );
+  const cachedWrite = Number(
+    usage.cached_write_tokens ?? usage.cachedWriteTokens ?? 0,
+  );
+  if (!input && !output && !cachedRead && !cachedWrite) return null;
+  return [
+    `${formatCount(input)} in / ${formatCount(output)} out`,
+    cachedRead ? `${formatCount(cachedRead)} cache read` : null,
+    cachedWrite ? `${formatCount(cachedWrite)} cache write` : null,
+  ]
+    .filter(Boolean)
+    .join(" / ");
 }
 
 function formatCount(value: number) {

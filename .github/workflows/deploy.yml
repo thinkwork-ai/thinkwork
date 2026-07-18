@@ -13,6 +13,10 @@ on:
         description: "Run optional post-deploy smoke tests"
         type: boolean
         default: false
+      allow_destructive_terraform:
+        description: "Allow a reviewed Terraform plan containing delete/replace actions"
+        type: boolean
+        default: false
       use_controller:
         description: "Start the dev deployment controller instead of direct Terraform apply"
         type: boolean
@@ -1387,6 +1391,12 @@ jobs:
             # populates CAPABILITY_PRIVATE_* so agentcore-admin provisions
             # capability-private interpreters. One-line revert disables it.
             -var "enable_capability_broker=true"
+            # THINK-316 — explicit dev-only managed multiplayer Harness pilot.
+            # The default remains off. Production/customer release workflows do
+            # not pass these repository variables.
+            -var "enable_agentcore_multiplayer_proof=${{ vars.ENABLE_AGENTCORE_MULTIPLAYER_PROOF || 'false' }}"
+            -var "agentcore_multiplayer_proof_tenant_slug=${{ vars.AGENTCORE_MULTIPLAYER_PROOF_TENANT_SLUG || '' }}"
+            -var "agentcore_multiplayer_proof_owner_allowlist=${{ vars.AGENTCORE_MULTIPLAYER_PROOF_OWNER_ALLOWLIST || '' }}"
           )
 
           resolve_existing_api_id() {
@@ -1510,13 +1520,62 @@ jobs:
               -target=module.thinkwork.module.capability_broker.aws_lambda_function.broker
               -target=module.thinkwork.module.agentcore_admin.aws_lambda_function.admin
             )
+            if [ "${{ vars.ENABLE_AGENTCORE_MULTIPLAYER_PROOF || 'false' }}" = "true" ]; then
+              # The Harness lifecycle and exact-user Identity/Gateway plane
+              # sit outside the blanket API Lambda target. Keep the pilot
+              # recoverable after a cancelled Terraform-bearing deploy.
+              TF_TARGET_ARGS+=(
+                -target=module.thinkwork.module.agentcore_harness
+                -target=module.thinkwork.module.agentcore_proof_identity
+                -target=module.thinkwork.module.agentcore_proof_gateway
+                -target=module.thinkwork.aws_ssm_parameter.agentcore_harness_proof_profile
+                -target=module.thinkwork.module.api.aws_kms_key.agentcore_turn_assertion
+                -target=module.thinkwork.module.api.aws_kms_alias.agentcore_turn_assertion
+                -target=module.thinkwork.module.api.aws_iam_role.turn_assertion_mint
+                -target=module.thinkwork.module.api.aws_iam_role_policy.turn_assertion_mint_kms
+                -target=module.thinkwork.module.api.aws_iam_role_policy.turn_assertion_jwks_kms
+              )
+            fi
           fi
+          # Always materialize and inspect the exact plan that will be
+          # applied. A push to main must never auto-approve a delete or
+          # replacement: destructive changes require an explicit reviewed
+          # workflow_dispatch with allow_destructive_terraform=true.
+          #
           # -refresh=false skips ~30s of "Refreshing state…" against ~700
           # resources on every push. Out-of-band drift is caught by the
-          # nightly drift-check job in .github/workflows/verify.yml, which
-          # runs `terraform plan -refresh=true` and surfaces any diff to
-          # $GITHUB_STEP_SUMMARY without failing the workflow.
-          terraform apply -auto-approve -refresh=false -lock-timeout=10m "${TF_TARGET_ARGS[@]}" "${TF_VAR_ARGS[@]}"
+          # nightly drift-check job in .github/workflows/verify.yml.
+          plan_file=$(mktemp "${RUNNER_TEMP}/thinkwork-plan.XXXXXX")
+          plan_json=$(mktemp "${RUNNER_TEMP}/thinkwork-plan.XXXXXX.json")
+          terraform plan \
+            -input=false \
+            -refresh=false \
+            -lock-timeout=10m \
+            -out="$plan_file" \
+            "${TF_TARGET_ARGS[@]}" \
+            "${TF_VAR_ARGS[@]}"
+          terraform show -json "$plan_file" > "$plan_json"
+
+          destructive_count=$(jq '[
+            .resource_changes[]?
+            | select(.change.actions | index("delete"))
+          ] | length' "$plan_json")
+          if [ "$destructive_count" -gt 0 ]; then
+            echo "Terraform plan contains ${destructive_count} delete/replace action(s):"
+            jq -r '
+              .resource_changes[]?
+              | select(.change.actions | index("delete"))
+              | "- \(.address): \(.change.actions | join("/"))"
+            ' "$plan_json"
+            allow_destructive="${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive_terraform == true }}"
+            if [ "$allow_destructive" != "true" ]; then
+              echo "::error::Refusing destructive Terraform auto-apply. Review the plan, then use workflow_dispatch with allow_destructive_terraform=true only when every delete is intentional."
+              exit 1
+            fi
+            echo "::warning::Applying explicitly approved destructive Terraform plan."
+          fi
+
+          terraform apply -auto-approve -lock-timeout=10m "$plan_file"
 
       - name: Restart Twenty CRM runtime after database prep
         working-directory: terraform/examples/greenfield
@@ -1852,16 +1911,7 @@ jobs:
   migration-drift-check:
     name: Migration Drift Check
     needs: [terraform-apply, compliance-bootstrap]
-    # TEMPORARILY DISABLED — the drift gate fires ~150 separate psql
-    # connections on every deploy and intermittently exits 1 on
-    # transient RDS connection-rate / network blips, blocking deploys
-    # with no actionable signal (the inner invocation inside
-    # bootstrap-compliance-roles.sh redirects output to /dev/null).
-    # Re-enable by restoring the original
-    #   if: always() && needs.terraform-apply.result == 'success' && needs.compliance-bootstrap.result == 'success'
-    # once the drift gate is rewritten to share a single psql
-    # connection (or moved off the deploy critical path entirely).
-    if: false
+    if: always() && needs.terraform-apply.result == 'success' && needs.compliance-bootstrap.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

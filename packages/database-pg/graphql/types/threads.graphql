@@ -75,6 +75,8 @@ type Thread {
   billingCode: String
   labels: AWSJSON
   metadata: AWSJSON
+  "True only for an explicitly enrolled managed Harness proof thread."
+  harnessProof: Boolean!
   goal: ThreadGoal
   dueAt: AWSDateTime
   startedAt: AWSDateTime

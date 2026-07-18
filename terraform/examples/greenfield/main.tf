@@ -111,6 +111,36 @@ variable "enable_capability_broker" {
   default     = false
 }
 
+variable "enable_agentcore_multiplayer_proof" {
+  description = "Opt in to the non-production THINK-316 AgentCore Identity/Gateway proof substrate."
+  type        = bool
+  default     = false
+}
+
+variable "agentcore_multiplayer_proof_tenant_slug" {
+  description = "Explicit non-production tenant slug used for the one-Harness multiplayer proof."
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_multiplayer_proof_owner_allowlist" {
+  description = "Comma-separated non-production subjects for the manual authorization-code and mixed-disclosure fixtures. Signed OBO turn participants do not require registration here."
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_turn_assertion_key_versions" {
+  description = "One or two published AgentCore assertion key versions during rotation."
+  type        = list(string)
+  default     = ["v1"]
+}
+
+variable "agentcore_turn_assertion_active_key_version" {
+  description = "AgentCore assertion key version used to sign new tokens."
+  type        = string
+  default     = "v1"
+}
+
 variable "analyst_lambda_vpc_egress" {
   description = "VPC-attach the analyst data-path Lambdas so their egress rides the NAT gateway's stable EIP — required when an external analyst data source sits behind an IP allowlist. See the thinkwork module's analyst_egress_ip output for the IP to allowlist."
   type        = bool
@@ -764,51 +794,56 @@ module "thinkwork" {
 
   plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
 
-  db_password                       = var.db_password
-  database_engine                   = var.database_engine
-  enable_hindsight                  = var.enable_hindsight
-  enable_capability_broker          = var.enable_capability_broker
-  analyst_lambda_vpc_egress         = var.analyst_lambda_vpc_egress
-  hindsight_database_name           = var.hindsight_database_name
-  memory_engine                     = var.memory_engine
-  twenty_provisioned                = var.twenty_provisioned
-  twenty_runtime_enabled            = var.twenty_runtime_enabled
-  twenty_image_uri                  = var.twenty_image_uri
-  twenty_db_username                = var.twenty_db_username
-  twenty_db_name                    = var.twenty_db_name
-  twenty_db_url_secret_arn          = var.twenty_db_url_secret_arn
-  twenty_encryption_key_secret_arn  = var.twenty_encryption_key_secret_arn
-  twenty_email_from_address         = var.twenty_email_from_address
-  twenty_email_from_name            = var.twenty_email_from_name
-  twenty_public_url                 = local.twenty_url
-  twenty_certificate_arn            = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
-  n8n_provisioned                   = var.n8n_provisioned
-  n8n_runtime_enabled               = var.n8n_runtime_enabled
-  n8n_image_uri                     = var.n8n_image_uri
-  n8n_database_admin_secret_arn     = var.n8n_database_admin_secret_arn
-  n8n_database_url_secret_arn       = var.n8n_database_url_secret_arn
-  n8n_database_username             = var.n8n_database_username
-  n8n_database_name                 = var.n8n_database_name
-  n8n_encryption_key_secret_arn     = var.n8n_encryption_key_secret_arn
-  n8n_operator_secret_arn           = var.n8n_operator_secret_arn
-  n8n_service_credential_secret_arn = var.n8n_service_credential_secret_arn
-  n8n_storage_bucket_name           = var.n8n_storage_bucket_name
-  n8n_container_port                = var.n8n_container_port
-  n8n_cache_engine                  = var.n8n_cache_engine
-  n8n_domain                        = local.n8n_domain
-  n8n_public_url                    = local.n8n_url
-  n8n_certificate_arn               = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
-  google_oauth_client_id            = var.google_oauth_client_id
-  google_oauth_client_secret        = var.google_oauth_client_secret
-  pre_signup_lambda_zip             = var.pre_signup_lambda_zip
-  cognito_custom_auth_lambda_zip    = var.cognito_custom_auth_lambda_zip
-  lambda_zips_dir                   = var.lambda_zips_dir
-  lambda_artifact_bucket            = var.lambda_artifact_bucket
-  lambda_artifact_prefix            = var.lambda_artifact_prefix
-  require_lambda_artifacts          = var.require_lambda_artifacts
-  enable_workspace_orchestration    = var.enable_workspace_orchestration
-  api_auth_secret                   = var.api_auth_secret
-  platform_operator_emails          = var.platform_operator_emails
+  db_password                                 = var.db_password
+  database_engine                             = var.database_engine
+  enable_hindsight                            = var.enable_hindsight
+  enable_capability_broker                    = var.enable_capability_broker
+  enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
+  agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug
+  agentcore_multiplayer_proof_owner_allowlist = var.agentcore_multiplayer_proof_owner_allowlist
+  agentcore_turn_assertion_key_versions       = var.agentcore_turn_assertion_key_versions
+  agentcore_turn_assertion_active_key_version = var.agentcore_turn_assertion_active_key_version
+  analyst_lambda_vpc_egress                   = var.analyst_lambda_vpc_egress
+  hindsight_database_name                     = var.hindsight_database_name
+  memory_engine                               = var.memory_engine
+  twenty_provisioned                          = var.twenty_provisioned
+  twenty_runtime_enabled                      = var.twenty_runtime_enabled
+  twenty_image_uri                            = var.twenty_image_uri
+  twenty_db_username                          = var.twenty_db_username
+  twenty_db_name                              = var.twenty_db_name
+  twenty_db_url_secret_arn                    = var.twenty_db_url_secret_arn
+  twenty_encryption_key_secret_arn            = var.twenty_encryption_key_secret_arn
+  twenty_email_from_address                   = var.twenty_email_from_address
+  twenty_email_from_name                      = var.twenty_email_from_name
+  twenty_public_url                           = local.twenty_url
+  twenty_certificate_arn                      = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
+  n8n_provisioned                             = var.n8n_provisioned
+  n8n_runtime_enabled                         = var.n8n_runtime_enabled
+  n8n_image_uri                               = var.n8n_image_uri
+  n8n_database_admin_secret_arn               = var.n8n_database_admin_secret_arn
+  n8n_database_url_secret_arn                 = var.n8n_database_url_secret_arn
+  n8n_database_username                       = var.n8n_database_username
+  n8n_database_name                           = var.n8n_database_name
+  n8n_encryption_key_secret_arn               = var.n8n_encryption_key_secret_arn
+  n8n_operator_secret_arn                     = var.n8n_operator_secret_arn
+  n8n_service_credential_secret_arn           = var.n8n_service_credential_secret_arn
+  n8n_storage_bucket_name                     = var.n8n_storage_bucket_name
+  n8n_container_port                          = var.n8n_container_port
+  n8n_cache_engine                            = var.n8n_cache_engine
+  n8n_domain                                  = local.n8n_domain
+  n8n_public_url                              = local.n8n_url
+  n8n_certificate_arn                         = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
+  google_oauth_client_id                      = var.google_oauth_client_id
+  google_oauth_client_secret                  = var.google_oauth_client_secret
+  pre_signup_lambda_zip                       = var.pre_signup_lambda_zip
+  cognito_custom_auth_lambda_zip              = var.cognito_custom_auth_lambda_zip
+  lambda_zips_dir                             = var.lambda_zips_dir
+  lambda_artifact_bucket                      = var.lambda_artifact_bucket
+  lambda_artifact_prefix                      = var.lambda_artifact_prefix
+  require_lambda_artifacts                    = var.require_lambda_artifacts
+  enable_workspace_orchestration              = var.enable_workspace_orchestration
+  api_auth_secret                             = var.api_auth_secret
+  platform_operator_emails                    = var.platform_operator_emails
 
   # Public website custom domain (optional — wired only when www_domain is set)
   www_domain          = var.www_domain
@@ -1341,4 +1376,44 @@ output "customer_domain_name_servers" {
 output "analyst_egress_ip" {
   description = "Stable NAT egress IP of the VPC-attached analyst data-path Lambdas (null unless analyst_lambda_vpc_egress is set)"
   value       = module.thinkwork.analyst_egress_ip
+}
+
+output "agentcore_harness_proof_arn" {
+  description = "One pilot tenant/profile Harness ARN."
+  value       = module.thinkwork.agentcore_harness_proof_arn
+}
+
+output "agentcore_harness_proof_endpoint_name" {
+  description = "Named version-pinned Harness qualifier."
+  value       = module.thinkwork.agentcore_harness_proof_endpoint_name
+}
+
+output "agentcore_harness_proof_version" {
+  description = "Attested immutable Harness version."
+  value       = module.thinkwork.agentcore_harness_proof_version
+}
+
+output "agentcore_harness_proof_status" {
+  description = "Safe managed Harness proof readiness state."
+  value       = module.thinkwork.agentcore_harness_proof_status
+}
+
+output "agentcore_turn_assertion_issuer" {
+  description = "Proof CUSTOM_JWT issuer used by deployed operator probes."
+  value       = module.thinkwork.agentcore_turn_assertion_issuer
+}
+
+output "agentcore_harness_audience" {
+  description = "Purpose-bound proof Harness audience."
+  value       = module.thinkwork.agentcore_harness_audience
+}
+
+output "agentcore_turn_assertion_active_key_arn" {
+  description = "Operator-only active proof signing key ARN."
+  value       = module.thinkwork.agentcore_turn_assertion_active_key_arn
+}
+
+output "agentcore_turn_assertion_active_kid" {
+  description = "Public JWKS key identifier for the active proof signing key."
+  value       = module.thinkwork.agentcore_turn_assertion_active_kid
 }

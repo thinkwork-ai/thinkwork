@@ -58,6 +58,8 @@ describe("analyst semantic model (THINK-228 U1)", () => {
   it("excludes denylisted secret-bearing tables from the model", () => {
     for (const denied of [
       "credentials",
+      "harness_governed_tool_executions",
+      "harness_participant_sessions",
       "webhooks",
       "routine_approval_tokens",
       "workos_auth_sessions",

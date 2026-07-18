@@ -16,6 +16,7 @@ import {
   GetItemCommand,
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import { GetPublicKeyCommand, KMSClient } from "@aws-sdk/client-kms";
 import {
   McpOAuthStateError,
   encodeJwt,
@@ -27,6 +28,7 @@ import {
 } from "../lib/mcp-oauth/state.js";
 import { handleCors, json, error } from "../lib/response.js";
 import { verifyClientSecret } from "../lib/mcp-oauth/client-secret.js";
+import { publicKeyDerToJwk } from "../lib/mcp-oauth/turn-assertion.js";
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const AUTH_CODE_TTL_SECONDS = 5 * 60;
@@ -70,11 +72,25 @@ const secrets = new SecretsManagerClient({
 const dynamodb = new DynamoDBClient({
   region: process.env.AWS_REGION || "us-east-1",
 });
+const kms = new KMSClient({
+  region: process.env.AWS_REGION || "us-east-1",
+});
 const testAuthorizationCodes = new Map<string, StoredAuthorizationCode>();
 const testRevokedTokenIds = new Map<
   string,
   { expiresAt: number; revokedAt: string; clientId?: string }
 >();
+
+type TurnAssertionPublicKeyLoader = (keyId: string) => Promise<Uint8Array>;
+type TurnAssertionJwksKey = { keyId: string; kid: string };
+let turnAssertionPublicKeyLoaderOverride: TurnAssertionPublicKeyLoader | null =
+  null;
+
+export function __setTurnAssertionPublicKeyLoaderForTest(
+  loader: TurnAssertionPublicKeyLoader | null,
+): void {
+  turnAssertionPublicKeyLoaderOverride = loader;
+}
 
 type RegisteredClient = {
   kind: "mcp_client";
@@ -144,6 +160,15 @@ export async function handler(
     ) {
       return authorizationServerMetadata(event);
     }
+    if (
+      method === "GET" &&
+      path === "/agentcore/.well-known/openid-configuration"
+    ) {
+      return turnAssertionIssuerMetadata();
+    }
+    if (method === "GET" && path === "/agentcore/oauth/jwks") {
+      return await turnAssertionJwks();
+    }
     if (method === "GET" && path === "/mcp/oauth/jwks") {
       return json({ keys: [] });
     }
@@ -204,6 +229,98 @@ function authorizationServerMetadata(event: APIGatewayProxyEventV2) {
     ],
     scopes_supported: SCOPES_SUPPORTED_LIST,
   });
+}
+
+function turnAssertionIssuerMetadata() {
+  const issuer = requiredEnv("AGENTCORE_TURN_ASSERTION_ISSUER");
+  return json({
+    issuer,
+    jwks_uri: `${issuer}/oauth/jwks`,
+    id_token_signing_alg_values_supported: ["RS256"],
+    response_types_supported: [],
+    subject_types_supported: ["public"],
+  });
+}
+
+async function turnAssertionJwks() {
+  const configuredKeys = turnAssertionJwksKeys();
+  const load =
+    turnAssertionPublicKeyLoaderOverride ?? loadTurnAssertionPublicKey;
+  const keys = await Promise.all(
+    configuredKeys.map(async ({ keyId, kid }) =>
+      publicKeyDerToJwk(await load(keyId), kid),
+    ),
+  );
+  return json({ keys });
+}
+
+function turnAssertionJwksKeys(): TurnAssertionJwksKey[] {
+  const encoded = process.env.AGENTCORE_TURN_ASSERTION_JWKS_KEYS?.trim();
+  if (!encoded) {
+    return [
+      {
+        keyId: requiredEnv("AGENTCORE_TURN_ASSERTION_KMS_KEY_ID"),
+        kid: requiredEnv("AGENTCORE_TURN_ASSERTION_KID"),
+      },
+    ];
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(encoded);
+  } catch {
+    throw new McpOAuthStateError(
+      "AgentCore assertion JWKS key configuration is invalid JSON",
+    );
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > 2) {
+    throw new McpOAuthStateError(
+      "AgentCore assertion JWKS must publish one or two keys",
+    );
+  }
+
+  const keys = parsed.map((entry) => {
+    if (!entry || typeof entry !== "object") {
+      throw new McpOAuthStateError(
+        "AgentCore assertion JWKS key entry is invalid",
+      );
+    }
+    const candidate = entry as Record<string, unknown>;
+    const keyId = candidate.keyId ?? candidate.key_id;
+    if (
+      typeof keyId !== "string" ||
+      !keyId.trim() ||
+      typeof candidate.kid !== "string" ||
+      !candidate.kid.trim()
+    ) {
+      throw new McpOAuthStateError(
+        "AgentCore assertion JWKS keyId and kid are required",
+      );
+    }
+    return { keyId: keyId.trim(), kid: candidate.kid.trim() };
+  });
+  if (new Set(keys.map(({ kid }) => kid)).size !== keys.length) {
+    throw new McpOAuthStateError(
+      "AgentCore assertion JWKS key ids must be unique",
+    );
+  }
+  return keys;
+}
+
+async function loadTurnAssertionPublicKey(keyId: string): Promise<Uint8Array> {
+  const result = await kms.send(new GetPublicKeyCommand({ KeyId: keyId }));
+  if (
+    result.KeyUsage !== "SIGN_VERIFY" ||
+    !result.SigningAlgorithms?.includes("RSASSA_PKCS1_V1_5_SHA_256")
+  ) {
+    throw new McpOAuthStateError(
+      "AgentCore assertion key is not an RS256 signing key",
+    );
+  }
+  if (!result.PublicKey?.byteLength) {
+    throw new McpOAuthStateError("AgentCore assertion key has no public key");
+  }
+  return result.PublicKey;
 }
 
 async function registerClient(event: APIGatewayProxyEventV2) {

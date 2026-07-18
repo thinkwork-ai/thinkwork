@@ -19,6 +19,10 @@ const { queryResponses, executeMutationMock, toastErrorMock } = vi.hoisted(
   }),
 );
 
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
+}));
+
 vi.mock("urql", () => ({
   useQuery: ({ query }: { query: unknown }) => {
     const key = queryKeyOf(query);
@@ -53,8 +57,11 @@ vi.mock("sonner", () => ({
 function queryKeyOf(doc: unknown): string {
   const text = JSON.stringify(doc) ?? "";
   for (const name of [
+    "SettingsCreateHarnessProofThread",
     "UpdateTenantGoalBudget",
     "UpdateTenantAgent",
+    "SettingsDeploymentStatus",
+    "DeploymentStatus",
     "TenantModelCatalog",
     "TenantGoalBudget",
     "TenantAgent",
@@ -96,9 +103,27 @@ function seedHappyQueries() {
   queryResponses.set("TenantGoalBudget", {
     data: { tenant: { settings: { goalDefaultTokenBudget: 100000 } } },
   });
+  queryResponses.set("SettingsDeploymentStatus", {
+    data: {
+      deploymentStatus: {
+        agentcoreHarnessProof: {
+          state: "ready",
+          ready: true,
+          reasonCode: "ready",
+          endpointName: "ThinkworkProof",
+          expectedVersion: "4",
+          liveVersion: "4",
+          sessionStrategy: "fresh",
+          activeThreadId: null,
+          checkedAt: "2026-07-17T20:00:00.000Z",
+        },
+      },
+    },
+  });
 }
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   queryResponses.clear();
   executeMutationMock.mockReset();
   toastErrorMock.mockReset();
@@ -116,6 +141,9 @@ describe("AgentConfigSection", () => {
     expect(screen.getByText("Default Space")).toBeTruthy();
     expect(screen.getByText("Default model")).toBeTruthy();
     expect(screen.getByText("Goal token budget")).toBeTruthy();
+    expect(
+      screen.getByText(/AgentCore Harness ready · version 4/),
+    ).toBeTruthy();
     expect(
       (screen.getByLabelText("Goal token budget") as HTMLInputElement).value,
     ).toBe("100000");
@@ -165,13 +193,40 @@ describe("AgentConfigSection", () => {
     render(<AgentConfigSection spaces={SPACES} />);
     expect(screen.getByText("(model catalog unavailable)")).toBeTruthy();
   });
+
+  it("saves Harness as the default only for future Composer threads", async () => {
+    executeMutationMock.mockReturnValue({ data: {} });
+    render(<AgentConfigSection spaces={SPACES} />);
+
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(
+      await screen.findByRole("option", {
+        name: "AgentCore Harness",
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Save Harness default",
+      }),
+    );
+
+    expect(executeMutationMock).toHaveBeenCalledTimes(1);
+    expect(executeMutationMock).toHaveBeenCalledWith("UpdateTenantAgent", {
+      tenantId: "tenant-1",
+      input: {
+        runtimeConfig: {
+          defaultSpaceId: "space-1",
+          defaultThreadRuntime: "agentcore",
+        },
+      },
+    });
+    expect(screen.queryByText("Open proof thread")).toBeNull();
+  });
 });
 
 describe("AgentConfigSheet", () => {
   it("renders the section inside the sheet when open", () => {
-    render(
-      <AgentConfigSheet open onOpenChange={vi.fn()} spaces={SPACES} />,
-    );
+    render(<AgentConfigSheet open onOpenChange={vi.fn()} spaces={SPACES} />);
     expect(screen.getByTestId("agent-config-sheet")).toBeTruthy();
     expect(screen.getByText("Agent configuration")).toBeTruthy();
     expect(screen.getByText("Default Agent")).toBeTruthy();
@@ -188,11 +243,7 @@ describe("AgentConfigSheet", () => {
 
   it("renders nothing when closed", () => {
     render(
-      <AgentConfigSheet
-        open={false}
-        onOpenChange={vi.fn()}
-        spaces={SPACES}
-      />,
+      <AgentConfigSheet open={false} onOpenChange={vi.fn()} spaces={SPACES} />,
     );
     expect(screen.queryByTestId("agent-config-sheet")).toBeNull();
   });

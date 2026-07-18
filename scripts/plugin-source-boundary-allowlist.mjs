@@ -96,6 +96,26 @@ export const sharedPluginTermAllowlist = [
       "platform memory-source adapter (THINK-193): normalizes Twenty CRM records into the source-agnostic evidence/dossier contract consumed by the memory-stage worker; the adapter seam is platform-owned like the other source families, while plugin runtime and manifest source remain under plugins/twenty.",
   },
   {
+    path: "terraform/modules/app/agentcore-identity/scripts/bootstrap_twenty_oauth_client.sh",
+    reason:
+      "shared AgentCore Identity Terraform module must ship its apply-time Twenty confidential-client bootstrap inside the registry module; the Twenty application runtime remains plugin-owned.",
+  },
+  {
+    path: "terraform/modules/app/agentcore-identity/scripts/delete_twenty_identity.sh",
+    reason:
+      "shared AgentCore Identity Terraform module owns teardown of the provider it provisions; keeping the destroy helper module-local preserves registry-module lifecycle integrity.",
+  },
+  {
+    path: "terraform/modules/app/agentcore-identity/scripts/reconcile_twenty_identity.sh",
+    reason:
+      "shared AgentCore Identity Terraform module owns its provider reconciliation lifecycle and must package the local-exec helper with the registry module.",
+  },
+  {
+    path: "terraform/modules/app/agentcore-identity/scripts/reconcile_twenty_provider.mjs",
+    reason:
+      "shared AgentCore Identity Terraform module owns the AWS provider adapter invoked by its module-local reconciler; Twenty application runtime source remains under plugins/twenty.",
+  },
+  {
     path: "packages/api/src/lib/memory-sources/adapters/twenty.test.ts",
     reason: "unit tests for the platform Twenty memory-source adapter above.",
   },

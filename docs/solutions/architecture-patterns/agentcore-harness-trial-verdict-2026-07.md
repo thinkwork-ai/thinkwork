@@ -9,6 +9,14 @@ tags:
 
 # AgentCore Harness Execution Trial — Dossier & Verdict (THINK-311, 2026-07)
 
+> **2026-07-17 multiplayer delta:** THINK-316 subsequently passed the native
+> managed multiplayer architecture using one tenant Harness, participant-scoped
+> fresh sessions, Identity OBO at both downstream hops, Gateway/Cedar exact-user
+> authorization, and the real ThinkWork application path. See
+> `docs/solutions/architecture-patterns/agentcore-harness-multiplayer-proof-verdict-2026-07.md`.
+> The original conditional no-go below remains the historical THINK-311
+> decision and is not rewritten.
+
 Plan: `docs/plans/2026-07-16-002-feat-agentcore-harness-trial-plan.md`. This document carries the U1 reference-run dossier (below) and, once U6 executes, the go/no-go verdict with the evidence triple (manifest fingerprint, harness version, artifact id).
 
 ## Verdict

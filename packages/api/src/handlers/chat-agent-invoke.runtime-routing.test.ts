@@ -202,6 +202,19 @@ beforeEach(() => {
 });
 
 describe("chat-agent-invoke runtime routing", () => {
+  it("honors an explicit Pi thread pin while the configured runtime is Harness", async () => {
+    const { resolveChatInvocationRuntimeType } = await import(
+      "./chat-agent-invoke.js"
+    );
+
+    expect(
+      resolveChatInvocationRuntimeType({
+        configuredRuntimeType: "agentcore",
+        requestedRuntime: "pi",
+      }),
+    ).toBe("pi");
+  });
+
   it("dispatches Computer-backed Pi agent turns to the Pi AgentCore runtime", async () => {
     const { handler } = await import("./chat-agent-invoke.js");
 
@@ -814,7 +827,7 @@ describe("chat-agent-invoke runtime routing", () => {
       tenantSlug: "acme",
       templateId: null,
       templateModel: "moonshotai.kimi-k2.5",
-      runtimeType: "harness",
+      runtimeType: "agentcore",
       budgetMonthlyCents: null,
       budgetPaused: false,
       blockedTools: [],
@@ -847,9 +860,9 @@ describe("chat-agent-invoke runtime routing", () => {
     expect(mocks.insertValues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          runtime_type: "harness",
+          runtime_type: "agentcore",
           context_snapshot: expect.objectContaining({
-            runtime_type: "harness",
+            runtime_type: "agentcore",
           }),
         }),
       ]),
@@ -881,7 +894,7 @@ describe("chat-agent-invoke runtime routing", () => {
       tenantSlug: "acme",
       templateId: null,
       templateModel: "moonshotai.kimi-k2.5",
-      runtimeType: "harness",
+      runtimeType: "agentcore",
       budgetMonthlyCents: null,
       budgetPaused: false,
       blockedTools: [],
@@ -921,7 +934,7 @@ describe("chat-agent-invoke runtime routing", () => {
     });
     expect(command.input.FunctionName).not.toBe("pi-runtime-fn");
     const body = decodeInvokeBody(command);
-    expect(body.runtime_type).toBe("harness");
+    expect(body.runtime_type).toBe("agentcore");
   });
 
   it("routes a per-turn agentcore request to the harness runner (THINK-311 U5b)", async () => {
@@ -943,12 +956,12 @@ describe("chat-agent-invoke runtime routing", () => {
     };
     expect(command.input.FunctionName).toBe("harness-runner-fn");
     const body = decodeInvokeBody(command);
-    expect(body.runtime_type).toBe("harness");
+    expect(body.runtime_type).toBe("agentcore");
     // Evidence: the per-turn request is recorded on the turn row.
     expect(mocks.insertValues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          runtime_type: "harness",
+          runtime_type: "agentcore",
           context_snapshot: expect.objectContaining({
             requested_runtime: "agentcore",
           }),

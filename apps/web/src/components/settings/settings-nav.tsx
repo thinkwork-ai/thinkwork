@@ -65,7 +65,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Connectors",
     to: "/settings/mcp-servers",
     icon: ModelContextProtocol,
-    operatorOnly: true,
   },
   {
     label: "Model Catalog",

@@ -3,10 +3,46 @@ import {
   buildDefaultAgentTurnWakeup,
   dispatchDefaultAgentChatTurn,
   dispatchDefaultAgentTurn,
+  dispatchMentionedAgentChatTurn,
   type DefaultAgentRoutingRepository,
 } from "./default-agent-routing.js";
 
 describe("default agent routing", () => {
+  it("direct-invokes an explicitly mentioned Harness agent without changing the thread default", async () => {
+    const repository = makeRepository({ agentId: "default-agent" });
+    const invoked: unknown[] = [];
+
+    await dispatchMentionedAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        agentId: "mentioned-agent",
+        content: "@agent who am I?",
+        requestedRuntime: "agentcore",
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(invoked).toEqual([
+      expect.objectContaining({
+        agentId: "mentioned-agent",
+        requestedRuntime: "agentcore",
+      }),
+    ]);
+    expect(repository.assignments).toEqual([]);
+    expect(repository.wakeups).toEqual([]);
+  });
+
   it("builds chat_message wakeups for the subscribed/default agent", () => {
     expect(
       buildDefaultAgentTurnWakeup({

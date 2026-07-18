@@ -26,6 +26,11 @@ describe("thread turn runtime helpers", () => {
         resultJson: { response: { runtime: "pi" } },
       }).runtimeType,
     ).toBe("pi");
+    expect(
+      withRuntimeType({
+        resultJson: { response: { runtime: "harness" } },
+      }).runtimeType,
+    ).toBe("agentcore");
   });
 
   it("extracts the model from turn snapshots", () => {

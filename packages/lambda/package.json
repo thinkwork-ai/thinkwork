@@ -7,6 +7,7 @@
     "./github-workspace": "./github-workspace.ts",
     "./analyst-caller-context": "./analyst-caller-context.ts",
     "./capability-caller-context": "./capability-caller-context.ts",
+    "./agentcore-proof-oauth-provider": "./agentcore-proof-oauth-provider.ts",
     "./analyst-reader-db": "./analyst-reader-db.ts",
     "./routine-output-redactor": "./routine-output-redactor.ts",
     "./routine-repo-tools": "./routine-repo-tools.ts",
@@ -42,6 +43,7 @@
   "devDependencies": {
     "@aws-sdk/client-bedrock-agentcore": "^3.1028.0",
     "@aws-sdk/client-bedrock-agentcore-control": "^3.917.0",
+    "@aws-sdk/client-kms": "^3.917.0",
     "@aws-sdk/client-dynamodb": "^3.1024.0",
     "@aws-sdk/client-cloudwatch": "^3.917.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.917.0",

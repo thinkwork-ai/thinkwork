@@ -783,7 +783,10 @@ function normalizeStatus(status?: string | null): string {
 
 function runtimeLabel(runtimeType?: string | null): string {
   const trimmed = runtimeType?.trim();
-  return trimmed ? trimmed.toUpperCase() : "--";
+  if (!trimmed) return "--";
+  return ["agentcore", "harness"].includes(trimmed.toLowerCase())
+    ? "AgentCore Harness"
+    : trimmed.toUpperCase();
 }
 
 function traceEventLabel(trace: ThreadTrace): string {

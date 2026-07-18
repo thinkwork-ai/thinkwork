@@ -6,7 +6,8 @@
  * the harness-runner Lambda instead of the Pi Lambda — no second payload
  * builder), and performs the real run:
  *
- *   projection (U3) → ensure harness (control plane) → InvokeHarness
+ *   trusted projection → resolve pinned Harness profile → mint a purpose-bound
+ *   turn assertion → Bearer InvokeHarness
  *   stream loop → caller-fulfilled emit_document via handleDocumentEmission
  *   → processFinalize with a complete FinalizePayload.
  *
@@ -24,21 +25,15 @@
  */
 
 import {
-  projectHarnessConfig,
-  type HarnessProjectedConfig,
-  type HarnessProjectionInput,
-  type HarnessProjectionRejection,
-} from "./projection.js";
-import {
-  buildEmitDocumentToolProjection,
   relayEmissionResultToModel,
   toEmissionRaw,
+  buildEmitDocumentToolProjection,
 } from "./emit-document-tool.js";
+import { createHash } from "node:crypto";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { FinalizePayload } from "../chat-finalize/types.js";
-import type {
-  McpConfig,
-  SkillConfig,
-} from "../resolve-agent-runtime-config.js";
+import type { McpConfig } from "../resolve-agent-runtime-config.js";
+import { guardHarnessPublication } from "./publication-guard.js";
 
 // ---------------------------------------------------------------------------
 // Deps
@@ -49,6 +44,27 @@ export interface EnsuredHarness {
   harnessId: string;
   /** Version string/number as reported by the control plane (evidence). */
   harnessVersion: string;
+  /** Actual immutable Harness model; authoritative for usage and pricing. */
+  modelId: string;
+  qualifier: string;
+  configurationFingerprint: string;
+  sessionStrategy: "fresh";
+  /** Attested direct MCP endpoint for deterministic governed evidence. */
+  gatewayUrl: string;
+  gatewayTargetName: string;
+  identityWorkloadName: string;
+  identityCredentialProviderName: string;
+}
+
+/**
+ * A second at-least-once Lambda delivery found the turn already claimed.
+ * It must be acknowledged without competing for the turn's finalize CAS.
+ */
+export class HarnessDuplicateDeliveryError extends Error {
+  constructor(public readonly sessionState: string) {
+    super(`Harness turn is already claimed (${sessionState})`);
+    this.name = "HarnessDuplicateDeliveryError";
+  }
 }
 
 /** Minimal projection of the InvokeHarness stream events the loop consumes. */
@@ -77,6 +93,81 @@ export interface HarnessStreamEvent {
   validationException?: { message?: string; reason?: string };
 }
 
+/**
+ * Harness' HTTP event stream carries the value of each ConverseStream union
+ * member directly (for example `{role}`, `{contentBlockIndex, delta}` and
+ * `{stopReason}`), rather than wrapping it under `messageStart`,
+ * `contentBlockDelta`, or `messageStop`. Keep the rest of the runner on one
+ * canonical shape and adapt exactly once at the transport boundary.
+ */
+export function normalizeHarnessWireEvent(
+  event: Record<string, unknown>,
+): HarnessStreamEvent {
+  if (
+    "messageStart" in event ||
+    "contentBlockStart" in event ||
+    "contentBlockDelta" in event ||
+    "contentBlockStop" in event ||
+    "messageStop" in event ||
+    "metadata" in event
+  ) {
+    return event as HarnessStreamEvent;
+  }
+  if (typeof event.role === "string") {
+    return { messageStart: { role: event.role } };
+  }
+  if (
+    typeof event.contentBlockIndex === "number" &&
+    event.start &&
+    typeof event.start === "object"
+  ) {
+    return {
+      contentBlockStart: {
+        contentBlockIndex: event.contentBlockIndex,
+        start: event.start as HarnessStreamEvent["contentBlockStart"] extends {
+          start?: infer Start;
+        }
+          ? Start
+          : never,
+      },
+    };
+  }
+  if (
+    typeof event.contentBlockIndex === "number" &&
+    event.delta &&
+    typeof event.delta === "object"
+  ) {
+    return {
+      contentBlockDelta: {
+        contentBlockIndex: event.contentBlockIndex,
+        delta: event.delta as HarnessStreamEvent["contentBlockDelta"] extends {
+          delta?: infer Delta;
+        }
+          ? Delta
+          : never,
+      },
+    };
+  }
+  if (typeof event.contentBlockIndex === "number") {
+    return { contentBlockStop: { contentBlockIndex: event.contentBlockIndex } };
+  }
+  if (typeof event.stopReason === "string") {
+    return { messageStop: { stopReason: event.stopReason } };
+  }
+  if (event.usage && typeof event.usage === "object") {
+    return {
+      metadata: {
+        usage: event.usage as HarnessStreamEvent["metadata"] extends {
+          usage?: infer Usage;
+        }
+          ? Usage
+          : never,
+      },
+    };
+  }
+  return event as HarnessStreamEvent;
+}
+
 export interface HarnessInvokeMessage {
   role: "user" | "assistant";
   content: Array<Record<string, unknown>>;
@@ -84,21 +175,67 @@ export interface HarnessInvokeMessage {
 
 export interface HarnessRunnerDeps {
   /**
-   * Ensure a harness exists matching the projected config (create or
-   * update by harnessName) and return its identity. Implemented with the
-   * control-plane SDK in the handler; scripted in tests.
+   * Resolve and attest the already-provisioned, named Harness endpoint.
+   * This is deliberately data-plane-only: chat code cannot create, update,
+   * list, or delete Harness resources.
    */
-  ensureHarness(
-    config: HarnessProjectedConfig,
-    executionRoleArn: string,
-  ): Promise<EnsuredHarness>;
+  resolveHarness(input: {
+    tenantId: string;
+    tenantSlug: string;
+  }): Promise<EnsuredHarness>;
+  /** Mint a short-lived CUSTOM_JWT from the persisted running turn tuple. */
+  mintHarnessAssertion(input: {
+    tenantId: string;
+    turnId: string;
+  }): Promise<{ token: string; expiresAt: number; jti: string }>;
+  /** Allocate and exclusively claim the enrolled fresh-per-turn session. */
+  prepareFreshTurn(input: {
+    tenantId: string;
+    threadId: string;
+    turnId: string;
+    agentId: string;
+    participantUserId: string;
+    qualifier: string;
+    resolvedVersion: string;
+    baseFingerprint: string;
+    participantFingerprint: string;
+  }): Promise<{
+    sessionRecordId: string;
+    runtimeSessionId: string;
+    capturedHighWater: number;
+    currentMessage: string;
+    history: Array<{ role: "user" | "assistant"; content: string }>;
+  }>;
+  transitionFreshTurn(input: {
+    tenantId: string;
+    turnId: string;
+    sessionRecordId: string;
+    from: "running" | "finalizing";
+    to: "finalizing" | "completed";
+    appliedHighWater: number;
+  }): Promise<void>;
+  abandonFreshTurn(input: {
+    tenantId: string;
+    turnId: string;
+    sessionRecordId: string;
+    reasonCode: string;
+  }): Promise<void>;
   /** One InvokeHarness call; returns the event stream. */
   invokeHarness(input: {
     harnessArn: string;
+    qualifier: string;
+    bearerToken: string;
     runtimeSessionId: string;
-    runtimeUserId?: string;
     messages: HarnessInvokeMessage[];
-  }): Promise<AsyncIterable<HarnessStreamEvent>>;
+    /** Optional per-turn narrowing of the Harness's configured tool ceiling. */
+    allowedTools?: string[];
+    /** Caller-fulfilled tools must be repeated on InvokeHarness. */
+    tools?: Array<Record<string, unknown>>;
+    systemPrompt?: Array<{ text: string }>;
+    maxIterations?: number;
+  }):
+    | Promise<AsyncIterable<HarnessStreamEvent>>
+    | AsyncIterable<HarnessStreamEvent>;
   /** Direct lib call into the existing document emission pipeline. */
   emitDocument(input: {
     tenantId: string;
@@ -111,14 +248,25 @@ export interface HarnessRunnerDeps {
   finalize(payload: FinalizePayload): Promise<unknown>;
   /** thread_turns.last_activity_at keepalive bump (KTD-9). */
   bumpTurnActivity(input: { turnId: string; tenantId: string }): Promise<void>;
+  /** Governed target evidence recorded so far for this exact turn. */
+  loadToolExecutions(input: {
+    tenantId: string;
+    threadId: string;
+    turnId: string;
+  }): Promise<Array<Record<string, unknown>>>;
+  /** Deterministically execute one exact-user governed connector read. */
+  collectConnectorEvidence(input: {
+    tenantId: string;
+    turnId: string;
+    connector: string;
+    query: string;
+    gatewayUrl: string;
+    gatewayTargetName: string;
+    identityWorkloadName: string;
+    identityCredentialProviderName: string;
+  }): Promise<{ connector: string; tool: string; evidence: unknown }>;
   /** Read a text file from the workspace bucket; null when absent. */
   fetchWorkspaceText(key: string): Promise<string | null>;
-  /** Model-catalog provider lookup ("bedrock" | other | null). */
-  resolveModelProvider(input: {
-    tenantId: string;
-    modelId: string;
-  }): Promise<string | null>;
-  executionRoleArn: string;
   workspaceBucket: string;
   keepaliveIntervalMs?: number;
   /** Injectable clock for tests. */
@@ -478,6 +626,299 @@ const CONTINUE_STOP_REASONS = new Set([
 ]);
 const MAX_TOOL_ROUNDS = 16;
 
+interface DocumentPlateContract {
+  slug: string;
+  displayName: string;
+  useFor: string;
+  sections?: Array<{
+    id: string;
+    title: string;
+    tier: "required" | "required-if-material";
+  }>;
+  analyses?: Array<{ key: string; op: string; inputHint: string }>;
+}
+
+function normalizePlatePhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function projectedPlateContracts(value: unknown): DocumentPlateContract[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const row = entry as Record<string, unknown>;
+    if (
+      typeof row.slug !== "string" ||
+      typeof row.displayName !== "string" ||
+      typeof row.useFor !== "string"
+    ) {
+      return [];
+    }
+    return [row as unknown as DocumentPlateContract];
+  });
+}
+
+/**
+ * Canonicalize a common model-authored waiver shape without weakening the
+ * plate contract: a waived section must be absent, and its tw:waiver block
+ * must remain as structured evidence outside that section.
+ */
+export function normalizeDocumentContractMarkdown(
+  markdown: string,
+  plate: DocumentPlateContract | null,
+): string {
+  if (!plate?.sections?.length) return markdown;
+  const sectionById = new Map(plate.sections.map((s) => [s.id, s]));
+  const waivers: Array<{ id: string; block: string }> = [];
+  const withoutKnownWaivers = markdown.replace(
+    /```tw:waiver\s*\n([\s\S]*?)\n```/gi,
+    (block, body: string) => {
+      const id = body.match(/^section:\s*([a-z0-9-]+)\s*$/im)?.[1];
+      if (!id || !sectionById.has(id)) return block;
+      waivers.push({ id, block: String(block).trim() });
+      return "";
+    },
+  );
+  if (waivers.length === 0) return markdown;
+
+  const waivedTitles = new Set(
+    waivers.map((w) => normalizePlatePhrase(sectionById.get(w.id)!.title)),
+  );
+  const lines = withoutKnownWaivers.split("\n");
+  const kept: string[] = [];
+  for (let index = 0; index < lines.length; ) {
+    const heading = lines[index]?.match(/^##\s+(.+?)\s*$/);
+    if (heading && waivedTitles.has(normalizePlatePhrase(heading[1]))) {
+      index += 1;
+      while (index < lines.length && !/^##\s+/.test(lines[index] ?? "")) {
+        index += 1;
+      }
+      continue;
+    }
+    kept.push(lines[index] ?? "");
+    index += 1;
+  }
+  const uniqueWaivers = [
+    ...new Map(waivers.map((waiver) => [waiver.id, waiver.block])).values(),
+  ];
+  return `${kept.join("\n").trim()}\n\n${uniqueWaivers.join("\n\n")}\n`;
+}
+
+function hasExplicitQuotaEvidence(value: unknown, depth = 0): boolean {
+  if (depth > 12 || value == null) return false;
+  if (Array.isArray(value)) {
+    return value.some((child) => hasExplicitQuotaEvidence(child, depth + 1));
+  }
+  if (typeof value !== "object") return false;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (
+      /(?:^|_)(?:quota|quotaTarget|quota_target|attainment)(?:$|_)/i.test(
+        key,
+      ) &&
+      ((typeof child === "number" && Number.isFinite(child) && child > 0) ||
+        (typeof child === "string" && /[1-9]/.test(child)))
+    ) {
+      return true;
+    }
+    if (hasExplicitQuotaEvidence(child, depth + 1)) return true;
+  }
+  return false;
+}
+
+export function forceDocumentSectionWaiver(input: {
+  markdown: string;
+  plate: DocumentPlateContract | null;
+  sectionId: string;
+  analysisKey?: string;
+  reason: string;
+}): string {
+  const section = input.plate?.sections?.find(
+    (candidate) => candidate.id === input.sectionId,
+  );
+  if (!section) return input.markdown;
+  let markdown = input.markdown;
+  if (input.analysisKey) {
+    const escaped = input.analysisKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    markdown = markdown.replace(
+      /```tw:analysis\s*\n([\s\S]*?)\n```/gi,
+      (block, body: string) =>
+        new RegExp(`^analysis:\\s*${escaped}\\s*$`, "im").test(body)
+          ? ""
+          : block,
+    );
+  }
+  markdown = `${markdown.trim()}\n\n\`\`\`tw:waiver\nsection: ${input.sectionId}\nreason: ${input.reason}\n\`\`\`\n`;
+  return normalizeDocumentContractMarkdown(markdown, input.plate);
+}
+
+export function normalizeFunnelAnalysisOrder(markdown: string): string {
+  return markdown.replace(
+    /```tw:analysis\s*\n([\s\S]*?)\n```/gi,
+    (block, body: string) => {
+      let parsed: unknown;
+      try {
+        parsed = parseYaml(body, { strict: true });
+      } catch {
+        return block;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return block;
+      }
+      const root = parsed as Record<string, unknown>;
+      if (
+        root.analysis !== "pipeline-conversion" ||
+        !Array.isArray(root.stages)
+      ) {
+        return block;
+      }
+      const stages = root.stages;
+      if (
+        stages.some(
+          (stage) =>
+            !stage ||
+            typeof stage !== "object" ||
+            Array.isArray(stage) ||
+            typeof (stage as Record<string, unknown>).count !== "number" ||
+            !Number.isFinite((stage as Record<string, unknown>).count),
+        )
+      ) {
+        return block;
+      }
+      const ordered = [...stages].sort(
+        (left, right) =>
+          Number((right as Record<string, unknown>).count) -
+          Number((left as Record<string, unknown>).count),
+      );
+      const normalized = stringifyYaml(
+        { ...root, stages: ordered },
+        { lineWidth: 0 },
+      ).trimEnd();
+      return `\`\`\`tw:analysis\n${normalized}\n\`\`\``;
+    },
+  );
+}
+
+/** Resolve named business-document intent against the canonical plate list. */
+export function selectRequestedDocumentPlate(
+  message: string,
+  documentPlates: unknown,
+): DocumentPlateContract | null {
+  const normalizedMessage = normalizePlatePhrase(message);
+  const plates = projectedPlateContracts(documentPlates).sort(
+    (a, b) =>
+      Math.max(
+        normalizePlatePhrase(b.slug).length,
+        normalizePlatePhrase(b.displayName).length,
+      ) -
+      Math.max(
+        normalizePlatePhrase(a.slug).length,
+        normalizePlatePhrase(a.displayName).length,
+      ),
+  );
+  const named = plates.find((plate) =>
+    [plate.slug, plate.displayName]
+      .map(normalizePlatePhrase)
+      .filter((name) => name.length >= 3)
+      .some((name) => normalizedMessage.includes(name)),
+  );
+  if (named) return named;
+  if (/\bcustomer\s+(?:report|review)\b/i.test(message)) {
+    return plates.find((plate) => plate.slug === "qbr") ?? null;
+  }
+  if (
+    /(?:\bemit_document\b|\bhtml\s+artifact\b|\bdurable\s+html\b|\busing\s+the\s+[a-z0-9_-]+\s+plate\b)/i.test(
+      message,
+    )
+  ) {
+    return plates.find((plate) => plate.slug === "report") ?? null;
+  }
+  return null;
+}
+
+export function requiresExplicitDocumentEmission(
+  message: string,
+  documentPlates?: unknown,
+): boolean {
+  return Boolean(
+    selectRequestedDocumentPlate(message, documentPlates) ??
+    /(?:\bemit_document\b|\bhtml\s+artifact\b|\bdurable\s+html\b|\busing\s+the\s+[a-z0-9_-]+\s+plate\b)/i.test(
+      message,
+    ),
+  );
+}
+
+export type ParsedDocumentEnvelope =
+  | { ok: true; input: Record<string, unknown>; title: string }
+  | { ok: false; error: string };
+
+/**
+ * Strict no-tools artifact protocol used while AgentCore Harness exact-name
+ * allowedTools filtering drops inline functions (verified live 2026-07-18).
+ * This parser never interprets XML/function-call prose and cannot dispatch an
+ * arbitrary operation: it accepts only the document fields already validated
+ * by handleDocumentEmission.
+ */
+export function parseDocumentEnvelope(
+  text: string,
+  expectedGenre?: string,
+): ParsedDocumentEnvelope {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+  const candidate = (fenced?.[1] ?? trimmed).trim();
+  let value: unknown;
+  try {
+    value = JSON.parse(candidate);
+  } catch {
+    return { ok: false, error: "response was not one JSON object" };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "document envelope must be a JSON object" };
+  }
+  const record = value as Record<string, unknown>;
+  const allowed = new Set([
+    "genre",
+    "title",
+    "abstract",
+    "digest_markdown",
+    "status",
+    "document_id",
+    "space_id",
+  ]);
+  const unknown = Object.keys(record).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    return {
+      ok: false,
+      error: `document envelope contains unsupported fields: ${unknown.join(", ")}`,
+    };
+  }
+  for (const field of ["genre", "title", "abstract", "digest_markdown"]) {
+    if (typeof record[field] !== "string" || !record[field].trim()) {
+      return { ok: false, error: `${field} must be a non-empty string` };
+    }
+  }
+  if (expectedGenre && record.genre !== expectedGenre) {
+    return {
+      ok: false,
+      error: `genre must be the selected plate "${expectedGenre}"`,
+    };
+  }
+  if (
+    record.status !== undefined &&
+    record.status !== "draft" &&
+    record.status !== "final"
+  ) {
+    return { ok: false, error: "status must be draft or final" };
+  }
+  return {
+    ok: true,
+    input: record,
+    title: String(record.title),
+  };
+}
+
 /** Payload features the trial's chat-only adapter refuses up front. */
 const UNSUPPORTED_PAYLOAD_FIELDS: Array<[string, string]> = [
   ["computer_task_id", "computer task turns"],
@@ -485,6 +926,7 @@ const UNSUPPORTED_PAYLOAD_FIELDS: Array<[string, string]> = [
   ["skill_creator_command", "skill-creator command turns"],
   ["pending_user_questions", "question-answer resume turns"],
   ["pinned_skills", "message-pinned skills"],
+  ["guardrail_config", "bedrock_guardrail projection"],
 ];
 
 export async function runHarnessTurn(
@@ -494,6 +936,14 @@ export async function runHarnessTurn(
   const now = deps.now ?? Date.now;
   const startedAt = now();
   const turn = extractTurn(payload);
+  const selectedDocumentPlate = selectRequestedDocumentPlate(
+    turn.userMessage,
+    payload.document_plates,
+  );
+  const documentEmissionRequired = requiresExplicitDocumentEmission(
+    turn.userMessage,
+    payload.document_plates,
+  );
 
   const toolInvocations: Array<Record<string, unknown>> = [];
   const usage = {
@@ -506,9 +956,18 @@ export async function runHarnessTurn(
   let lastDocumentId: string | null = null;
   let emissionAttempts = 0;
   let emissionSuccesses = 0;
+  let missingEmissionCorrections = 0;
+  let documentCompositionPhase = false;
   let harness: EnsuredHarness | null = null;
-  let projected: HarnessProjectedConfig | null = null;
   let composedSystemPrompt: string | null = null;
+  let turnProjectionFingerprint: string | null = null;
+  let preparedSession: {
+    sessionRecordId: string;
+    runtimeSessionId: string;
+    capturedHighWater: number;
+    currentMessage: string;
+    history: Array<{ role: "user" | "assistant"; content: string }>;
+  } | null = null;
 
   const finalizeWith = async (
     status: "completed" | "failed",
@@ -522,8 +981,8 @@ export async function runHarnessTurn(
       trace_id: turn.traceId,
       cost_owner_user_id: turn.costOwnerUserId,
       user_message: turn.userMessage.slice(0, 2000),
-      agent_model: turn.modelId,
-      runtime_type: "harness",
+      agent_model: harness?.modelId ?? turn.modelId,
+      runtime_type: "agentcore",
       agent_slug: turn.agentSlug,
       agent_name: turn.agentName,
       duration_ms: now() - startedAt,
@@ -533,7 +992,7 @@ export async function runHarnessTurn(
       composed_system_prompt: composedSystemPrompt,
       response: {
         content: fields.content ?? "",
-        runtime: "harness",
+        runtime: "agentcore",
         tool_invocations: toolInvocations,
         tools_called: [
           ...new Set(toolInvocations.map((t) => String(t.tool_name ?? ""))),
@@ -543,15 +1002,19 @@ export async function runHarnessTurn(
             harness_id: harness?.harnessId ?? null,
             harness_arn: harness?.harnessArn ?? null,
             harness_version: harness?.harnessVersion ?? null,
-            projection_fingerprint:
-              projected?.evidence.projectionFingerprint ?? null,
-            manifest_fingerprint:
-              projected?.evidence.manifestFingerprint ??
-              str(payload.capabilities_manifest_fingerprint),
-            config_fingerprint:
-              projected?.evidence.configFingerprint ??
-              str(payload.config_fingerprint),
-            exclusions: projected?.evidence.exclusions ?? [],
+            model_id: harness?.modelId ?? null,
+            requested_model: turn.modelId,
+            projection_fingerprint: turnProjectionFingerprint,
+            manifest_fingerprint: str(
+              payload.capabilities_manifest_fingerprint,
+            ),
+            config_fingerprint: str(payload.config_fingerprint),
+            harness_configuration_fingerprint:
+              harness?.configurationFingerprint ?? null,
+            qualifier: harness?.qualifier ?? null,
+            session_strategy: harness?.sessionStrategy ?? null,
+            authentication: "custom_jwt_bearer",
+            exclusions: [],
             artifact_id: lastArtifactId,
             document_id: lastDocumentId,
             emission_attempts: emissionAttempts,
@@ -560,14 +1023,61 @@ export async function runHarnessTurn(
         },
       },
       usage: {
-        model: turn.modelId,
+        model: harness?.modelId ?? turn.modelId,
         input_tokens: usage.inputTokens,
         output_tokens: usage.outputTokens,
         cached_read_tokens: usage.cacheReadTokens,
         cached_write_tokens: usage.cacheWriteTokens,
       },
+      ...(status === "completed" && preparedSession && turn.currentUserId
+        ? {
+            claim: {
+              status: "running",
+              harness_session_id: preparedSession.sessionRecordId,
+              harness_participant_user_id: turn.currentUserId,
+            },
+          }
+        : {}),
     };
-    await deps.finalize(finalizePayload);
+    if (preparedSession) {
+      if (status === "completed") {
+        await deps.transitionFreshTurn({
+          tenantId: turn.tenantId,
+          turnId: turn.turnId,
+          sessionRecordId: preparedSession.sessionRecordId,
+          from: "running",
+          to: "finalizing",
+          appliedHighWater: preparedSession.capturedHighWater,
+        });
+      } else {
+        await deps.abandonFreshTurn({
+          tenantId: turn.tenantId,
+          turnId: turn.turnId,
+          sessionRecordId: preparedSession.sessionRecordId,
+          reasonCode: "turn_failed",
+        });
+      }
+    }
+    const finalized = await deps.finalize(finalizePayload);
+    if (
+      status === "completed" &&
+      finalized &&
+      typeof finalized === "object" &&
+      "finalized" in finalized &&
+      (finalized as { finalized?: unknown }).finalized !== true
+    ) {
+      throw new Error("harness_finalize_authorization_fence_rejected");
+    }
+    if (preparedSession && status === "completed") {
+      await deps.transitionFreshTurn({
+        tenantId: turn.tenantId,
+        turnId: turn.turnId,
+        sessionRecordId: preparedSession.sessionRecordId,
+        from: "finalizing",
+        to: "completed",
+        appliedHighWater: preparedSession.capturedHighWater,
+      });
+    }
     return { status } as const;
   };
 
@@ -602,101 +1112,262 @@ export async function runHarnessTurn(
     const mcpConfigs = (
       Array.isArray(payload.mcp_configs) ? payload.mcp_configs : []
     ) as McpConfig[];
-    const skills = (
-      Array.isArray(payload.skills) ? payload.skills : []
-    ) as SkillConfig[];
-    const agentProfiles = Array.isArray(payload.agent_profiles)
-      ? (payload.agent_profiles as Array<Record<string, unknown>>)
-      : [];
-    const piExtensions = Array.isArray(payload.pi_extensions)
-      ? payload.pi_extensions
-      : [];
-    const attachments = Array.isArray(payload.message_attachments)
-      ? payload.message_attachments
-      : [];
-
+    const connectorNames = mcpConfigs
+      .map((config) => config.name?.trim())
+      .filter((name): name is string => Boolean(name));
+    const normalizedTask = normalizePlatePhrase(turn.userMessage);
+    const connectorEvidenceRequired = Boolean(
+      selectedDocumentPlate &&
+      connectorNames.some((name) => {
+        const normalizedName = normalizePlatePhrase(name);
+        return (
+          normalizedTask.includes(normalizedName) ||
+          normalizedTask.includes("live") ||
+          ((selectedDocumentPlate.slug === "sales-rep-review" ||
+            selectedDocumentPlate.slug === "opportunity-review") &&
+            normalizedName.includes("crm"))
+        );
+      }),
+    );
+    const selectedConnectorName = connectorEvidenceRequired
+      ? (connectorNames.find((name) =>
+          normalizedTask.includes(normalizePlatePhrase(name)),
+        ) ??
+        connectorNames.find((name) => /twenty/i.test(name)) ??
+        connectorNames.find((name) => /crm/i.test(name)) ??
+        connectorNames[0] ??
+        null)
+      : null;
+    const requestedPerson = turn.userMessage.match(
+      /\bfor\s+([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){1,3})\b/,
+    )?.[1];
+    const connectorEvidenceQuery =
+      selectedDocumentPlate?.slug === "sales-rep-review"
+        ? [
+            `List CRM opportunity records${requestedPerson ? ` for ${requestedPerson}` : ""}.`,
+            "Include owner, stage, amount, expected close date, and record name fields when available.",
+          ].join(" ")
+        : turn.userMessage;
     composedSystemPrompt = await composeHarnessSystemPrompt(
       payload,
       mcpConfigs,
       deps,
     );
-
-    const modelProvider = turn.modelId
-      ? await deps.resolveModelProvider({
-          tenantId: turn.tenantId,
-          modelId: turn.modelId,
-        })
-      : null;
-
-    const emitTool = buildEmitDocumentToolProjection(payload.document_plates);
-
-    const projectionInput: HarnessProjectionInput = {
-      tenantId: turn.tenantId,
-      agentId: turn.agentId,
-      agentSlug: turn.agentSlug ?? "agent",
-      systemPrompt: composedSystemPrompt,
-      modelId: turn.modelId,
-      modelProvider,
-      skills,
-      mcpConfigs,
-      manifestFingerprint: str(payload.capabilities_manifest_fingerprint),
-      configFingerprint: str(payload.config_fingerprint),
-      emitDocument: emitTool,
-      workspaceBucket: deps.workspaceBucket,
-      capabilitySurface: {
-        piExtensionCount: piExtensions.length,
-        agentProfileSlugs: agentProfiles
-          .map((p) => str(p.slug))
-          .filter((slug): slug is string => Boolean(slug)),
-        browserAutomationEnabled: payload.browser_automation_enabled === true,
-        sandboxConfigured: payload.sandbox_status != null,
-        guardrailConfigured: payload.guardrail_config != null,
-        sendEmailEnabled: payload.send_email_config != null,
-        webSearchEnabled: payload.web_search_config != null,
-        webExtractEnabled: payload.web_extract_config != null,
-        contextEngineEnabled: payload.context_engine_enabled === true,
-        jsonRenderUiEnabled: payload.thread_json_render_ui_enabled === true,
-        knowledgeGraphEnabled: payload.knowledge_graph_enabled === true,
-        attachmentCount: attachments.length,
-      },
-    };
-
-    const projection = projectHarnessConfig(projectionInput);
-    if (!projection.ok) {
+    const tenantSlug = str(payload.tenant_slug);
+    if (!tenantSlug) {
       return await finalizeWith("failed", {
-        errorMessage: formatRejection(projection.rejection),
+        errorMessage:
+          "Harness proof requires the trusted tenant slug; no default tenant is inferred.",
       });
     }
-    projected = projection.config;
+    if (!turn.currentUserId) {
+      return await finalizeWith("failed", {
+        errorMessage:
+          "Harness proof requires a persisted human participant identity.",
+      });
+    }
 
-    harness = await deps.ensureHarness(projected, deps.executionRoleArn);
+    harness = await deps.resolveHarness({
+      tenantId: turn.tenantId,
+      tenantSlug,
+    });
+    const trustedContext = [
+      "<thinkwork_trusted_turn_context>",
+      "The following context was projected by ThinkWork from authorized canonical state.",
+      `tenant_id=${turn.tenantId}`,
+      `thread_id=${turn.threadId}`,
+      `participant_id=${turn.currentUserId}`,
+      `agent_id=${turn.agentId}`,
+      composedSystemPrompt ? `agent_context:\n${composedSystemPrompt}` : "",
+      "</thinkwork_trusted_turn_context>",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const fingerprints = computeHarnessProjectionFingerprints({
+      tenantId: turn.tenantId,
+      threadId: turn.threadId,
+      agentId: turn.agentId,
+      harnessConfigurationFingerprint: harness.configurationFingerprint,
+      harnessVersion: harness.harnessVersion,
+      sessionStrategy: harness.sessionStrategy,
+      participantId: turn.currentUserId,
+      turnId: turn.turnId,
+      configFingerprint: str(payload.config_fingerprint) ?? "",
+      manifestFingerprint: str(payload.capabilities_manifest_fingerprint) ?? "",
+    });
+    const { baseFingerprint } = fingerprints;
+    turnProjectionFingerprint = fingerprints.participantFingerprint;
+    preparedSession = await deps.prepareFreshTurn({
+      tenantId: turn.tenantId,
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      agentId: turn.agentId,
+      participantUserId: turn.currentUserId,
+      qualifier: harness.qualifier,
+      resolvedVersion: harness.harnessVersion,
+      baseFingerprint,
+      participantFingerprint: turnProjectionFingerprint,
+    });
+    let governedConnectorEvidence: {
+      connector: string;
+      tool: string;
+      evidence: unknown;
+    } | null = null;
+    if (connectorEvidenceRequired) {
+      if (!selectedConnectorName) {
+        return await finalizeWith("failed", {
+          errorMessage:
+            "Connector-backed plate composition requires an authorized connector projection.",
+        });
+      }
+      governedConnectorEvidence = await deps.collectConnectorEvidence({
+        tenantId: turn.tenantId,
+        turnId: turn.turnId,
+        connector: selectedConnectorName,
+        query: connectorEvidenceQuery,
+        gatewayUrl: harness.gatewayUrl,
+        gatewayTargetName: harness.gatewayTargetName,
+        identityWorkloadName: harness.identityWorkloadName,
+        identityCredentialProviderName: harness.identityCredentialProviderName,
+      });
+      const evidenceLedger = await deps.loadToolExecutions({
+        tenantId: turn.tenantId,
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+      });
+      if (
+        !evidenceLedger.some((invocation) => {
+          if (
+            invocation.operation !== "mcp.tools.call" ||
+            invocation.status !== "completed" ||
+            typeof invocation.input_preview !== "string"
+          ) {
+            return false;
+          }
+          try {
+            const preview = JSON.parse(invocation.input_preview) as Record<
+              string,
+              unknown
+            >;
+            return (
+              preview.connector === governedConnectorEvidence?.connector &&
+              preview.tool === governedConnectorEvidence?.tool
+            );
+          } catch {
+            return false;
+          }
+        })
+      ) {
+        return await finalizeWith("failed", {
+          errorMessage:
+            "Connector-backed plate composition was refused because its governed call was not recorded.",
+        });
+      }
+      documentCompositionPhase = true;
+    }
+    let assertion = await deps.mintHarnessAssertion({
+      tenantId: turn.tenantId,
+      turnId: turn.turnId,
+    });
     onActivity();
 
-    // Session id: thread-derived, stable across tool round-trips, ≥33 chars.
-    const runtimeSessionId = `tw-harness-${turn.threadId}`;
-
-    let nextMessages: HarnessInvokeMessage[] = [
-      ...turn.history.map(
-        (m): HarnessInvokeMessage => ({
-          role: m.role,
-          content: [{ text: m.content }],
-        }),
-      ),
-      { role: "user", content: [{ text: turn.userMessage }] },
-    ];
+    let nextMessages: HarnessInvokeMessage[] = governedConnectorEvidence
+      ? [
+          { role: "user", content: [{ text: trustedContext }] },
+          {
+            role: "user",
+            content: [
+              {
+                text: [
+                  `User request: ${preparedSession.currentMessage}`,
+                  "The following JSON is trusted, exact-user evidence collected by ThinkWork through AgentCore Gateway and Cedar for this same turn.",
+                  JSON.stringify(governedConnectorEvidence),
+                  selectedDocumentPlate
+                    ? `Compose the registered ${selectedDocumentPlate.displayName} plate (${selectedDocumentPlate.slug}) from this evidence now.`
+                    : "Compose the requested durable ThinkWork document from this evidence now.",
+                  "Return exactly one validated document envelope. Do not call tools, estimate missing values, or substitute generic benchmarks.",
+                ].join("\n"),
+              },
+            ],
+          },
+        ]
+      : [
+          { role: "user", content: [{ text: trustedContext }] },
+          ...preparedSession.history.map(
+            (m): HarnessInvokeMessage => ({
+              role: m.role,
+              content: [{ text: m.content }],
+            }),
+          ),
+          { role: "user", content: [{ text: preparedSession.currentMessage }] },
+        ];
 
     let finalText = "";
+    const emitDocumentProjection = documentEmissionRequired
+      ? buildEmitDocumentToolProjection(payload.document_plates)
+      : null;
+    const documentEnvelopeSystemPrompt = emitDocumentProjection
+      ? [
+          {
+            text: [
+              "You are ThinkWork's document composer. Produce the requested document as exactly one JSON object and no other text, markdown fence, XML, function-call tag, or explanation.",
+              "The JSON object must validate against this schema:",
+              JSON.stringify(emitDocumentProjection.inputSchema),
+              selectedDocumentPlate
+                ? `The selected registered plate contract is authoritative. genre MUST be "${selectedDocumentPlate.slug}". Contract: ${JSON.stringify(selectedDocumentPlate)}`
+                : "Choose the most specific visible plate genre for the request.",
+              "The digest_markdown value is the complete document body. Include every required and material required-if-material section using the exact ## heading title from the contract.",
+              "For every declared analysis backed by the gathered data, include a fenced tw:analysis YAML block naming its key and supplying inputs in the inputHint shape. The platform computes and renders its chart/stats; never narrate computed rates as a substitute for the directive.",
+              "tw:analysis inputs are top-level YAML fields beside `analysis`; never nest them under `inputs`. For pipeline-conversion use exactly this shape: ```tw:analysis\nanalysis: pipeline-conversion\nstages:\n  - { label: Identified, count: 8 }\n  - { label: Qualified, count: 2 }\n``` (replace labels/counts only with evidence-backed values; order widest-to-narrowest so counts never increase).",
+              "For sales-rep-review, CRM opportunity amounts are pipeline value, NEVER quota or attainment. When the evidence has no explicit quota target, omit the Quota Attainment heading and author the quota-attainment waiver. Never emit the quota-attainment analysis from pipeline value.",
+              "Do not author tw:chart blocks for a contract-bearing plate. Every chart must come from a declared tw:analysis so the platform computes its values.",
+              "If backing data is genuinely unavailable for a required-if-material section, OMIT that section's ## heading entirely and include: ```tw:waiver\\nsection: <section-id>\\nreason: <specific reason>\\n``` outside every section.",
+              "Use only evidence gathered earlier in this same turn. Never invent quota, pipeline, usage, or customer values. Use status draft unless the user explicitly requests final.",
+              "Keep the digest decision-useful and concise (at most 700 words). Validate the JSON and every tw:analysis YAML block before responding.",
+            ].join("\n"),
+          },
+        ]
+      : undefined;
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       if (round === MAX_TOOL_ROUNDS) {
         return await finalizeWith("failed", {
           errorMessage: `Harness run exceeded ${MAX_TOOL_ROUNDS} caller-fulfilled tool rounds without terminating.`,
         });
       }
+      // Assertions are intentionally short lived. Caller-fulfilled tool loops
+      // can outlive one token, so refresh before each continuation instead of
+      // turning a healthy long-running turn into an authentication failure.
+      if (assertion.expiresAt <= Math.floor(now() / 1000) + 30) {
+        assertion = await deps.mintHarnessAssertion({
+          tenantId: turn.tenantId,
+          turnId: turn.turnId,
+        });
+      }
       const stream = await deps.invokeHarness({
         harnessArn: harness.harnessArn,
-        runtimeSessionId,
-        runtimeUserId: turn.currentUserId ?? undefined,
+        qualifier: harness.qualifier,
+        bearerToken: assertion.token,
+        runtimeSessionId: preparedSession.runtimeSessionId,
         messages: nextMessages,
+        ...(documentEmissionRequired && !documentCompositionPhase
+          ? {
+              // Use the Harness's configured Gateway allowlist. Live testing
+              // showed per-invocation exact names do not share that namespace
+              // and silently hide the same Gateway tools that work here.
+              maxIterations: 8,
+            }
+          : {}),
+        ...(documentCompositionPhase
+          ? {
+              // Exact-name filtering currently drops Harness inline functions
+              // while "*" permits unsafe built-ins. Select a deliberately
+              // nonexistent tool so this turn is generation-only; ThinkWork
+              // validates the returned document envelope before persistence.
+              allowedTools: ["__thinkwork_document_envelope__"],
+              systemPrompt: documentEnvelopeSystemPrompt,
+              maxIterations: 2,
+            }
+          : {}),
       });
       const segment = await assembleStream(stream, onActivity);
       usage.inputTokens += segment.usage.inputTokens;
@@ -719,13 +1390,140 @@ export async function runHarnessTurn(
               "Harness stream ended with empty content and zero output tokens (swallowed model failure).",
           });
         }
-        if (emissionAttempts > 0 && emissionSuccesses === 0) {
+        if (
+          emissionAttempts > 0 &&
+          emissionSuccesses === 0 &&
+          !documentCompositionPhase
+        ) {
           // Never a false pass (AE2): the model tried to emit, every
           // attempt was rejected, and the run ended anyway.
           return await finalizeWith("failed", {
             errorMessage: `Harness run ended without a successful document emission after ${emissionAttempts} rejected emit_document attempt(s).`,
           });
         }
+        if (
+          documentEmissionRequired &&
+          emissionSuccesses === 0 &&
+          !documentCompositionPhase
+        ) {
+          documentCompositionPhase = true;
+          nextMessages = [
+            {
+              role: "user",
+              content: [
+                {
+                  text: [
+                    "Now turn the evidence you gathered in this turn into the requested durable ThinkWork document.",
+                    selectedDocumentPlate
+                      ? `Use the registered ${selectedDocumentPlate.displayName} plate (${selectedDocumentPlate.slug}) and satisfy its full section and analysis contract.`
+                      : "Use the most specific registered plate for the request.",
+                    "Return exactly one JSON document envelope as instructed. Do not call more tools and do not return a prose-only report.",
+                  ].join("\n"),
+                },
+              ],
+            },
+          ];
+          continue;
+        }
+        if (documentCompositionPhase && emissionSuccesses === 0) {
+          const parsed = parseDocumentEnvelope(
+            segment.text,
+            selectedDocumentPlate?.slug,
+          );
+          if (parsed.ok) {
+            const startedTool = now();
+            emissionAttempts += 1;
+            let digestMarkdown = String(parsed.input.digest_markdown);
+            if (selectedDocumentPlate) {
+              digestMarkdown = normalizeDocumentContractMarkdown(
+                digestMarkdown,
+                selectedDocumentPlate,
+              );
+              if (
+                selectedDocumentPlate.slug === "sales-rep-review" &&
+                governedConnectorEvidence &&
+                !hasExplicitQuotaEvidence(governedConnectorEvidence.evidence)
+              ) {
+                digestMarkdown = forceDocumentSectionWaiver({
+                  markdown: digestMarkdown,
+                  plate: selectedDocumentPlate,
+                  sectionId: "quota-attainment",
+                  analysisKey: "quota-attainment",
+                  reason:
+                    "Governed CRM opportunity evidence contains no explicit quota target; pipeline value cannot be used as quota attainment.",
+                });
+              }
+              digestMarkdown = normalizeFunnelAnalysisOrder(digestMarkdown);
+            }
+            const normalizedInput = selectedDocumentPlate
+              ? { ...parsed.input, digest_markdown: digestMarkdown }
+              : parsed.input;
+            const emission = await deps.emitDocument({
+              tenantId: turn.tenantId,
+              threadId: turn.threadId,
+              agentId: turn.agentId,
+              turnId: turn.turnId,
+              raw: toEmissionRaw(normalizedInput),
+            });
+            const relay = relayEmissionResultToModel(emission);
+            toolInvocations.push({
+              tool_name: "emit_document",
+              status: relay.status === "success" ? "completed" : "rejected",
+              duration_ms: now() - startedTool,
+              result_summary: relay.text.slice(0, 500),
+              protocol: "validated_document_envelope_v1",
+            });
+            if (relay.status === "success") {
+              emissionSuccesses += 1;
+              lastArtifactId = relay.artifactId ?? lastArtifactId;
+              lastDocumentId = relay.documentId ?? lastDocumentId;
+              return await finalizeWith("completed", {
+                content: `Done — ${parsed.title} is ready.`,
+              });
+            }
+            if (relay.fatal) {
+              return await finalizeWith("failed", {
+                errorMessage: `emit_document fulfillment failed fatally: ${relay.text}`,
+              });
+            }
+            if (missingEmissionCorrections < 1) {
+              missingEmissionCorrections += 1;
+              nextMessages = [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      text: `${relay.text}\nReturn the complete corrected document as exactly one JSON object matching the required schema. No prose, markdown fence, XML, or function tags.`,
+                    },
+                  ],
+                },
+              ];
+              continue;
+            }
+            return await finalizeWith("failed", {
+              errorMessage: `Harness document envelope remained invalid after ${emissionAttempts} emission attempt(s).`,
+            });
+          }
+          if (missingEmissionCorrections < 1) {
+            missingEmissionCorrections += 1;
+            nextMessages = [
+              {
+                role: "user",
+                content: [
+                  {
+                    text: `The document response was rejected: ${parsed.error}. Return the complete document as exactly one JSON object matching the required schema. No prose, markdown fence, XML, or function tags.`,
+                  },
+                ],
+              },
+            ];
+            continue;
+          }
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness ended without a valid document envelope after one corrective continuation.",
+          });
+        }
+        guardHarnessPublication(finalText);
         return await finalizeWith("completed", { content: finalText });
       }
 
@@ -742,6 +1540,15 @@ export async function runHarnessTurn(
           let resultStatus: "success" | "error";
           if (toolUse.parseError) {
             resultText = toolUse.parseError;
+            resultStatus = "error";
+          } else if (
+            toolUse.name === "emit_document" &&
+            documentEmissionRequired &&
+            !documentCompositionPhase
+          ) {
+            resultText = connectorEvidenceRequired
+              ? "emit_document is locked until a successful governed connector call is recorded. Gather the required live evidence first."
+              : "emit_document is locked until the bounded research phase ends. Return your evidence summary first.";
             resultStatus = "error";
           } else if (toolUse.name !== "emit_document") {
             resultText = `Unknown caller-fulfilled tool "${toolUse.name}" — only emit_document is available.`;
@@ -811,6 +1618,12 @@ export async function runHarnessTurn(
       errorMessage: "Harness run loop exited unexpectedly.",
     });
   } catch (err) {
+    if (err instanceof HarnessDuplicateDeliveryError) {
+      console.info(
+        `[harness-runner] duplicate delivery acknowledged for turn ${turn.turnId} (session ${err.sessionState})`,
+      );
+      return { status: "completed" };
+    }
     const message =
       err instanceof HarnessStreamError
         ? `Harness stream failure [${err.reason}]: ${err.message}`
@@ -830,6 +1643,40 @@ export async function runHarnessTurn(
   }
 }
 
-function formatRejection(rejection: HarnessProjectionRejection): string {
-  return `Harness projection rejected [${rejection.kind}] ${rejection.capability}: ${rejection.detail}`;
+export function computeHarnessProjectionFingerprints(input: {
+  tenantId: string;
+  threadId: string;
+  agentId: string;
+  harnessConfigurationFingerprint: string;
+  harnessVersion: string;
+  sessionStrategy: string;
+  participantId: string;
+  turnId: string;
+  configFingerprint: string;
+  manifestFingerprint: string;
+}): { baseFingerprint: string; participantFingerprint: string } {
+  const baseFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        agentId: input.agentId,
+        harnessConfigurationFingerprint: input.harnessConfigurationFingerprint,
+        harnessVersion: input.harnessVersion,
+        sessionStrategy: input.sessionStrategy,
+      }),
+    )
+    .digest("hex");
+  const participantFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        baseFingerprint,
+        participantId: input.participantId,
+        turnId: input.turnId,
+        configFingerprint: input.configFingerprint,
+        manifestFingerprint: input.manifestFingerprint,
+      }),
+    )
+    .digest("hex");
+  return { baseFingerprint, participantFingerprint };
 }

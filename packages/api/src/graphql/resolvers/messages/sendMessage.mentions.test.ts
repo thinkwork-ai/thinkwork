@@ -34,8 +34,15 @@ describe("sendMessage mention collaboration path", () => {
 
   it("routes eligible messages to the default agent without double-dispatching agent mentions", () => {
     expect(source).toContain("dispatchDefaultAgentChatTurn");
+    expect(source).toContain("dispatchMentionedAgentChatTurn");
     expect(source).toContain("shouldDispatchDefaultAgentTurn");
     expect(source).toContain("hasAgentMentions");
+  });
+
+  it("direct-invokes Harness-pinned @mentions instead of entering the minute-polled Pi wakeup path", () => {
+    expect(source).toContain('requestedRuntime === "agentcore"');
+    expect(source).toContain("await dispatchMentionedAgentChatTurn");
+    expect(source).toContain("requestedRuntime,");
   });
 
   it("publishes user messages to collaborative thread subscribers", () => {
@@ -226,9 +233,7 @@ describe("sendMessage sync-dispatch failure stamp (plan 2026-07-03-003 U6, R7)",
     expect(source).toContain(
       "mention dispatch failed for agents:",
     );
-    const mentionBlock = source.slice(
-      source.indexOf("const mentionResults = await dispatchAgentMentions("),
-    );
+    const mentionBlock = source.slice(source.indexOf("const mentionResults ="));
     expect(mentionBlock).toContain("stampDispatchFailure({");
     expect(mentionBlock).toContain('route: "mention"');
   });

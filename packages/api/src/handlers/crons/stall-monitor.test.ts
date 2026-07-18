@@ -88,7 +88,7 @@ describe("stall monitor", () => {
             tenant_id: "tenant-1",
             agent_id: "agent-1",
             thread_id: "thread-1",
-            runtime_type: "harness",
+            runtime_type: "agentcore",
             retry_attempt: 0,
           },
         ],

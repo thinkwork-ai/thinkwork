@@ -461,6 +461,13 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wakeupSource).toContain("triggering_message_id: messageId");
   });
 
+  it("persists cache-write usage so the turn disclosure explains charged prompt-cache cost", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    expect(wakeupSource).toContain(
+      "cached_write_tokens: usage.cachedWriteTokens",
+    );
+  });
+
   it("both wakeup builders carry messageId into the payload so it reaches the turn row (first turn AND resume)", () => {
     // First (opening) turn.
     const firstDefault = buildDefaultAgentTurnWakeup({

@@ -1,6 +1,11 @@
+import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import { handler, verifyMcpAccessToken } from "./mcp-oauth.js";
+import {
+  __setTurnAssertionPublicKeyLoaderForTest,
+  handler,
+  verifyMcpAccessToken,
+} from "./mcp-oauth.js";
 import {
   encodeJwt,
   sha256Base64Url,
@@ -16,6 +21,12 @@ describe("mcp-oauth handler", () => {
     process.env.COGNITO_AUTH_BASE_URL =
       "https://thinkwork-dev.auth.us-east-1.amazoncognito.com";
     process.env.COGNITO_MCP_CLIENT_ID = "cognito-mcp-client";
+    process.env.AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = "kms-key-id";
+    process.env.AGENTCORE_TURN_ASSERTION_KID = "kid-2026-07";
+    delete process.env.AGENTCORE_TURN_ASSERTION_JWKS_KEYS;
+    process.env.AGENTCORE_TURN_ASSERTION_ISSUER =
+      "https://identity.example.test/agentcore";
+    __setTurnAssertionPublicKeyLoaderForTest(null);
     vi.restoreAllMocks();
   });
 
@@ -44,6 +55,82 @@ describe("mcp-oauth handler", () => {
       `https://${host}/mcp/oauth/register`,
     );
     expect(body.code_challenge_methods_supported).toContain("S256");
+  });
+
+  it("serves a dedicated AgentCore issuer without changing MCP token metadata", async () => {
+    const response = await handler(
+      event("GET", "/agentcore/.well-known/openid-configuration"),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body || "{}")).toEqual({
+      issuer: "https://identity.example.test/agentcore",
+      jwks_uri: "https://identity.example.test/agentcore/oauth/jwks",
+      id_token_signing_alg_values_supported: ["RS256"],
+      response_types_supported: [],
+      subject_types_supported: ["public"],
+    });
+  });
+
+  it("publishes the KMS public key as an RS256 JWKS without signing access", async () => {
+    const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const publicKeyDer = publicKey.export({ type: "spki", format: "der" });
+    const load = vi.fn(async () => publicKeyDer);
+    __setTurnAssertionPublicKeyLoaderForTest(load);
+
+    const jwks = await handler(event("GET", "/agentcore/oauth/jwks"));
+    expect(jwks.statusCode).toBe(200);
+    expect(JSON.parse(jwks.body || "{}")).toMatchObject({
+      keys: [
+        {
+          alg: "RS256",
+          kid: "kid-2026-07",
+          kty: "RSA",
+          use: "sig",
+        },
+      ],
+    });
+    expect(load).toHaveBeenCalledWith("kms-key-id");
+  });
+
+  it("publishes active and previous KMS keys during a bounded rotation overlap", async () => {
+    const { publicKey: activeKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+    });
+    const { publicKey: previousKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+    });
+    const keys = new Map([
+      [
+        "kms-active",
+        activeKey.export({ type: "spki", format: "der" }) as Uint8Array,
+      ],
+      [
+        "kms-previous",
+        previousKey.export({ type: "spki", format: "der" }) as Uint8Array,
+      ],
+    ]);
+    const load = vi.fn(async (keyId: string) => {
+      const key = keys.get(keyId);
+      if (!key) throw new Error("unexpected key");
+      return key;
+    });
+    __setTurnAssertionPublicKeyLoaderForTest(load);
+    process.env.AGENTCORE_TURN_ASSERTION_JWKS_KEYS = JSON.stringify([
+      { keyId: "kms-active", kid: "turn-v2" },
+      { keyId: "kms-previous", kid: "turn-v1" },
+    ]);
+
+    const response = await handler(event("GET", "/agentcore/oauth/jwks"));
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body || "{}").keys).toEqual([
+      expect.objectContaining({ kid: "turn-v2", alg: "RS256" }),
+      expect.objectContaining({ kid: "turn-v1", alg: "RS256" }),
+    ]);
+    expect(load.mock.calls.map(([keyId]) => keyId)).toEqual([
+      "kms-active",
+      "kms-previous",
+    ]);
   });
 
   it("rejects plaintext non-loopback redirect URIs at registration", async () => {

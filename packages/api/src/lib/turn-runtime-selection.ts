@@ -16,13 +16,13 @@ export class InvalidRequestedRuntimeError extends Error {
 }
 
 /**
- * Parse `metadata.requestedRuntime`. Absent / "pi" → null (configured
- * runtime applies). "agentcore" (alias "harness") → "agentcore". Anything
- * else throws — a mistyped runtime request must never silently run Pi (R4).
+ * Parse `metadata.requestedRuntime`. An explicit Pi or Harness value pins the
+ * thread even when the tenant's future-thread default changes. Anything else
+ * throws — a mistyped runtime request must never silently run Pi (R4).
  */
 export function requestedRuntimeFromMetadata(
   metadata: unknown,
-): "agentcore" | null {
+): "pi" | "agentcore" | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return null;
   }
@@ -30,7 +30,7 @@ export function requestedRuntimeFromMetadata(
   if (value == null || value === "") return null;
   if (typeof value === "string") {
     const normalized = value.toLowerCase();
-    if (normalized === "pi") return null;
+    if (normalized === "pi") return "pi";
     if (normalized === "agentcore" || normalized === "harness")
       return "agentcore";
   }

@@ -21,11 +21,14 @@ import {
   toThreadParticipantInsert,
 } from "../../../lib/mentions/thread-participant-mentions.js";
 import { loadThreadMentionTargets } from "../../../lib/mentions/thread-mention-targets.js";
-import { dispatchDefaultAgentChatTurn } from "../../../lib/mentions/default-agent-routing.js";
+import {
+  dispatchDefaultAgentChatTurn,
+  dispatchMentionedAgentChatTurn,
+} from "../../../lib/mentions/default-agent-routing.js";
 import {
   InvalidRequestedRuntimeError,
-  requestedRuntimeFromMetadata,
 } from "../../../lib/turn-runtime-selection.js";
+import { requestedRuntimeForTurn } from "../../../lib/harness/thread-runtime-policy.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";
@@ -114,6 +117,7 @@ export const sendMessage = async (
       title: threads.title,
       status: threads.status,
       mode_override: threads.mode_override,
+      metadata: threads.metadata,
     })
     .from(threads)
     .where(eq(threads.id, i.threadId));
@@ -192,9 +196,9 @@ export const sendMessage = async (
   });
   // THINK-311 U5b: per-turn AgentCore trial selection from the composer's
   // runtime picker. Malformed values reject here — never silently Pi.
-  let requestedRuntime: "agentcore" | null = null;
+  let requestedRuntime: "pi" | "agentcore" | null = null;
   try {
-    requestedRuntime = requestedRuntimeFromMetadata(parsedMetadata);
+    requestedRuntime = requestedRuntimeForTurn(parsedMetadata, thread.metadata);
   } catch (err) {
     if (err instanceof InvalidRequestedRuntimeError) {
       throw new GraphQLError(err.message, {
@@ -519,17 +523,58 @@ export const sendMessage = async (
     !shouldSuppressAgentMentionDispatch({ agentDispatch: i.agentDispatch })
   ) {
     try {
-      const mentionResults = await dispatchAgentMentions({
-        tenantId: thread.tenant_id,
-        threadId: i.threadId,
-        spaceId: thread.space_id,
-        messageId: row.id,
-        content: i.content,
-        mentions: parsedMentions,
-        requestedModelId,
-        ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
-        sender: { type: senderType, id: senderId },
-      });
+      // AgentCore Harness-pinned @mentions are interactive chat turns. They
+      // must use the direct invoke path: the durable wakeup path is polled
+      // once per minute and resolves runtime from the agent row, which can
+      // silently execute Pi even though the thread is pinned to Harness.
+      const mentionResults =
+        requestedRuntime === "agentcore"
+          ? await Promise.all(
+              parsedMentions
+                .filter((mention) => mention.targetType === "agent")
+                .map(async (mention, index) => {
+                  try {
+                    const result = await dispatchMentionedAgentChatTurn({
+                      tenantId: thread.tenant_id,
+                      threadId: i.threadId,
+                      spaceId: thread.space_id,
+                      messageId: row.id,
+                      agentId: mention.targetId,
+                      content: i.content,
+                      requestedModelId,
+                      requestedRuntime,
+                      ...(index === 0 && pendingQuestionAnswers
+                        ? { pendingQuestionAnswers }
+                        : {}),
+                      sender: { type: senderType, id: senderId },
+                    });
+                    return {
+                      agentId: mention.targetId,
+                      enqueued: false,
+                      wakeupRequestId: result?.wakeupRequestId ?? undefined,
+                    };
+                  } catch (err) {
+                    return {
+                      agentId: mention.targetId,
+                      enqueued: false,
+                      failed: true,
+                      error:
+                        err instanceof Error ? err.message : String(err),
+                    };
+                  }
+                }),
+            )
+          : await dispatchAgentMentions({
+              tenantId: thread.tenant_id,
+              threadId: i.threadId,
+              spaceId: thread.space_id,
+              messageId: row.id,
+              content: i.content,
+              mentions: parsedMentions,
+              requestedModelId,
+              ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
+              sender: { type: senderType, id: senderId },
+            });
       // R7: mention dispatch can fail per-agent (multiple mentioned agents).
       // Stamp a per-dispatch failed state naming which agents failed, rather
       // than treating it as all-or-nothing.
