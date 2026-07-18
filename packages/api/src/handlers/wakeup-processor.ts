@@ -3180,6 +3180,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           input_tokens: usage.inputTokens,
           output_tokens: usage.outputTokens,
           cached_read_tokens: usage.cachedReadTokens,
+          cached_write_tokens: usage.cachedWriteTokens,
           tools_called: (invokeResult.tools_called ||
             (invokeResult.response as Record<string, unknown>)?.tools_called ||
             []) as string[],
