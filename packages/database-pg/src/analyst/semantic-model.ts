@@ -98,6 +98,9 @@ export const ANALYST_DENYLISTED_COLUMNS: Readonly<
   // Full normalized claim value can embed note/email bodies from source
   // records — same content boundary as evidence snapshots.
   memory_claims: ["value"],
+  // Correlates a runtime tool invocation with the principal whose private
+  // credential was used. Keep this audit evidence out of analyst queries.
+  harness_tool_execution_events: ["credential_owner_alias"],
   routines: ["credential_refs"], // connector credential references
   skill_catalog: ["signature_payload"], // skill signing material
   skill_runs: ["completion_hmac_secret"], // per-run HMAC secret

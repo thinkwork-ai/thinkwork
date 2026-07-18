@@ -81,6 +81,7 @@ Conventions:
 - [goals](#goals)
 - [guardrail_blocks](#guardrail-blocks)
 - [guardrails](#guardrails)
+- [harness_tool_execution_events](#harness-tool-execution-events)
 - [inbox_item_comments](#inbox-item-comments)
 - [inbox_item_links](#inbox-item-links)
 - [inbox_items](#inbox-items)
@@ -1831,6 +1832,43 @@ Join hints:
 Join hints:
 
 - `guardrails.tenant_id` → `tenants.id`
+
+## harness_tool_execution_events
+
+| column | type | flags |
+| --- | --- | --- |
+| id | bigserial | PK, not null |
+| tenant_id | uuid | not null |
+| thread_id | uuid | not null |
+| turn_id | uuid | not null |
+| principal_type | text | not null |
+| principal_id | text | not null |
+| tool_use_id | text | not null |
+| operation | text | not null |
+| policy_revision | text | not null |
+| policy_decision_id | text |  |
+| idempotency_key | text | not null |
+| event_type | text | not null |
+| input_preview | jsonb |  |
+| output_preview | jsonb |  |
+| error_preview | jsonb |  |
+| provider_request_id | text |  |
+| duration_ms | integer |  |
+| provider_cost_usd | numeric(18, 8) |  |
+| created_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `principal_type`: `user`, `service`
+- `event_type`: `started`, `completed`, `failed`, `uncertain`
+
+Join hints:
+
+- `harness_tool_execution_events.tenant_id` → `tenants.id`
+- `harness_tool_execution_events.thread_id` → `threads.id`
+- `harness_tool_execution_events.turn_id` → `thread_turns.id`
+
+Not granted (do not query): `credential_owner_alias`.
 
 ## inbox_item_comments
 
