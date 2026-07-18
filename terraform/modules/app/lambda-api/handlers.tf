@@ -37,6 +37,11 @@ locals {
       "msteams-install-complete",
       "msteams-account-link-complete",
     ],
+    var.enable_agentcore_multiplayer_proof ? [] : [
+      "turn-assertion-mint",
+      "agentcore-proof-oauth-provider",
+      "agentcore-identity-boundary-target",
+    ],
   )
 
   # Config-class configuration shared by all API handlers. As of plan
@@ -243,6 +248,24 @@ locals {
     NODE_OPTIONS    = "--enable-source-maps"
   }
 
+  # THINK-316 U1: the assertion mint runs on a sibling role and receives only
+  # the database connection plus immutable stage identity. In particular it
+  # does not inherit API_AUTH_SECRET or APPSYNC_API_KEY from common_env.
+  turn_assertion_mint_env = {
+    STAGE          = var.stage
+    DATABASE_URL   = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    AWS_ACCOUNT_ID = var.account_id
+    NODE_OPTIONS   = "--enable-source-maps"
+  }
+
+  # THINK-316 U1: the synthetic provider/target are proof-only public
+  # boundaries. They receive no database URL, platform bearer, or AppSync key.
+  agentcore_proof_boundary_env = {
+    STAGE          = var.stage
+    AWS_ACCOUNT_ID = var.account_id
+    NODE_OPTIONS   = "--enable-source-maps"
+  }
+
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as the api-cross-function-invoke statement in
   # iam-grouped.tf) so we don't introduce a self-referential dependency
@@ -256,6 +279,41 @@ locals {
   }
 
   handler_extra_env = {
+    # THINK-316 U1: short-lived, server-minted identity assertions for
+    # AgentCore Harness and Gateway. The public mcp-oauth handler receives the
+    # key id only to publish GetPublicKey-derived JWKS; its role cannot Sign.
+    "mcp-oauth" = {
+      AGENTCORE_TURN_ASSERTION_ISSUER = local.agentcore_turn_assertion_issuer
+      AGENTCORE_TURN_ASSERTION_JWKS_KEYS = jsonencode([
+        for key in values(local.agentcore_turn_assertion_keys) : {
+          keyId = key.key_id
+          kid   = key.kid
+        }
+      ])
+    }
+    "turn-assertion-mint" = {
+      AGENTCORE_TURN_ASSERTION_ISSUER     = local.agentcore_turn_assertion_issuer
+      AGENTCORE_HARNESS_AUDIENCE          = local.agentcore_harness_audience
+      AGENTCORE_GATEWAY_AUDIENCE          = local.agentcore_gateway_audience
+      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.agentcore_turn_assertion_active_key.key_id
+      AGENTCORE_TURN_ASSERTION_KID        = local.agentcore_turn_assertion_active_key.kid
+    }
+    "agentcore-proof-oauth-provider" = {
+      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
+      AGENTCORE_PROOF_OAUTH_CLIENT_ID     = var.agentcore_proof_oauth_client_id
+      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
+      AGENTCORE_ASSERTION_ISSUER          = local.agentcore_turn_assertion_issuer
+      AGENTCORE_HARNESS_AUDIENCE          = local.agentcore_harness_audience
+      AGENTCORE_GATEWAY_AUDIENCE          = local.agentcore_gateway_audience
+      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.agentcore_turn_assertion_active_key.key_id
+      AGENTCORE_TURN_ASSERTION_KID        = local.agentcore_turn_assertion_active_key.kid
+      AGENTCORE_PROOF_OWNER_ALLOWLIST     = var.agentcore_proof_owner_allowlist
+    }
+    "agentcore-identity-boundary-target" = {
+      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
+      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
+      AGENTCORE_PROOF_OWNER_ALLOWLIST     = var.agentcore_proof_owner_allowlist
+    }
     # Analyst query broker (THINK-228 U3). Reader role + caller credential
     # secrets, and the workspace bucket's analyst-staging/ prefix for
     # large-result CSVs (lifecycle TTL lives on the bucket module). The
@@ -411,11 +469,11 @@ locals {
       # rule); resolveRuntimeFunctionName derives it from STAGE at call
       # time, exactly like workspace-renderer.
     }
-    # THINK-311 U5: CreateHarness requires the execution role ARN (U4
-    # module output; empty string when the harness module is disabled —
-    # the runner then fails the turn explicitly, never falls back to Pi).
+    # THINK-316 U5: the runner reads the server-only attested profile and
+    # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives
+    # no Harness control-plane inputs or permissions.
     "harness-runner" = {
-      HARNESS_EXECUTION_ROLE_ARN = var.agentcore_harness_execution_role_arn
+      HARNESS_PROOF_PROFILE_PARAMETER_NAME = "/thinkwork/${var.stage}/agentcore-harness-proof-profile"
     }
     # 240s: sync Hindsight retain (LLM extraction + auto-consolidation) can
     # exceed 60s; the client timeout must stay below the Lambda timeout (300s)
@@ -637,6 +695,12 @@ resource "aws_lambda_function" "handler" {
     # drives InvokeHarness, fulfills emit_document, and finalizes the turn
     # via processFinalize. No API route — direct Event invoke only.
     "harness-runner",
+    # THINK-316 U1: direct-invoke-only assertion mint. It derives all identity
+    # claims from the persisted turn tuple and signs with a dedicated KMS key;
+    # there is intentionally no public API Gateway route.
+    "turn-assertion-mint",
+    "agentcore-proof-oauth-provider",
+    "agentcore-identity-boundary-target",
     # canvas-refresh — headless Living Artifacts data-refresh (THINK-145 U6).
     # Invoked RequestResponse by the refreshCanvasData mutation (graphql-http)
     # and by job-trigger's canvas_refresh branch (U7). Re-runs the saved
@@ -936,7 +1000,7 @@ resource "aws_lambda_function" "handler" {
   # so its destructive evidence-snapshot S3 capability (version enumeration +
   # bulk version deletion) never leaks into the 90+ handlers on the shared
   # role. Everything else keeps the shared role.
-  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : aws_iam_role.lambda.arn
+  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : each.key == "turn-assertion-mint" ? aws_iam_role.turn_assertion_mint[0].arn : each.key == "agentcore-proof-oauth-provider" ? aws_iam_role.agentcore_proof_provider[0].arn : each.key == "agentcore-identity-boundary-target" ? aws_iam_role.agentcore_proof_boundary[0].arn : aws_iam_role.lambda.arn
   handler = "index.handler"
   runtime = local.runtime
   # Parameters and Secrets extension: container-local cache for the SSM
@@ -997,7 +1061,10 @@ resource "aws_lambda_function" "handler" {
 
   environment {
     variables = merge(
-      local.common_env,
+      each.key == "turn-assertion-mint" ? local.turn_assertion_mint_env : contains([
+        "agentcore-proof-oauth-provider",
+        "agentcore-identity-boundary-target",
+      ], each.key) ? local.agentcore_proof_boundary_env : local.common_env,
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
@@ -1579,14 +1646,26 @@ locals {
       "GET /.well-known/oauth-authorization-server"        = "mcp-oauth"
       "GET /.well-known/openid-configuration"              = "mcp-oauth"
       "GET /mcp/oauth/jwks"                                = "mcp-oauth"
-      "POST /mcp/oauth/register"                           = "mcp-oauth"
-      "GET /mcp/oauth/authorize"                           = "mcp-oauth"
-      "GET /mcp/oauth/callback"                            = "mcp-oauth"
-      "POST /mcp/oauth/token"                              = "mcp-oauth"
-      "POST /mcp/oauth/revoke"                             = "mcp-oauth"
-      "ANY /mcp/user-memory"                               = "mcp-user-memory"
-      "ANY /mcp/context-engine"                            = "mcp-context-engine"
-      "ANY /mcp/open-engine"                               = "mcp-open-engine"
+      # THINK-316 U1: AgentCore CUSTOM_JWT discovery is deliberately isolated
+      # under /agentcore so the existing user-memory OAuth issuer is unchanged.
+      "GET /agentcore/.well-known/openid-configuration" = "mcp-oauth"
+      "GET /agentcore/oauth/jwks"                       = "mcp-oauth"
+      # THINK-316 U1 proof-only provider and downstream HTTPS target. Both
+      # handlers validate their own credentials; the route filter removes all
+      # five when enable_agentcore_multiplayer_proof is false.
+      "GET /agentcore-proof/oauth/.well-known/openid-configuration" = "agentcore-proof-oauth-provider"
+      "GET /agentcore-proof/oauth/authorize"                        = "agentcore-proof-oauth-provider"
+      "POST /agentcore-proof/oauth/token"                           = "agentcore-proof-oauth-provider"
+      "GET /agentcore-proof/target/owner"                           = "agentcore-identity-boundary-target"
+      "GET /agentcore-proof/target/mixed"                           = "agentcore-identity-boundary-target"
+      "POST /mcp/oauth/register"                                    = "mcp-oauth"
+      "GET /mcp/oauth/authorize"                                    = "mcp-oauth"
+      "GET /mcp/oauth/callback"                                     = "mcp-oauth"
+      "POST /mcp/oauth/token"                                       = "mcp-oauth"
+      "POST /mcp/oauth/revoke"                                      = "mcp-oauth"
+      "ANY /mcp/user-memory"                                        = "mcp-user-memory"
+      "ANY /mcp/context-engine"                                     = "mcp-context-engine"
+      "ANY /mcp/open-engine"                                        = "mcp-open-engine"
       # THINK-280 U8: scoped external capability search facade. The handler is
       # inert unless CAPABILITY_EXTERNAL_SEARCH_ENABLED (gated on
       # enable_capability_broker) is on — routing it while disabled returns an
@@ -1845,7 +1924,9 @@ locals {
       "GET /api/runtime/capability-catalog"     = "capability-catalog-list"
       "OPTIONS /api/runtime/capability-catalog" = "capability-catalog-list"
     } : route_key => handler_name
-    if !contains(local.optional_integration_handler_names, handler_name)
+    if !contains(local.optional_integration_handler_names, handler_name) && (
+      var.enable_agentcore_multiplayer_proof || !startswith(route_key, "GET /agentcore/")
+    )
   } : {}
 }
 

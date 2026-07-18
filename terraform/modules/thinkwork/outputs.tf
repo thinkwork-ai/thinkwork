@@ -659,3 +659,78 @@ output "agentcore_harness_execution_role_arn" {
   description = "Execution role ARN Harness microVMs assume (CreateHarness executionRoleArn). Empty when enable_agentcore_harness is false."
   value       = module.agentcore_harness.execution_role_arn
 }
+
+output "agentcore_harness_proof_arn" {
+  description = "One pilot tenant/profile Harness ARN. Empty when the proof is disabled."
+  value       = module.agentcore_harness.proof_harness_arn
+}
+
+output "agentcore_harness_proof_endpoint_arn" {
+  description = "Named version-pinned pilot Harness endpoint ARN."
+  value       = module.agentcore_harness.proof_endpoint_arn
+}
+
+output "agentcore_harness_proof_endpoint_name" {
+  description = "Named pilot Harness endpoint qualifier."
+  value       = module.agentcore_harness.proof_endpoint_name
+}
+
+output "agentcore_harness_proof_version" {
+  description = "Attested immutable Harness version served by the proof endpoint."
+  value       = module.agentcore_harness.proof_target_version
+}
+
+output "agentcore_harness_proof_status" {
+  description = "Safe server readiness state for the multiplayer Harness proof."
+  value       = module.agentcore_harness.proof_status
+}
+
+output "agentcore_harness_proof_configuration_fingerprint" {
+  description = "Non-secret stable Harness ceiling fingerprint."
+  value       = module.agentcore_harness.proof_configuration_fingerprint
+}
+
+output "agentcore_turn_assertion_issuer" {
+  description = "Proof CUSTOM_JWT issuer used by deployed operator probes."
+  value       = module.api.agentcore_turn_assertion_issuer
+}
+
+output "agentcore_harness_audience" {
+  description = "Purpose-bound proof Harness audience."
+  value       = module.api.agentcore_harness_audience
+}
+
+output "agentcore_turn_assertion_active_key_arn" {
+  description = "Operator-only active proof signing key ARN."
+  value       = module.api.agentcore_turn_assertion_active_key_arn
+}
+
+output "agentcore_turn_assertion_active_kid" {
+  description = "Public JWKS key identifier for the active proof signing key."
+  value       = module.api.agentcore_turn_assertion_active_kid
+}
+
+output "agentcore_harness_proof_profile_parameter_name" {
+  description = "Server-only SSM readiness/profile contract consumed by the Harness runner and operator DeploymentStatus resolver."
+  value       = var.enable_agentcore_multiplayer_proof ? aws_ssm_parameter.agentcore_harness_proof_profile[0].name : ""
+}
+
+output "agentcore_multiplayer_proof_gateway_arn" {
+  description = "Proof-only AgentCore Gateway ARN. Empty unless enable_agentcore_multiplayer_proof is true."
+  value       = module.agentcore_proof_gateway.gateway_arn
+}
+
+output "agentcore_multiplayer_proof_gateway_url" {
+  description = "Proof-only AgentCore Gateway MCP endpoint."
+  value       = module.agentcore_proof_gateway.gateway_url
+}
+
+output "agentcore_multiplayer_proof_workload_identity_arn" {
+  description = "Manual proof workload identity ARN used only for U1 Identity verification."
+  value       = module.agentcore_proof_identity.workload_identity_arn
+}
+
+output "agentcore_multiplayer_proof_credential_provider_arn" {
+  description = "Synthetic proof OAuth credential provider ARN."
+  value       = module.agentcore_proof_identity.credential_provider_arn
+}

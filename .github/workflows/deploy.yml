@@ -1387,6 +1387,12 @@ jobs:
             # populates CAPABILITY_PRIVATE_* so agentcore-admin provisions
             # capability-private interpreters. One-line revert disables it.
             -var "enable_capability_broker=true"
+            # THINK-316 — explicit dev-only managed multiplayer Harness pilot.
+            # The default remains off. Production/customer release workflows do
+            # not pass these repository variables.
+            -var "enable_agentcore_multiplayer_proof=${{ vars.ENABLE_AGENTCORE_MULTIPLAYER_PROOF || 'false' }}"
+            -var "agentcore_multiplayer_proof_tenant_slug=${{ vars.AGENTCORE_MULTIPLAYER_PROOF_TENANT_SLUG || '' }}"
+            -var "agentcore_multiplayer_proof_owner_allowlist=${{ vars.AGENTCORE_MULTIPLAYER_PROOF_OWNER_ALLOWLIST || '' }}"
           )
 
           resolve_existing_api_id() {
@@ -1510,6 +1516,22 @@ jobs:
               -target=module.thinkwork.module.capability_broker.aws_lambda_function.broker
               -target=module.thinkwork.module.agentcore_admin.aws_lambda_function.admin
             )
+            if [ "${{ vars.ENABLE_AGENTCORE_MULTIPLAYER_PROOF || 'false' }}" = "true" ]; then
+              # The Harness lifecycle and exact-user Identity/Gateway plane
+              # sit outside the blanket API Lambda target. Keep the pilot
+              # recoverable after a cancelled Terraform-bearing deploy.
+              TF_TARGET_ARGS+=(
+                -target=module.thinkwork.module.agentcore_harness
+                -target=module.thinkwork.module.agentcore_proof_identity
+                -target=module.thinkwork.module.agentcore_proof_gateway
+                -target=module.thinkwork.aws_ssm_parameter.agentcore_harness_proof_profile
+                -target=module.thinkwork.module.api.aws_kms_key.agentcore_turn_assertion
+                -target=module.thinkwork.module.api.aws_kms_alias.agentcore_turn_assertion
+                -target=module.thinkwork.module.api.aws_iam_role.turn_assertion_mint
+                -target=module.thinkwork.module.api.aws_iam_role_policy.turn_assertion_mint_kms
+                -target=module.thinkwork.module.api.aws_iam_role_policy.turn_assertion_jwks_kms
+              )
+            fi
           fi
           # -refresh=false skips ~30s of "Refreshing state…" against ~700
           # resources on every push. Out-of-band drift is caught by the
@@ -1852,16 +1874,7 @@ jobs:
   migration-drift-check:
     name: Migration Drift Check
     needs: [terraform-apply, compliance-bootstrap]
-    # TEMPORARILY DISABLED — the drift gate fires ~150 separate psql
-    # connections on every deploy and intermittently exits 1 on
-    # transient RDS connection-rate / network blips, blocking deploys
-    # with no actionable signal (the inner invocation inside
-    # bootstrap-compliance-roles.sh redirects output to /dev/null).
-    # Re-enable by restoring the original
-    #   if: always() && needs.terraform-apply.result == 'success' && needs.compliance-bootstrap.result == 'success'
-    # once the drift gate is rewritten to share a single psql
-    # connection (or moved off the deploy critical path entirely).
-    if: false
+    if: always() && needs.terraform-apply.result == 'success' && needs.compliance-bootstrap.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

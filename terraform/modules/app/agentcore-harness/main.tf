@@ -1,16 +1,66 @@
 ################################################################################
-# AgentCore Harness — App Module (THINK-311 U4, ship-inert)
+# AgentCore Harness — App Module (THINK-316 managed multiplayer runtime)
 #
-# IAM surface for the AWS Bedrock AgentCore Harness trial: the execution role
-# Harness microVMs assume, plus (via outputs consumed by lambda-api's grouped
-# policies) the invoker grants the shared api Lambda role needs to create and
-# invoke Harness resources. Nothing reads or invokes any of this until the
-# harness-runner handler lands in U5 — this module is pure IAM.
+# Stable execution role plus the optional single tenant/profile Harness and
+# named immutable-version endpoint used by the managed multiplayer proof.
 #
 # Trust-policy note: sibling agentcore roles (agentcore-pi, agentcore-runtime)
 # trust the bare `bedrock-agentcore.amazonaws.com` service principal with no
 # account/source-arn conditions; this role mirrors that repo pattern.
 ################################################################################
+
+terraform {
+  required_providers {
+    external = {
+      source  = "hashicorp/external"
+      version = ">= 2.3.0"
+    }
+  }
+}
+
+locals {
+  normalized_stage   = replace(var.stage, "-", "_")
+  normalized_tenant  = replace(var.pilot_tenant_slug, "-", "_")
+  normalized_profile = replace(var.trust_profile, "-", "_")
+  harness_name       = "Thinkwork_${local.normalized_stage}_${local.normalized_tenant}_${local.normalized_profile}"
+  endpoint_name      = "ThinkworkProof"
+  gateway_target_tool_names = [
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___owner_probe",
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___mixed_disclosure",
+  ]
+  tenant_skill_prefix = var.pilot_tenant_slug != "" ? (
+    "tenants/${var.pilot_tenant_slug}/"
+  ) : "tenants/"
+  configuration_hash = nonsensitive(sha256(jsonencode({
+    tenant_slug  = var.pilot_tenant_slug
+    profile      = var.trust_profile
+    discovery    = var.discovery_url
+    audience     = var.harness_audience
+    gateway_arn  = var.gateway_arn
+    provider_arn = var.oauth_credential_provider_arn
+    return_url   = var.oauth_return_url
+    target_tools = local.gateway_target_tool_names
+    model_id     = var.model_id
+    memory       = "disabled"
+    tool_policy  = "gateway-and-cedar-authoritative"
+  })))
+}
+
+check "managed_multiplayer_harness_configuration" {
+  assert {
+    condition = !var.multiplayer_proof_enabled || (
+      var.enabled &&
+      var.pilot_tenant_slug != "" &&
+      can(regex("^https://", var.discovery_url)) &&
+      var.harness_audience != "" &&
+      can(regex("^arn:aws:bedrock-agentcore:", var.gateway_arn)) &&
+      can(regex("^arn:aws:bedrock-agentcore:", var.oauth_credential_provider_arn)) &&
+      can(regex("^arn:aws:secretsmanager:", var.oauth_credential_secret_arn))
+      && can(regex("^https://", var.oauth_return_url))
+    )
+    error_message = "The multiplayer Harness requires the base role, pilot tenant, HTTPS discovery, exact audience, Gateway, OAuth provider, and provider secret."
+  }
+}
 
 ################################################################################
 # Harness execution role — assumed by Harness microVMs
@@ -65,7 +115,7 @@ resource "aws_iam_role_policy" "harness_execution" {
         Sid      = "WorkspaceSkillSourcesRead"
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
-        Resource = "arn:aws:s3:::${var.bucket_name}/tenants/*"
+        Resource = "arn:aws:s3:::${var.bucket_name}/${local.tenant_skill_prefix}*"
       },
       {
         Sid      = "WorkspaceSkillSourcesList"
@@ -74,30 +124,9 @@ resource "aws_iam_role_policy" "harness_execution" {
         Resource = "arn:aws:s3:::${var.bucket_name}"
         Condition = {
           StringLike = {
-            "s3:prefix" = "tenants/*"
+            "s3:prefix" = "${local.tenant_skill_prefix}*"
           }
         }
-      },
-      {
-        # Each Harness auto-provisions a session memory
-        # (memory/harness_tw_*) and reads/writes it at runtime as this
-        # execution role — observed live: AccessDenied on ListEvents from
-        # the harness microVM. Data-plane only, scoped to harness memories.
-        Sid    = "HarnessSessionMemoryDataPlane"
-        Effect = "Allow"
-        Action = [
-          "bedrock-agentcore:ListEvents",
-          "bedrock-agentcore:GetEvent",
-          "bedrock-agentcore:CreateEvent",
-          "bedrock-agentcore:DeleteEvent",
-          "bedrock-agentcore:ListSessions",
-          "bedrock-agentcore:ListActors",
-          "bedrock-agentcore:ListMemoryRecords",
-          "bedrock-agentcore:RetrieveMemoryRecords",
-          "bedrock-agentcore:GetMemoryRecord",
-          "bedrock-agentcore:GetMemory",
-        ]
-        Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:memory/harness_tw_*"
       },
       {
         # Harness containers log to the service-managed bedrock-agentcore
@@ -117,6 +146,132 @@ resource "aws_iam_role_policy" "harness_execution" {
           "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/*:*",
         ]
       },
+      {
+        Sid      = "SelectedTenantGateway"
+        Effect   = "Allow"
+        Action   = ["bedrock-agentcore:InvokeGateway"]
+        Resource = var.multiplayer_proof_enabled ? var.gateway_arn : "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:gateway/disabled"
+      },
+      {
+        Sid    = "ExactUserIdentityExchange"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:GetResourceOauth2Token",
+          "bedrock-agentcore:GetWorkloadAccessToken",
+          "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
+        ]
+        Resource = var.multiplayer_proof_enabled ? [
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default",
+          var.oauth_credential_provider_arn,
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default",
+          # AgentCore prefixes the managed runtime workload identity with
+          # `harness_`, then appends its generated runtime id.
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default/workload-identity/harness_${local.harness_name}-*",
+        ] : ["arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default/workload-identity/disabled"]
+      },
+      {
+        Sid      = "ExactOauthProviderSecret"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.multiplayer_proof_enabled ? var.oauth_credential_secret_arn : "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:disabled"
+      },
+      {
+        # The service-managed Harness container resolves its public base image
+        # at startup under the execution role.
+        Sid    = "PublicHarnessImage"
+        Effect = "Allow"
+        Action = [
+          "ecr-public:GetAuthorizationToken",
+          "sts:GetServiceBearerToken",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "HarnessRuntimeTelemetry"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:PutMetricData",
+          "xray:PutTraceSegments",
+          "xray:PutTelemetryRecords",
+          "xray:GetSamplingRules",
+          "xray:GetSamplingTargets",
+        ]
+        Resource = "*"
+      },
     ]
   })
+}
+
+################################################################################
+# One stable pilot tenant/profile Harness and named version-pinned endpoint.
+################################################################################
+
+moved {
+  from = terraform_data.managed_multiplayer_harness
+  to   = terraform_data.managed_multiplayer_harness_identity
+}
+
+# Owns deletion of the stable stage/tenant/profile identity. Configuration
+# revisions are reconciled separately so an ordinary prompt/tool/model update
+# creates a new immutable Harness version without replacing the Harness ARN.
+resource "terraform_data" "managed_multiplayer_harness_identity" {
+  count = var.multiplayer_proof_enabled ? 1 : 0
+
+  input = {
+    region        = var.region
+    harness_name  = local.harness_name
+    endpoint_name = local.endpoint_name
+  }
+  provisioner "local-exec" {
+    when    = destroy
+    command = "bash ${path.module}/scripts/delete_harness.sh"
+    environment = {
+      AWS_REGION    = self.input.region
+      HARNESS_NAME  = self.input.harness_name
+      ENDPOINT_NAME = self.input.endpoint_name
+    }
+  }
+
+  depends_on = [aws_iam_role_policy.harness_execution]
+}
+
+resource "terraform_data" "managed_multiplayer_harness_configuration" {
+  count = var.multiplayer_proof_enabled ? 1 : 0
+
+  input            = local.configuration_hash
+  triggers_replace = [local.configuration_hash]
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/scripts/reconcile_harness.sh"
+    environment = {
+      AWS_REGION                    = var.region
+      HARNESS_NAME                  = local.harness_name
+      ENDPOINT_NAME                 = local.endpoint_name
+      EXECUTION_ROLE_ARN            = aws_iam_role.harness_execution[0].arn
+      DISCOVERY_URL                 = var.discovery_url
+      HARNESS_AUDIENCE              = var.harness_audience
+      GATEWAY_ARN                   = var.gateway_arn
+      GATEWAY_TARGET_TOOL_NAMES     = join(",", local.gateway_target_tool_names)
+      OAUTH_CREDENTIAL_PROVIDER_ARN = var.oauth_credential_provider_arn
+      OAUTH_RETURN_URL              = var.oauth_return_url
+      MODEL_ID                      = var.model_id
+      TENANT_SLUG                   = var.pilot_tenant_slug
+      TRUST_PROFILE                 = var.trust_profile
+      CONFIGURATION_HASH            = local.configuration_hash
+    }
+  }
+
+  depends_on = [terraform_data.managed_multiplayer_harness_identity]
+}
+
+data "external" "harness_state" {
+  count      = var.multiplayer_proof_enabled ? 1 : 0
+  depends_on = [terraform_data.managed_multiplayer_harness_configuration]
+  program    = ["bash", "${path.module}/scripts/read_harness.sh"]
+
+  query = {
+    region        = var.region
+    harness_name  = local.harness_name
+    endpoint_name = local.endpoint_name
+  }
 }

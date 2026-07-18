@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  computeHarnessProjectionFingerprints,
+  HarnessDuplicateDeliveryError,
+  normalizeHarnessWireEvent,
   parseHarnessInvokeEvent,
   runHarnessTurn,
   type HarnessRunnerDeps,
@@ -14,6 +17,35 @@ function stream(
     for (const event of events) yield event;
   })();
 }
+
+describe("Harness projection fingerprints", () => {
+  it("keeps one logical-agent base while participant projections differ", () => {
+    const common = {
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      harnessConfigurationFingerprint: "harness-config",
+      harnessVersion: "5",
+      sessionStrategy: "fresh",
+    };
+    const alice = computeHarnessProjectionFingerprints({
+      ...common,
+      participantId: "alice",
+      turnId: "turn-alice",
+      configFingerprint: "alice-config",
+      manifestFingerprint: "alice-manifest",
+    });
+    const bob = computeHarnessProjectionFingerprints({
+      ...common,
+      participantId: "bob",
+      turnId: "turn-bob",
+      configFingerprint: "bob-config",
+      manifestFingerprint: "bob-manifest",
+    });
+    expect(alice.baseFingerprint).toBe(bob.baseFingerprint);
+    expect(alice.participantFingerprint).not.toBe(bob.participantFingerprint);
+  });
+});
 
 function textEvents(
   text: string,
@@ -72,6 +104,7 @@ const EMIT_INPUT = {
 function basePayload(): Record<string, unknown> {
   return {
     tenant_id: "tenant-1",
+    tenant_slug: "tenant-one",
     thread_id: "thread-1",
     assistant_id: "agent-1",
     thread_turn_id: "turn-1",
@@ -130,14 +163,30 @@ function makeDeps(
     finalizePayloads,
     invocations,
     emissions,
-    executionRoleArn: "arn:aws:iam::123:role/harness-exec",
     workspaceBucket: "bucket-1",
     keepaliveIntervalMs: 0,
-    ensureHarness: vi.fn(async () => ({
+    resolveHarness: vi.fn(async () => ({
       harnessArn: "arn:aws:bedrock-agentcore:us-east-1:123:harness/h1",
       harnessId: "h1",
       harnessVersion: "3",
+      qualifier: "ThinkworkProof",
+      configurationFingerprint: "harness-config-fp",
+      sessionStrategy: "fresh" as const,
     })),
+    mintHarnessAssertion: vi.fn(async () => ({
+      token: "signed-turn-assertion",
+      expiresAt: 2_000_000_000,
+      jti: "jti-1",
+    })),
+    prepareFreshTurn: vi.fn(async () => ({
+      sessionRecordId: "session-row-1",
+      runtimeSessionId: "tw-harness-turn-turn-1",
+      capturedHighWater: 1,
+      currentMessage: "Generate the QBR for 777 Automotive",
+      history: [],
+    })),
+    transitionFreshTurn: vi.fn(async () => {}),
+    abandonFreshTurn: vi.fn(async () => {}),
     invokeHarness: vi.fn(async (input) => {
       invocations.push({ messages: input.messages });
       const next = queue.shift();
@@ -165,7 +214,6 @@ function makeDeps(
     }),
     bumpTurnActivity: vi.fn(async () => {}),
     fetchWorkspaceText: vi.fn(async () => null),
-    resolveModelProvider: vi.fn(async () => "bedrock"),
   };
 }
 
@@ -182,6 +230,39 @@ describe("parseHarnessInvokeEvent", () => {
   it("passes through a bare payload", () => {
     expect(parseHarnessInvokeEvent({ tenant_id: "t" })).toEqual({
       tenant_id: "t",
+    });
+  });
+});
+
+describe("normalizeHarnessWireEvent", () => {
+  it("adapts the live flat Harness stream union into the runner shape", () => {
+    expect(normalizeHarnessWireEvent({ role: "assistant" })).toEqual({
+      messageStart: { role: "assistant" },
+    });
+    expect(
+      normalizeHarnessWireEvent({
+        contentBlockIndex: 0,
+        delta: { text: "hello" },
+      }),
+    ).toEqual({
+      contentBlockDelta: {
+        contentBlockIndex: 0,
+        delta: { text: "hello" },
+      },
+    });
+    expect(normalizeHarnessWireEvent({ contentBlockIndex: 0 })).toEqual({
+      contentBlockStop: { contentBlockIndex: 0 },
+    });
+    expect(normalizeHarnessWireEvent({ stopReason: "end_turn" })).toEqual({
+      messageStop: { stopReason: "end_turn" },
+    });
+    expect(
+      normalizeHarnessWireEvent({
+        metrics: { latencyMs: 10 },
+        usage: { inputTokens: 5, outputTokens: 2 },
+      }),
+    ).toEqual({
+      metadata: { usage: { inputTokens: 5, outputTokens: 2 } },
     });
   });
 });
@@ -259,6 +340,42 @@ describe("runHarnessTurn — happy path", () => {
         status: "completed",
       }),
     ]);
+  });
+
+  it("refreshes an expiring turn assertion before a tool continuation", async () => {
+    let nowMs = 1_000_000;
+    const deps = makeDeps([
+      stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),
+      stream(textEvents("Published with a refreshed assertion.")),
+    ]);
+    (deps.mintHarnessAssertion as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        token: "assertion-1",
+        expiresAt: 1_060,
+        jti: "jti-1",
+      })
+      .mockResolvedValueOnce({
+        token: "assertion-2",
+        expiresAt: 1_360,
+        jti: "jti-2",
+      });
+    (deps.invokeHarness as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(async () => {
+        nowMs = 1_040_000;
+        return stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT));
+      })
+      .mockImplementationOnce(async () =>
+        stream(textEvents("Published with a refreshed assertion.")),
+      );
+    deps.now = () => nowMs;
+
+    await runHarnessTurn(basePayload(), deps);
+
+    expect(deps.mintHarnessAssertion).toHaveBeenCalledTimes(2);
+    expect(deps.invokeHarness).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ bearerToken: "assertion-2" }),
+    );
   });
 
   it("relays toolResults ONLY for the final assistant message's toolUses (internal builtin rounds excluded)", async () => {
@@ -471,7 +588,7 @@ describe("runHarnessTurn — explicit failures (AE2/KTD-4)", () => {
     expect(deps.finalizePayloads[0].error_message).toContain(
       "bedrock_guardrail",
     );
-    expect(deps.ensureHarness).not.toHaveBeenCalled();
+    expect(deps.resolveHarness).not.toHaveBeenCalled();
     expect(deps.invocations).toHaveLength(0);
   });
 
@@ -481,7 +598,7 @@ describe("runHarnessTurn — explicit failures (AE2/KTD-4)", () => {
     const result = await runHarnessTurn(payload, deps);
     expect(result.status).toBe("failed");
     expect(deps.finalizePayloads[0].error_message).toContain("goal_mode");
-    expect(deps.ensureHarness).not.toHaveBeenCalled();
+    expect(deps.resolveHarness).not.toHaveBeenCalled();
   });
 
   it("fails the pi-ai analog: empty content + zero output tokens on end_turn", async () => {
@@ -535,6 +652,19 @@ describe("runHarnessTurn — explicit failures (AE2/KTD-4)", () => {
 });
 
 describe("runHarnessTurn — turn lifecycle (KTD-9)", () => {
+  it("acknowledges a duplicate delivery without finalizing the live turn", async () => {
+    const deps = makeDeps([]);
+    (deps.prepareFreshTurn as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new HarnessDuplicateDeliveryError("running"),
+    );
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.finalize).not.toHaveBeenCalled();
+    expect(deps.invokeHarness).not.toHaveBeenCalled();
+  });
+
   it("bumps last_activity_at while streaming", async () => {
     const deps = makeDeps([stream(textEvents("done"))]);
     await runHarnessTurn(basePayload(), deps);
@@ -558,6 +688,38 @@ describe("runHarnessTurn — turn lifecycle (KTD-9)", () => {
     });
     expect(deps.finalizePayloads[0].error_message).toContain(
       "ValidationException",
+    );
+  });
+
+  it("publishes only through the Harness authorization fence", async () => {
+    const deps = makeDeps([stream(textEvents("authorized answer"))]);
+    (deps.finalize as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(async (payload: FinalizePayload) => {
+        deps.finalizePayloads.push(payload);
+        return { finalized: false, messageId: null };
+      })
+      .mockImplementationOnce(async (payload: FinalizePayload) => {
+        deps.finalizePayloads.push(payload);
+        return { finalized: true, messageId: "failure-message" };
+      });
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0]).toMatchObject({
+      status: "completed",
+      claim: {
+        status: "running",
+        harness_session_id: "session-row-1",
+        harness_participant_user_id: "user-1",
+      },
+    });
+    expect(deps.finalizePayloads[1]).toMatchObject({ status: "failed" });
+    expect(deps.abandonFreshTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ reasonCode: "turn_failed" }),
+    );
+    expect(deps.transitionFreshTurn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ to: "completed" }),
     );
   });
 });

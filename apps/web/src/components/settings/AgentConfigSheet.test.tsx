@@ -19,6 +19,10 @@ const { queryResponses, executeMutationMock, toastErrorMock } = vi.hoisted(
   }),
 );
 
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
+}));
+
 vi.mock("urql", () => ({
   useQuery: ({ query }: { query: unknown }) => {
     const key = queryKeyOf(query);
@@ -53,8 +57,11 @@ vi.mock("sonner", () => ({
 function queryKeyOf(doc: unknown): string {
   const text = JSON.stringify(doc) ?? "";
   for (const name of [
+    "SettingsCreateHarnessProofThread",
     "UpdateTenantGoalBudget",
     "UpdateTenantAgent",
+    "SettingsDeploymentStatus",
+    "DeploymentStatus",
     "TenantModelCatalog",
     "TenantGoalBudget",
     "TenantAgent",
@@ -96,9 +103,27 @@ function seedHappyQueries() {
   queryResponses.set("TenantGoalBudget", {
     data: { tenant: { settings: { goalDefaultTokenBudget: 100000 } } },
   });
+  queryResponses.set("SettingsDeploymentStatus", {
+    data: {
+      deploymentStatus: {
+        agentcoreHarnessProof: {
+          state: "ready",
+          ready: true,
+          reasonCode: "ready",
+          endpointName: "ThinkworkProof",
+          expectedVersion: "4",
+          liveVersion: "4",
+          sessionStrategy: "fresh",
+          activeThreadId: null,
+          checkedAt: "2026-07-17T20:00:00.000Z",
+        },
+      },
+    },
+  });
 }
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   queryResponses.clear();
   executeMutationMock.mockReset();
   toastErrorMock.mockReset();
@@ -116,6 +141,9 @@ describe("AgentConfigSection", () => {
     expect(screen.getByText("Default Space")).toBeTruthy();
     expect(screen.getByText("Default model")).toBeTruthy();
     expect(screen.getByText("Goal token budget")).toBeTruthy();
+    expect(
+      screen.getByText(/AgentCore Harness \(proof\) ready · version 4/),
+    ).toBeTruthy();
     expect(
       (screen.getByLabelText("Goal token budget") as HTMLInputElement).value,
     ).toBe("100000");
@@ -165,13 +193,47 @@ describe("AgentConfigSection", () => {
     render(<AgentConfigSection spaces={SPACES} />);
     expect(screen.getByText("(model catalog unavailable)")).toBeTruthy();
   });
+
+  it("restores Pi when proof-thread bootstrap fails after Harness selection", async () => {
+    executeMutationMock.mockImplementation((key) => {
+      if (key === "SettingsCreateHarnessProofThread") {
+        return { error: new Error("proof bootstrap failed") };
+      }
+      return { data: {} };
+    });
+    render(<AgentConfigSection spaces={SPACES} />);
+
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(
+      await screen.findByRole("option", {
+        name: "AgentCore Harness (proof)",
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Select Harness and create thread",
+      }),
+    );
+
+    expect(
+      await screen.findByText(/Pi was restored automatically/),
+    ).toBeTruthy();
+    expect(executeMutationMock).toHaveBeenNthCalledWith(
+      1,
+      "UpdateTenantAgent",
+      { tenantId: "tenant-1", input: { runtime: "AGENTCORE" } },
+    );
+    expect(executeMutationMock).toHaveBeenNthCalledWith(
+      3,
+      "UpdateTenantAgent",
+      { tenantId: "tenant-1", input: { runtime: "FLUE" } },
+    );
+  });
 });
 
 describe("AgentConfigSheet", () => {
   it("renders the section inside the sheet when open", () => {
-    render(
-      <AgentConfigSheet open onOpenChange={vi.fn()} spaces={SPACES} />,
-    );
+    render(<AgentConfigSheet open onOpenChange={vi.fn()} spaces={SPACES} />);
     expect(screen.getByTestId("agent-config-sheet")).toBeTruthy();
     expect(screen.getByText("Agent configuration")).toBeTruthy();
     expect(screen.getByText("Default Agent")).toBeTruthy();
@@ -188,11 +250,7 @@ describe("AgentConfigSheet", () => {
 
   it("renders nothing when closed", () => {
     render(
-      <AgentConfigSheet
-        open={false}
-        onOpenChange={vi.fn()}
-        spaces={SPACES}
-      />,
+      <AgentConfigSheet open={false} onOpenChange={vi.fn()} spaces={SPACES} />,
     );
     expect(screen.queryByTestId("agent-config-sheet")).toBeNull();
   });

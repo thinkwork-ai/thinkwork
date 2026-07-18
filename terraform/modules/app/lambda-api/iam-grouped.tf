@@ -527,6 +527,10 @@ locals {
           # harness-runner: chat-agent-invoke Event-invokes this for chat
           # turns routed to the AWS AgentCore runtime (THINK-311 trial).
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-harness-runner",
+          # harness-runner RequestResponse-invokes this dedicated signer. The
+          # signer re-derives the actor/tenant/thread tuple from the running
+          # turn and alone holds KMS Sign; the shared runner role never does.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-turn-assertion-mint",
           # ontology-scan: startOntologySuggestionScan Event-invokes this
           # after inserting a durable scan job row.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-ontology-scan",
@@ -890,14 +894,14 @@ locals {
       Resource = "*"
     },
     ],
-    # THINK-311 U4 — AgentCore Harness trial invoker grants, present only when
-    # the agentcore-harness module is enabled (empty role ARN = module off).
-    # Ship-inert: no handler calls Harness until U5's harness-runner lands.
+    # THINK-316 U2 — request path receives data-plane invocation only.
+    # Provisioning/version/endpoint/PassRole rights belong to Terraform's
+    # dedicated Harness lifecycle and never reach a chat Lambda.
     #
     # CRITICAL: never grant `bedrock-agentcore:InvokeAgentRuntimeCommand`
     # anywhere — it bypasses Harness allowedTools enforcement. Invocation goes
     # through InvokeHarness / InvokeAgentRuntime only.
-    var.agentcore_harness_execution_role_arn != "" ? [
+    var.enable_agentcore_harness_invocation ? [
       {
         # Data plane — invoke a Harness (and its runtime endpoints) directly.
         Sid    = "AgentCoreHarnessInvoke"
@@ -907,68 +911,6 @@ locals {
           "bedrock-agentcore:InvokeAgentRuntime",
         ]
         Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:harness/*"
-      },
-      {
-        # Control plane — CreateHarness has no resource ARN at create time
-        # (same non-scopable shape as bedrock:CreateKnowledgeBase above), so
-        # this statement is "*"; PassRole below stays scoped to the single
-        # Harness execution role.
-        Sid    = "AgentCoreHarnessControl"
-        Effect = "Allow"
-        Action = [
-          "bedrock-agentcore:CreateHarness",
-          "bedrock-agentcore:GetHarness",
-          "bedrock-agentcore:UpdateHarness",
-          "bedrock-agentcore:DeleteHarness",
-          "bedrock-agentcore:CreateHarnessEndpoint",
-          "bedrock-agentcore:GetHarnessEndpoint",
-          "bedrock-agentcore:ListHarnessEndpoints",
-          "bedrock-agentcore:ListHarnesses",
-          "bedrock-agentcore:ListHarnessVersions",
-          # CreateHarness carries fingerprint tags; tagging on create
-          # requires TagResource (harness-runner also reconciles tags on
-          # UpdateHarness).
-          "bedrock-agentcore:TagResource",
-          "bedrock-agentcore:UntagResource",
-          "bedrock-agentcore:ListTagsForResource",
-          # CreateHarness provisions a backing AgentRuntime and a workload
-          # identity ON BEHALF OF the caller — both authorize against the
-          # calling role, not the harness execution role (observed live:
-          # AccessDenied on CreateAgentRuntime, then the harness itself
-          # landed CREATE_FAILED on CreateWorkloadIdentity).
-          "bedrock-agentcore:CreateAgentRuntime",
-          "bedrock-agentcore:CreateAgentRuntimeEndpoint",
-          "bedrock-agentcore:GetAgentRuntime",
-          "bedrock-agentcore:GetAgentRuntimeEndpoint",
-          "bedrock-agentcore:ListAgentRuntimes",
-          "bedrock-agentcore:ListAgentRuntimeVersions",
-          "bedrock-agentcore:ListAgentRuntimeEndpoints",
-          "bedrock-agentcore:UpdateAgentRuntime",
-          "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
-          "bedrock-agentcore:CreateWorkloadIdentity",
-          "bedrock-agentcore:GetWorkloadIdentity",
-          "bedrock-agentcore:UpdateWorkloadIdentity",
-          "bedrock-agentcore:ListWorkloadIdentities",
-        ]
-        Resource = "*"
-      },
-    ] : [],
-    # (Separate conditional from the two statements above only because the
-    # Condition attribute gives this object a different Terraform type —
-    # same gate, same feature.)
-    var.agentcore_harness_execution_role_arn != "" ? [
-      {
-        # CreateHarness takes executionRoleArn; the caller must be able to
-        # pass exactly that role, and only to the bedrock-agentcore service.
-        Sid      = "AgentCoreHarnessPassExecutionRole"
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
-        Resource = var.agentcore_harness_execution_role_arn
-        Condition = {
-          StringEquals = {
-            "iam:PassedToService" = "bedrock-agentcore.amazonaws.com"
-          }
-        }
       },
     ] : [],
   )

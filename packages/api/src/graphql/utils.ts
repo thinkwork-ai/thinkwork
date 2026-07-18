@@ -147,6 +147,7 @@ import {
   piExtensionSources,
   piExtensionVersions,
   piExtensionAssignments,
+  harnessManagedThreadEnrollments,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -270,6 +271,7 @@ export {
   piExtensionSources,
   piExtensionVersions,
   piExtensionAssignments,
+  harnessManagedThreadEnrollments,
   checkAndFireUnblockWakeups,
   generateSlug,
 };

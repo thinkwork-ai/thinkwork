@@ -16,85 +16,34 @@
 import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { threadTurns } from "@thinkwork/database-pg/schema";
-import { getConfig } from "@thinkwork/runtime-config";
-import {
-  BedrockAgentCoreControlClient,
-  CreateHarnessCommand,
-  GetHarnessCommand,
-  ListHarnessesCommand,
-  UpdateHarnessCommand,
-} from "@aws-sdk/client-bedrock-agentcore-control";
-import {
-  BedrockAgentCoreClient,
-  InvokeHarnessCommand,
-} from "@aws-sdk/client-bedrock-agentcore";
+import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { EventStreamCodec } from "@smithy/eventstream-codec";
 import {
   parseHarnessInvokeEvent,
+  normalizeHarnessWireEvent,
   runHarnessTurn,
   type EnsuredHarness,
+  type HarnessInvokeMessage,
   type HarnessRunnerDeps,
   type HarnessStreamEvent,
 } from "../lib/harness/runner.js";
-import type { HarnessProjectedConfig } from "../lib/harness/projection.js";
 import { handleDocumentEmission } from "../lib/artifacts/document-emission.js";
 import { processFinalize } from "../lib/chat-finalize/process-finalize.js";
-import { listTenantModelCatalogByIds } from "../lib/model-catalog/tenant-catalog.js";
+import { requireHarnessProofProfile } from "../lib/harness/proof-profile.js";
+import {
+  abandonFreshHarnessTurn,
+  prepareFreshHarnessTurn,
+  transitionFreshHarnessTurn,
+} from "../lib/harness/participant-session-store.js";
 
 const region =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
-const controlClient = new BedrockAgentCoreControlClient({ region });
-const dataClient = new BedrockAgentCoreClient({ region });
 const s3 = new S3Client({ region });
-
-const HARNESS_READY_TIMEOUT_MS = 120_000;
-const HARNESS_READY_POLL_MS = 3_000;
-
-function toSdkHarnessFields(
-  config: HarnessProjectedConfig,
-  executionRoleArn: string,
-) {
-  return {
-    executionRoleArn,
-    model: {
-      bedrockModelConfig: {
-        modelId: config.model.bedrockModelConfig.modelId,
-      },
-    },
-    systemPrompt: [{ text: config.systemPrompt }],
-    tools: config.tools.map((tool) =>
-      tool.type === "mcp"
-        ? {
-            type: "remote_mcp" as const,
-            name: tool.name,
-            config: { remoteMcp: tool.remoteMcp },
-          }
-        : {
-            type: "inline_function" as const,
-            name: tool.name,
-            config: { inlineFunction: tool.inlineFunction },
-          },
-    ),
-    // Installed workspace skill folders already carry SKILL.md at their
-    // root; passed as-is as S3 bundle sources (as-is vs. packaging
-    // transform — decided against the real folder, verified live in U6).
-    ...(config.skillMaterializations.length > 0
-      ? {
-          skills: config.skillMaterializations.map((skill) => ({
-            s3: { uri: skill.sourceS3Uri },
-          })),
-        }
-      : {}),
-    allowedTools: config.allowedTools,
-    maxIterations: config.maxIterations,
-    timeoutSeconds: config.timeoutSeconds,
-    ...(config.maxTokens ? { maxTokens: config.maxTokens } : {}),
-    tags: {
-      thinkwork_projection_fingerprint: config.evidence.projectionFingerprint,
-      thinkwork_manifest_fingerprint: config.evidence.manifestFingerprint,
-    },
-  };
-}
+const lambda = new LambdaClient({ region });
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 /**
  * Control-plane responses wrap the harness document under a `harness` key
@@ -111,7 +60,11 @@ export function unwrapHarness(
   return response;
 }
 
-export function readIdentity(raw: Record<string, unknown>): EnsuredHarness {
+export function readIdentity(raw: Record<string, unknown>): {
+  harnessId: string;
+  harnessArn: string;
+  harnessVersion: string;
+} {
   const response = unwrapHarness(raw);
   const harnessId = String(response.harnessId ?? response.id ?? "");
   const harnessArn = String(response.harnessArn ?? response.arn ?? "");
@@ -126,92 +79,151 @@ export function readIdentity(raw: Record<string, unknown>): EnsuredHarness {
   return { harnessId, harnessArn, harnessVersion };
 }
 
-async function ensureHarness(
-  config: HarnessProjectedConfig,
-  executionRoleArn: string,
-): Promise<EnsuredHarness> {
-  const fields = toSdkHarnessFields(config, executionRoleArn);
-  const listed = await controlClient.send(
-    new ListHarnessesCommand({ maxResults: 100 }),
-  );
-  const existing = (
-    (listed as unknown as Record<string, unknown>).harnesses as
-      | Array<Record<string, unknown>>
-      | undefined
-  )?.find((h) => h.harnessName === config.harnessName);
+async function resolveHarness(input: {
+  tenantId: string;
+  tenantSlug: string;
+}): Promise<EnsuredHarness> {
+  const profile = await requireHarnessProofProfile(input.tenantSlug);
+  const harnessId = profile.harnessArn.split("/").at(-1) ?? "";
+  if (!harnessId) throw new Error("Harness proof ARN is malformed");
+  return {
+    harnessArn: profile.harnessArn,
+    harnessId,
+    harnessVersion: profile.liveVersion,
+    qualifier: profile.endpointName,
+    configurationFingerprint: profile.configurationFingerprint,
+    sessionStrategy: "fresh",
+  };
+}
 
-  let identity: EnsuredHarness;
-  if (existing) {
-    const updated = await controlClient.send(
-      new UpdateHarnessCommand({
-        harnessId: String(existing.harnessId ?? existing.id),
-        ...fields,
-      } as never),
+async function mintHarnessAssertion(input: {
+  tenantId: string;
+  turnId: string;
+}): Promise<{ token: string; expiresAt: number; jti: string }> {
+  const response = await lambda.send(
+    new InvokeCommand({
+      FunctionName: deriveFunctionName("turn-assertion-mint"),
+      InvocationType: "RequestResponse",
+      Payload: encoder.encode(JSON.stringify({ ...input, target: "harness" })),
+    }),
+  );
+  if (response.FunctionError) {
+    throw new Error("Harness turn assertion mint failed");
+  }
+  const result = JSON.parse(
+    response.Payload ? decoder.decode(response.Payload) : "{}",
+  ) as Record<string, unknown>;
+  if (
+    typeof result.token !== "string" ||
+    !result.token ||
+    !Number.isInteger(result.expiresAt) ||
+    Number(result.expiresAt) <= Math.floor(Date.now() / 1000) ||
+    typeof result.jti !== "string" ||
+    !result.jti
+  ) {
+    throw new Error("Harness turn assertion mint returned an invalid result");
+  }
+  return {
+    token: result.token,
+    expiresAt: Number(result.expiresAt),
+    jti: result.jti,
+  };
+}
+
+function eventHeader(
+  message: { headers?: Record<string, { value?: unknown }> },
+  name: string,
+): string | undefined {
+  const value = message.headers?.[name]?.value;
+  return typeof value === "string" ? value : undefined;
+}
+
+async function* invokeHarnessWithBearer(input: {
+  harnessArn: string;
+  qualifier: string;
+  bearerToken: string;
+  runtimeSessionId: string;
+  messages: HarnessInvokeMessage[];
+}): AsyncIterable<HarnessStreamEvent> {
+  const url = new URL(
+    `https://bedrock-agentcore.${region}.amazonaws.com/harnesses/invoke`,
+  );
+  url.searchParams.set("harnessArn", input.harnessArn);
+  url.searchParams.set("qualifier", input.qualifier);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${input.bearerToken}`,
+      "content-type": "application/json",
+      "x-amzn-bedrock-agentcore-runtime-session-id": input.runtimeSessionId,
+    },
+    body: JSON.stringify({
+      messages: input.messages,
+      maxIterations: 50,
+      timeoutSeconds: 900,
+    }),
+    signal: AbortSignal.timeout(910_000),
+  });
+  if (!response.ok || !response.body) {
+    const requestId =
+      response.headers.get("x-amzn-requestid") ??
+      response.headers.get("x-amz-request-id") ??
+      "unknown";
+    throw new Error(
+      `Harness Bearer invocation failed with HTTP ${response.status} (request ${requestId})`,
     );
-    identity = readIdentity({
-      ...existing,
-      ...unwrapHarness(updated as unknown as Record<string, unknown>),
-    });
-  } else {
-    const created = await controlClient.send(
-      new CreateHarnessCommand({
-        harnessName: config.harnessName,
-        ...fields,
-      } as never),
-    );
-    identity = readIdentity(created as unknown as Record<string, unknown>);
   }
 
-  // Wait for READY — InvokeHarness against a CREATING/UPDATING harness fails.
-  const deadline = Date.now() + HARNESS_READY_TIMEOUT_MS;
+  const codec = new EventStreamCodec(
+    (bytes) => decoder.decode(bytes),
+    (text) => encoder.encode(text),
+  );
+  let buffer = Buffer.alloc(0);
+  const reader = response.body.getReader();
   for (;;) {
-    const got = unwrapHarness(
-      (await controlClient.send(
-        new GetHarnessCommand({ harnessId: identity.harnessId } as never),
-      )) as unknown as Record<string, unknown>,
-    );
-    const status = String(got.status ?? "");
-    if (status === "READY" || status === "ACTIVE") {
-      return readIdentity({ ...identity, ...got });
+    const { value: chunk, done } = await reader.read();
+    if (done) break;
+    if (!chunk) continue;
+    buffer = Buffer.concat([buffer, Buffer.from(chunk)]);
+    while (buffer.length >= 4) {
+      const frameLength = buffer.readUInt32BE(0);
+      if (frameLength < 16) throw new Error("Invalid Harness event frame");
+      if (buffer.length < frameLength) break;
+      const frame = buffer.subarray(0, frameLength);
+      buffer = buffer.subarray(frameLength);
+      const message = codec.decode(frame);
+      if (eventHeader(message, ":message-type") === "exception") {
+        const exceptionType =
+          eventHeader(message, ":exception-type") ?? "service_exception";
+        throw new Error(`Harness stream failed (${exceptionType})`);
+      }
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(decoder.decode(message.body)) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        continue;
+      }
+      yield normalizeHarnessWireEvent(event);
     }
-    if (status.includes("FAIL")) {
-      throw new Error(
-        `Harness ${identity.harnessId} entered status ${status} (${JSON.stringify(got.failureReason ?? "")})`,
-      );
-    }
-    if (Date.now() > deadline) {
-      throw new Error(
-        `Harness ${identity.harnessId} not READY within ${HARNESS_READY_TIMEOUT_MS}ms (status ${status})`,
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, HARNESS_READY_POLL_MS));
+  }
+  if (buffer.length !== 0) {
+    throw new Error("Harness event stream ended with an incomplete frame");
   }
 }
 
 function createRealDeps(): HarnessRunnerDeps {
   const workspaceBucket = getConfig("WORKSPACE_BUCKET", "");
-  const executionRoleArn = getConfig("HARNESS_EXECUTION_ROLE_ARN", "");
   return {
-    executionRoleArn,
     workspaceBucket,
-    ensureHarness,
-    async invokeHarness(input) {
-      const response = await dataClient.send(
-        new InvokeHarnessCommand({
-          harnessArn: input.harnessArn,
-          runtimeSessionId: input.runtimeSessionId,
-          ...(input.runtimeUserId
-            ? { runtimeUserId: input.runtimeUserId }
-            : {}),
-          messages: input.messages,
-        } as never),
-      );
-      const stream = (response as unknown as Record<string, unknown>).stream;
-      if (!stream) {
-        throw new Error("InvokeHarness returned no stream");
-      }
-      return stream as AsyncIterable<HarnessStreamEvent>;
-    },
+    resolveHarness,
+    mintHarnessAssertion,
+    prepareFreshTurn: prepareFreshHarnessTurn,
+    transitionFreshTurn: transitionFreshHarnessTurn,
+    abandonFreshTurn: abandonFreshHarnessTurn,
+    invokeHarness: invokeHarnessWithBearer,
     async emitDocument(input) {
       // Resolve triggering_message_id the same way the activity handler
       // does — handleDocumentEmission derives the acting user from it.
@@ -262,21 +274,6 @@ function createRealDeps(): HarnessRunnerDeps {
         );
         return (await object.Body?.transformToString()) ?? null;
       } catch {
-        return null;
-      }
-    },
-    async resolveModelProvider({ tenantId, modelId }) {
-      try {
-        const rows = await listTenantModelCatalogByIds({
-          tenantId,
-          modelIds: [modelId],
-        });
-        const row = rows.find((r) => r.modelId === modelId) as
-          | { provider?: string | null }
-          | undefined;
-        return row?.provider ?? null;
-      } catch (err) {
-        console.warn(`[harness-runner] model provider lookup failed:`, err);
         return null;
       }
     },

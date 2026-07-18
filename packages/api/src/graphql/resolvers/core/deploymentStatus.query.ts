@@ -13,6 +13,14 @@ import {
   resolveDeploymentProfileConfig,
   resolveDeploymentStatusPointerConfig,
 } from "../deployments/shared.js";
+import {
+  and,
+  db,
+  eq,
+  harnessManagedThreadEnrollments,
+  tenants,
+} from "../../utils.js";
+import { readHarnessProofReadiness } from "../../../lib/harness/proof-profile.js";
 
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda
@@ -55,6 +63,26 @@ export const deploymentStatus = async (
     tenantId,
     await readManagedApplications(tenantId),
   );
+  const [tenant] = tenantId
+    ? await db
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1)
+    : [];
+  const harnessProof = await readHarnessProofReadiness(tenant?.slug ?? null);
+  const [activeEnrollment] = tenantId
+    ? await db
+        .select({ threadId: harnessManagedThreadEnrollments.thread_id })
+        .from(harnessManagedThreadEnrollments)
+        .where(
+          and(
+            eq(harnessManagedThreadEnrollments.tenant_id, tenantId),
+            eq(harnessManagedThreadEnrollments.status, "active"),
+          ),
+        )
+        .limit(1)
+    : [];
   return {
     stage,
     source: "AWS",
@@ -79,6 +107,17 @@ export const deploymentStatus = async (
     agentcoreStatus: getConfig("AGENTCORE_PI_FUNCTION_NAME")
       ? "managed (always on)"
       : "not deployed",
+    agentcoreHarnessProof: {
+      state: harnessProof.state,
+      ready: harnessProof.ready,
+      reasonCode: harnessProof.reasonCode,
+      endpointName: harnessProof.endpointName,
+      expectedVersion: harnessProof.expectedVersion,
+      liveVersion: harnessProof.liveVersion,
+      sessionStrategy: harnessProof.sessionStrategy,
+      activeThreadId: activeEnrollment?.threadId ?? null,
+      checkedAt: harnessProof.checkedAt,
+    },
     hindsightEnabled: !!getConfig("HINDSIGHT_ENDPOINT"),
     managedMemoryEnabled: !!getConfig("AGENTCORE_MEMORY_ID"),
     twentyProvisioned: twenty.provisioned,

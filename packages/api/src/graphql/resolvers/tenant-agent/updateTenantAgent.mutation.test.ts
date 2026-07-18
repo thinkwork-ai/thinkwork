@@ -20,8 +20,27 @@ vi.mock("../../utils.js", () => {
       id: col("agents.id"),
       tenant_id: col("agents.tenant_id"),
       is_platform_default: col("agents.is_platform_default"),
+      runtime: col("agents.runtime"),
+      runtime_config: col("agents.runtime_config"),
+    },
+    harnessManagedThreadEnrollments: {
+      tenant_id: col("harness_managed_thread_enrollments.tenant_id"),
+      status: col("harness_managed_thread_enrollments.status"),
+    },
+    tenants: {
+      id: col("tenants.id"),
+      slug: col("tenants.slug"),
     },
     db: {
+      select: () => {
+        const chain = {
+          from: () => chain,
+          where: () => chain,
+          limit: () =>
+            Promise.resolve([{ runtime: "pi", runtimeConfig: null }]),
+        };
+        return chain;
+      },
       update: () => ({
         set: (updates: Record<string, unknown>) => {
           updateSets.push(updates);

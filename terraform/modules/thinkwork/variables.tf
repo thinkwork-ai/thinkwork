@@ -365,6 +365,36 @@ variable "enable_agentcore_harness" {
   default     = true
 }
 
+variable "enable_agentcore_multiplayer_proof" {
+  description = "Provision the non-production THINK-316 Identity/Gateway proof substrate. Defaults off; requires the Harness IAM surface and never changes the tenant runtime selector by itself."
+  type        = bool
+  default     = false
+}
+
+variable "agentcore_multiplayer_proof_tenant_slug" {
+  description = "Explicit non-production pilot tenant slug for the one-Harness multiplayer proof. Required when the proof is enabled."
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_multiplayer_proof_owner_allowlist" {
+  description = "Comma-separated non-production user IDs enrolled as the two exact-user proof owners."
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_turn_assertion_key_versions" {
+  description = "One or two published assertion key versions for the managed Harness proof."
+  type        = list(string)
+  default     = ["v1"]
+}
+
+variable "agentcore_turn_assertion_active_key_version" {
+  description = "Assertion key version used for new Harness and Gateway tokens."
+  type        = string
+  default     = "v1"
+}
+
 variable "enable_capability_broker" {
   description = "Enable the THINK-280 governed capability broker (private REST API + dedicated execute-api VPCE with private DNS disabled, DynamoDB session store, broker Lambda). Ship-inert: defaults OFF; U4 flips it on after the live negative-egress proof. The broker Lambda code also fails closed independent of this flag."
   type        = bool

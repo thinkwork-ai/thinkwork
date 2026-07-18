@@ -87,7 +87,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "harness-runner" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "harness-runner" ] || [ "$name" = "agentcore-proof-oauth-provider" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -236,6 +236,18 @@ build_handler "chat-agent-finalize" \
 # 3.1088+ (Harness ops), newer than the runtime's built-in SDK.
 build_handler "harness-runner" \
   "$REPO_ROOT/packages/api/src/handlers/harness-runner.ts"
+
+# THINK-316 U1: direct-invoke-only per-turn AgentCore CUSTOM_JWT mint.
+# KMS is externalized like the other Lambda-runtime-provided AWS SDK clients.
+build_handler "turn-assertion-mint" \
+  "$REPO_ROOT/packages/api/src/handlers/turn-assertion-mint.ts"
+
+# THINK-316 U1: self-contained synthetic OAuth provider and sanitized HTTPS
+# target used only by the exact-user AgentCore Identity/Gateway proof.
+build_handler "agentcore-proof-oauth-provider" \
+  "$REPO_ROOT/packages/lambda/agentcore-proof-oauth-provider.ts"
+build_handler "agentcore-identity-boundary-target" \
+  "$REPO_ROOT/packages/lambda/agentcore-identity-boundary-target.ts"
 
 build_handler "chat-agent-activity" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-activity.ts"

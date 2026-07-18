@@ -6,7 +6,8 @@
  * the harness-runner Lambda instead of the Pi Lambda — no second payload
  * builder), and performs the real run:
  *
- *   projection (U3) → ensure harness (control plane) → InvokeHarness
+ *   trusted projection → resolve pinned Harness profile → mint a purpose-bound
+ *   turn assertion → Bearer InvokeHarness
  *   stream loop → caller-fulfilled emit_document via handleDocumentEmission
  *   → processFinalize with a complete FinalizePayload.
  *
@@ -24,21 +25,13 @@
  */
 
 import {
-  projectHarnessConfig,
-  type HarnessProjectedConfig,
-  type HarnessProjectionInput,
-  type HarnessProjectionRejection,
-} from "./projection.js";
-import {
-  buildEmitDocumentToolProjection,
   relayEmissionResultToModel,
   toEmissionRaw,
 } from "./emit-document-tool.js";
+import { createHash } from "node:crypto";
 import type { FinalizePayload } from "../chat-finalize/types.js";
-import type {
-  McpConfig,
-  SkillConfig,
-} from "../resolve-agent-runtime-config.js";
+import type { McpConfig } from "../resolve-agent-runtime-config.js";
+import { guardHarnessPublication } from "./publication-guard.js";
 
 // ---------------------------------------------------------------------------
 // Deps
@@ -49,6 +42,20 @@ export interface EnsuredHarness {
   harnessId: string;
   /** Version string/number as reported by the control plane (evidence). */
   harnessVersion: string;
+  qualifier: string;
+  configurationFingerprint: string;
+  sessionStrategy: "fresh";
+}
+
+/**
+ * A second at-least-once Lambda delivery found the turn already claimed.
+ * It must be acknowledged without competing for the turn's finalize CAS.
+ */
+export class HarnessDuplicateDeliveryError extends Error {
+  constructor(public readonly sessionState: string) {
+    super(`Harness turn is already claimed (${sessionState})`);
+    this.name = "HarnessDuplicateDeliveryError";
+  }
 }
 
 /** Minimal projection of the InvokeHarness stream events the loop consumes. */
@@ -77,6 +84,81 @@ export interface HarnessStreamEvent {
   validationException?: { message?: string; reason?: string };
 }
 
+/**
+ * Harness' HTTP event stream carries the value of each ConverseStream union
+ * member directly (for example `{role}`, `{contentBlockIndex, delta}` and
+ * `{stopReason}`), rather than wrapping it under `messageStart`,
+ * `contentBlockDelta`, or `messageStop`. Keep the rest of the runner on one
+ * canonical shape and adapt exactly once at the transport boundary.
+ */
+export function normalizeHarnessWireEvent(
+  event: Record<string, unknown>,
+): HarnessStreamEvent {
+  if (
+    "messageStart" in event ||
+    "contentBlockStart" in event ||
+    "contentBlockDelta" in event ||
+    "contentBlockStop" in event ||
+    "messageStop" in event ||
+    "metadata" in event
+  ) {
+    return event as HarnessStreamEvent;
+  }
+  if (typeof event.role === "string") {
+    return { messageStart: { role: event.role } };
+  }
+  if (
+    typeof event.contentBlockIndex === "number" &&
+    event.start &&
+    typeof event.start === "object"
+  ) {
+    return {
+      contentBlockStart: {
+        contentBlockIndex: event.contentBlockIndex,
+        start: event.start as HarnessStreamEvent["contentBlockStart"] extends {
+          start?: infer Start;
+        }
+          ? Start
+          : never,
+      },
+    };
+  }
+  if (
+    typeof event.contentBlockIndex === "number" &&
+    event.delta &&
+    typeof event.delta === "object"
+  ) {
+    return {
+      contentBlockDelta: {
+        contentBlockIndex: event.contentBlockIndex,
+        delta: event.delta as HarnessStreamEvent["contentBlockDelta"] extends {
+          delta?: infer Delta;
+        }
+          ? Delta
+          : never,
+      },
+    };
+  }
+  if (typeof event.contentBlockIndex === "number") {
+    return { contentBlockStop: { contentBlockIndex: event.contentBlockIndex } };
+  }
+  if (typeof event.stopReason === "string") {
+    return { messageStop: { stopReason: event.stopReason } };
+  }
+  if (event.usage && typeof event.usage === "object") {
+    return {
+      metadata: {
+        usage: event.usage as HarnessStreamEvent["metadata"] extends {
+          usage?: infer Usage;
+        }
+          ? Usage
+          : never,
+      },
+    };
+  }
+  return event as HarnessStreamEvent;
+}
+
 export interface HarnessInvokeMessage {
   role: "user" | "assistant";
   content: Array<Record<string, unknown>>;
@@ -84,21 +166,61 @@ export interface HarnessInvokeMessage {
 
 export interface HarnessRunnerDeps {
   /**
-   * Ensure a harness exists matching the projected config (create or
-   * update by harnessName) and return its identity. Implemented with the
-   * control-plane SDK in the handler; scripted in tests.
+   * Resolve and attest the already-provisioned, named Harness endpoint.
+   * This is deliberately data-plane-only: chat code cannot create, update,
+   * list, or delete Harness resources.
    */
-  ensureHarness(
-    config: HarnessProjectedConfig,
-    executionRoleArn: string,
-  ): Promise<EnsuredHarness>;
+  resolveHarness(input: {
+    tenantId: string;
+    tenantSlug: string;
+  }): Promise<EnsuredHarness>;
+  /** Mint a short-lived CUSTOM_JWT from the persisted running turn tuple. */
+  mintHarnessAssertion(input: {
+    tenantId: string;
+    turnId: string;
+  }): Promise<{ token: string; expiresAt: number; jti: string }>;
+  /** Allocate and exclusively claim the enrolled fresh-per-turn session. */
+  prepareFreshTurn(input: {
+    tenantId: string;
+    threadId: string;
+    turnId: string;
+    agentId: string;
+    participantUserId: string;
+    qualifier: string;
+    resolvedVersion: string;
+    baseFingerprint: string;
+    participantFingerprint: string;
+  }): Promise<{
+    sessionRecordId: string;
+    runtimeSessionId: string;
+    capturedHighWater: number;
+    currentMessage: string;
+    history: Array<{ role: "user" | "assistant"; content: string }>;
+  }>;
+  transitionFreshTurn(input: {
+    tenantId: string;
+    turnId: string;
+    sessionRecordId: string;
+    from: "running" | "finalizing";
+    to: "finalizing" | "completed";
+    appliedHighWater: number;
+  }): Promise<void>;
+  abandonFreshTurn(input: {
+    tenantId: string;
+    turnId: string;
+    sessionRecordId: string;
+    reasonCode: string;
+  }): Promise<void>;
   /** One InvokeHarness call; returns the event stream. */
   invokeHarness(input: {
     harnessArn: string;
+    qualifier: string;
+    bearerToken: string;
     runtimeSessionId: string;
-    runtimeUserId?: string;
     messages: HarnessInvokeMessage[];
-  }): Promise<AsyncIterable<HarnessStreamEvent>>;
+  }):
+    | Promise<AsyncIterable<HarnessStreamEvent>>
+    | AsyncIterable<HarnessStreamEvent>;
   /** Direct lib call into the existing document emission pipeline. */
   emitDocument(input: {
     tenantId: string;
@@ -113,12 +235,6 @@ export interface HarnessRunnerDeps {
   bumpTurnActivity(input: { turnId: string; tenantId: string }): Promise<void>;
   /** Read a text file from the workspace bucket; null when absent. */
   fetchWorkspaceText(key: string): Promise<string | null>;
-  /** Model-catalog provider lookup ("bedrock" | other | null). */
-  resolveModelProvider(input: {
-    tenantId: string;
-    modelId: string;
-  }): Promise<string | null>;
-  executionRoleArn: string;
   workspaceBucket: string;
   keepaliveIntervalMs?: number;
   /** Injectable clock for tests. */
@@ -485,6 +601,7 @@ const UNSUPPORTED_PAYLOAD_FIELDS: Array<[string, string]> = [
   ["skill_creator_command", "skill-creator command turns"],
   ["pending_user_questions", "question-answer resume turns"],
   ["pinned_skills", "message-pinned skills"],
+  ["guardrail_config", "bedrock_guardrail projection"],
 ];
 
 export async function runHarnessTurn(
@@ -507,8 +624,15 @@ export async function runHarnessTurn(
   let emissionAttempts = 0;
   let emissionSuccesses = 0;
   let harness: EnsuredHarness | null = null;
-  let projected: HarnessProjectedConfig | null = null;
   let composedSystemPrompt: string | null = null;
+  let turnProjectionFingerprint: string | null = null;
+  let preparedSession: {
+    sessionRecordId: string;
+    runtimeSessionId: string;
+    capturedHighWater: number;
+    currentMessage: string;
+    history: Array<{ role: "user" | "assistant"; content: string }>;
+  } | null = null;
 
   const finalizeWith = async (
     status: "completed" | "failed",
@@ -543,15 +667,17 @@ export async function runHarnessTurn(
             harness_id: harness?.harnessId ?? null,
             harness_arn: harness?.harnessArn ?? null,
             harness_version: harness?.harnessVersion ?? null,
-            projection_fingerprint:
-              projected?.evidence.projectionFingerprint ?? null,
-            manifest_fingerprint:
-              projected?.evidence.manifestFingerprint ??
-              str(payload.capabilities_manifest_fingerprint),
-            config_fingerprint:
-              projected?.evidence.configFingerprint ??
-              str(payload.config_fingerprint),
-            exclusions: projected?.evidence.exclusions ?? [],
+            projection_fingerprint: turnProjectionFingerprint,
+            manifest_fingerprint: str(
+              payload.capabilities_manifest_fingerprint,
+            ),
+            config_fingerprint: str(payload.config_fingerprint),
+            harness_configuration_fingerprint:
+              harness?.configurationFingerprint ?? null,
+            qualifier: harness?.qualifier ?? null,
+            session_strategy: harness?.sessionStrategy ?? null,
+            authentication: "custom_jwt_bearer",
+            exclusions: [],
             artifact_id: lastArtifactId,
             document_id: lastDocumentId,
             emission_attempts: emissionAttempts,
@@ -566,8 +692,55 @@ export async function runHarnessTurn(
         cached_read_tokens: usage.cacheReadTokens,
         cached_write_tokens: usage.cacheWriteTokens,
       },
+      ...(status === "completed" && preparedSession && turn.currentUserId
+        ? {
+            claim: {
+              status: "running",
+              harness_session_id: preparedSession.sessionRecordId,
+              harness_participant_user_id: turn.currentUserId,
+            },
+          }
+        : {}),
     };
-    await deps.finalize(finalizePayload);
+    if (preparedSession) {
+      if (status === "completed") {
+        await deps.transitionFreshTurn({
+          tenantId: turn.tenantId,
+          turnId: turn.turnId,
+          sessionRecordId: preparedSession.sessionRecordId,
+          from: "running",
+          to: "finalizing",
+          appliedHighWater: preparedSession.capturedHighWater,
+        });
+      } else {
+        await deps.abandonFreshTurn({
+          tenantId: turn.tenantId,
+          turnId: turn.turnId,
+          sessionRecordId: preparedSession.sessionRecordId,
+          reasonCode: "turn_failed",
+        });
+      }
+    }
+    const finalized = await deps.finalize(finalizePayload);
+    if (
+      status === "completed" &&
+      finalized &&
+      typeof finalized === "object" &&
+      "finalized" in finalized &&
+      (finalized as { finalized?: unknown }).finalized !== true
+    ) {
+      throw new Error("harness_finalize_authorization_fence_rejected");
+    }
+    if (preparedSession && status === "completed") {
+      await deps.transitionFreshTurn({
+        tenantId: turn.tenantId,
+        turnId: turn.turnId,
+        sessionRecordId: preparedSession.sessionRecordId,
+        from: "finalizing",
+        to: "completed",
+        appliedHighWater: preparedSession.capturedHighWater,
+      });
+    }
     return { status } as const;
   };
 
@@ -602,87 +775,81 @@ export async function runHarnessTurn(
     const mcpConfigs = (
       Array.isArray(payload.mcp_configs) ? payload.mcp_configs : []
     ) as McpConfig[];
-    const skills = (
-      Array.isArray(payload.skills) ? payload.skills : []
-    ) as SkillConfig[];
-    const agentProfiles = Array.isArray(payload.agent_profiles)
-      ? (payload.agent_profiles as Array<Record<string, unknown>>)
-      : [];
-    const piExtensions = Array.isArray(payload.pi_extensions)
-      ? payload.pi_extensions
-      : [];
-    const attachments = Array.isArray(payload.message_attachments)
-      ? payload.message_attachments
-      : [];
-
     composedSystemPrompt = await composeHarnessSystemPrompt(
       payload,
       mcpConfigs,
       deps,
     );
-
-    const modelProvider = turn.modelId
-      ? await deps.resolveModelProvider({
-          tenantId: turn.tenantId,
-          modelId: turn.modelId,
-        })
-      : null;
-
-    const emitTool = buildEmitDocumentToolProjection(payload.document_plates);
-
-    const projectionInput: HarnessProjectionInput = {
-      tenantId: turn.tenantId,
-      agentId: turn.agentId,
-      agentSlug: turn.agentSlug ?? "agent",
-      systemPrompt: composedSystemPrompt,
-      modelId: turn.modelId,
-      modelProvider,
-      skills,
-      mcpConfigs,
-      manifestFingerprint: str(payload.capabilities_manifest_fingerprint),
-      configFingerprint: str(payload.config_fingerprint),
-      emitDocument: emitTool,
-      workspaceBucket: deps.workspaceBucket,
-      capabilitySurface: {
-        piExtensionCount: piExtensions.length,
-        agentProfileSlugs: agentProfiles
-          .map((p) => str(p.slug))
-          .filter((slug): slug is string => Boolean(slug)),
-        browserAutomationEnabled: payload.browser_automation_enabled === true,
-        sandboxConfigured: payload.sandbox_status != null,
-        guardrailConfigured: payload.guardrail_config != null,
-        sendEmailEnabled: payload.send_email_config != null,
-        webSearchEnabled: payload.web_search_config != null,
-        webExtractEnabled: payload.web_extract_config != null,
-        contextEngineEnabled: payload.context_engine_enabled === true,
-        jsonRenderUiEnabled: payload.thread_json_render_ui_enabled === true,
-        knowledgeGraphEnabled: payload.knowledge_graph_enabled === true,
-        attachmentCount: attachments.length,
-      },
-    };
-
-    const projection = projectHarnessConfig(projectionInput);
-    if (!projection.ok) {
+    const tenantSlug = str(payload.tenant_slug);
+    if (!tenantSlug) {
       return await finalizeWith("failed", {
-        errorMessage: formatRejection(projection.rejection),
+        errorMessage:
+          "Harness proof requires the trusted tenant slug; no default tenant is inferred.",
       });
     }
-    projected = projection.config;
+    if (!turn.currentUserId) {
+      return await finalizeWith("failed", {
+        errorMessage:
+          "Harness proof requires a persisted human participant identity.",
+      });
+    }
 
-    harness = await deps.ensureHarness(projected, deps.executionRoleArn);
+    harness = await deps.resolveHarness({
+      tenantId: turn.tenantId,
+      tenantSlug,
+    });
+    const trustedContext = [
+      "<thinkwork_trusted_turn_context>",
+      "The following context was projected by ThinkWork from authorized canonical state.",
+      `tenant_id=${turn.tenantId}`,
+      `thread_id=${turn.threadId}`,
+      `participant_id=${turn.currentUserId}`,
+      `agent_id=${turn.agentId}`,
+      composedSystemPrompt ? `agent_context:\n${composedSystemPrompt}` : "",
+      "</thinkwork_trusted_turn_context>",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const fingerprints = computeHarnessProjectionFingerprints({
+      tenantId: turn.tenantId,
+      threadId: turn.threadId,
+      agentId: turn.agentId,
+      harnessConfigurationFingerprint: harness.configurationFingerprint,
+      harnessVersion: harness.harnessVersion,
+      sessionStrategy: harness.sessionStrategy,
+      participantId: turn.currentUserId,
+      turnId: turn.turnId,
+      configFingerprint: str(payload.config_fingerprint) ?? "",
+      manifestFingerprint: str(payload.capabilities_manifest_fingerprint) ?? "",
+    });
+    const { baseFingerprint } = fingerprints;
+    turnProjectionFingerprint = fingerprints.participantFingerprint;
+    preparedSession = await deps.prepareFreshTurn({
+      tenantId: turn.tenantId,
+      threadId: turn.threadId,
+      turnId: turn.turnId,
+      agentId: turn.agentId,
+      participantUserId: turn.currentUserId,
+      qualifier: harness.qualifier,
+      resolvedVersion: harness.harnessVersion,
+      baseFingerprint,
+      participantFingerprint: turnProjectionFingerprint,
+    });
+    let assertion = await deps.mintHarnessAssertion({
+      tenantId: turn.tenantId,
+      turnId: turn.turnId,
+    });
     onActivity();
 
-    // Session id: thread-derived, stable across tool round-trips, ≥33 chars.
-    const runtimeSessionId = `tw-harness-${turn.threadId}`;
-
     let nextMessages: HarnessInvokeMessage[] = [
-      ...turn.history.map(
+      { role: "user", content: [{ text: trustedContext }] },
+      ...preparedSession.history.map(
         (m): HarnessInvokeMessage => ({
           role: m.role,
           content: [{ text: m.content }],
         }),
       ),
-      { role: "user", content: [{ text: turn.userMessage }] },
+      { role: "user", content: [{ text: preparedSession.currentMessage }] },
     ];
 
     let finalText = "";
@@ -692,10 +859,20 @@ export async function runHarnessTurn(
           errorMessage: `Harness run exceeded ${MAX_TOOL_ROUNDS} caller-fulfilled tool rounds without terminating.`,
         });
       }
+      // Assertions are intentionally short lived. Caller-fulfilled tool loops
+      // can outlive one token, so refresh before each continuation instead of
+      // turning a healthy long-running turn into an authentication failure.
+      if (assertion.expiresAt <= Math.floor(now() / 1000) + 30) {
+        assertion = await deps.mintHarnessAssertion({
+          tenantId: turn.tenantId,
+          turnId: turn.turnId,
+        });
+      }
       const stream = await deps.invokeHarness({
         harnessArn: harness.harnessArn,
-        runtimeSessionId,
-        runtimeUserId: turn.currentUserId ?? undefined,
+        qualifier: harness.qualifier,
+        bearerToken: assertion.token,
+        runtimeSessionId: preparedSession.runtimeSessionId,
         messages: nextMessages,
       });
       const segment = await assembleStream(stream, onActivity);
@@ -726,6 +903,7 @@ export async function runHarnessTurn(
             errorMessage: `Harness run ended without a successful document emission after ${emissionAttempts} rejected emit_document attempt(s).`,
           });
         }
+        guardHarnessPublication(finalText);
         return await finalizeWith("completed", { content: finalText });
       }
 
@@ -811,6 +989,12 @@ export async function runHarnessTurn(
       errorMessage: "Harness run loop exited unexpectedly.",
     });
   } catch (err) {
+    if (err instanceof HarnessDuplicateDeliveryError) {
+      console.info(
+        `[harness-runner] duplicate delivery acknowledged for turn ${turn.turnId} (session ${err.sessionState})`,
+      );
+      return { status: "completed" };
+    }
     const message =
       err instanceof HarnessStreamError
         ? `Harness stream failure [${err.reason}]: ${err.message}`
@@ -830,6 +1014,40 @@ export async function runHarnessTurn(
   }
 }
 
-function formatRejection(rejection: HarnessProjectionRejection): string {
-  return `Harness projection rejected [${rejection.kind}] ${rejection.capability}: ${rejection.detail}`;
+export function computeHarnessProjectionFingerprints(input: {
+  tenantId: string;
+  threadId: string;
+  agentId: string;
+  harnessConfigurationFingerprint: string;
+  harnessVersion: string;
+  sessionStrategy: string;
+  participantId: string;
+  turnId: string;
+  configFingerprint: string;
+  manifestFingerprint: string;
+}): { baseFingerprint: string; participantFingerprint: string } {
+  const baseFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        agentId: input.agentId,
+        harnessConfigurationFingerprint: input.harnessConfigurationFingerprint,
+        harnessVersion: input.harnessVersion,
+        sessionStrategy: input.sessionStrategy,
+      }),
+    )
+    .digest("hex");
+  const participantFingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        baseFingerprint,
+        participantId: input.participantId,
+        turnId: input.turnId,
+        configFingerprint: input.configFingerprint,
+        manifestFingerprint: input.manifestFingerprint,
+      }),
+    )
+    .digest("hex");
+  return { baseFingerprint, participantFingerprint };
 }

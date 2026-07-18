@@ -1894,6 +1894,7 @@ export const ComputerThreadQuery = gql`
       }
       lifecycleStatus
       metadata
+      harnessProof
       lastModel
       lastResponsePreview
       costSummary

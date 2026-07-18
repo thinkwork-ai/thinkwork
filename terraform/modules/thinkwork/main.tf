@@ -978,6 +978,23 @@ resource "tls_private_key" "capability_signing" {
   algorithm = "ED25519"
 }
 
+resource "random_password" "agentcore_proof_oauth_client_secret" {
+  count   = var.enable_agentcore_multiplayer_proof ? 1 : 0
+  length  = 48
+  special = false
+}
+
+check "agentcore_multiplayer_proof_requires_harness" {
+  assert {
+    condition = !var.enable_agentcore_multiplayer_proof || (
+      var.enable_agentcore_harness &&
+      can(regex("^[a-z0-9][a-z0-9-]{0,47}$", var.agentcore_multiplayer_proof_tenant_slug)) &&
+      length(distinct(compact([for owner in split(",", var.agentcore_multiplayer_proof_owner_allowlist) : trimspace(owner)]))) >= 2
+    )
+    error_message = "enable_agentcore_multiplayer_proof requires enable_agentcore_harness, an explicit lowercase tenant slug, and at least two explicit distinct proof owner subjects."
+  }
+}
+
 resource "aws_secretsmanager_secret" "capability_signing_key" {
   name        = "thinkwork/${var.stage}/capability-signing-key"
   description = "Ed25519 private key (PKCS8 PEM) signing capability sidecars and manifests (THINK-173)."
@@ -1055,9 +1072,20 @@ module "api" {
   # Governed autonomy — per-tenant self-extension opt-in allowlist (default off).
   capability_self_extension_tenants = var.capability_self_extension_tenants
 
-  # THINK-311 U4 — keys the Harness invoker grants in the grouped ai policy
-  # (empty string when the harness module is disabled = grants omitted).
-  agentcore_harness_execution_role_arn = module.agentcore_harness.execution_role_arn
+  # THINK-316 U2 — request path receives only Harness invocation. Terraform
+  # owns provisioning/version/endpoint control, avoiding a module cycle and
+  # keeping PassRole/create/update/list out of chat Lambdas.
+  enable_agentcore_harness_invocation = var.enable_agentcore_multiplayer_proof
+
+  # THINK-316 U1 — proof-only assertion/provider handlers remain absent unless
+  # explicitly enabled. The generated secret stays in Terraform sensitive
+  # state and is passed only to the two narrow boundary Lambdas and Identity.
+  enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
+  agentcore_turn_assertion_key_versions       = var.agentcore_turn_assertion_key_versions
+  agentcore_turn_assertion_active_key_version = var.agentcore_turn_assertion_active_key_version
+  agentcore_proof_oauth_client_id             = "thinkwork-${var.stage}-agentcore-proof"
+  agentcore_proof_oauth_client_secret         = var.enable_agentcore_multiplayer_proof ? random_password.agentcore_proof_oauth_client_secret[0].result : ""
+  agentcore_proof_owner_allowlist             = var.agentcore_multiplayer_proof_owner_allowlist
 
   # Phase 3 U8b — KMS key + Object Lock mode forwarded as
   # COMPLIANCE_ANCHOR_KMS_KEY_ARN and COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE
@@ -1256,11 +1284,88 @@ module "agentcore_pi" {
 module "agentcore_harness" {
   source = "../app/agentcore-harness"
 
-  enabled     = var.enable_agentcore_harness
-  stage       = var.stage
-  region      = var.region
-  account_id  = var.account_id
-  bucket_name = module.s3.bucket_name
+  enabled                       = var.enable_agentcore_harness
+  multiplayer_proof_enabled     = var.enable_agentcore_multiplayer_proof
+  stage                         = var.stage
+  region                        = var.region
+  account_id                    = var.account_id
+  bucket_name                   = module.s3.bucket_name
+  pilot_tenant_slug             = var.agentcore_multiplayer_proof_tenant_slug
+  discovery_url                 = "${module.api.agentcore_turn_assertion_issuer}/.well-known/openid-configuration"
+  harness_audience              = module.api.agentcore_harness_audience
+  gateway_arn                   = module.agentcore_proof_gateway.gateway_arn
+  oauth_credential_provider_arn = module.agentcore_proof_identity.credential_provider_arn
+  oauth_credential_secret_arn   = module.agentcore_proof_identity.credential_secret_arn
+  oauth_return_url              = module.agentcore_proof_identity.oauth_return_url
+}
+
+# The Harness depends on the public issuer/API, so feeding its generated ARN
+# back into the api module would create a Terraform cycle. Publish the
+# non-secret, attested readiness contract under a deterministic SSM key; the
+# runner and DeploymentStatus resolver read it server-side. No browser token,
+# participant id, credential, prompt, or private result is stored here.
+resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
+  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
+
+  name = "/thinkwork/${var.stage}/agentcore-harness-proof-profile"
+  type = "String"
+  value = jsonencode({
+    tenantSlug               = var.agentcore_multiplayer_proof_tenant_slug
+    trustProfile             = "default"
+    harnessArn               = module.agentcore_harness.proof_harness_arn
+    endpointArn              = module.agentcore_harness.proof_endpoint_arn
+    endpointName             = module.agentcore_harness.proof_endpoint_name
+    expectedVersion          = module.agentcore_harness.proof_target_version
+    liveVersion              = module.agentcore_harness.proof_live_version
+    status                   = module.agentcore_harness.proof_status
+    configurationFingerprint = module.agentcore_harness.proof_configuration_fingerprint
+    authorizerAudience       = module.api.agentcore_harness_audience
+    sessionStrategy          = "fresh"
+    strategyDecisionRule     = "reuse_only_if_correct_and_20_percent_benefit"
+    capacityEnvelope = {
+      activeSessions       = 100
+      newSessionsPerSecond = 10
+      minimumHeadroom      = 0.50
+    }
+  })
+
+  tags = {
+    Name                   = "thinkwork-${var.stage}-agentcore-harness-proof-profile"
+    "thinkwork:proof"      = "THINK-316"
+    "thinkwork:tenant"     = var.agentcore_multiplayer_proof_tenant_slug
+    "thinkwork:profile"    = "default"
+    "thinkwork:visibility" = "server-only-nonsecret"
+  }
+}
+
+# THINK-316 U1 proof-only Identity and Gateway plane. These resources use the
+# regional execute-api URL because the dev account rejects public Lambda
+# Function URLs and a custom domain may be unavailable in a fresh stage.
+module "agentcore_proof_identity" {
+  source = "../app/agentcore-identity"
+
+  enabled             = var.enable_agentcore_multiplayer_proof
+  stage               = var.stage
+  region              = var.region
+  oauth_issuer        = module.api.agentcore_proof_oauth_issuer
+  oauth_client_id     = "thinkwork-${var.stage}-agentcore-proof"
+  oauth_client_secret = var.enable_agentcore_multiplayer_proof ? random_password.agentcore_proof_oauth_client_secret[0].result : ""
+}
+
+module "agentcore_proof_gateway" {
+  source = "../app/agentcore-gateway"
+
+  enabled                       = var.enable_agentcore_multiplayer_proof
+  stage                         = var.stage
+  region                        = var.region
+  account_id                    = var.account_id
+  discovery_url                 = "${module.api.agentcore_turn_assertion_issuer}/.well-known/openid-configuration"
+  gateway_audience              = module.api.agentcore_gateway_audience
+  target_base_url               = module.api.agentcore_proof_target_base_url
+  oauth_credential_provider_arn = module.agentcore_proof_identity.credential_provider_arn
+  oauth_credential_secret_arn   = module.agentcore_proof_identity.credential_secret_arn
+  oauth_return_url              = module.agentcore_proof_identity.oauth_return_url
+  proof_owner_allowlist         = var.agentcore_multiplayer_proof_owner_allowlist
 }
 
 # Capability Broker (THINK-280 U3) — ship-inert, gated by
