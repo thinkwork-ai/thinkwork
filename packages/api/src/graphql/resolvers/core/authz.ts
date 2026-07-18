@@ -79,16 +79,16 @@ export function hasServiceSecret(ctx: GraphQLContext): boolean {
  *
  * The optional `dbOrTx` handle routes the role lookup through a transaction
  * when one is provided — matching Drizzle's `db.transaction(async tx => ...)`
- * API. The caller-identity lookup (`resolveCallerUserId`) always runs on the
- * module-level `db`; that lookup is a prerequisite to the transactional
- * invariant, not part of it.
+ * API. The route/identity/tenant admission lookup always runs on the
+ * module-level `db`; it is a prerequisite to the transactional invariant,
+ * not part of it.
  */
 export async function requireTenantAdmin(
   ctx: GraphQLContext,
   tenantId: string,
   dbOrTx: DbOrTx = defaultDb,
 ): Promise<TenantAdminRole> {
-  const callerUserId = await resolveCallerUserId(ctx);
+  const callerUserId = await resolveCallerUserId(ctx, tenantId);
   if (!callerUserId) {
     throw forbidden("Tenant admin role required");
   }
@@ -121,7 +121,7 @@ export async function requireTenantMember(
   if (ctx.auth.authType !== "cognito") {
     throw forbidden("Tenant membership required");
   }
-  const callerUserId = await resolveCallerUserId(ctx);
+  const callerUserId = await resolveCallerUserId(ctx, tenantId);
   if (!callerUserId) {
     throw forbidden("Tenant membership required");
   }

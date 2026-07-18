@@ -95,6 +95,12 @@ export function resolveNativeAuthPolicy(
         connection.connectionKey === "microsoft:organizations"
       );
     }
+    if (
+      connection.connectionKey === "google" ||
+      connection.connectionKey === "microsoft:organizations"
+    ) {
+      return true;
+    }
     return (
       connection.tenantId === snapshot.tenantId &&
       connection.tenantReferenceStatus === "enabled"

@@ -88,6 +88,30 @@ describe("resolveNativeAuthPolicy", () => {
     expect(JSON.stringify(result)).not.toContain("microsoft:tenant");
   });
 
+  it("keeps global Google available on a tenant host without a tenant reference", () => {
+    const tenantId = "11111111-1111-4111-8111-111111111111";
+    const entra = {
+      ...connection(
+        "microsoft:tenant:acme",
+        "microsoft_tenant",
+        "Entra_0000000000004000_abcd1234",
+        "entra-client",
+      ),
+      tenantId,
+      tenantReferenceStatus: "enabled",
+    };
+
+    expect(
+      resolveNativeAuthPolicy({
+        scope: "tenant",
+        tenantId,
+        localPasswordEnabled: true,
+        routes,
+        connections: [connections[0], connections[1], entra],
+      }).oauthOptions.map((option) => option.provider),
+    ).toEqual(["google", "entra"]);
+  });
+
   it("keeps password independent and omits invalid or detached routes", () => {
     const result = resolveNativeAuthPolicy({
       scope: "deployment",

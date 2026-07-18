@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   setTaskStatus: vi.fn(),
   setWorkItemStatus: vi.fn(),
   authenticate: vi.fn(),
+  resolveCallerFromAuth: vi.fn(),
 }));
 
 vi.mock("../lib/task-status-tool.js", async (importOriginal) => {
@@ -28,22 +29,8 @@ vi.mock("../lib/cognito-auth.js", () => ({
   authenticate: mocks.authenticate,
 }));
 
-vi.mock("../lib/db.js", () => ({
-  db: {
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: async () => [
-            {
-              id: "user-1",
-              tenantId: "tenant-1",
-              email: "eric@example.com",
-            },
-          ],
-        }),
-      }),
-    }),
-  },
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerFromAuth: mocks.resolveCallerFromAuth,
 }));
 
 import { handler } from "./task-status-tool";
@@ -81,6 +68,10 @@ beforeEach(() => {
     previousStatusCategory: "todo",
     statusCategory: "done",
     statusId: "status-done",
+  });
+  mocks.resolveCallerFromAuth.mockResolvedValue({
+    userId: "user-1",
+    tenantId: "tenant-1",
   });
 });
 

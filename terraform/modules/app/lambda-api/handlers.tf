@@ -769,6 +769,7 @@ resource "aws_lambda_function" "handler" {
     "stripe-subscription",
     "deployment-sessions",
     "auth-me",
+    "auth-revoke",
     "public-auth-options",
     "auth-provider-reconcile",
     "workos-auth",
@@ -1761,6 +1762,8 @@ locals {
       "OPTIONS /api/deployment-sessions/{sessionId}/teardown"                   = "deployment-sessions"
       "GET /api/auth/me"                                                        = "auth-me"
       "OPTIONS /api/auth/me"                                                    = "auth-me"
+      "POST /api/auth/revoke"                                                   = "auth-revoke"
+      "OPTIONS /api/auth/revoke"                                                = "auth-revoke"
       "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
       "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 

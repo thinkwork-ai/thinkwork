@@ -72,6 +72,22 @@ vi.mock("aws-jwt-verify", () => ({
   },
 }));
 
+// Route admission is covered independently. These bridge tests exercise the
+// REST auth + membership handoff after a Cognito route has been admitted.
+vi.mock("../lib/auth-admission.js", () => ({
+  resolveCognitoRouteProvenance: vi.fn(async () => ({
+    routeClientId: "route-test",
+    routeKey: "local",
+    clientFamily: "test",
+    appClientId: "test-client",
+    lifecycleState: "native",
+    connectionId: "connection-local",
+    connectionKey: "local",
+    providerKind: "local",
+    providerIssuer: null,
+  })),
+}));
+
 // ---------------------------------------------------------------------------
 // DB mock
 // ---------------------------------------------------------------------------
@@ -494,6 +510,8 @@ describe("admin REST auth bridge — 14 handlers gate on auth + membership", () 
     mockVerifyImpl.fn = (_token: string) =>
       Promise.resolve({
         sub: "user-test",
+        iss: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_test",
+        aud: "test-client",
         email: "test@example.com",
         "custom:tenant_id": TENANT_UUID,
       }) as Promise<any>;

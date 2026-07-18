@@ -13,7 +13,7 @@ export async function requireUserScope(
   ctx: GraphQLContext,
   args: { tenantId: string; userId: string },
 ): Promise<{ tenantId: string; userId: string }> {
-  const caller = await resolveCaller(ctx);
+  const caller = await resolveCaller(ctx, args.tenantId);
   if (!caller.userId || !caller.tenantId) {
     throw new UserScopeAuthError("User and tenant context required");
   }
@@ -37,9 +37,10 @@ export async function requireMemoryUserScope(
     allowTenantAdmin?: boolean | null;
   },
 ): Promise<{ tenantId: string; userId: string }> {
-  const caller = await resolveCaller(ctx);
-  const tenantId =
-    args.tenantId ?? caller.tenantId ?? ctx.auth.tenantId ?? null;
+  const caller = args.tenantId
+    ? await resolveCaller(ctx, args.tenantId)
+    : await resolveCaller(ctx);
+  const tenantId = args.tenantId ?? caller.tenantId ?? null;
   if (!tenantId) throw new UserScopeAuthError("Tenant context required");
 
   const hasServiceSecret =
@@ -128,9 +129,10 @@ export async function requireMemoryTenantScope(
   ctx: GraphQLContext,
   args: { tenantId?: string | null },
 ): Promise<{ tenantId: string; userId: string | null }> {
-  const caller = await resolveCaller(ctx);
-  const tenantId =
-    args.tenantId ?? caller.tenantId ?? ctx.auth.tenantId ?? null;
+  const caller = args.tenantId
+    ? await resolveCaller(ctx, args.tenantId)
+    : await resolveCaller(ctx);
+  const tenantId = args.tenantId ?? caller.tenantId ?? null;
   if (!tenantId) throw new UserScopeAuthError("Tenant context required");
 
   const hasServiceSecret =

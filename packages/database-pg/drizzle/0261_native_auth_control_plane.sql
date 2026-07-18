@@ -11,6 +11,8 @@
 -- creates: public.uq_tenant_auth_provider_references_tenant_resource
 -- creates: public.tenant_auth_policies
 -- creates: public.uq_tenant_auth_policies_tenant
+-- creates: public.ensure_default_tenant_auth_policy
+-- creates: public.tenants.trg_tenants_default_auth_policy
 -- creates: public.tenant_auth_hosts
 -- creates: public.uq_tenant_auth_hosts_hostname
 -- creates: public.idx_tenant_auth_hosts_tenant_status
@@ -118,6 +120,46 @@ CREATE TABLE IF NOT EXISTS public.tenant_auth_policies (
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_tenant_auth_policies_tenant
   ON public.tenant_auth_policies (tenant_id);
+
+-- Preserve the pre-native-auth behavior for existing tenants explicitly:
+-- local password is enabled and validated global Google/Microsoft routes are
+-- permitted by an active policy. Tenant-specific Entra references can then
+-- replace general Microsoft without leaving older tenants policy-less.
+INSERT INTO public.tenant_auth_policies (
+  tenant_id,
+  local_password_enabled,
+  status,
+  revision,
+  created_at,
+  updated_at
+)
+SELECT id, true, 'active', 1, now(), now()
+FROM public.tenants
+ON CONFLICT (tenant_id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.ensure_default_tenant_auth_policy()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO public.tenant_auth_policies (
+    tenant_id,
+    local_password_enabled,
+    status,
+    revision,
+    created_at,
+    updated_at
+  ) VALUES (NEW.id, true, 'active', 1, now(), now())
+  ON CONFLICT (tenant_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_tenants_default_auth_policy ON public.tenants;
+CREATE TRIGGER trg_tenants_default_auth_policy
+AFTER INSERT ON public.tenants
+FOR EACH ROW
+EXECUTE FUNCTION public.ensure_default_tenant_auth_policy();
 
 CREATE TABLE IF NOT EXISTS public.tenant_auth_hosts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

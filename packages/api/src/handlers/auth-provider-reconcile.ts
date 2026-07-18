@@ -322,6 +322,13 @@ export async function reconcileAuthProviderMetadata(
             provider_kind: connection.providerKind,
             display_name: connection.displayName,
             lifecycle_state: connection.lifecycleState,
+            cognito_app_client_ids: payload.routeClients
+              .filter((route) =>
+                route.providerNames.includes(
+                  connection.cognitoIdentityProviderName,
+                ),
+              )
+              .map((route) => route.cognitoAppClientId),
             cognito_identity_provider_name:
               connection.cognitoIdentityProviderName,
             issuer_url: connection.issuerUrl ?? null,

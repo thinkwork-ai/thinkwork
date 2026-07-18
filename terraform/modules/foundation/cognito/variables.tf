@@ -222,6 +222,24 @@ variable "custom_auth_lambda_s3_key" {
   default     = ""
 }
 
+variable "pre_token_generation_lambda_s3_bucket" {
+  description = "S3 bucket containing the Cognito pre-token client-deny Lambda release artifact"
+  type        = string
+  default     = ""
+}
+
+variable "pre_token_generation_lambda_s3_key" {
+  description = "S3 key for the Cognito pre-token client-deny Lambda release artifact"
+  type        = string
+  default     = ""
+}
+
+variable "denied_app_client_ids" {
+  description = "Cognito app clients denied new and refresh token issuance during auth cutover"
+  type        = list(string)
+  default     = []
+}
+
 variable "api_auth_secret" {
   description = "Shared signing secret used by the custom-auth challenge Lambda"
   type        = string

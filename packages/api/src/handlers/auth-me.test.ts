@@ -28,12 +28,16 @@ const { selectQueue, mockDb } = vi.hoisted(() => {
   return { selectQueue, mockDb };
 });
 
-const { authenticateMock } = vi.hoisted(() => ({
+const { authenticateMock, resolveCallerFromAuthMock } = vi.hoisted(() => ({
   authenticateMock: vi.fn(),
+  resolveCallerFromAuthMock: vi.fn(),
 }));
 
 vi.mock("../lib/db.js", () => ({ db: mockDb }));
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: authenticateMock }));
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerFromAuth: resolveCallerFromAuthMock,
+}));
 
 import { handler } from "./auth-me.js";
 
@@ -47,14 +51,15 @@ function getEvent(): APIGatewayProxyEventV2 {
 beforeEach(() => {
   selectQueue.length = 0;
   authenticateMock.mockReset();
+  resolveCallerFromAuthMock.mockReset();
   authenticateMock.mockResolvedValue({
     email: "Service@HomeCareIntel.com",
   });
+  resolveCallerFromAuthMock.mockResolvedValue({ userId: null, tenantId: null });
 });
 
 describe("auth-me pendingClaim", () => {
   it("reports pendingClaim=true when a pending tenant matches the email", async () => {
-    selectQueue.push([]); // users lookup — no row
     selectQueue.push([{ id: "tenant-1" }]); // pending_owner_email lookup
 
     const result = await handler(getEvent());
@@ -66,7 +71,6 @@ describe("auth-me pendingClaim", () => {
   });
 
   it("reports pendingClaim=false when no pending tenant exists", async () => {
-    selectQueue.push([]); // users lookup — no row
     selectQueue.push([]); // pending_owner_email lookup — no row
 
     const result = await handler(getEvent());
@@ -76,6 +80,10 @@ describe("auth-me pendingClaim", () => {
   });
 
   it("omits pendingClaim once the user row exists", async () => {
+    resolveCallerFromAuthMock.mockResolvedValue({
+      userId: "user-1",
+      tenantId: "t-1",
+    });
     selectQueue.push([
       { id: "user-1", email: "service@homecareintel.com", tenant_id: "t-1" },
     ]);
@@ -88,7 +96,7 @@ describe("auth-me pendingClaim", () => {
     expect(body.tenantId).toBe("t-1");
   });
 
-  it("currently resolves an existing account by email without checking the Cognito subject", async () => {
+  it("does not resolve an existing account by email without an admitted subject", async () => {
     authenticateMock.mockResolvedValue({
       authType: "cognito",
       principalId: "different-cognito-subject",
@@ -96,22 +104,15 @@ describe("auth-me pendingClaim", () => {
       emailVerified: true,
       tenantId: null,
     });
-    selectQueue.push([
-      {
-        id: "user-1",
-        email: "service@homecareintel.com",
-        tenant_id: "t-1",
-        cognito_sub: "original-cognito-subject",
-      },
-    ]);
-    selectQueue.push([{ role: "owner", status: "active" }]);
+    selectQueue.push([]); // no pending owner enrollment either
 
     const result = await handler(getEvent());
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body ?? "{}")).toMatchObject({
-      userId: "user-1",
-      tenantId: "t-1",
-      role: "owner",
+      userId: null,
+      tenantId: null,
+      role: null,
+      pendingClaim: false,
     });
   });
 });

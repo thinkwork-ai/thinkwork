@@ -1101,6 +1101,12 @@ variable "cognito_custom_auth_lambda_zip" {
   default     = ""
 }
 
+variable "cognito_denied_app_client_ids" {
+  description = "Cognito app clients denied new and refresh token issuance during native-auth cutover"
+  type        = list(string)
+  default     = []
+}
+
 # ---------------------------------------------------------------------------
 # Docs site (custom domain — optional)
 # ---------------------------------------------------------------------------

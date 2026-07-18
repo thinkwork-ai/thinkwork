@@ -105,4 +105,19 @@ describe("Cognito identity provider Terraform fixture", () => {
     expect(outputs).toMatch(/output "identity_provider_names"/);
     expect(outputs).toMatch(/output "auth_route_clients"/);
   });
+
+  it("wires a V2 pre-token cutoff without granting Cognito mutation access", () => {
+    const vars = read("terraform/modules/foundation/cognito/variables.tf");
+    const main = read("terraform/modules/foundation/cognito/main.tf");
+
+    expect(vars).toMatch(/variable "denied_app_client_ids"/);
+    expect(main).toMatch(
+      /resource "aws_lambda_function" "pre_token_generation"/,
+    );
+    expect(main).toMatch(/pre_token_generation_config/);
+    expect(main).toMatch(/lambda_version\s*=\s*"V2_0"/);
+    expect(main).toMatch(/COGNITO_DENIED_APP_CLIENT_IDS/);
+    expect(main).not.toMatch(/AdminLinkProviderForUser/);
+    expect(main).not.toMatch(/AdminSetUserPassword/);
+  });
 });

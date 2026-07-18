@@ -17,11 +17,12 @@ import type {
 } from "aws-lambda";
 import { eq } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
+import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
 
-const { stripeCustomers, stripeSubscriptions, tenants, users } = schema;
+const { stripeCustomers, stripeSubscriptions, tenants } = schema;
 
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -40,25 +41,12 @@ export async function handler(
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!auth || (!auth.tenantId && !auth.email)) {
+  if (!auth || auth.authType !== "cognito") {
     return unauthorized("Authentication required");
   }
-
-  // Resolve tenant (JWT claim, or email fallback for Google-federated users).
-  // Email match is case-insensitive — Google can return mixed-case in the
-  // JWT email claim while our users table stores lowercase.
-  let tenantId = auth.tenantId;
-  const emailLower = auth.email ? auth.email.toLowerCase() : null;
-  if (!tenantId && emailLower) {
-    const [userRow] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, emailLower))
-      .limit(1);
-    tenantId = userRow?.tenant_id ?? null;
-  }
+  const { tenantId } = await resolveCallerFromAuth(auth);
   console.log(
-    `[stripe-subscription] auth.email=${auth.email} auth.tenantId=${auth.tenantId} resolved=${tenantId ?? "null"}`,
+    `[stripe-subscription] appClientId=${auth.route?.appClientId ?? "none"} resolved=${tenantId ?? "null"}`,
   );
   if (!tenantId) {
     return json({ error: "No tenant resolved for the caller" }, 403);

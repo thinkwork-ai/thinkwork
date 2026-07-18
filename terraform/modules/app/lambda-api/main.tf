@@ -73,6 +73,14 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 20
   }
 
+  # Session revocation is authenticated and independently rate-limited in the
+  # handler per principal. This edge throttle also bounds aggregate abuse.
+  route_settings {
+    route_key              = "POST /api/auth/revoke"
+    throttling_rate_limit  = 5
+    throttling_burst_limit = 10
+  }
+
   # UpdateStage 404s ("Unable to find Route by key … within the provided
   # RouteSettings") if the stage update races the route creation — Terraform
   # sees no reference edge between route_settings.route_key and the route

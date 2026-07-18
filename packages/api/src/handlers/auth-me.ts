@@ -27,6 +27,7 @@ import type {
 } from "aws-lambda";
 import { eq, and, sql } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
+import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
@@ -51,13 +52,15 @@ export async function handler(
   }
 
   const emailLower = auth.email.toLowerCase();
-
-  // Resolve user row (canonical source for id + tenant_id + name).
-  const [userRow] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, emailLower))
-    .limit(1);
+  const admitted = await resolveCallerFromAuth(auth);
+  // Resolve user row only by the identity admitted from the Cognito subject.
+  const [userRow] = admitted.userId
+    ? await db
+        .select()
+        .from(users)
+        .where(eq(users.id, admitted.userId))
+        .limit(1)
+    : [];
 
   if (!userRow) {
     // Pre-provisioned owner claim (Stripe checkout or `thinkwork deploy`):
@@ -85,7 +88,7 @@ export async function handler(
     );
   }
 
-  const tenantId = userRow.tenant_id;
+  const tenantId = admitted.tenantId;
   if (!tenantId) {
     return json({
       email: userRow.email,

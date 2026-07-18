@@ -1205,7 +1205,18 @@ function isServiceBearer(bearer: string): boolean {
 
 async function tryFirstPartyAuth(event: APIGatewayProxyEventV2) {
   const { authenticate } = await import("../lib/cognito-auth.js");
-  return await authenticate(event.headers);
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
+  const auth = await authenticate(event.headers);
+  if (!auth) return null;
+  if (auth.authType !== "cognito") return auth;
+  const admitted = await resolveCallerFromAuth(
+    auth,
+    event.headers["x-tenant-id"],
+  );
+  return admitted.userId && admitted.tenantId
+    ? { ...auth, principalId: admitted.userId, tenantId: admitted.tenantId }
+    : null;
 }
 
 function hasScope(claims: Record<string, unknown>, scope: string): boolean {

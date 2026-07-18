@@ -239,6 +239,25 @@ vi.mock("../lib/cognito-auth.js", () => ({
   authenticate: authMockImpl,
 }));
 
+// This suite exercises workspace-file behavior, not the native Cognito
+// admission repository. Preserve its existing queued caller fixture at the
+// stable resolver seam; auth-admission has dedicated contract tests.
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerFromAuth: vi.fn(async (auth: any) => {
+    if (auth.authType === "apikey" || auth.authType === "service") {
+      return { userId: auth.principalId ?? null, tenantId: auth.tenantId };
+    }
+    const [row] = dbQueue.shift() ?? [];
+    const caller = row as
+      | { id?: string; tenant_id?: string | null }
+      | undefined;
+    return {
+      userId: caller?.id ?? null,
+      tenantId: caller?.tenant_id ?? null,
+    };
+  }),
+}));
+
 // ─── Mock regenerateManifest to a noop ───────────────────────────────────────
 
 vi.mock("../lib/workspace-manifest.js", () => ({
@@ -4820,12 +4839,9 @@ skills: [finance-audit-xls]
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
-  it("PUT for a Google-federated admin queries tenantMembers by users.id, not Cognito sub", async () => {
-    // Regression: PR #565's U31 admin gate passed `auth.principalId`
-    // (the Cognito sub) into `callerIsTenantAdmin`, but
-    // `tenantMembers.principal_id` holds `users.id`. For Google-federated
-    // users `users.id` is a fresh UUID linked by email — sub ≠ users.id —
-    // so the role lookup matched zero rows and every save 403'd.
+  it("PUT for an admitted Google identity queries tenantMembers by stable users.id, not Cognito sub", async () => {
+    // Native admission maps the immutable Cognito subject through
+    // user_auth_identities to users.id. Email is not an identity fallback.
     const COGNITO_SUB = "google-oauth-cognito-sub-not-equal-to-users-id";
     authMockImpl.mockResolvedValue({
       principalId: COGNITO_SUB,
@@ -4833,8 +4849,7 @@ skills: [finance-audit-xls]
       email: EMAIL,
       authType: "cognito",
     });
-    pushDbRows([]); // resolveCallerFromAuth byId — no row for federated sub
-    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // byEmail fallback
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // admitted identity
     pushDbRows([agentRow()]); // resolveAgentTarget: agents
     pushDbRows([tenantRow()]); // resolveAgentTarget: tenants
     pushDbRows([{ role: "admin" }]); // U31 role gate

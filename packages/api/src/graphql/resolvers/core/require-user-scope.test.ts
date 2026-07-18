@@ -4,7 +4,7 @@ import {
   requireMemoryTenantScope,
   requireMemoryUserScope,
 } from "./require-user-scope.js";
-import { resolveCaller } from "./resolve-auth-user.js";
+import { resolveCaller, type ResolvedCaller } from "./resolve-auth-user.js";
 
 vi.mock("./resolve-auth-user.js", () => ({
   resolveCaller: vi.fn(),
@@ -21,13 +21,17 @@ vi.mock("../../utils.js", () => ({
 const resolveCallerMock = vi.mocked(resolveCaller);
 const dbExecuteMock = vi.mocked(db.execute);
 
+function mockResolvedCaller(caller: ResolvedCaller): void {
+  resolveCallerMock.mockResolvedValue(caller);
+}
+
 describe("requireMemoryUserScope", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("defaults memory scope to the authenticated requester when no user id is supplied", async () => {
-    resolveCallerMock.mockResolvedValue({
+    mockResolvedCaller({
       tenantId: "tenant-1",
       userId: "requester-1",
     });
@@ -41,7 +45,7 @@ describe("requireMemoryUserScope", () => {
   });
 
   it("rejects requester defaulting across tenants", async () => {
-    resolveCallerMock.mockResolvedValue({
+    mockResolvedCaller({
       tenantId: "tenant-1",
       userId: "requester-1",
     });
@@ -55,7 +59,7 @@ describe("requireMemoryUserScope", () => {
   });
 
   it("allows tenant admins to read another user's memory scope with case-insensitive membership type", async () => {
-    resolveCallerMock.mockResolvedValue({
+    mockResolvedCaller({
       tenantId: "tenant-1",
       userId: "admin-1",
     });
@@ -85,7 +89,7 @@ describe("requireMemoryTenantScope (plan 2026-06-09-004 U9)", () => {
   });
 
   it("grants a NON-admin tenant member access to tenant scope (no admin check, no db hit)", async () => {
-    resolveCallerMock.mockResolvedValue({
+    mockResolvedCaller({
       tenantId: "tenant-1",
       userId: "member-1",
     });
@@ -101,7 +105,7 @@ describe("requireMemoryTenantScope (plan 2026-06-09-004 U9)", () => {
   });
 
   it("rejects a tenant A member reading tenant B scope", async () => {
-    resolveCallerMock.mockResolvedValue({
+    mockResolvedCaller({
       tenantId: "tenant-a",
       userId: "member-1",
     });
@@ -115,7 +119,7 @@ describe("requireMemoryTenantScope (plan 2026-06-09-004 U9)", () => {
   });
 
   it("rejects a caller with no resolvable user (non-member)", async () => {
-    resolveCallerMock.mockResolvedValue({ tenantId: null, userId: null });
+    mockResolvedCaller({ tenantId: null, userId: null });
 
     await expect(
       requireMemoryTenantScope(
@@ -126,7 +130,7 @@ describe("requireMemoryTenantScope (plan 2026-06-09-004 U9)", () => {
   });
 
   it("rejects a caller whose membership tenant cannot be resolved", async () => {
-    resolveCallerMock.mockResolvedValue({ tenantId: null, userId: "user-1" });
+    mockResolvedCaller({ tenantId: null, userId: "user-1" });
 
     await expect(
       requireMemoryTenantScope(
@@ -137,7 +141,7 @@ describe("requireMemoryTenantScope (plan 2026-06-09-004 U9)", () => {
   });
 
   it("requires a tenant id from somewhere", async () => {
-    resolveCallerMock.mockResolvedValue({ tenantId: null, userId: "user-1" });
+    mockResolvedCaller({ tenantId: null, userId: "user-1" });
 
     await expect(
       requireMemoryTenantScope(
@@ -148,7 +152,7 @@ describe("requireMemoryTenantScope (plan 2026-06-09-004 U9)", () => {
   });
 
   it("passes service credentials for any tenant, with a null userId", async () => {
-    resolveCallerMock.mockResolvedValue({ tenantId: null, userId: null });
+    mockResolvedCaller({ tenantId: null, userId: null });
 
     await expect(
       requireMemoryTenantScope(

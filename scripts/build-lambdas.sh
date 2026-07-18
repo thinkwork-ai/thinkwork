@@ -148,6 +148,8 @@ build_handler "graphql-http" \
 
 build_handler "cognito-pre-signup" \
   "$REPO_ROOT/packages/api/src/handlers/cognito-pre-signup.ts"
+build_handler "cognito-pre-token-client-deny" \
+  "$REPO_ROOT/packages/api/src/handlers/cognito-pre-token-client-deny.ts"
 
 build_handler "cognito-custom-auth" \
   "$REPO_ROOT/packages/api/src/handlers/cognito-custom-auth.ts"
@@ -374,6 +376,9 @@ build_handler "deployment-sessions" \
 
 build_handler "auth-me" \
   "$REPO_ROOT/packages/api/src/handlers/auth-me.ts"
+
+build_handler "auth-revoke" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-revoke.ts"
 
 build_handler "extension-proxy" \
   "$REPO_ROOT/packages/api/src/handlers/extension-proxy.ts"

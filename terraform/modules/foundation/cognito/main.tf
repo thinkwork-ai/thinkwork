@@ -13,6 +13,7 @@ locals {
   use_remote_custom_auth_artifact = trimspace(var.custom_auth_lambda_s3_bucket) != ""
   custom_auth_artifact_count      = (local.use_local_custom_auth_artifact ? 1 : 0) + (local.use_remote_custom_auth_artifact ? 1 : 0)
   create_custom_auth              = local.create && local.custom_auth_artifact_count == 1
+  create_pre_token_generation     = local.create && trimspace(var.pre_token_generation_lambda_s3_bucket) != "" && trimspace(var.pre_token_generation_lambda_s3_key) != ""
 
   user_pool_id     = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
   user_pool_arn    = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
@@ -140,26 +141,6 @@ resource "aws_iam_role_policy_attachment" "pre_signup_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy" "pre_signup_cognito" {
-  count = local.create_pre_signup ? 1 : 0
-  name  = "cognito-access"
-  role  = aws_iam_role.pre_signup[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "cognito-idp:ListUsers",
-        "cognito-idp:AdminLinkProviderForUser",
-        "cognito-idp:AdminCreateUser",
-        "cognito-idp:AdminSetUserPassword"
-      ]
-      Resource = aws_cognito_user_pool.main[0].arn
-    }]
-  })
-}
-
 resource "aws_lambda_function" "pre_signup" {
   count         = local.create_pre_signup ? 1 : 0
   function_name = "thinkwork-${var.stage}-cognito-pre-signup"
@@ -177,6 +158,56 @@ resource "aws_lambda_permission" "cognito_pre_signup" {
   statement_id  = "AllowCognitoInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.pre_signup[0].function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main[0].arn
+}
+
+################################################################################
+# Pre Token Generation Client Cutoff Lambda
+################################################################################
+
+resource "aws_iam_role" "pre_token_generation" {
+  count = local.create_pre_token_generation ? 1 : 0
+  name  = "thinkwork-${var.stage}-cognito-pre-token-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "pre_token_generation_basic" {
+  count      = local.create_pre_token_generation ? 1 : 0
+  role       = aws_iam_role.pre_token_generation[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "pre_token_generation" {
+  count         = local.create_pre_token_generation ? 1 : 0
+  function_name = "thinkwork-${var.stage}-cognito-pre-token-client-deny"
+  s3_bucket     = var.pre_token_generation_lambda_s3_bucket
+  s3_key        = var.pre_token_generation_lambda_s3_key
+  handler       = "index.handler"
+  runtime       = "nodejs20.x"
+  timeout       = 5
+  role          = aws_iam_role.pre_token_generation[0].arn
+
+  environment {
+    variables = {
+      COGNITO_DENIED_APP_CLIENT_IDS = join(",", var.denied_app_client_ids)
+    }
+  }
+}
+
+resource "aws_lambda_permission" "cognito_pre_token_generation" {
+  count         = local.create_pre_token_generation ? 1 : 0
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.pre_token_generation[0].function_name
   principal     = "cognito-idp.amazonaws.com"
   source_arn    = aws_cognito_user_pool.main[0].arn
 }
@@ -337,12 +368,20 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   dynamic "lambda_config" {
-    for_each = local.create_pre_signup || local.create_custom_auth ? [1] : []
+    for_each = local.create_pre_signup || local.create_custom_auth || local.create_pre_token_generation ? [1] : []
     content {
       pre_sign_up                    = local.create_pre_signup ? aws_lambda_function.pre_signup[0].arn : null
       define_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
       create_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
       verify_auth_challenge_response = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
+
+      dynamic "pre_token_generation_config" {
+        for_each = local.create_pre_token_generation ? [1] : []
+        content {
+          lambda_arn     = aws_lambda_function.pre_token_generation[0].arn
+          lambda_version = "V2_0"
+        }
+      }
     }
   }
 
