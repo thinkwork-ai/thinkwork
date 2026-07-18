@@ -239,6 +239,39 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
         }
       }}}},
       responses: {"200": {description: "Sanitized bounded page content"}}
+    }},
+    "/agentcore/capabilities/brain/query": {post: {
+      operationId: "query_brain",
+      summary: "Query permissioned ThinkWork Brain context as the exact turn participant",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "query"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          query: {type: "string", minLength: 1, maxLength: 2000},
+          mode: {type: "string", enum: ["results", "answer"], default: "results"},
+          limit: {type: "integer", minimum: 1, maximum: 10, default: 8}
+        }
+      }}}},
+      responses: {"200": {description: "Sanitized permissioned Brain context"}}
+    }},
+    "/agentcore/capabilities/email/send": {post: {
+      operationId: "send_email",
+      summary: "Send or request approval for one idempotent policy-governed email",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "to", "subject", "content"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          to: {type: "array", minItems: 1, maxItems: 5, items: {type: "string", format: "email", maxLength: 320}},
+          subject: {type: "string", minLength: 1, maxLength: 500},
+          content: {type: "string", minLength: 1, maxLength: 60000, description: "Complete email message body"}
+        }
+      }}}},
+      responses: {
+        "200": {description: "Email sent or replayed safely"},
+        "202": {description: "First-send human review requested"}
+      }
     }}
   }
 }')"
@@ -329,7 +362,9 @@ permit(
     AgentCore::Action::"${TARGET_NAME}___call_connector_tool",
     AgentCore::Action::"${TARGET_NAME}___execute_code",
     AgentCore::Action::"${TARGET_NAME}___web_search",
-    AgentCore::Action::"${TARGET_NAME}___web_extract"
+    AgentCore::Action::"${TARGET_NAME}___web_extract",
+    AgentCore::Action::"${TARGET_NAME}___query_brain",
+    AgentCore::Action::"${TARGET_NAME}___send_email"
   ],
   resource == AgentCore::Gateway::"${gateway_arn}"
 )
@@ -353,7 +388,9 @@ when {
         action == AgentCore::Action::"${TARGET_NAME}___call_connector_tool" ||
         action == AgentCore::Action::"${TARGET_NAME}___execute_code" ||
         action == AgentCore::Action::"${TARGET_NAME}___web_search" ||
-        action == AgentCore::Action::"${TARGET_NAME}___web_extract"
+        action == AgentCore::Action::"${TARGET_NAME}___web_extract" ||
+        action == AgentCore::Action::"${TARGET_NAME}___query_brain" ||
+        action == AgentCore::Action::"${TARGET_NAME}___send_email"
       ) &&
       context.input.tenant_id == principal.getTag("tenant_id")
     )

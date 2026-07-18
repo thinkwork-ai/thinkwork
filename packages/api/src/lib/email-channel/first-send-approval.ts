@@ -9,6 +9,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "@thinkwork/database-pg";
 import type { EmailProviderSendResult } from "./provider-contract.js";
+import { sendComputerApprovalPush } from "../push-notifications.js";
 
 type Db = Pick<Database, "select" | "insert" | "update">;
 
@@ -30,6 +31,8 @@ export interface EmailDraftApprovalInput {
   providerInstallId: string | null;
   provider: EmailChannelProvider;
   agentId: string;
+  /** Exact authenticated user who requested an interactive send. */
+  requestingUserId?: string | null;
   spaceId?: string | null;
   threadId?: string | null;
   from: string;
@@ -152,6 +155,7 @@ export async function requestFirstSendApproval(
       tenant_id: input.tenantId,
       requester_type: "agent",
       requester_id: input.agentId,
+      recipient_id: input.requestingUserId ?? null,
       type: "computer_approval",
       title: `Review email to ${input.to.join(", ")}`,
       description:
@@ -210,6 +214,24 @@ export async function requestFirstSendApproval(
     to_emails: input.to,
     metadata: { actionType: "email_send" },
   });
+
+  // The Work Item is the durable approval surface. Assign it to the exact
+  // requesting user and make mobile push a best-effort notification; neither
+  // approval creation nor later delivery depends on an approval email.
+  if (input.requestingUserId) {
+    await sendComputerApprovalPush({
+      userId: input.requestingUserId,
+      tenantId: input.tenantId,
+      approvalId: inboxItem.id,
+      question: `Review email to ${input.to.join(", ")}`,
+    }).catch((error) => {
+      console.error("[first-send-approval] approval push failed", {
+        tenantId: input.tenantId,
+        inboxItemId: inboxItem.id,
+        errorType: error instanceof Error ? error.name : "unknown",
+      });
+    });
+  }
 
   return {
     status: "pending_review",

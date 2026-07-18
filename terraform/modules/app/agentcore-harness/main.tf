@@ -32,6 +32,8 @@ locals {
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___execute_code",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___web_search",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___web_extract",
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___query_brain",
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___send_email",
   ]
   tenant_skill_prefix = var.pilot_tenant_slug != "" ? (
     "tenants/${var.pilot_tenant_slug}/"
@@ -51,6 +53,7 @@ locals {
     connector_facade = "intent-ranked-direct-v1"
     sandbox_facade   = "bounded-internal-python-v1"
     builtin_web      = "tenant-policy-secret-bound-v1"
+    platform_tools   = "brain-read-email-content-contract-assigned-approval-v3"
     artifact_facade  = "caller-fulfilled-emit-document-v1"
   })))
 }

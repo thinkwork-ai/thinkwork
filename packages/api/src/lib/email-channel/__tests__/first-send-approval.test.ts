@@ -1,4 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+
+const { sendComputerApprovalPushMock } = vi.hoisted(() => ({
+  sendComputerApprovalPushMock: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../push-notifications.js", () => ({
+  sendComputerApprovalPush: sendComputerApprovalPushMock,
+}));
 import {
   emailBodyObjects,
   emailConversations,
@@ -57,6 +65,7 @@ describe("first-send email approval", () => {
         providerInstallId: "provider-1",
         provider: "ses",
         agentId: "agent-1",
+        requestingUserId: "user-1",
         spaceId: "space-1",
         threadId: "thread-1",
         from: "sales@acme.thinkwork.ai",
@@ -85,6 +94,7 @@ describe("first-send email approval", () => {
         type: "computer_approval",
         requester_type: "agent",
         requester_id: "agent-1",
+        recipient_id: "user-1",
         entity_type: "email_conversation",
         entity_id: "conversation-1",
       },
@@ -110,6 +120,12 @@ describe("first-send email approval", () => {
         .rowsFor(emailLedgerEvents)
         .map((row: Record<string, any>) => row.event_type),
     ).toEqual(["draft_created", "approval_requested"]);
+    expect(sendComputerApprovalPushMock).toHaveBeenCalledWith({
+      userId: "user-1",
+      tenantId: "tenant-1",
+      approvalId: "inbox-1",
+      question: "Review email to buyer@example.com",
+    });
   });
 
   it("reuses a pending conversation instead of inserting a duplicate row", async () => {

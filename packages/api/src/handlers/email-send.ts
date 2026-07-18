@@ -46,11 +46,12 @@ interface SendEmailRequest {
   quotedBody?: string;
 }
 
-interface DirectSendEmailRequest {
+export interface DirectSendEmailRequest {
   tenantId?: string;
   routineId?: string;
   executionId?: string;
   agentId?: string;
+  requestingUserId?: string;
   spaceId?: string;
   threadId?: string;
   to?: string[] | string;
@@ -59,6 +60,7 @@ interface DirectSendEmailRequest {
   body?: string;
   bodyFormat?: "text" | "html" | "markdown";
   source?: string;
+  idempotencyKey?: string;
 }
 
 function isHttpEvent(event: unknown): event is APIGatewayProxyEventV2 {
@@ -413,7 +415,7 @@ function deriveSpaceAddressFromRequest(req: SendEmailRequest): string | null {
   return deriveSpaceAddress({ tenantSlug, spaceSlug });
 }
 
-async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
+export async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
   const recipients = parseRecipients(req.to);
   const cc = parseRecipients(req.cc);
   const subject = req.subject?.trim() ?? "";
@@ -567,6 +569,7 @@ async function sendRoutineChannelEmail(input: {
       providerInstallId: policy.providerInstallId,
       provider: policy.provider,
       agentId,
+      requestingUserId: input.req.requestingUserId ?? null,
       spaceId,
       threadId: input.req.threadId ?? null,
       from: fromAddress,
@@ -595,6 +598,7 @@ async function sendRoutineChannelEmail(input: {
     to: input.recipients,
     cc: input.cc,
     subject: input.subject,
+    idempotencyKey: input.req.idempotencyKey,
     text: rendered
       ? rendered.text
       : input.req.bodyFormat === "html"
