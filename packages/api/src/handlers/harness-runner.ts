@@ -90,6 +90,7 @@ async function resolveHarness(input: {
     harnessArn: profile.harnessArn,
     harnessId,
     harnessVersion: profile.liveVersion,
+    modelId: profile.modelId,
     qualifier: profile.endpointName,
     configurationFingerprint: profile.configurationFingerprint,
     sessionStrategy: "fresh",

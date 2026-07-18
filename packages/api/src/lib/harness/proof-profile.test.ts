@@ -11,6 +11,7 @@ const profile = JSON.stringify({
   endpointName: "ThinkworkProof",
   expectedVersion: "4",
   liveVersion: "4",
+  modelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
   status: "ready",
   configurationFingerprint: "a".repeat(64),
   sessionStrategy: "fresh",
@@ -35,6 +36,7 @@ describe("Harness proof profile", () => {
       reasonCode: "ready",
       expectedVersion: "4",
       liveVersion: "4",
+      modelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
       sessionStrategy: "fresh",
     });
   });

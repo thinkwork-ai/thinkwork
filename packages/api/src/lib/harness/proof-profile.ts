@@ -13,6 +13,7 @@ export interface HarnessProofProfile {
   endpointName: string;
   expectedVersion: string;
   liveVersion: string;
+  modelId: string;
   status: string;
   configurationFingerprint: string;
   sessionStrategy: string;
@@ -27,6 +28,7 @@ export interface HarnessProofReadiness {
   endpointName: string | null;
   expectedVersion: string | null;
   liveVersion: string | null;
+  modelId: string | null;
   configurationFingerprint: string | null;
   sessionStrategy: string | null;
   checkedAt: string;
@@ -67,6 +69,7 @@ export function parseHarnessProofProfile(value: string): HarnessProofProfile {
       "expectedVersion",
     ),
     liveVersion: requiredProfileString(candidate.liveVersion, "liveVersion"),
+    modelId: requiredProfileString(candidate.modelId, "modelId"),
     status: requiredProfileString(candidate.status, "status"),
     configurationFingerprint: requiredProfileString(
       candidate.configurationFingerprint,
@@ -131,6 +134,7 @@ export async function readHarnessProofReadiness(
     endpointName: profile.endpointName,
     expectedVersion: profile.expectedVersion,
     liveVersion: profile.liveVersion,
+    modelId: profile.modelId,
     configurationFingerprint: profile.configurationFingerprint,
     sessionStrategy: profile.sessionStrategy,
     checkedAt,
@@ -197,6 +201,7 @@ export async function requireHarnessProofProfile(
     endpointName: readiness.endpointName!,
     expectedVersion: readiness.expectedVersion!,
     liveVersion: readiness.liveVersion!,
+    modelId: readiness.modelId!,
     status: "ready",
     configurationFingerprint: readiness.configurationFingerprint!,
     sessionStrategy: readiness.sessionStrategy!,
@@ -217,6 +222,7 @@ function emptyReadiness(
     endpointName: null,
     expectedVersion: null,
     liveVersion: null,
+    modelId: null,
     configurationFingerprint: null,
     sessionStrategy: null,
     checkedAt,

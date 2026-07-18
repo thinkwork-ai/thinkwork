@@ -38,6 +38,11 @@ output "proof_live_version" {
   value       = var.multiplayer_proof_enabled ? data.external.harness_state[0].result.live_version : ""
 }
 
+output "proof_model_id" {
+  description = "Actual Bedrock model configured on the immutable Harness version."
+  value       = var.multiplayer_proof_enabled ? var.model_id : ""
+}
+
 output "proof_status" {
   description = "Derived safe readiness state: disabled, provisioning, ready, drifted, or misconfigured."
   value = !var.multiplayer_proof_enabled ? "disabled" : (

@@ -42,6 +42,8 @@ export interface EnsuredHarness {
   harnessId: string;
   /** Version string/number as reported by the control plane (evidence). */
   harnessVersion: string;
+  /** Actual immutable Harness model; authoritative for usage and pricing. */
+  modelId: string;
   qualifier: string;
   configurationFingerprint: string;
   sessionStrategy: "fresh";
@@ -646,7 +648,7 @@ export async function runHarnessTurn(
       trace_id: turn.traceId,
       cost_owner_user_id: turn.costOwnerUserId,
       user_message: turn.userMessage.slice(0, 2000),
-      agent_model: turn.modelId,
+      agent_model: harness?.modelId ?? turn.modelId,
       runtime_type: "agentcore",
       agent_slug: turn.agentSlug,
       agent_name: turn.agentName,
@@ -667,6 +669,8 @@ export async function runHarnessTurn(
             harness_id: harness?.harnessId ?? null,
             harness_arn: harness?.harnessArn ?? null,
             harness_version: harness?.harnessVersion ?? null,
+            model_id: harness?.modelId ?? null,
+            requested_model: turn.modelId,
             projection_fingerprint: turnProjectionFingerprint,
             manifest_fingerprint: str(
               payload.capabilities_manifest_fingerprint,
@@ -686,7 +690,7 @@ export async function runHarnessTurn(
         },
       },
       usage: {
-        model: turn.modelId,
+        model: harness?.modelId ?? turn.modelId,
         input_tokens: usage.inputTokens,
         output_tokens: usage.outputTokens,
         cached_read_tokens: usage.cacheReadTokens,

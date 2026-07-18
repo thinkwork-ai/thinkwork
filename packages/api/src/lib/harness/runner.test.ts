@@ -169,6 +169,7 @@ function makeDeps(
       harnessArn: "arn:aws:bedrock-agentcore:us-east-1:123:harness/h1",
       harnessId: "h1",
       harnessVersion: "3",
+      modelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
       qualifier: "ThinkworkProof",
       configurationFingerprint: "harness-config-fp",
       sessionStrategy: "fresh" as const,
@@ -312,13 +313,13 @@ describe("runHarnessTurn — happy path", () => {
       thread_turn_id: "turn-1",
       status: "completed",
       runtime_type: "agentcore",
-      agent_model: "moonshotai.kimi-k2.5",
+      agent_model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
       cost_owner_user_id: "user-1",
       changed_files: [],
     });
     expect(finalize.response?.content).toBe("Here is the QBR.");
     expect(finalize.usage).toMatchObject({
-      model: "moonshotai.kimi-k2.5",
+      model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
       input_tokens: 150,
       output_tokens: 30,
     });
@@ -327,6 +328,8 @@ describe("runHarnessTurn — happy path", () => {
     expect(harness).toMatchObject({
       harness_id: "h1",
       harness_version: "3",
+      model_id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      requested_model: "moonshotai.kimi-k2.5",
       manifest_fingerprint: "manifest-fp",
       config_fingerprint: "config-fp",
       artifact_id: "artifact-1",

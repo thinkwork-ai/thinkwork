@@ -34,17 +34,18 @@ locals {
     "tenants/${var.pilot_tenant_slug}/"
   ) : "tenants/"
   configuration_hash = nonsensitive(sha256(jsonencode({
-    tenant_slug  = var.pilot_tenant_slug
-    profile      = var.trust_profile
-    discovery    = var.discovery_url
-    audience     = var.harness_audience
-    gateway_arn  = var.gateway_arn
-    provider_arn = var.oauth_credential_provider_arn
-    return_url   = var.oauth_return_url
-    target_tools = local.gateway_target_tool_names
-    model_id     = var.model_id
-    memory       = "disabled"
-    tool_policy  = "gateway-and-cedar-authoritative"
+    tenant_slug      = var.pilot_tenant_slug
+    profile          = var.trust_profile
+    discovery        = var.discovery_url
+    audience         = var.harness_audience
+    gateway_arn      = var.gateway_arn
+    provider_arn     = var.oauth_credential_provider_arn
+    return_url       = var.oauth_return_url
+    target_tools     = local.gateway_target_tool_names
+    model_id         = var.model_id
+    memory           = "disabled"
+    tool_policy      = "gateway-and-cedar-authoritative"
+    connector_facade = "intent-ranked-direct-v1"
   })))
 }
 

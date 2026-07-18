@@ -1317,6 +1317,7 @@ resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
     endpointName             = module.agentcore_harness.proof_endpoint_name
     expectedVersion          = module.agentcore_harness.proof_target_version
     liveVersion              = module.agentcore_harness.proof_live_version
+    modelId                  = module.agentcore_harness.proof_model_id
     status                   = module.agentcore_harness.proof_status
     configurationFingerprint = module.agentcore_harness.proof_configuration_fingerprint
     authorizerAudience       = module.api.agentcore_harness_audience
