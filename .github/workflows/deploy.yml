@@ -603,6 +603,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # AgentCore Identity reconciliation runs a small Node script that uses
+      # the root AWS SDK dependency. Keep the apply job self-contained: Lambda
+      # artifacts alone do not populate node_modules on a fresh runner.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Terraform lifecycle dependencies
+        run: pnpm --filter thinkwork install --frozen-lockfile
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
