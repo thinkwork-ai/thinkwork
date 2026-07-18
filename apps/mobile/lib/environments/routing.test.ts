@@ -60,7 +60,6 @@ function platformConfig(
     graphqlHttpUrl: "",
     graphqlUrl: "",
     graphqlWsUrl: "",
-    graphqlApiKey: "",
     cognitoUserPoolId: "us-east-1_pool",
     cognitoClientId: "client-id",
     cognitoDomain: "https://auth.example.com",

@@ -3001,7 +3001,6 @@ def test_runtime_profile_contains_customer_authority_metadata(
         "app_url": {"value": "https://app.example.com"},
         "appsync_api_url": {"value": "https://appsync.example.com/graphql"},
         "appsync_realtime_url": {"value": "wss://appsync.example.com/graphql"},
-        "appsync_api_key": {"value": "api-key"},
         "auth_domain": {"value": "thinkwork-tei-e2e"},
         "user_pool_id": {"value": "us-east-1_abc"},
         "admin_client_id": {"value": "client-id"},

@@ -15,7 +15,6 @@ describe("fetchEnvironmentRuntimeConfig", () => {
           VITE_GRAPHQL_HTTP_URL: "https://api.example.com/graphql",
           VITE_GRAPHQL_URL: "https://appsync.example.com/graphql",
           VITE_GRAPHQL_WS_URL: "wss://appsync.example.com/graphql",
-          VITE_GRAPHQL_API_KEY: "vite-key",
           VITE_COGNITO_DOMAIN: "auth.example.com",
           VITE_COGNITO_USER_POOL_ID: "us-east-1_pool",
           VITE_COGNITO_CLIENT_ID: "client-id",
@@ -44,7 +43,6 @@ describe("fetchEnvironmentRuntimeConfig", () => {
         // Queries ride the HTTP API — never the subscription-only AppSync endpoint.
         graphqlUrl: "https://api.example.com/graphql",
         graphqlWsUrl: "wss://appsync.example.com/graphql",
-        graphqlApiKey: "vite-key",
         cognitoDomain: "auth.example.com",
         cognitoUserPoolId: "us-east-1_pool",
         cognitoClientId: "client-id",
@@ -66,7 +64,6 @@ describe("fetchEnvironmentRuntimeConfig", () => {
         graphqlHttpUrl: "https://outer-api.example.com/graphql",
         appsyncUrl: "https://outer-appsync.example.com/graphql",
         appsyncRealtimeUrl: "wss://outer-appsync.example.com/graphql",
-        appsyncApiKey: "outer-key",
         cognitoDomain: "outer-auth.example.com",
         cognitoUserPoolId: "us-east-1_outer",
         cognitoClientId: "outer-client",
@@ -77,9 +74,7 @@ describe("fetchEnvironmentRuntimeConfig", () => {
       }),
     );
 
-    const result = await fetchEnvironmentRuntimeConfig(
-      "outer.thinkwork.ai",
-    );
+    const result = await fetchEnvironmentRuntimeConfig("outer.thinkwork.ai");
 
     expect(result).toMatchObject({
       ok: true,
@@ -88,7 +83,6 @@ describe("fetchEnvironmentRuntimeConfig", () => {
         graphqlHttpUrl: "https://outer-api.example.com/graphql",
         graphqlUrl: "https://outer-api.example.com/graphql",
         graphqlWsUrl: "wss://outer-appsync.example.com/graphql",
-        graphqlApiKey: "outer-key",
         cognitoDomain: "outer-auth.example.com",
         cognitoUserPoolId: "us-east-1_outer",
         cognitoClientId: "outer-client",
@@ -128,10 +122,7 @@ describe("fetchEnvironmentRuntimeConfig", () => {
   });
 
   it("reports unreachable when fetch throws", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValue(new Error("dns failed")),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("dns failed")));
 
     const result = await fetchEnvironmentRuntimeConfig("down.thinkwork.ai");
 
@@ -143,7 +134,10 @@ describe("fetchEnvironmentRuntimeConfig", () => {
 
   it("reports unreachable on timeout", async () => {
     vi.useFakeTimers();
-    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => undefined)),
+    );
 
     const promise = fetchEnvironmentRuntimeConfig("slow.thinkwork.ai");
     await vi.advanceTimersByTimeAsync(10_000);

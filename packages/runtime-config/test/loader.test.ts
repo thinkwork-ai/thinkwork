@@ -5,7 +5,6 @@ import {
   deriveFunctionArn,
   deriveFunctionName,
   getApiAuthSecret,
-  getAppsyncApiKey,
   getConfig,
   getSecret,
   primeRuntimeConfig,
@@ -37,7 +36,6 @@ const ENV_KEYS = [
   "TEST_KEY",
   "API_AUTH_SECRET",
   "THINKWORK_API_SECRET",
-  "APPSYNC_API_KEY",
 ];
 
 const savedEnv: Record<string, string | undefined> = {};
@@ -154,7 +152,6 @@ describe("fetch path selection", () => {
     process.env.AWS_SESSION_TOKEN = "token-123";
     // env secret copies present → no secret prefetch; isolates the param path
     process.env.API_AUTH_SECRET = "env-secret";
-    process.env.APPSYNC_API_KEY = "env-key";
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -179,8 +176,10 @@ describe("fetch path selection", () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = "thinkwork-test-api-graphql-http";
     process.env.AWS_SESSION_TOKEN = "token-123";
     process.env.API_AUTH_SECRET = "env-secret";
-    process.env.APPSYNC_API_KEY = "env-key";
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
+    );
     ssmSend.mockResolvedValue({
       Parameter: { Value: JSON.stringify({ TEST_KEY: "from-sdk" }) },
     });
@@ -204,10 +203,13 @@ describe("fetch path selection", () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = "thinkwork-test-api-graphql-http";
     process.env.AWS_SESSION_TOKEN = "token-123";
     process.env.API_AUTH_SECRET = "env-secret";
-    process.env.APPSYNC_API_KEY = "env-key";
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockRejectedValue(Object.assign(new DOMException("timeout", "TimeoutError"))),
+      vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new DOMException("timeout", "TimeoutError")),
+        ),
     );
     ssmSend.mockResolvedValue({
       Parameter: { Value: JSON.stringify({ TEST_KEY: "from-sdk" }) },
@@ -331,14 +333,19 @@ describe("getSecret", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     expect(await getSecret("thinkwork/test/api-auth")).toBe("ext-secret");
-    expect(fetchMock.mock.calls[0][0]).toContain("/secretsmanager/get?secretId=");
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      "/secretsmanager/get?secretId=",
+    );
     expect(secretsSend).not.toHaveBeenCalled();
   });
 
   it("falls back to the SDK when the extension path fails", async () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
     process.env.AWS_SESSION_TOKEN = "token-123";
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
+    );
     secretsSend.mockResolvedValue({ SecretString: "sdk-secret" });
 
     expect(await getSecret("thinkwork/test/api-auth")).toBe("sdk-secret");
@@ -354,7 +361,10 @@ describe("getSecret", () => {
 
   it("dedupes concurrent fetches of the same secret", async () => {
     secretsSend.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve({ SecretString: "v" }), 5)),
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ SecretString: "v" }), 5),
+        ),
     );
     await Promise.all([getSecret("a"), getSecret("a")]);
     expect(secretsSend).toHaveBeenCalledTimes(1);
@@ -371,10 +381,9 @@ describe("platform secret accessors", () => {
 
   it("returns '' when neither env nor cache has the secret", () => {
     expect(getApiAuthSecret()).toBe("");
-    expect(getAppsyncApiKey()).toBe("");
   });
 
-  it("prefetches api-auth + appsync-api-key at Lambda prime when env copies are absent", async () => {
+  it("prefetches api-auth at Lambda prime when its env copy is absent", async () => {
     process.env.STAGE = "test";
     process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
     ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
@@ -382,24 +391,23 @@ describe("platform secret accessors", () => {
 
     await primeRuntimeConfig({ force: true });
 
-    const requested = secretsSend.mock.calls.map((c) => c[0].input.SecretId).sort();
-    expect(requested).toEqual(["thinkwork/test/api-auth", "thinkwork/test/appsync-api-key"]);
+    const requested = secretsSend.mock.calls
+      .map((c) => c[0].input.SecretId)
+      .sort();
+    expect(requested).toEqual(["thinkwork/test/api-auth"]);
     expect(getApiAuthSecret()).toBe("prefetched");
-    expect(getAppsyncApiKey()).toBe("prefetched");
   });
 
   it("skips prefetch while the env copies still exist (transition window)", async () => {
     process.env.STAGE = "test";
     process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
     process.env.API_AUTH_SECRET = "env-secret";
-    process.env.APPSYNC_API_KEY = "env-key";
     ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
 
     await primeRuntimeConfig({ force: true });
 
     expect(secretsSend).not.toHaveBeenCalled();
     expect(getApiAuthSecret()).toBe("env-secret");
-    expect(getAppsyncApiKey()).toBe("env-key");
   });
 
   it("degrades to '' and warns once when prefetch fails", async () => {
@@ -427,10 +435,9 @@ describe("platform secret accessors", () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = "fn";
     vi.spyOn(console, "warn").mockImplementation(() => {});
     ssmSend.mockResolvedValue({ Parameter: { Value: "{}" } });
-    // Both platform-secret prefetches (api-auth + appsync-api-key) fail at
-    // cold start, then the service recovers.
+    // The platform-secret prefetch fails at cold start, then the service
+    // recovers through the accessor's background fetch.
     secretsSend
-      .mockRejectedValueOnce(new Error("ThrottlingException"))
       .mockRejectedValueOnce(new Error("ThrottlingException"))
       .mockResolvedValue({ SecretString: "healed" });
 
@@ -449,7 +456,6 @@ describe("platform secret accessors", () => {
     expect(ssmSend).not.toHaveBeenCalled();
     expect(secretsSend).not.toHaveBeenCalled();
     expect(getApiAuthSecret()).toBe("");
-    expect(getAppsyncApiKey()).toBe("");
     // The accessor misses must not have fired background fetches either —
     // there is no stage to derive a secret name from.
     expect(secretsSend).not.toHaveBeenCalled();
@@ -459,7 +465,9 @@ describe("platform secret accessors", () => {
 describe("derive-by-convention", () => {
   it("derives function names from STAGE", () => {
     process.env.STAGE = "dev";
-    expect(deriveFunctionName("email-send")).toBe("thinkwork-dev-api-email-send");
+    expect(deriveFunctionName("email-send")).toBe(
+      "thinkwork-dev-api-email-send",
+    );
   });
 
   it("throws when STAGE is unavailable", () => {
@@ -478,12 +486,16 @@ describe("derive-by-convention", () => {
   it("deriveFunctionArn throws when region is unset", () => {
     process.env.STAGE = "dev";
     process.env.AWS_ACCOUNT_ID = "123456789012";
-    expect(() => deriveFunctionArn("email-send")).toThrow(/region or AWS_ACCOUNT_ID/);
+    expect(() => deriveFunctionArn("email-send")).toThrow(
+      /region or AWS_ACCOUNT_ID/,
+    );
   });
 
   it("deriveFunctionArn throws when AWS_ACCOUNT_ID is unset", () => {
     process.env.STAGE = "dev";
     process.env.AWS_REGION = "us-east-1";
-    expect(() => deriveFunctionArn("email-send")).toThrow(/region or AWS_ACCOUNT_ID/);
+    expect(() => deriveFunctionArn("email-send")).toThrow(
+      /region or AWS_ACCOUNT_ID/,
+    );
   });
 });

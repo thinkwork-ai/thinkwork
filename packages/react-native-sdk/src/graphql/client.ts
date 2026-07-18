@@ -40,8 +40,6 @@ export function createThinkworkClient(
       const headers: Record<string, string> = {};
       const token = getAuthToken();
       if (token) headers.Authorization = token;
-      else if (config.graphqlApiKey)
-        headers["x-api-key"] = config.graphqlApiKey;
       return { headers };
     },
   });

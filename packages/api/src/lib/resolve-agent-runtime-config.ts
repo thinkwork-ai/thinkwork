@@ -37,11 +37,7 @@
  * inside the container (admin-skill refusals).
  */
 
-import {
-  getConfig,
-  getApiAuthSecret,
-  getAppsyncApiKey,
-} from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import { eq, and } from "drizzle-orm";
 import {
   GetObjectCommand,
@@ -421,12 +417,11 @@ export interface ResolveAgentRuntimeConfigOptions {
   /**
    * Env-var-backed service credentials the helper plumbs into default skills'
    * envOverrides. Defaults to `getConfig("THINKWORK_API_URL")` /
-   * `THINKWORK_API_SECRET` / `APPSYNC_API_KEY`. Passed explicitly so tests can
+   * `THINKWORK_API_SECRET`. Passed explicitly so tests can
    * avoid touching process.env globally.
    */
   thinkworkApiUrl?: string;
   thinkworkApiSecret?: string;
-  appsyncApiKey?: string;
 }
 
 const DEFAULT_SKILLS: ReadonlyArray<{ skillId: string }> = [
@@ -460,7 +455,6 @@ export async function resolveAgentRuntimeConfig(
     opts.thinkworkApiUrl ?? getConfig("THINKWORK_API_URL") ?? "";
   const thinkworkApiSecret =
     opts.thinkworkApiSecret ?? getApiAuthSecret() ?? "";
-  const appsyncApiKey = opts.appsyncApiKey ?? getAppsyncApiKey();
 
   const [agent] = await db
     .select({
@@ -681,7 +675,6 @@ export async function resolveAgentRuntimeConfig(
     const env: Record<string, string> = {
       THINKWORK_API_URL: thinkworkApiUrl,
       THINKWORK_API_SECRET: thinkworkApiSecret,
-      GRAPHQL_API_KEY: appsyncApiKey,
       AGENT_ID: opts.agentId,
     };
     if (currentUserEmail) env.CURRENT_USER_EMAIL = currentUserEmail;

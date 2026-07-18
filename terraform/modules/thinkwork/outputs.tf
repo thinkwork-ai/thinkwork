@@ -126,11 +126,6 @@ output "appsync_realtime_url" {
   value = module.appsync.graphql_realtime_url
 }
 
-output "appsync_api_key" {
-  value     = module.appsync.graphql_api_key
-  sensitive = true
-}
-
 output "auth_domain" {
   description = "Cognito hosted UI domain"
   value       = module.cognito.auth_domain

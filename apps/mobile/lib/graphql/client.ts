@@ -328,7 +328,6 @@ function buildClient(): Client {
     GRAPHQL_WS_URL: config.graphqlWsUrl
       ? `${config.graphqlWsUrl.slice(0, 40)}...`
       : "(empty)",
-    hasApiKey: !!config.graphqlApiKey,
   });
   const exchanges = [cacheExchange, fetchExchange];
 
@@ -353,8 +352,6 @@ function buildClient(): Client {
       const headers: Record<string, string> = {};
       if (cachedToken) {
         headers["Authorization"] = cachedToken;
-      } else if (latestConfig.graphqlApiKey) {
-        headers["x-api-key"] = latestConfig.graphqlApiKey;
       }
       return { headers };
     },
@@ -394,11 +391,7 @@ export function resetGraphqlClientForPlatformConfigChange(): Client {
 
 function currentClientKey(): string {
   const config = getPlatformConfig();
-  return [
-    config.graphqlUrl,
-    config.graphqlWsUrl,
-    config.graphqlApiKey ? "api-key" : "no-api-key",
-  ].join("|");
+  return [config.graphqlUrl, config.graphqlWsUrl].join("|");
 }
 
 // Eager export for provider

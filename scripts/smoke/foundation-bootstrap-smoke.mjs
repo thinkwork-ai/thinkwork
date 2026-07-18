@@ -12,7 +12,7 @@
  *   SMOKE_GRAPHQL_URL=https://...
  *   SMOKE_COGNITO_DOMAIN=https://...
  *   SMOKE_DEPLOYMENT_PROFILE_JSON='{"schemaVersion":1,...}'
- *   VITE_GRAPHQL_API_KEY, GRAPHQL_API_KEY, API_AUTH_SECRET, or THINKWORK_API_SECRET
+ *   API_AUTH_SECRET or THINKWORK_API_SECRET
  *   SMOKE_EVIDENCE_FILE=/tmp/foundation-smoke.json
  *   SMOKE_EVIDENCE_S3_URI=s3://bucket/prefix
  */
@@ -42,10 +42,7 @@ const dryRun = {
     "Generated Cognito hosted UI domain",
     "Deployment control-plane outputs when GitHub-free deploys are enabled",
   ],
-  optionalGraphqlEnv: [
-    "VITE_GRAPHQL_API_KEY or GRAPHQL_API_KEY",
-    "API_AUTH_SECRET or THINKWORK_API_SECRET",
-  ],
+  optionalGraphqlEnv: ["API_AUTH_SECRET or THINKWORK_API_SECRET"],
   optionalEvidenceEnv: [
     "SMOKE_EVIDENCE_FILE",
     "SMOKE_EVIDENCE_S3_URI",
@@ -197,11 +194,7 @@ async function probeHttp(url) {
 
 async function probeGraphql(url) {
   const apiSecret = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
-  const apiKey = first(
-    env.VITE_GRAPHQL_API_KEY,
-    env.APPSYNC_API_KEY,
-    env.GRAPHQL_API_KEY,
-  );
+  const apiKey = apiSecret;
   if (!apiSecret && !apiKey) {
     return {
       skipped: true,

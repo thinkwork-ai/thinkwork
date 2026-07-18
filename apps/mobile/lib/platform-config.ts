@@ -19,7 +19,6 @@ export interface MobilePlatformConfig {
   graphqlHttpUrl: string;
   graphqlUrl: string;
   graphqlWsUrl: string;
-  graphqlApiKey: string;
   cognitoUserPoolId: string;
   cognitoClientId: string;
   cognitoDomain: string;
@@ -44,20 +43,16 @@ export async function hydratePlatformConfig(): Promise<MobilePlatformConfig> {
 export function getPlatformConfig(): MobilePlatformConfig {
   const environmentEntry = getActiveEnvironmentEntry();
   if (environmentEntry) {
-    const config = runtimePlatformConfig(
-      environmentEntry.config,
-      [],
-      {
-        source: "environment",
-        deploymentId: environmentEntry.config.deploymentId || null,
-        displayName: environmentEntry.displayName,
-        stage: environmentEntry.stage || environmentEntry.config.stage || "dev",
-        region: environmentEntry.region || environmentEntry.config.region || null,
-        profileSha256: null,
-        trustStatus: "unsigned",
-        trustLabel: "Environment config",
-      },
-    );
+    const config = runtimePlatformConfig(environmentEntry.config, [], {
+      source: "environment",
+      deploymentId: environmentEntry.config.deploymentId || null,
+      displayName: environmentEntry.displayName,
+      stage: environmentEntry.stage || environmentEntry.config.stage || "dev",
+      region: environmentEntry.region || environmentEntry.config.region || null,
+      profileSha256: null,
+      trustStatus: "unsigned",
+      trustLabel: "Environment config",
+    });
     return {
       ...config,
       ...validationFor(config),
@@ -71,7 +66,6 @@ export function getPlatformConfig(): MobilePlatformConfig {
       runtime,
       profileSnapshot.issues,
       profileSnapshot.summary!,
-      env("EXPO_PUBLIC_GRAPHQL_API_KEY"),
     );
     return {
       ...config,
@@ -128,7 +122,6 @@ function envPlatformConfig(
     graphqlHttpUrl,
     graphqlUrl,
     graphqlWsUrl,
-    graphqlApiKey: env("EXPO_PUBLIC_GRAPHQL_API_KEY"),
     cognitoUserPoolId: env("EXPO_PUBLIC_COGNITO_USER_POOL_ID"),
     cognitoClientId: env("EXPO_PUBLIC_COGNITO_CLIENT_ID"),
     cognitoDomain: normalizedCognitoDomain(env("EXPO_PUBLIC_COGNITO_DOMAIN")),
@@ -150,7 +143,6 @@ function runtimePlatformConfig(
   runtime: EnvironmentRuntimeConfig,
   issues: DeploymentProfileValidationIssue[],
   deployment: MobileDeploymentProfileSummary,
-  graphqlApiKeyFallback = "",
 ): Omit<MobilePlatformConfig, "configured" | "missing"> {
   return {
     stage: runtime.stage,
@@ -161,7 +153,6 @@ function runtimePlatformConfig(
     // endpoint — prefer the HTTP URL whenever it exists.
     graphqlUrl: runtime.graphqlHttpUrl?.trim() || runtime.graphqlUrl,
     graphqlWsUrl: runtime.graphqlWsUrl,
-    graphqlApiKey: runtime.graphqlApiKey?.trim() || graphqlApiKeyFallback,
     cognitoUserPoolId: runtime.cognitoUserPoolId,
     cognitoClientId: runtime.cognitoClientId,
     cognitoDomain: normalizedCognitoDomain(runtime.cognitoDomain),

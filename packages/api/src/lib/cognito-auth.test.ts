@@ -109,24 +109,6 @@ describe("authenticate — apikey path", () => {
     });
   });
 
-  it("does not accept public AppSync API keys as GraphQL HTTP service auth", async () => {
-    process.env.API_AUTH_SECRET = "";
-    process.env.GRAPHQL_API_KEY = "public-appsync-key";
-    process.env.APPSYNC_API_KEY = "public-appsync-key";
-
-    try {
-      expect(
-        await authenticate({
-          "x-api-key": "public-appsync-key",
-          "x-tenant-id": "tenant-abc",
-        }),
-      ).toBeNull();
-    } finally {
-      delete process.env.GRAPHQL_API_KEY;
-      delete process.env.APPSYNC_API_KEY;
-    }
-  });
-
   it("returns email=null when x-principal-email is absent", async () => {
     const auth = await authenticate({ "x-api-key": "tw-test-secret" });
     expect(auth).not.toBeNull();

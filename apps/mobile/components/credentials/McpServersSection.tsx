@@ -21,12 +21,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
+import { getStoredOAuthIdToken } from "@/lib/auth";
 
 const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   /\/graphql$/,
   "",
 );
-const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 type McpServerRow = {
   id: string;
@@ -66,9 +66,11 @@ export function McpServersSection({ refreshSignal }: Props) {
       return;
     }
     try {
+      const token = getStoredOAuthIdToken();
+      if (!token) throw new Error("Authentication is not ready");
       const res = await fetch(`${API_BASE}/api/skills/user-mcp-servers`, {
         headers: {
-          "x-api-key": GRAPHQL_API_KEY,
+          Authorization: `Bearer ${token}`,
           "x-tenant-id": tenantId,
           "x-principal-id": user.id,
         },

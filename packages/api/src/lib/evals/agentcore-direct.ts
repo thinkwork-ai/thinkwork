@@ -1,8 +1,4 @@
-import {
-  getConfig,
-  getApiAuthSecret,
-  getAppsyncApiKey,
-} from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import { classifyMcpToolAccess } from "@thinkwork/evals-core";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import {
@@ -44,9 +40,6 @@ export function effectiveEvalRuntimeConfig(
     : runtimeConfig;
 }
 
-function appsyncEndpoint(): string {
-  return getConfig("APPSYNC_ENDPOINT", "");
-}
 function workspaceBucket(): string {
   return getConfig("WORKSPACE_BUCKET", "");
 }
@@ -326,8 +319,6 @@ export function buildEvalAgentCorePayload(input: {
     workspace_bucket: workspaceBucket() || undefined,
     thinkwork_api_url: thinkworkApiUrl() || undefined,
     thinkwork_api_secret: getApiAuthSecret() || undefined,
-    appsync_endpoint: appsyncEndpoint() || undefined,
-    appsync_api_key: getAppsyncApiKey() || undefined,
     hindsight_endpoint: hindsightEndpoint() || undefined,
     // Side-effect kill list (U8 replay KTD, layer 1 of 2): eval
     // invocations must never carry outbound side-effect tool configs —
@@ -480,7 +471,6 @@ async function invokeAgentCoreForEvalOnce(input: {
     agentId: input.agentId,
     thinkworkApiUrl: thinkworkApiUrl(),
     thinkworkApiSecret: getApiAuthSecret(),
-    appsyncApiKey: getAppsyncApiKey(),
     logPrefix: "[eval-worker]",
     ...(capabilitiesManifest !== undefined ? { capabilitiesManifest } : {}),
     // Flagged-thread replay identity (THINK-179): the source thread's

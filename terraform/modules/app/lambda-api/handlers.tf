@@ -56,7 +56,7 @@ locals {
   # The reader-coverage fixture test in apps/cli fails CI if a key in this
   # map still has a direct process.env reader. Identity values (STAGE,
   # AWS_ACCOUNT_ID, NODE_OPTIONS) and secrets (DATABASE_URL,
-  # API_AUTH_SECRET, APPSYNC_API_KEY) stay out of this map — identity stays
+  # API_AUTH_SECRET) stay out of this map — identity stays
   # env forever, secrets live in Secrets Manager (R4), never in the String
   # document.
   config_env = merge({
@@ -102,7 +102,7 @@ locals {
     CAPABILITY_EXTERNAL_SEARCH_ENABLED = var.enable_capability_broker ? "true" : "false"
     ENABLE_CAPABILITY_BROKER           = var.enable_capability_broker ? "true" : "false"
     # BUCKET_NAME and USER_POOL_ID were duplicate aliases of WORKSPACE_BUCKET
-    # and COGNITO_USER_POOL_ID; GRAPHQL_API_KEY duplicated APPSYNC_API_KEY;
+    # and COGNITO_USER_POOL_ID; the legacy GRAPHQL_API_KEY alias is retired;
     # THINKWORK_API_SECRET and EMAIL_HMAC_SECRET duplicated API_AUTH_SECRET
     # (~310 serialized bytes total). graphql-http sits at Lambda's hard 4KB
     # env ceiling (#2375) — every reader falls back to the canonical name.
@@ -244,13 +244,12 @@ locals {
   # window (R8). Config-class keys live ONLY in the SSM runtime-config
   # document now — adding a key here is guarded by the identity-allowlist
   # fixture test in apps/cli (R10). Follow-up release: DATABASE_URL,
-  # APPSYNC_API_KEY, and API_AUTH_SECRET drop too (readers already resolve
+  # API_AUTH_SECRET drops too (readers already resolve
   # via Secrets Manager prefetch when the env copies are absent), bringing
   # every handler under the ≤1KB R1 target.
   common_env = {
     STAGE           = var.stage
     DATABASE_URL    = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    APPSYNC_API_KEY = var.appsync_api_key
     API_AUTH_SECRET = var.api_auth_secret
     AWS_ACCOUNT_ID  = var.account_id
     NODE_OPTIONS    = "--enable-source-maps"
@@ -1057,7 +1056,6 @@ resource "aws_lambda_function" "handler" {
   depends_on = [
     aws_ssm_parameter.runtime_config,
     aws_secretsmanager_secret_version.api_auth,
-    aws_secretsmanager_secret_version.appsync_api_key,
   ]
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run

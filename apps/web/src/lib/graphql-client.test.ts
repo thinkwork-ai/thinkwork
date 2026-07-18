@@ -99,8 +99,6 @@ describe("AppSync realtime URL wiring", () => {
 
 describe("GraphQL auth headers", () => {
   it("does not send the public AppSync API key on HTTP GraphQL requests", () => {
-    setRuntimeConfigForTest({ VITE_GRAPHQL_API_KEY: "public-appsync-key" });
-
     expect(buildGraphqlAuthHeaders()).not.toHaveProperty("x-api-key");
   });
 

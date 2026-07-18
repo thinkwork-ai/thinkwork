@@ -33,28 +33,8 @@ resource "aws_appsync_graphql_api" "subscriptions" {
     authentication_type = "AWS_IAM"
   }
 
-  # Migration-only provider: no schema field carries @aws_api_key, so the
-  # extant key cannot publish or register. U14 cleanup removes the provider,
-  # resource, outputs, and all config propagation after deployed drain proof.
-  additional_authentication_provider {
-    authentication_type = "API_KEY"
-  }
-
   tags = {
     Name = "thinkwork-${var.stage}-subscriptions"
-  }
-}
-
-################################################################################
-# API Key — 365 day expiry
-################################################################################
-
-resource "aws_appsync_api_key" "main" {
-  api_id  = aws_appsync_graphql_api.subscriptions.id
-  expires = timeadd(timestamp(), "8760h")
-
-  lifecycle {
-    ignore_changes = [expires]
   }
 }
 

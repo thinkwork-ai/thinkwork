@@ -34,10 +34,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-bash "$(cd "$(dirname "$0")" && pwd)/post-deploy-smoke-web-thread-streaming.sh" \
-  --stage "$STAGE" \
-  --region "$REGION"
-
 export STAGE
 export AWS_REGION="$REGION"
 export AWS_DEFAULT_REGION="$REGION"
@@ -51,10 +47,9 @@ source "$REPO_ROOT/scripts/smoke/_env.sh"
 source "$REPO_ROOT/scripts/lib/terraform-output.sh"
 
 APPSYNC_API_URL="$(cd "$TF_DIR" && tf_output_raw appsync_api_url)"
-APPSYNC_API_KEY="$(cd "$TF_DIR" && tf_output_raw appsync_api_key)"
 COMPUTER_URL="$(cd "$TF_DIR" && tf_output_raw computer_url)"
 
-if [[ -z "${API_URL:-}" || -z "${DATABASE_URL:-}" || -z "$APPSYNC_API_URL" || -z "$APPSYNC_API_KEY" || -z "$COMPUTER_URL" ]]; then
+if [[ -z "${API_URL:-}" || -z "${API_AUTH_SECRET:-}" || -z "${DATABASE_URL:-}" || -z "$APPSYNC_API_URL" || -z "$COMPUTER_URL" ]]; then
   echo "smoke-web: failed to resolve deployed GraphQL/AppSync/database config" >&2
   exit 3
 fi
@@ -63,7 +58,6 @@ export COMPUTER_ENV_FILE=none
 export SMOKE_COMPUTER_URL="$COMPUTER_URL"
 export VITE_GRAPHQL_HTTP_URL="${API_URL}/graphql"
 export VITE_GRAPHQL_URL="$APPSYNC_API_URL"
-export VITE_GRAPHQL_API_KEY="$APPSYNC_API_KEY"
 
 node scripts/smoke/spaces-surface-smoke.mjs
 node scripts/smoke/spaces-applet-pipeline-smoke.mjs

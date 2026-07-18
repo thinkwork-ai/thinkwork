@@ -621,7 +621,6 @@ export function buildRuntimeConfig(values: {
   authDomain: string;
   appsyncUrl: string;
   appsyncRealtimeUrl: string;
-  appsyncApiKey: string;
   userPoolId: string;
   adminClientId: string;
   issuedAt: string;
@@ -646,7 +645,6 @@ export function buildRuntimeConfig(values: {
     graphqlHttpUrl: api ? `${api}/graphql` : "",
     appsyncUrl: values.appsyncUrl,
     appsyncRealtimeUrl: values.appsyncRealtimeUrl,
-    appsyncApiKey: values.appsyncApiKey,
     cognitoDomain,
     cognitoUserPoolId: values.userPoolId,
     cognitoClientId: values.adminClientId,
@@ -660,7 +658,6 @@ export function buildRuntimeConfig(values: {
       VITE_GRAPHQL_HTTP_URL: api ? `${api}/graphql` : "",
       VITE_GRAPHQL_URL: values.appsyncUrl,
       VITE_GRAPHQL_WS_URL: values.appsyncRealtimeUrl,
-      VITE_GRAPHQL_API_KEY: values.appsyncApiKey,
       VITE_COGNITO_DOMAIN: cognitoDomain,
       VITE_COGNITO_USER_POOL_ID: values.userPoolId,
       VITE_COGNITO_CLIENT_ID: values.adminClientId,
@@ -700,7 +697,6 @@ async function publishRuntimeConfig(
     authDomain: await output("auth_domain"),
     appsyncUrl: await output("appsync_api_url"),
     appsyncRealtimeUrl: await output("appsync_realtime_url"),
-    appsyncApiKey: await output("appsync_api_key"),
     userPoolId: await output("user_pool_id"),
     adminClientId:
       (await output("admin_client_id")) ||

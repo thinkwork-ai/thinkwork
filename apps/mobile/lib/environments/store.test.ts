@@ -156,7 +156,6 @@ describe("mobile environment store", () => {
       displayName: "Legacy Customer",
       host: "https://legacy.thinkwork.ai",
       config: {
-        graphqlApiKey: "legacy-api-key",
         cognitoClientId: "legacy-client",
       },
     });
@@ -178,7 +177,6 @@ function runtimeConfig(
     graphqlHttpUrl: "https://api.example.com/graphql",
     graphqlUrl: "https://appsync.example.com/graphql",
     graphqlWsUrl: "wss://appsync.example.com/graphql",
-    graphqlApiKey: "runtime-key",
     cognitoDomain: "auth.example.com",
     cognitoUserPoolId: "us-east-1_pool",
     cognitoClientId: "client-id",
@@ -202,7 +200,6 @@ function baseProfile(): DeploymentProfile {
     graphqlHttpUrl: "https://legacy-api.example.com/graphql",
     appsyncHttpUrl: "https://legacy-appsync.example.com/graphql",
     appsyncWsUrl: "wss://legacy-appsync.example.com/graphql",
-    graphqlApiKey: "legacy-api-key",
     cognitoDomain: "legacy-auth.example.com",
     cognitoUserPoolId: "us-east-1_legacy",
     cognitoClientId: "legacy-client",

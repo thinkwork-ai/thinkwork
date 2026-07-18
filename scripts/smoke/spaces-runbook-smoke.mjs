@@ -10,7 +10,7 @@
  * Required for live mode:
  *   DATABASE_URL
  *   VITE_GRAPHQL_HTTP_URL, GRAPHQL_HTTP_URL, or API_GRAPHQL_URL
- *   API_AUTH_SECRET, THINKWORK_API_SECRET, VITE_GRAPHQL_API_KEY, or GRAPHQL_API_KEY
+ *   API_AUTH_SECRET or THINKWORK_API_SECRET
  *
  * Computer identity can be supplied with SMOKE_TENANT_ID, SMOKE_COMPUTER_ID,
  * and SMOKE_USER_ID. If omitted, the script uses the most recently updated
@@ -52,11 +52,7 @@ const apiUrl = first(
   env.API_GRAPHQL_URL,
 );
 const apiSecret = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
-const apiKey = first(
-  env.VITE_GRAPHQL_API_KEY,
-  env.APPSYNC_API_KEY,
-  env.GRAPHQL_API_KEY,
-);
+const apiKey = apiSecret;
 
 if (!LIVE_ENABLED) {
   console.log(

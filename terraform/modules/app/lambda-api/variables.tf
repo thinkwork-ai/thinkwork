@@ -140,12 +140,6 @@ variable "appsync_api_id" {
   type        = string
 }
 
-variable "appsync_api_key" {
-  description = "AppSync API key"
-  type        = string
-  sensitive   = true
-}
-
 variable "kb_service_role_arn" {
   description = "Bedrock Knowledge Base service role ARN"
   type        = string

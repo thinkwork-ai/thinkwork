@@ -109,10 +109,10 @@ function usage(exitCode = 2): never {
     [--space-id <space-id>] [--timeout 180000] [--json]
 
 Environment:
-  THINKWORK_GRAPHQL_URL / THINKWORK_GRAPHQL_API_KEY
+  THINKWORK_GRAPHQL_URL / API_AUTH_SECRET
   optional THINKWORK_GRAPHQL_AUTH_TOKEN / SMOKE_COGNITO_ID_TOKEN
-  or SMOKE_GRAPHQL_HTTP_URL / GRAPHQL_API_KEY
-  or apps/web/.env with VITE_GRAPHQL_HTTP_URL / VITE_GRAPHQL_API_KEY`);
+  or SMOKE_GRAPHQL_HTTP_URL / API_AUTH_SECRET
+  or apps/web/.env with VITE_GRAPHQL_HTTP_URL plus API_AUTH_SECRET`);
   process.exit(exitCode);
 }
 
@@ -156,11 +156,7 @@ function parseArgs(): Args {
     env.VITE_GRAPHQL_HTTP_URL ||
     "";
   const apiKey =
-    process.env.THINKWORK_GRAPHQL_API_KEY ||
-    process.env.GRAPHQL_API_KEY ||
-    process.env.VITE_GRAPHQL_API_KEY ||
-    env.VITE_GRAPHQL_API_KEY ||
-    "";
+    process.env.API_AUTH_SECRET || process.env.THINKWORK_API_SECRET || "";
   const authToken =
     process.env.THINKWORK_GRAPHQL_AUTH_TOKEN ||
     process.env.SMOKE_COGNITO_ID_TOKEN ||

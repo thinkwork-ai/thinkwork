@@ -282,7 +282,6 @@ function runtimeConfig(
     graphqlHttpUrl: "https://api.example.com/graphql",
     graphqlUrl: "https://appsync.example.com/graphql",
     graphqlWsUrl: "wss://appsync.example.com/graphql",
-    graphqlApiKey: "key",
     cognitoDomain: "auth.example.com",
     cognitoUserPoolId: "us-east-1_pool",
     cognitoClientId: "client-id",
@@ -307,6 +306,5 @@ function jwt(payload: Record<string, unknown>): string {
 }
 
 function encode(value: Record<string, unknown>): string {
-  return Buffer.from(JSON.stringify(value))
-    .toString("base64url");
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
 }

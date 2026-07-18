@@ -936,11 +936,6 @@ output "appsync_realtime_url" {
   value = module.thinkwork.appsync_realtime_url
 }
 
-output "appsync_api_key" {
-  value     = module.thinkwork.appsync_api_key
-  sensitive = true
-}
-
 output "admin_client_id_out" {
   value = module.thinkwork.admin_client_id
 }

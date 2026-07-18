@@ -3842,10 +3842,6 @@ output "app_distribution_id" {{ value = module.thinkwork.app_distribution_id }}
 output "api_endpoint" {{ value = module.thinkwork.api_endpoint }}
 output "appsync_api_url" {{ value = module.thinkwork.appsync_api_url }}
 output "appsync_realtime_url" {{ value = module.thinkwork.appsync_realtime_url }}
-output "appsync_api_key" {{
-  value     = module.thinkwork.appsync_api_key
-  sensitive = true
-}}
 output "auth_domain" {{ value = module.thinkwork.auth_domain }}
 output "customer_domain" {{ value = module.thinkwork.customer_domain }}
 output "customer_domain_name_servers" {{ value = module.thinkwork.customer_domain_name_servers }}
@@ -4079,7 +4075,6 @@ def write_outputs_to_ssm(outputs_path, vars_json):
         "profile/graphql-http-url": None,
         "profile/appsync-url": "appsync_api_url",
         "profile/appsync-realtime-url": "appsync_realtime_url",
-        "profile/appsync-api-key": "appsync_api_key",
         "profile/cognito-domain": None,
         "profile/cognito-user-pool-id": "user_pool_id",
         "profile/cognito-client-id": "admin_client_id",
@@ -4220,7 +4215,6 @@ def runtime_profile(outputs, vars_json):
         "graphqlHttpUrl": graphql_http_url,
         "appsyncUrl": output_value("appsync_api_url"),
         "appsyncRealtimeUrl": output_value("appsync_realtime_url"),
-        "appsyncApiKey": output_value("appsync_api_key"),
         "cognitoDomain": cognito_domain,
         "cognitoUserPoolId": output_value("user_pool_id"),
         "cognitoClientId": output_value("admin_client_id"),
@@ -4251,7 +4245,6 @@ def runtime_profile(outputs, vars_json):
         "VITE_GRAPHQL_HTTP_URL": profile["graphqlHttpUrl"],
         "VITE_GRAPHQL_URL": profile["appsyncUrl"],
         "VITE_GRAPHQL_WS_URL": profile["appsyncRealtimeUrl"],
-        "VITE_GRAPHQL_API_KEY": profile["appsyncApiKey"],
         "VITE_COGNITO_DOMAIN": profile["cognitoDomain"],
         "VITE_COGNITO_USER_POOL_ID": profile["cognitoUserPoolId"],
         "VITE_COGNITO_CLIENT_ID": profile["cognitoClientId"],

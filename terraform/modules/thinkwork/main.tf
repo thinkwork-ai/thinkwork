@@ -1149,7 +1149,6 @@ module "api" {
 
   appsync_api_id  = module.appsync.graphql_api_id
   appsync_api_url = module.appsync.graphql_api_url
-  appsync_api_key = module.appsync.graphql_api_key
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 

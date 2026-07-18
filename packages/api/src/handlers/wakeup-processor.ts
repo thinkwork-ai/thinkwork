@@ -14,7 +14,6 @@ import {
   deriveFunctionName,
   getConfig,
   getApiAuthSecret,
-  getAppsyncApiKey,
 } from "@thinkwork/runtime-config";
 import { randomBytes } from "crypto";
 import { jsonSafePreview } from "../lib/json-safe-text.js";
@@ -168,13 +167,10 @@ import {
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
 // document may load after module init, and vitest stubs env after import.
-// Secret-class values are read at call time via getApiAuthSecret /
-// getAppsyncApiKey — never captured at module load. The remaining
+// Secret-class values are read at call time via getApiAuthSecret, never
+// captured at module load. The remaining
 // process.env reads stay as-is until their own migration unit.
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
-function appsyncEndpoint(): string {
-  return getConfig("APPSYNC_ENDPOINT", "");
-}
 const MCP_BASE_URL = process.env.MCP_BASE_URL || "";
 const MCP_AUTH_SECRET = process.env.MCP_AUTH_SECRET || "";
 const AGENTCORE_GATEWAY_URL = process.env.AGENTCORE_GATEWAY_URL || "";
@@ -1218,7 +1214,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       const env: Record<string, string> = {
         THINKWORK_API_URL: thinkworkApiUrl(),
         THINKWORK_API_SECRET: getApiAuthSecret(),
-        GRAPHQL_API_KEY: getAppsyncApiKey(),
         AGENT_ID: wakeup.agent_id,
       };
       skillsConfig.push({
@@ -1562,8 +1557,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         secretRef: undefined,
         mcpServer: undefined,
         envOverrides: {
-          THINKWORK_API_URL: appsyncEndpoint(),
-          THINKWORK_API_SECRET: getAppsyncApiKey(),
+          THINKWORK_API_URL: thinkworkApiUrl(),
+          THINKWORK_API_SECRET: getApiAuthSecret(),
           AGENT_ID: wakeup.agent_id,
           TENANT_ID: wakeup.tenant_id,
           CURRENT_THREAD_ID: runThreadId,
@@ -2475,8 +2470,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       human_name: humanName || undefined,
       workspace_bucket: workspaceBucket() || undefined,
       workspace_prefix: workspacePrefix,
-      appsync_endpoint: appsyncEndpoint() || undefined,
-      appsync_api_key: getAppsyncApiKey() || undefined,
       hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: effectiveWebSearchConfig,
       web_extract_config: effectiveWebExtractConfig
@@ -3245,8 +3238,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             human_name: humanName || undefined,
             workspace_bucket: workspaceBucket() || undefined,
             workspace_prefix: workspacePrefix,
-            appsync_endpoint: appsyncEndpoint() || undefined,
-            appsync_api_key: getAppsyncApiKey() || undefined,
             hindsight_endpoint: hindsightEndpoint() || undefined,
             web_search_config: effectiveWebSearchConfig,
             web_extract_config: effectiveWebExtractConfig

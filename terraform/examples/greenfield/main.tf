@@ -1073,12 +1073,6 @@ output "appsync_realtime_url" {
   value       = module.thinkwork.appsync_realtime_url
 }
 
-output "appsync_api_key" {
-  description = "AppSync API key"
-  value       = module.thinkwork.appsync_api_key
-  sensitive   = true
-}
-
 output "mapbox_public_token" {
   description = "Mapbox public token used by apps/web MapView. Read by scripts/build-web.sh to inline VITE_MAPBOX_PUBLIC_TOKEN at build time; empty string lets MapView fall back to OpenStreetMap tiles."
   value       = module.thinkwork.mapbox_public_token

@@ -44,7 +44,6 @@ tf_output_cached_raw() {
 API_ENDPOINT="$(tf_output_cached_raw api_endpoint)"
 APPSYNC_API_URL="$(tf_output_cached_raw appsync_api_url)"
 APPSYNC_REALTIME_URL="$(tf_output_cached_raw appsync_realtime_url)"
-APPSYNC_API_KEY="$(tf_output_cached_raw appsync_api_key)"
 USER_POOL_ID="$(tf_output_cached_raw user_pool_id)"
 ADMIN_CLIENT_ID="$(tf_output_cached_raw admin_client_id)"
 AUTH_DOMAIN="$(tf_output_cached_raw auth_domain)"
@@ -109,7 +108,6 @@ VITE_RELEASE_VERSION=${WEB_RELEASE_VERSION}
 VITE_GRAPHQL_HTTP_URL=${API_ENDPOINT}/graphql
 VITE_GRAPHQL_URL=${APPSYNC_API_URL}
 VITE_GRAPHQL_WS_URL=${APPSYNC_WS_URL}
-VITE_GRAPHQL_API_KEY=${APPSYNC_API_KEY}
 VITE_COGNITO_USER_POOL_ID=${USER_POOL_ID}
 VITE_COGNITO_CLIENT_ID=${ADMIN_CLIENT_ID}
 VITE_COGNITO_DOMAIN=${COGNITO_DOMAIN}
@@ -186,7 +184,6 @@ jq -n \
   --arg appUrl "$APP_URL" --arg apiEndpoint "$API_ENDPOINT" \
   --arg graphqlHttpUrl "${API_BASE:+${API_BASE}/graphql}" \
   --arg appsyncUrl "$APPSYNC_API_URL" --arg appsyncRealtimeUrl "$APPSYNC_REALTIME_URL" \
-  --arg appsyncApiKey "$APPSYNC_API_KEY" \
   --arg cognitoDomain "$COGNITO_DOMAIN" --arg userPoolId "$USER_POOL_ID" \
   --arg clientId "$ADMIN_CLIENT_ID" --arg issuedAt "$ISSUED_AT" \
   '{
@@ -197,7 +194,6 @@ jq -n \
     appUrl: $appUrl, apiEndpoint: $apiEndpoint,
     graphqlHttpUrl: $graphqlHttpUrl,
     appsyncUrl: $appsyncUrl, appsyncRealtimeUrl: $appsyncRealtimeUrl,
-    appsyncApiKey: $appsyncApiKey,
     cognitoDomain: $cognitoDomain, cognitoUserPoolId: $userPoolId,
     cognitoClientId: $clientId, controller: null, issuedAt: $issuedAt,
     viteEnv: {
@@ -205,7 +201,6 @@ jq -n \
       VITE_GRAPHQL_HTTP_URL: $graphqlHttpUrl,
       VITE_GRAPHQL_URL: $appsyncUrl,
       VITE_GRAPHQL_WS_URL: $appsyncRealtimeUrl,
-      VITE_GRAPHQL_API_KEY: $appsyncApiKey,
       VITE_COGNITO_DOMAIN: $cognitoDomain,
       VITE_COGNITO_USER_POOL_ID: $userPoolId,
       VITE_COGNITO_CLIENT_ID: $clientId,

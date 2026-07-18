@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@thinkwork/database-pg", () => ({ getDb: () => ({}) }));
 vi.mock("@thinkwork/runtime-config", () => ({
   getConfig: () => ({}),
-  getAppsyncApiKey: async () => null,
 }));
 
 const { extractUsage } = await import("./cost-recording.js");

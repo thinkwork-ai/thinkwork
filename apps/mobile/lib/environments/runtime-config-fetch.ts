@@ -10,7 +10,6 @@ export interface EnvironmentRuntimeConfig {
   graphqlHttpUrl: string;
   graphqlUrl: string;
   graphqlWsUrl: string;
-  graphqlApiKey?: string;
   cognitoDomain: string;
   cognitoUserPoolId: string;
   cognitoClientId: string;
@@ -79,25 +78,18 @@ function mapEnvironmentRuntimeConfig(raw: unknown): EnvironmentRuntimeConfig {
   return {
     apiUrl: pick(viteEnv, "VITE_API_URL") || pick(record, "apiEndpoint"),
     graphqlHttpUrl:
-      pick(viteEnv, "VITE_GRAPHQL_HTTP_URL") ||
-      pick(record, "graphqlHttpUrl"),
+      pick(viteEnv, "VITE_GRAPHQL_HTTP_URL") || pick(record, "graphqlHttpUrl"),
     // Mobile's graphqlUrl is the QUERY endpoint (HTTP API Gateway). Web's
     // VITE_GRAPHQL_URL is the AppSync endpoint, whose schema is
     // subscription-only — routing queries there fails every one with
     // FieldUndefined. Subscriptions use graphqlWsUrl below.
     graphqlUrl:
-      pick(viteEnv, "VITE_GRAPHQL_HTTP_URL") ||
-      pick(record, "graphqlHttpUrl"),
+      pick(viteEnv, "VITE_GRAPHQL_HTTP_URL") || pick(record, "graphqlHttpUrl"),
     graphqlWsUrl:
       pick(viteEnv, "VITE_GRAPHQL_WS_URL") ||
       pick(record, "appsyncRealtimeUrl"),
-    graphqlApiKey:
-      pick(viteEnv, "VITE_GRAPHQL_API_KEY") ||
-      pick(record, "appsyncApiKey") ||
-      undefined,
     cognitoDomain:
-      pick(viteEnv, "VITE_COGNITO_DOMAIN") ||
-      pick(record, "cognitoDomain"),
+      pick(viteEnv, "VITE_COGNITO_DOMAIN") || pick(record, "cognitoDomain"),
     cognitoUserPoolId:
       pick(viteEnv, "VITE_COGNITO_USER_POOL_ID") ||
       pick(record, "cognitoUserPoolId"),
