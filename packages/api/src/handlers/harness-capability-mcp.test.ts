@@ -82,7 +82,7 @@ function deps() {
         transport: "streamable-http" as const,
       },
       {
-        name: "lastmile",
+        name: "lastmile-data-catalog",
         url: "https://mcp.example.test/lastmile",
         transport: "streamable-http" as const,
       },
@@ -151,6 +151,8 @@ describe("Harness capability MCP target", () => {
         turn_id: "turn-1",
         principal_id: "user-1",
         policy_revision: "policy-v1",
+        credential_owner_alias:
+          "user:user-1:agentcore-identity:twenty--crm",
         input_preview: { connector: "twenty--crm" },
       }),
       expect.objectContaining({
@@ -164,6 +166,31 @@ describe("Harness capability MCP target", () => {
     expect(JSON.stringify(injected.ledgerRows)).not.toContain(
       "exact-user-token",
     );
+  });
+
+  it("records the LastMile tenant service owner separately from the acting user", async () => {
+    const injected = deps();
+    const handler = createHarnessCapabilityMcpHandler(injected);
+    const response = await handler(
+      event(
+        "/agentcore/capabilities/mcp/tools/list",
+        capabilityBody({ connector: "lastmile-data-catalog" }),
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(injected.ledgerRows).toEqual([
+      expect.objectContaining({
+        principal_type: "user",
+        principal_id: "user-1",
+        credential_owner_alias:
+          "tenant:tenant-1:service:lastmile-data-catalog",
+      }),
+      expect.objectContaining({
+        credential_owner_alias:
+          "tenant:tenant-1:service:lastmile-data-catalog",
+      }),
+    ]);
   });
 
   it("collapses universal MCP catalog discovery into relevant direct tools", async () => {

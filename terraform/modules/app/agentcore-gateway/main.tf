@@ -185,3 +185,62 @@ data "external" "gateway_state" {
     policy_name        = local.policy_name
   }
 }
+
+################################################################################
+# Gateway audit evidence
+#
+# AgentCore does not create an application-log destination for Gateways by
+# default. Policy decisions are enforced inside the managed Gateway, so the
+# target Lambda cannot truthfully invent a Cedar decision id. Deliver the
+# service-owned Gateway records instead; certification correlates those records
+# with the target-side append-only ledger and the canonical turn.
+################################################################################
+
+resource "aws_cloudwatch_log_group" "gateway_application" {
+  count             = var.enabled ? 1 : 0
+  name              = "/aws/vendedlogs/bedrock-agentcore/gateway/APPLICATION_LOGS/${data.external.gateway_state[0].result.gateway_id}"
+  retention_in_days = var.observability_retention_days
+
+  tags = {
+    Stage   = var.stage
+    Purpose = "agentcore-gateway-policy-audit"
+  }
+}
+
+resource "aws_cloudwatch_log_delivery_source" "gateway_application" {
+  count        = var.enabled ? 1 : 0
+  name         = "thinkwork-${var.stage}-agentcore-gateway-application"
+  log_type     = "APPLICATION_LOGS"
+  resource_arn = data.external.gateway_state[0].result.gateway_arn
+
+  tags = {
+    Stage   = var.stage
+    Purpose = "agentcore-gateway-policy-audit"
+  }
+}
+
+resource "aws_cloudwatch_log_delivery_destination" "gateway_application" {
+  count         = var.enabled ? 1 : 0
+  name          = "thinkwork-${var.stage}-agentcore-gateway-cloudwatch"
+  output_format = "json"
+
+  delivery_destination_configuration {
+    destination_resource_arn = aws_cloudwatch_log_group.gateway_application[0].arn
+  }
+
+  tags = {
+    Stage   = var.stage
+    Purpose = "agentcore-gateway-policy-audit"
+  }
+}
+
+resource "aws_cloudwatch_log_delivery" "gateway_application" {
+  count                    = var.enabled ? 1 : 0
+  delivery_source_name     = aws_cloudwatch_log_delivery_source.gateway_application[0].name
+  delivery_destination_arn = aws_cloudwatch_log_delivery_destination.gateway_application[0].arn
+
+  tags = {
+    Stage   = var.stage
+    Purpose = "agentcore-gateway-policy-audit"
+  }
+}

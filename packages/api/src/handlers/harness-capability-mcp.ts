@@ -53,6 +53,20 @@ const UNIVERSAL_CATALOG_TOOL = "get_tool_catalog";
 const UNIVERSAL_LEARN_TOOL = "learn_tools";
 const UNIVERSAL_EXECUTE_TOOL = "execute_tool";
 
+/** Closed U9 credential-ownership vocabulary; never contains a secret ref. */
+export function credentialOwnerAliasForConnector(
+  connector: string,
+  context: Pick<HarnessCapabilityContext, "tenantId" | "userId">,
+): string | null {
+  if (connector === "lastmile-data-catalog") {
+    return `tenant:${context.tenantId}:service:${connector}`;
+  }
+  if (connector === "twenty--crm") {
+    return `user:${context.userId}:agentcore-identity:${connector}`;
+  }
+  return null;
+}
+
 export interface HarnessCapabilityClaims {
   sub: string;
   participant_id: string;
@@ -207,6 +221,10 @@ export function createHarnessCapabilityMcpHandler(
       operation: isList ? "mcp.tools.list" : "mcp.tools.call",
       policyRevision: deps.policyRevision,
       idempotencyKey: event.requestContext.requestId,
+      credentialOwnerAlias: credentialOwnerAliasForConnector(
+        body.connector,
+        context,
+      ),
     };
     await appendToolExecutionStarted(deps.ledgerStore, {
       ...correlation,

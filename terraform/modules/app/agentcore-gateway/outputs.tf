@@ -37,3 +37,8 @@ output "execution_role_arn" {
   description = "Dedicated proof Gateway execution role ARN. Empty when disabled."
   value       = var.enabled ? aws_iam_role.gateway_execution[0].arn : ""
 }
+
+output "application_log_group_name" {
+  description = "CloudWatch log group receiving AgentCore Gateway application and policy records."
+  value       = var.enabled ? aws_cloudwatch_log_group.gateway_application[0].name : ""
+}

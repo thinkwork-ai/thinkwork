@@ -346,6 +346,7 @@ locals {
     # refresh path cannot replace the old manual AWS CLI step.
     var.deployment_evidence_bucket != "" ? [
       {
+        Sid    = "DeploymentEvidenceBucket"
         Effect = "Allow"
         Action = [
           "s3:GetObject",
@@ -361,7 +362,7 @@ locals {
         Sid      = "AgentCoreHarnessGatewayOauthSecret"
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:bedrock-agentcore-identity!default/oauth2/thinkwork-${var.stage}-proof-oauth-*"
+        Resource = ["arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:bedrock-agentcore-identity!default/oauth2/thinkwork-${var.stage}-proof-oauth-*"]
       },
     ] : [],
     var.billing_export_bucket_name != "" ? [
@@ -916,7 +917,7 @@ locals {
           "bedrock-agentcore:InvokeHarness",
           "bedrock-agentcore:InvokeAgentRuntime",
         ]
-        Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:harness/*"
+        Resource = ["arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:harness/*"]
       },
       {
         # The deterministic report adapter uses the same AgentCore Identity
