@@ -62,6 +62,7 @@ function setup(overrides: Partial<HarnessBuiltinToolsDeps> = {}) {
       agentId: "agent-1",
       threadId: "thread-1",
       turnId: "turn-1",
+      triggeringMessageId: "message-1",
       spaceId: "space-1",
     })),
     resolveBuiltinTools: vi.fn<HarnessBuiltinToolsDeps["resolveBuiltinTools"]>(

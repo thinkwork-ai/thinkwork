@@ -12,8 +12,11 @@ const context = {
   agentId: "agent-1",
   threadId: "thread-1",
   turnId: "turn-1",
+  triggeringMessageId: "message-1",
   spaceId: "space-1",
 };
+
+const noPinnedSkills = async () => [] as string[];
 
 function rendered(
   active: Array<{
@@ -137,7 +140,10 @@ describe("AgentCore governed workspace skills", () => {
     const render = vi.fn(async () => projection);
 
     await expect(
-      listAuthorizedWorkspaceSkills(context, { render }),
+      listAuthorizedWorkspaceSkills(context, {
+        render,
+        resolvePinnedSkillIds: noPinnedSkills,
+      }),
     ).resolves.toEqual({
       manifestFingerprint: "manifest-1",
       skills: [
@@ -189,6 +195,7 @@ describe("AgentCore governed workspace skills", () => {
       loadAuthorizedWorkspaceSkill(context, "alice-private", {
         render,
         readText,
+        resolvePinnedSkillIds: noPinnedSkills,
       }),
     ).resolves.toEqual(
       expect.objectContaining({
@@ -202,6 +209,7 @@ describe("AgentCore governed workspace skills", () => {
       loadAuthorizedWorkspaceSkill(context, "alice-private", {
         render,
         readText,
+        resolvePinnedSkillIds: noPinnedSkills,
       }),
     ).rejects.toMatchObject({ code: "workspace_skill_not_authorized" });
     expect(render).toHaveBeenCalledTimes(2);
@@ -214,7 +222,11 @@ describe("AgentCore governed workspace skills", () => {
       const render = vi.fn();
       const readText = vi.fn();
       await expect(
-        loadAuthorizedWorkspaceSkill(context, slug, { render, readText }),
+        loadAuthorizedWorkspaceSkill(context, slug, {
+          render,
+          readText,
+          resolvePinnedSkillIds: noPinnedSkills,
+        }),
       ).rejects.toBeInstanceOf(WorkspaceSkillAccessError);
       expect(render).not.toHaveBeenCalled();
       expect(readText).not.toHaveBeenCalled();
@@ -243,6 +255,7 @@ describe("AgentCore governed workspace skills", () => {
     const error = await loadAuthorizedWorkspaceSkill(context, "unsafe", {
       render: async () => projection,
       readText: async () => raw,
+      resolvePinnedSkillIds: noPinnedSkills,
     }).catch((caught: unknown) => caught);
 
     expect(error).toMatchObject({ code: "workspace_skill_content_blocked" });
@@ -272,6 +285,7 @@ describe("AgentCore governed workspace skills", () => {
       loadAuthorizedWorkspaceSkill(context, "large", {
         render: async () => projection,
         readText,
+        resolvePinnedSkillIds: noPinnedSkills,
       }),
     ).rejects.toMatchObject({ code: "workspace_skill_too_large" });
     expect(readText).not.toHaveBeenCalled();
@@ -301,8 +315,79 @@ describe("AgentCore governed workspace skills", () => {
       loadAuthorizedWorkspaceSkill(context, "foreign-source", {
         render: async () => projection,
         readText,
+        resolvePinnedSkillIds: noPinnedSkills,
       }),
     ).rejects.toMatchObject({ code: "workspace_skill_not_authorized" });
     expect(readText).not.toHaveBeenCalled();
+  });
+
+  it("lists and loads a trusted message-pinned skill without trusting its payload S3 key", async () => {
+    const projection = rendered([], []);
+    const resolvePinnedSkillIds = vi.fn(async () => [
+      "customer-qbr",
+      "untrusted",
+      "blocked-skill",
+    ]);
+    const loadTrustedSkillIds = vi.fn(
+      async () => new Set(["customer-qbr", "blocked-skill"]),
+    );
+    projection.effectivePolicy.blockedTools = ["blocked-skill"];
+    const readText = vi.fn(async (key: string) => {
+      expect(key).toBe("tenants/acme/skill-catalog/customer-qbr/SKILL.md");
+      return "# Customer QBR\nBuild the approved customer report.\n";
+    });
+
+    await expect(
+      listAuthorizedWorkspaceSkills(context, {
+        render: async () => projection,
+        resolvePinnedSkillIds,
+        loadTrustedSkillIds,
+      }),
+    ).resolves.toEqual({
+      manifestFingerprint: "manifest-1",
+      skills: [{ slug: "customer-qbr", scope: "message" }],
+    });
+    await expect(
+      loadAuthorizedWorkspaceSkill(context, "customer-qbr", {
+        render: async () => projection,
+        readText,
+        resolvePinnedSkillIds,
+        loadTrustedSkillIds,
+      }),
+    ).resolves.toMatchObject({
+      slug: "customer-qbr",
+      scope: "message",
+      content: "# Customer QBR\nBuild the approved customer report.\n",
+    });
+    expect(resolvePinnedSkillIds).toHaveBeenCalledWith(context);
+    expect(loadTrustedSkillIds).toHaveBeenCalledWith(context, [
+      "customer-qbr",
+      "untrusted",
+      "blocked-skill",
+    ]);
+  });
+
+  it("rechecks message-pin trust on load and denies a pin revoked after listing", async () => {
+    const projection = rendered([], []);
+    const loadTrustedSkillIds = vi
+      .fn()
+      .mockResolvedValueOnce(new Set(["customer-qbr"]))
+      .mockResolvedValueOnce(new Set());
+    const deps = {
+      render: async () => projection,
+      resolvePinnedSkillIds: async () => ["customer-qbr"],
+      loadTrustedSkillIds,
+      readText: vi.fn(),
+    };
+
+    await expect(
+      listAuthorizedWorkspaceSkills(context, deps),
+    ).resolves.toMatchObject({
+      skills: [{ slug: "customer-qbr", scope: "message" }],
+    });
+    await expect(
+      loadAuthorizedWorkspaceSkill(context, "customer-qbr", deps),
+    ).rejects.toMatchObject({ code: "workspace_skill_not_authorized" });
+    expect(deps.readText).not.toHaveBeenCalled();
   });
 });
