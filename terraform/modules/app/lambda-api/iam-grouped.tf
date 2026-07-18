@@ -181,6 +181,8 @@ locals {
           "cognito-idp:AdminRespondToAuthChallenge",
           "cognito-idp:AdminSetUserPassword",
           "cognito-idp:AdminUpdateUserAttributes",
+          "cognito-idp:DescribeIdentityProvider",
+          "cognito-idp:DescribeUserPoolClient",
           "cognito-idp:ListUsers",
         ]
         Resource = var.user_pool_arn

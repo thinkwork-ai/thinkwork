@@ -86,6 +86,7 @@ export * from "./pending-user-questions";
 export * from "./pending-tool-approvals";
 export * from "./harness-multiplayer";
 export * from "./plugins";
+export * from "./auth";
 export * from "./plugin-app-overlays";
 export * from "./pi-extensions";
 export * from "./document-plates";

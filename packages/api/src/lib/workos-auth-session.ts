@@ -276,7 +276,8 @@ async function findActiveWorkosSession(
     )
     .orderBy(desc(workosAuthSessions.created_at))
     .limit(1);
-  return row ?? null;
+  if (!row?.clientSecretRef) return null;
+  return { ...row, clientSecretRef: row.clientSecretRef };
 }
 
 async function revokeWorkosSession(args: {

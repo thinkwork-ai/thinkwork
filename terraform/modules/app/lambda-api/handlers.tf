@@ -770,6 +770,7 @@ resource "aws_lambda_function" "handler" {
     "deployment-sessions",
     "auth-me",
     "public-auth-options",
+    "auth-provider-reconcile",
     "workos-auth",
     # Public artifact share links (THINK-208): GET /share/{token}, token
     # verified in handler code (no gateway auth, uniform 404 on any miss).
@@ -1580,8 +1581,11 @@ locals {
       # Public login capabilities. Unauthenticated by design; the handler
       # resolves tenant-scoped OAuth options only from trusted API Gateway
       # domain metadata and fails closed for unknown/shared hosts.
-      "GET /api/auth/options"              = "public-auth-options"
-      "OPTIONS /api/auth/options"          = "public-auth-options"
+      "GET /api/auth/options"     = "public-auth-options"
+      "OPTIONS /api/auth/options" = "public-auth-options"
+      # Operator/deployment-only metadata seam. The Lambda independently
+      # verifies API_AUTH_SECRET and rejects raw secret values.
+      "POST /api/auth/providers/reconcile" = "auth-provider-reconcile"
       "GET /api/auth/workos/authorize"     = "workos-auth"
       "OPTIONS /api/auth/workos/authorize" = "workos-auth"
       "GET /api/auth/workos/callback"      = "workos-auth"

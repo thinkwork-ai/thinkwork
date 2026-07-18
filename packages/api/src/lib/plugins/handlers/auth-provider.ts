@@ -168,8 +168,7 @@ export function createDefaultAuthProviderHandlerDeps(
         if (!client?.ClientId) return null;
         return {
           clientId: client.ClientId,
-          supportedIdentityProviders:
-            client.SupportedIdentityProviders ?? [],
+          supportedIdentityProviders: client.SupportedIdentityProviders ?? [],
           callbackUrls: client.CallbackURLs ?? [],
           logoutUrls: client.LogoutURLs ?? [],
         };
@@ -455,8 +454,15 @@ async function loadAuthProviderConfig(
       ),
     )
     .limit(1);
-  if (!row) return null;
-  return row;
+  if (!row || !row.issuerUrl || !row.clientId || !row.clientSecretRef) {
+    return null;
+  }
+  return {
+    ...row,
+    issuerUrl: row.issuerUrl,
+    clientId: row.clientId,
+    clientSecretRef: row.clientSecretRef,
+  };
 }
 
 export async function fetchOidcDiscovery(

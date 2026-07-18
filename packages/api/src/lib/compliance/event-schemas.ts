@@ -300,6 +300,61 @@ export const EVENT_PAYLOAD_SHAPES: Record<
       "result",
     ]),
   },
+  "auth.provider_reconciled": {
+    allowedFields: new Set([
+      "stage",
+      "revision",
+      "manifestFingerprint",
+      "connectionKey",
+      "providerKind",
+      "lifecycleState",
+      "validationStatus",
+      "resourceArn",
+      "outcome",
+    ]),
+  },
+  "auth.provider_reconciliation_rejected": {
+    allowedFields: new Set([
+      "stage",
+      "revision",
+      "manifestFingerprint",
+      "reasonCode",
+      "connectionKey",
+      "outcome",
+    ]),
+  },
+  "auth.identity_backfilled": {
+    allowedFields: new Set([
+      "userId",
+      "identityId",
+      "providerKind",
+      "proofKind",
+      "status",
+      "outcome",
+    ]),
+  },
+  "auth.identity_quarantined": {
+    allowedFields: new Set([
+      "userId",
+      "identityId",
+      "providerKind",
+      "proofKind",
+      "status",
+      "reasonCode",
+      "outcome",
+    ]),
+  },
+  "auth.enrollment_consumed": {
+    allowedFields: new Set([
+      "userId",
+      "identityId",
+      "enrollmentId",
+      "connectionKey",
+      "routeKey",
+      "status",
+      "outcome",
+    ]),
+  },
 
   "user.invited": {
     allowedFields: new Set(["email", "role", "invitedBy"]),

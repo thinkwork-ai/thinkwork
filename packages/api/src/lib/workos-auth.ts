@@ -457,11 +457,21 @@ async function loadWorkosPublicationForHost(
       ),
     );
 
-  const matches = rows.filter((row) =>
-    row.hostnames.some((candidate) => normalizeTrustedHost(candidate) === host),
+  const matches = rows.filter(
+    (row) =>
+      row.clientId !== null &&
+      row.clientSecretRef !== null &&
+      row.hostnames.some(
+        (candidate) => normalizeTrustedHost(candidate) === host,
+      ),
   );
   if (matches.length !== 1) return null;
-  return matches[0];
+  const match = matches[0]!;
+  return {
+    ...match,
+    clientId: match.clientId!,
+    clientSecretRef: match.clientSecretRef!,
+  };
 }
 
 async function exchangeWorkosCode(

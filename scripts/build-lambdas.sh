@@ -155,6 +155,9 @@ build_handler "cognito-custom-auth" \
 build_handler "public-auth-options" \
   "$REPO_ROOT/packages/api/src/handlers/public-auth-options.ts"
 
+build_handler "auth-provider-reconcile" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-provider-reconcile.ts"
+
 build_handler "workos-auth" \
   "$REPO_ROOT/packages/api/src/handlers/workos-auth.ts"
 
