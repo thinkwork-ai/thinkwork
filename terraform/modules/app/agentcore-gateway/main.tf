@@ -127,7 +127,16 @@ resource "aws_iam_role_policy" "gateway_execution" {
   })
 }
 
-resource "terraform_data" "gateway_lifecycle" {
+# Keep the stable Gateway/target/policy identity separate from configuration
+# reconciliation. A terraform_data replacement runs destroy provisioners, so
+# coupling the configuration hash to this resource used to tear down the live
+# Gateway before recreating it on every ordinary contract update.
+moved {
+  from = terraform_data.gateway_lifecycle
+  to   = terraform_data.gateway_identity
+}
+
+resource "terraform_data" "gateway_identity" {
   count = var.enabled ? 1 : 0
 
   input = {
@@ -137,8 +146,19 @@ resource "terraform_data" "gateway_lifecycle" {
     policy_engine_name = local.policy_engine_name
     policy_name        = local.policy_name
   }
-  triggers_replace = [local.configuration_hash]
 
+  # The moved predecessor stored the full configuration hash in
+  # triggers_replace. Ignore that retired state-only attribute during the
+  # one-time split so Terraform can move the live identity without running its
+  # destroy provisioner. The dedicated configuration resource below owns all
+  # subsequent reconciliation revisions.
+  lifecycle {
+    ignore_changes = [triggers_replace]
+  }
+
+  # A brand-new identity must exist before the external data source reads it.
+  # The configuration resource performs the same idempotent reconciliation a
+  # second time on initial creation, then becomes the sole revision trigger.
   provisioner "local-exec" {
     command = "bash ${path.module}/scripts/reconcile_gateway.sh"
     environment = {
@@ -172,9 +192,44 @@ resource "terraform_data" "gateway_lifecycle" {
   depends_on = [aws_iam_role_policy.gateway_execution]
 }
 
+# Configuration revisions reconcile the stable identity in place. This
+# terraform_data instance intentionally has no destroy provisioner: replacing
+# it is only a signal to rerun the idempotent reconciler, never permission to
+# delete a Gateway, target, policy, or engine.
+resource "terraform_data" "gateway_configuration" {
+  count = var.enabled ? 1 : 0
+
+  input            = local.configuration_hash
+  triggers_replace = [local.configuration_hash]
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/scripts/reconcile_gateway.sh"
+    environment = {
+      AWS_REGION                    = var.region
+      GATEWAY_NAME                  = local.gateway_name
+      GATEWAY_ROLE_ARN              = aws_iam_role.gateway_execution[0].arn
+      GATEWAY_DISCOVERY_URL         = var.discovery_url
+      GATEWAY_AUDIENCE              = var.gateway_audience
+      TARGET_NAME                   = local.target_name
+      TARGET_BASE_URL               = trimsuffix(var.target_base_url, "/")
+      OAUTH_CREDENTIAL_PROVIDER_ARN = var.oauth_credential_provider_arn
+      OAUTH_RETURN_URL              = var.oauth_return_url
+      POLICY_ENGINE_NAME            = local.policy_engine_name
+      POLICY_NAME                   = local.policy_name
+      PROOF_OWNER_ALLOWLIST         = var.proof_owner_allowlist
+    }
+  }
+
+  depends_on = [terraform_data.gateway_identity]
+}
+
 data "external" "gateway_state" {
-  count      = var.enabled ? 1 : 0
-  depends_on = [terraform_data.gateway_lifecycle]
+  count = var.enabled ? 1 : 0
+  # Identity creation reconciles the Gateway before this read. Do not depend
+  # on the revision signal: doing so defers this read on every config update,
+  # makes the stable Gateway id unknown during planning, and falsely forces
+  # all CloudWatch delivery resources to replace.
+  depends_on = [terraform_data.gateway_identity]
   program    = ["bash", "${path.module}/scripts/read_gateway.sh"]
 
   query = {
