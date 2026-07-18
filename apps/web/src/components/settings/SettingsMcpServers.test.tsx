@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => ({
     tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
     tenantId: "tenant-1",
     userId: "user-1" as string | null,
+    isOperator: true,
   },
   authUser: {
     email: "operator@example.com",
@@ -245,6 +246,7 @@ beforeEach(() => {
     tenant: { id: "tenant-1", slug: "thinkwork", name: "ThinkWork" },
     tenantId: "tenant-1",
     userId: "user-1",
+    isOperator: true,
   };
   mocks.authUser = {
     email: "operator@example.com",
