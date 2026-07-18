@@ -31,7 +31,10 @@ export interface PublicAuthOptionsResponse {
 export type PublicOAuthOption = NativeAuthOption;
 
 export interface PublicAuthOptionsDeps {
-  loadPolicy(host: string | null): Promise<AuthPolicySnapshot>;
+  loadPolicy(
+    host: string | null,
+    clientFamily: string,
+  ): Promise<AuthPolicySnapshot>;
 }
 
 export function createPublicAuthOptionsHandler(
@@ -52,7 +55,9 @@ export function createPublicAuthOptionsHandler(
 
     const query = new URLSearchParams(event.rawQueryString ?? "");
     const platform = query.get("platform") || "web";
-    if (platform !== "web") return publicJson(emptyOptions());
+    if (!["web", "mobile", "desktop", "cli"].includes(platform)) {
+      return publicJson(emptyOptions());
+    }
 
     // The requested browser host selects public presentation only. It is not
     // trusted for authorization; authenticated admission checks the route
@@ -64,6 +69,7 @@ export function createPublicAuthOptionsHandler(
       return publicJson(
         await resolvePublicAuthOptions({
           routingHost: requestedHost ?? gatewayHost,
+          clientFamily: platform,
           deps,
         }),
       );
@@ -80,6 +86,7 @@ export async function resolvePublicAuthOptions(args: {
   routingHost?: string | null;
   /** Backward-compatible name for characterization callers. */
   trustedDomainName?: string;
+  clientFamily?: string;
   deps?: PublicAuthOptionsDeps;
 }): Promise<PublicAuthOptionsResponse> {
   const deps = args.deps ?? createDefaultPublicAuthOptionsDeps();
@@ -87,19 +94,24 @@ export async function resolvePublicAuthOptions(args: {
     args.routingHost === undefined
       ? normalizeTrustedHost(args.trustedDomainName)
       : args.routingHost;
-  return resolveNativeAuthPolicy(await deps.loadPolicy(host ?? null));
+  const clientFamily = args.clientFamily ?? "web";
+  return resolveNativeAuthPolicy(
+    await deps.loadPolicy(host ?? null, clientFamily),
+    clientFamily,
+  );
 }
 
 export function createDefaultPublicAuthOptionsDeps(
   db: DbLike = defaultDb,
 ): PublicAuthOptionsDeps {
   return {
-    loadPolicy: (host) => loadPolicy(host, db),
+    loadPolicy: (host, clientFamily) => loadPolicy(host, clientFamily, db),
   };
 }
 
 async function loadPolicy(
   host: string | null,
+  clientFamily: string,
   db: DbLike,
 ): Promise<AuthPolicySnapshot> {
   const hostRows = host
@@ -141,7 +153,7 @@ async function loadPolicy(
       validationStatus: authRouteClients.validation_status,
     })
     .from(authRouteClients)
-    .where(eq(authRouteClients.client_family, "web"));
+    .where(eq(authRouteClients.client_family, clientFamily));
 
   const connectionRows = await db
     .select({

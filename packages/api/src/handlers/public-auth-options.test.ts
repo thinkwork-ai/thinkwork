@@ -108,7 +108,39 @@ describe("createPublicAuthOptionsHandler", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers?.["Cache-Control"]).toBe("no-store, max-age=0");
-    expect(d.loadPolicy).toHaveBeenCalledWith("login.customer.example");
+    expect(d.loadPolicy).toHaveBeenCalledWith("login.customer.example", "web");
+  });
+
+  it("publishes the same provider contract for the mobile route family", async () => {
+    const mobileSnapshot = {
+      ...snapshot,
+      routes: snapshot.routes.map((route) => ({
+        ...route,
+        clientFamily: "mobile",
+        cognitoAppClientId: `mobile-${route.routeKey}-client`,
+      })),
+      connections: snapshot.connections.map((connection) => ({
+        ...connection,
+        cognitoAppClientIds: [
+          `mobile-${connection.providerKind === "google" ? "google" : "microsoft"}-client`,
+        ],
+      })),
+    };
+    const d: PublicAuthOptionsDeps = {
+      loadPolicy: vi.fn(async () => mobileSnapshot),
+    };
+    const response = await createPublicAuthOptionsHandler(d)(
+      event({
+        domainName: "api.example",
+        rawQueryString: "host=customer.example&platform=mobile",
+      }),
+    );
+    const body = JSON.parse(response.body ?? "{}");
+    expect(body.password.clientId).toBe("mobile-local-client");
+    expect(
+      body.oauthOptions.map((option: { label: string }) => option.label),
+    ).toEqual(["Continue with Google", "Continue with Microsoft"]);
+    expect(d.loadPolicy).toHaveBeenCalledWith("customer.example", "mobile");
   });
 
   it("fails closed when catalog loading fails", async () => {

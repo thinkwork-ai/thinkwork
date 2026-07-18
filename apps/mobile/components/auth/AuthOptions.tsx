@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
-import { useColorScheme } from "nativewind";
-import { Shield } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/typography";
-import { COLORS } from "@/lib/theme";
 import {
   FALLBACK_AUTH_OPTIONS,
   deriveAuthOptionsDisplay,
@@ -50,17 +47,15 @@ export function useAuthOptions(reloadKey: string): {
 export function AuthOptions({
   state,
   onRetry,
-  onPressSso,
+  onPressOAuth,
   disabled,
 }: {
   state: AuthOptionsUiState;
   onRetry: () => void;
-  onPressSso?: (option: PublicOAuthOption) => void;
+  onPressOAuth?: (option: PublicOAuthOption) => void;
   disabled?: boolean;
 }) {
   const display = deriveAuthOptionsDisplay(state);
-  const { colorScheme } = useColorScheme();
-  const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
   return (
     <View className="gap-4">
@@ -71,16 +66,20 @@ export function AuthOptions({
         </View>
       )}
 
-      {display.ssoOption && display.showSsoButton && (
-        <Button
-          variant={display.showPasswordForm ? "outline" : "default"}
-          onPress={() => onPressSso?.(display.ssoOption!)}
-          disabled={disabled}
-        >
-          <Shield size={20} color={colors.foreground} />
-          Continue with SSO
-        </Button>
-      )}
+      {display.showOAuthButtons &&
+        display.oauthOptions.map((option) => (
+          <Button
+            key={option.key}
+            variant={display.showPasswordForm ? "outline" : "default"}
+            onPress={() => onPressOAuth?.(option)}
+            disabled={disabled}
+          >
+            <Text className="mr-2 font-semibold">
+              {option.icon === "google" ? "G" : "⊞"}
+            </Text>
+            {option.label}
+          </Button>
+        ))}
 
       {display.showDivider && (
         <View className="my-1 flex-row items-center">

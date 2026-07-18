@@ -62,6 +62,7 @@ const VALIDATION_STATES = new Set(["valid", "partially_valid"]);
  */
 export function resolveNativeAuthPolicy(
   snapshot: AuthPolicySnapshot,
+  clientFamily = "web",
 ): ResolvedNativeAuthPolicy {
   if (snapshot.scope === "ambiguous") {
     return { password: { enabled: false }, oauthOptions: [] };
@@ -70,7 +71,7 @@ export function resolveNativeAuthPolicy(
   const routes = snapshot.routes
     .filter(
       (route) =>
-        route.clientFamily === "web" &&
+        route.clientFamily === clientFamily &&
         route.lifecycleState === "native" &&
         VALIDATION_STATES.has(route.validationStatus),
     )

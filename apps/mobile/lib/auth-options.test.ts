@@ -9,35 +9,52 @@ import {
 vi.mock("./platform-config", () => ({
   getPlatformConfig: () => ({ apiUrl: "https://api.example.com/" }),
 }));
+vi.mock("./environments/store", () => ({
+  getActiveEnvironmentEntry: () => ({ host: "customer.example.com" }),
+}));
 
 describe("mobile auth options", () => {
   it("parses password-only options without an SSO button", () => {
     const options = parsePublicAuthOptions({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [],
     });
 
-    expect(deriveAuthOptionsDisplay({ loading: false, failed: false, options }))
-      .toMatchObject({
-        showSsoButton: false,
-        showPasswordForm: true,
-        showDivider: false,
-      });
+    expect(
+      deriveAuthOptionsDisplay({ loading: false, failed: false, options }),
+    ).toMatchObject({
+      showOAuthButtons: false,
+      showPasswordForm: true,
+      showDivider: false,
+    });
   });
 
-  it("parses one WorkOS option into one SSO button above password", () => {
+  it("parses direct Cognito Google and Microsoft options above password", () => {
     const options = parsePublicAuthOptions({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [
         {
-          key: "workos",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
           providerSpecific: true,
           route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
+          },
+        },
+        {
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
           },
         },
       ],
@@ -48,9 +65,12 @@ describe("mobile auth options", () => {
       options,
     });
 
-    expect(display.showSsoButton).toBe(true);
+    expect(display.showOAuthButtons).toBe(true);
     expect(display.showDivider).toBe(true);
-    expect(display.ssoOption?.key).toBe("workos");
+    expect(display.oauthOptions.map((option) => option.key)).toEqual([
+      "google",
+      "microsoft",
+    ]);
   });
 
   it("distinguishes loading from loaded and failed states", () => {
@@ -61,7 +81,7 @@ describe("mobile auth options", () => {
         options: FALLBACK_AUTH_OPTIONS,
       }),
     ).toMatchObject({
-      showSsoButton: false,
+      showOAuthButtons: false,
       showPasswordForm: true,
       showRetry: false,
     });
@@ -83,12 +103,12 @@ describe("mobile auth options", () => {
       throw new Error("offline");
     }) as unknown as typeof fetch;
 
-    await expect(fetchAuthOptionsForActiveEnvironment(fetchImpl)).resolves.toEqual(
-      {
-        options: FALLBACK_AUTH_OPTIONS,
-        failed: true,
-      },
-    );
+    await expect(
+      fetchAuthOptionsForActiveEnvironment(fetchImpl),
+    ).resolves.toEqual({
+      options: FALLBACK_AUTH_OPTIONS,
+      failed: true,
+    });
   });
 
   it("fetches from the active environment apiUrl", async () => {
@@ -100,7 +120,7 @@ describe("mobile auth options", () => {
     const result = await fetchAuthOptionsForActiveEnvironment(fetchImpl);
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      "https://api.example.com/api/auth/options",
+      "https://api.example.com/api/auth/options?platform=mobile&host=customer.example.com",
       expect.objectContaining({
         method: "GET",
         headers: { accept: "application/json" },

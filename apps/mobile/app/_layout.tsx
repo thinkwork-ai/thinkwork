@@ -228,7 +228,6 @@ function RootLayoutNav() {
       "invite",
       "forgot-password",
       "auth",
-      "oauth",
       "deployment-profile",
       "environment-setup",
     ];
@@ -253,10 +252,7 @@ function RootLayoutNav() {
       platformConfig: deploymentConfig,
     });
 
-    if (
-      shouldSetupEnvironment &&
-      segments[0] !== "environment-setup"
-    ) {
+    if (shouldSetupEnvironment && segments[0] !== "environment-setup") {
       router.replace("/environment-setup");
       return;
     }
@@ -382,10 +378,6 @@ function RootLayoutNav() {
                 <Stack.Screen name="onboarding/complete" />
                 <Stack.Screen
                   name="auth/callback"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="oauth/callback"
                   options={{ headerShown: false }}
                 />
                 <Stack.Screen

@@ -31,13 +31,10 @@ import {
   subscribePlatformConfig,
   type MobilePlatformConfig,
 } from "@/lib/platform-config";
-import type { PublicOAuthOption } from "@/lib/auth-options";
 import {
-  buildWorkosAuthorizeUrl,
-  exchangeWorkosBridgeCode,
-  parseWorkosCallbackUrl,
-  WORKOS_MOBILE_REDIRECT_URI,
-} from "@/lib/workos-auth";
+  fetchAuthOptionsForActiveEnvironment,
+  type PublicOAuthOption,
+} from "@/lib/auth-options";
 import * as SecureStore from "expo-secure-store";
 
 // Keys for biometric credential storage, scoped per environment clientId so a
@@ -69,7 +66,9 @@ const STORED_TENANT_ID_KEY = "thinkwork_stored_tenant_id";
  */
 function storedTenantIdKey(): string {
   const clientId = getPlatformConfig().cognitoClientId;
-  return clientId ? `${STORED_TENANT_ID_KEY}.${clientId}` : STORED_TENANT_ID_KEY;
+  return clientId
+    ? `${STORED_TENANT_ID_KEY}.${clientId}`
+    : STORED_TENANT_ID_KEY;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,10 +112,8 @@ interface AuthContextValue {
   rescopeAuthForEnvironmentChange: () => Promise<boolean>;
   /** Sign in with Google via Cognito hosted UI */
   signInWithGoogle: () => Promise<void>;
-  /** Sign in with WorkOS SSO via the environment's brokered bridge */
-  signInWithSSO: (option: PublicOAuthOption) => Promise<void>;
-  /** Complete a WorkOS SSO bridge code delivered by a deep link fallback */
-  completeSignInWithSSOBridge: (bridgeCode: string) => Promise<void>;
+  /** Sign in through an exact provider-specific Cognito app client. */
+  signInWithOAuth: (option: PublicOAuthOption) => Promise<void>;
   deploymentConfig: MobilePlatformConfig;
   /** Increments each time the app returns to foreground and token is refreshed. Watch this to re-fetch data. */
   refreshCounter: number;
@@ -289,16 +286,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [resolveTenantId]);
 
-  const rescopeAuthForEnvironmentChange = useCallback(async (): Promise<
-    boolean
-  > => {
-    auth.resetAuthEngineForEnvironmentChange();
-    setAuthToken(null);
-    setUser(null);
-    setHasStoredSession(false);
-    setDidActiveLogin(false);
-    return runBootstrap();
-  }, [runBootstrap]);
+  const rescopeAuthForEnvironmentChange =
+    useCallback(async (): Promise<boolean> => {
+      auth.resetAuthEngineForEnvironmentChange();
+      setAuthToken(null);
+      setUser(null);
+      setHasStoredSession(false);
+      setDidActiveLogin(false);
+      return runBootstrap();
+    }, [runBootstrap]);
 
   // First-run bootstrap on mount
   useEffect(() => {
@@ -406,202 +402,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ------ Sign in with Google (OAuth) ------
+  // ------ Provider-specific Cognito OAuth ------
   // Re-entry guard: if a sign-in is already in flight, ignore additional
   // calls. React's batched state updates can let two button presses fire
   // before `googleLoading` flips, which would issue two authorize requests
   // and burn the first single-use code.
   const oauthInFlightRef = useRef(false);
-  const handleSignInWithGoogle = useCallback(async () => {
-    if (oauthInFlightRef.current) {
-      console.warn(
-        "[AuthProvider] Google OAuth: already in flight, ignoring re-entry",
-      );
-      return;
-    }
-    oauthInFlightRef.current = true;
-    try {
-      if (Platform.OS === "web") {
-        const config = getPlatformConfig();
-        if (!config.configured) {
-          throw new Error(
-            `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
-          );
-        }
-        const redirectUri = window.location.origin + "/auth/callback";
-        window.location.href = auth.getGoogleSignInUrl(redirectUri);
-        return;
-      }
-
-      const config = getPlatformConfig();
-      if (!config.configured) {
-        throw new Error(
-          `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
-        );
-      }
-
-      // Native: hard-code the redirect URI rather than computing via
-      // Linking.createURL("auth/callback"). expo-linking's createURL applies
-      // path normalization (host/slash placement, encodeURI) that produced a
-      // URI which Cognito's exact-string comparison rejected on the
-      // authorize→token leg, surfacing as `invalid_grant`. The literal
-      // matches what's registered in the Cognito user pool client callback
-      // list and removes any computation from the hot path.
-      const redirectUri = "thinkwork://auth/callback";
-      console.log("[AuthProvider] Google OAuth redirectUri:", redirectUri);
-      const authorizeUrl = auth.getGoogleSignInUrl(redirectUri);
-      console.log("[AuthProvider] Google OAuth authorizeUrl:", authorizeUrl);
-      // Use the persistent ASWebAuthenticationSession cookie jar so iOS
-      // keychain prefills Google credentials and remembers the prior
-      // account choice. The old `preferEphemeralSession: true` workaround
-      // was added to dodge a stale-cookie `invalid_grant` in the Cognito
-      // hosted-UI flow, but it kneecaps normal UX on every sign-in. The
-      // literal redirect URI fix below (stopping at `&` AND `#`) is the
-      // durable fix for that parser bug — ephemeral sessions are no
-      // longer needed.
-      const result = await WebBrowser.openAuthSessionAsync(
-        authorizeUrl,
-        redirectUri,
-      );
-      console.log(
-        "[AuthProvider] Google OAuth result type:",
-        result.type,
-        "url" in result ? result.url : "no url",
-      );
-
-      if (result.type !== "success") return;
-
-      // Parse code from callback URL — avoid `new URL()` which isn't reliable on Hermes.
-      // Stop at `&` AND `#` — Cognito's redirect appends a trailing `#` fragment
-      // that would otherwise get captured into the code and rejected as
-      // `invalid_grant`. This was the root cause of every "Token exchange failed"
-      // error we were chasing all day.
-      const codeMatch = result.url.match(/[?&]code=([^&#]+)/);
-      const code = codeMatch?.[1] ? decodeURIComponent(codeMatch[1]) : null;
-      if (!code) throw new Error("No authorization code in callback URL");
-      console.log("[AuthProvider] Google OAuth code length:", code.length);
-
-      const tokens = await auth.exchangeCodeForTokens(code, redirectUri);
-      let oauthUser = auth.storeOAuthTokens(tokens);
-      setAuthToken(tokens.id_token);
-
-      // Federated (Google) users don't have custom:tenant_id in their JWT on
-      // first sign-in. Mirror the admin app's TenantContext bootstrap flow:
-      // call bootstrapUser to auto-provision a tenant and merge the id into
-      // local user state so the routing guard can redirect to the home tab.
-      if (!oauthUser.tenantId) {
-        const graphqlUrl = getPlatformConfig().graphqlUrl;
-        if (!graphqlUrl) throw new Error("GraphQL URL not configured");
-        const res = await fetch(graphqlUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.id_token}`,
-          },
-          body: JSON.stringify({
-            query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
-          }),
-        });
-        const bootstrapResult = await res.json();
-        const bootstrap = bootstrapResult?.data?.bootstrapUser;
-        if (!bootstrap?.tenant?.id) {
-          throw new Error(
-            bootstrapResult?.errors?.[0]?.message ??
-              "Failed to provision workspace",
-          );
-        }
-        oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
-      }
-
-      // Persist the tenantId so the next cold start can rehydrate it and
-      // skip the /sign-in bounce. Fire-and-forget — SecureStore writes are
-      // async and we don't want to block the happy path for persistence.
-      // This code runs after the `Platform.OS === "web"` early return above,
-      // so we're guaranteed to be on native here.
-      if (oauthUser.tenantId) {
-        SecureStore.setItemAsync(
-          storedTenantIdKey(),
-          oauthUser.tenantId,
-        ).catch((e) => {
-          console.warn("[AuthProvider] tenantId persist failed:", e);
-        });
-      }
-
-      setUser(oauthUser);
-      setHasStoredSession(true);
-      setDidActiveLogin(true);
-    } finally {
-      oauthInFlightRef.current = false;
-    }
-  }, []);
-
-  const completeWorkosBridgeSignIn = useCallback(
-    async (bridgeCode: string) => {
-      const config = getPlatformConfig();
-      if (!config.configured) {
-        throw new Error(
-          `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
-        );
-      }
-
-      const tokens = await exchangeWorkosBridgeCode(bridgeCode, config.apiUrl);
-      let ssoUser = auth.storeOAuthTokens(tokens);
-      setAuthToken(tokens.id_token);
-
-      // Federated WorkOS users can lack custom:tenant_id on first sign-in.
-      // Mirror the Google OAuth bootstrap path so routing has a tenant.
-      if (!ssoUser.tenantId) {
-        const graphqlUrl = getPlatformConfig().graphqlUrl;
-        if (!graphqlUrl) throw new Error("GraphQL URL not configured");
-        const res = await fetch(graphqlUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.id_token}`,
-          },
-          body: JSON.stringify({
-            query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
-          }),
-        });
-        const bootstrapResult = await res.json();
-        const bootstrap = bootstrapResult?.data?.bootstrapUser;
-        if (!bootstrap?.tenant?.id) {
-          throw new Error(
-            bootstrapResult?.errors?.[0]?.message ??
-              "Failed to provision workspace",
-          );
-        }
-        ssoUser = { ...ssoUser, tenantId: bootstrap.tenant.id };
-      }
-
-      if (ssoUser.tenantId) {
-        SecureStore.setItemAsync(storedTenantIdKey(), ssoUser.tenantId).catch(
-          (e) => {
-            console.warn("[AuthProvider] tenantId persist failed:", e);
-          },
-        );
-      }
-
-      setUser(ssoUser);
-      setHasStoredSession(true);
-      setDidActiveLogin(true);
-    },
-    [],
-  );
-
-  const workosInFlightRef = useRef(false);
-  const handleSignInWithSSO = useCallback(
+  const handleSignInWithOAuth = useCallback(
     async (option: PublicOAuthOption) => {
-      if (workosInFlightRef.current) {
+      if (oauthInFlightRef.current) {
         console.warn(
-          "[AuthProvider] WorkOS SSO: already in flight, ignoring re-entry",
+          "[AuthProvider] Cognito OAuth: already in flight, ignoring re-entry",
         );
         return;
       }
-      workosInFlightRef.current = true;
+      oauthInFlightRef.current = true;
       try {
         if (Platform.OS === "web") {
-          throw new Error("WorkOS SSO is only available in the native app.");
+          const config = getPlatformConfig();
+          if (!config.configured) {
+            throw new Error(
+              `Deployment configuration is incomplete: ${formatPlatformConfigMissing(config)}`,
+            );
+          }
+          const redirectUri = window.location.origin + "/auth/callback";
+          const request = await auth.createOAuthAuthorizeRequest(
+            option,
+            redirectUri,
+          );
+          window.sessionStorage.setItem(
+            `thinkwork:mobile-oauth:${request.state}`,
+            JSON.stringify(request),
+          );
+          window.location.href = request.authorizeUrl;
+          return;
         }
 
         const config = getPlatformConfig();
@@ -611,22 +445,123 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
 
-        const authorizeUrl = buildWorkosAuthorizeUrl(option, config.apiUrl);
+        // Native: hard-code the redirect URI rather than computing via
+        // Linking.createURL("auth/callback"). expo-linking's createURL applies
+        // path normalization (host/slash placement, encodeURI) that produced a
+        // URI which Cognito's exact-string comparison rejected on the
+        // authorize→token leg, surfacing as `invalid_grant`. The literal
+        // matches what's registered in the Cognito user pool client callback
+        // list and removes any computation from the hot path.
+        const redirectUri = "thinkwork://auth/callback";
+        const request = await auth.createOAuthAuthorizeRequest(
+          option,
+          redirectUri,
+        );
+        // Use the persistent ASWebAuthenticationSession cookie jar so iOS
+        // keychain prefills Google credentials and remembers the prior
+        // account choice. The old `preferEphemeralSession: true` workaround
+        // was added to dodge a stale-cookie `invalid_grant` in the Cognito
+        // hosted-UI flow, but it kneecaps normal UX on every sign-in. The
+        // literal redirect URI fix below (stopping at `&` AND `#`) is the
+        // durable fix for that parser bug — ephemeral sessions are no
+        // longer needed.
         const result = await WebBrowser.openAuthSessionAsync(
-          authorizeUrl,
-          WORKOS_MOBILE_REDIRECT_URI,
+          request.authorizeUrl,
+          redirectUri,
+        );
+        console.log(
+          "[AuthProvider] Cognito OAuth result type:",
+          result.type,
+          "url" in result ? result.url : "no url",
         );
 
         if (result.type !== "success") return;
 
-        const { bridgeCode } = parseWorkosCallbackUrl(result.url);
-        await completeWorkosBridgeSignIn(bridgeCode);
+        // Parse code from callback URL — avoid `new URL()` which isn't reliable on Hermes.
+        // Stop at `&` AND `#` — Cognito's redirect appends a trailing `#` fragment
+        // that would otherwise get captured into the code and rejected as
+        // `invalid_grant`. This was the root cause of every "Token exchange failed"
+        // error we were chasing all day.
+        const codeMatch = result.url.match(/[?&]code=([^&#]+)/);
+        const code = codeMatch?.[1] ? decodeURIComponent(codeMatch[1]) : null;
+        if (!code) throw new Error("No authorization code in callback URL");
+        const stateMatch = result.url.match(/[?&]state=([^&#]+)/);
+        const returnedState = stateMatch?.[1]
+          ? decodeURIComponent(stateMatch[1])
+          : null;
+        if (returnedState !== request.state) {
+          throw new Error("OAuth state verification failed");
+        }
+
+        const tokens = await auth.exchangeCodeForTokens(
+          code,
+          redirectUri,
+          request.clientId,
+          request.codeVerifier,
+        );
+        let oauthUser = auth.storeOAuthTokens(tokens, request.clientId);
+        setAuthToken(tokens.id_token);
+
+        // Federated users don't have custom:tenant_id in their JWT on
+        // first sign-in. Mirror the admin app's TenantContext bootstrap flow:
+        // call bootstrapUser to auto-provision a tenant and merge the id into
+        // local user state so the routing guard can redirect to the home tab.
+        if (!oauthUser.tenantId) {
+          const graphqlUrl = getPlatformConfig().graphqlUrl;
+          if (!graphqlUrl) throw new Error("GraphQL URL not configured");
+          const res = await fetch(graphqlUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${tokens.id_token}`,
+            },
+            body: JSON.stringify({
+              query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+            }),
+          });
+          const bootstrapResult = await res.json();
+          const bootstrap = bootstrapResult?.data?.bootstrapUser;
+          if (!bootstrap?.tenant?.id) {
+            throw new Error(
+              bootstrapResult?.errors?.[0]?.message ??
+                "Failed to provision workspace",
+            );
+          }
+          oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
+        }
+
+        // Persist the tenantId so the next cold start can rehydrate it and
+        // skip the /sign-in bounce. Fire-and-forget — SecureStore writes are
+        // async and we don't want to block the happy path for persistence.
+        // This code runs after the `Platform.OS === "web"` early return above,
+        // so we're guaranteed to be on native here.
+        if (oauthUser.tenantId) {
+          SecureStore.setItemAsync(
+            storedTenantIdKey(),
+            oauthUser.tenantId,
+          ).catch((e) => {
+            console.warn("[AuthProvider] tenantId persist failed:", e);
+          });
+        }
+
+        setUser(oauthUser);
+        setHasStoredSession(true);
+        setDidActiveLogin(true);
       } finally {
-        workosInFlightRef.current = false;
+        oauthInFlightRef.current = false;
       }
     },
-    [completeWorkosBridgeSignIn],
+    [],
   );
+
+  const handleSignInWithGoogle = useCallback(async () => {
+    const result = await fetchAuthOptionsForActiveEnvironment();
+    const google = result.options.oauthOptions.find(
+      (option) => option.provider === "google",
+    );
+    if (!google) throw new Error("Google sign-in is not available");
+    await handleSignInWithOAuth(google);
+  }, [handleSignInWithOAuth]);
 
   // ------ Sign up / confirm ------
   const handleSignUp = useCallback(
@@ -682,8 +617,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         retryBootstrap: runBootstrap,
         rescopeAuthForEnvironmentChange,
         signInWithGoogle: handleSignInWithGoogle,
-        signInWithSSO: handleSignInWithSSO,
-        completeSignInWithSSOBridge: completeWorkosBridgeSignIn,
+        signInWithOAuth: handleSignInWithOAuth,
         deploymentConfig,
         refreshCounter,
       }}

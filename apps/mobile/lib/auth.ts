@@ -19,21 +19,32 @@ import {
   resetStorageHydrationForDeploymentChange,
 } from "./cognito-storage";
 import { getPlatformConfig } from "./platform-config";
+import * as Crypto from "expo-crypto";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 let _userPool: CognitoUserPool | null = null;
 let _userPoolKey: string | null = null;
+let _passwordAuthClientId: string | null = null;
+
+export function configurePasswordAuthClient(clientId?: string): void {
+  const normalized = clientId?.trim() || null;
+  if (_passwordAuthClientId === normalized) return;
+  _passwordAuthClientId = normalized;
+  _userPool = null;
+  _userPoolKey = null;
+}
 
 function getUserPool(): CognitoUserPool | null {
   const config = getPlatformConfig();
-  if (!config.cognitoUserPoolId || !config.cognitoClientId) return null;
-  const key = `${config.cognitoUserPoolId}:${config.cognitoClientId}`;
+  const clientId = _passwordAuthClientId || config.cognitoClientId;
+  if (!config.cognitoUserPoolId || !clientId) return null;
+  const key = `${config.cognitoUserPoolId}:${clientId}`;
   if (!_userPool || _userPoolKey !== key) {
     _userPool = new CognitoUserPool({
       UserPoolId: config.cognitoUserPoolId,
-      ClientId: config.cognitoClientId,
+      ClientId: clientId,
       Storage: CognitoSecureStorage,
     });
     _userPoolKey = key;
@@ -86,7 +97,17 @@ export function signIn(
     });
 
     user.authenticateUser(authDetails, {
-      onSuccess: (session) => resolve(session),
+      onSuccess: (session) => {
+        storeOAuthTokens(
+          {
+            id_token: session.getIdToken().getJwtToken(),
+            access_token: session.getAccessToken().getJwtToken(),
+            refresh_token: session.getRefreshToken().getToken(),
+          },
+          _passwordAuthClientId || getPlatformConfig().cognitoClientId,
+        );
+        resolve(session);
+      },
       onFailure: (err) => reject(err),
     });
   });
@@ -153,6 +174,7 @@ export function signOut(): void {
   if (user) {
     user.signOut();
   }
+  clearStoredEnvironmentSession();
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +294,7 @@ function parseIdToken(session: CognitoUserSession): AuthUser {
 }
 
 // ---------------------------------------------------------------------------
-// OAuth helpers (Google sign-in via Cognito hosted UI)
+// Provider-specific Cognito hosted UI helpers
 // ---------------------------------------------------------------------------
 
 export interface OAuthTokens {
@@ -281,29 +303,67 @@ export interface OAuthTokens {
   refresh_token: string;
 }
 
-/** Build the Cognito hosted UI authorize URL for Google sign-in. */
-export function getGoogleSignInUrl(redirectUri: string): string {
+export interface OAuthAuthorizeRequest {
+  authorizeUrl: string;
+  clientId: string;
+  codeVerifier: string;
+  redirectUri: string;
+  state: string;
+}
+
+export async function createOAuthAuthorizeRequest(
+  option: {
+    route: {
+      clientId: string;
+      identityProvider: string;
+      prompt?: string;
+    };
+  },
+  redirectUri: string,
+): Promise<OAuthAuthorizeRequest> {
   const config = getPlatformConfig();
-  if (!config.cognitoDomain || !config.cognitoClientId) {
-    throw new Error("Auth not configured");
-  }
+  if (!config.cognitoDomain) throw new Error("Auth not configured");
+  const state = Crypto.randomUUID();
+  const nonce = Crypto.randomUUID();
+  const codeVerifier = `${Crypto.randomUUID()}${Crypto.randomUUID()}`.replace(
+    /-/g,
+    "",
+  );
+  const digest = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    codeVerifier,
+    { encoding: Crypto.CryptoEncoding.BASE64 },
+  );
   const params = new URLSearchParams({
-    identity_provider: "Google",
+    identity_provider: option.route.identityProvider,
     response_type: "code",
-    client_id: config.cognitoClientId,
+    client_id: option.route.clientId,
     redirect_uri: redirectUri,
     scope: "openid email profile",
+    prompt: option.route.prompt || "select_account",
+    state,
+    nonce,
+    code_challenge_method: "S256",
+    code_challenge: base64Url(digest),
   });
-  return `${config.cognitoDomain}/oauth2/authorize?${params.toString()}`;
+  return {
+    authorizeUrl: `${config.cognitoDomain}/oauth2/authorize?${params.toString()}`,
+    clientId: option.route.clientId,
+    codeVerifier,
+    redirectUri,
+    state,
+  };
 }
 
 /** Exchange an authorization code for tokens via the Cognito token endpoint. */
 export async function exchangeCodeForTokens(
   code: string,
   redirectUri: string,
+  clientId = getPlatformConfig().cognitoClientId,
+  codeVerifier?: string,
 ): Promise<OAuthTokens> {
   const config = getPlatformConfig();
-  if (!config.cognitoDomain || !config.cognitoClientId) {
+  if (!config.cognitoDomain || !clientId) {
     throw new Error("Auth not configured");
   }
   // Log the EXACT inputs Cognito will see. Don't log the full code (treat it
@@ -311,7 +371,7 @@ export async function exchangeCodeForTokens(
   // attempts apart without leaking the secret.
   console.log("[auth] exchangeCodeForTokens", {
     domain: config.cognitoDomain,
-    clientIdLen: config.cognitoClientId.length,
+    clientIdLen: clientId.length,
     redirectUri,
     codeLen: code.length,
     codePrefix: code.slice(0, 6),
@@ -321,9 +381,10 @@ export async function exchangeCodeForTokens(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: config.cognitoClientId,
+      client_id: clientId,
       code,
       redirect_uri: redirectUri,
+      ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
     }).toString(),
   });
 
@@ -351,7 +412,10 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
  * Store OAuth tokens in CognitoSecureStorage using the standard Cognito key format.
  * This lets getCurrentUser/getCurrentSession find them on subsequent loads.
  */
-export function storeOAuthTokens(tokens: OAuthTokens): AuthUser {
+export function storeOAuthTokens(
+  tokens: OAuthTokens,
+  oauthClientId = getPlatformConfig().cognitoClientId,
+): AuthUser {
   const payload = decodeJwtPayload(tokens.id_token);
   const username =
     (payload["sub"] as string) ?? (payload["cognito:username"] as string) ?? "";
@@ -372,6 +436,12 @@ export function storeOAuthTokens(tokens: OAuthTokens): AuthUser {
     `${prefix}.${username}.refreshToken`,
     tokens.refresh_token,
   );
+  if (oauthClientId) {
+    CognitoSecureStorage.setItem(
+      `${prefix}.${username}.oauthClientId`,
+      oauthClientId,
+    );
+  }
   CognitoSecureStorage.setItem(`${prefix}.${username}.clockDrift`, "0");
 
   return {
@@ -416,6 +486,14 @@ export function getStoredOAuthRefreshToken(): string | null {
   const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
   if (!username) return null;
   return CognitoSecureStorage.getItem(`${prefix}.${username}.refreshToken`);
+}
+
+export function getStoredOAuthClientId(): string | null {
+  const prefix = cognitoStoragePrefix();
+  if (!prefix) return null;
+  const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
+  if (!username) return null;
+  return CognitoSecureStorage.getItem(`${prefix}.${username}.oauthClientId`);
 }
 
 /**
@@ -471,7 +549,8 @@ export async function refreshOAuthTokens(): Promise<string | null> {
     const refreshToken = getStoredOAuthRefreshToken();
     if (!refreshToken) return null;
     const config = getPlatformConfig();
-    if (!config.cognitoDomain || !config.cognitoClientId) return null;
+    const oauthClientId = getStoredOAuthClientId() || config.cognitoClientId;
+    if (!config.cognitoDomain || !oauthClientId) return null;
 
     try {
       const response = await fetch(`${config.cognitoDomain}/oauth2/token`, {
@@ -479,7 +558,7 @@ export async function refreshOAuthTokens(): Promise<string | null> {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "refresh_token",
-          client_id: config.cognitoClientId,
+          client_id: oauthClientId,
           refresh_token: refreshToken,
         }).toString(),
       });
@@ -552,4 +631,26 @@ export async function clearAuthStorageForEnvironment(
 function cognitoStoragePrefix(): string | null {
   const clientId = getPlatformConfig().cognitoClientId;
   return clientId ? `CognitoIdentityServiceProvider.${clientId}` : null;
+}
+
+function clearStoredEnvironmentSession(): void {
+  const prefix = cognitoStoragePrefix();
+  if (!prefix) return;
+  const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
+  CognitoSecureStorage.removeItem(`${prefix}.LastAuthUser`);
+  if (!username) return;
+  for (const suffix of [
+    "idToken",
+    "accessToken",
+    "refreshToken",
+    "clockDrift",
+    "oauthClientId",
+    "userData",
+  ]) {
+    CognitoSecureStorage.removeItem(`${prefix}.${username}.${suffix}`);
+  }
+}
+
+function base64Url(value: string): string {
+  return value.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }

@@ -13,10 +13,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Text, H2 } from "@/components/ui/typography";
-import {
-  AuthOptions,
-  useAuthOptions,
-} from "@/components/auth/AuthOptions";
+import { AuthOptions, useAuthOptions } from "@/components/auth/AuthOptions";
 import {
   EnvironmentPickerSheet,
   type EnvironmentPickerSheetRef,
@@ -26,6 +23,7 @@ import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
 import { COLORS } from "@/lib/theme";
 import { useColorScheme } from "nativewind";
 import { deriveAuthOptionsDisplay } from "@/lib/auth-options";
+import { configurePasswordAuthClient } from "@/lib/auth";
 import { environmentFooterLabel } from "@/lib/environments/display";
 import {
   getActiveEnvironmentEntry,
@@ -34,7 +32,7 @@ import {
 
 export default function SignInScreen() {
   const router = useRouter();
-  const { signIn, signInWithSSO, deploymentConfig } = useAuth();
+  const { signIn, signInWithOAuth, deploymentConfig } = useAuth();
   const {
     isSupported: biometricSupported,
     hasStoredCredentials,
@@ -70,6 +68,10 @@ export default function SignInScreen() {
   useEffect(() => {
     refreshCredentialsCheck();
   }, [refreshCredentialsCheck]);
+
+  useEffect(() => {
+    configurePasswordAuthClient(authOptions.state.options.password.clientId);
+  }, [authOptions.state.options.password.clientId]);
 
   useEffect(() => {
     const unsubscribe = subscribeEnvironmentStore((snapshot) => {
@@ -157,8 +159,8 @@ export default function SignInScreen() {
     }
   };
 
-  const handleSsoPress = async (
-    option: Parameters<typeof signInWithSSO>[0],
+  const handleOAuthPress = async (
+    option: Parameters<typeof signInWithOAuth>[0],
   ) => {
     if (configBlocked) {
       setError(
@@ -169,15 +171,15 @@ export default function SignInScreen() {
     setSsoLoading(true);
     setError(null);
     try {
-      await signInWithSSO(option);
+      await signInWithOAuth(option);
     } catch (err) {
-      console.error("[sign-in] WorkOS SSO error:", err);
+      console.error("[sign-in] Cognito OAuth error:", err);
       const message = err instanceof Error ? err.message : String(err);
       const lower = message.toLowerCase();
       if (
         lower.includes("expired") ||
         lower.includes("already used") ||
-        lower.includes("bridge")
+        lower.includes("state")
       ) {
         setError("Sign-in link expired or already used. Please try again.");
       } else if (
@@ -226,7 +228,7 @@ export default function SignInScreen() {
             <AuthOptions
               state={authOptions.state}
               onRetry={authOptions.retry}
-              onPressSso={handleSsoPress}
+              onPressOAuth={handleOAuthPress}
               disabled={configBlocked || ssoLoading || loading}
             />
 

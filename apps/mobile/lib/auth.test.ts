@@ -9,6 +9,19 @@ vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
 }));
 
+vi.mock("expo-crypto", async () => {
+  const { createHash } = await import("node:crypto");
+  let counter = 0;
+  return {
+    CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+    CryptoEncoding: { BASE64: "base64" },
+    randomUUID: () =>
+      `00000000-0000-4000-8000-${String(++counter).padStart(12, "0")}`,
+    digestStringAsync: async (_algorithm: string, value: string) =>
+      createHash("sha256").update(value).digest("base64"),
+  };
+});
+
 vi.mock("expo-secure-store", () => ({
   AFTER_FIRST_UNLOCK: "AFTER_FIRST_UNLOCK",
   setItemAsync: vi.fn(async () => undefined),
@@ -21,6 +34,7 @@ vi.mock("./graphql/client", () => ({
 }));
 
 import {
+  createOAuthAuthorizeRequest,
   getCurrentUser,
   getStoredOAuthIdToken,
   hasStoredSession,
@@ -144,6 +158,33 @@ describe("mobile auth environment storage", () => {
       }),
     );
     expect(getStoredOAuthIdToken()).toBe(nextIdToken);
+  });
+
+  it("builds a provider-specific Cognito authorize request with PKCE and state", async () => {
+    await addOrUpdateEnvironment({
+      host: "one.thinkwork.ai",
+      config: runtimeConfig({ cognitoClientId: "local-client" }),
+    });
+    const request = await createOAuthAuthorizeRequest(
+      {
+        route: {
+          clientId: "microsoft-client",
+          identityProvider: "MicrosoftOrganizations",
+          prompt: "select_account",
+        },
+      },
+      "thinkwork://auth/callback",
+    );
+    const url = new URL(request.authorizeUrl);
+    expect(url.pathname).toBe("/oauth2/authorize");
+    expect(url.searchParams.get("client_id")).toBe("microsoft-client");
+    expect(url.searchParams.get("identity_provider")).toBe(
+      "MicrosoftOrganizations",
+    );
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("code_challenge")).toBeTruthy();
+    expect(url.searchParams.get("state")).toBe(request.state);
+    expect(request.codeVerifier.length).toBeGreaterThanOrEqual(43);
   });
 
   it("switches between two stored environment sessions without leaking tokens", async () => {
