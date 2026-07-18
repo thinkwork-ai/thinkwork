@@ -61,6 +61,7 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
       agentId: "agent-1",
       threadId: "thread-1",
       turnId: "turn-1",
+      triggeringMessageId: "message-1",
       spaceId: "space-1",
     })),
     resolveAccess: vi.fn(async () => ({ brain: true, email: true })),

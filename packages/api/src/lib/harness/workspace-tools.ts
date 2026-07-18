@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto";
 import { S3Client } from "@aws-sdk/client-s3";
+import { getDb } from "@thinkwork/database-pg";
 import { getConfig } from "@thinkwork/runtime-config";
+import { isBuiltinToolSlug } from "../builtin-tool-slugs.js";
+import { toolPolicyAliases } from "../builtin-tool-policy-aliases.js";
 import { CAPABILITY_SLUG_PATTERN } from "../capabilities/definition-schemas.js";
+import { resolveDispatchPinnedSkills } from "../skills/message-pinned-skills.js";
+import { loadTrustedCatalogSkillIds } from "../skill-trust/runtime-gate.js";
 import { renderWorkspaceTuple } from "../workspace-renderer/compose-tuple.js";
+import { isToolAllowed } from "../workspace-renderer/effective-policy-composer.js";
 import { S3WorkspaceRendererObjectStore } from "../workspace-renderer/s3-store.js";
 import type {
   RenderedWorkspaceTuple,
@@ -22,12 +28,13 @@ export interface WorkspaceSkillContext {
   agentId: string;
   threadId: string;
   turnId: string;
+  triggeringMessageId: string;
   spaceId: string | null;
 }
 
 export interface AuthorizedWorkspaceSkill {
   slug: string;
-  scope: "agent" | "space" | "user";
+  scope: "agent" | "space" | "user" | "message";
 }
 
 interface ResolvedWorkspaceSkill extends AuthorizedWorkspaceSkill {
@@ -40,6 +47,11 @@ export interface WorkspaceSkillReaderDeps {
     input: WorkspaceRenderTupleInput,
   ) => Promise<RenderedWorkspaceTuple>;
   readText?: (key: string) => Promise<string | null>;
+  resolvePinnedSkillIds?: (context: WorkspaceSkillContext) => Promise<string[]>;
+  loadTrustedSkillIds?: (
+    context: WorkspaceSkillContext,
+    skillIds: string[],
+  ) => Promise<Set<string>>;
   bucket?: string;
 }
 
@@ -174,12 +186,50 @@ async function resolveProjection(
       ...(source.size === undefined ? {} : { size: source.size }),
     });
   }
+  const resolvePinnedSkillIds =
+    deps.resolvePinnedSkillIds ?? defaultResolvePinnedSkillIds;
+  const pinnedSkillIds = await resolvePinnedSkillIds(context);
+  if (pinnedSkillIds.length > 0) {
+    const loadTrustedSkillIds =
+      deps.loadTrustedSkillIds ?? defaultLoadTrustedSkillIds;
+    const trustedPinnedSkillIds = await loadTrustedSkillIds(
+      context,
+      pinnedSkillIds,
+    );
+    for (const slug of pinnedSkillIds) {
+      if (
+        bySlug.has(slug) ||
+        !CAPABILITY_SLUG_PATTERN.test(slug) ||
+        !trustedPinnedSkillIds.has(slug) ||
+        !skillAllowedByPolicy(slug, rendered.effectivePolicy)
+      ) {
+        continue;
+      }
+      bySlug.set(slug, {
+        slug,
+        scope: "message",
+        sourceKey: `${tenantSourcePrefix}skill-catalog/${slug}/SKILL.md`,
+      });
+    }
+  }
   return {
     manifestFingerprint: rendered.capabilities.fingerprint,
     skills: [...bySlug.values()].sort((left, right) =>
       left.slug.localeCompare(right.slug),
     ),
   };
+}
+
+function skillAllowedByPolicy(
+  slug: string,
+  policy: RenderedWorkspaceTuple["effectivePolicy"],
+): boolean {
+  const aliases = toolPolicyAliases(slug);
+  if (aliases.some((alias) => policy.blockedTools.includes(alias))) {
+    return false;
+  }
+  if (!isBuiltinToolSlug(slug)) return true;
+  return aliases.some((alias) => isToolAllowed(policy, alias));
 }
 
 function authorizedScope(
@@ -242,6 +292,28 @@ async function readWorkspaceText(
   if (deps.readText) return deps.readText(key);
   const { bucket, store } = defaultStore(deps.bucket);
   return store.getText({ bucket, key });
+}
+
+async function defaultResolvePinnedSkillIds(
+  context: WorkspaceSkillContext,
+): Promise<string[]> {
+  return resolveDispatchPinnedSkills({
+    db: getDb(),
+    tenantId: context.tenantId,
+    threadId: context.threadId,
+    messageId: context.triggeringMessageId,
+  });
+}
+
+async function defaultLoadTrustedSkillIds(
+  context: WorkspaceSkillContext,
+  skillIds: string[],
+): Promise<Set<string>> {
+  return loadTrustedCatalogSkillIds({
+    tenantId: context.tenantId,
+    skillIds,
+    logPrefix: "[harness-workspace-skills]",
+  });
 }
 
 let sharedStore: S3WorkspaceRendererObjectStore | null = null;

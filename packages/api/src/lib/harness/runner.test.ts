@@ -415,6 +415,13 @@ describe("runHarnessTurn — happy path", () => {
           },
           { skillId: "../invalid", s3Key: "tenants/tei/private" },
         ],
+        pinned_skills: [
+          {
+            skillId: "sales-rep-review",
+            s3Key: "tenants/tei/skill-catalog/sales-rep-review",
+            secretRef: "must-not-project-pinned",
+          },
+        ],
       },
       deps,
     );
@@ -424,7 +431,9 @@ describe("runHarnessTurn — happy path", () => {
     expect(messages).toContain(
       "authorized_workspace_skills=customer-qbr,document-composer",
     );
+    expect(messages).toContain("message_pinned_skills=sales-rep-review");
     expect(messages).not.toContain("must-not-project");
+    expect(messages).not.toContain("must-not-project-pinned");
     expect(messages).not.toContain("tenants/tei");
     expect(messages).not.toContain("../invalid");
   });

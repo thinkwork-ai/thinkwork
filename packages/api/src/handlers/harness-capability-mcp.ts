@@ -89,6 +89,7 @@ export interface HarnessCapabilityContext {
   agentId: string;
   threadId: string;
   turnId: string;
+  triggeringMessageId: string;
   spaceId: string | null;
 }
 
@@ -727,6 +728,7 @@ export async function resolveHarnessCapabilityContext(
     agentId: row.agentId,
     threadId: row.threadId,
     turnId: row.turnId,
+    triggeringMessageId: row.triggeringMessageId,
     spaceId: row.spaceId,
   };
 }
