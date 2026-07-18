@@ -124,4 +124,25 @@ describe("auth provider safe metadata validation", () => {
       "duplicate_resource",
     );
   });
+
+  it("accepts native-app schemes only for mobile or desktop clients", () => {
+    const mobile = validPayload();
+    mobile.routeClients[0] = {
+      ...mobile.routeClients[0]!,
+      clientFamily: "mobile",
+      redirectUris: ["thinkwork://auth/callback"],
+      logoutUris: ["thinkwork://"],
+    };
+    const { manifestFingerprint: _mobileOld, ...mobileInput } = mobile;
+    mobile.manifestFingerprint = canonicalAuthManifestFingerprint(mobileInput);
+    expect(
+      validateAuthProviderMetadata(mobile).routeClients[0]?.redirectUris,
+    ).toEqual(["thinkwork://auth/callback"]);
+
+    const web = validPayload();
+    web.routeClients[0]!.redirectUris = ["javascript:alert(1)"];
+    const { manifestFingerprint: _webOld, ...webInput } = web;
+    web.manifestFingerprint = canonicalAuthManifestFingerprint(webInput);
+    expectCode(() => validateAuthProviderMetadata(web), "invalid_url");
+  });
 });

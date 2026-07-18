@@ -5,13 +5,13 @@ import {
   exchangeCodeForSession,
   exchangeWorkosBridgeForSession,
   storeTokensInCognitoStorage,
-  getGoogleSignInUrl,
 } from "@/lib/auth";
 
 export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
   validateSearch: (search: Record<string, unknown>) => ({
     code: (search.code as string) || "",
+    state: (search.state as string) || "",
     workos_bridge: (search.workos_bridge as string) || "",
     next: (search.next as string) || "",
     error: (search.error as string) || "",
@@ -22,6 +22,7 @@ export const Route = createFileRoute("/auth/callback")({
 export function AuthCallback() {
   const {
     code,
+    state,
     workos_bridge,
     next,
     error: oauthError,
@@ -32,19 +33,7 @@ export function AuthCallback() {
 
   useEffect(() => {
     if (oauthError) {
-      // PreSignUp trigger throws on first Google sign-in to link accounts.
-      // Cognito retries automatically, but the redirect carries the error.
-      // Tell user to try again — the link is now established.
-      if (
-        error_description?.includes("PreSignUp") ||
-        error_description?.includes("Provider linked")
-      ) {
-        setError(
-          "Account linking in progress. Please try signing in with Google again.",
-        );
-      } else {
-        setError(error_description || oauthError || "OAuth failed");
-      }
+      setError(error_description || oauthError || "OAuth failed");
       return;
     }
 
@@ -58,13 +47,27 @@ export function AuthCallback() {
     exchanged.current = true;
 
     const exchange = workos_bridge
-      ? exchangeWorkosBridgeForSession(workos_bridge)
-      : exchangeCodeForSession(code);
+      ? exchangeWorkosBridgeForSession(workos_bridge).then((tokens) => ({
+          tokens,
+          clientId: undefined,
+          next: safeCallbackNext(next),
+        }))
+      : exchangeCodeForSession(code, state);
 
     exchange
-      .then((tokens) => {
-        storeTokensInCognitoStorage(tokens, workos_bridge ? "workos" : "cognito");
-        const nextTarget = consumePostAuthRedirect(safeCallbackNext(next));
+      .then((session) => {
+        if (workos_bridge) {
+          storeTokensInCognitoStorage(session.tokens, "workos");
+        } else {
+          storeTokensInCognitoStorage(
+            session.tokens,
+            "cognito",
+            session.clientId,
+          );
+        }
+        const nextTarget = workos_bridge
+          ? consumePostAuthRedirect(session.next)
+          : session.next;
         // If opened as popup, notify parent and close
         if (window.opener) {
           window.opener.location.href = nextTarget;
@@ -77,25 +80,13 @@ export function AuthCallback() {
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");
       });
-  }, [code, error_description, next, oauthError, workos_bridge]);
+  }, [code, error_description, next, oauthError, state, workos_bridge]);
 
   if (error) {
-    const isLinking = error.includes("linking") || error.includes("try again");
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
         <div className="text-center space-y-3">
           <p className="text-sm text-destructive">{error}</p>
-          {isLinking && (
-            <button
-              onClick={() => {
-                // Retry Google sign-in from the popup
-                window.location.href = getGoogleSignInUrl();
-              }}
-              className="text-sm font-medium underline underline-offset-2"
-            >
-              Try again
-            </button>
-          )}
           <a href="/sign-in" className="block text-sm underline">
             Back to sign in
           </a>

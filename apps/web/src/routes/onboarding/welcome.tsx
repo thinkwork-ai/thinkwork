@@ -26,7 +26,6 @@ import {
 } from "@/components/tenant/TenantSlugPicker";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
-import { getGoogleSignInUrl, rememberPostAuthRedirect } from "@/lib/auth";
 import {
   connectDeploymentSessionCredentialLease,
   createDeploymentSession,
@@ -82,12 +81,14 @@ function WelcomePage() {
   );
   const [bootstrapResult, bootstrapUser] = useMutation(BootstrapUserMutation);
 
-  const startGoogleSignIn = useCallback(() => {
-    rememberPostAuthRedirect(
-      `${window.location.pathname}${window.location.search}`,
-    );
-    window.location.assign(getGoogleSignInUrl());
-  }, []);
+  const startSignIn = useCallback(() => {
+    navigate({
+      to: "/sign-in",
+      search: {
+        next: `${window.location.pathname}${window.location.search}`,
+      },
+    });
+  }, [navigate]);
 
   useEffect(() => {
     if (!session_id) return;
@@ -97,8 +98,8 @@ function WelcomePage() {
 
   useEffect(() => {
     if (!session_id || !ready || isAuthenticated) return;
-    startGoogleSignIn();
-  }, [session_id, ready, isAuthenticated, startGoogleSignIn]);
+    startSignIn();
+  }, [session_id, ready, isAuthenticated, startSignIn]);
 
   useEffect(() => {
     if (
@@ -211,8 +212,8 @@ function WelcomePage() {
             Finalizing your ThinkWork account...
           </CardTitle>
           <CardDescription>
-            Payment confirmed. We're preparing your workspace, then you'll sign
-            in with Google.
+            Payment confirmed. We're preparing your workspace, then you'll
+            choose how to sign in.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -221,7 +222,7 @@ function WelcomePage() {
             within a few seconds, click below.
           </p>
           <div className="mt-6">
-            <Button className="w-full" onClick={startGoogleSignIn}>
+            <Button className="w-full" onClick={startSignIn}>
               Continue to sign in
             </Button>
           </div>

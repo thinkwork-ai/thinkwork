@@ -19,6 +19,7 @@ const authContextMocks = vi.hoisted(() => ({
 }));
 
 const authMocks = vi.hoisted(() => ({
+  configurePasswordAuthClient: vi.fn(),
   confirmForgotPassword: vi.fn(),
   forgotPassword: vi.fn(),
   getAuthOptionSignInUrl: vi.fn(),
@@ -64,6 +65,7 @@ vi.mock("@/context/AuthContext", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
+  configurePasswordAuthClient: authMocks.configurePasswordAuthClient,
   confirmForgotPassword: authMocks.confirmForgotPassword,
   forgotPassword: authMocks.forgotPassword,
   getAuthOptionSignInUrl: authMocks.getAuthOptionSignInUrl,
@@ -107,12 +109,12 @@ beforeEach(() => {
     isAuthenticated: false,
     isLoading: false,
   });
-  authMocks.getAuthOptionSignInUrl.mockReturnValue(
-    "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
+  authMocks.getAuthOptionSignInUrl.mockResolvedValue(
+    "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=google-client",
   );
   authMocks.isPasswordSignInConfigured.mockReturnValue(false);
   authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-    password: { enabled: true },
+    password: { enabled: true, clientId: "local-client" },
     oauthOptions: [],
   });
   routerMocks.search = { next: undefined };
@@ -177,17 +179,18 @@ describe("SignInPage", () => {
       isLoading: true,
     });
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [
         {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
           route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
             prompt: "select_account",
           },
         },
@@ -198,9 +201,9 @@ describe("SignInPage", () => {
 
     expect(
       (
-        await screen.findByRole("button", {
+        (await screen.findByRole("button", {
           name: "Checking session...",
-        }) as HTMLButtonElement
+        })) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
   });
@@ -393,19 +396,20 @@ describe("SignInPage", () => {
     );
   });
 
-  it("uses the WorkOS SSO option from public auth options outside desktop mode", async () => {
+  it("uses the direct Google option from public auth options outside desktop mode", async () => {
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [
         {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
           route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
             prompt: "select_account",
           },
         },
@@ -427,18 +431,21 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Continue with SSO" }),
+      await screen.findByRole("button", { name: "Continue with Google" }),
     );
 
-    expect(navigations).toEqual([
-      "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
-    ]);
+    await waitFor(() =>
+      expect(navigations).toEqual([
+        "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=google-client",
+      ]),
+    );
     expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalledWith(
       expect.objectContaining({
-        key: "workos-sso",
+        key: "google",
         route: {
-          type: "workosAuthorize",
-          authorizePath: "/api/auth/workos/authorize",
+          type: "cognitoHostedUi",
+          clientId: "google-client",
+          identityProvider: "Google",
           prompt: "select_account",
         },
       }),
@@ -529,13 +536,13 @@ describe("SignInPage", () => {
     await screen.findByText("No in-flight OAuth attempt for callback state");
   });
 
-  it("renders the email/password form when password sign-in is configured", () => {
+  it("renders the email/password form when password sign-in is configured", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
-    expect(screen.getByLabelText("Email")).toBeTruthy();
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reset password" })).toBeTruthy();
@@ -543,20 +550,34 @@ describe("SignInPage", () => {
     expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
   });
 
-  it("renders WorkOS SSO before password when a public option is returned", async () => {
+  it("renders Google and Microsoft before password when native options are returned", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [
         {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
           route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
+            prompt: "select_account",
+          },
+        },
+        {
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
             prompt: "select_account",
           },
         },
@@ -578,18 +599,23 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
     expect(
-      await screen.findByRole("button", { name: "Continue with SSO" }),
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue with Microsoft" }),
     ).toBeTruthy();
     expect(screen.getByText("or")).toBeTruthy();
     expect(screen.getByLabelText("Email")).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Continue with SSO" }),
+      screen.getByRole("button", { name: "Continue with Google" }),
     );
 
-    expect(navigations).toEqual([
-      "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
-    ]);
+    await waitFor(() =>
+      expect(navigations).toEqual([
+        "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=google-client",
+      ]),
+    );
     expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalledWith(
       expect.any(Object),
       "/new",

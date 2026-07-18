@@ -33,6 +33,16 @@ output "auth_route_clients" {
   value       = module.cognito.auth_route_clients
 }
 
+output "web_local_client_id" {
+  description = "Local-password-only Cognito app client for web login."
+  value       = module.cognito.web_local_client_id
+}
+
+output "mobile_local_client_id" {
+  description = "Local-password-only Cognito app client for mobile login."
+  value       = module.cognito.mobile_local_client_id
+}
+
 output "microsoft_identity_provider_name" {
   value = module.cognito.microsoft_identity_provider_name
 }

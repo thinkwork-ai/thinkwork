@@ -158,7 +158,44 @@ function validateUrl(value: string, path: string, httpsOnly = true): string {
       `${path} must not contain credentials`,
     );
   }
-  return parsed.toString();
+  return value.trim();
+}
+
+function validateRouteUri(value: string, path: string, family: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new AuthProviderValidationError(
+      "invalid_url",
+      `${path} must be an absolute URL`,
+    );
+  }
+  if (parsed.username || parsed.password) {
+    throw new AuthProviderValidationError(
+      "credential_in_url",
+      `${path} must not contain credentials`,
+    );
+  }
+  if (parsed.protocol === "https:") return value.trim();
+  if (
+    parsed.protocol === "http:" &&
+    (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost")
+  ) {
+    return value.trim();
+  }
+  const customSchemeAllowed = family === "mobile" || family === "desktop";
+  if (
+    customSchemeAllowed &&
+    /^[a-z][a-z0-9+.-]*:$/.test(parsed.protocol) &&
+    !["data:", "file:", "javascript:"].includes(parsed.protocol)
+  ) {
+    return value.trim();
+  }
+  throw new AuthProviderValidationError(
+    "invalid_url",
+    `${path} must use HTTPS, an approved loopback URL, or a native-app scheme`,
+  );
 }
 
 function validateResourceArn(
@@ -433,19 +470,10 @@ function parseRoute(
       `${path}.explicitAuthFlows`,
     ),
     redirectUris: stringArray(value.redirectUris, `${path}.redirectUris`).map(
-      (uri) =>
-        validateUrl(
-          uri,
-          `${path}.redirectUris`,
-          !uri.startsWith("http://127.0.0.1"),
-        ),
+      (uri) => validateRouteUri(uri, `${path}.redirectUris`, family),
     ),
     logoutUris: stringArray(value.logoutUris, `${path}.logoutUris`).map((uri) =>
-      validateUrl(
-        uri,
-        `${path}.logoutUris`,
-        !uri.startsWith("http://127.0.0.1"),
-      ),
+      validateRouteUri(uri, `${path}.logoutUris`, family),
     ),
     lifecycleState: lifecycle as SafeAuthRouteClientMetadata["lifecycleState"],
     resourceArn: validateResourceArn(

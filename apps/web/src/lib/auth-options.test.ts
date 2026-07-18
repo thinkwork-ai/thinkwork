@@ -5,9 +5,27 @@ afterEach(() => {
 });
 
 describe("parsePublicAuthOptions", () => {
-  it("accepts the single WorkOS SSO fallback contract", async () => {
+  it("accepts direct Cognito Google and Microsoft routes", async () => {
     const { parsePublicAuthOptions } = await import("./auth-options");
+    expect(
+      parsePublicAuthOptions({
+        password: { enabled: true, clientId: "local-client" },
+        oauthOptions: [
+          option("google", "Google", "google-client"),
+          option("microsoft", "MicrosoftOrganizations", "microsoft-client"),
+        ],
+      }),
+    ).toEqual({
+      password: { enabled: true, clientId: "local-client" },
+      oauthOptions: [
+        option("google", "Google", "google-client"),
+        option("microsoft", "MicrosoftOrganizations", "microsoft-client"),
+      ],
+    });
+  });
 
+  it("drops WorkOS and malformed routes", async () => {
+    const { parsePublicAuthOptions } = await import("./auth-options");
     expect(
       parsePublicAuthOptions({
         password: { enabled: true },
@@ -21,110 +39,75 @@ describe("parsePublicAuthOptions", () => {
             route: {
               type: "workosAuthorize",
               authorizePath: "/api/auth/workos/authorize",
-              prompt: "select_account",
             },
           },
         ],
       }),
-    ).toEqual({
-      password: { enabled: true },
-      oauthOptions: [
-        {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
-          route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
-            prompt: "select_account",
-          },
-        },
-      ],
-    });
+    ).toEqual({ password: { enabled: false }, oauthOptions: [] });
   });
 
-  it("drops malformed OAuth options and keeps password sign-in usable", async () => {
+  it("fails closed for malformed responses", async () => {
     const { parsePublicAuthOptions } = await import("./auth-options");
-
-    expect(
-      parsePublicAuthOptions({
-        password: { enabled: true },
-        oauthOptions: [
-          {
-            key: "bad",
-            label: "Bad",
-            icon: "sso",
-            provider: "workos",
-            providerSpecific: false,
-            route: {
-              type: "workosAuthorize",
-              authorizePath: "/api/auth/workos/bad",
-            },
-          },
-        ],
-      }),
-    ).toEqual({ password: { enabled: true }, oauthOptions: [] });
-  });
-
-  it("defaults malformed responses to password enabled and no OAuth options", async () => {
-    const { parsePublicAuthOptions } = await import("./auth-options");
-
     expect(parsePublicAuthOptions(null)).toEqual({
-      password: { enabled: true },
+      password: { enabled: false },
       oauthOptions: [],
     });
   });
 });
 
 describe("fetchPublicAuthOptions", () => {
-  it("fetches from VITE_API_URL without caching", async () => {
+  it("sends host and platform as non-authoritative routing input", async () => {
     vi.stubEnv("VITE_API_URL", "https://api.example.com/");
-    const fetchImpl = vi.fn(async () =>
-      Response.json({ password: { enabled: false }, oauthOptions: [] }),
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({ password: { enabled: false }, oauthOptions: [] }),
     );
     const { fetchPublicAuthOptions } = await import("./auth-options");
-
-    const options = await fetchPublicAuthOptions(fetchImpl as typeof fetch);
-
-    expect(options).toEqual({ password: { enabled: false }, oauthOptions: [] });
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "https://api.example.com/api/auth/options",
-      {
-        method: "GET",
-        cache: "no-store",
-        headers: { accept: "application/json" },
-      },
-    );
-  });
-
-  it("falls back to the GraphQL HTTP origin when VITE_API_URL is absent", async () => {
-    vi.stubEnv("VITE_API_URL", "");
-    vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
-    const fetchImpl = vi.fn(async () =>
-      Response.json({ password: { enabled: true }, oauthOptions: [] }),
-    );
-    const { fetchPublicAuthOptions } = await import("./auth-options");
-
     await fetchPublicAuthOptions(fetchImpl as typeof fetch);
 
-    expect(fetchImpl).toHaveBeenCalledWith(
+    const [rawUrl, init] = fetchImpl.mock.calls[0];
+    const url = new URL(String(rawUrl));
+    expect(url.origin + url.pathname).toBe(
       "https://api.example.com/api/auth/options",
-      expect.any(Object),
     );
+    expect(url.searchParams.get("host")).toBe(window.location.hostname);
+    expect(url.searchParams.get("platform")).toBe("web");
+    expect(init).toEqual({
+      method: "GET",
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
   });
 
   it("fails closed when the endpoint errors", async () => {
     vi.stubEnv("VITE_API_URL", "https://api.example.com");
     const fetchImpl = vi.fn(async () => new Response("nope", { status: 500 }));
     const { fetchPublicAuthOptions } = await import("./auth-options");
-
     await expect(
       fetchPublicAuthOptions(fetchImpl as typeof fetch),
     ).resolves.toEqual({
-      password: { enabled: true },
+      password: { enabled: false },
       oauthOptions: [],
     });
   });
 });
+
+function option(
+  provider: "google" | "microsoft",
+  identityProvider: string,
+  clientId: string,
+) {
+  return {
+    key: provider,
+    label: `Continue with ${provider === "google" ? "Google" : "Microsoft"}`,
+    icon: provider,
+    provider,
+    providerSpecific: true,
+    route: {
+      type: "cognitoHostedUi",
+      clientId,
+      identityProvider,
+      prompt: "select_account",
+    },
+  } as const;
+}

@@ -139,6 +139,82 @@ def test_customer_update_accepts_customer_ecr_agentcore_pi_source_image() -> Non
     ) == image
 
 
+def test_native_auth_reconciliation_builds_route_specific_secret_free_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(
+        runner.uuid,
+        "uuid4",
+        lambda: "019f762b-683c-7153-acff-24ee932d73f6",
+    )
+    outputs = {
+        "user_pool_id": {"value": "us-east-1_Example123"},
+        "auth_route_clients": {
+            "value": {
+                "web:local": {
+                    "client_id": "1234567890abcdefghijklmnop",
+                    "route_key": "local",
+                    "client_family": "web",
+                    "provider_names": ["COGNITO"],
+                    "explicit_auth_flows": [
+                        "ALLOW_USER_PASSWORD_AUTH",
+                        "ALLOW_USER_SRP_AUTH",
+                        "ALLOW_REFRESH_TOKEN_AUTH",
+                    ],
+                    "callback_urls": ["https://app.example/auth/callback"],
+                    "logout_urls": ["https://app.example"],
+                    "lifecycle_state": "native",
+                },
+                "web:google": {
+                    "client_id": "abcdefghijklmnopqrstuvwxyz",
+                    "route_key": "google",
+                    "client_family": "web",
+                    "provider_names": ["Google"],
+                    "explicit_auth_flows": ["ALLOW_REFRESH_TOKEN_AUTH"],
+                    "callback_urls": ["https://app.example/auth/callback"],
+                    "logout_urls": ["https://app.example"],
+                    "lifecycle_state": "native",
+                },
+                "web:microsoft": {
+                    "client_id": "zyxwvutsrqponmlkjihgfedcba",
+                    "route_key": "microsoft",
+                    "client_family": "web",
+                    "provider_names": ["MicrosoftOrganizations"],
+                    "explicit_auth_flows": ["ALLOW_REFRESH_TOKEN_AUTH"],
+                    "callback_urls": ["https://app.example/auth/callback"],
+                    "logout_urls": ["https://app.example"],
+                    "lifecycle_state": "native",
+                },
+            }
+        },
+    }
+    scope = {
+        "stage": "dev",
+        "account_id": "123456789012",
+        "region": "us-east-1",
+    }
+
+    payload, state = runner.native_auth_reconciliation_payload(outputs, scope, {})
+
+    assert payload["revision"] == 1
+    assert [item["connectionKey"] for item in payload["connections"]] == [
+        "google",
+        "local",
+        "microsoft:organizations",
+    ]
+    by_route = {item["routeKey"]: item for item in payload["routeClients"]}
+    assert by_route["local"]["providerNames"] == ["COGNITO"]
+    assert by_route["google"]["providerNames"] == ["Google"]
+    assert by_route["microsoft"]["providerNames"] == ["MicrosoftOrganizations"]
+    assert "secret" not in json.dumps(payload).lower()
+    assert len(payload["manifestFingerprint"]) == 64
+
+    replay, replay_state = runner.native_auth_reconciliation_payload(outputs, scope, state)
+    assert replay is None
+    assert replay_state == state
+
+
 def test_bootstrap_can_fall_back_to_release_agentcore_pi_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

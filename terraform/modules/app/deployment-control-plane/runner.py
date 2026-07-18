@@ -7,8 +7,10 @@ import re
 import secrets
 import subprocess
 import tarfile
+import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -506,6 +508,7 @@ def redacted_tfvars(vars_json):
         "api_auth_secret",
         "db_password",
         "google_oauth_client_secret",
+        "microsoft_oauth_client_secret",
     ]:
         if key in redacted:
             redacted[key] = "[redacted]"
@@ -3131,6 +3134,24 @@ def write_runner_files(payload, runner_secrets):
                 default="",
             ),
         ),
+        "microsoft_oauth_client_id": safe_get(
+            runner_secrets,
+            "microsoftOauthClientId",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthClientId",
+                default="",
+            ),
+        ),
+        "microsoft_oauth_client_secret": safe_get(
+            runner_secrets,
+            "microsoftOauthClientSecret",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthClientSecret",
+                default="",
+            ),
+        ),
         "cognito_email_source_arn": safe_get(
             runner_secrets,
             "cognitoEmailSourceArn",
@@ -3348,6 +3369,15 @@ variable "google_oauth_client_id" {{
 }}
 
 variable "google_oauth_client_secret" {{
+  type      = string
+  sensitive = true
+}}
+
+variable "microsoft_oauth_client_id" {{
+  type = string
+}}
+
+variable "microsoft_oauth_client_secret" {{
   type      = string
   sensitive = true
 }}
@@ -3676,6 +3706,8 @@ module "thinkwork" {{
 
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
+  microsoft_oauth_client_id     = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret = var.microsoft_oauth_client_secret
   platform_operator_emails   = var.platform_operator_emails
 
   cognito_email_source_arn       = var.cognito_email_source_arn
@@ -3790,6 +3822,8 @@ output "db_secret_arn" {{ value = module.thinkwork.db_secret_arn }}
 output "database_name" {{ value = module.thinkwork.database_name }}
 output "user_pool_id" {{ value = module.thinkwork.user_pool_id }}
 output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
+output "web_local_client_id" {{ value = module.thinkwork.web_local_client_id }}
+output "auth_route_clients" {{ value = module.thinkwork.auth_route_clients }}
   output "docs_bucket_name" {{ value = module.thinkwork.docs_bucket_name }}
   output "docs_distribution_id" {{ value = module.thinkwork.docs_distribution_id }}
   output "docs_distribution_domain" {{ value = module.thinkwork.docs_distribution_domain }}
@@ -4211,6 +4245,194 @@ def runtime_profile(outputs, vars_json):
     return profile, web_env + "\n"
 
 
+def native_auth_reconciliation_payload(outputs, vars_json, previous_state=None):
+    """Build the complete secret-free Cognito desired set from Terraform outputs."""
+    previous_state = previous_state if isinstance(previous_state, dict) else {}
+    route_manifest = outputs.get("auth_route_clients", {}).get("value") or {}
+    if not isinstance(route_manifest, dict):
+        raise RuntimeError("auth_route_clients Terraform output must be an object")
+    user_pool_id = str(outputs.get("user_pool_id", {}).get("value") or "")
+    if not user_pool_id:
+        raise RuntimeError("Native auth reconciliation requires user_pool_id output")
+
+    routes = []
+    provider_client_ids = {}
+    for manifest_key, raw in sorted(route_manifest.items()):
+        if not isinstance(raw, dict):
+            raise RuntimeError(f"Invalid auth route manifest entry: {manifest_key}")
+        provider_names = [str(value) for value in raw.get("provider_names") or []]
+        client_id = str(raw.get("client_id") or "")
+        for provider_name in provider_names:
+            provider_client_ids.setdefault(provider_name, []).append(client_id)
+        routes.append(
+            {
+                "routeKey": str(raw.get("route_key") or ""),
+                "clientFamily": str(raw.get("client_family") or ""),
+                "cognitoUserPoolId": user_pool_id,
+                "cognitoAppClientId": client_id,
+                "providerNames": provider_names,
+                "explicitAuthFlows": [
+                    str(value) for value in raw.get("explicit_auth_flows") or []
+                ],
+                "redirectUris": [str(value) for value in raw.get("callback_urls") or []],
+                "logoutUris": [str(value) for value in raw.get("logout_urls") or []],
+                "lifecycleState": str(raw.get("lifecycle_state") or "native"),
+            }
+        )
+
+    connections = [
+        {
+            "connectionKey": "local",
+            "providerKey": "cognito",
+            "providerKind": "local",
+            "displayName": "Email and password",
+            "lifecycleState": "native",
+            "cognitoUserPoolId": user_pool_id,
+            "cognitoIdentityProviderName": "COGNITO",
+            "authorizeScopes": "openid email profile",
+            "tenantBindings": [],
+        }
+    ]
+    if provider_client_ids.get("Google"):
+        connections.append(
+            {
+                "connectionKey": "google",
+                "providerKey": "google",
+                "providerKind": "google",
+                "displayName": "Google",
+                "lifecycleState": "native",
+                "cognitoUserPoolId": user_pool_id,
+                "cognitoIdentityProviderName": "Google",
+                "authorizeScopes": "openid email profile",
+                "tenantBindings": [],
+            }
+        )
+    if provider_client_ids.get("MicrosoftOrganizations"):
+        connections.append(
+            {
+                "connectionKey": "microsoft:organizations",
+                "providerKey": "microsoft",
+                "providerKind": "microsoft_organizations",
+                "displayName": "Microsoft",
+                "lifecycleState": "native",
+                "cognitoUserPoolId": user_pool_id,
+                "cognitoIdentityProviderName": "MicrosoftOrganizations",
+                "issuerUrl": "https://login.microsoftonline.com/organizations/v2.0",
+                "authorizeScopes": "openid email profile",
+                "tenantBindings": [],
+            }
+        )
+
+    # Identity-provider operations store the complete tenant connection set in
+    # safe SSM state. Standard releases carry it forward; omission is not
+    # interpreted as deletion.
+    for connection in previous_state.get("tenantConnections") or []:
+        if isinstance(connection, dict):
+            connections.append(connection)
+
+    desired = {
+        "connections": sorted(connections, key=lambda item: item["connectionKey"]),
+        "routeClients": sorted(
+            routes,
+            key=lambda item: f"{item['routeKey']}:{item['clientFamily']}",
+        ),
+    }
+    desired_fingerprint = hashlib.sha256(canonical_json(desired).encode("utf-8")).hexdigest()
+    if desired_fingerprint == previous_state.get("desiredFingerprint"):
+        return None, previous_state
+
+    previous_revision = int(previous_state.get("revision") or 0)
+    payload = {
+        "stage": vars_json["stage"],
+        "awsAccountId": vars_json["account_id"],
+        "awsRegion": vars_json["region"],
+        "revision": previous_revision + 1,
+        "expectedPreviousRevision": previous_revision,
+        "idempotencyKey": str(uuid.uuid4()),
+        "connections": desired["connections"],
+        "routeClients": desired["routeClients"],
+    }
+    payload["manifestFingerprint"] = hashlib.sha256(
+        json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    next_state = {
+        "revision": payload["revision"],
+        "desiredFingerprint": desired_fingerprint,
+        "tenantConnections": previous_state.get("tenantConnections") or [],
+    }
+    return payload, next_state
+
+
+def auth_reconciliation_state(stage):
+    name = f"/thinkwork/{stage}/auth/reconciliation/state"
+    try:
+        encoded = output(
+            [
+                "aws",
+                "ssm",
+                "get-parameter",
+                "--name",
+                name,
+                "--query",
+                "Parameter.Value",
+                "--output",
+                "text",
+            ]
+        )
+        return json.loads(encoded)
+    except Exception:
+        return {}
+
+
+def reconcile_native_auth_metadata(outputs_path, vars_json):
+    outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
+    previous = auth_reconciliation_state(vars_json["stage"])
+    payload, next_state = native_auth_reconciliation_payload(outputs, vars_json, previous)
+    if payload is None:
+        return {"status": "unchanged", "revision": previous.get("revision", 0)}
+    api_endpoint = str(outputs.get("api_endpoint", {}).get("value") or "").rstrip("/")
+    api_auth_secret = str(vars_json.get("api_auth_secret") or "")
+    if not api_endpoint or not api_auth_secret:
+        raise RuntimeError("Native auth reconciliation requires API endpoint and service auth")
+    request = urllib.request.Request(
+        f"{api_endpoint}/api/auth/providers/reconcile",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_auth_secret}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as error:
+        safe_body = error.read().decode("utf-8", errors="replace")[:1000]
+        raise RuntimeError(
+            f"Native auth metadata reconciliation failed with HTTP {error.code}: {safe_body}"
+        ) from error
+    run(
+        [
+            "aws",
+            "ssm",
+            "put-parameter",
+            "--overwrite",
+            "--type",
+            "String",
+            "--name",
+            f"/thinkwork/{vars_json['stage']}/auth/reconciliation/state",
+            "--value",
+            json.dumps(next_state, separators=(",", ":")),
+        ]
+    )
+    return {
+        "status": str(result.get("status") or "applied"),
+        "revision": int(result.get("revision") or payload["revision"]),
+        "manifestFingerprint": payload["manifestFingerprint"],
+    }
+
+
 def sync_static(outputs_path, static_files, vars_json, artifact_names=None):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     artifact_names = set(artifact_names or [])
@@ -4610,6 +4832,9 @@ def main():
             )
         else:
             push_database_schema(outputs_path, vars_json)
+            CONTROLLER_EVIDENCE["authReconciliation"] = reconcile_native_auth_metadata(
+                outputs_path, vars_json
+            )
             ensure_first_admin(outputs_path, vars_json, payload, runner_secrets)
             write_outputs_to_ssm(outputs_path, vars_json)
             selected_controller_release = write_controller_release_selection_to_ssm(vars_json)

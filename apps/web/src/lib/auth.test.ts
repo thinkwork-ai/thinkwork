@@ -15,6 +15,7 @@ beforeEach(() => {
     configurable: true,
     value: createMemoryStorage(),
   });
+  window.sessionStorage.clear();
 });
 
 function stubLocation(origin: string): { navigations: string[] } {
@@ -23,6 +24,8 @@ function stubLocation(origin: string): { navigations: string[] } {
     configurable: true,
     value: {
       origin,
+      host: new URL(origin).host,
+      hostname: new URL(origin).hostname,
       set href(target: string) {
         navigations.push(target);
       },
@@ -58,62 +61,116 @@ function makeIdToken(payload: object): string {
   return ["header", base64Url(payload), "signature"].join(".");
 }
 
-describe("getGoogleSignInUrl", () => {
-  it("forces the Google account chooser with prompt=select_account", async () => {
-    stubLocation("https://app.example");
-    const { getGoogleSignInUrl } = await import("./auth");
-
-    const url = new URL(getGoogleSignInUrl());
-    expect(url.pathname).toBe("/oauth2/authorize");
-    expect(url.searchParams.get("identity_provider")).toBe("Google");
-    expect(url.searchParams.get("prompt")).toBe("select_account");
-  });
-});
-
-describe("getHostedSignInUrl", () => {
-  it("uses the Cognito hosted UI without forcing an identity provider", async () => {
-    stubLocation("https://app.example");
-    const { getHostedSignInUrl } = await import("./auth");
-
-    const url = new URL(getHostedSignInUrl());
-    expect(url.pathname).toBe("/oauth2/authorize");
-    expect(url.searchParams.get("identity_provider")).toBeNull();
-    expect(url.searchParams.get("prompt")).toBeNull();
-    expect(url.searchParams.get("client_id")).toBe("test-client-id");
-  });
-});
-
 describe("getAuthOptionSignInUrl", () => {
-  it("routes public auth options through the WorkOS API authorize endpoint", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
+  it("starts direct Cognito authorization with state, nonce, and S256 PKCE", async () => {
     stubLocation("https://app.example");
     const { getAuthOptionSignInUrl } = await import("./auth");
 
     const url = new URL(
-      getAuthOptionSignInUrl(
+      await getAuthOptionSignInUrl(
         {
-        key: "workos-sso",
-        label: "Continue with SSO",
-        icon: "sso",
-        provider: "workos",
-        providerSpecific: false,
-        route: {
-          type: "workosAuthorize",
-          authorizePath: "/api/auth/workos/authorize",
-          prompt: "select_account",
-        },
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
+            prompt: "select_account",
+          },
         },
         "/automations/123",
       ),
     );
 
-    expect(url.origin).toBe("https://api.example.com");
-    expect(url.pathname).toBe("/api/auth/workos/authorize");
+    expect(url.origin).toBe(
+      "https://thinkwork-test.auth.us-east-1.amazoncognito.com",
+    );
+    expect(url.pathname).toBe("/oauth2/authorize");
+    expect(url.searchParams.get("client_id")).toBe("microsoft-client");
+    expect(url.searchParams.get("identity_provider")).toBe(
+      "MicrosoftOrganizations",
+    );
     expect(url.searchParams.get("redirect_uri")).toBe(
       "https://app.example/auth/callback",
     );
-    expect(url.searchParams.get("return_to")).toBe("/automations/123");
     expect(url.searchParams.get("prompt")).toBe("select_account");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("code_challenge")).toMatch(
+      /^[A-Za-z0-9_-]{43}$/,
+    );
+    expect(url.searchParams.get("nonce")).toBeTruthy();
+    const state = url.searchParams.get("state");
+    expect(state).toBeTruthy();
+    const stored = JSON.parse(
+      window.sessionStorage.getItem(`thinkwork:oauth-flow:${state}`) ?? "{}",
+    );
+    expect(stored).toEqual(
+      expect.objectContaining({
+        clientId: "microsoft-client",
+        initiatingOrigin: "https://app.example",
+        next: "/automations/123",
+      }),
+    );
+  });
+});
+
+describe("native Cognito callback exchange", () => {
+  it("uses the selected route client and one-time PKCE state", async () => {
+    stubLocation("https://app.example");
+    const auth = await import("./auth");
+    const authorizeUrl = new URL(
+      await auth.getAuthOptionSignInUrl({
+        key: "google",
+        label: "Continue with Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "google-client",
+          identityProvider: "Google",
+          prompt: "select_account",
+        },
+      }),
+    );
+    const state = authorizeUrl.searchParams.get("state")!;
+    const nonce = authorizeUrl.searchParams.get("nonce")!;
+    const issuer =
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        id_token: makeIdToken({
+          token_use: "id",
+          aud: "google-client",
+          nonce,
+          iss: issuer,
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        access_token: makeIdToken({
+          token_use: "access",
+          client_id: "google-client",
+          iss: issuer,
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        refresh_token: "refresh-token",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await auth.exchangeCodeForSession("one-time-code", state);
+    expect(result.clientId).toBe("google-client");
+    expect(result.next).toBe("/new");
+    const request = fetchMock.mock.calls[0][1];
+    const body = request?.body as URLSearchParams;
+    expect(body.get("client_id")).toBe("google-client");
+    expect(body.get("code_verifier")).toBeTruthy();
+    await expect(
+      auth.exchangeCodeForSession("replayed-code", state),
+    ).rejects.toThrow(/missing, expired, or already used/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

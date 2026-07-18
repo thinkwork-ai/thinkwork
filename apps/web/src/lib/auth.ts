@@ -14,30 +14,55 @@ import type { PublicOAuthOption } from "./auth-options";
 // Config — lazy-init to avoid crashing when env vars aren't set (local dev)
 // ---------------------------------------------------------------------------
 let _userPool: CognitoUserPool | null = null;
+let _userPoolClientId: string | null = null;
+let passwordAuthClientId: string | null = null;
 let tokenStorage: TokenStorage = new LocalStorageTokenStorage();
 const TOKEN_REFRESH_SKEW_MS = 30_000;
 const AUTH_SOURCE_STORAGE_KEY = "thinkwork:auth-source";
+const AUTH_CLIENT_STORAGE_KEY = "thinkwork:auth-client-id";
+const OAUTH_FLOW_STORAGE_PREFIX = "thinkwork:oauth-flow:";
+const OAUTH_FLOW_TTL_MS = 10 * 60 * 1000;
 
 export function configureTokenStorage(storage: TokenStorage): void {
   if (tokenStorage === storage) return;
   tokenStorage = storage;
   _userPool = null;
+  _userPoolClientId = null;
 }
 
 export function getTokenStorage(): TokenStorage {
   return tokenStorage;
 }
 
+export function configurePasswordAuthClient(
+  clientId: string | undefined,
+): void {
+  passwordAuthClientId = clientId?.trim() || null;
+  if (_userPoolClientId !== getActiveClientId()) {
+    _userPool = null;
+    _userPoolClientId = null;
+  }
+}
+
+function getActiveClientId(): string {
+  return (
+    tokenStorage.getItem(AUTH_CLIENT_STORAGE_KEY) ||
+    passwordAuthClientId ||
+    readRuntimeEnv("VITE_COGNITO_CLIENT_ID")
+  );
+}
+
 function getUserPool(): CognitoUserPool | null {
   const userPoolId = readRuntimeEnv("VITE_COGNITO_USER_POOL_ID");
-  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  const clientId = getActiveClientId();
   if (!userPoolId || !clientId) return null;
-  if (!_userPool) {
+  if (!_userPool || _userPoolClientId !== clientId) {
     _userPool = new CognitoUserPool({
       UserPoolId: userPoolId,
       ClientId: clientId,
       Storage: tokenStorage as unknown as Storage,
     });
+    _userPoolClientId = clientId;
   }
   return _userPool;
 }
@@ -62,6 +87,9 @@ export function signIn(
   newPassword?: string,
 ): Promise<CognitoUserSession> {
   return new Promise((resolve, reject) => {
+    if (passwordAuthClientId) {
+      tokenStorage.setItem(AUTH_CLIENT_STORAGE_KEY, passwordAuthClientId);
+    }
     const pool = getUserPool();
     if (!pool) return reject(new Error("Auth not configured"));
 
@@ -190,6 +218,7 @@ export async function signOut(): Promise<void> {
   const idToken = await getIdToken().catch(() => getStoredIdToken());
   const authSource = tokenStorage.getItem(AUTH_SOURCE_STORAGE_KEY);
   const isWorkosSession = authSource === "workos";
+  const clientId = getActiveClientId();
 
   clearLocalAuthSession();
 
@@ -211,7 +240,6 @@ export async function signOut(): Promise<void> {
     return;
   }
 
-  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
   if (!clientId) {
     window.location.href = "/sign-in";
     return;
@@ -229,7 +257,7 @@ export async function signOut(): Promise<void> {
 }
 
 export function clearLocalAuthSession(): void {
-  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  const clientId = getActiveClientId();
   const prefix = clientId ? `CognitoIdentityServiceProvider.${clientId}` : "";
   const lastUser = prefix
     ? tokenStorage.getItem(`${prefix}.LastAuthUser`)
@@ -248,6 +276,9 @@ export function clearLocalAuthSession(): void {
     tokenStorage.removeItem(`${prefix}.LastAuthUser`);
   }
   tokenStorage.removeItem(AUTH_SOURCE_STORAGE_KEY);
+  tokenStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
+  _userPool = null;
+  _userPoolClientId = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +313,12 @@ export function getCurrentSession(): Promise<CognitoUserSession | null> {
 // ---------------------------------------------------------------------------
 
 function getStoredTokenName(): string | null {
-  const prefix = `CognitoIdentityServiceProvider.${readRuntimeEnv("VITE_COGNITO_CLIENT_ID")}`;
+  const prefix = `CognitoIdentityServiceProvider.${getActiveClientId()}`;
   return tokenStorage.getItem(`${prefix}.LastAuthUser`);
 }
 
 function getStoredToken(kind: "idToken" | "accessToken" | "refreshToken") {
-  const prefix = `CognitoIdentityServiceProvider.${readRuntimeEnv("VITE_COGNITO_CLIENT_ID")}`;
+  const prefix = `CognitoIdentityServiceProvider.${getActiveClientId()}`;
   const lastUser = getStoredTokenName();
   if (!lastUser) return null;
   return tokenStorage.getItem(`${prefix}.${lastUser}.${kind}`);
@@ -323,7 +354,7 @@ async function refreshStoredOAuthSession(): Promise<{
 } | null> {
   const username = getStoredTokenName();
   const refreshToken = getStoredToken("refreshToken");
-  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  const clientId = getActiveClientId();
   const cognitoDomain = readRuntimeEnv("VITE_COGNITO_DOMAIN");
   if (!username || !refreshToken || !clientId || !cognitoDomain) return null;
 
@@ -443,30 +474,11 @@ function getCognitoDomainBase(): string {
   return `https://${raw}.auth.us-east-1.amazoncognito.com`;
 }
 
-export function getGoogleSignInUrl(): string {
-  return getHostedSignInUrl({
-    identityProvider: "Google",
-    prompt: "select_account",
-  });
-}
-
 export function getAuthOptionSignInUrl(
   option: PublicOAuthOption,
   next = "/new",
-): string {
-  if (option.route.type !== "workosAuthorize") {
-    throw new Error("Unsupported auth option route");
-  }
-  const url = new URL(`${apiBaseUrl()}${option.route.authorizePath}`);
-  url.searchParams.set(
-    "redirect_uri",
-    `${window.location.origin}/auth/callback`,
-  );
-  url.searchParams.set("return_to", safeReturnTo(next));
-  if (option.route.prompt) {
-    url.searchParams.set("prompt", option.route.prompt);
-  }
-  return url.toString();
+): Promise<string> {
+  return createNativeAuthorizeUrl(option, next);
 }
 
 /**
@@ -478,28 +490,84 @@ export function getAuthOptionSignInUrl(
 export function isPasswordSignInConfigured(): boolean {
   return Boolean(
     readRuntimeEnv("VITE_COGNITO_USER_POOL_ID") &&
-      readRuntimeEnv("VITE_COGNITO_CLIENT_ID"),
+    (passwordAuthClientId || readRuntimeEnv("VITE_COGNITO_CLIENT_ID")),
   );
 }
 
-export function getHostedSignInUrl(options?: {
-  identityProvider?: string;
-  prompt?: string;
-}): string {
+interface PendingOAuthFlow {
+  version: 1;
+  state: string;
+  nonce: string;
+  codeVerifier: string;
+  clientId: string;
+  redirectUri: string;
+  initiatingOrigin: string;
+  initiatingHost: string;
+  next: string;
+  expiresAt: number;
+}
+
+async function createNativeAuthorizeUrl(
+  option: PublicOAuthOption,
+  next: string,
+): Promise<string> {
+  const state = randomUrlSafeValue(32);
+  const nonce = randomUrlSafeValue(32);
+  const codeVerifier = randomUrlSafeValue(64);
   const redirectUri = `${window.location.origin}/auth/callback`;
+  const flow: PendingOAuthFlow = {
+    version: 1,
+    state,
+    nonce,
+    codeVerifier,
+    clientId: option.route.clientId,
+    redirectUri,
+    initiatingOrigin: window.location.origin,
+    initiatingHost: window.location.host,
+    next: safeReturnTo(next),
+    expiresAt: Date.now() + OAUTH_FLOW_TTL_MS,
+  };
+  sessionStorage.setItem(
+    `${OAUTH_FLOW_STORAGE_PREFIX}${state}`,
+    JSON.stringify(flow),
+  );
+
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: readRuntimeEnv("VITE_COGNITO_CLIENT_ID"),
+    client_id: option.route.clientId,
     redirect_uri: redirectUri,
     scope: "openid email profile",
+    identity_provider: option.route.identityProvider,
+    prompt: option.route.prompt || "select_account",
+    state,
+    nonce,
+    code_challenge_method: "S256",
+    code_challenge: await sha256Base64Url(codeVerifier),
   });
-  if (options?.identityProvider) {
-    params.set("identity_provider", options.identityProvider);
-  }
-  if (options?.prompt) {
-    params.set("prompt", options.prompt);
-  }
   return `${getCognitoDomainBase()}/oauth2/authorize?${params.toString()}`;
+}
+
+function randomUrlSafeValue(bytes: number): string {
+  const value = new Uint8Array(bytes);
+  crypto.getRandomValues(value);
+  return bytesToBase64Url(value);
+}
+
+async function sha256Base64Url(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return bytesToBase64Url(new Uint8Array(digest));
+}
+
+function bytesToBase64Url(value: Uint8Array): string {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 function apiBaseUrl(): string {
@@ -536,16 +604,23 @@ export function consumePostAuthRedirect(fallback = "/new"): string {
   return stored;
 }
 
-interface OAuthTokens {
+export interface OAuthTokens {
   id_token: string;
   access_token: string;
   refresh_token: string;
 }
 
+export interface NativeOAuthSession {
+  tokens: OAuthTokens;
+  clientId: string;
+  next: string;
+}
+
 export async function exchangeCodeForSession(
   code: string,
-): Promise<OAuthTokens> {
-  const redirectUri = `${window.location.origin}/auth/callback`;
+  state: string,
+): Promise<NativeOAuthSession> {
+  const flow = consumePendingOAuthFlow(state);
   const base = getCognitoDomainBase();
 
   const res = await fetch(`${base}/oauth2/token`, {
@@ -553,9 +628,10 @@ export async function exchangeCodeForSession(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: readRuntimeEnv("VITE_COGNITO_CLIENT_ID"),
-      redirect_uri: redirectUri,
+      client_id: flow.clientId,
+      redirect_uri: flow.redirectUri,
       code,
+      code_verifier: flow.codeVerifier,
     }),
   });
 
@@ -577,11 +653,77 @@ export async function exchangeCodeForSession(
   ) {
     throw new Error("Token exchange returned an unexpected response shape");
   }
-  return {
+  const tokens = {
     id_token: raw.id_token,
     access_token: raw.access_token,
     refresh_token: raw.refresh_token,
   };
+  validateNativeOAuthTokens(tokens, flow);
+  return { tokens, clientId: flow.clientId, next: flow.next };
+}
+
+function consumePendingOAuthFlow(state: string): PendingOAuthFlow {
+  if (!state) throw new Error("OAuth callback is missing state.");
+  const key = `${OAUTH_FLOW_STORAGE_PREFIX}${state}`;
+  const encoded = sessionStorage.getItem(key);
+  // State is single-use even when token exchange or claim validation fails.
+  sessionStorage.removeItem(key);
+  if (!encoded)
+    throw new Error("OAuth state is missing, expired, or already used.");
+  let flow: PendingOAuthFlow;
+  try {
+    flow = JSON.parse(encoded) as PendingOAuthFlow;
+  } catch {
+    throw new Error("OAuth state is invalid.");
+  }
+  if (
+    flow.version !== 1 ||
+    flow.state !== state ||
+    flow.expiresAt <= Date.now() ||
+    flow.initiatingOrigin !== window.location.origin ||
+    flow.initiatingHost !== window.location.host ||
+    flow.redirectUri !== `${window.location.origin}/auth/callback` ||
+    !flow.clientId ||
+    !flow.codeVerifier ||
+    !flow.nonce
+  ) {
+    throw new Error("OAuth state does not match this login attempt.");
+  }
+  return flow;
+}
+
+function validateNativeOAuthTokens(
+  tokens: OAuthTokens,
+  flow: PendingOAuthFlow,
+): void {
+  const id = decodeJwtPayload(tokens.id_token);
+  const access = decodeJwtPayload(tokens.access_token);
+  const userPoolId = readRuntimeEnv("VITE_COGNITO_USER_POOL_ID");
+  const region = userPoolId.split("_")[0];
+  const expectedIssuer =
+    userPoolId && region
+      ? `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`
+      : "";
+  if (
+    !id ||
+    !access ||
+    id.token_use !== "id" ||
+    access.token_use !== "access" ||
+    id.aud !== flow.clientId ||
+    access.client_id !== flow.clientId ||
+    id.nonce !== flow.nonce ||
+    !expectedIssuer ||
+    id.iss !== expectedIssuer ||
+    access.iss !== expectedIssuer ||
+    typeof id.exp !== "number" ||
+    typeof access.exp !== "number" ||
+    isExpiredJwt(tokens.id_token) ||
+    isExpiredJwt(tokens.access_token)
+  ) {
+    throw new Error(
+      "Cognito returned tokens that do not match this login attempt.",
+    );
+  }
 }
 
 export async function exchangeWorkosBridgeForSession(
@@ -616,12 +758,18 @@ export async function exchangeWorkosBridgeForSession(
 export function storeTokensInCognitoStorage(
   tokens: OAuthTokens,
   authSource: "cognito" | "workos" = "cognito",
+  clientId = getActiveClientId(),
 ): void {
   // Decode the id token to extract the username (sub claim)
-  const payload = JSON.parse(atob(tokens.id_token.split(".")[1]));
+  const payload = decodeJwtPayload(tokens.id_token);
+  if (!payload) throw new Error("Cognito returned an invalid ID token.");
   const username = payload["cognito:username"] || payload["sub"];
+  if (typeof username !== "string" || !username) {
+    throw new Error("Cognito ID token is missing its subject.");
+  }
 
-  const prefix = `CognitoIdentityServiceProvider.${readRuntimeEnv("VITE_COGNITO_CLIENT_ID")}`;
+  if (!clientId) throw new Error("Auth client is not configured.");
+  const prefix = `CognitoIdentityServiceProvider.${clientId}`;
 
   tokenStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
   tokenStorage.setItem(
@@ -634,6 +782,9 @@ export function storeTokensInCognitoStorage(
   );
   tokenStorage.setItem(`${prefix}.LastAuthUser`, username);
   tokenStorage.setItem(AUTH_SOURCE_STORAGE_KEY, authSource);
+  tokenStorage.setItem(AUTH_CLIENT_STORAGE_KEY, clientId);
+  _userPool = null;
+  _userPoolClientId = null;
 }
 
 async function requestWorkosLogoutUrl(idToken: string): Promise<string | null> {

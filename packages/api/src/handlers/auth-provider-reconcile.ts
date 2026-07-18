@@ -273,6 +273,13 @@ export async function reconcileAuthProviderMetadata(
     });
 
     for (const connection of payload.connections) {
+      const publishesNativeOption =
+        connection.lifecycleState === "native" &&
+        (connection.providerKind === "google" ||
+          connection.providerKind === "microsoft_organizations" ||
+          connection.tenantBindings.some(
+            (binding) => binding.status === "enabled",
+          ));
       const [resource] = await tx
         .insert(authProviderResources)
         .values({
@@ -301,7 +308,7 @@ export async function reconcileAuthProviderMetadata(
           desired_revision: payload.revision,
           validation_status:
             connection.lifecycleState === "denied" ? "disabled" : "valid",
-          public_options_published: false,
+          public_options_published: publishesNativeOption,
           diagnostics: {},
           updated_at: new Date(),
         })
@@ -327,7 +334,7 @@ export async function reconcileAuthProviderMetadata(
             desired_revision: payload.revision,
             validation_status:
               connection.lifecycleState === "denied" ? "disabled" : "valid",
-            public_options_published: false,
+            public_options_published: publishesNativeOption,
             diagnostics: {},
             updated_at: new Date(),
           },

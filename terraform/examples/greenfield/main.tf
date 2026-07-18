@@ -1100,6 +1100,11 @@ output "admin_client_id" {
   value       = module.thinkwork.admin_client_id
 }
 
+output "web_local_client_id" {
+  description = "Local-password-only Cognito app client used by the web runtime."
+  value       = module.thinkwork.web_local_client_id
+}
+
 output "mobile_client_id" {
   description = "Cognito app client ID for mobile"
   value       = module.thinkwork.mobile_client_id

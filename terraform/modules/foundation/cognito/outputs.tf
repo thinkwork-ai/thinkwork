@@ -49,6 +49,22 @@ output "auth_route_clients" {
   } : var.existing_auth_route_clients
 }
 
+output "web_local_client_id" {
+  description = "Local-password-only Cognito app client for the web client family."
+  value = local.create ? aws_cognito_user_pool_client.auth_route["web:local"].id : try(
+    var.existing_auth_route_clients["web:local"].client_id,
+    null,
+  )
+}
+
+output "mobile_local_client_id" {
+  description = "Local-password-only Cognito app client for the mobile client family."
+  value = local.create ? aws_cognito_user_pool_client.auth_route["mobile:local"].id : try(
+    var.existing_auth_route_clients["mobile:local"].client_id,
+    null,
+  )
+}
+
 output "microsoft_identity_provider_name" {
   description = "Direct Microsoft organizations Cognito provider name, or null when not configured."
   value       = var.microsoft_oauth_client_id != "" ? "MicrosoftOrganizations" : null

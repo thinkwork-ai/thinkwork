@@ -4,12 +4,9 @@
 # Reads environment config from Terraform outputs, builds a production
 # Vite bundle, syncs to S3, and invalidates the CloudFront cache.
 #
-# apps/web reuses the existing ThinkworkAdmin Cognito client (same
-# users, single sign-in across both surfaces) so VITE_COGNITO_CLIENT_ID
-# is sourced from the admin_client_id Terraform output, not a separate
-# app client. The terraform/modules/thinkwork concat() extends that
-# client's CallbackURLs to include app.thinkwork.ai and the compatibility
-# computer.thinkwork.ai redirect automatically.
+# During coexistence VITE_COGNITO_CLIENT_ID remains the legacy client only for
+# restoring pre-cutover sessions. New local, Google, and Microsoft logins select
+# their isolated clients from the public auth catalog.
 #
 # Usage:
 #   bash scripts/build-web.sh <stage>

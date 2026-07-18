@@ -6,6 +6,7 @@ import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { EmailPasswordForm } from "@/components/auth/EmailPasswordForm";
 import { useAuth } from "@/context/AuthContext";
 import {
+  configurePasswordAuthClient,
   getAuthOptionSignInUrl,
   isPasswordSignInConfigured,
 } from "@/lib/auth";
@@ -45,7 +46,7 @@ export function SignInPage() {
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
   const [isProfileBusy, setIsProfileBusy] = useState(false);
   const [authOptions, setAuthOptions] = useState<PublicAuthOptions>({
-    password: { enabled: true },
+    password: { enabled: false },
     oauthOptions: [],
   });
 
@@ -114,7 +115,10 @@ export function SignInPage() {
     if (isDesktop) return;
     let cancelled = false;
     void fetchPublicAuthOptions().then((options) => {
-      if (!cancelled) setAuthOptions(options);
+      if (!cancelled) {
+        configurePasswordAuthClient(options.password.clientId);
+        setAuthOptions(options);
+      }
     });
     return () => {
       cancelled = true;
@@ -173,7 +177,7 @@ export function SignInPage() {
     setError("Desktop bridge is unavailable.");
   }
 
-  function handlePublicOAuth(option: PublicOAuthOption) {
+  async function handlePublicOAuth(option: PublicOAuthOption) {
     setError(null);
     if (!webDeploymentProfile.okForOAuth) {
       setError(
@@ -181,7 +185,20 @@ export function SignInPage() {
       );
       return;
     }
-    window.location.href = getAuthOptionSignInUrl(option, next || "/new");
+    setIsStartingOAuth(true);
+    try {
+      window.location.href = await getAuthOptionSignInUrl(
+        option,
+        next || "/new",
+      );
+    } catch (oauthError) {
+      setError(
+        oauthError instanceof Error
+          ? oauthError.message
+          : "Sign-in could not be started.",
+      );
+      setIsStartingOAuth(false);
+    }
   }
 
   const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
@@ -269,7 +286,7 @@ export function SignInPage() {
             publicOAuthOptions.map((option) => (
               <Button
                 key={option.key}
-                onClick={() => handlePublicOAuth(option)}
+                onClick={() => void handlePublicOAuth(option)}
                 size="lg"
                 variant={showPasswordForm ? "outline" : "default"}
                 className={showPasswordForm ? "w-full" : "min-w-40"}
@@ -281,7 +298,7 @@ export function SignInPage() {
                   "Opening..."
                 ) : (
                   <>
-                    <SsoIcon />
+                    <ProviderIcon icon={option.icon} />
                     {option.label}
                   </>
                 )}
@@ -356,22 +373,41 @@ function desktopDeploymentLabel(config: DesktopConfig): string {
     .join(" · ");
 }
 
-function SsoIcon() {
+function ProviderIcon({ icon }: { icon: PublicOAuthOption["icon"] }) {
+  if (icon === "google") return <GoogleIcon />;
+  return <MicrosoftIcon />;
+}
+
+function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none">
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
       <path
-        d="M12 3 4.5 6.5v5.4c0 4.35 3.08 7.43 7.5 9.1 4.42-1.67 7.5-4.75 7.5-9.1V6.5L12 3Z"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
+        fill="#4285F4"
+        d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.41Z"
       />
       <path
-        d="M8.5 12.2 11 14.7l4.8-5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
+        fill="#34A853"
+        d="M12 22c2.7 0 4.97-.9 6.62-2.36l-3.24-2.54c-.9.6-2.05.96-3.38.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"
       />
+      <path
+        fill="#FBBC05"
+        d="M6.39 13.93A6 6 0 0 1 6.08 12c0-.67.11-1.32.31-1.93V7.45H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.55l3.35-2.62Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.94c1.47 0 2.8.51 3.84 1.5l2.86-2.87A9.64 9.64 0 0 0 12 2a10 10 0 0 0-8.96 5.45l3.35 2.62C7.18 7.7 9.39 5.94 12 5.94Z"
+      />
+    </svg>
+  );
+}
+
+function MicrosoftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
+      <path fill="#F25022" d="M2 2h9.5v9.5H2z" />
+      <path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z" />
+      <path fill="#00A4EF" d="M2 12.5h9.5V22H2z" />
+      <path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z" />
     </svg>
   );
 }
