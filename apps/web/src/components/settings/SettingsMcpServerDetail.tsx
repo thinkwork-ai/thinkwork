@@ -27,6 +27,7 @@ import {
   deleteMcpServer,
   getMcpServiceCredentialStatus,
   getAgentCoreOAuthStatus,
+  completeAgentCoreOAuth,
   isPluginInstalledMcpServer,
   listMcpServers,
   listRuntimeMcpTools,
@@ -214,13 +215,51 @@ export function SettingsMcpServerDetail() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("agentcoreOAuth") !== "success") return;
-    setAgentCoreAuthStatus("connected");
-    setNotice("AgentCore Identity connected.");
+    const oauthStatus = params.get("agentcoreOAuth");
+    if (oauthStatus === "success") {
+      setAgentCoreAuthStatus("connected");
+      setNotice("AgentCore Identity connected.");
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("agentcoreOAuth");
+      window.history.replaceState({}, "", nextUrl.toString());
+      return;
+    }
+    if (oauthStatus !== "pending" || !tenantSlug) return;
+    const sessionId = params.get("agentcoreSessionId");
+    const state = params.get("agentcoreState");
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.delete("agentcoreOAuth");
+    nextUrl.searchParams.delete("agentcoreSessionId");
+    nextUrl.searchParams.delete("agentcoreState");
     window.history.replaceState({}, "", nextUrl.toString());
-  }, []);
+    if (!sessionId || !state) {
+      setError("AgentCore authorization callback was incomplete.");
+      return;
+    }
+    let cancelled = false;
+    setAgentCoreAuthLoading(true);
+    completeAgentCoreOAuth(tenantSlug, sessionId, state)
+      .then(() => {
+        if (cancelled) return;
+        setAgentCoreAuthStatus("connected");
+        setNotice("AgentCore Identity connected.");
+        setError(null);
+      })
+      .catch((cause) => {
+        if (cancelled) return;
+        setError(
+          cause instanceof Error
+            ? `AgentCore authorization failed: ${cause.message}`
+            : "AgentCore authorization failed.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setAgentCoreAuthLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug]);
 
   const loadRuntimeTools = useCallback(async () => {
     if (!server || !runtimeAgentId) return;

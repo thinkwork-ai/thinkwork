@@ -37,7 +37,7 @@ describe("visibleSettingsNavItems", () => {
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Workspace")).toBe(false);
   });
 
-  it("shows only General, Activity, and Plugins for members", () => {
+  it("shows personal Connections alongside General, Activity, and Plugins for members", () => {
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
@@ -47,6 +47,7 @@ describe("visibleSettingsNavItems", () => {
     expect(memberWeb.map((i) => i.label)).toEqual([
       "General",
       "Activity",
+      "Connectors",
       "Plugins",
     ]);
     expect(memberWeb.some((i) => i.to === "/settings/users")).toBe(false);
@@ -106,7 +107,7 @@ describe("visibleSettingsNavItems", () => {
     );
     expect(item).toBeDefined();
     expect(item?.label).toBe("Connectors");
-    expect(item?.operatorOnly).toBe(true);
+    expect(item?.operatorOnly).toBeUndefined();
     // The old sidebar label is gone; only the per-user tab inside the page
     // keeps the "Connections" name.
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Connections")).toBe(

@@ -337,6 +337,18 @@ export function startAgentCoreOAuth(
   });
 }
 
+export function completeAgentCoreOAuth(
+  tenantSlug: string,
+  sessionId: string,
+  state: string,
+): Promise<{ status: "connected" }> {
+  return request("/api/skills/mcp-oauth/agentcore/complete", {
+    method: "POST",
+    tenantSlug,
+    body: JSON.stringify({ sessionId, state }),
+  });
+}
+
 export function isManagedMcpServer(server: McpServer): boolean {
   return (
     server.managementSource === "managed_application" ||

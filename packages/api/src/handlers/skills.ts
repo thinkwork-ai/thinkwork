@@ -71,6 +71,10 @@ import {
   completeAgentCoreUserOAuth,
   getAgentCoreUserOAuth,
 } from "../lib/harness/agentcore-user-oauth.js";
+import {
+  agentCoreOAuthPrincipalMatches,
+  agentCoreOAuthSessionUri,
+} from "../lib/harness/agentcore-oauth-callback.js";
 
 export { loadTenantBuiltinTools };
 
@@ -105,14 +109,15 @@ export async function handler(
   if (
     path.startsWith("/api/skills/mcp-oauth/") &&
     path !== "/api/skills/mcp-oauth/agentcore/start" &&
-    path !== "/api/skills/mcp-oauth/agentcore/status"
+    path !== "/api/skills/mcp-oauth/agentcore/status" &&
+    !(path === "/api/skills/mcp-oauth/agentcore/complete" && method === "POST")
   ) {
     try {
       if (
         path === "/api/skills/mcp-oauth/agentcore/complete" &&
         method === "GET"
       ) {
-        return agentCoreOAuthComplete(event);
+        return agentCoreOAuthBrowserReturn(event);
       }
       if (path === "/api/skills/mcp-oauth/authorize" && method === "GET") {
         return mcpOAuthAuthorize(event);
@@ -150,6 +155,12 @@ export async function handler(
     }
     if (path === "/api/skills/mcp-oauth/agentcore/status" && method === "GET") {
       return agentCoreOAuthStatus(event);
+    }
+    if (
+      path === "/api/skills/mcp-oauth/agentcore/complete" &&
+      method === "POST"
+    ) {
+      return agentCoreOAuthComplete(event);
     }
 
     // GET /api/skills/plugin-oauth/authorize — app-level plugin activation
@@ -910,11 +921,26 @@ async function agentCoreOAuthStatus(
   );
 }
 
-async function agentCoreOAuthComplete(
+function verifiedAgentCoreOAuthState(signedState: string): AgentCoreOAuthState {
+  const state = verifyObject<AgentCoreOAuthState>(
+    signedState,
+    getApiAuthSecret(),
+  );
+  if (
+    state.kind !== "agentcore-twenty-user-federation" ||
+    !state.userId ||
+    !state.tenantId
+  ) {
+    throw new Error("Invalid AgentCore OAuth state");
+  }
+  return state;
+}
+
+async function agentCoreOAuthBrowserReturn(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const query = event.queryStringParameters ?? {};
-  const sessionUri = query.sessionUri ?? query.session_uri;
+  const sessionUri = agentCoreOAuthSessionUri(query);
   const signedState = query.customState ?? query.custom_state ?? query.state;
   if (!sessionUri || !signedState) {
     return error(
@@ -924,35 +950,61 @@ async function agentCoreOAuthComplete(
   }
   let state: AgentCoreOAuthState;
   try {
-    state = verifyObject<AgentCoreOAuthState>(signedState, getApiAuthSecret());
+    state = verifiedAgentCoreOAuthState(signedState);
+  } catch {
+    return error("Invalid or expired AgentCore OAuth state", 403);
+  }
+  if (!state.returnTo)
+    return error("AgentCore OAuth return URL is required", 400);
+  const location = new URL(state.returnTo);
+  location.searchParams.set("agentcoreOAuth", "pending");
+  location.searchParams.set("agentcoreSessionId", sessionUri);
+  location.searchParams.set("agentcoreState", signedState);
+  return {
+    statusCode: 302,
+    headers: { Location: location.toString(), "Cache-Control": "no-store" },
+    body: "",
+  };
+}
+
+async function agentCoreOAuthComplete(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const principal = await agentCoreOAuthPrincipal(event);
+  if (!principal.ok) return principal.response;
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return error("Invalid JSON body", 400);
+  }
+  const sessionUri =
+    typeof body.sessionId === "string" ? body.sessionId : undefined;
+  const signedState = typeof body.state === "string" ? body.state : undefined;
+  if (!sessionUri || !signedState) {
+    return error(
+      "AgentCore OAuth session binding parameters are required",
+      400,
+    );
+  }
+  let state: AgentCoreOAuthState;
+  try {
+    state = verifiedAgentCoreOAuthState(signedState);
   } catch {
     return error("Invalid or expired AgentCore OAuth state", 403);
   }
   if (
-    state.kind !== "agentcore-twenty-user-federation" ||
-    !state.userId ||
-    !state.tenantId
+    !agentCoreOAuthPrincipalMatches({
+      stateUserId: state.userId,
+      stateTenantId: state.tenantId,
+      principalUserId: principal.userId,
+      principalTenantId: principal.tenantId,
+    })
   ) {
-    return error("Invalid AgentCore OAuth state", 403);
+    return error("AgentCore OAuth user session does not match", 403);
   }
-  await completeAgentCoreUserOAuth({ userId: state.userId, sessionUri });
-  if (state.returnTo) {
-    const location = new URL(state.returnTo);
-    location.searchParams.set("agentcoreOAuth", "success");
-    return {
-      statusCode: 302,
-      headers: { Location: location.toString(), "Cache-Control": "no-store" },
-      body: "",
-    };
-  }
-  return {
-    statusCode: 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-    body: "<!doctype html><title>ThinkWork connection complete</title><p>Twenty CRM is connected to AgentCore. You can close this window.</p>",
-  };
+  await completeAgentCoreUserOAuth({ userId: principal.userId, sessionUri });
+  return json({ status: "connected" });
 }
 
 /**

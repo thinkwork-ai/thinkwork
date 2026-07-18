@@ -342,17 +342,19 @@ export function SettingsMcpServers() {
   usePageHeaderActions({
     title: "Connectors",
     breadcrumbs: [{ label: "Connectors" }],
-    tabs: [
-      { to: CONNECTIONS_ROUTE, label: "Connections" },
-      { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
-      { to: DATA_SOURCES_ROUTE, label: "Data Sources" },
-      { to: SELF_ACQUIRED_ROUTE, label: "Self-Acquired" },
-    ],
+    tabs: isOperator
+      ? [
+          { to: CONNECTIONS_ROUTE, label: "Connections" },
+          { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
+          { to: DATA_SOURCES_ROUTE, label: "Data Sources" },
+          { to: SELF_ACQUIRED_ROUTE, label: "Self-Acquired" },
+        ]
+      : [{ to: CONNECTIONS_ROUTE, label: "Connections" }],
     // THINK-285: each tab shows only the action that creates the thing it
     // lists — New MCP Server on the servers tab, Register data source on the
     // Data Sources tab, nothing on the per-user Connections tab.
     action:
-      activeTab === "servers" ? (
+      isOperator && activeTab === "servers" ? (
         <TooltipIconButton
           label="New MCP Server — register an MCP server for the tenant."
           aria-label="New MCP Server"
@@ -360,7 +362,7 @@ export function SettingsMcpServers() {
         >
           <Plus className="size-4" />
         </TooltipIconButton>
-      ) : activeTab === "data-sources" ? (
+      ) : isOperator && activeTab === "data-sources" ? (
         <TooltipIconButton
           label="Register data source — give the analyst a Postgres database to query with a read-only, brokered credential."
           aria-label="Register data source"
