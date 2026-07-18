@@ -1,14 +1,12 @@
 import {
   type FormEvent,
   type InputHTMLAttributes,
-  useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CheckCircle2, Circle, Loader2, RotateCcw } from "lucide-react";
-import { gql, useMutation } from "urql";
+import { useMutation } from "urql";
 import {
   Button,
   Card,
@@ -50,87 +48,19 @@ export const Route = createFileRoute("/onboarding/welcome")({
   }),
 });
 
-const WEBHOOK_WAIT_MS = 2200;
 const DEPLOYMENT_SESSION_STORAGE_KEY =
   "thinkwork:new-environment-deployment-session:v1";
-
-const BootstrapUserMutation = gql`
-  mutation OnboardingBootstrapUser {
-    bootstrapUser {
-      tenant {
-        id
-        name
-        slug
-        plan
-      }
-    }
-  }
-`;
 
 function WelcomePage() {
   const { session_id } = Route.useSearch();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const { tenant, isLoading: tenantLoading, refetch } = useTenant();
-  const [ready, setReady] = useState(false);
+  const { tenant, refetch } = useTenant();
   const [slug, setSlug] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
-  const bootstrapAttempted = useRef(false);
   const [renameResult, renameTenantSlug] = useMutation(
     SettingsRenameTenantSlugMutation,
   );
-  const [bootstrapResult, bootstrapUser] = useMutation(BootstrapUserMutation);
-
-  const startSignIn = useCallback(() => {
-    navigate({
-      to: "/sign-in",
-      search: {
-        next: `${window.location.pathname}${window.location.search}`,
-      },
-    });
-  }, [navigate]);
-
-  useEffect(() => {
-    if (!session_id) return;
-    const timer = window.setTimeout(() => setReady(true), WEBHOOK_WAIT_MS);
-    return () => window.clearTimeout(timer);
-  }, [session_id]);
-
-  useEffect(() => {
-    if (!session_id || !ready || isAuthenticated) return;
-    startSignIn();
-  }, [session_id, ready, isAuthenticated, startSignIn]);
-
-  useEffect(() => {
-    if (
-      !session_id ||
-      !ready ||
-      !isAuthenticated ||
-      tenantLoading ||
-      tenant ||
-      bootstrapAttempted.current
-    ) {
-      return;
-    }
-
-    bootstrapAttempted.current = true;
-    void (async () => {
-      const result = await bootstrapUser({});
-      if (result.error) {
-        setServerError(result.error.message);
-        return;
-      }
-      await refetch();
-    })();
-  }, [
-    bootstrapUser,
-    isAuthenticated,
-    ready,
-    refetch,
-    tenant,
-    tenantLoading,
-    session_id,
-  ]);
 
   useEffect(() => {
     if (!tenant) return;
@@ -146,7 +76,6 @@ function WelcomePage() {
       navigate({ to: "/new", search: { spaceId: undefined }, replace: true });
       return;
     }
-
     const result = await renameTenantSlug({
       tenantId: tenant.id,
       newSlug: nextSlug,
@@ -162,41 +91,30 @@ function WelcomePage() {
 
   if (!session_id) return <NewEnvironmentInstaller />;
 
-  if (isAuthenticated) {
+  if (isAuthenticated && tenant) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Choose your tenant identifier</CardTitle>
             <CardDescription>
-              This becomes your ThinkWork email subdomain.
+              Your exact Cognito identity is enrolled. This identifier becomes
+              your ThinkWork email subdomain.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {tenantLoading || !tenant ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  Preparing your tenant...
-                </div>
-                {serverError ? (
-                  <p className="text-sm text-destructive">{serverError}</p>
-                ) : null}
-              </div>
-            ) : (
-              <TenantSlugPicker
-                value={slug}
-                onValueChange={(value) => {
-                  setSlug(value);
-                  setServerError(null);
-                }}
-                currentSlug={tenant.slug}
-                serverError={serverError}
-                loading={renameResult.fetching || bootstrapResult.fetching}
-                submitLabel="Continue"
-                onSubmit={submitSlug}
-              />
-            )}
+            <TenantSlugPicker
+              value={slug}
+              onValueChange={(value) => {
+                setSlug(value);
+                setServerError(null);
+              }}
+              currentSlug={tenant.slug}
+              serverError={serverError}
+              loading={renameResult.fetching}
+              submitLabel="Continue"
+              onSubmit={submitSlug}
+            />
           </CardContent>
         </Card>
       </div>
@@ -207,26 +125,23 @@ function WelcomePage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-            Finalizing your ThinkWork account...
-          </CardTitle>
+          <CardTitle>Payment confirmed</CardTitle>
           <CardDescription>
-            Payment confirmed. We're preparing your workspace, then you'll
-            choose how to sign in.
+            Your workspace invitation is being delivered to the email address
+            from checkout.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Don't close this tab. If the redirect doesn't happen on its own
-            within a few seconds, click below.
+            Open the email, follow its secure enrollment link, sign in with
+            local Cognito, Google, or Microsoft, and enter the separate one-time
+            code. Both factors are required to claim ownership.
           </p>
-          <div className="mt-6">
-            <Button className="w-full" onClick={startSignIn}>
-              Continue to sign in
-            </Button>
-          </div>
-          <p className="mt-4 text-center text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
+            If the email does not arrive, contact your ThinkWork operator to
+            re-deliver the pending enrollment.
+          </p>
+          <p className="text-center text-xs text-muted-foreground">
             Session: <code className="font-mono">{session_id}</code>
           </p>
         </CardContent>

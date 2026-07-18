@@ -195,31 +195,36 @@ export async function handler(
           });
         }
 
-        const result = await provisionTenantFromStripeSession({
-          session: full,
-          customer: customer as Stripe.Customer,
-          subscription: subscription as Stripe.Subscription,
-        });
-        console.log(
-          `[stripe-webhook] Provisioned tenant ${result.tenantId} plan=${result.plan} from session ${session.id}`,
-        );
-
-        // Fire the welcome email. Non-fatal on SES failure — the tenant
-        // row already carries pending_owner_email, so the webhook ack's
-        // 200 either way (Stripe won't retry, and the operator has a
-        // manual-recovery path via the logs).
         const appUrl =
           process.env.APP_URL ||
           process.env.WEB_URL ||
           getConfig("ADMIN_URL") ||
           "https://app.thinkwork.ai";
-        await sendStripeWelcomeEmail({
+        const result = await provisionTenantFromStripeSession({
+          session: full,
+          customer: customer as Stripe.Customer,
+          subscription: subscription as Stripe.Subscription,
+          appUrl,
+        });
+        console.log(
+          `[stripe-webhook] Provisioned tenant ${result.tenantId} plan=${result.plan} from session ${session.id}`,
+        );
+
+        // Delivery is part of successful provisioning semantics. A failed
+        // send releases the event claim; retry rotates the enrollment pair.
+        const delivered = await sendStripeWelcomeEmail({
           email: result.email,
           plan: result.plan,
           tenantId: result.tenantId,
           sessionId: session.id,
           appUrl,
+          enrollment: result.enrollment,
         });
+        if (!delivered) {
+          throw new Error(
+            "Owner enrollment email was not delivered; releasing the Stripe event for retry.",
+          );
+        }
 
         return json({ received: true, tenantId: result.tenantId });
       }
@@ -317,12 +322,18 @@ export async function handler(
       `[stripe-webhook] Dispatch failure for ${stripeEvent.type} (${stripeEvent.id}):`,
       msg,
     );
-    // 500 so Stripe retries. The stripe_events row is already written, so
-    // a later retry will hit the dedup gate and return 200 without
-    // re-doing side effects — BUT the provision work never committed, so
-    // the tenant row is absent. That's an incident-path scenario: operator
-    // needs to manually inspect and either re-drive the provisioning or
-    // delete the stripe_events row to let Stripe retry from scratch.
+    // Release the idempotency claim when dispatch did not finish so Stripe's
+    // retry can re-drive the transaction instead of being falsely acked.
+    try {
+      await db
+        .delete(stripeEvents)
+        .where(eq(stripeEvents.stripe_event_id, stripeEvent.id));
+    } catch (releaseError) {
+      console.error(
+        `[stripe-webhook] Could not release failed event ${stripeEvent.id}:`,
+        releaseError,
+      );
+    }
     return json({ error: "Provision failed" }, 500);
   }
 }

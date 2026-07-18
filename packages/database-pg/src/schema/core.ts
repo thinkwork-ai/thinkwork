@@ -85,12 +85,9 @@ export const tenants = pgTable(
     sandbox_interpreter_capability_private_id: text(
       "sandbox_interpreter_capability_private_id",
     ),
-    // Set by the stripe-webhook Lambda when a checkout.session.completed event
-    // pre-provisions a paid tenant. bootstrapUser later matches this column
-    // to a Google-signed-in user's email and claims the tenant (attaches the
-    // user as owner, clears this column). NULL for tenants created by
-    // bootstrapUser directly (free signups) or once a paid tenant is claimed.
-    // Partial unique index enforced via drizzle/0022_stripe_billing_indexes.sql.
+    // Legacy delivery/recovery metadata retained during migration only.
+    // Authorization code must never select a tenant or user from this value;
+    // new paid/deploy provisioning binds an exact Cognito subject/enrollment.
     pending_owner_email: text("pending_owner_email"),
     // Bootstrap-first deployments use the same pending-owner-email claim path
     // as paid signup, but mark the tenant as first-admin gated until the

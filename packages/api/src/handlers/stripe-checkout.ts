@@ -8,7 +8,7 @@
  *   • Signup (unauth): the www /pricing page + mobile /onboarding/payment
  *     send just { plan }. client_reference_id is a fresh UUID. On
  *     checkout.session.completed the webhook pre-provisions a new tenant
- *     with pending_owner_email; bootstrapUser claims it at sign-in time.
+ *     with an inert owner membership plus exact Cognito enrollment.
  *
  *   • Upgrade (authed): the admin/mobile Billing screen sends a Cognito
  *     Bearer token. We resolve the caller's tenantId and encode it in

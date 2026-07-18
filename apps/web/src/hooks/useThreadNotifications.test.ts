@@ -16,7 +16,6 @@ vi.mock("../context/TenantContext", () => ({
     userId: "me",
     tenantId: "t1",
     role: null,
-    pendingClaim: false,
   }),
 }));
 vi.mock("../lib/desktop-runtime", () => ({ getDesktopBridge: vi.fn() }));
@@ -47,7 +46,9 @@ describe("shouldRaiseNotification", () => {
   });
 
   it("suppresses the current user's own message (R3)", () => {
-    expect(shouldRaiseNotification(activity({ authorId: "me" }), base)).toBe(false);
+    expect(shouldRaiseNotification(activity({ authorId: "me" }), base)).toBe(
+      false,
+    );
   });
 
   it("suppresses when app focused AND viewing that exact thread (R5)", () => {
@@ -81,11 +82,15 @@ describe("shouldRaiseNotification", () => {
   });
 
   it("suppresses everything when the toggle is off (U7)", () => {
-    expect(shouldRaiseNotification(activity(), { ...base, enabled: false })).toBe(false);
+    expect(
+      shouldRaiseNotification(activity(), { ...base, enabled: false }),
+    ).toBe(false);
   });
 
   it("does not suppress an agent message just because authorId is null", () => {
-    expect(shouldRaiseNotification(activity({ authorId: null }), base)).toBe(true);
+    expect(shouldRaiseNotification(activity({ authorId: null }), base)).toBe(
+      true,
+    );
   });
 
   it("suppresses when the server marks the event shouldNotify:false (muted, R10)", () => {
@@ -104,9 +109,9 @@ describe("shouldRaiseNotification", () => {
   });
 
   it("treats an absent/null shouldNotify as true for legacy-event backward compat", () => {
-    expect(shouldRaiseNotification(activity({ shouldNotify: null }), base)).toBe(
-      true,
-    );
+    expect(
+      shouldRaiseNotification(activity({ shouldNotify: null }), base),
+    ).toBe(true);
     expect(shouldRaiseNotification(activity(), base)).toBe(true);
   });
 
@@ -122,7 +127,10 @@ describe("shouldRaiseNotification", () => {
 
 describe("useThreadNotifications (subscription consumer)", () => {
   let capturedHandler:
-    | ((prev: unknown, event: { onThreadActivity?: ThreadActivityLike }) => unknown)
+    | ((
+        prev: unknown,
+        event: { onThreadActivity?: ThreadActivityLike },
+      ) => unknown)
     | null = null;
 
   const raiseThreadNotification = vi.fn();
@@ -189,7 +197,9 @@ describe("useThreadNotifications (subscription consumer)", () => {
     });
 
     expect(raiseThreadNotification).toHaveBeenCalledTimes(1);
-    expect(raiseThreadNotification.mock.calls[0][0]).toMatchObject({ count: 3 });
+    expect(raiseThreadNotification.mock.calls[0][0]).toMatchObject({
+      count: 3,
+    });
   });
 
   it("raises no native notification for a muted event but still drives liveness", () => {
@@ -210,15 +220,23 @@ describe("useThreadNotifications (subscription consumer)", () => {
 
 describe("buildNotificationBody", () => {
   it("uses the snippet for a single message (R11)", () => {
-    expect(buildNotificationBody({ count: 1, snippet: "hello there" })).toBe("hello there");
+    expect(buildNotificationBody({ count: 1, snippet: "hello there" })).toBe(
+      "hello there",
+    );
   });
 
   it("falls back to a default when no snippet", () => {
-    expect(buildNotificationBody({ count: 1, snippet: null })).toBe("New message");
-    expect(buildNotificationBody({ count: 1, snippet: "   " })).toBe("New message");
+    expect(buildNotificationBody({ count: 1, snippet: null })).toBe(
+      "New message",
+    );
+    expect(buildNotificationBody({ count: 1, snippet: "   " })).toBe(
+      "New message",
+    );
   });
 
   it("collapses a coalesced burst to a count (R4/R6)", () => {
-    expect(buildNotificationBody({ count: 5, snippet: "ignored" })).toBe("5 new messages");
+    expect(buildNotificationBody({ count: 5, snippet: "ignored" })).toBe(
+      "5 new messages",
+    );
   });
 });

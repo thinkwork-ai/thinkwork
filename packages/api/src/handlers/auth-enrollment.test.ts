@@ -39,6 +39,7 @@ vi.mock("@thinkwork/database-pg/schema", () => {
       "principal_type",
       "principal_id",
     ]),
+    tenants: table("tenants", ["id"]),
     userAuthIdentities: table("identities", [
       "user_id",
       "cognito_issuer",
@@ -126,6 +127,7 @@ function enrollment(overrides: Record<string, unknown> = {}) {
     tenant_id: "tenant-1",
     intended_user_id: "user-1",
     recipient_grant_id: "member-1",
+    recipient_grant_kind: "membership",
     auth_provider_resource_id: "connection-1",
     auth_route_client_id: "route-client-1",
     redirect_uri: "https://app.example.com/auth/callback",
@@ -235,6 +237,29 @@ describe("identity enrollment", () => {
     });
   });
 
+  it("marks first-owner grants distinctly from ordinary memberships", async () => {
+    routeRows.push({
+      route_client_id: "route-google",
+      route_key: "google-web",
+      connection_id: "connection-google",
+    });
+    await issueEnrollmentGrants({
+      tenantId: "tenant-1",
+      intendedUserId: "user-1",
+      membershipId: "member-1",
+      grantKind: "pending_owner",
+      redirectUri: "https://app.example.com/auth/callback",
+    });
+    expect(inserts[0]).toMatchObject({
+      values: [
+        expect.objectContaining({
+          recipient_grant_kind: "pending_owner",
+          recipient_grant_id: "member-1",
+        }),
+      ],
+    });
+  });
+
   it("atomically binds the exact Cognito route and activates the intended grant", async () => {
     selectQueue.push([enrollment()], []);
     await expect(
@@ -261,6 +286,34 @@ describe("identity enrollment", () => {
       }),
     );
     expect(updates).toHaveLength(2);
+  });
+
+  it("closes the first-admin gate only after exact pending-owner consumption", async () => {
+    selectQueue.push(
+      [enrollment({ recipient_grant_kind: "pending_owner" })],
+      [],
+    );
+    await expect(
+      consumeEnrollment(
+        {
+          startToken: "start-token",
+          recipientChallenge: "654321",
+          redirectUri: "https://app.example.com/auth/callback",
+        },
+        auth,
+        new Date("2026-07-18T00:00:00Z"),
+      ),
+    ).resolves.toBe("consumed");
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            first_admin_claim_required: false,
+            first_admin_claimed_user_id: "user-1",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("rejects a forwarded start link without the recipient challenge", async () => {

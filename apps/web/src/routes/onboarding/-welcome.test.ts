@@ -20,7 +20,6 @@ describe("onboarding welcome route", () => {
     expect(source).toContain("DEPLOYMENT_SESSION_STORAGE_KEY");
     expect(source).toContain("State starts in the ThinkWork control plane");
     expect(source).toContain("Teardown");
-    expect(source).toContain("if (!session_id || !ready || isAuthenticated)");
   });
 
   it("keeps bootstrap credential material out of local storage", () => {
@@ -38,22 +37,14 @@ describe("onboarding welcome route", () => {
     );
   });
 
-  it("returns OAuth users to the welcome flow before choosing a tenant identifier", () => {
-    expect(source).toContain("rememberPostAuthRedirect");
-    expect(source).toContain("startGoogleSignIn");
-    expect(source).toContain("window.location.pathname");
-    expect(source).toContain("window.location.search");
-  });
-
-  it("prefills and submits the tenant slug picker from the claimed tenant", () => {
+  it("requires exact link-and-code enrollment after checkout", () => {
+    expect(source).toContain("Payment confirmed");
+    expect(source).toContain("secure enrollment link");
+    expect(source).toContain("one-time");
+    expect(source).toContain("code. Both factors are required");
     expect(source).toContain("TenantSlugPicker");
-    expect(source).toContain("OnboardingBootstrapUser");
-    expect(source).toContain("bootstrapUser");
-    expect(source).toContain("await refetch()");
-    expect(source).toContain("suggestTenantSlug(tenant.name, tenant.slug)");
     expect(source).toContain("SettingsRenameTenantSlugMutation");
-    expect(source).toContain("tenantId: tenant.id");
-    expect(source).toContain("newSlug: nextSlug");
-    expect(source).toContain('to: "/new"');
+    expect(source).not.toContain("OnboardingBootstrapUser");
+    expect(source).not.toContain("bootstrapUser");
   });
 });

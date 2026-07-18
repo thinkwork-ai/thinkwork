@@ -13,6 +13,7 @@ import {
   authIdentityEnrollments,
   authSubscriptionInvalidations,
   tenantMembers,
+  tenants,
   userAuthIdentities,
 } from "@thinkwork/database-pg/schema";
 
@@ -43,6 +44,10 @@ export interface IssuedEnrollmentGrant {
   routeKeys: string[];
 }
 
+type AuthEnrollmentTransaction = Parameters<
+  Parameters<typeof db.transaction>[0]
+>[0];
+
 /**
  * Issue one opaque bearer/challenge pair across every requested client-family
  * route for the tenant. Digests are route-domain-separated, so selecting a
@@ -59,6 +64,8 @@ export async function issueEnrollmentGrants(input: {
   }>;
   ttlMs?: number;
   now?: Date;
+  grantKind?: "membership" | "pending_owner";
+  transaction?: AuthEnrollmentTransaction;
 }): Promise<IssuedEnrollmentGrant> {
   const now = input.now ?? new Date();
   const expiresAt = new Date(now.getTime() + (input.ttlMs ?? 30 * 60_000));
@@ -75,8 +82,11 @@ export async function issueEnrollmentGrants(input: {
     ...(input.additionalRoutes ?? []),
   ];
   const routes: EnrollmentRoute[] = [];
+  const database = input.transaction ?? db;
   for (const target of targets) {
-    const result = await db.execute<Omit<EnrollmentRoute, "redirect_uri">>(sql`
+    const result = await database.execute<
+      Omit<EnrollmentRoute, "redirect_uri">
+    >(sql`
       SELECT DISTINCT
         rc.id AS route_client_id,
         rc.route_key,
@@ -84,7 +94,7 @@ export async function issueEnrollmentGrants(input: {
       FROM auth_route_clients rc
       JOIN auth_provider_resources apr
         ON apr.cognito_app_client_ids ? rc.cognito_app_client_id
-      JOIN tenant_auth_provider_references tapr
+      LEFT JOIN tenant_auth_provider_references tapr
         ON tapr.auth_provider_resource_id = apr.id
        AND tapr.tenant_id = ${input.tenantId}
        AND tapr.status = 'enabled'
@@ -97,6 +107,10 @@ export async function issueEnrollmentGrants(input: {
         AND apr.lifecycle_state = 'native'
         AND apr.validation_status = 'valid'
         AND rc.redirect_uris @> jsonb_build_array(${target.redirectUri}::text)
+        AND (
+          apr.provider_kind IN ('local', 'google', 'microsoft_organizations')
+          OR tapr.id IS NOT NULL
+        )
     `);
     routes.push(
       ...result.rows.map((route) => ({
@@ -109,7 +123,7 @@ export async function issueEnrollmentGrants(input: {
     throw new Error("No admitted enrollment route is available");
   }
 
-  await db.transaction(async (tx) => {
+  const persist = async (tx: AuthEnrollmentTransaction) => {
     await tx
       .update(authIdentityEnrollments)
       .set({ status: "revoked", updated_at: now })
@@ -123,7 +137,7 @@ export async function issueEnrollmentGrants(input: {
       routes.map((route) => ({
         tenant_id: input.tenantId,
         intended_user_id: input.intendedUserId,
-        recipient_grant_kind: "membership",
+        recipient_grant_kind: input.grantKind ?? "membership",
         recipient_grant_id: input.membershipId,
         auth_provider_resource_id: route.connection_id,
         auth_route_client_id: route.route_client_id,
@@ -138,7 +152,12 @@ export async function issueEnrollmentGrants(input: {
         proof: { routeKey: route.route_key },
       })),
     );
-  });
+  };
+  if (input.transaction) {
+    await persist(input.transaction);
+  } else {
+    await db.transaction(persist);
+  }
   return {
     startToken,
     recipientChallenge,
@@ -259,6 +278,18 @@ export async function consumeEnrollment(
           eq(tenantMembers.principal_id, enrollment.intended_user_id),
         ),
       );
+    if (enrollment.recipient_grant_kind === "pending_owner") {
+      await tx
+        .update(tenants)
+        .set({
+          pending_owner_email: null,
+          first_admin_claim_required: false,
+          first_admin_claimed_at: now,
+          first_admin_claimed_user_id: enrollment.intended_user_id,
+          updated_at: now,
+        })
+        .where(eq(tenants.id, enrollment.tenant_id));
+    }
     await tx
       .update(authIdentityEnrollments)
       .set({

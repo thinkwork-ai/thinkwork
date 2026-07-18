@@ -763,7 +763,12 @@ async function publishRuntimeConfig(
 async function ensureOwnerUser(
   cwd: string,
   region: string,
-): Promise<{ email: string; tempPassword: string | null } | null> {
+): Promise<{
+  email: string;
+  tempPassword: string | null;
+  cognitoSub: string;
+  userPoolId: string;
+} | null> {
   const email = (readTfvarsSignalsRaw(cwd).platform_operator_emails ?? "")
     .split(",")[0]
     ?.trim();
@@ -785,7 +790,16 @@ async function ensureOwnerUser(
     ],
     { encoding: "utf8" },
   );
-  if (exists.status === 0) return { email, tempPassword: null };
+  if (exists.status === 0) {
+    const cognitoSub = cognitoSubFromAwsOutput(exists.stdout ?? "");
+    if (!cognitoSub) {
+      printWarning(
+        `Owner user ${email} exists but its Cognito sub is missing.`,
+      );
+      return null;
+    }
+    return { email, tempPassword: null, cognitoSub, userPoolId };
+  }
 
   // Meets the default Cognito policy (upper/lower/digit/symbol).
   const tempPassword = `Tw1!${randomBytes(12).toString("base64url")}`;
@@ -816,7 +830,29 @@ async function ensureOwnerUser(
     );
     return null;
   }
-  return { email, tempPassword };
+  const cognitoSub = cognitoSubFromAwsOutput(created.stdout ?? "");
+  if (!cognitoSub) {
+    printWarning(
+      `Owner user ${email} was created but its Cognito sub could not be read. Rerun deploy to bind the owner tenant.`,
+    );
+    return null;
+  }
+  return { email, tempPassword, cognitoSub, userPoolId };
+}
+
+export function cognitoSubFromAwsOutput(output: string): string | null {
+  try {
+    const parsed = JSON.parse(output) as {
+      UserAttributes?: Array<{ Name?: string; Value?: string }>;
+      User?: { Attributes?: Array<{ Name?: string; Value?: string }> };
+    };
+    const attributes = parsed.UserAttributes ?? parsed.User?.Attributes ?? [];
+    return (
+      attributes.find((attribute) => attribute.Name === "sub")?.Value ?? null
+    );
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1235,11 +1271,10 @@ export async function runLocalTerraformDeploy(
     await applySchemaMigrations(cwd0, caller, stage);
   }
 
-  // ── Owner tenant + user: the first Cognito sign-in claims the instance
-  //    through bootstrapUser's pending_owner_email claim path, so deploy must
-  //    leave both a pending tenant and a Cognito user behind. Runs BEFORE the
-  //    workspace bootstrap so per-tenant workspace seeding sees the tenant. ──
-  let ownerUser: { email: string; tempPassword: string | null } | null = null;
+  // ── Owner tenant + user: create/read the Cognito user first, then bind its
+  //    exact immutable sub to the initial tenant. Runs BEFORE workspace
+  //    bootstrap so per-tenant workspace seeding sees the tenant. ──
+  let ownerUser: Awaited<ReturnType<typeof ensureOwnerUser>> = null;
   if (scaffolded && caller) {
     const operatorEmail = (
       readTfvarsSignalsRaw(cwd0).platform_operator_emails ?? ""
@@ -1248,15 +1283,24 @@ export async function runLocalTerraformDeploy(
       ?.trim();
     if (operatorEmail) {
       try {
+        ownerUser = await ensureOwnerUser(cwd0, caller.region);
+        if (!ownerUser) {
+          throw new Error(
+            "The exact Cognito owner subject could not be created or resolved.",
+          );
+        }
         const connection = await resolveStageDbConnection(cwd0, caller, stage);
         const ownerTenant = await ensureOwnerTenant({
           stage,
           email: operatorEmail,
+          cognitoSub: ownerUser.cognitoSub,
+          cognitoUserPoolId: ownerUser.userPoolId,
+          region: caller.region,
           connection,
         });
         if (ownerTenant.created) {
           printSuccess(
-            `Owner tenant "${ownerTenant.slug}" pre-provisioned — first sign-in by ${ownerTenant.email} claims it.`,
+            `Owner tenant "${ownerTenant.slug}" bound to Cognito user ${ownerTenant.email}.`,
           );
         }
       } catch (err) {
@@ -1266,7 +1310,6 @@ export async function runLocalTerraformDeploy(
         );
       }
     }
-    ownerUser = await ensureOwnerUser(cwd0, caller.region);
   }
 
   // ── Web assets (U9): CI-built bundles ship in the release; publish them to

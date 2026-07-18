@@ -8,6 +8,12 @@ import { apiFetch, ApiError } from "@/lib/api-fetch";
 export const Route = createFileRoute("/accept-invite")({
   validateSearch: (search: Record<string, unknown>) => ({
     token: typeof search.token === "string" ? search.token : "",
+    next:
+      typeof search.next === "string" &&
+      search.next.startsWith("/") &&
+      !search.next.startsWith("//")
+        ? search.next
+        : undefined,
   }),
   component: AcceptInvitePage,
 });
@@ -25,13 +31,15 @@ type EnrollmentResponse = {
 };
 
 export function AcceptInvitePage() {
-  const { token } = Route.useSearch();
+  const { token, next } = Route.useSearch();
   const { isAuthenticated, isLoading } = useAuth();
   const [challenge, setChallenge] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const returnTo = `/accept-invite?token=${encodeURIComponent(token)}`;
+  const returnTo = `/accept-invite?token=${encodeURIComponent(token)}${
+    next ? `&next=${encodeURIComponent(next)}` : ""
+  }`;
 
   async function consume(event: FormEvent) {
     event.preventDefault();
@@ -53,7 +61,7 @@ export function AcceptInvitePage() {
         result.outcome === "consumed" ||
         result.outcome === "already_consumed"
       ) {
-        window.location.href = "/new";
+        window.location.href = next ?? "/new";
         return;
       }
       setError(outcomeMessage(result.outcome));

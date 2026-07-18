@@ -3,9 +3,9 @@
  *
  * Flow: stripe-webhook Lambda receives checkout.session.completed, inserts a
  * row in `stripe_events` (PK conflict = replay; return 200 and skip), then
- * pre-provisions a tenants row with `pending_owner_email` and attaches
- * stripe_customers + stripe_subscriptions rows. bootstrapUser later claims
- * the tenant when the paying user signs in via Google OAuth.
+ * pre-provisions a tenant, inert owner membership, exact Cognito enrollment,
+ * and the stripe_customers + stripe_subscriptions rows. Ownership activates
+ * only after the link-and-code enrollment is consumed.
  *
  * See docs/plans/2026-04-22-008-feat-stripe-pricing-and-post-checkout-onboarding-plan.md
  */

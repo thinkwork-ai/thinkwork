@@ -37,6 +37,18 @@ describe("migration 0263 — drop WorkOS auth runtime", () => {
     expect(migration).toContain("completed_at IS NOT NULL");
   });
 
+  it("does not require fictional cutover evidence on a clean installation", () => {
+    expect(migration).toContain(
+      "No WorkOS auth data exists — empty historical tables may be retired without cutover evidence",
+    );
+    expect(migration).toContain(
+      "SELECT EXISTS (SELECT 1 FROM public.workos_auth_bridges)",
+    );
+    expect(migration).toContain(
+      "SELECT EXISTS (SELECT 1 FROM public.workos_auth_sessions)",
+    );
+  });
+
   it("rejects live enrollment, bridge, or session state before mutation", () => {
     expect(migration).toContain("enrollment.status = 'pending'");
     expect(migration).toContain("active WorkOS session(s)");

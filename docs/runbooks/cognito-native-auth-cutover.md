@@ -37,16 +37,25 @@ email match as authorization.
 For each web, mobile, desktop, and CLI client family, record these deployed
 checks against the exact route-specific app client:
 
-| Route | Required proof |
-| --- | --- |
-| Local Cognito | sign-in, refresh, membership resolution, logout, refresh rejection |
-| Google | PKCE S256, Cognito token audience, refresh, logout/account choice |
-| Microsoft organizations | PKCE S256, Cognito token audience, refresh, logout/account choice |
-| Tenant Entra | assigned tenant succeeds; another tenant and wrong directory fail closed |
+| Route                   | Required proof                                                           |
+| ----------------------- | ------------------------------------------------------------------------ |
+| Local Cognito           | sign-in, refresh, membership resolution, logout, refresh rejection       |
+| Google                  | PKCE S256, Cognito token audience, refresh, logout/account choice        |
+| Microsoft organizations | PKCE S256, Cognito token audience, refresh, logout/account choice        |
+| Tenant Entra            | assigned tenant succeeds; another tenant and wrong directory fail closed |
 
 Also verify invite and pending-owner enrollment on web and mobile. Capture only
 request IDs, counts, timestamps, route keys, and hashed principals—never tokens,
 codes, session IDs, emails, or provider profiles.
+
+Paid first-owner provisioning must create an inert user plus `pending`
+membership, then require the opaque `/accept-invite` link and separately shown
+8-digit challenge. Verify local Cognito, Google, and Microsoft can each consume
+that exact enrollment and that an email match alone cannot expose
+`pendingClaim`, call `bootstrapUser`, or activate ownership. A failed welcome
+email must release the Stripe event claim; the retry must rotate the enrollment
+without creating a second tenant. Self-hosted deploys instead bind the exact
+Cognito `sub` returned by `admin-create-user`/`admin-get-user`.
 
 ## 3. Disable and drain WorkOS
 
@@ -115,6 +124,10 @@ Apply `0263_drop_workos_auth_runtime.sql`. It takes an advisory lock and checks
 the completion row again before mutation. It explicitly removes legacy
 identities/references/routes/plugin rows, drops the two raw WorkOS tables, and
 narrows lifecycle/component constraints; it never uses `CASCADE`.
+
+On a genuinely clean installation, the migration may drop empty historical
+tables without fictional cutover evidence. Any WorkOS row, coexistence route,
+or legacy plugin install restores the full evidence requirement.
 
 After the database migration succeeds:
 

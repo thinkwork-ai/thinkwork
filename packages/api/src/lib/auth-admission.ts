@@ -7,7 +7,6 @@ import {
   tenantAuthProviderReferences,
   tenantMembers,
   userAuthIdentities,
-  users,
 } from "@thinkwork/database-pg/schema";
 
 import { db } from "./db.js";
@@ -80,9 +79,6 @@ export interface AuthAdmissionRepository {
   ): Promise<RouteAdmissionCandidate[]>;
   loadIdentityCandidates(
     cognitoIssuer: string,
-    cognitoSub: string,
-  ): Promise<IdentityAdmissionCandidate[]>;
-  loadCompatibilityIdentities(
     cognitoSub: string,
   ): Promise<IdentityAdmissionCandidate[]>;
   loadMemberships(
@@ -243,25 +239,10 @@ export async function admitCognitoTenant(
       "Cognito route provenance is required for tenant admission.",
     );
   }
-  let identities = await repository.loadIdentityCandidates(
+  const identities = await repository.loadIdentityCandidates(
     auth.cognitoIssuer,
     auth.principalId,
   );
-  if (identities.length === 0 && auth.route.providerKind === "local") {
-    const compatibility = await repository.loadCompatibilityIdentities(
-      auth.principalId,
-    );
-    if (compatibility.length > 0) {
-      console.warn(
-        "[auth-admission] compatibility users.cognito_sub fallback used",
-        { appClientId: auth.route.appClientId, count: compatibility.length },
-      );
-      identities = compatibility.map((identity) => ({
-        ...identity,
-        authProviderResourceId: auth.route!.connectionId,
-      }));
-    }
-  }
   const activeIdentity = identities.filter(
     (identity) =>
       identity.status === "active" &&
@@ -391,22 +372,6 @@ export function createDbAuthAdmissionRepository(
             eq(userAuthIdentities.cognito_sub, cognitoSub),
           ),
         );
-    },
-    async loadCompatibilityIdentities(cognitoSub) {
-      const rows = await database
-        .select({
-          userId: users.id,
-          identityTenantId: users.tenant_id,
-        })
-        .from(users)
-        .where(eq(users.cognito_sub, cognitoSub));
-      return rows.map((row) => ({
-        identityId: `compat:users.cognito_sub:${row.userId}`,
-        userId: row.userId,
-        identityTenantId: row.identityTenantId,
-        authProviderResourceId: null,
-        status: "active",
-      }));
     },
     async loadMemberships(userId, requestedTenantId) {
       return database

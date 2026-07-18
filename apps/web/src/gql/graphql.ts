@@ -12708,18 +12708,6 @@ export type SaveAppletStateMutation = {
   };
 };
 
-export type TenantContextClaimPendingTenantMutationVariables = Exact<{
-  [key: string]: never;
-}>;
-
-export type TenantContextClaimPendingTenantMutation = {
-  __typename?: "Mutation";
-  bootstrapUser: {
-    __typename?: "BootstrapResult";
-    tenant: { __typename?: "Tenant"; id: string };
-  };
-};
-
 export type SpacesThreadActivitySubscriptionVariables = Exact<{
   userId: Scalars["ID"]["input"];
 }>;
@@ -17794,24 +17782,6 @@ export type WebhookOwningLoopQuery = {
   } | null;
 };
 
-export type OnboardingBootstrapUserMutationVariables = Exact<{
-  [key: string]: never;
-}>;
-
-export type OnboardingBootstrapUserMutation = {
-  __typename?: "Mutation";
-  bootstrapUser: {
-    __typename?: "BootstrapResult";
-    tenant: {
-      __typename?: "Tenant";
-      id: string;
-      name: string;
-      slug: string;
-      plan: string;
-    };
-  };
-};
-
 export const SettingsPiExtensionFieldsFragmentDoc = {
   kind: "Document",
   definitions: [
@@ -18056,43 +18026,6 @@ export const SaveAppletStateDocument = {
 } as unknown as DocumentNode<
   SaveAppletStateMutation,
   SaveAppletStateMutationVariables
->;
-export const TenantContextClaimPendingTenantDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "TenantContextClaimPendingTenant" },
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "bootstrapUser" },
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "tenant" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  TenantContextClaimPendingTenantMutation,
-  TenantContextClaimPendingTenantMutationVariables
 >;
 export const SpacesThreadActivityDocument = {
   kind: "Document",
@@ -37926,44 +37859,4 @@ export const WebhookOwningLoopDocument = {
 } as unknown as DocumentNode<
   WebhookOwningLoopQuery,
   WebhookOwningLoopQueryVariables
->;
-export const OnboardingBootstrapUserDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "OnboardingBootstrapUser" },
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "bootstrapUser" },
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "tenant" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      { kind: "Field", name: { kind: "Name", value: "name" } },
-                      { kind: "Field", name: { kind: "Name", value: "slug" } },
-                      { kind: "Field", name: { kind: "Name", value: "plan" } },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  OnboardingBootstrapUserMutation,
-  OnboardingBootstrapUserMutationVariables
 >;

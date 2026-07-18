@@ -1,11 +1,5 @@
 /**
- * /api/auth/me — pendingClaim reporting for pre-provisioned owners.
- *
- * When the caller has no users row, the handler checks whether a tenants
- * row carries the caller's email in pending_owner_email (written by the
- * Stripe webhook or by `thinkwork deploy`). `pendingClaim: true` tells the
- * web shell it may safely call bootstrapUser — its claim path attaches only
- * to that row, so this does not reopen ADV-9's auto-provisioning hole.
+ * /api/auth/me — exact Cognito identity admission only.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,25 +52,18 @@ beforeEach(() => {
   resolveCallerFromAuthMock.mockResolvedValue({ userId: null, tenantId: null });
 });
 
-describe("auth-me pendingClaim", () => {
-  it("reports pendingClaim=true when a pending tenant matches the email", async () => {
-    selectQueue.push([{ id: "tenant-1" }]); // pending_owner_email lookup
-
+describe("auth-me identity admission", () => {
+  it("does not convert an authenticated email into an ownership claim", async () => {
     const result = await handler(getEvent());
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body ?? "{}");
-    expect(body.pendingClaim).toBe(true);
-    expect(body.tenantId).toBeNull();
-    expect(body.note).toBe("user_not_bootstrapped");
-  });
-
-  it("reports pendingClaim=false when no pending tenant exists", async () => {
-    selectQueue.push([]); // pending_owner_email lookup — no row
-
-    const result = await handler(getEvent());
-    expect(result.statusCode).toBe(200);
-    const body = JSON.parse(result.body ?? "{}");
-    expect(body.pendingClaim).toBe(false);
+    expect(body.pendingClaim).toBeUndefined();
+    expect(body).toMatchObject({
+      userId: null,
+      tenantId: null,
+      role: null,
+      note: "user_not_bootstrapped",
+    });
   });
 
   it("omits pendingClaim once the user row exists", async () => {
@@ -104,15 +91,12 @@ describe("auth-me pendingClaim", () => {
       emailVerified: true,
       tenantId: null,
     });
-    selectQueue.push([]); // no pending owner enrollment either
-
     const result = await handler(getEvent());
     expect(result.statusCode).toBe(200);
     expect(JSON.parse(result.body ?? "{}")).toMatchObject({
       userId: null,
       tenantId: null,
       role: null,
-      pendingClaim: false,
     });
   });
 });

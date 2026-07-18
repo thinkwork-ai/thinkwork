@@ -28,6 +28,7 @@ DO $$
 DECLARE
   cutover record;
   residue_exists boolean;
+  table_has_rows boolean;
   pending_count bigint;
 BEGIN
   IF current_database() != 'thinkwork' THEN
@@ -35,9 +36,7 @@ BEGIN
   END IF;
 
   SELECT
-    to_regclass('public.workos_auth_bridges') IS NOT NULL
-    OR to_regclass('public.workos_auth_sessions') IS NOT NULL
-    OR EXISTS (
+    EXISTS (
       SELECT 1 FROM public.auth_provider_resources
       WHERE provider_kind = 'legacy_workos' OR lifecycle_state = 'coexistence'
     )
@@ -47,11 +46,22 @@ BEGIN
     )
     OR EXISTS (
       SELECT 1 FROM public.plugin_installs WHERE plugin_key = 'workos-auth'
-    )
+  )
   INTO residue_exists;
 
+  IF to_regclass('public.workos_auth_bridges') IS NOT NULL THEN
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.workos_auth_bridges)'
+      INTO table_has_rows;
+    residue_exists := residue_exists OR table_has_rows;
+  END IF;
+  IF to_regclass('public.workos_auth_sessions') IS NOT NULL THEN
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.workos_auth_sessions)'
+      INTO table_has_rows;
+    residue_exists := residue_exists OR table_has_rows;
+  END IF;
+
   IF NOT residue_exists THEN
-    RAISE NOTICE 'WorkOS auth runtime already absent — guarded cleanup is a no-op';
+    RAISE NOTICE 'No WorkOS auth data exists — empty historical tables may be retired without cutover evidence';
     RETURN;
   END IF;
 
