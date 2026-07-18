@@ -212,6 +212,33 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
         }
       }}}},
       responses: {"200": {description: "Sanitized code result and declared files"}}
+    }},
+    "/agentcore/capabilities/web/search": {post: {
+      operationId: "web_search",
+      summary: "Search the current web through the tenant-configured governed provider",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "query"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          query: {type: "string", minLength: 1, maxLength: 2000},
+          limit: {type: "integer", minimum: 1, maximum: 10, default: 5}
+        }
+      }}}},
+      responses: {"200": {description: "Sanitized current web search results"}}
+    }},
+    "/agentcore/capabilities/web/extract": {post: {
+      operationId: "web_extract",
+      summary: "Extract one known HTTPS page through the tenant-configured governed provider",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "url"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          url: {type: "string", format: "uri", maxLength: 2048, pattern: "^https://"}
+        }
+      }}}},
+      responses: {"200": {description: "Sanitized bounded page content"}}
     }}
   }
 }')"
@@ -300,7 +327,9 @@ permit(
     AgentCore::Action::"${TARGET_NAME}___mixed_disclosure",
     AgentCore::Action::"${TARGET_NAME}___list_connector_tools",
     AgentCore::Action::"${TARGET_NAME}___call_connector_tool",
-    AgentCore::Action::"${TARGET_NAME}___execute_code"
+    AgentCore::Action::"${TARGET_NAME}___execute_code",
+    AgentCore::Action::"${TARGET_NAME}___web_search",
+    AgentCore::Action::"${TARGET_NAME}___web_extract"
   ],
   resource == AgentCore::Gateway::"${gateway_arn}"
 )
@@ -322,7 +351,9 @@ when {
       (
         action == AgentCore::Action::"${TARGET_NAME}___list_connector_tools" ||
         action == AgentCore::Action::"${TARGET_NAME}___call_connector_tool" ||
-        action == AgentCore::Action::"${TARGET_NAME}___execute_code"
+        action == AgentCore::Action::"${TARGET_NAME}___execute_code" ||
+        action == AgentCore::Action::"${TARGET_NAME}___web_search" ||
+        action == AgentCore::Action::"${TARGET_NAME}___web_extract"
       ) &&
       context.input.tenant_id == principal.getTag("tenant_id")
     )

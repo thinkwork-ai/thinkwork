@@ -31,7 +31,7 @@ locals {
     secret_arn          = var.oauth_credential_secret_arn
     return_url          = var.oauth_return_url
     owners              = var.proof_owner_allowlist
-    capability_contract = "mcp-list-call-sandbox-v3-tenant-admission"
+    capability_contract = "mcp-list-call-sandbox-builtin-web-v4-tenant-admission"
     # URL-mode OAuth elicitation requires the 2025-11-25 protocol and cannot
     # be added to an existing Gateway, so changing this contract must replace
     # the script-owned Gateway lifecycle.
