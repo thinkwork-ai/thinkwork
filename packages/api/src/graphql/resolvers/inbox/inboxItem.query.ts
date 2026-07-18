@@ -10,6 +10,9 @@ import {
   snakeToCamel,
   inboxItemToCamel,
 } from "../../utils.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { requireTenantMember } from "../core/authz.js";
+import { assertEmailApprovalRecipient } from "./email-approval-auth.js";
 
 export const inboxItem = async (
   _parent: any,
@@ -21,6 +24,8 @@ export const inboxItem = async (
     .from(inboxItems)
     .where(eq(inboxItems.id, args.id));
   if (!row) return null;
+  await requireTenantMember(ctx, row.tenant_id);
+  assertEmailApprovalRecipient(row, await resolveCallerUserId(ctx));
   const commentRows = await db
     .select()
     .from(inboxItemComments)

@@ -1179,6 +1179,7 @@ export async function runHarnessTurn(
       `participant_id=${turn.currentUserId}`,
       `agent_id=${turn.agentId}`,
       composedSystemPrompt ? `agent_context:\n${composedSystemPrompt}` : "",
+      "Governed action rule: when a user asks to send email, call the send_email tool. Never say an email was sent, submitted, queued, or is awaiting approval unless that tool returned the matching status in this turn. If you do not call the tool, state that nothing was sent.",
       "</thinkwork_trusted_turn_context>",
     ]
       .filter(Boolean)
