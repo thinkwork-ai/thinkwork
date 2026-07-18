@@ -164,7 +164,9 @@ async function waitForHarnessWorkloadIdentity(client, harnessName) {
     let nextToken;
     do {
       const response = await client.send(
-        new ListWorkloadIdentitiesCommand({ nextToken, maxResults: 100 }),
+        // Identity's live API caps this page size at 20. Continue paging so a
+        // busy directory cannot hide the Harness-managed workload identity.
+        new ListWorkloadIdentitiesCommand({ nextToken, maxResults: 20 }),
       );
       const found = response.workloadIdentities?.find((identity) =>
         identity.name?.startsWith(prefix),

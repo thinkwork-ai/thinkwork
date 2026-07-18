@@ -63,6 +63,10 @@ describe("managed multiplayer Harness topology", () => {
     assert.match(lifecycle, /memory: \{ disabled: \{\} \}/);
     assert.match(lifecycle, /required\("GATEWAY_TARGET_TOOL_NAMES"\)/);
     assert.match(lifecycle, /targetToolNames\.map/);
+    assert.match(
+      lifecycle,
+      /ListWorkloadIdentitiesCommand\(\{ nextToken, maxResults: 20 \}\)/,
+    );
     assert.match(terraform, /___owner_probe/);
     assert.match(terraform, /___mixed_disclosure/);
     assert.match(terraform, /gateway-and-cedar-authoritative/);
