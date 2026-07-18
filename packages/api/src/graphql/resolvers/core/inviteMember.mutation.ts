@@ -32,10 +32,18 @@ import {
   resolveInviteEmailChannel,
   type InviteEmailChannelDelivery,
 } from "./member-invite-delivery.js";
+import { issueEnrollmentGrants } from "../../../handlers/auth-enrollment.js";
 
 const cognito = createCognitoInviteClient();
 function userPoolId(): string {
   return getConfig("COGNITO_USER_POOL_ID", "");
+}
+
+function enrollmentRedirectUri(): string {
+  const appUrl = (getConfig("ADMIN_URL", "") || "https://app.thinkwork.ai")
+    .trim()
+    .replace(/\/$/, "");
+  return `${appUrl}/auth/callback`;
 }
 
 export const inviteMember = async (
@@ -224,12 +232,19 @@ async function inviteMemberCore(
     );
   if (existingMember.length > 0) {
     if (pendingChannelInvite) {
+      const enrollment = await issueEnrollmentGrants({
+        tenantId,
+        intendedUserId: cognitoSub,
+        membershipId: existingMember[0].id,
+        redirectUri: enrollmentRedirectUri(),
+      });
       await deliverInviteViaEmailChannel({
         tenantId,
         email,
         name: name ?? null,
         tempPassword: pendingChannelInvite.tempPassword,
         delivery: pendingChannelInvite.delivery,
+        enrollment,
       });
     }
     return snakeToCamel(existingMember[0]);
@@ -247,17 +262,26 @@ async function inviteMemberCore(
       principal_type: "user",
       principal_id: cognitoSub,
       role: role ?? "member",
-      status: "active",
+      // First access stays inert until the recipient proves an exact Cognito
+      // route plus the one-time challenge delivered with the invitation.
+      status: emailChannelDelivery ? "pending" : "active",
     })
     .returning();
 
   if (pendingChannelInvite) {
+    const enrollment = await issueEnrollmentGrants({
+      tenantId,
+      intendedUserId: cognitoSub,
+      membershipId: row.id,
+      redirectUri: enrollmentRedirectUri(),
+    });
     await deliverInviteViaEmailChannel({
       tenantId,
       email,
       name: name ?? null,
       tempPassword: pendingChannelInvite.tempPassword,
       delivery: pendingChannelInvite.delivery,
+      enrollment,
     });
   }
 

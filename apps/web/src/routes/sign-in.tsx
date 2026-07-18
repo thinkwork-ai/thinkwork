@@ -61,9 +61,13 @@ export function SignInPage() {
   // If the user is already signed in, send them to the new-thread workspace.
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate({ to: "/new", search: { spaceId: undefined }, replace: true });
+      if (next) {
+        window.location.href = next;
+      } else {
+        navigate({ to: "/new", search: { spaceId: undefined }, replace: true });
+      }
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isLoading, navigate, next]);
 
   useEffect(() => {
     const bridge = getDesktopBridge();

@@ -22,6 +22,7 @@ import {
   generateTemporaryPassword,
   resolveInviteEmailChannel,
 } from "./member-invite-delivery.js";
+import { issueEnrollmentGrants } from "../../../handlers/auth-enrollment.js";
 
 const cognito = createCognitoInviteClient();
 
@@ -44,6 +45,13 @@ interface ResendMemberInviteResult {
 
 function userPoolId(): string {
   return getConfig("COGNITO_USER_POOL_ID", "");
+}
+
+function enrollmentRedirectUri(): string {
+  const appUrl = (getConfig("ADMIN_URL", "") || "https://app.thinkwork.ai")
+    .trim()
+    .replace(/\/$/, "");
+  return `${appUrl}/auth/callback`;
 }
 
 export const resendMemberInvite = async (
@@ -79,6 +87,7 @@ export const resendMemberInvite = async (
         input.memberId,
         target.email,
         target.name,
+        target.userId,
         input.idempotencyKey,
       ),
   });
@@ -109,6 +118,7 @@ async function resolveResendTarget(
 ): Promise<{
   email: string;
   name: string | null;
+  userId: string;
   cognitoStatus: string | null;
 }> {
   const [member] = await db
@@ -147,6 +157,7 @@ async function resolveResendTarget(
   return {
     email: user.email,
     name: typeof user.name === "string" ? user.name : null,
+    userId: user.id,
     cognitoStatus: existing.UserStatus ?? null,
   };
 }
@@ -156,6 +167,7 @@ async function resendPendingInvite(
   memberId: string,
   email: string,
   name: string | null,
+  userId: string,
   idempotencyKey: string,
 ): Promise<ResendMemberInviteResult> {
   const emailChannelDelivery = await resolveInviteEmailChannel(tenantId);
@@ -165,6 +177,7 @@ async function resendPendingInvite(
       memberId,
       email,
       name,
+      userId,
       idempotencyKey,
       delivery: emailChannelDelivery,
     });
@@ -202,6 +215,7 @@ async function resendPendingInviteViaEmailChannel(input: {
   memberId: string;
   email: string;
   name: string | null;
+  userId: string;
   idempotencyKey: string;
   delivery: Awaited<ReturnType<typeof resolveInviteEmailChannel>>;
 }): Promise<ResendMemberInviteResult> {
@@ -218,6 +232,12 @@ async function resendPendingInviteViaEmailChannel(input: {
       Permanent: false,
     }),
   );
+  const enrollment = await issueEnrollmentGrants({
+    tenantId: input.tenantId,
+    intendedUserId: input.userId,
+    membershipId: input.memberId,
+    redirectUri: enrollmentRedirectUri(),
+  });
 
   try {
     await deliverInviteViaEmailChannel({
@@ -226,6 +246,7 @@ async function resendPendingInviteViaEmailChannel(input: {
       name: input.name,
       tempPassword,
       delivery: input.delivery,
+      enrollment,
       idempotencyKey: `tenant-invite-resend:${input.tenantId}:${input.memberId}:${input.idempotencyKey}`,
     });
   } catch (error) {

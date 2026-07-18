@@ -8,6 +8,7 @@ const {
   insertReturningQueue,
   selectRowsQueue,
   mockRequireTenantAdmin,
+  issueEnrollmentGrantsMock,
 } = vi.hoisted(() => ({
   cognitoSendMock: vi.fn(),
   emailChannelSendMock: vi.fn(),
@@ -16,6 +17,11 @@ const {
   insertReturningQueue: [] as unknown[][],
   selectRowsQueue: [] as unknown[][],
   mockRequireTenantAdmin: vi.fn(),
+  issueEnrollmentGrantsMock: vi.fn(),
+}));
+
+vi.mock("../handlers/auth-enrollment.js", () => ({
+  issueEnrollmentGrants: issueEnrollmentGrantsMock,
 }));
 
 vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
@@ -107,6 +113,12 @@ describe("inviteMember onboarding claim", () => {
     selectRowsQueue.length = 0;
     mockRequireTenantAdmin.mockReset();
     mockRequireTenantAdmin.mockResolvedValue("admin");
+    issueEnrollmentGrantsMock.mockResolvedValue({
+      startToken: "enrollment-token",
+      recipientChallenge: "12345678",
+      expiresAt: new Date("2026-07-18T18:00:00Z"),
+      routeKeys: ["google-web"],
+    });
     emailChannelSendMock.mockResolvedValue({
       provider: "resend",
       providerMessageId: "resend-email-1",
@@ -262,10 +274,15 @@ describe("inviteMember onboarding claim", () => {
       text?: string;
     };
     expect(invitePayload.html).toContain('src="https://app.test/logo.png"');
-    expect(invitePayload.html).toContain('href="https://app.test/sign-in"');
+    expect(invitePayload.html).toContain(
+      'href="https://app.test/accept-invite?token=enrollment-token"',
+    );
     expect(invitePayload.html).toContain("Workspace invitation");
     expect(invitePayload.html).toContain("Temporary password");
-    expect(invitePayload.text).toContain("Sign in: https://app.test/sign-in");
+    expect(invitePayload.text).toContain(
+      "Sign in: https://app.test/accept-invite?token=enrollment-token",
+    );
+    expect(invitePayload.text).toContain("Enrollment code: 12345678");
     expect(emailChannelSendMock).toHaveBeenCalledWith(
       "resend",
       expect.objectContaining({

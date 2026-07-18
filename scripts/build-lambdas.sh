@@ -381,6 +381,8 @@ build_handler "auth-revoke" \
   "$REPO_ROOT/packages/api/src/handlers/auth-revoke.ts"
 build_handler "auth-subscription-ticket" \
   "$REPO_ROOT/packages/api/src/handlers/auth-subscription-ticket.ts"
+build_handler "auth-enrollment" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-enrollment.ts"
 build_handler "appsync-subscription-authorizer" \
   "$REPO_ROOT/packages/api/src/handlers/appsync-subscription-authorizer.ts"
 build_handler "subscription-invalidation" \

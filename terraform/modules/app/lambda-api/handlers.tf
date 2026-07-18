@@ -773,6 +773,7 @@ resource "aws_lambda_function" "handler" {
     "deployment-sessions",
     "auth-me",
     "auth-revoke",
+    "auth-enrollment",
     "auth-subscription-ticket",
     "appsync-subscription-authorizer",
     "subscription-invalidation",
@@ -1771,6 +1772,8 @@ locals {
       "OPTIONS /api/auth/revoke"                                                = "auth-revoke"
       "POST /api/auth/subscription-ticket"                                      = "auth-subscription-ticket"
       "OPTIONS /api/auth/subscription-ticket"                                   = "auth-subscription-ticket"
+      "POST /api/auth/enrollment/consume"                                       = "auth-enrollment"
+      "OPTIONS /api/auth/enrollment/consume"                                    = "auth-enrollment"
       "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
       "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 
