@@ -208,7 +208,11 @@ async function runBrain(
   });
   await appendToolExecutionStarted(deps.ledgerStore, {
     ...correlation,
-    input: { queryLength: input.query.length, mode: input.mode, limit: input.limit },
+    input: {
+      queryLength: input.query.length,
+      mode: input.mode,
+      limit: input.limit,
+    },
     inputAllowPaths: ["queryLength", "mode", "limit"],
   });
   try {
@@ -285,13 +289,16 @@ async function runEmail(
       idempotencyKey,
     });
     const sanitized = sanitizeEmailResult(result);
-    const failed = sanitized.status === "blocked" || sanitized.status === "failed";
+    const failed =
+      sanitized.status === "blocked" || sanitized.status === "failed";
     await deps.finishEmail({
       context,
       idempotencyKey,
       state: failed ? "failed" : "completed",
       result: sanitized,
-      ...(failed ? { failureReason: String(sanitized.reasonCode ?? "blocked") } : {}),
+      ...(failed
+        ? { failureReason: String(sanitized.reasonCode ?? "blocked") }
+        : {}),
     });
     await appendToolExecutionTerminal(deps.ledgerStore, {
       ...correlation,
@@ -299,21 +306,40 @@ async function runEmail(
       output: {
         status: sanitized.status,
         approvalRequested: sanitized.status === "pending_review",
+        ...(sanitized.inboxItemId
+          ? { inboxItemId: sanitized.inboxItemId }
+          : {}),
+        ...(sanitized.approvalUrl
+          ? { approvalUrl: sanitized.approvalUrl }
+          : {}),
       },
-      outputAllowPaths: ["status", "approvalRequested"],
+      outputAllowPaths: [
+        "status",
+        "approvalRequested",
+        "inboxItemId",
+        "approvalUrl",
+      ],
       ...(failed
-        ? { error: { code: String(sanitized.reasonCode ?? "blocked") }, errorAllowPaths: ["code"] }
+        ? {
+            error: { code: String(sanitized.reasonCode ?? "blocked") },
+            errorAllowPaths: ["code"],
+          }
         : {}),
       durationMs: Math.max(0, deps.now() - startedAt),
     });
-    return response(failed ? 503 : sanitized.status === "pending_review" ? 202 : 200, sanitized);
+    return response(
+      failed ? 503 : sanitized.status === "pending_review" ? 202 : 200,
+      sanitized,
+    );
   } catch (error) {
-    await deps.finishEmail({
-      context,
-      idempotencyKey,
-      state: "ambiguous",
-      failureReason: "provider_result_ambiguous",
-    }).catch(() => undefined);
+    await deps
+      .finishEmail({
+        context,
+        idempotencyKey,
+        state: "ambiguous",
+        failureReason: "provider_result_ambiguous",
+      })
+      .catch(() => undefined);
     await recordUncertain(deps, correlation, startedAt, "send_email_ambiguous");
     console.error("[harness-platform-tools] Email send became ambiguous", {
       tenantId: context.tenantId,
@@ -373,12 +399,19 @@ async function resolvePlatformAccess(
       blockedTools: agents.blocked_tools,
     })
     .from(agents)
-    .where(and(eq(agents.id, context.agentId), eq(agents.tenant_id, context.tenantId)))
+    .where(
+      and(
+        eq(agents.id, context.agentId),
+        eq(agents.tenant_id, context.tenantId),
+      ),
+    )
     .limit(1);
   if (!agent) return { brain: false, email: false };
   const blocked = new Set(
     Array.isArray(agent.blockedTools)
-      ? agent.blockedTools.filter((value): value is string => typeof value === "string")
+      ? agent.blockedTools.filter(
+          (value): value is string => typeof value === "string",
+        )
       : [],
   );
   const isBlocked = (tool: string) =>
@@ -386,8 +419,10 @@ async function resolvePlatformAccess(
   const brain = validateTemplateContextEngine(agent.contextEngine);
   const email = validateTemplateSendEmail(agent.sendEmail);
   return {
-    brain: brain.ok && brain.value?.enabled === true && !isBlocked("context_engine"),
-    email: email.ok && email.value?.enabled === true && !isBlocked("send_email"),
+    brain:
+      brain.ok && brain.value?.enabled === true && !isBlocked("context_engine"),
+    email:
+      email.ok && email.value?.enabled === true && !isBlocked("send_email"),
   };
 }
 
@@ -458,7 +493,10 @@ async function claimEmail(input: EmailClaimInput): Promise<EmailClaim> {
       and(
         eq(harnessParticipantSessions.tenant_id, input.context.tenantId),
         eq(harnessParticipantSessions.turn_id, input.context.turnId),
-        eq(harnessParticipantSessions.participant_user_id, input.context.userId),
+        eq(
+          harnessParticipantSessions.participant_user_id,
+          input.context.userId,
+        ),
       ),
     )
     .limit(1);
@@ -555,7 +593,10 @@ function parseBrainBody(body: BrainBody): ParseResult<ParsedBrain> {
   if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > 10) {
     return { ok: false, error: "invalid_limit" };
   }
-  return { ok: true, value: { query: body.query.trim(), mode, limit: Number(limit) } };
+  return {
+    ok: true,
+    value: { query: body.query.trim(), mode, limit: Number(limit) },
+  };
 }
 
 function parseEmailBody(body: EmailBody): ParseResult<ParsedEmail> {
@@ -597,7 +638,13 @@ function parseEmailBody(body: EmailBody): ParseResult<ParsedEmail> {
 
 function digestEmailInput(input: ParsedEmail): string {
   return createHash("sha256")
-    .update(JSON.stringify({ to: input.to, subject: input.subject, body: input.body }))
+    .update(
+      JSON.stringify({
+        to: input.to,
+        subject: input.subject,
+        body: input.body,
+      }),
+    )
     .digest("hex");
 }
 
@@ -616,13 +663,17 @@ function sanitizeBrainResult(result: ContextEngineResponse) {
       provenance: {
         ...(hit.provenance.label ? { label: hit.provenance.label } : {}),
         ...(hit.provenance.uri ? { uri: hit.provenance.uri } : {}),
-        ...(hit.provenance.sourceId ? { sourceId: hit.provenance.sourceId } : {}),
+        ...(hit.provenance.sourceId
+          ? { sourceId: hit.provenance.sourceId }
+          : {}),
       },
     })),
     providers: result.providers.map((provider) => ({
       displayName: provider.displayName,
       state: provider.state,
-      ...(typeof provider.hitCount === "number" ? { hitCount: provider.hitCount } : {}),
+      ...(typeof provider.hitCount === "number"
+        ? { hitCount: provider.hitCount }
+        : {}),
     })),
   };
 }
@@ -638,46 +689,54 @@ function sanitizeEmailResult(result: Record<string, unknown>) {
         : "failed";
   return {
     status,
-    ...(typeof result.messageId === "string" ? { messageId: result.messageId } : {}),
+    ...(typeof result.messageId === "string"
+      ? { messageId: result.messageId }
+      : {}),
     ...(typeof result.conversationId === "string"
       ? { conversationId: result.conversationId }
       : {}),
-    ...(typeof result.inboxItemId === "string" ? { inboxItemId: result.inboxItemId } : {}),
+    ...(typeof result.inboxItemId === "string"
+      ? { inboxItemId: result.inboxItemId }
+      : {}),
     ...(typeof result.approvalUrl === "string"
       ? { approvalUrl: result.approvalUrl }
       : typeof result.inboxItemId === "string"
         ? { approvalUrl: `/approvals/${result.inboxItemId}` }
         : {}),
-    ...(typeof result.reasonCode === "string" ? { reasonCode: result.reasonCode } : {}),
+    ...(typeof result.reasonCode === "string"
+      ? { reasonCode: result.reasonCode }
+      : {}),
   };
 }
 
 function hasIdentityOverride(headers: Record<string, string | undefined>) {
   return Boolean(
     headers["x-thinkwork-user-id"] ||
-      headers["x-thinkwork-tenant-id"] ||
-      headers["x-thinkwork-agent-id"] ||
-      headers["x-thinkwork-turn-id"],
+    headers["x-thinkwork-tenant-id"] ||
+    headers["x-thinkwork-agent-id"] ||
+    headers["x-thinkwork-turn-id"],
   );
 }
 
 function hasCompleteTurnTuple(claims: HarnessCapabilityClaims) {
   return Boolean(
     claims.sub &&
-      claims.participant_id &&
-      claims.sub === claims.participant_id &&
-      claims.tenant_id &&
-      claims.agent_id &&
-      claims.thread_id &&
-      claims.turn_id &&
-      Number.isInteger(claims.session_generation) &&
-      claims.session_generation > 0,
+    claims.participant_id &&
+    claims.sub === claims.participant_id &&
+    claims.tenant_id &&
+    claims.agent_id &&
+    claims.thread_id &&
+    claims.turn_id &&
+    Number.isInteger(claims.session_generation) &&
+    claims.session_generation > 0,
   );
 }
 
 function decodeBody(event: APIGatewayProxyEventV2): string {
   const body = event.body ?? "";
-  return event.isBase64Encoded ? Buffer.from(body, "base64").toString("utf8") : body;
+  return event.isBase64Encoded
+    ? Buffer.from(body, "base64").toString("utf8")
+    : body;
 }
 
 function response(
@@ -722,7 +781,8 @@ const deployedHandler = createHarnessPlatformToolsHandler({
   finishEmail,
   ledgerStore: drizzleToolExecutionLedgerStore(),
   policyRevision:
-    process.env.AGENTCORE_GATEWAY_POLICY_REVISION?.trim() || "platform-tools-v1",
+    process.env.AGENTCORE_GATEWAY_POLICY_REVISION?.trim() ||
+    "platform-tools-v1",
   now: Date.now,
 });
 

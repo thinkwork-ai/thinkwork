@@ -17,7 +17,10 @@ const claims = {
   session_generation: 1,
 };
 
-function event(path: string, body: Record<string, unknown>): APIGatewayProxyEventV2 {
+function event(
+  path: string,
+  body: Record<string, unknown>,
+): APIGatewayProxyEventV2 {
   return {
     version: "2.0",
     routeKey: `POST ${path}`,
@@ -180,6 +183,12 @@ describe("Harness governed platform tools target", () => {
       expect.objectContaining({ state: "completed" }),
     );
     expect(rows.map((row) => row.event_type)).toEqual(["started", "completed"]);
+    expect(rows[1]?.output_preview).toEqual({
+      status: "pending_review",
+      approvalRequested: true,
+      inboxItemId: "inbox-1",
+      approvalUrl: "/approvals/inbox-1",
+    });
     expect(JSON.stringify(rows)).not.toContain("customer@example.com");
     expect(JSON.stringify(rows)).not.toContain("Hello from ThinkWork");
   });

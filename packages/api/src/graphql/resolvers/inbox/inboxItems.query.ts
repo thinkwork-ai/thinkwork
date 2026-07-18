@@ -7,12 +7,17 @@ import {
   inboxItems,
   inboxItemToCamel,
 } from "../../utils.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { requireTenantMember } from "../core/authz.js";
+import { canReadEmailApproval } from "./email-approval-auth.js";
 
 export const inboxItems_ = async (
   _parent: any,
   args: any,
   ctx: GraphQLContext,
 ) => {
+  await requireTenantMember(ctx, args.tenantId);
+  const callerUserId = await resolveCallerUserId(ctx);
   const conditions = [eq(inboxItems.tenant_id, args.tenantId)];
   if (args.status)
     conditions.push(eq(inboxItems.status, args.status.toLowerCase()));
@@ -26,5 +31,7 @@ export const inboxItems_ = async (
     .from(inboxItems)
     .where(and(...conditions))
     .orderBy(desc(inboxItems.created_at));
-  return rows.map(inboxItemToCamel);
+  return rows
+    .filter((row) => canReadEmailApproval(row, callerUserId))
+    .map(inboxItemToCamel);
 };

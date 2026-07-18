@@ -24,6 +24,7 @@ import {
   isEmailSendApprovalInboxItem,
 } from "../../../lib/email-channel/first-send-approval.js";
 import { createEmailChannelService } from "../../../lib/email-channel/channel-service.js";
+import { assertEmailApprovalRecipient } from "./email-approval-auth.js";
 
 export const rejectInboxItem = async (
   _parent: any,
@@ -36,9 +37,10 @@ export const rejectInboxItem = async (
     .where(eq(inboxItems.id, args.id));
   if (!current) throw new Error("Inbox item not found");
   await requireTenantMember(ctx, current.tenant_id);
+  const callerUserId = await resolveCallerUserId(ctx);
+  assertEmailApprovalRecipient(current, callerUserId);
   assertInboxItemTransition(current.status, "rejected");
   const reviewNotes = args.input?.reviewNotes ?? null;
-  const callerUserId = await resolveCallerUserId(ctx);
   const [row] = await db
     .update(inboxItems)
     .set({

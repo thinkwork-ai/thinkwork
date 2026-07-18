@@ -188,6 +188,7 @@ import {
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 import type { ApprovedModelOption } from "@/lib/approved-model-selection";
 import { ProjectedWorkspacePanel } from "@/components/workbench/ProjectedWorkspacePanel";
+import { InlineEmailApprovalCard } from "@/components/workbench/InlineEmailApprovalCard";
 import {
   agentsMdContentMayDiffer,
   parseWorkspaceProjection,
@@ -2253,6 +2254,7 @@ function ThreadTurnActivity({
 
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
+  const emailApprovalIds = emailApprovalIdsForTurn(usage);
   const goalRun = goalRunFromTurnEvidence(turn.resultJson, turn.usageJson);
 
   // Single source of truth for the header label (KTD2): derived from
@@ -2290,72 +2292,107 @@ function ThreadTurnActivity({
   // loading; failed turns keep an explicit header and reveal details on manual
   // expansion. Manual toggle persists across re-renders.
   return (
-    <div className="flex min-w-0 max-w-full items-start gap-1">
-      <div className="min-w-0 flex-1">
-        <ThinkingRow
-          title={header}
-          usageLabel={usageLabel}
-          costLabel={costLabel}
-          running={running}
-          elapsedLabel={elapsedLabel}
-          defaultOpen={false}
-          detail={turnSummary(turn, usage)}
-          ariaLabel="Turn activity"
-        >
-          {projection ? (
-            <ProjectedWorkspacePanel
-              projection={projection}
-              threadId={threadId}
-              agentsMdMayDiffer={agentsMdContentMayDiffer(
-                turn.id,
-                projection,
-                latestProjection ?? null,
-              )}
-            />
-          ) : null}
-          {goalRun ? (
-            <GoalRunCard
-              goalRun={goalRun}
-              onResume={
-                goalRun.resumeEligible && onSendFollowUp
-                  ? (resumeGoalRun) =>
-                      resumeGoalRunFromThread(onSendFollowUp, resumeGoalRun)
-                  : undefined
-              }
-            />
-          ) : null}
-          {rows.map((row, index) => (
-            <ActionRow
-              key={`${turn.id}-${index}-${row.title}`}
-              title={row.title}
-              detail={row.detail}
-              content={row.content}
-              kind={row.kind}
-              hideIcon={row.hideIcon}
-              childrenRows={row.children}
-            />
-          ))}
-          {failureDetail ? (
-            <ActionRow title="Run failed" detail={failureDetail} kind="tool" />
-          ) : null}
-        </ThinkingRow>
+    <div className="grid min-w-0 max-w-full gap-3">
+      <div className="flex min-w-0 max-w-full items-start gap-1">
+        <div className="min-w-0 flex-1">
+          <ThinkingRow
+            title={header}
+            usageLabel={usageLabel}
+            costLabel={costLabel}
+            running={running}
+            elapsedLabel={elapsedLabel}
+            defaultOpen={false}
+            detail={turnSummary(turn, usage)}
+            ariaLabel="Turn activity"
+          >
+            {projection ? (
+              <ProjectedWorkspacePanel
+                projection={projection}
+                threadId={threadId}
+                agentsMdMayDiffer={agentsMdContentMayDiffer(
+                  turn.id,
+                  projection,
+                  latestProjection ?? null,
+                )}
+              />
+            ) : null}
+            {goalRun ? (
+              <GoalRunCard
+                goalRun={goalRun}
+                onResume={
+                  goalRun.resumeEligible && onSendFollowUp
+                    ? (resumeGoalRun) =>
+                        resumeGoalRunFromThread(onSendFollowUp, resumeGoalRun)
+                    : undefined
+                }
+              />
+            ) : null}
+            {rows.map((row, index) => (
+              <ActionRow
+                key={`${turn.id}-${index}-${row.title}`}
+                title={row.title}
+                detail={row.detail}
+                content={row.content}
+                kind={row.kind}
+                hideIcon={row.hideIcon}
+                childrenRows={row.children}
+              />
+            ))}
+            {failureDetail ? (
+              <ActionRow
+                title="Run failed"
+                detail={failureDetail}
+                kind="tool"
+              />
+            ) : null}
+          </ThinkingRow>
+        </div>
+        {canFlag ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Flag turn for evaluation"
+            title="Flag for evaluation"
+            data-testid={`flag-turn-${turn.id}`}
+            className="shrink-0 text-muted-foreground/50 hover:text-foreground"
+            onClick={() => onFlagTurn?.(turn)}
+          >
+            <Flag className="size-3.5" />
+          </Button>
+        ) : null}
       </div>
-      {canFlag ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Flag turn for evaluation"
-          title="Flag for evaluation"
-          data-testid={`flag-turn-${turn.id}`}
-          className="shrink-0 text-muted-foreground/50 hover:text-foreground"
-          onClick={() => onFlagTurn?.(turn)}
-        >
-          <Flag className="size-3.5" />
-        </Button>
-      ) : null}
+      {emailApprovalIds.map((approvalId) => (
+        <InlineEmailApprovalCard key={approvalId} approvalId={approvalId} />
+      ))}
     </div>
   );
+}
+
+export function emailApprovalIdsForTurn(
+  usage: Record<string, unknown>,
+): string[] {
+  const ids = new Set<string>();
+  for (const value of parseArray(usage.tool_invocations)) {
+    const invocation = parseRecord(value);
+    const operation = stringValue(invocation.operation);
+    const toolName =
+      stringValue(invocation.tool_name) ||
+      stringValue(invocation.toolName) ||
+      stringValue(invocation.name);
+    if (
+      operation !== "email.send" &&
+      toolName !== "email_send" &&
+      toolName !== "send_email"
+    ) {
+      continue;
+    }
+    const output = parseRecord(invocation.output_preview);
+    if (stringValue(output.status) !== "pending_review") continue;
+    const approvalId = stringValue(output.inboxItemId);
+    if (approvalId) ids.add(approvalId);
+  }
+  return [...ids];
 }
 
 function turnDurationMs(turn: TaskThreadTurn): number | null {

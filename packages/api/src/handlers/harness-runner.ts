@@ -47,6 +47,7 @@ import {
 } from "../lib/harness/participant-session-store.js";
 import { loadTurnToolExecutionInvocations } from "../lib/harness/tool-execution-ledger.js";
 import { collectGovernedConnectorEvidence } from "../lib/harness/gateway-evidence.js";
+import { enforceGovernedActionGrounding } from "../lib/harness/governed-action-grounding.js";
 
 const region =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -350,6 +351,7 @@ function createRealDeps(): HarnessRunnerDeps {
           ),
         ];
       }
+      enforceGovernedActionGrounding(payload.response, governedInvocations);
       return processFinalize(payload);
     },
     async bumpTurnActivity({ turnId, tenantId }) {
