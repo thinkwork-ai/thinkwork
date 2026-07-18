@@ -93,6 +93,27 @@ function setWindowLocation(url: string): void {
   });
 }
 
+function publishDesktopGoogleOption(): void {
+  authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+    password: { enabled: false },
+    oauthOptions: [
+      {
+        key: "google",
+        label: "Continue with Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "desktop-google-client",
+          identityProvider: "Google",
+          prompt: "select_account",
+        },
+      },
+    ],
+  });
+}
+
 beforeEach(() => {
   vi.stubEnv("VITE_API_URL", "https://api.example.com");
   vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
@@ -214,6 +235,7 @@ describe("SignInPage", () => {
       state: "xyz",
     });
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    publishDesktopGoogleOption();
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
       startOAuth,
       onOAuthError: () => () => {},
@@ -221,25 +243,34 @@ describe("SignInPage", () => {
     routerMocks.search = { next: "/automations/123" };
 
     render(<SignInPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    );
 
     await waitFor(() =>
-      expect(startOAuth).toHaveBeenCalledWith({ next: "/automations/123" }),
+      expect(startOAuth).toHaveBeenCalledWith({
+        authOptionKey: "google",
+        next: "/automations/123",
+      }),
     );
   });
 
-  it("renders draggable desktop chrome in the Electron sign-in shell", () => {
+  it("renders draggable desktop chrome in the Electron sign-in shell", async () => {
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    publishDesktopGoogleOption();
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
     expect(screen.getByRole("banner").textContent).toContain("ThinkWork");
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    ).toBeTruthy();
   });
 
   it("shows incomplete packaged desktop configuration before OAuth starts", async () => {
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    publishDesktopGoogleOption();
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
       getDesktopConfig: vi.fn().mockResolvedValue({
         stage: "dev",
@@ -263,9 +294,10 @@ describe("SignInPage", () => {
     await screen.findByText("Configuration incomplete for dev");
     expect(screen.getByText(/Missing VITE_API_URL/)).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+      (await screen.findByRole("button", {
+        name: "Continue with Google",
+      })) as HTMLButtonElement,
+    ).toHaveProperty("disabled", true);
   });
 
   it("shows the active desktop deployment profile before OAuth starts", async () => {
@@ -622,14 +654,33 @@ describe("SignInPage", () => {
     );
   });
 
-  it("hides the email/password form in the desktop shell", () => {
+  it("renders published email/password and OAuth options in the desktop shell", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true, clientId: "desktop-local-client" },
+      oauthOptions: [
+        {
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "desktop-microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
+          },
+        },
+      ],
+    });
 
     render(<SignInPage />);
 
-    expect(screen.queryByLabelText("Email")).toBeNull();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue with Microsoft" }),
+    ).toBeTruthy();
   });
 });

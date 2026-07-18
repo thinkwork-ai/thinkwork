@@ -26,6 +26,7 @@ const FALLBACK_AUTH_OPTIONS: PublicAuthOptions = {
 
 export async function fetchPublicAuthOptions(
   fetchImpl: typeof fetch = fetch,
+  platform: "web" | "desktop" = "web",
 ): Promise<PublicAuthOptions> {
   try {
     const url = new URL(
@@ -33,7 +34,7 @@ export async function fetchPublicAuthOptions(
       window.location.origin,
     );
     url.searchParams.set("host", window.location.hostname);
-    url.searchParams.set("platform", "web");
+    url.searchParams.set("platform", platform);
     const response = await fetchImpl(url.toString(), {
       method: "GET",
       cache: "no-store",

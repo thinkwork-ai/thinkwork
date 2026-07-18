@@ -116,14 +116,15 @@ export function SignInPage() {
   });
 
   useEffect(() => {
-    if (isDesktop) return;
     let cancelled = false;
-    void fetchPublicAuthOptions().then((options) => {
-      if (!cancelled) {
-        configurePasswordAuthClient(options.password.clientId);
-        setAuthOptions(options);
-      }
-    });
+    void fetchPublicAuthOptions(fetch, isDesktop ? "desktop" : "web").then(
+      (options) => {
+        if (!cancelled) {
+          configurePasswordAuthClient(options.password.clientId);
+          setAuthOptions(options);
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -154,7 +155,7 @@ export function SignInPage() {
     }
   }
 
-  async function handleDesktopOAuth() {
+  async function handleDesktopOAuth(option: PublicOAuthOption) {
     setError(null);
     const bridge = getDesktopBridge();
     if (bridge) {
@@ -166,7 +167,10 @@ export function SignInPage() {
       }
       setIsStartingOAuth(true);
       try {
-        await bridge.startOAuth(next ? { next } : undefined);
+        await bridge.startOAuth({
+          authOptionKey: option.key,
+          ...(next ? { next } : {}),
+        });
       } catch (oauthError) {
         setError(
           oauthError instanceof Error
@@ -206,10 +210,13 @@ export function SignInPage() {
   }
 
   const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
-  const publicOAuthOptions = isDesktop ? [] : authOptions.oauthOptions;
+  const publicOAuthOptions = authOptions.oauthOptions;
   const showPasswordForm =
-    !isDesktop && authOptions.password.enabled && isPasswordSignInConfigured();
+    authOptions.password.enabled && isPasswordSignInConfigured();
   const showPublicOAuthOptions = publicOAuthOptions.length > 0;
+  const loginBlocked = isDesktop
+    ? Boolean(desktopConfig && !desktopConfig.configured)
+    : webConfigBlocked;
 
   const splash = (
     <main className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
@@ -267,34 +274,21 @@ export function SignInPage() {
           </div>
         )}
         <div className="flex w-full flex-col items-center gap-4">
-          {isDesktop ? (
-            <Button
-              onClick={() => void handleDesktopOAuth()}
-              size="lg"
-              className="min-w-40"
-              disabled={
-                isLoading ||
-                isStartingOAuth ||
-                isProfileBusy ||
-                Boolean(desktopConfig && !desktopConfig.configured)
-              }
-            >
-              {isLoading
-                ? "Checking session..."
-                : isStartingOAuth || isProfileBusy
-                  ? "Opening..."
-                  : "Log in"}
-            </Button>
-          ) : (
-            showPublicOAuthOptions &&
+          {showPublicOAuthOptions &&
             publicOAuthOptions.map((option) => (
               <Button
                 key={option.key}
-                onClick={() => void handlePublicOAuth(option)}
+                onClick={() =>
+                  void (isDesktop
+                    ? handleDesktopOAuth(option)
+                    : handlePublicOAuth(option))
+                }
                 size="lg"
                 variant={showPasswordForm ? "outline" : "default"}
                 className={showPasswordForm ? "w-full" : "min-w-40"}
-                disabled={isLoading || isStartingOAuth || webConfigBlocked}
+                disabled={
+                  isLoading || isStartingOAuth || isProfileBusy || loginBlocked
+                }
               >
                 {isLoading ? (
                   "Checking session..."
@@ -307,8 +301,7 @@ export function SignInPage() {
                   </>
                 )}
               </Button>
-            ))
-          )}
+            ))}
           {showPasswordForm && (
             <>
               {showPublicOAuthOptions && (
@@ -321,10 +314,10 @@ export function SignInPage() {
                   <span className="h-px flex-1 bg-border" />
                 </div>
               )}
-              <EmailPasswordForm disabled={isLoading || webConfigBlocked} />
+              <EmailPasswordForm disabled={isLoading || loginBlocked} />
             </>
           )}
-          {!isDesktop && !showPasswordForm && !showPublicOAuthOptions && (
+          {!showPasswordForm && !showPublicOAuthOptions && (
             <p className="text-center text-sm text-muted-foreground">
               Sign-in options are unavailable.
             </p>
