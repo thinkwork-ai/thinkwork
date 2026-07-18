@@ -18,7 +18,6 @@ let _userPoolClientId: string | null = null;
 let passwordAuthClientId: string | null = null;
 let tokenStorage: TokenStorage = new LocalStorageTokenStorage();
 const TOKEN_REFRESH_SKEW_MS = 30_000;
-const AUTH_SOURCE_STORAGE_KEY = "thinkwork:auth-source";
 const AUTH_CLIENT_STORAGE_KEY = "thinkwork:auth-client-id";
 const OAUTH_FLOW_STORAGE_PREFIX = "thinkwork:oauth-flow:";
 const OAUTH_FLOW_TTL_MS = 10 * 60 * 1000;
@@ -211,34 +210,11 @@ export function confirmForgotPassword(
 // ---------------------------------------------------------------------------
 // Sign out
 // ---------------------------------------------------------------------------
-// Clears local Cognito tokens and ends the upstream browser session. WorkOS
-// primary sessions must redirect through WorkOS' session logout URL; legacy
-// Cognito Hosted UI sessions keep using Cognito `/logout`.
+// Clears local tokens and ends the provider session through Cognito Hosted UI.
 export async function signOut(): Promise<void> {
-  const idToken = await getIdToken().catch(() => getStoredIdToken());
-  const authSource = tokenStorage.getItem(AUTH_SOURCE_STORAGE_KEY);
-  const isWorkosSession = authSource === "workos";
   const clientId = getActiveClientId();
 
   clearLocalAuthSession();
-
-  const workosLogoutUrl =
-    idToken && isWorkosSession
-      ? await requestWorkosLogoutUrl(idToken).catch((error) => {
-          console.error("[auth] WorkOS logout failed", error);
-          return null;
-        })
-      : null;
-
-  if (workosLogoutUrl) {
-    window.location.href = workosLogoutUrl;
-    return;
-  }
-
-  if (isWorkosSession) {
-    window.location.href = "/sign-in";
-    return;
-  }
 
   if (!clientId) {
     window.location.href = "/sign-in";
@@ -275,7 +251,6 @@ export function clearLocalAuthSession(): void {
     }
     tokenStorage.removeItem(`${prefix}.LastAuthUser`);
   }
-  tokenStorage.removeItem(AUTH_SOURCE_STORAGE_KEY);
   tokenStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
   _userPool = null;
   _userPoolClientId = null;
@@ -726,38 +701,8 @@ function validateNativeOAuthTokens(
   }
 }
 
-export async function exchangeWorkosBridgeForSession(
-  bridgeCode: string,
-): Promise<OAuthTokens> {
-  const res = await fetch(`${apiBaseUrl()}/api/auth/workos/bridge`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ bridge_code: bridgeCode }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`WorkOS bridge exchange failed: ${text}`);
-  }
-
-  const raw = (await res.json()) as Record<string, unknown>;
-  if (
-    typeof raw.id_token !== "string" ||
-    typeof raw.access_token !== "string" ||
-    typeof raw.refresh_token !== "string"
-  ) {
-    throw new Error("WorkOS bridge returned an unexpected response shape");
-  }
-  return {
-    id_token: raw.id_token,
-    access_token: raw.access_token,
-    refresh_token: raw.refresh_token,
-  };
-}
-
 export function storeTokensInCognitoStorage(
   tokens: OAuthTokens,
-  authSource: "cognito" | "workos" = "cognito",
   clientId = getActiveClientId(),
 ): void {
   // Decode the id token to extract the username (sub claim)
@@ -781,28 +726,7 @@ export function storeTokensInCognitoStorage(
     tokens.refresh_token,
   );
   tokenStorage.setItem(`${prefix}.LastAuthUser`, username);
-  tokenStorage.setItem(AUTH_SOURCE_STORAGE_KEY, authSource);
   tokenStorage.setItem(AUTH_CLIENT_STORAGE_KEY, clientId);
   _userPool = null;
   _userPoolClientId = null;
-}
-
-async function requestWorkosLogoutUrl(idToken: string): Promise<string | null> {
-  const res = await fetch(`${apiBaseUrl()}/api/auth/workos/logout`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({
-      return_to: `${window.location.origin}/`,
-    }),
-  });
-  if (!res.ok) return null;
-
-  const raw = (await res.json()) as Record<string, unknown>;
-  return typeof raw.logout_url === "string" && raw.logout_url
-    ? raw.logout_url
-    : null;
 }

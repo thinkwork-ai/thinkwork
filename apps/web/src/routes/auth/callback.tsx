@@ -1,9 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  consumePostAuthRedirect,
   exchangeCodeForSession,
-  exchangeWorkosBridgeForSession,
   storeTokensInCognitoStorage,
 } from "@/lib/auth";
 
@@ -12,8 +10,6 @@ export const Route = createFileRoute("/auth/callback")({
   validateSearch: (search: Record<string, unknown>) => ({
     code: (search.code as string) || "",
     state: (search.state as string) || "",
-    workos_bridge: (search.workos_bridge as string) || "",
-    next: (search.next as string) || "",
     error: (search.error as string) || "",
     error_description: (search.error_description as string) || "",
   }),
@@ -23,8 +19,6 @@ export function AuthCallback() {
   const {
     code,
     state,
-    workos_bridge,
-    next,
     error: oauthError,
     error_description,
   } = Route.useSearch();
@@ -37,7 +31,7 @@ export function AuthCallback() {
       return;
     }
 
-    if (!code && !workos_bridge) {
+    if (!code) {
       setError("No authorization code received.");
       return;
     }
@@ -46,28 +40,10 @@ export function AuthCallback() {
     if (exchanged.current) return;
     exchanged.current = true;
 
-    const exchange = workos_bridge
-      ? exchangeWorkosBridgeForSession(workos_bridge).then((tokens) => ({
-          tokens,
-          clientId: undefined,
-          next: safeCallbackNext(next),
-        }))
-      : exchangeCodeForSession(code, state);
-
-    exchange
+    exchangeCodeForSession(code, state)
       .then((session) => {
-        if (workos_bridge) {
-          storeTokensInCognitoStorage(session.tokens, "workos");
-        } else {
-          storeTokensInCognitoStorage(
-            session.tokens,
-            "cognito",
-            session.clientId,
-          );
-        }
-        const nextTarget = workos_bridge
-          ? consumePostAuthRedirect(session.next)
-          : session.next;
+        storeTokensInCognitoStorage(session.tokens, session.clientId);
+        const nextTarget = session.next;
         // If opened as popup, notify parent and close
         if (window.opener) {
           window.opener.location.href = nextTarget;
@@ -80,7 +56,7 @@ export function AuthCallback() {
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");
       });
-  }, [code, error_description, next, oauthError, state, workos_bridge]);
+  }, [code, error_description, oauthError, state]);
 
   if (error) {
     return (
@@ -100,14 +76,4 @@ export function AuthCallback() {
       <p className="text-sm text-muted-foreground">Signing you in...</p>
     </div>
   );
-}
-
-function safeCallbackNext(value: string): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/new";
-  try {
-    const url = new URL(value, window.location.origin);
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return "/new";
-  }
 }

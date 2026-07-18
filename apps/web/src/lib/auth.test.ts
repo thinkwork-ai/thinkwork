@@ -189,80 +189,6 @@ describe("signOut", () => {
     // guard bounces the unauthenticated user to /sign-in once they land.
     expect(target.searchParams.get("logout_uri")).toBe("https://app.example");
   });
-
-  it("redirects through WorkOS logout when the API returns a WorkOS session URL", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        logout_url:
-          "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example",
-      }),
-    } as Response);
-    vi.stubGlobal("fetch", fetchMock);
-    const { signOut, storeTokensInCognitoStorage } = await import("./auth");
-    const { navigations } = stubLocation("https://app.example");
-    const idToken = makeIdToken({
-      sub: "cognito-sub-123",
-      "cognito:username": "cognito-user-123",
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    });
-    storeTokensInCognitoStorage(
-      {
-        id_token: idToken,
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      },
-      "workos",
-    );
-
-    await signOut();
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.com/api/auth/workos/logout",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          return_to: "https://app.example/",
-        }),
-      },
-    );
-    expect(navigations).toEqual([
-      "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example",
-    ]);
-  });
-
-  it("does not fall back to Cognito logout when WorkOS has no session URL", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      json: async () => ({ logout_url: null }),
-    } as Response);
-    vi.stubGlobal("fetch", fetchMock);
-    const { signOut, storeTokensInCognitoStorage } = await import("./auth");
-    const { navigations } = stubLocation("https://app.example");
-    storeTokensInCognitoStorage(
-      {
-        id_token: makeIdToken({
-          sub: "cognito-sub-123",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        }),
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      },
-      "workos",
-    );
-
-    await signOut();
-
-    expect(fetchMock).toHaveBeenCalled();
-    expect(navigations).toEqual(["/sign-in"]);
-  });
 });
 
 describe("post-auth redirects", () => {
@@ -375,18 +301,17 @@ describe("Cognito token storage", () => {
       sub: "user-sub",
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
-    window.localStorage.setItem(`${prefix}.LastAuthUser`, "workos-user");
-    window.localStorage.setItem(`${prefix}.workos-user.idToken`, idToken);
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "federated-user");
+    window.localStorage.setItem(`${prefix}.federated-user.idToken`, idToken);
     window.localStorage.setItem(
-      `${prefix}.workos-user.accessToken`,
+      `${prefix}.federated-user.accessToken`,
       "access-token",
     );
     window.localStorage.setItem(
-      `${prefix}.workos-user.refreshToken`,
+      `${prefix}.federated-user.refreshToken`,
       "refresh-token",
     );
-    window.localStorage.setItem(`${prefix}.workos-user.clockDrift`, "0");
-    window.localStorage.setItem("thinkwork:auth-source", "workos");
+    window.localStorage.setItem(`${prefix}.federated-user.clockDrift`, "0");
 
     vi.resetModules();
     const { clearLocalAuthSession, getIdToken } = await import("./auth");
@@ -395,15 +320,14 @@ describe("Cognito token storage", () => {
 
     expect(window.localStorage.getItem(`${prefix}.LastAuthUser`)).toBeNull();
     expect(
-      window.localStorage.getItem(`${prefix}.workos-user.idToken`),
+      window.localStorage.getItem(`${prefix}.federated-user.idToken`),
     ).toBeNull();
     expect(
-      window.localStorage.getItem(`${prefix}.workos-user.accessToken`),
+      window.localStorage.getItem(`${prefix}.federated-user.accessToken`),
     ).toBeNull();
     expect(
-      window.localStorage.getItem(`${prefix}.workos-user.refreshToken`),
+      window.localStorage.getItem(`${prefix}.federated-user.refreshToken`),
     ).toBeNull();
-    expect(window.localStorage.getItem("thinkwork:auth-source")).toBeNull();
     await expect(getIdToken()).resolves.toBeNull();
   });
 
@@ -467,42 +391,6 @@ describe("Cognito token storage", () => {
         method: "POST",
         body: expect.any(URLSearchParams),
       }),
-    );
-  });
-});
-
-describe("exchangeWorkosBridgeForSession", () => {
-  it("posts the one-time WorkOS bridge code to the API and validates Cognito tokens", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        id_token: "id-token",
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      }),
-    } as Response);
-    vi.stubGlobal("fetch", fetchMock);
-    const { exchangeWorkosBridgeForSession } = await import("./auth");
-
-    await expect(
-      exchangeWorkosBridgeForSession("browser-bridge-code"),
-    ).resolves.toEqual({
-      id_token: "id-token",
-      access_token: "access-token",
-      refresh_token: "refresh-token",
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.com/api/auth/workos/bridge",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ bridge_code: "browser-bridge-code" }),
-      },
     );
   });
 });
