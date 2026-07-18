@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   appendToolExecutionStarted,
   appendToolExecutionTerminal,
+  projectToolExecutionInvocations,
   type ToolExecutionLedgerStore,
 } from "./tool-execution-ledger.js";
 
@@ -119,5 +120,52 @@ describe("tool execution ledger", () => {
       }),
     ).rejects.toThrow(/durationMs/);
     expect(target.rows).toHaveLength(0);
+  });
+
+  it("projects redacted start and terminal evidence into turn-detail invocations", () => {
+    const rows = [
+      {
+        idempotency_key: "idem-list",
+        tool_use_id: "tool-list",
+        operation: "mcp.tools.list",
+        policy_revision: "policy-v7",
+        policy_decision_id: "decision-1",
+        credential_owner_alias: "owner-hmac-1",
+        event_type: "started" as const,
+        input_preview: { connector: "twenty--crm" },
+        output_preview: null,
+        error_preview: null,
+        provider_request_id: null,
+        duration_ms: null,
+        provider_cost_usd: null,
+      },
+      {
+        idempotency_key: "idem-list",
+        tool_use_id: "tool-list",
+        operation: "mcp.tools.list",
+        policy_revision: "policy-v7",
+        policy_decision_id: "decision-1",
+        credential_owner_alias: "owner-hmac-1",
+        event_type: "completed" as const,
+        input_preview: null,
+        output_preview: { connector: "twenty--crm", toolCount: 3 },
+        error_preview: null,
+        provider_request_id: "request-1",
+        duration_ms: 6816,
+        provider_cost_usd: "0.00120000",
+      },
+    ];
+
+    expect(projectToolExecutionInvocations(rows)).toEqual([
+      expect.objectContaining({
+        tool_name: "mcp_twenty--crm_list_tools",
+        status: "completed",
+        duration_ms: 6816,
+        cost_usd: 0.0012,
+        input_preview: '{"connector":"twenty--crm"}',
+        output_preview: '{"connector":"twenty--crm","toolCount":3}',
+        evidence_source: "harness_tool_execution_events",
+      }),
+    ]);
   });
 });

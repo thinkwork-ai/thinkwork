@@ -17,6 +17,10 @@ export interface HarnessProofProfile {
   status: string;
   configurationFingerprint: string;
   sessionStrategy: string;
+  gatewayUrl: string;
+  gatewayTargetName: string;
+  identityWorkloadName: string;
+  identityCredentialProviderName: string;
 }
 
 export interface HarnessProofReadiness {
@@ -31,6 +35,10 @@ export interface HarnessProofReadiness {
   modelId: string | null;
   configurationFingerprint: string | null;
   sessionStrategy: string | null;
+  gatewayUrl: string | null;
+  gatewayTargetName: string | null;
+  identityWorkloadName: string | null;
+  identityCredentialProviderName: string | null;
   checkedAt: string;
 }
 
@@ -78,6 +86,19 @@ export function parseHarnessProofProfile(value: string): HarnessProofProfile {
     sessionStrategy: requiredProfileString(
       candidate.sessionStrategy,
       "sessionStrategy",
+    ),
+    gatewayUrl: requiredProfileString(candidate.gatewayUrl, "gatewayUrl"),
+    gatewayTargetName: requiredProfileString(
+      candidate.gatewayTargetName,
+      "gatewayTargetName",
+    ),
+    identityWorkloadName: requiredProfileString(
+      candidate.identityWorkloadName,
+      "identityWorkloadName",
+    ),
+    identityCredentialProviderName: requiredProfileString(
+      candidate.identityCredentialProviderName,
+      "identityCredentialProviderName",
     ),
   };
 }
@@ -137,6 +158,10 @@ export async function readHarnessProofReadiness(
     modelId: profile.modelId,
     configurationFingerprint: profile.configurationFingerprint,
     sessionStrategy: profile.sessionStrategy,
+    gatewayUrl: profile.gatewayUrl,
+    gatewayTargetName: profile.gatewayTargetName,
+    identityWorkloadName: profile.identityWorkloadName,
+    identityCredentialProviderName: profile.identityCredentialProviderName,
     checkedAt,
   };
   if (tenantSlug && profile.tenantSlug !== tenantSlug) {
@@ -205,6 +230,10 @@ export async function requireHarnessProofProfile(
     status: "ready",
     configurationFingerprint: readiness.configurationFingerprint!,
     sessionStrategy: readiness.sessionStrategy!,
+    gatewayUrl: readiness.gatewayUrl!,
+    gatewayTargetName: readiness.gatewayTargetName!,
+    identityWorkloadName: readiness.identityWorkloadName!,
+    identityCredentialProviderName: readiness.identityCredentialProviderName!,
   };
 }
 
@@ -225,6 +254,10 @@ function emptyReadiness(
     modelId: null,
     configurationFingerprint: null,
     sessionStrategy: null,
+    gatewayUrl: null,
+    gatewayTargetName: null,
+    identityWorkloadName: null,
+    identityCredentialProviderName: null,
     checkedAt,
   };
 }

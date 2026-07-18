@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   computeHarnessProjectionFingerprints,
+  forceDocumentSectionWaiver,
   HarnessDuplicateDeliveryError,
+  normalizeDocumentContractMarkdown,
+  normalizeFunnelAnalysisOrder,
   normalizeHarnessWireEvent,
   parseHarnessInvokeEvent,
   runHarnessTurn,
@@ -44,6 +47,87 @@ describe("Harness projection fingerprints", () => {
     });
     expect(alice.baseFingerprint).toBe(bob.baseFingerprint);
     expect(alice.participantFingerprint).not.toBe(bob.participantFingerprint);
+  });
+});
+
+describe("document plate normalization", () => {
+  it("moves a known waiver outside and removes the section it waives", () => {
+    const normalized = normalizeDocumentContractMarkdown(
+      [
+        "## Quota Attainment",
+        "",
+        "No quota exists.",
+        "",
+        "```tw:waiver",
+        "section: quota-attainment",
+        "reason: Twenty CRM has no quota target.",
+        "```",
+        "",
+        "## Pipeline Health",
+        "",
+        "Evidence.",
+      ].join("\n"),
+      {
+        slug: "sales-rep-review",
+        displayName: "Sales Rep Review",
+        useFor: "rep reviews",
+        sections: [
+          {
+            id: "quota-attainment",
+            title: "Quota Attainment",
+            tier: "required-if-material",
+          },
+        ],
+      },
+    );
+    expect(normalized).not.toContain("## Quota Attainment");
+    expect(normalized).toContain("## Pipeline Health");
+    expect(normalized).toContain("section: quota-attainment");
+  });
+
+  it("forces unsupported quota math to a truthful waiver", () => {
+    const plate = {
+      slug: "sales-rep-review",
+      displayName: "Sales Rep Review",
+      useFor: "Rep review",
+      sections: [
+        {
+          id: "quota-attainment",
+          title: "Quota Attainment",
+          tier: "required-if-material" as const,
+        },
+        {
+          id: "coaching-notes",
+          title: "Coaching Notes",
+          tier: "required" as const,
+        },
+      ],
+    };
+    const normalized = forceDocumentSectionWaiver({
+      markdown:
+        "## Quota Attainment\n\n```tw:analysis\nanalysis: quota-attainment\nnumerator: 330250\ndenominator: 1\n```\n\n## Coaching Notes\n\nAdvance qualified deals.",
+      plate,
+      sectionId: "quota-attainment",
+      analysisKey: "quota-attainment",
+      reason: "No explicit quota target.",
+    });
+    expect(normalized).not.toContain("## Quota Attainment");
+    expect(normalized).not.toContain("analysis: quota-attainment");
+    expect(normalized).toContain("## Coaching Notes");
+    expect(normalized).toContain("section: quota-attainment");
+  });
+
+  it("orders funnel stages widest-to-narrowest without changing counts", () => {
+    const normalized = normalizeFunnelAnalysisOrder(
+      "```tw:analysis\nanalysis: pipeline-conversion\nstages:\n  - { label: Identified, count: 8 }\n  - { label: Active, count: 1 }\n  - { label: Value Alignment, count: 2 }\n```",
+    );
+    expect(normalized.indexOf("count: 8")).toBeLessThan(
+      normalized.indexOf("count: 2"),
+    );
+    expect(normalized.indexOf("count: 2")).toBeLessThan(
+      normalized.indexOf("count: 1"),
+    );
+    expect(normalized.match(/count:/g)).toHaveLength(3);
   });
 });
 
@@ -109,7 +193,7 @@ function basePayload(): Record<string, unknown> {
     assistant_id: "agent-1",
     thread_turn_id: "turn-1",
     trace_id: "trace-1",
-    message: "Generate the QBR for 777 Automotive",
+    message: "Review 777 Automotive",
     system_prompt: "You are ThinkWork, the tenant platform agent.",
     messages_history: [],
     model: "moonshotai.kimi-k2.5",
@@ -144,7 +228,13 @@ function basePayload(): Record<string, unknown> {
 
 interface TestDeps extends HarnessRunnerDeps {
   finalizePayloads: FinalizePayload[];
-  invocations: Array<{ messages: unknown }>;
+  invocations: Array<{
+    messages: unknown;
+    allowedTools?: string[];
+    tools?: Array<Record<string, unknown>>;
+    systemPrompt?: Array<{ text: string }>;
+    maxIterations?: number;
+  }>;
   emissions: Array<Record<string, unknown>>;
 }
 
@@ -155,7 +245,13 @@ function makeDeps(
   } = {},
 ): TestDeps {
   const finalizePayloads: FinalizePayload[] = [];
-  const invocations: Array<{ messages: unknown }> = [];
+  const invocations: Array<{
+    messages: unknown;
+    allowedTools?: string[];
+    tools?: Array<Record<string, unknown>>;
+    systemPrompt?: Array<{ text: string }>;
+    maxIterations?: number;
+  }> = [];
   const emissions: Array<Record<string, unknown>> = [];
   const emitResults = [...(options.emitResults ?? [])];
   const queue = [...streams];
@@ -173,6 +269,10 @@ function makeDeps(
       qualifier: "ThinkworkProof",
       configurationFingerprint: "harness-config-fp",
       sessionStrategy: "fresh" as const,
+      gatewayUrl: "https://gateway.example.com/mcp",
+      gatewayTargetName: "ThinkworkDevOwnerProof",
+      identityWorkloadName: "thinkwork-dev-multiplayer-proof",
+      identityCredentialProviderName: "thinkwork-dev-proof-oauth",
     })),
     mintHarnessAssertion: vi.fn(async () => ({
       token: "signed-turn-assertion",
@@ -183,13 +283,19 @@ function makeDeps(
       sessionRecordId: "session-row-1",
       runtimeSessionId: "tw-harness-turn-turn-1",
       capturedHighWater: 1,
-      currentMessage: "Generate the QBR for 777 Automotive",
+      currentMessage: "Review 777 Automotive",
       history: [],
     })),
     transitionFreshTurn: vi.fn(async () => {}),
     abandonFreshTurn: vi.fn(async () => {}),
     invokeHarness: vi.fn(async (input) => {
-      invocations.push({ messages: input.messages });
+      invocations.push({
+        messages: input.messages,
+        allowedTools: input.allowedTools,
+        tools: input.tools,
+        systemPrompt: input.systemPrompt,
+        maxIterations: input.maxIterations,
+      });
       const next = queue.shift();
       if (!next) throw new Error("test: no more scripted streams");
       return next;
@@ -214,6 +320,25 @@ function makeDeps(
       return { finalized: true, messageId: "msg-1" };
     }),
     bumpTurnActivity: vi.fn(async () => {}),
+    loadToolExecutions: vi.fn(async () => [
+      {
+        operation: "mcp.tools.call",
+        status: "completed",
+        input_preview: JSON.stringify({
+          connector: "twenty--crm",
+          tool: "find_many_opportunities",
+        }),
+      },
+    ]),
+    collectConnectorEvidence: vi.fn(async () => ({
+      connector: "twenty--crm",
+      tool: "find_many_opportunities",
+      evidence: {
+        opportunities: [
+          { name: "McPherson POC", amount: 8_750_000, stage: "ACTIVE" },
+        ],
+      },
+    })),
     fetchWorkspaceText: vi.fn(async () => null),
   };
 }
@@ -343,6 +468,379 @@ describe("runHarnessTurn — happy path", () => {
         status: "completed",
       }),
     ]);
+  });
+
+  it("corrects an explicit HTML-artifact hallucination and requires a real emission", async () => {
+    const deps = makeDeps([
+      stream(textEvents("The HTML artifact was created.")),
+      stream(
+        textEvents(
+          JSON.stringify({
+            genre: "report",
+            title: "Harness report",
+            abstract: "Validated artifact envelope.",
+            digest_markdown:
+              "## Summary\n\nProof.\n\n## Evidence\n\nGreen.\n\n## Verdict\n\nPass.",
+            status: "draft",
+          }),
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Create an HTML artifact using the report plate and call emit_document.",
+    };
+    (
+      deps.prepareFreshTurn as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce({
+      sessionRecordId: "session-row-1",
+      runtimeSessionId: "tw-harness-turn-turn-1",
+      capturedHighWater: 1,
+      currentMessage:
+        "Create an HTML artifact using the report plate and call emit_document.",
+      history: [],
+    });
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invokeHarness).toHaveBeenCalledTimes(2);
+    expect(deps.invocations[0]?.allowedTools).toBeUndefined();
+    expect(deps.invocations[0]?.maxIterations).toBe(8);
+    expect(deps.invocations[1]?.allowedTools).toEqual([
+      "__thinkwork_document_envelope__",
+    ]);
+    expect(deps.invocations[1]?.maxIterations).toBe(2);
+    expect(deps.invocations[0]?.tools).toBeUndefined();
+    expect(deps.emissions).toHaveLength(1);
+    expect(deps.finalizePayloads[0]?.response?.content).toBe(
+      "Done — Harness report is ready.",
+    );
+  });
+
+  it("gathers data before compiling a named business plate with its chart contract", async () => {
+    const salesPlate = {
+      slug: "sales-rep-review",
+      displayName: "Sales Rep Review",
+      useFor: "A sales rep performance review.",
+      sections: [
+        {
+          id: "quota-attainment",
+          title: "Quota Attainment",
+          tier: "required-if-material",
+        },
+        {
+          id: "pipeline-health",
+          title: "Pipeline Health",
+          tier: "required-if-material",
+        },
+        {
+          id: "coaching-notes",
+          title: "Coaching Notes",
+          tier: "required",
+        },
+      ],
+      analyses: [
+        {
+          key: "pipeline-conversion",
+          op: "funnel_conversion",
+          inputHint: "ordered stages: [{ label, count }], >=2 stages",
+        },
+      ],
+    };
+    const deps = makeDeps([
+      stream(textEvents("I gathered four live CRM opportunities.")),
+      stream(
+        textEvents(
+          JSON.stringify({
+            genre: "sales-rep-review",
+            title: "Eric Odom — Sales Rep Review",
+            abstract: "Live CRM pipeline review.",
+            digest_markdown: [
+              "## Pipeline Health",
+              "",
+              "```tw:analysis",
+              "analysis: pipeline-conversion",
+              "stages:",
+              "  - { label: Identified, count: 4 }",
+              "  - { label: Active, count: 2 }",
+              "```",
+              "",
+              "```tw:waiver",
+              "section: quota-attainment",
+              "reason: No quota target was returned by Twenty CRM.",
+              "```",
+              "",
+              "## Coaching Notes",
+              "",
+              "Prioritize the two active opportunities.",
+            ].join("\n"),
+            status: "draft",
+          }),
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message: "Run a sales rep review report for Eric Odom",
+      document_plates: [salesPlate],
+    };
+    (
+      deps.prepareFreshTurn as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce({
+      sessionRecordId: "session-row-1",
+      runtimeSessionId: "tw-harness-turn-turn-1",
+      capturedHighWater: 1,
+      currentMessage: "Run a sales rep review report for Eric Odom",
+      history: [],
+    });
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.invocations[0]?.allowedTools).toBeUndefined();
+    expect(deps.invocations[0]?.maxIterations).toBe(8);
+    expect(deps.invocations[1]?.allowedTools).toEqual([
+      "__thinkwork_document_envelope__",
+    ]);
+    expect(deps.invocations[1]?.systemPrompt?.[0]?.text).toContain(
+      'genre MUST be "sales-rep-review"',
+    );
+    expect(deps.invocations[1]?.systemPrompt?.[0]?.text).toContain(
+      "pipeline-conversion",
+    );
+    expect(deps.emissions[0]).toMatchObject({
+      genre: "sales-rep-review",
+    });
+    expect(String(deps.emissions[0]?.digestMarkdown)).toContain(
+      "analysis: pipeline-conversion",
+    );
+    expect(deps.finalizePayloads[0]?.response?.content).toBe(
+      "Done — Eric Odom — Sales Rep Review is ready.",
+    );
+  });
+
+  it("refuses a connector-backed plate when no governed connector call exists", async () => {
+    const deps = makeDeps([
+      stream(toolUseEvents("emit_document", "premature-emit", EMIT_INPUT)),
+      stream(textEvents("I can write a generic report without CRM data.")),
+      stream(textEvents("I still did not call the connector.")),
+    ]);
+    (deps.loadToolExecutions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    const payload = {
+      ...basePayload(),
+      message: "Create a live Twenty CRM Sales Rep Review for Eric Odom",
+      mcp_configs: [
+        {
+          name: "twenty--crm",
+          url: "https://mcp.example.com/twenty",
+          transport: "streamable-http",
+          tools: ["query"],
+        },
+      ],
+      document_plates: [
+        {
+          slug: "sales-rep-review",
+          displayName: "Sales Rep Review",
+          useFor: "A sales rep performance review.",
+        },
+      ],
+    };
+    (
+      deps.prepareFreshTurn as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce({
+      sessionRecordId: "session-row-1",
+      runtimeSessionId: "tw-harness-turn-turn-1",
+      capturedHighWater: 1,
+      currentMessage: payload.message,
+      history: [],
+    });
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.collectConnectorEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connector: "twenty--crm",
+        gatewayTargetName: "ThinkworkDevOwnerProof",
+      }),
+    );
+    expect(deps.invocations).toHaveLength(0);
+    expect(deps.emissions).toHaveLength(0);
+    expect(deps.finalizePayloads[0]?.error_message).toContain(
+      "governed call was not recorded",
+    );
+  });
+
+  it("collects governed CRM evidence before one generation-only plate composition", async () => {
+    const deps = makeDeps([
+      stream(
+        textEvents(
+          JSON.stringify({
+            genre: "sales-rep-review",
+            title: "Eric Odom — Sales Rep Review",
+            abstract: "Review from governed CRM evidence.",
+            digest_markdown: [
+              "## Pipeline Health",
+              "",
+              "```tw:analysis",
+              "analysis: pipeline-conversion",
+              "stages:",
+              "  - { label: Active, count: 1 }",
+              "  - { label: Won, count: 0 }",
+              "```",
+              "",
+              "```tw:waiver",
+              "section: quota-attainment",
+              "reason: The CRM evidence contains no quota target.",
+              "```",
+              "",
+              "## Coaching Notes",
+              "",
+              "Advance the active McPherson opportunity.",
+            ].join("\n"),
+            status: "draft",
+          }),
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message: "Create a live Twenty CRM Sales Rep Review for Eric Odom",
+      mcp_configs: [
+        {
+          name: "twenty--crm",
+          url: "https://mcp.example.com/twenty",
+          transport: "streamable-http",
+          tools: ["query"],
+        },
+      ],
+      document_plates: [
+        {
+          slug: "sales-rep-review",
+          displayName: "Sales Rep Review",
+          useFor: "A sales rep performance review.",
+          sections: [
+            {
+              id: "quota-attainment",
+              title: "Quota Attainment",
+              tier: "required-if-material",
+            },
+            {
+              id: "pipeline-health",
+              title: "Pipeline Health",
+              tier: "required-if-material",
+            },
+            {
+              id: "coaching-notes",
+              title: "Coaching Notes",
+              tier: "required",
+            },
+          ],
+          analyses: [
+            {
+              key: "pipeline-conversion",
+              op: "funnel_conversion",
+              inputHint: "ordered stages: [{ label, count }], >=2 stages",
+            },
+          ],
+        },
+      ],
+    };
+    (
+      deps.prepareFreshTurn as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce({
+      sessionRecordId: "session-row-1",
+      runtimeSessionId: "tw-harness-turn-turn-1",
+      capturedHighWater: 1,
+      currentMessage: payload.message,
+      history: [],
+    });
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.collectConnectorEvidence).toHaveBeenCalledTimes(1);
+    expect(deps.invocations).toHaveLength(1);
+    expect(deps.invocations[0]?.allowedTools).toEqual([
+      "__thinkwork_document_envelope__",
+    ]);
+    expect(JSON.stringify(deps.invocations[0]?.messages)).toContain(
+      "McPherson POC",
+    );
+    expect(deps.invocations[0]?.systemPrompt?.[0]?.text).toContain(
+      "pipeline-conversion",
+    );
+    expect(deps.emissions).toHaveLength(1);
+  });
+
+  it("lets the document composer repair a compositor rejection once", async () => {
+    const envelope = JSON.stringify({
+      genre: "qbr",
+      title: "Acme QBR",
+      abstract: "Quarterly review.",
+      digest_markdown:
+        "## Business Outcomes\n\nEvidence.\n\n## Account Health\n\nHealthy.\n\n## Next Quarter Plan\n\nExecute.",
+      status: "draft",
+    });
+    const deps = makeDeps(
+      [
+        stream(textEvents("I gathered the account evidence.")),
+        stream(textEvents(envelope)),
+        stream(textEvents(envelope)),
+      ],
+      {
+        emitResults: [
+          {
+            statusCode: 200,
+            body: {
+              ok: false,
+              code: "COMPILE_REJECTED",
+              diagnostics: [
+                {
+                  code: "SECTION_WAIVER_CONFLICT",
+                  message: "Remove the waiver because the section is present.",
+                  location: "tw:waiver",
+                },
+              ],
+            },
+          },
+          {
+            statusCode: 200,
+            body: {
+              ok: true,
+              artifactId: "artifact-fixed",
+              documentId: "doc-fixed",
+              status: "draft",
+            },
+          },
+        ],
+      },
+    );
+    const payload = {
+      ...basePayload(),
+      message: "Generate the QBR for Acme",
+    };
+    (
+      deps.prepareFreshTurn as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce({
+      sessionRecordId: "session-row-1",
+      runtimeSessionId: "tw-harness-turn-turn-1",
+      capturedHighWater: 1,
+      currentMessage: "Generate the QBR for Acme",
+      history: [],
+    });
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.emissions).toHaveLength(2);
+    expect(deps.invocations).toHaveLength(3);
+    expect(deps.finalizePayloads[0]?.response?.content).toBe(
+      "Done — Acme QBR is ready.",
+    );
   });
 
   it("refreshes an expiring turn assertion before a tool continuation", async () => {

@@ -5600,7 +5600,9 @@ function sourceKey(value: unknown) {
 function turnSummary(turn: TaskThreadTurn, usage: Record<string, unknown>) {
   const parts = [
     formatInvocationSource(turn.invocationSource),
-    stringValue(turn.model),
+    // The requested UI model can differ from the immutable managed Harness
+    // model. Finalized usage is the authoritative provider/model attribution.
+    stringValue(usage.model) || stringValue(turn.model),
     formatTurnStatus(turn.status),
     formatTurnDuration(turn),
     formatTokenUsage(usage),

@@ -15,6 +15,10 @@ const profile = JSON.stringify({
   status: "ready",
   configurationFingerprint: "a".repeat(64),
   sessionStrategy: "fresh",
+  gatewayUrl: "https://gateway.example.com/mcp",
+  gatewayTargetName: "ThinkworkDevOwnerProof",
+  identityWorkloadName: "thinkwork-dev-multiplayer-proof",
+  identityCredentialProviderName: "thinkwork-dev-proof-oauth",
 });
 
 function deps(value: string | null, stage = "dev") {

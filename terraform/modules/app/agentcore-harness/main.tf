@@ -29,6 +29,7 @@ locals {
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___mixed_disclosure",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___list_connector_tools",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___call_connector_tool",
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___execute_code",
   ]
   tenant_skill_prefix = var.pilot_tenant_slug != "" ? (
     "tenants/${var.pilot_tenant_slug}/"
@@ -46,6 +47,8 @@ locals {
     memory           = "disabled"
     tool_policy      = "gateway-and-cedar-authoritative"
     connector_facade = "intent-ranked-direct-v1"
+    sandbox_facade   = "bounded-internal-python-v1"
+    artifact_facade  = "caller-fulfilled-emit-document-v1"
   })))
 }
 

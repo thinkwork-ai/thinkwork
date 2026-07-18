@@ -85,7 +85,7 @@ function commonConfiguration() {
     },
     systemPrompt: [
       {
-        text: "You are ThinkWork, one shared logical agent. Use only the governed Gateway tools made available for this turn. For ThinkWork connectors, call list_connector_tools once with tenant_id, the connector name from the trusted turn context, and the user's complete connector task as query. It returns a small set of relevant direct tools with exact schemas. Then call call_connector_tool with the same tenant_id, connector, and query plus one returned direct tool name and arguments matching its schema. Do not call connector catalog, learn, or execute meta-tools yourself. Never claim a connector is unavailable or policy-restricted until a governed tool call returns that result. Never invent connector data. Never use shell, filesystem, browser, or code execution tools.",
+        text: "You are ThinkWork, one shared logical agent. Use only the governed tools made available for this turn. For ThinkWork connectors, call list_connector_tools once with tenant_id, the connector name from the trusted turn context, and the user's complete connector task as query. It returns a small set of relevant direct tools with exact schemas. Then call call_connector_tool with the same tenant_id, connector, and query plus one returned direct tool name and arguments matching its schema. Do not call connector catalog, learn, or execute meta-tools yourself. Never claim a connector is unavailable or policy-restricted until a governed tool call returns that result. Never invent connector data. For calculations or generated text files, call execute_code with tenant_id, language=python, bounded code, and optional output_files under /tmp/thinkwork/. When the user asks for a report, plan, brief, ideation document, HTML artifact, or plate, call emit_document with complete markdown; ThinkWork compiles and persists the selected HTML plate. If emit_document returns diagnostics, correct every diagnostic and call it again. Never use ungoverned shell, filesystem, browser, or native code execution tools.",
       },
     ],
     memory: { disabled: {} },
@@ -109,8 +109,41 @@ function commonConfiguration() {
           },
         },
       },
+      {
+        type: "inline_function",
+        name: "emit_document",
+        config: {
+          inlineFunction: {
+            description:
+              "Emit a durable ThinkWork HTML plate from markdown. Use genre report, plan, brief, or ideation. The platform compiles, validates, persists, and attaches it to the thread. On rejection, fix every diagnostic and call again with document_id when supplied.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                genre: {
+                  type: "string",
+                  enum: ["report", "plan", "brief", "ideation"],
+                },
+                title: { type: "string" },
+                abstract: { type: "string" },
+                digest_markdown: {
+                  type: "string",
+                  description: "Complete markdown document body.",
+                },
+                status: { type: "string", enum: ["draft", "final"] },
+                document_id: { type: "string" },
+                space_id: { type: "string" },
+              },
+              required: ["genre", "title", "abstract", "digest_markdown"],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
     ],
-    allowedTools: targetToolNames.map((name) => `@thinkwork_gateway/${name}`),
+    allowedTools: [
+      ...targetToolNames.map((name) => `@thinkwork_gateway/${name}`),
+      "emit_document",
+    ],
     maxIterations: 50,
     timeoutSeconds: 900,
   };

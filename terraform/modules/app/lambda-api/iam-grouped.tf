@@ -357,6 +357,12 @@ locals {
           "arn:aws:s3:::${var.deployment_evidence_bucket}/*",
         ]
       },
+      {
+        Sid      = "AgentCoreHarnessGatewayOauthSecret"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:bedrock-agentcore-identity!default/oauth2/thinkwork-${var.stage}-proof-oauth-*"
+      },
     ] : [],
     var.billing_export_bucket_name != "" ? [
       {
@@ -911,6 +917,23 @@ locals {
           "bedrock-agentcore:InvokeAgentRuntime",
         ]
         Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:harness/*"
+      },
+      {
+        # The deterministic report adapter uses the same AgentCore Identity
+        # chain as Harness Gateway outbound auth: turn JWT -> workload token
+        # -> OBO Gateway token. No provider client secret enters Lambda.
+        Sid    = "AgentCoreHarnessGatewayIdentity"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
+          "bedrock-agentcore:GetResourceOauth2Token",
+        ]
+        Resource = [
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default",
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default/workload-identity/thinkwork-${var.stage}-multiplayer-proof",
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default",
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default/oauth2credentialprovider/thinkwork-${var.stage}-proof-oauth",
+        ]
       },
     ] : [],
   )

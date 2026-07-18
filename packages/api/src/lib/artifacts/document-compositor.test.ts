@@ -179,8 +179,8 @@ tw:analysis
 analysis: pipeline-conversion
 stages:
   - { label: NEW, count: 9 }
-  - { label: PROSPECT, count: 1 }
-  - { label: WON, count: 34 }
+  - { label: PROSPECT, count: 4 }
+  - { label: WON, count: 1 }
 \`\`\`
 `,
     });

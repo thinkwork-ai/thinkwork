@@ -27,8 +27,10 @@
 import {
   relayEmissionResultToModel,
   toEmissionRaw,
+  buildEmitDocumentToolProjection,
 } from "./emit-document-tool.js";
 import { createHash } from "node:crypto";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { FinalizePayload } from "../chat-finalize/types.js";
 import type { McpConfig } from "../resolve-agent-runtime-config.js";
 import { guardHarnessPublication } from "./publication-guard.js";
@@ -47,6 +49,11 @@ export interface EnsuredHarness {
   qualifier: string;
   configurationFingerprint: string;
   sessionStrategy: "fresh";
+  /** Attested direct MCP endpoint for deterministic governed evidence. */
+  gatewayUrl: string;
+  gatewayTargetName: string;
+  identityWorkloadName: string;
+  identityCredentialProviderName: string;
 }
 
 /**
@@ -220,6 +227,12 @@ export interface HarnessRunnerDeps {
     bearerToken: string;
     runtimeSessionId: string;
     messages: HarnessInvokeMessage[];
+    /** Optional per-turn narrowing of the Harness's configured tool ceiling. */
+    allowedTools?: string[];
+    /** Caller-fulfilled tools must be repeated on InvokeHarness. */
+    tools?: Array<Record<string, unknown>>;
+    systemPrompt?: Array<{ text: string }>;
+    maxIterations?: number;
   }):
     | Promise<AsyncIterable<HarnessStreamEvent>>
     | AsyncIterable<HarnessStreamEvent>;
@@ -235,6 +248,23 @@ export interface HarnessRunnerDeps {
   finalize(payload: FinalizePayload): Promise<unknown>;
   /** thread_turns.last_activity_at keepalive bump (KTD-9). */
   bumpTurnActivity(input: { turnId: string; tenantId: string }): Promise<void>;
+  /** Governed target evidence recorded so far for this exact turn. */
+  loadToolExecutions(input: {
+    tenantId: string;
+    threadId: string;
+    turnId: string;
+  }): Promise<Array<Record<string, unknown>>>;
+  /** Deterministically execute one exact-user governed connector read. */
+  collectConnectorEvidence(input: {
+    tenantId: string;
+    turnId: string;
+    connector: string;
+    query: string;
+    gatewayUrl: string;
+    gatewayTargetName: string;
+    identityWorkloadName: string;
+    identityCredentialProviderName: string;
+  }): Promise<{ connector: string; tool: string; evidence: unknown }>;
   /** Read a text file from the workspace bucket; null when absent. */
   fetchWorkspaceText(key: string): Promise<string | null>;
   workspaceBucket: string;
@@ -596,6 +626,299 @@ const CONTINUE_STOP_REASONS = new Set([
 ]);
 const MAX_TOOL_ROUNDS = 16;
 
+interface DocumentPlateContract {
+  slug: string;
+  displayName: string;
+  useFor: string;
+  sections?: Array<{
+    id: string;
+    title: string;
+    tier: "required" | "required-if-material";
+  }>;
+  analyses?: Array<{ key: string; op: string; inputHint: string }>;
+}
+
+function normalizePlatePhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function projectedPlateContracts(value: unknown): DocumentPlateContract[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const row = entry as Record<string, unknown>;
+    if (
+      typeof row.slug !== "string" ||
+      typeof row.displayName !== "string" ||
+      typeof row.useFor !== "string"
+    ) {
+      return [];
+    }
+    return [row as unknown as DocumentPlateContract];
+  });
+}
+
+/**
+ * Canonicalize a common model-authored waiver shape without weakening the
+ * plate contract: a waived section must be absent, and its tw:waiver block
+ * must remain as structured evidence outside that section.
+ */
+export function normalizeDocumentContractMarkdown(
+  markdown: string,
+  plate: DocumentPlateContract | null,
+): string {
+  if (!plate?.sections?.length) return markdown;
+  const sectionById = new Map(plate.sections.map((s) => [s.id, s]));
+  const waivers: Array<{ id: string; block: string }> = [];
+  const withoutKnownWaivers = markdown.replace(
+    /```tw:waiver\s*\n([\s\S]*?)\n```/gi,
+    (block, body: string) => {
+      const id = body.match(/^section:\s*([a-z0-9-]+)\s*$/im)?.[1];
+      if (!id || !sectionById.has(id)) return block;
+      waivers.push({ id, block: String(block).trim() });
+      return "";
+    },
+  );
+  if (waivers.length === 0) return markdown;
+
+  const waivedTitles = new Set(
+    waivers.map((w) => normalizePlatePhrase(sectionById.get(w.id)!.title)),
+  );
+  const lines = withoutKnownWaivers.split("\n");
+  const kept: string[] = [];
+  for (let index = 0; index < lines.length; ) {
+    const heading = lines[index]?.match(/^##\s+(.+?)\s*$/);
+    if (heading && waivedTitles.has(normalizePlatePhrase(heading[1]))) {
+      index += 1;
+      while (index < lines.length && !/^##\s+/.test(lines[index] ?? "")) {
+        index += 1;
+      }
+      continue;
+    }
+    kept.push(lines[index] ?? "");
+    index += 1;
+  }
+  const uniqueWaivers = [
+    ...new Map(waivers.map((waiver) => [waiver.id, waiver.block])).values(),
+  ];
+  return `${kept.join("\n").trim()}\n\n${uniqueWaivers.join("\n\n")}\n`;
+}
+
+function hasExplicitQuotaEvidence(value: unknown, depth = 0): boolean {
+  if (depth > 12 || value == null) return false;
+  if (Array.isArray(value)) {
+    return value.some((child) => hasExplicitQuotaEvidence(child, depth + 1));
+  }
+  if (typeof value !== "object") return false;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (
+      /(?:^|_)(?:quota|quotaTarget|quota_target|attainment)(?:$|_)/i.test(
+        key,
+      ) &&
+      ((typeof child === "number" && Number.isFinite(child) && child > 0) ||
+        (typeof child === "string" && /[1-9]/.test(child)))
+    ) {
+      return true;
+    }
+    if (hasExplicitQuotaEvidence(child, depth + 1)) return true;
+  }
+  return false;
+}
+
+export function forceDocumentSectionWaiver(input: {
+  markdown: string;
+  plate: DocumentPlateContract | null;
+  sectionId: string;
+  analysisKey?: string;
+  reason: string;
+}): string {
+  const section = input.plate?.sections?.find(
+    (candidate) => candidate.id === input.sectionId,
+  );
+  if (!section) return input.markdown;
+  let markdown = input.markdown;
+  if (input.analysisKey) {
+    const escaped = input.analysisKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    markdown = markdown.replace(
+      /```tw:analysis\s*\n([\s\S]*?)\n```/gi,
+      (block, body: string) =>
+        new RegExp(`^analysis:\\s*${escaped}\\s*$`, "im").test(body)
+          ? ""
+          : block,
+    );
+  }
+  markdown = `${markdown.trim()}\n\n\`\`\`tw:waiver\nsection: ${input.sectionId}\nreason: ${input.reason}\n\`\`\`\n`;
+  return normalizeDocumentContractMarkdown(markdown, input.plate);
+}
+
+export function normalizeFunnelAnalysisOrder(markdown: string): string {
+  return markdown.replace(
+    /```tw:analysis\s*\n([\s\S]*?)\n```/gi,
+    (block, body: string) => {
+      let parsed: unknown;
+      try {
+        parsed = parseYaml(body, { strict: true });
+      } catch {
+        return block;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return block;
+      }
+      const root = parsed as Record<string, unknown>;
+      if (
+        root.analysis !== "pipeline-conversion" ||
+        !Array.isArray(root.stages)
+      ) {
+        return block;
+      }
+      const stages = root.stages;
+      if (
+        stages.some(
+          (stage) =>
+            !stage ||
+            typeof stage !== "object" ||
+            Array.isArray(stage) ||
+            typeof (stage as Record<string, unknown>).count !== "number" ||
+            !Number.isFinite((stage as Record<string, unknown>).count),
+        )
+      ) {
+        return block;
+      }
+      const ordered = [...stages].sort(
+        (left, right) =>
+          Number((right as Record<string, unknown>).count) -
+          Number((left as Record<string, unknown>).count),
+      );
+      const normalized = stringifyYaml(
+        { ...root, stages: ordered },
+        { lineWidth: 0 },
+      ).trimEnd();
+      return `\`\`\`tw:analysis\n${normalized}\n\`\`\``;
+    },
+  );
+}
+
+/** Resolve named business-document intent against the canonical plate list. */
+export function selectRequestedDocumentPlate(
+  message: string,
+  documentPlates: unknown,
+): DocumentPlateContract | null {
+  const normalizedMessage = normalizePlatePhrase(message);
+  const plates = projectedPlateContracts(documentPlates).sort(
+    (a, b) =>
+      Math.max(
+        normalizePlatePhrase(b.slug).length,
+        normalizePlatePhrase(b.displayName).length,
+      ) -
+      Math.max(
+        normalizePlatePhrase(a.slug).length,
+        normalizePlatePhrase(a.displayName).length,
+      ),
+  );
+  const named = plates.find((plate) =>
+    [plate.slug, plate.displayName]
+      .map(normalizePlatePhrase)
+      .filter((name) => name.length >= 3)
+      .some((name) => normalizedMessage.includes(name)),
+  );
+  if (named) return named;
+  if (/\bcustomer\s+(?:report|review)\b/i.test(message)) {
+    return plates.find((plate) => plate.slug === "qbr") ?? null;
+  }
+  if (
+    /(?:\bemit_document\b|\bhtml\s+artifact\b|\bdurable\s+html\b|\busing\s+the\s+[a-z0-9_-]+\s+plate\b)/i.test(
+      message,
+    )
+  ) {
+    return plates.find((plate) => plate.slug === "report") ?? null;
+  }
+  return null;
+}
+
+export function requiresExplicitDocumentEmission(
+  message: string,
+  documentPlates?: unknown,
+): boolean {
+  return Boolean(
+    selectRequestedDocumentPlate(message, documentPlates) ??
+    /(?:\bemit_document\b|\bhtml\s+artifact\b|\bdurable\s+html\b|\busing\s+the\s+[a-z0-9_-]+\s+plate\b)/i.test(
+      message,
+    ),
+  );
+}
+
+export type ParsedDocumentEnvelope =
+  | { ok: true; input: Record<string, unknown>; title: string }
+  | { ok: false; error: string };
+
+/**
+ * Strict no-tools artifact protocol used while AgentCore Harness exact-name
+ * allowedTools filtering drops inline functions (verified live 2026-07-18).
+ * This parser never interprets XML/function-call prose and cannot dispatch an
+ * arbitrary operation: it accepts only the document fields already validated
+ * by handleDocumentEmission.
+ */
+export function parseDocumentEnvelope(
+  text: string,
+  expectedGenre?: string,
+): ParsedDocumentEnvelope {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+  const candidate = (fenced?.[1] ?? trimmed).trim();
+  let value: unknown;
+  try {
+    value = JSON.parse(candidate);
+  } catch {
+    return { ok: false, error: "response was not one JSON object" };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "document envelope must be a JSON object" };
+  }
+  const record = value as Record<string, unknown>;
+  const allowed = new Set([
+    "genre",
+    "title",
+    "abstract",
+    "digest_markdown",
+    "status",
+    "document_id",
+    "space_id",
+  ]);
+  const unknown = Object.keys(record).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    return {
+      ok: false,
+      error: `document envelope contains unsupported fields: ${unknown.join(", ")}`,
+    };
+  }
+  for (const field of ["genre", "title", "abstract", "digest_markdown"]) {
+    if (typeof record[field] !== "string" || !record[field].trim()) {
+      return { ok: false, error: `${field} must be a non-empty string` };
+    }
+  }
+  if (expectedGenre && record.genre !== expectedGenre) {
+    return {
+      ok: false,
+      error: `genre must be the selected plate "${expectedGenre}"`,
+    };
+  }
+  if (
+    record.status !== undefined &&
+    record.status !== "draft" &&
+    record.status !== "final"
+  ) {
+    return { ok: false, error: "status must be draft or final" };
+  }
+  return {
+    ok: true,
+    input: record,
+    title: String(record.title),
+  };
+}
+
 /** Payload features the trial's chat-only adapter refuses up front. */
 const UNSUPPORTED_PAYLOAD_FIELDS: Array<[string, string]> = [
   ["computer_task_id", "computer task turns"],
@@ -613,6 +936,14 @@ export async function runHarnessTurn(
   const now = deps.now ?? Date.now;
   const startedAt = now();
   const turn = extractTurn(payload);
+  const selectedDocumentPlate = selectRequestedDocumentPlate(
+    turn.userMessage,
+    payload.document_plates,
+  );
+  const documentEmissionRequired = requiresExplicitDocumentEmission(
+    turn.userMessage,
+    payload.document_plates,
+  );
 
   const toolInvocations: Array<Record<string, unknown>> = [];
   const usage = {
@@ -625,6 +956,8 @@ export async function runHarnessTurn(
   let lastDocumentId: string | null = null;
   let emissionAttempts = 0;
   let emissionSuccesses = 0;
+  let missingEmissionCorrections = 0;
+  let documentCompositionPhase = false;
   let harness: EnsuredHarness | null = null;
   let composedSystemPrompt: string | null = null;
   let turnProjectionFingerprint: string | null = null;
@@ -779,6 +1112,42 @@ export async function runHarnessTurn(
     const mcpConfigs = (
       Array.isArray(payload.mcp_configs) ? payload.mcp_configs : []
     ) as McpConfig[];
+    const connectorNames = mcpConfigs
+      .map((config) => config.name?.trim())
+      .filter((name): name is string => Boolean(name));
+    const normalizedTask = normalizePlatePhrase(turn.userMessage);
+    const connectorEvidenceRequired = Boolean(
+      selectedDocumentPlate &&
+      connectorNames.some((name) => {
+        const normalizedName = normalizePlatePhrase(name);
+        return (
+          normalizedTask.includes(normalizedName) ||
+          normalizedTask.includes("live") ||
+          ((selectedDocumentPlate.slug === "sales-rep-review" ||
+            selectedDocumentPlate.slug === "opportunity-review") &&
+            normalizedName.includes("crm"))
+        );
+      }),
+    );
+    const selectedConnectorName = connectorEvidenceRequired
+      ? (connectorNames.find((name) =>
+          normalizedTask.includes(normalizePlatePhrase(name)),
+        ) ??
+        connectorNames.find((name) => /twenty/i.test(name)) ??
+        connectorNames.find((name) => /crm/i.test(name)) ??
+        connectorNames[0] ??
+        null)
+      : null;
+    const requestedPerson = turn.userMessage.match(
+      /\bfor\s+([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){1,3})\b/,
+    )?.[1];
+    const connectorEvidenceQuery =
+      selectedDocumentPlate?.slug === "sales-rep-review"
+        ? [
+            `List CRM opportunity records${requestedPerson ? ` for ${requestedPerson}` : ""}.`,
+            "Include owner, stage, amount, expected close date, and record name fields when available.",
+          ].join(" ")
+        : turn.userMessage;
     composedSystemPrompt = await composeHarnessSystemPrompt(
       payload,
       mcpConfigs,
@@ -839,24 +1208,126 @@ export async function runHarnessTurn(
       baseFingerprint,
       participantFingerprint: turnProjectionFingerprint,
     });
+    let governedConnectorEvidence: {
+      connector: string;
+      tool: string;
+      evidence: unknown;
+    } | null = null;
+    if (connectorEvidenceRequired) {
+      if (!selectedConnectorName) {
+        return await finalizeWith("failed", {
+          errorMessage:
+            "Connector-backed plate composition requires an authorized connector projection.",
+        });
+      }
+      governedConnectorEvidence = await deps.collectConnectorEvidence({
+        tenantId: turn.tenantId,
+        turnId: turn.turnId,
+        connector: selectedConnectorName,
+        query: connectorEvidenceQuery,
+        gatewayUrl: harness.gatewayUrl,
+        gatewayTargetName: harness.gatewayTargetName,
+        identityWorkloadName: harness.identityWorkloadName,
+        identityCredentialProviderName: harness.identityCredentialProviderName,
+      });
+      const evidenceLedger = await deps.loadToolExecutions({
+        tenantId: turn.tenantId,
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+      });
+      if (
+        !evidenceLedger.some((invocation) => {
+          if (
+            invocation.operation !== "mcp.tools.call" ||
+            invocation.status !== "completed" ||
+            typeof invocation.input_preview !== "string"
+          ) {
+            return false;
+          }
+          try {
+            const preview = JSON.parse(invocation.input_preview) as Record<
+              string,
+              unknown
+            >;
+            return (
+              preview.connector === governedConnectorEvidence?.connector &&
+              preview.tool === governedConnectorEvidence?.tool
+            );
+          } catch {
+            return false;
+          }
+        })
+      ) {
+        return await finalizeWith("failed", {
+          errorMessage:
+            "Connector-backed plate composition was refused because its governed call was not recorded.",
+        });
+      }
+      documentCompositionPhase = true;
+    }
     let assertion = await deps.mintHarnessAssertion({
       tenantId: turn.tenantId,
       turnId: turn.turnId,
     });
     onActivity();
 
-    let nextMessages: HarnessInvokeMessage[] = [
-      { role: "user", content: [{ text: trustedContext }] },
-      ...preparedSession.history.map(
-        (m): HarnessInvokeMessage => ({
-          role: m.role,
-          content: [{ text: m.content }],
-        }),
-      ),
-      { role: "user", content: [{ text: preparedSession.currentMessage }] },
-    ];
+    let nextMessages: HarnessInvokeMessage[] = governedConnectorEvidence
+      ? [
+          { role: "user", content: [{ text: trustedContext }] },
+          {
+            role: "user",
+            content: [
+              {
+                text: [
+                  `User request: ${preparedSession.currentMessage}`,
+                  "The following JSON is trusted, exact-user evidence collected by ThinkWork through AgentCore Gateway and Cedar for this same turn.",
+                  JSON.stringify(governedConnectorEvidence),
+                  selectedDocumentPlate
+                    ? `Compose the registered ${selectedDocumentPlate.displayName} plate (${selectedDocumentPlate.slug}) from this evidence now.`
+                    : "Compose the requested durable ThinkWork document from this evidence now.",
+                  "Return exactly one validated document envelope. Do not call tools, estimate missing values, or substitute generic benchmarks.",
+                ].join("\n"),
+              },
+            ],
+          },
+        ]
+      : [
+          { role: "user", content: [{ text: trustedContext }] },
+          ...preparedSession.history.map(
+            (m): HarnessInvokeMessage => ({
+              role: m.role,
+              content: [{ text: m.content }],
+            }),
+          ),
+          { role: "user", content: [{ text: preparedSession.currentMessage }] },
+        ];
 
     let finalText = "";
+    const emitDocumentProjection = documentEmissionRequired
+      ? buildEmitDocumentToolProjection(payload.document_plates)
+      : null;
+    const documentEnvelopeSystemPrompt = emitDocumentProjection
+      ? [
+          {
+            text: [
+              "You are ThinkWork's document composer. Produce the requested document as exactly one JSON object and no other text, markdown fence, XML, function-call tag, or explanation.",
+              "The JSON object must validate against this schema:",
+              JSON.stringify(emitDocumentProjection.inputSchema),
+              selectedDocumentPlate
+                ? `The selected registered plate contract is authoritative. genre MUST be "${selectedDocumentPlate.slug}". Contract: ${JSON.stringify(selectedDocumentPlate)}`
+                : "Choose the most specific visible plate genre for the request.",
+              "The digest_markdown value is the complete document body. Include every required and material required-if-material section using the exact ## heading title from the contract.",
+              "For every declared analysis backed by the gathered data, include a fenced tw:analysis YAML block naming its key and supplying inputs in the inputHint shape. The platform computes and renders its chart/stats; never narrate computed rates as a substitute for the directive.",
+              "tw:analysis inputs are top-level YAML fields beside `analysis`; never nest them under `inputs`. For pipeline-conversion use exactly this shape: ```tw:analysis\nanalysis: pipeline-conversion\nstages:\n  - { label: Identified, count: 8 }\n  - { label: Qualified, count: 2 }\n``` (replace labels/counts only with evidence-backed values; order widest-to-narrowest so counts never increase).",
+              "For sales-rep-review, CRM opportunity amounts are pipeline value, NEVER quota or attainment. When the evidence has no explicit quota target, omit the Quota Attainment heading and author the quota-attainment waiver. Never emit the quota-attainment analysis from pipeline value.",
+              "Do not author tw:chart blocks for a contract-bearing plate. Every chart must come from a declared tw:analysis so the platform computes its values.",
+              "If backing data is genuinely unavailable for a required-if-material section, OMIT that section's ## heading entirely and include: ```tw:waiver\\nsection: <section-id>\\nreason: <specific reason>\\n``` outside every section.",
+              "Use only evidence gathered earlier in this same turn. Never invent quota, pipeline, usage, or customer values. Use status draft unless the user explicitly requests final.",
+              "Keep the digest decision-useful and concise (at most 700 words). Validate the JSON and every tw:analysis YAML block before responding.",
+            ].join("\n"),
+          },
+        ]
+      : undefined;
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       if (round === MAX_TOOL_ROUNDS) {
         return await finalizeWith("failed", {
@@ -878,6 +1349,25 @@ export async function runHarnessTurn(
         bearerToken: assertion.token,
         runtimeSessionId: preparedSession.runtimeSessionId,
         messages: nextMessages,
+        ...(documentEmissionRequired && !documentCompositionPhase
+          ? {
+              // Use the Harness's configured Gateway allowlist. Live testing
+              // showed per-invocation exact names do not share that namespace
+              // and silently hide the same Gateway tools that work here.
+              maxIterations: 8,
+            }
+          : {}),
+        ...(documentCompositionPhase
+          ? {
+              // Exact-name filtering currently drops Harness inline functions
+              // while "*" permits unsafe built-ins. Select a deliberately
+              // nonexistent tool so this turn is generation-only; ThinkWork
+              // validates the returned document envelope before persistence.
+              allowedTools: ["__thinkwork_document_envelope__"],
+              systemPrompt: documentEnvelopeSystemPrompt,
+              maxIterations: 2,
+            }
+          : {}),
       });
       const segment = await assembleStream(stream, onActivity);
       usage.inputTokens += segment.usage.inputTokens;
@@ -900,11 +1390,137 @@ export async function runHarnessTurn(
               "Harness stream ended with empty content and zero output tokens (swallowed model failure).",
           });
         }
-        if (emissionAttempts > 0 && emissionSuccesses === 0) {
+        if (
+          emissionAttempts > 0 &&
+          emissionSuccesses === 0 &&
+          !documentCompositionPhase
+        ) {
           // Never a false pass (AE2): the model tried to emit, every
           // attempt was rejected, and the run ended anyway.
           return await finalizeWith("failed", {
             errorMessage: `Harness run ended without a successful document emission after ${emissionAttempts} rejected emit_document attempt(s).`,
+          });
+        }
+        if (
+          documentEmissionRequired &&
+          emissionSuccesses === 0 &&
+          !documentCompositionPhase
+        ) {
+          documentCompositionPhase = true;
+          nextMessages = [
+            {
+              role: "user",
+              content: [
+                {
+                  text: [
+                    "Now turn the evidence you gathered in this turn into the requested durable ThinkWork document.",
+                    selectedDocumentPlate
+                      ? `Use the registered ${selectedDocumentPlate.displayName} plate (${selectedDocumentPlate.slug}) and satisfy its full section and analysis contract.`
+                      : "Use the most specific registered plate for the request.",
+                    "Return exactly one JSON document envelope as instructed. Do not call more tools and do not return a prose-only report.",
+                  ].join("\n"),
+                },
+              ],
+            },
+          ];
+          continue;
+        }
+        if (documentCompositionPhase && emissionSuccesses === 0) {
+          const parsed = parseDocumentEnvelope(
+            segment.text,
+            selectedDocumentPlate?.slug,
+          );
+          if (parsed.ok) {
+            const startedTool = now();
+            emissionAttempts += 1;
+            let digestMarkdown = String(parsed.input.digest_markdown);
+            if (selectedDocumentPlate) {
+              digestMarkdown = normalizeDocumentContractMarkdown(
+                digestMarkdown,
+                selectedDocumentPlate,
+              );
+              if (
+                selectedDocumentPlate.slug === "sales-rep-review" &&
+                governedConnectorEvidence &&
+                !hasExplicitQuotaEvidence(governedConnectorEvidence.evidence)
+              ) {
+                digestMarkdown = forceDocumentSectionWaiver({
+                  markdown: digestMarkdown,
+                  plate: selectedDocumentPlate,
+                  sectionId: "quota-attainment",
+                  analysisKey: "quota-attainment",
+                  reason:
+                    "Governed CRM opportunity evidence contains no explicit quota target; pipeline value cannot be used as quota attainment.",
+                });
+              }
+              digestMarkdown = normalizeFunnelAnalysisOrder(digestMarkdown);
+            }
+            const normalizedInput = selectedDocumentPlate
+              ? { ...parsed.input, digest_markdown: digestMarkdown }
+              : parsed.input;
+            const emission = await deps.emitDocument({
+              tenantId: turn.tenantId,
+              threadId: turn.threadId,
+              agentId: turn.agentId,
+              turnId: turn.turnId,
+              raw: toEmissionRaw(normalizedInput),
+            });
+            const relay = relayEmissionResultToModel(emission);
+            toolInvocations.push({
+              tool_name: "emit_document",
+              status: relay.status === "success" ? "completed" : "rejected",
+              duration_ms: now() - startedTool,
+              result_summary: relay.text.slice(0, 500),
+              protocol: "validated_document_envelope_v1",
+            });
+            if (relay.status === "success") {
+              emissionSuccesses += 1;
+              lastArtifactId = relay.artifactId ?? lastArtifactId;
+              lastDocumentId = relay.documentId ?? lastDocumentId;
+              return await finalizeWith("completed", {
+                content: `Done — ${parsed.title} is ready.`,
+              });
+            }
+            if (relay.fatal) {
+              return await finalizeWith("failed", {
+                errorMessage: `emit_document fulfillment failed fatally: ${relay.text}`,
+              });
+            }
+            if (missingEmissionCorrections < 1) {
+              missingEmissionCorrections += 1;
+              nextMessages = [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      text: `${relay.text}\nReturn the complete corrected document as exactly one JSON object matching the required schema. No prose, markdown fence, XML, or function tags.`,
+                    },
+                  ],
+                },
+              ];
+              continue;
+            }
+            return await finalizeWith("failed", {
+              errorMessage: `Harness document envelope remained invalid after ${emissionAttempts} emission attempt(s).`,
+            });
+          }
+          if (missingEmissionCorrections < 1) {
+            missingEmissionCorrections += 1;
+            nextMessages = [
+              {
+                role: "user",
+                content: [
+                  {
+                    text: `The document response was rejected: ${parsed.error}. Return the complete document as exactly one JSON object matching the required schema. No prose, markdown fence, XML, or function tags.`,
+                  },
+                ],
+              },
+            ];
+            continue;
+          }
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness ended without a valid document envelope after one corrective continuation.",
           });
         }
         guardHarnessPublication(finalText);
@@ -924,6 +1540,15 @@ export async function runHarnessTurn(
           let resultStatus: "success" | "error";
           if (toolUse.parseError) {
             resultText = toolUse.parseError;
+            resultStatus = "error";
+          } else if (
+            toolUse.name === "emit_document" &&
+            documentEmissionRequired &&
+            !documentCompositionPhase
+          ) {
+            resultText = connectorEvidenceRequired
+              ? "emit_document is locked until a successful governed connector call is recorded. Gather the required live evidence first."
+              : "emit_document is locked until the bounded research phase ends. Return your evidence summary first.";
             resultStatus = "error";
           } else if (toolUse.name !== "emit_document") {
             resultText = `Unknown caller-fulfilled tool "${toolUse.name}" — only emit_document is available.`;

@@ -2555,6 +2555,41 @@ describe("TaskThreadView", () => {
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
   });
 
+  it("shows the finalized provider model instead of a different requested model", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-agentcore-model",
+          title: "AgentCore model attribution",
+          lifecycleStatus: "RUNNING",
+          messages: [
+            { id: "message-1", role: "USER", content: "Create a report" },
+          ],
+          turns: [
+            {
+              id: "turn-agentcore-model",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              model: "us.anthropic.claude-sonnet-4-6",
+              usageJson: {
+                runtime_type: "agentcore",
+                model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+                input_tokens: 741,
+                output_tokens: 350,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    openThinkingDisclosure();
+    expect(
+      screen.getByText(/us\.anthropic\.claude-haiku-4-5-20251001-v1:0/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/us\.anthropic\.claude-sonnet-4-6/)).toBeNull();
+  });
+
   it("renders durable Computer event detail rows for a thread turn", () => {
     render(
       <TaskThreadView

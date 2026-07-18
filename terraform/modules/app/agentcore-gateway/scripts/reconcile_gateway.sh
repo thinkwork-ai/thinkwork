@@ -193,6 +193,25 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
         }
       }}}},
       responses: {"200": {description: "Connector tool result"}}
+    }},
+    "/agentcore/capabilities/sandbox/execute": {post: {
+      operationId: "execute_code",
+      summary: "Execute one bounded Python program in a short-lived internal-only sandbox",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "language", "code"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          language: {type: "string", enum: ["python"]},
+          code: {type: "string", maxLength: 16384},
+          output_files: {
+            type: "array", maxItems: 5,
+            description: "Optional absolute files under /tmp/thinkwork/ to return as text",
+            items: {type: "string", pattern: "^/tmp/thinkwork/[A-Za-z0-9][A-Za-z0-9._/-]{0,180}$"}
+          }
+        }
+      }}}},
+      responses: {"200": {description: "Sanitized code result and declared files"}}
     }}
   }
 }')"
@@ -280,7 +299,8 @@ permit(
     AgentCore::Action::"${TARGET_NAME}___owner_probe",
     AgentCore::Action::"${TARGET_NAME}___mixed_disclosure",
     AgentCore::Action::"${TARGET_NAME}___list_connector_tools",
-    AgentCore::Action::"${TARGET_NAME}___call_connector_tool"
+    AgentCore::Action::"${TARGET_NAME}___call_connector_tool",
+    AgentCore::Action::"${TARGET_NAME}___execute_code"
   ],
   resource == AgentCore::Gateway::"${gateway_arn}"
 )
@@ -301,7 +321,8 @@ when {
     (
       (
         action == AgentCore::Action::"${TARGET_NAME}___list_connector_tools" ||
-        action == AgentCore::Action::"${TARGET_NAME}___call_connector_tool"
+        action == AgentCore::Action::"${TARGET_NAME}___call_connector_tool" ||
+        action == AgentCore::Action::"${TARGET_NAME}___execute_code"
       ) &&
       context.input.tenant_id == principal.getTag("tenant_id")
     )

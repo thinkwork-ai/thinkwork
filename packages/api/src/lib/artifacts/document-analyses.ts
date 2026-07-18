@@ -183,6 +183,17 @@ stages:
         funnelConversionSpec,
       );
     }
+    if (
+      stages.some(
+        (stage, index) => index > 0 && stage.value > stages[index - 1].value,
+      )
+    ) {
+      return reject(
+        "funnel_conversion",
+        "Stage counts must be ordered widest-to-narrowest and cannot increase.",
+        funnelConversionSpec,
+      );
+    }
     const stats: AnalysisStat[] = [];
     const series: AnalysisSeriesPoint[] = [stages[0]];
     for (let i = 1; i < stages.length; i++) {

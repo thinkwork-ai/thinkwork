@@ -1,5 +1,6 @@
 import { getDb } from "@thinkwork/database-pg";
 import { harnessToolExecutionEvents } from "@thinkwork/database-pg/schema";
+import { and, asc, eq } from "drizzle-orm";
 import {
   redactToolRecord,
   type ToolRecordRedactionOptions,
@@ -47,15 +48,13 @@ export interface ToolExecutionLedgerStore {
   append(row: ToolExecutionEventInsert): Promise<{ id: string | number }>;
 }
 
-export interface AppendToolExecutionStartedInput
-  extends ToolExecutionCorrelation {
+export interface AppendToolExecutionStartedInput extends ToolExecutionCorrelation {
   input: unknown;
   inputAllowPaths: readonly string[];
   forbiddenValues?: readonly string[];
 }
 
-export interface AppendToolExecutionTerminalInput
-  extends ToolExecutionCorrelation {
+export interface AppendToolExecutionTerminalInput extends ToolExecutionCorrelation {
   status: ToolExecutionTerminalStatus;
   output: unknown;
   outputAllowPaths: readonly string[];
@@ -204,4 +203,134 @@ export function drizzleToolExecutionLedgerStore(
       return inserted;
     },
   };
+}
+
+export interface ToolExecutionProjectionRow {
+  idempotency_key: string;
+  tool_use_id: string;
+  operation: string;
+  policy_revision: string;
+  policy_decision_id: string | null;
+  credential_owner_alias: string | null;
+  event_type: "started" | ToolExecutionTerminalStatus;
+  input_preview: Record<string, unknown> | null;
+  output_preview: Record<string, unknown> | null;
+  error_preview: Record<string, unknown> | null;
+  provider_request_id: string | null;
+  duration_ms: number | null;
+  provider_cost_usd: string | null;
+}
+
+function projectedToolName(row: ToolExecutionProjectionRow): string {
+  const input = row.input_preview ?? {};
+  const output = row.output_preview ?? {};
+  if (row.operation === "sandbox.execute_code") return "execute_code";
+  if (row.operation === "mcp.tools.list") {
+    const connector = String(
+      input.connector ?? output.connector ?? "connector",
+    );
+    return `mcp_${connector}_list_tools`;
+  }
+  if (row.operation === "mcp.tools.call") {
+    const connector = String(
+      input.connector ?? output.connector ?? "connector",
+    );
+    const tool = String(input.tool ?? output.tool ?? "call");
+    return `mcp_${connector}_${tool}`;
+  }
+  return row.operation.replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+function preview(value: Record<string, unknown> | null): string | undefined {
+  return value && Object.keys(value).length > 0
+    ? JSON.stringify(value)
+    : undefined;
+}
+
+/** Collapse append-only start/terminal evidence into the finalized turn UI. */
+export function projectToolExecutionInvocations(
+  rows: ToolExecutionProjectionRow[],
+): Array<Record<string, unknown>> {
+  const grouped = new Map<
+    string,
+    {
+      started?: ToolExecutionProjectionRow;
+      terminal?: ToolExecutionProjectionRow;
+    }
+  >();
+  for (const row of rows) {
+    const entry = grouped.get(row.idempotency_key) ?? {};
+    if (row.event_type === "started") entry.started = row;
+    else entry.terminal = row;
+    grouped.set(row.idempotency_key, entry);
+  }
+  return [...grouped.values()].map(({ started, terminal }) => {
+    const source = started ?? terminal!;
+    const status = terminal?.event_type ?? "running";
+    return {
+      tool_name: projectedToolName(started ?? source),
+      status,
+      operation: source.operation,
+      tool_use_id: source.tool_use_id,
+      policy_revision: source.policy_revision,
+      ...(source.policy_decision_id
+        ? { policy_decision_id: source.policy_decision_id }
+        : {}),
+      ...(source.credential_owner_alias
+        ? { credential_owner_alias: source.credential_owner_alias }
+        : {}),
+      ...(terminal?.duration_ms != null
+        ? { duration_ms: terminal.duration_ms }
+        : {}),
+      ...(terminal?.provider_cost_usd != null
+        ? { cost_usd: Number(terminal.provider_cost_usd) }
+        : {}),
+      ...(terminal?.provider_request_id
+        ? { provider_request_id: terminal.provider_request_id }
+        : {}),
+      ...(preview(started?.input_preview ?? null)
+        ? { input_preview: preview(started?.input_preview ?? null) }
+        : {}),
+      ...(preview(terminal?.output_preview ?? null)
+        ? { output_preview: preview(terminal?.output_preview ?? null) }
+        : {}),
+      ...(preview(terminal?.error_preview ?? null)
+        ? { error_preview: preview(terminal?.error_preview ?? null) }
+        : {}),
+      evidence_source: "harness_tool_execution_events",
+    };
+  });
+}
+
+export async function loadTurnToolExecutionInvocations(input: {
+  tenantId: string;
+  threadId: string;
+  turnId: string;
+}): Promise<Array<Record<string, unknown>>> {
+  const rows = await getDb()
+    .select({
+      idempotency_key: harnessToolExecutionEvents.idempotency_key,
+      tool_use_id: harnessToolExecutionEvents.tool_use_id,
+      operation: harnessToolExecutionEvents.operation,
+      policy_revision: harnessToolExecutionEvents.policy_revision,
+      policy_decision_id: harnessToolExecutionEvents.policy_decision_id,
+      credential_owner_alias: harnessToolExecutionEvents.credential_owner_alias,
+      event_type: harnessToolExecutionEvents.event_type,
+      input_preview: harnessToolExecutionEvents.input_preview,
+      output_preview: harnessToolExecutionEvents.output_preview,
+      error_preview: harnessToolExecutionEvents.error_preview,
+      provider_request_id: harnessToolExecutionEvents.provider_request_id,
+      duration_ms: harnessToolExecutionEvents.duration_ms,
+      provider_cost_usd: harnessToolExecutionEvents.provider_cost_usd,
+    })
+    .from(harnessToolExecutionEvents)
+    .where(
+      and(
+        eq(harnessToolExecutionEvents.tenant_id, input.tenantId),
+        eq(harnessToolExecutionEvents.thread_id, input.threadId),
+        eq(harnessToolExecutionEvents.turn_id, input.turnId),
+      ),
+    )
+    .orderBy(asc(harnessToolExecutionEvents.id));
+  return projectToolExecutionInvocations(rows as ToolExecutionProjectionRow[]);
 }

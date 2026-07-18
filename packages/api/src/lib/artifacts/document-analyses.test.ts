@@ -129,6 +129,22 @@ describe("funnel_conversion", () => {
     );
   });
 
+  it("rejects an increasing funnel that would render conversion above 100%", () => {
+    const rejected = expectRejected(
+      computeAnalysis({
+        op: "funnel_conversion",
+        inputs: {
+          stages: [
+            { label: "Identified", count: 8 },
+            { label: "Active", count: 1 },
+            { label: "Value alignment", count: 2 },
+          ],
+        },
+      }),
+    );
+    expect(rejected.diagnostics[0].message).toContain("cannot increase");
+  });
+
   it("reports n/a instead of dividing by a zero stage", () => {
     const ok = expectOk(
       computeAnalysis({
