@@ -213,7 +213,6 @@ describe("projectHarnessConfig — AE2 rejections name the capability", () => {
       "adapter_unimplemented",
       "browser_automation",
     ],
-    [{ attachmentCount: 1 }, "adapter_unimplemented", "message_attachments"],
   ] as const)("rejects %o as %s (%s)", (surfacePatch, kind, capability) => {
     const input = referenceInput();
     const result = projectHarnessConfig({

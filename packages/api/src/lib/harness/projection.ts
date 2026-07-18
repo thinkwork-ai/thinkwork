@@ -318,14 +318,6 @@ export function projectHarnessConfig(
         "agent has browser automation enabled; Harness offers agentCoreBrowser but the trial adapter does not project it",
     });
   }
-  if (surface.attachmentCount > 0) {
-    return reject({
-      kind: "adapter_unimplemented",
-      capability: "message_attachments",
-      detail: `${surface.attachmentCount} attachment(s) on the triggering message; the trial adapter projects text-only invocations`,
-    });
-  }
-
   // --- Model -------------------------------------------------------------
   if (!input.modelId) {
     return reject({

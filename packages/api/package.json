@@ -76,7 +76,9 @@
     "stripe": "^17.5.0",
     "sucrase": "^3.35.1",
     "svix": "^1.95.2",
-    "uuidv7": "^1.2.1"
+    "uuidv7": "^1.2.1",
+    "unpdf": "^0.12.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-agent": "^3.1024.0",

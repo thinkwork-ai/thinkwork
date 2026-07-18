@@ -283,6 +283,37 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
         "403": {description: "Skill is not currently authorized"}
       }
     }},
+    "/agentcore/capabilities/message/attachments/list": {post: {
+      operationId: "list_message_attachments",
+      summary: "List files attached to the exact canonical triggering message",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"}
+        }
+      }}}},
+      responses: {"200": {description: "Sanitized canonical attachment metadata"}}
+    }},
+    "/agentcore/capabilities/message/attachments/read": {post: {
+      operationId: "read_message_attachment",
+      summary: "Read a bounded text chunk from one file on the exact triggering message",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "attachment_id"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          attachment_id: {type: "string", format: "uuid"},
+          offset: {type: "integer", minimum: 0, default: 0},
+          max_chars: {type: "integer", minimum: 1, maximum: 65536, default: 32768}
+        }
+      }}}},
+      responses: {
+        "200": {description: "Bounded extracted text and continuation offset"},
+        "403": {description: "Attachment is not on the canonical triggering message"},
+        "422": {description: "Attachment format has no safe text projection"}
+      }
+    }},
     "/agentcore/capabilities/email/send": {post: {
       operationId: "send_email",
       summary: "Send or request approval for one idempotent policy-governed email",
@@ -394,6 +425,8 @@ permit(
     AgentCore::Action::"${TARGET_NAME}___query_brain",
     AgentCore::Action::"${TARGET_NAME}___list_workspace_skills",
     AgentCore::Action::"${TARGET_NAME}___load_workspace_skill",
+    AgentCore::Action::"${TARGET_NAME}___list_message_attachments",
+    AgentCore::Action::"${TARGET_NAME}___read_message_attachment",
     AgentCore::Action::"${TARGET_NAME}___send_email"
   ],
   resource == AgentCore::Gateway::"${gateway_arn}"
@@ -422,6 +455,8 @@ when {
         action == AgentCore::Action::"${TARGET_NAME}___query_brain" ||
         action == AgentCore::Action::"${TARGET_NAME}___list_workspace_skills" ||
         action == AgentCore::Action::"${TARGET_NAME}___load_workspace_skill" ||
+        action == AgentCore::Action::"${TARGET_NAME}___list_message_attachments" ||
+        action == AgentCore::Action::"${TARGET_NAME}___read_message_attachment" ||
         action == AgentCore::Action::"${TARGET_NAME}___send_email"
       ) &&
       context.input.tenant_id == principal.getTag("tenant_id")
