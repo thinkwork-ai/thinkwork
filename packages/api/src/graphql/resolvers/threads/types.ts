@@ -52,23 +52,26 @@ export function threadParticipantToCamel(row: Record<string, unknown>) {
   return uppercaseFields(snakeToCamel(row), THREAD_PARTICIPANT_ENUM_FIELDS);
 }
 
+async function isAgentcoreManagedThread(thread: any): Promise<boolean> {
+  const tenantId = thread.tenantId ?? thread.tenant_id ?? null;
+  if (!tenantId || !thread.id) return false;
+  const [enrollment] = await db
+    .select({ id: harnessManagedThreadEnrollments.id })
+    .from(harnessManagedThreadEnrollments)
+    .where(
+      and(
+        eq(harnessManagedThreadEnrollments.tenant_id, tenantId),
+        eq(harnessManagedThreadEnrollments.thread_id, thread.id),
+        eq(harnessManagedThreadEnrollments.status, "active"),
+      ),
+    )
+    .limit(1);
+  return Boolean(enrollment);
+}
+
 export const threadTypeResolvers = {
-  agentcoreManaged: async (thread: any) => {
-    const tenantId = thread.tenantId ?? thread.tenant_id ?? null;
-    if (!tenantId || !thread.id) return false;
-    const [enrollment] = await db
-      .select({ id: harnessManagedThreadEnrollments.id })
-      .from(harnessManagedThreadEnrollments)
-      .where(
-        and(
-          eq(harnessManagedThreadEnrollments.tenant_id, tenantId),
-          eq(harnessManagedThreadEnrollments.thread_id, thread.id),
-          eq(harnessManagedThreadEnrollments.status, "active"),
-        ),
-      )
-      .limit(1);
-    return Boolean(enrollment);
-  },
+  agentcoreManaged: isAgentcoreManagedThread,
+  harnessProof: isAgentcoreManagedThread,
   agent: (thread: any, _args: any, ctx: GraphQLContext) => {
     if (thread.agent && typeof thread.agent === "object") return thread.agent;
     const agentId = thread.agentId || thread.agent_id;

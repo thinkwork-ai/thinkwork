@@ -83,6 +83,17 @@ export const deploymentStatus = async (
         )
         .limit(1)
     : [];
+  const agentcoreHarnessStatus = {
+    state: agentcoreHarness.state,
+    ready: agentcoreHarness.ready,
+    reasonCode: agentcoreHarness.reasonCode,
+    endpointName: agentcoreHarness.endpointName,
+    expectedVersion: agentcoreHarness.expectedVersion,
+    liveVersion: agentcoreHarness.liveVersion,
+    sessionStrategy: agentcoreHarness.sessionStrategy,
+    activeThreadId: activeEnrollment?.threadId ?? null,
+    checkedAt: agentcoreHarness.checkedAt,
+  };
   return {
     stage,
     source: "AWS",
@@ -107,17 +118,8 @@ export const deploymentStatus = async (
     agentcoreStatus: getConfig("AGENTCORE_PI_FUNCTION_NAME")
       ? "managed (always on)"
       : "not deployed",
-    agentcoreHarness: {
-      state: agentcoreHarness.state,
-      ready: agentcoreHarness.ready,
-      reasonCode: agentcoreHarness.reasonCode,
-      endpointName: agentcoreHarness.endpointName,
-      expectedVersion: agentcoreHarness.expectedVersion,
-      liveVersion: agentcoreHarness.liveVersion,
-      sessionStrategy: agentcoreHarness.sessionStrategy,
-      activeThreadId: activeEnrollment?.threadId ?? null,
-      checkedAt: agentcoreHarness.checkedAt,
-    },
+    agentcoreHarness: agentcoreHarnessStatus,
+    agentcoreHarnessProof: agentcoreHarnessStatus,
     hindsightEnabled: !!getConfig("HINDSIGHT_ENDPOINT"),
     managedMemoryEnabled: !!getConfig("AGENTCORE_MEMORY_ID"),
     twentyProvisioned: twenty.provisioned,

@@ -138,6 +138,9 @@ type DeploymentStatus {
   hindsightEndpoint: String
   agentcoreStatus: String
   agentcoreHarness: AgentCoreHarnessStatus!
+  "Legacy read alias retained during the managed-runtime rollout."
+  agentcoreHarnessProof: AgentCoreHarnessStatus!
+    @deprecated(reason: "Use agentcoreHarness")
   hindsightEnabled: Boolean!
   managedMemoryEnabled: Boolean!
   twentyProvisioned: Boolean!

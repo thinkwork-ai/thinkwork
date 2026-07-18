@@ -2326,6 +2326,11 @@ export type DeploymentStatus = {
   accountId?: Maybe<Scalars["String"]["output"]>;
   adminUrl?: Maybe<Scalars["String"]["output"]>;
   agentcoreHarness: AgentCoreHarnessStatus;
+  /**
+   * Legacy read alias retained during the managed-runtime rollout.
+   * @deprecated Use agentcoreHarness
+   */
+  agentcoreHarnessProof: AgentCoreHarnessStatus;
   agentcoreStatus?: Maybe<Scalars["String"]["output"]>;
   apiEndpoint?: Maybe<Scalars["String"]["output"]>;
   appsyncRealtimeUrl?: Maybe<Scalars["String"]["output"]>;
@@ -10579,6 +10584,11 @@ export type Thread = {
   createdByType?: Maybe<Scalars["String"]["output"]>;
   dueAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   goal?: Maybe<ThreadGoal>;
+  /**
+   * Legacy read alias retained during the managed-runtime rollout.
+   * @deprecated Use agentcoreManaged
+   */
+  harnessProof: Scalars["Boolean"]["output"];
   id: Scalars["ID"]["output"];
   identifier?: Maybe<Scalars["String"]["output"]>;
   isBlocked: Scalars["Boolean"]["output"];
