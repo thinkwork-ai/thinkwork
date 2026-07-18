@@ -13,10 +13,10 @@
  * port — so only if another CLI login is in progress) we surface a clear
  * "port in use" error so the user knows to kill the conflict.
  *
- * No PKCE here — Cognito's hosted UI supports confidential + public clients
- * and the admin client is set up without `client_secret`, so the plain code
- * exchange is sufficient. (PKCE can be layered in later if we introduce a
- * confidential client.)
+ * CLI clients are public OAuth clients, so every authorization request uses
+ * S256 PKCE and a fresh verifier in addition to state. Provider-specific
+ * routes also pass Cognito's `identity_provider` parameter so the selected
+ * Google/Microsoft connection and app client remain exact through callback.
  */
 
 import {
@@ -25,7 +25,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { AddressInfo } from "node:net";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import chalk from "chalk";
 import type { CognitoConfig } from "./cognito-discovery.js";
@@ -45,6 +45,10 @@ export interface CognitoTokens {
 
 export interface LoginOptions {
   cognito: CognitoConfig;
+  /** Cognito IdP name selected from the public native-auth catalog. */
+  identityProvider?: string;
+  /** Optional upstream prompt, e.g. `select_account`. */
+  prompt?: string;
   /** Override the loopback port (useful in tests). Defaults to CLI_LOOPBACK_PORT. */
   port?: number;
   /** Abort the flow after this many ms. Defaults to 5 minutes. */
@@ -62,8 +66,19 @@ export async function loginWithCognito(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`;
   const state = randomBytes(16).toString("hex");
+  const codeVerifier = randomBytes(64).toString("base64url");
+  const codeChallenge = createHash("sha256")
+    .update(codeVerifier)
+    .digest("base64url");
 
-  const authorizeUrl = buildAuthorizeUrl(opts.cognito, redirectUri, state);
+  const authorizeUrl = buildAuthorizeUrl(
+    opts.cognito,
+    redirectUri,
+    state,
+    codeChallenge,
+    opts.identityProvider,
+    opts.prompt,
+  );
 
   const code = await waitForCallbackCode({
     port,
@@ -81,7 +96,14 @@ export async function loginWithCognito(
     },
   });
 
-  return exchangeCodeForTokens(opts.cognito, redirectUri, code);
+  const tokens = await exchangeCodeForTokens(
+    opts.cognito,
+    redirectUri,
+    code,
+    codeVerifier,
+  );
+  verifyTokenAudience(tokens.idToken, opts.cognito.clientId);
+  return tokens;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +114,9 @@ function buildAuthorizeUrl(
   cognito: CognitoConfig,
   redirectUri: string,
   state: string,
+  codeChallenge: string,
+  identityProvider?: string,
+  prompt?: string,
 ): string {
   const params = new URLSearchParams({
     client_id: cognito.clientId,
@@ -99,7 +124,11 @@ function buildAuthorizeUrl(
     scope: "openid email profile",
     redirect_uri: redirectUri,
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
   });
+  if (identityProvider) params.set("identity_provider", identityProvider);
+  if (prompt) params.set("prompt", prompt);
   return `${cognito.domainUrl}/oauth2/authorize?${params.toString()}`;
 }
 
@@ -223,12 +252,14 @@ async function exchangeCodeForTokens(
   cognito: CognitoConfig,
   redirectUri: string,
   code: string,
+  codeVerifier: string,
 ): Promise<CognitoTokens> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: cognito.clientId,
     code,
     redirect_uri: redirectUri,
+    code_verifier: codeVerifier,
   });
 
   const res = await fetch(`${cognito.domainUrl}/oauth2/token`, {
@@ -291,11 +322,26 @@ export async function refreshCognitoTokens(
 
 export interface IdTokenClaims {
   sub: string;
+  aud?: string;
   email?: string;
   "cognito:username"?: string;
   "custom:tenant_id"?: string;
   exp: number;
   iat: number;
+}
+
+function verifyTokenAudience(idToken: string, expectedClientId: string): void {
+  let claims: IdTokenClaims;
+  try {
+    claims = decodeIdToken(idToken);
+  } catch {
+    throw new Error("Cognito returned a malformed id_token.");
+  }
+  if (claims.aud !== expectedClientId) {
+    throw new Error(
+      "Cognito id_token audience did not match the selected login route.",
+    );
+  }
 }
 
 export function decodeIdToken(idToken: string): IdTokenClaims {

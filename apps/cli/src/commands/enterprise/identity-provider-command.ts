@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import { password } from "@inquirer/prompts";
+import { input, password } from "@inquirer/prompts";
 import { Command, InvalidArgumentError } from "commander";
 
 import { getAwsIdentity } from "../../aws.js";
@@ -30,7 +30,7 @@ export type TenantEntraAction = (typeof TENANT_ENTRA_ACTIONS)[number];
 
 interface IdentityProviderOptions {
   stage?: string;
-  directoryId: string;
+  directoryId?: string;
   tenantId?: string;
   clientId?: string;
   displayName?: string;
@@ -99,10 +99,7 @@ export function registerEnterpriseIdentityProviderCommand(
       "Create, validate, rotate, or disable a tenant-specific Microsoft Entra OIDC route",
     )
     .argument("<action>", "Lifecycle action", parseAction)
-    .requiredOption(
-      "--directory-id <uuid>",
-      "Microsoft Entra directory (tenant) GUID",
-    )
+    .option("--directory-id <uuid>", "Microsoft Entra directory (tenant) GUID")
     .option("-s, --stage <name>", "Deployment stage")
     .option("--tenant-id <uuid>", "ThinkWork tenant UUID (required for create)")
     .option(
@@ -292,6 +289,7 @@ async function runIdentityProviderOperation(
   options: IdentityProviderOptions,
 ): Promise<void> {
   const stage = await resolveStage({ flag: options.stage });
+  const directoryId = options.directoryId?.trim() || (await readDirectoryId());
   const identity = getAwsIdentity();
   if (!identity || identity.region === "unknown") {
     throw new Error("Could not resolve AWS identity and region.");
@@ -308,7 +306,7 @@ async function runIdentityProviderOperation(
     );
   }
   const state = readAuthReconciliationState(stage);
-  const existing = findExistingConnection(state, options.directoryId);
+  const existing = findExistingConnection(state, directoryId);
   if (action === "create" && existing) {
     throw new Error(
       "This tenant Entra connection already exists; use validate or rotate.",
@@ -337,9 +335,9 @@ async function runIdentityProviderOperation(
   let secretArn = existingString(existing, "clientSecretRef");
   const validationSecretArn =
     secretArn ??
-    `arn:aws:secretsmanager:${identity.region}:${identity.account}:secret:${buildTenantEntraSecretName(stage, options.directoryId)}`;
+    `arn:aws:secretsmanager:${identity.region}:${identity.account}:secret:${buildTenantEntraSecretName(stage, directoryId)}`;
   let connection = buildTenantEntraConnectionMetadata({
-    directoryId: options.directoryId,
+    directoryId,
     thinkworkTenantId: required(
       thinkworkTenantId,
       "--tenant-id is required for create",
@@ -360,12 +358,12 @@ async function runIdentityProviderOperation(
     const clientSecret = await readClientSecret();
     secretArn = writeTenantEntraSecret({
       stage,
-      directoryId: options.directoryId,
+      directoryId,
       clientId: required(clientId, "--client-id is required for create"),
       clientSecret,
     });
     connection = buildTenantEntraConnectionMetadata({
-      directoryId: options.directoryId,
+      directoryId,
       thinkworkTenantId: connection.tenantBindings[0].tenantId,
       clientId: connection.clientId,
       clientSecretRef: secretArn,
@@ -401,6 +399,16 @@ async function runIdentityProviderOperation(
   console.log(`  Execution: ${executionArn}`);
   if (options.wait === false) return;
   await waitForController(executionArn);
+}
+
+async function readDirectoryId(): Promise<string> {
+  if (!process.stdin.isTTY) {
+    throw new Error("--directory-id is required in a non-interactive shell.");
+  }
+  return input({
+    message: "Microsoft Entra directory (tenant) GUID:",
+    validate: (value) => value.trim().length > 0 || "Directory ID is required.",
+  });
 }
 
 async function readClientSecret(): Promise<string> {

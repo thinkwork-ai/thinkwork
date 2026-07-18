@@ -141,6 +141,12 @@ describe("loginWithCognito (loopback)", () => {
       const parsed = new URL(url);
       const redirectUri = parsed.searchParams.get("redirect_uri")!;
       const state = parsed.searchParams.get("state")!;
+      expect(parsed.searchParams.get("code_challenge_method")).toBe("S256");
+      expect(parsed.searchParams.get("code_challenge")).toMatch(
+        /^[A-Za-z0-9_-]{43}$/,
+      );
+      expect(parsed.searchParams.get("identity_provider")).toBe("Google");
+      expect(parsed.searchParams.get("prompt")).toBe("select_account");
       // Let the listener finish binding before we hit it.
       setImmediate(() => {
         fetch(`${redirectUri}?code=authcode-xyz&state=${state}`).catch(
@@ -162,9 +168,15 @@ describe("loginWithCognito (loopback)", () => {
             const body = String(init?.body ?? "");
             expect(body).toContain("grant_type=authorization_code");
             expect(body).toContain("code=authcode-xyz");
+            expect(body).toMatch(/code_verifier=[A-Za-z0-9_-]{86}/);
             return new Response(
               JSON.stringify({
-                id_token: "id-tok",
+                id_token: mintIdToken({
+                  sub: "user-1",
+                  aud: "client-abc",
+                  exp: 1000,
+                  iat: 0,
+                }),
                 access_token: "acc-tok",
                 refresh_token: "ref-tok",
                 expires_in: 3600,
@@ -183,9 +195,11 @@ describe("loginWithCognito (loopback)", () => {
       openBrowser: true,
       launchBrowser,
       timeoutMs: 5000,
+      identityProvider: "Google",
+      prompt: "select_account",
     });
 
-    expect(tokens.idToken).toBe("id-tok");
+    expect(decodeIdToken(tokens.idToken).aud).toBe("client-abc");
     expect(tokens.accessToken).toBe("acc-tok");
     expect(tokens.refreshToken).toBe("ref-tok");
     expect(tokens.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000));
@@ -213,6 +227,49 @@ describe("loginWithCognito (loopback)", () => {
         timeoutMs: 5000,
       }),
     ).rejects.toThrow(/state parameter didn't match/i);
+  });
+
+  it("rejects an id token minted for a different route client", async () => {
+    const originalFetch = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/oauth2/token")) {
+          return new Response(
+            JSON.stringify({
+              id_token: mintIdToken({
+                sub: "user-1",
+                aud: "different-client",
+                exp: 1000,
+                iat: 0,
+              }),
+              access_token: "acc-tok",
+              refresh_token: "ref-tok",
+              expires_in: 3600,
+              token_type: "Bearer",
+            }),
+            { status: 200 },
+          );
+        }
+        return originalFetch(input as any, init);
+      },
+    );
+
+    await expect(
+      loginWithCognito({
+        cognito,
+        port: await ephemeralPort(),
+        launchBrowser: (url) => {
+          const parsed = new URL(url);
+          setImmediate(() => {
+            fetch(
+              `${parsed.searchParams.get("redirect_uri")}?code=abc&state=${parsed.searchParams.get("state")}`,
+            ).catch(() => undefined);
+          });
+        },
+        timeoutMs: 5000,
+      }),
+    ).rejects.toThrow(/audience did not match/i);
   });
 });
 
