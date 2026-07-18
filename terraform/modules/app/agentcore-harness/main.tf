@@ -27,6 +27,8 @@ locals {
   gateway_target_tool_names = [
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___owner_probe",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___mixed_disclosure",
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___list_connector_tools",
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___call_connector_tool",
   ]
   tenant_skill_prefix = var.pilot_tenant_slug != "" ? (
     "tenants/${var.pilot_tenant_slug}/"

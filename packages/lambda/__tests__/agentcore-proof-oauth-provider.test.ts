@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import {
   createProofOauthProviderHandler,
+  exchangeProofSubjectToken,
   handler as deployedProviderHandler,
   proofOwnerAllowlistFromEnv,
   verifyProofProviderAccessToken,
@@ -291,6 +292,88 @@ describe("AgentCore proof OAuth provider", () => {
     expect(exchanged).toEqual([
       { subjectToken: "gateway-subject-token", scope: "owner.read" },
     ]);
+  });
+
+  it("preserves the trusted turn tuple in the Gateway-to-target OBO token", async () => {
+    const participantId = "33333333-3333-4333-8333-333333333333";
+    const assertionIssuer = "https://api.example.test/agentcore";
+    const gatewayAudience = "urn:thinkwork:gateway";
+    const kid = "proof-key-v1";
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+    });
+    const encodedHeader = Buffer.from(
+      JSON.stringify({ alg: "RS256", kid, typ: "JWT" }),
+    ).toString("base64url");
+    const encodedClaims = Buffer.from(
+      JSON.stringify({
+        iss: assertionIssuer,
+        aud: gatewayAudience,
+        sub: participantId,
+        iat: NOW,
+        exp: NOW + 300,
+        tenant_id: "tenant-1",
+        space_id: "space-1",
+        agent_id: "agent-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        participant_id: participantId,
+        session_generation: 2,
+        purpose: "gateway_operation",
+        scope: "gateway:invoke",
+        token_class: "agentcore_proof_obo",
+      }),
+    ).toString("base64url");
+    const signingInput = `${encodedHeader}.${encodedClaims}`;
+    const subjectToken = `${signingInput}.${sign(
+      "RSA-SHA256",
+      Buffer.from(signingInput),
+      privateKey,
+    ).toString("base64url")}`;
+    const jwk = publicKey.export({ format: "jwk" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        return url.endsWith("/.well-known/openid-configuration")
+          ? {
+              ok: true,
+              json: async () => ({ jwks_uri: `${assertionIssuer}/jwks` }),
+            }
+          : { ok: true, json: async () => ({ keys: [{ ...jwk, kid }] }) };
+      }),
+    );
+
+    const accessToken = await exchangeProofSubjectToken({
+      subjectToken,
+      requestedScope: "owner.read",
+      assertionIssuer,
+      harnessAudience: "urn:thinkwork:harness",
+      gatewayAudience,
+      proofIssuer: ISSUER,
+      proofClientSecret: CLIENT_SECRET,
+      keyId: "unused-for-target-exchange",
+      kid,
+      nowSeconds: NOW,
+    });
+
+    expect(
+      verifyProofProviderAccessToken(accessToken, {
+        issuer: ISSUER,
+        audience: `${ISSUER}/target`,
+        secret: CLIENT_SECRET,
+        nowSeconds: NOW,
+      }),
+    ).toMatchObject({
+      sub: participantId,
+      participant_id: participantId,
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      agent_id: "agent-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      session_generation: 2,
+    });
   });
 
   it("fails closed when deployed proof secrets are missing", async () => {

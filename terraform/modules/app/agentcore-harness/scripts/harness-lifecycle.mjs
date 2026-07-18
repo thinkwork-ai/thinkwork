@@ -85,7 +85,7 @@ function commonConfiguration() {
     },
     systemPrompt: [
       {
-        text: "You are ThinkWork, one shared logical agent. Use only the governed Gateway tools made available for this turn. Never use shell, filesystem, browser, or code execution tools.",
+        text: "You are ThinkWork, one shared logical agent. Use only the governed Gateway tools made available for this turn. For ThinkWork connectors, call list_connector_tools with tenant_id and the connector name from the trusted turn context, then call_connector_tool with the same tenant_id and a returned tool name using its exact schema. Never claim a connector is unavailable or policy-restricted until a governed tool call returns that result. Never invent connector data. Never use shell, filesystem, browser, or code execution tools.",
       },
     ],
     memory: { disabled: {} },

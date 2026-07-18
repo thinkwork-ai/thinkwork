@@ -31,7 +31,7 @@ interface SignedProofPayload {
   nonce: string;
 }
 
-interface AccessTokenClaims {
+export interface AccessTokenClaims {
   iss: string;
   aud: string;
   sub: string;
@@ -40,6 +40,18 @@ interface AccessTokenClaims {
   exp: number;
   jti: string;
   token_class: "agentcore_proof_provider";
+  /**
+   * Present only on the Gateway→target OBO token. Authorization-code fixture
+   * tokens intentionally remain owner-only. A production target must require
+   * this complete tuple before touching canonical state or credentials.
+   */
+  tenant_id?: string;
+  space_id?: string;
+  agent_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+  participant_id?: string;
+  session_generation?: number;
 }
 
 export interface ProofOauthProviderDeps {
@@ -451,7 +463,7 @@ interface ProofSubjectClaims {
   token_class?: string;
 }
 
-async function exchangeProofSubjectToken(args: {
+export async function exchangeProofSubjectToken(args: {
   subjectToken: string;
   requestedScope: string;
   assertionIssuer: string;
@@ -483,6 +495,13 @@ async function exchangeProofSubjectToken(args: {
         exp: args.nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         jti: randomUUID(),
         token_class: "agentcore_proof_provider",
+        tenant_id: claims.tenant_id,
+        ...(claims.space_id ? { space_id: claims.space_id } : {}),
+        agent_id: claims.agent_id,
+        thread_id: claims.thread_id,
+        turn_id: claims.turn_id,
+        participant_id: claims.participant_id,
+        session_generation: claims.session_generation,
       },
       args.proofClientSecret,
     );

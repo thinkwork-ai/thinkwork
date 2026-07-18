@@ -24,13 +24,14 @@ locals {
   policy_engine_name = "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}MultiplayerProof"
   policy_name        = "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerIsolation"
   configuration_hash = nonsensitive(sha256(jsonencode({
-    discovery_url = var.discovery_url
-    audience      = var.gateway_audience
-    target_url    = var.target_base_url
-    provider_arn  = var.oauth_credential_provider_arn
-    secret_arn    = var.oauth_credential_secret_arn
-    return_url    = var.oauth_return_url
-    owners        = var.proof_owner_allowlist
+    discovery_url       = var.discovery_url
+    audience            = var.gateway_audience
+    target_url          = var.target_base_url
+    provider_arn        = var.oauth_credential_provider_arn
+    secret_arn          = var.oauth_credential_secret_arn
+    return_url          = var.oauth_return_url
+    owners              = var.proof_owner_allowlist
+    capability_contract = "mcp-list-call-v2-tenant-admission"
     # URL-mode OAuth elicitation requires the 2025-11-25 protocol and cannot
     # be added to an existing Gateway, so changing this contract must replace
     # the script-owned Gateway lifecycle.

@@ -164,6 +164,33 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
         schema: {type: "string"}
       }],
       responses: {"200": {description: "Sanitized mixed-sensitivity projection"}}
+    }},
+    "/agentcore/capabilities/mcp/tools/list": {post: {
+      operationId: "list_connector_tools",
+      summary: "List the current participant authorized tools for one ThinkWork connector",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false, required: ["tenant_id", "connector"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          connector: {type: "string", description: "Connector name from the trusted turn context"}
+        }
+      }}}},
+      responses: {"200": {description: "Authorized connector tool definitions"}}
+    }},
+    "/agentcore/capabilities/mcp/tools/call": {post: {
+      operationId: "call_connector_tool",
+      summary: "Call one currently authorized ThinkWork connector tool as the exact turn participant",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "connector", "tool", "arguments"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          connector: {type: "string", description: "Connector name from the trusted turn context"},
+          tool: {type: "string", description: "Tool name returned by list_connector_tools"},
+          arguments: {type: "object", additionalProperties: true}
+        }
+      }}}},
+      responses: {"200": {description: "Connector tool result"}}
     }}
   }
 }')"
@@ -222,7 +249,10 @@ done
 # Explicit OAuthUser principal branches make the owner match mechanically
 # reviewable and let Cedar reject cross-owner requests before AgentCore resolves
 # a target credential. AgentCore maps JWT `sub` to the principal entity id (not
-# a tag) and accepts one Cedar statement per policy definition.
+# a tag) and accepts one Cedar statement per policy definition. Connector and
+# tool assignments are mutable ThinkWork state, so Cedar provides authenticated
+# tenant admission while the target re-authorizes the live turn, connector, and
+# tool assignment before resolving credentials or invoking the provider.
 IFS=',' read -r -a proof_owners <<<"$PROOF_OWNER_ALLOWLIST"
 owner_conditions=""
 first_owner=""
@@ -246,7 +276,9 @@ permit(
   principal,
   action in [
     AgentCore::Action::"${TARGET_NAME}___owner_probe",
-    AgentCore::Action::"${TARGET_NAME}___mixed_disclosure"
+    AgentCore::Action::"${TARGET_NAME}___mixed_disclosure",
+    AgentCore::Action::"${TARGET_NAME}___list_connector_tools",
+    AgentCore::Action::"${TARGET_NAME}___call_connector_tool"
   ],
   resource == AgentCore::Gateway::"${gateway_arn}"
 )
@@ -263,6 +295,13 @@ when {
       action == AgentCore::Action::"${TARGET_NAME}___mixed_disclosure" &&
       principal == AgentCore::OAuthUser::"${first_owner}" &&
       context.input.requested_owner == "${first_owner}"
+    ) ||
+    (
+      (
+        action == AgentCore::Action::"${TARGET_NAME}___list_connector_tools" ||
+        action == AgentCore::Action::"${TARGET_NAME}___call_connector_tool"
+      ) &&
+      context.input.tenant_id == principal.getTag("tenant_id")
     )
   )
 };
@@ -272,7 +311,7 @@ CEDAR
 jq -n --arg name "$POLICY_NAME" --arg engine "$policy_engine_id" \
   --arg statement "$cedar_statement" '{
     name: $name,
-    description: "THINK-316 exact-user owner-isolation proof",
+    description: "THINK-316 exact-user admission; target owns dynamic capability authorization",
     definition: {cedar: {statement: $statement}},
     validationMode: "FAIL_ON_ANY_FINDINGS",
     policyEngineId: $engine

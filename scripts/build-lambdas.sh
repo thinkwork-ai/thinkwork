@@ -248,6 +248,8 @@ build_handler "agentcore-proof-oauth-provider" \
   "$REPO_ROOT/packages/lambda/agentcore-proof-oauth-provider.ts"
 build_handler "agentcore-identity-boundary-target" \
   "$REPO_ROOT/packages/lambda/agentcore-identity-boundary-target.ts"
+build_handler "harness-capability-mcp" \
+  "$REPO_ROOT/packages/api/src/handlers/harness-capability-mcp.ts"
 
 build_handler "chat-agent-activity" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-activity.ts"

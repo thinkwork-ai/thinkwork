@@ -41,6 +41,7 @@ locals {
       "turn-assertion-mint",
       "agentcore-proof-oauth-provider",
       "agentcore-identity-boundary-target",
+      "harness-capability-mcp",
     ],
   )
 
@@ -313,6 +314,11 @@ locals {
       AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
       AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
       AGENTCORE_PROOF_OWNER_ALLOWLIST     = var.agentcore_proof_owner_allowlist
+    }
+    "harness-capability-mcp" = {
+      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
+      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
+      AGENTCORE_GATEWAY_POLICY_REVISION   = "mcp-list-call-v1"
     }
     # Analyst query broker (THINK-228 U3). Reader role + caller credential
     # secrets, and the workspace bucket's analyst-staging/ prefix for
@@ -701,6 +707,7 @@ resource "aws_lambda_function" "handler" {
     "turn-assertion-mint",
     "agentcore-proof-oauth-provider",
     "agentcore-identity-boundary-target",
+    "harness-capability-mcp",
     # canvas-refresh — headless Living Artifacts data-refresh (THINK-145 U6).
     # Invoked RequestResponse by the refreshCanvasData mutation (graphql-http)
     # and by job-trigger's canvas_refresh branch (U7). Re-runs the saved
@@ -1658,6 +1665,8 @@ locals {
       "POST /agentcore-proof/oauth/token"                           = "agentcore-proof-oauth-provider"
       "GET /agentcore-proof/target/owner"                           = "agentcore-identity-boundary-target"
       "GET /agentcore-proof/target/mixed"                           = "agentcore-identity-boundary-target"
+      "POST /agentcore/capabilities/mcp/tools/list"                 = "harness-capability-mcp"
+      "POST /agentcore/capabilities/mcp/tools/call"                 = "harness-capability-mcp"
       "POST /mcp/oauth/register"                                    = "mcp-oauth"
       "GET /mcp/oauth/authorize"                                    = "mcp-oauth"
       "GET /mcp/oauth/callback"                                     = "mcp-oauth"

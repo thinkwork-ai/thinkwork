@@ -7,6 +7,7 @@
     "./github-workspace": "./github-workspace.ts",
     "./analyst-caller-context": "./analyst-caller-context.ts",
     "./capability-caller-context": "./capability-caller-context.ts",
+    "./agentcore-proof-oauth-provider": "./agentcore-proof-oauth-provider.ts",
     "./analyst-reader-db": "./analyst-reader-db.ts",
     "./routine-output-redactor": "./routine-output-redactor.ts",
     "./routine-repo-tools": "./routine-repo-tools.ts",
