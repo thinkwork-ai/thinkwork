@@ -39,7 +39,7 @@ import {
 } from "../lib/harness/runner.js";
 import { handleDocumentEmission } from "../lib/artifacts/document-emission.js";
 import { processFinalize } from "../lib/chat-finalize/process-finalize.js";
-import { requireHarnessProofProfile } from "../lib/harness/proof-profile.js";
+import { requireHarnessManagedProfile } from "../lib/harness/proof-profile.js";
 import {
   abandonFreshHarnessTurn,
   prepareFreshHarnessTurn,
@@ -93,9 +93,9 @@ async function resolveHarness(input: {
   tenantId: string;
   tenantSlug: string;
 }): Promise<EnsuredHarness> {
-  const profile = await requireHarnessProofProfile(input.tenantSlug);
+  const profile = await requireHarnessManagedProfile(input.tenantSlug);
   const harnessId = profile.harnessArn.split("/").at(-1) ?? "";
-  if (!harnessId) throw new Error("Harness proof ARN is malformed");
+  if (!harnessId) throw new Error("AgentCore Harness ARN is malformed");
   return {
     harnessArn: profile.harnessArn,
     harnessId,

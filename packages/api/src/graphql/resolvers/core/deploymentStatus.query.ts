@@ -20,7 +20,7 @@ import {
   harnessManagedThreadEnrollments,
   tenants,
 } from "../../utils.js";
-import { readHarnessProofReadiness } from "../../../lib/harness/proof-profile.js";
+import { readHarnessReadiness } from "../../../lib/harness/proof-profile.js";
 
 /**
  * deploymentStatus — reports deployment infrastructure details from Lambda
@@ -70,7 +70,7 @@ export const deploymentStatus = async (
         .where(eq(tenants.id, tenantId))
         .limit(1)
     : [];
-  const harnessProof = await readHarnessProofReadiness(tenant?.slug ?? null);
+  const agentcoreHarness = await readHarnessReadiness(tenant?.slug ?? null);
   const [activeEnrollment] = tenantId
     ? await db
         .select({ threadId: harnessManagedThreadEnrollments.thread_id })
@@ -83,6 +83,17 @@ export const deploymentStatus = async (
         )
         .limit(1)
     : [];
+  const agentcoreHarnessStatus = {
+    state: agentcoreHarness.state,
+    ready: agentcoreHarness.ready,
+    reasonCode: agentcoreHarness.reasonCode,
+    endpointName: agentcoreHarness.endpointName,
+    expectedVersion: agentcoreHarness.expectedVersion,
+    liveVersion: agentcoreHarness.liveVersion,
+    sessionStrategy: agentcoreHarness.sessionStrategy,
+    activeThreadId: activeEnrollment?.threadId ?? null,
+    checkedAt: agentcoreHarness.checkedAt,
+  };
   return {
     stage,
     source: "AWS",
@@ -107,17 +118,8 @@ export const deploymentStatus = async (
     agentcoreStatus: getConfig("AGENTCORE_PI_FUNCTION_NAME")
       ? "managed (always on)"
       : "not deployed",
-    agentcoreHarnessProof: {
-      state: harnessProof.state,
-      ready: harnessProof.ready,
-      reasonCode: harnessProof.reasonCode,
-      endpointName: harnessProof.endpointName,
-      expectedVersion: harnessProof.expectedVersion,
-      liveVersion: harnessProof.liveVersion,
-      sessionStrategy: harnessProof.sessionStrategy,
-      activeThreadId: activeEnrollment?.threadId ?? null,
-      checkedAt: harnessProof.checkedAt,
-    },
+    agentcoreHarness: agentcoreHarnessStatus,
+    agentcoreHarnessProof: agentcoreHarnessStatus,
     hindsightEnabled: !!getConfig("HINDSIGHT_ENDPOINT"),
     managedMemoryEnabled: !!getConfig("AGENTCORE_MEMORY_ID"),
     twentyProvisioned: twenty.provisioned,

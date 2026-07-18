@@ -40,7 +40,7 @@ import {
   PlatformAgentNotFoundError,
   resolveTenantPlatformAgent,
 } from "../../../lib/agents/tenant-platform-agent.js";
-import { requireHarnessProofProfile } from "../../../lib/harness/proof-profile.js";
+import { requireHarnessManagedProfile } from "../../../lib/harness/proof-profile.js";
 import {
   defaultThreadRuntimeFromConfig,
   pinThreadRuntimeMetadata,
@@ -210,7 +210,7 @@ export const createThread = async (
       ? defaultThreadRuntimeFromConfig(platformAgent.runtime_config)
       : "pi";
   let harnessProfile: Awaited<
-    ReturnType<typeof requireHarnessProofProfile>
+    ReturnType<typeof requireHarnessManagedProfile>
   > | null = null;
   if (pinnedRuntime === "agentcore") {
     const [tenant] = await db
@@ -218,7 +218,7 @@ export const createThread = async (
       .from(tenants)
       .where(eq(tenants.id, i.tenantId))
       .limit(1);
-    harnessProfile = await requireHarnessProofProfile(tenant?.slug ?? "");
+    harnessProfile = await requireHarnessManagedProfile(tenant?.slug ?? "");
   }
   const CHANNEL_PREFIX: Record<string, string> = {
     schedule: "AUTO",

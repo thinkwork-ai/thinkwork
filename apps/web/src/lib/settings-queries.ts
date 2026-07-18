@@ -58,7 +58,7 @@ export const SettingsDeploymentStatusQuery = graphql(`
       appsyncRealtimeUrl
       hindsightEndpoint
       agentcoreStatus
-      agentcoreHarnessProof {
+      agentcoreHarness {
         state
         ready
         reasonCode
@@ -111,17 +111,6 @@ export const SettingsDeploymentStatusQuery = graphql(`
         workflowReadinessReasons
         workflowCapabilityFlags
       }
-    }
-  }
-`);
-
-export const SettingsCreateHarnessProofThreadMutation = graphql(`
-  mutation SettingsCreateHarnessProofThread($tenantId: ID!) {
-    createHarnessProofThread(tenantId: $tenantId) {
-      threadId
-      created
-      state
-      priorRuntime
     }
   }
 `);

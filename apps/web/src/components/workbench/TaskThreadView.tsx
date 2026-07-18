@@ -250,7 +250,7 @@ export interface TaskThread {
   status?: string | null;
   lifecycleStatus?: string | null;
   costSummary?: number | null;
-  harnessProof?: boolean;
+  agentcoreManaged?: boolean;
   messages: TaskThreadMessage[];
   turns?: TaskThreadTurn[];
 }
@@ -789,12 +789,12 @@ export function TaskThreadView({
                   data-testid="thread-conversation-column"
                   className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
                 >
-                  {thread.harnessProof ? (
+                  {thread.agentcoreManaged ? (
                     <div
                       className="w-fit rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-200"
-                      data-testid="harness-proof-thread-badge"
+                      data-testid="agentcore-thread-badge"
                     >
-                      Harness proof
+                      AgentCore
                     </div>
                   ) : null}
                   {transcriptMessages.length === 0 ? (
@@ -2275,9 +2275,9 @@ function ThreadTurnActivity({
     running && elapsedMs != null ? formatDuration(elapsedMs) : null;
   const failureDetail =
     status === "failed"
-      ? turn.errorCode === "harness_proof_thread_required" ||
-        turn.error?.includes("harness_proof_thread_required")
-        ? "This thread is not enrolled for the AgentCore Harness proof. Open Agent configuration to create or open the proof thread, or restore Pi. No runtime fallback was used."
+      ? turn.errorCode === "agentcore_thread_enrollment_required" ||
+        turn.error?.includes("agentcore_thread_enrollment_required")
+        ? "This AgentCore thread is missing its managed runtime enrollment. Create a new thread after selecting AgentCore, or switch the default back to Pi for future threads. No runtime fallback was used."
         : turn.error || "No error detail was provided."
       : null;
 

@@ -44,21 +44,33 @@ try {
   aliceToken = await loadAliceToken();
   const bobToken = await createEphemeralBobSession();
 
-  // Close any exploratory enrollment through the same operator mutation used
-  // by the UI, then capture a new, empty enrolled proof thread.
+  // Exercise the same dual-runtime lifecycle as Composer: select AgentCore as
+  // the default for future threads, then create a normal chat thread. The
+  // server pins and enrolls it transactionally; there is no special proof
+  // mutation or test-thread lifecycle.
   await setRuntime(aliceToken, "FLUE");
   await setRuntime(aliceToken, "AGENTCORE");
   runtimeSelected = true;
-  const proof = await gql(
+  const created = await gql(
     aliceToken,
-    `mutation($tenantId: ID!) {
-      createHarnessProofThread(tenantId: $tenantId) {
-        threadId created state priorRuntime
+    `mutation($input: CreateThreadInput!) {
+      createThread(input: $input) {
+        id
+        agentcoreManaged
       }
     }`,
-    { tenantId },
+    {
+      input: {
+        tenantId,
+        title: "AgentCore multiplayer certification",
+        channel: "CHAT",
+      },
+    },
   );
-  const threadId = proof.createHarnessProofThread.threadId;
+  const threadId = created.createThread.id;
+  if (created.createThread.agentcoreManaged !== true) {
+    throw new Error("Normal Composer thread was not enrolled in AgentCore");
+  }
 
   await send(aliceToken, {
     threadId,

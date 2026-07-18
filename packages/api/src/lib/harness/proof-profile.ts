@@ -1,13 +1,13 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 
-export type HarnessProofReadinessState =
+export type HarnessReadinessState =
   | "disabled"
   | "provisioning"
   | "ready"
   | "drifted"
   | "misconfigured";
 
-export interface HarnessProofProfile {
+export interface HarnessManagedProfile {
   tenantSlug: string;
   harnessArn: string;
   endpointName: string;
@@ -23,8 +23,8 @@ export interface HarnessProofProfile {
   identityCredentialProviderName: string;
 }
 
-export interface HarnessProofReadiness {
-  state: HarnessProofReadinessState;
+export interface HarnessReadiness {
+  state: HarnessReadinessState;
   ready: boolean;
   reasonCode: string;
   tenantSlug: string | null;
@@ -53,20 +53,22 @@ const ssm = new SSMClient({ region });
 
 function requiredProfileString(
   value: unknown,
-  field: keyof HarnessProofProfile,
+  field: keyof HarnessManagedProfile,
 ): string {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`Harness proof profile is missing ${field}`);
+    throw new Error(`AgentCore Harness profile is missing ${field}`);
   }
   return value.trim();
 }
 
-export function parseHarnessProofProfile(value: string): HarnessProofProfile {
+export function parseHarnessManagedProfile(
+  value: string,
+): HarnessManagedProfile {
   let candidate: Record<string, unknown>;
   try {
     candidate = JSON.parse(value) as Record<string, unknown>;
   } catch {
-    throw new Error("Harness proof profile is not valid JSON");
+    throw new Error("AgentCore Harness profile is not valid JSON");
   }
   return {
     tenantSlug: requiredProfileString(candidate.tenantSlug, "tenantSlug"),
@@ -103,9 +105,20 @@ export function parseHarnessProofProfile(value: string): HarnessProofProfile {
   };
 }
 
-export function harnessProofProfileParameterName(stage: string): string {
-  const explicit = process.env.HARNESS_PROOF_PROFILE_PARAMETER_NAME?.trim();
-  return explicit || `/thinkwork/${stage}/agentcore-harness-proof-profile`;
+export function harnessManagedProfileParameterName(
+  stage: string,
+  tenantSlug: string,
+): string {
+  const explicit =
+    process.env.AGENTCORE_HARNESS_PROFILE_PARAMETER_NAME?.trim() ||
+    process.env.HARNESS_PROOF_PROFILE_PARAMETER_NAME?.trim();
+  return (
+    explicit || `/thinkwork/${stage}/agentcore-harness-profiles/${tenantSlug}`
+  );
+}
+
+function legacyHarnessProfileParameterName(stage: string): string {
+  return `/thinkwork/${stage}/agentcore-harness-proof-profile`;
 }
 
 function defaultDeps(): ProfileLoaderDeps {
@@ -127,25 +140,43 @@ function defaultDeps(): ProfileLoaderDeps {
   };
 }
 
-export async function readHarnessProofReadiness(
+export async function readHarnessReadiness(
   tenantSlug?: string | null,
   deps: ProfileLoaderDeps = defaultDeps(),
-): Promise<HarnessProofReadiness> {
+): Promise<HarnessReadiness> {
   const checkedAt = new Date().toISOString();
-  if (deps.stage === "prod" || deps.stage === "production") {
-    return emptyReadiness("disabled", "production_disabled", checkedAt);
+  if (!tenantSlug?.trim()) {
+    return emptyReadiness(
+      "misconfigured",
+      "tenant_identity_missing",
+      checkedAt,
+    );
   }
   let raw: string | null;
   try {
-    raw = await deps.getParameter(harnessProofProfileParameterName(deps.stage));
+    raw = await deps.getParameter(
+      harnessManagedProfileParameterName(deps.stage, tenantSlug),
+    );
+    // Rollout compatibility for the already-deployed single-tenant profile.
+    // New tenant profiles use the scoped path above; the legacy value is only
+    // eligible when its embedded tenant identity matches the caller below.
+    if (
+      !raw &&
+      !process.env.AGENTCORE_HARNESS_PROFILE_PARAMETER_NAME?.trim() &&
+      !process.env.HARNESS_PROOF_PROFILE_PARAMETER_NAME?.trim()
+    ) {
+      raw = await deps.getParameter(
+        legacyHarnessProfileParameterName(deps.stage),
+      );
+    }
   } catch {
     return emptyReadiness("misconfigured", "profile_read_failed", checkedAt);
   }
   if (!raw) return emptyReadiness("disabled", "profile_missing", checkedAt);
 
-  let profile: HarnessProofProfile;
+  let profile: HarnessManagedProfile;
   try {
-    profile = parseHarnessProofProfile(raw);
+    profile = parseHarnessManagedProfile(raw);
   } catch {
     return emptyReadiness("misconfigured", "profile_invalid", checkedAt);
   }
@@ -164,12 +195,12 @@ export async function readHarnessProofReadiness(
     identityCredentialProviderName: profile.identityCredentialProviderName,
     checkedAt,
   };
-  if (tenantSlug && profile.tenantSlug !== tenantSlug) {
+  if (profile.tenantSlug !== tenantSlug) {
     return {
       ...base,
       state: "disabled",
       ready: false,
-      reasonCode: "tenant_not_enrolled",
+      reasonCode: "profile_tenant_mismatch",
     };
   }
   if (profile.status === "provisioning") {
@@ -212,13 +243,15 @@ export async function readHarnessProofReadiness(
   };
 }
 
-export async function requireHarnessProofProfile(
+export async function requireHarnessManagedProfile(
   tenantSlug: string,
   deps?: ProfileLoaderDeps,
-): Promise<HarnessProofProfile> {
-  const readiness = await readHarnessProofReadiness(tenantSlug, deps);
+): Promise<HarnessManagedProfile> {
+  const readiness = await readHarnessReadiness(tenantSlug, deps);
   if (!readiness.ready) {
-    throw new Error(`Harness proof is unavailable (${readiness.reasonCode})`);
+    throw new Error(
+      `AgentCore Harness is unavailable (${readiness.reasonCode})`,
+    );
   }
   return {
     tenantSlug: readiness.tenantSlug!,
@@ -238,10 +271,10 @@ export async function requireHarnessProofProfile(
 }
 
 function emptyReadiness(
-  state: HarnessProofReadinessState,
+  state: HarnessReadinessState,
   reasonCode: string,
   checkedAt: string,
-): HarnessProofReadiness {
+): HarnessReadiness {
   return {
     state,
     ready: false,

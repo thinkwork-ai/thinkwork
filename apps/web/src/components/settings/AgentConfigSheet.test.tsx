@@ -57,7 +57,6 @@ vi.mock("sonner", () => ({
 function queryKeyOf(doc: unknown): string {
   const text = JSON.stringify(doc) ?? "";
   for (const name of [
-    "SettingsCreateHarnessProofThread",
     "UpdateTenantGoalBudget",
     "UpdateTenantAgent",
     "SettingsDeploymentStatus",
@@ -106,7 +105,7 @@ function seedHappyQueries() {
   queryResponses.set("SettingsDeploymentStatus", {
     data: {
       deploymentStatus: {
-        agentcoreHarnessProof: {
+        agentcoreHarness: {
           state: "ready",
           ready: true,
           reasonCode: "ready",
@@ -220,7 +219,7 @@ describe("AgentConfigSection", () => {
         },
       },
     });
-    expect(screen.queryByText("Open proof thread")).toBeNull();
+    expect(screen.queryByRole("button", { name: /open.*thread/i })).toBeNull();
   });
 });
 

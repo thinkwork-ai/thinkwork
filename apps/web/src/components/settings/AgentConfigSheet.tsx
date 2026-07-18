@@ -119,8 +119,8 @@ export function AgentConfigSection({
   const catalog = catalogResult.data?.tenantModelCatalog ?? [];
   const catalogFailed = !!catalogResult.error;
   const goalBudgetValid = validGoalTokenBudgetOrEmpty(goalTokenBudget);
-  const harnessProof =
-    deploymentResult.data?.deploymentStatus.agentcoreHarnessProof;
+  const agentcoreHarness =
+    deploymentResult.data?.deploymentStatus.agentcoreHarness;
   const runtimeOptions: Array<{
     value: AgentRuntime;
     label: string;
@@ -132,7 +132,7 @@ export function AgentConfigSection({
           {
             value: AgentRuntime.Agentcore,
             label: "AgentCore Harness",
-            disabled: harnessProof?.ready !== true,
+            disabled: agentcoreHarness?.ready !== true,
           },
         ]
       : []),
@@ -174,7 +174,7 @@ export function AgentConfigSection({
   }
 
   async function activateHarnessDefault() {
-    if (!tenantId || !harnessProof?.ready) return;
+    if (!tenantId || !agentcoreHarness?.ready) return;
     setErrorMsg(null);
     await saveDefaultThreadRuntime(AgentRuntime.Agentcore);
     setConfirmHarness(false);
@@ -256,11 +256,11 @@ export function AgentConfigSection({
         {isOperator && (
           <div
             className="mt-2 text-xs text-muted-foreground"
-            data-testid="harness-proof-readiness"
+            data-testid="agentcore-harness-readiness"
           >
-            {harnessProof?.ready
-              ? `AgentCore Harness ready · version ${harnessProof.liveVersion ?? "unknown"} · ${harnessProof.sessionStrategy ?? "unknown"} sessions`
-              : `AgentCore Harness unavailable · ${harnessProof?.reasonCode ?? (deploymentResult.fetching ? "checking" : "status_unavailable")}`}
+            {agentcoreHarness?.ready
+              ? `AgentCore Harness ready · version ${agentcoreHarness.liveVersion ?? "unknown"} · ${agentcoreHarness.sessionStrategy ?? "unknown"} sessions`
+              : `AgentCore Harness unavailable · ${agentcoreHarness?.reasonCode ?? (deploymentResult.fetching ? "checking" : "status_unavailable")}`}
           </div>
         )}
       </SettingsRow>

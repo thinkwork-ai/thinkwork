@@ -7,7 +7,7 @@ import {
   loadTenantAgentForGraphql,
   parseJsonInput,
 } from "./shared.js";
-import { readHarnessProofReadiness } from "../../../lib/harness/proof-profile.js";
+import { readHarnessReadiness } from "../../../lib/harness/proof-profile.js";
 import { GraphQLError } from "graphql";
 
 interface UpdateTenantAgentInput {
@@ -78,13 +78,13 @@ export async function updateTenantAgent(
         .from(tenants)
         .where(eq(tenants.id, args.tenantId))
         .limit(1);
-      const readiness = await readHarnessProofReadiness(tenant?.slug ?? null);
+      const readiness = await readHarnessReadiness(tenant?.slug ?? null);
       if (!readiness.ready) {
         throw new GraphQLError(
-          `AgentCore Harness proof is unavailable (${readiness.reasonCode})`,
+          `AgentCore Harness is unavailable (${readiness.reasonCode})`,
           {
             extensions: {
-              code: "HARNESS_PROOF_NOT_READY",
+              code: "AGENTCORE_HARNESS_NOT_READY",
               reasonCode: readiness.reasonCode,
             },
           },

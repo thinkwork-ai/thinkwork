@@ -135,8 +135,8 @@ const deploymentWithTwentyDisabled = {
   region: "us-east-1",
   accountId: "123456789012",
   agentcoreStatus: "ready",
-  agentcoreHarnessProof: {
-    __typename: "AgentCoreHarnessProofStatus",
+  agentcoreHarness: {
+    __typename: "AgentCoreHarnessStatus",
     state: "disabled",
     ready: false,
     reasonCode: "profile_missing",

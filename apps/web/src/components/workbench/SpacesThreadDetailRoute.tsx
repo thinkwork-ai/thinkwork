@@ -193,7 +193,7 @@ interface ThreadResult {
     } | null;
     lifecycleStatus?: string | null;
     metadata?: unknown;
-    harnessProof?: boolean | null;
+    agentcoreManaged?: boolean | null;
     lastModel?: string | null;
     costSummary?: number | null;
     createdAt?: string | null;
@@ -2690,7 +2690,7 @@ function toTaskThread(thread: NonNullable<ThreadResult["thread"]>): TaskThread {
     title: thread.title,
     status: thread.status,
     lifecycleStatus: thread.lifecycleStatus,
-    harnessProof: thread.harnessProof === true,
+    agentcoreManaged: thread.agentcoreManaged === true,
     costSummary: thread.costSummary,
     messages: (thread.messages?.edges ?? []).map(({ node }) => ({
       id: node.id,

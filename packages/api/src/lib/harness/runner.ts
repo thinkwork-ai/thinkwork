@@ -1157,13 +1157,13 @@ export async function runHarnessTurn(
     if (!tenantSlug) {
       return await finalizeWith("failed", {
         errorMessage:
-          "Harness proof requires the trusted tenant slug; no default tenant is inferred.",
+          "AgentCore Harness requires the trusted tenant slug; no default tenant is inferred.",
       });
     }
     if (!turn.currentUserId) {
       return await finalizeWith("failed", {
         errorMessage:
-          "Harness proof requires a persisted human participant identity.",
+          "AgentCore Harness requires a persisted human participant identity.",
       });
     }
 

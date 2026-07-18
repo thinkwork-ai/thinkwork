@@ -88,7 +88,7 @@ export async function prepareFreshHarnessTurn(input: {
         ),
       )
       .limit(1);
-    if (!enrollment) throw new Error("harness_proof_thread_required");
+    if (!enrollment) throw new Error("agentcore_thread_enrollment_required");
     if (
       enrollment.agentId !== input.agentId ||
       enrollment.qualifier !== input.qualifier ||

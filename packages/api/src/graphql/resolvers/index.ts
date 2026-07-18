@@ -159,7 +159,6 @@ import {
   documentPlateMutations,
   documentPlateQueries,
 } from "./document-plates/index.js";
-import { harnessProofMutations } from "./harness-proof/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -270,7 +269,6 @@ export const mutationResolvers: Record<string, any> = {
   ...agentLoopMutations,
   ...piExtensionMutations,
   ...documentPlateMutations,
-  ...harnessProofMutations,
 };
 
 import { agentTypeResolvers } from "./tenant-agent/types.js";
