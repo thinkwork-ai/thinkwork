@@ -318,7 +318,7 @@ locals {
     "harness-capability-mcp" = {
       AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
       AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_GATEWAY_POLICY_REVISION   = "mcp-list-call-v1"
+      AGENTCORE_GATEWAY_POLICY_REVISION   = "mcp-list-call-v2-tenant-admission"
     }
     # Analyst query broker (THINK-228 U3). Reader role + caller credential
     # secrets, and the workspace bucket's analyst-staging/ prefix for
