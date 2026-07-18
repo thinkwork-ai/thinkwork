@@ -237,6 +237,7 @@ async function resendPendingInviteViaEmailChannel(input: {
     intendedUserId: input.userId,
     membershipId: input.memberId,
     redirectUri: enrollmentRedirectUri(),
+    additionalRoutes: [mobileEnrollmentRoute()],
   });
 
   try {
@@ -262,5 +263,13 @@ async function resendPendingInviteViaEmailChannel(input: {
   return {
     status: "RESENT",
     message: "Invite resent.",
+  };
+}
+
+function mobileEnrollmentRoute() {
+  return {
+    clientFamily: "mobile" as const,
+    redirectUri:
+      process.env.MOBILE_OAUTH_REDIRECT_URI ?? "thinkwork://auth/callback",
   };
 }

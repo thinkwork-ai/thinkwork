@@ -237,6 +237,7 @@ async function inviteMemberCore(
         intendedUserId: cognitoSub,
         membershipId: existingMember[0].id,
         redirectUri: enrollmentRedirectUri(),
+        additionalRoutes: [mobileEnrollmentRoute()],
       });
       await deliverInviteViaEmailChannel({
         tenantId,
@@ -274,6 +275,7 @@ async function inviteMemberCore(
       intendedUserId: cognitoSub,
       membershipId: row.id,
       redirectUri: enrollmentRedirectUri(),
+      additionalRoutes: [mobileEnrollmentRoute()],
     });
     await deliverInviteViaEmailChannel({
       tenantId,
@@ -286,4 +288,12 @@ async function inviteMemberCore(
   }
 
   return snakeToCamel(row);
+}
+
+function mobileEnrollmentRoute() {
+  return {
+    clientFamily: "mobile" as const,
+    redirectUri:
+      process.env.MOBILE_OAUTH_REDIRECT_URI ?? "thinkwork://auth/callback",
+  };
 }

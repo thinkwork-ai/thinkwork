@@ -51,10 +51,10 @@ function credPasswordKey(): string {
   const clientId = getPlatformConfig().cognitoClientId;
   return clientId ? `${CRED_PASSWORD_KEY}.${clientId}` : CRED_PASSWORD_KEY;
 }
-// Google federated JWTs don't carry custom:tenant_id, so we persist the
-// id returned by bootstrapUser here and rehydrate it during the cold-start
-// session restore. Without this, every cold start drops the user on /sign-in
-// and silently disables their biometric preference (see _layout.tsx guard).
+// Federated JWTs can omit custom:tenant_id, so we persist the tenant returned
+// by exact /api/auth/me admission and rehydrate it during cold-start restore.
+// Without this, every cold start drops the user on /sign-in and silently
+// disables their biometric preference (see _layout.tsx guard).
 const STORED_TENANT_ID_KEY = "thinkwork_stored_tenant_id";
 
 /**
@@ -62,7 +62,7 @@ const STORED_TENANT_ID_KEY = "thinkwork_stored_tenant_id";
  * A single global key poisons cross-environment switches: a tenantId cached
  * on one environment gets replayed as another environment's tenant filter,
  * silently emptying every list. Unscoped legacy values are intentionally
- * ignored — resolveTenantId falls back to bootstrapUser.
+ * ignored — resolveTenantId falls back to /api/auth/me.
  */
 function storedTenantIdKey(): string {
   const clientId = getPlatformConfig().cognitoClientId;
@@ -152,8 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   //
   //   1. Fast path — cached tenantId in SecureStore (written after the last
   //      successful bootstrap). Zero network, sub-ms.
-  //   2. Network fallback — bootstrapUser mutation using the current id
-  //      token. Self-healing: persists to the cache for next cold start.
+  //   2. Network fallback — /api/auth/me using the current id token. This
+  //      resolves only an exact admitted identity + active membership and
+  //      never auto-creates a workspace from federated email claims.
   //
   // Returns a new user object with `tenantId` populated if either path
   // succeeded, otherwise returns the input unchanged (caller decides how to
@@ -173,32 +174,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const graphqlUrl = getPlatformConfig().graphqlUrl;
-        if (!graphqlUrl) return user;
-        const res = await fetch(graphqlUrl, {
-          method: "POST",
+        const apiUrl = getPlatformConfig().apiUrl?.replace(/\/+$/, "");
+        if (!apiUrl) return user;
+        const res = await fetch(`${apiUrl}/api/auth/me`, {
+          method: "GET",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
-          }),
         });
+        if (!res.ok) return user;
         const payload = await res.json();
-        const tenantId = payload?.data?.bootstrapUser?.tenant?.id as
-          | string
-          | undefined;
+        const tenantId = payload?.tenantId as string | undefined;
         if (tenantId) {
-          console.log("[auth-boot] tenantId resolved via bootstrapUser");
+          console.log("[auth-boot] tenantId resolved via auth/me");
           SecureStore.setItemAsync(storedTenantIdKey(), tenantId).catch((e) =>
             console.warn("[auth-boot] tenantId persist failed:", e),
           );
           return { ...user, tenantId };
         }
-        console.warn("[auth-boot] bootstrapUser returned no tenant", payload);
+        console.warn("[auth-boot] auth/me returned no active tenant", payload);
       } catch (e) {
-        console.warn("[auth-boot] bootstrapUser fallback failed:", e);
+        console.warn("[auth-boot] auth/me fallback failed:", e);
       }
 
       return user;
@@ -502,33 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let oauthUser = auth.storeOAuthTokens(tokens, request.clientId);
         setAuthToken(tokens.id_token);
 
-        // Federated users don't have custom:tenant_id in their JWT on
-        // first sign-in. Mirror the admin app's TenantContext bootstrap flow:
-        // call bootstrapUser to auto-provision a tenant and merge the id into
-        // local user state so the routing guard can redirect to the home tab.
-        if (!oauthUser.tenantId) {
-          const graphqlUrl = getPlatformConfig().graphqlUrl;
-          if (!graphqlUrl) throw new Error("GraphQL URL not configured");
-          const res = await fetch(graphqlUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${tokens.id_token}`,
-            },
-            body: JSON.stringify({
-              query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
-            }),
-          });
-          const bootstrapResult = await res.json();
-          const bootstrap = bootstrapResult?.data?.bootstrapUser;
-          if (!bootstrap?.tenant?.id) {
-            throw new Error(
-              bootstrapResult?.errors?.[0]?.message ??
-                "Failed to provision workspace",
-            );
-          }
-          oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
-        }
+        oauthUser = await resolveTenantId(oauthUser, tokens.id_token);
 
         // Persist the tenantId so the next cold start can rehydrate it and
         // skip the /sign-in bounce. Fire-and-forget — SecureStore writes are
@@ -551,7 +521,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         oauthInFlightRef.current = false;
       }
     },
-    [],
+    [resolveTenantId],
   );
 
   const handleSignInWithGoogle = useCallback(async () => {

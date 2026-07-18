@@ -1,15 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { inserts, routeRows, selectQueue, updates } = vi.hoisted(() => ({
-  inserts: [] as unknown[],
-  routeRows: [] as Array<{
-    route_client_id: string;
-    route_key: string;
-    connection_id: string;
-  }>,
-  selectQueue: [] as unknown[][],
-  updates: [] as unknown[],
-}));
+const { inserts, routeRows, routeRowQueue, selectQueue, updates } = vi.hoisted(
+  () => ({
+    inserts: [] as unknown[],
+    routeRows: [] as Array<{
+      route_client_id: string;
+      route_key: string;
+      connection_id: string;
+    }>,
+    routeRowQueue: [] as Array<
+      Array<{
+        route_client_id: string;
+        route_key: string;
+        connection_id: string;
+      }>
+    >,
+    selectQueue: [] as unknown[][],
+    updates: [] as unknown[],
+  }),
+);
 
 vi.mock("@thinkwork/database-pg/schema", () => {
   const table = (name: string, columns: string[]) =>
@@ -74,7 +83,8 @@ vi.mock("../lib/db.js", () => {
   };
   return {
     db: {
-      execute: () => Promise.resolve({ rows: routeRows }),
+      execute: () =>
+        Promise.resolve({ rows: routeRowQueue.shift() ?? routeRows }),
       transaction: (callback: (value: typeof tx) => unknown) => callback(tx),
     },
   };
@@ -131,8 +141,53 @@ describe("identity enrollment", () => {
   beforeEach(() => {
     inserts.length = 0;
     routeRows.length = 0;
+    routeRowQueue.length = 0;
     selectQueue.length = 0;
     updates.length = 0;
+  });
+
+  it("issues the same challenge for mobile routes with their exact redirect", async () => {
+    routeRowQueue.push(
+      [
+        {
+          route_client_id: "route-google-web",
+          route_key: "google-web",
+          connection_id: "connection-google",
+        },
+      ],
+      [
+        {
+          route_client_id: "route-google-mobile",
+          route_key: "google-mobile",
+          connection_id: "connection-google",
+        },
+      ],
+    );
+    const issued = await issueEnrollmentGrants({
+      tenantId: "tenant-1",
+      intendedUserId: "user-1",
+      membershipId: "member-1",
+      redirectUri: "https://app.example.com/auth/callback",
+      additionalRoutes: [
+        {
+          clientFamily: "mobile",
+          redirectUri: "thinkwork://auth/callback",
+        },
+      ],
+    });
+    expect(issued.routeKeys).toEqual(["google-web", "google-mobile"]);
+    expect(inserts[0]).toMatchObject({
+      values: [
+        expect.objectContaining({
+          auth_route_client_id: "route-google-web",
+          redirect_uri: "https://app.example.com/auth/callback",
+        }),
+        expect.objectContaining({
+          auth_route_client_id: "route-google-mobile",
+          redirect_uri: "thinkwork://auth/callback",
+        }),
+      ],
+    });
   });
 
   it("domain-separates the same bearer secret by route", () => {

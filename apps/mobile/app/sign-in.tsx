@@ -7,7 +7,7 @@ import {
   ScrollView,
   Image,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Scan } from "lucide-react-native";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,8 @@ import {
 
 export default function SignInScreen() {
   const router = useRouter();
+  const { next: rawNext } = useLocalSearchParams<{ next?: string }>();
+  const next = normalizeInternalPath(rawNext);
   const { signIn, signInWithOAuth, deploymentConfig } = useAuth();
   const {
     isSupported: biometricSupported,
@@ -102,6 +104,7 @@ export default function SignInScreen() {
 
     try {
       await signIn(trimmedEmail, currentPassword);
+      if (next) router.replace(next as never);
 
       if (
         biometricSupported &&
@@ -172,6 +175,7 @@ export default function SignInScreen() {
     setError(null);
     try {
       await signInWithOAuth(option);
+      if (next) router.replace(next as never);
     } catch (err) {
       console.error("[sign-in] Cognito OAuth error:", err);
       const message = err instanceof Error ? err.message : String(err);
@@ -332,4 +336,9 @@ export default function SignInScreen() {
       <EnvironmentPickerSheet ref={environmentSheetRef} />
     </KeyboardAvoidingView>
   );
+}
+
+function normalizeInternalPath(value: string | undefined): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
 }

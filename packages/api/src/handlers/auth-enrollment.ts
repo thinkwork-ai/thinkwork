@@ -44,7 +44,7 @@ export interface IssuedEnrollmentGrant {
 }
 
 /**
- * Issue one opaque bearer/challenge pair across every currently admitted web
+ * Issue one opaque bearer/challenge pair across every requested client-family
  * route for the tenant. Digests are route-domain-separated, so selecting a
  * provider does not let the grant cross to another app client or connection.
  */
@@ -53,6 +53,10 @@ export async function issueEnrollmentGrants(input: {
   intendedUserId: string;
   membershipId: string;
   redirectUri: string;
+  additionalRoutes?: Array<{
+    clientFamily: "mobile" | "desktop" | "cli";
+    redirectUri: string;
+  }>;
   ttlMs?: number;
   now?: Date;
 }): Promise<IssuedEnrollmentGrant> {
@@ -60,33 +64,48 @@ export async function issueEnrollmentGrants(input: {
   const expiresAt = new Date(now.getTime() + (input.ttlMs ?? 30 * 60_000));
   const startToken = randomBytes(32).toString("base64url");
   const recipientChallenge = String(randomInt(0, 100_000_000)).padStart(8, "0");
-  const routes = await db.execute<{
+  type EnrollmentRoute = {
     route_client_id: string;
     route_key: string;
     connection_id: string;
-  }>(sql`
-    SELECT DISTINCT
-      rc.id AS route_client_id,
-      rc.route_key,
-      apr.id AS connection_id
-    FROM auth_route_clients rc
-    JOIN auth_provider_resources apr
-      ON apr.cognito_app_client_ids ? rc.cognito_app_client_id
-    JOIN tenant_auth_provider_references tapr
-      ON tapr.auth_provider_resource_id = apr.id
-     AND tapr.tenant_id = ${input.tenantId}
-     AND tapr.status = 'enabled'
-    JOIN tenant_auth_policies tap
-      ON tap.tenant_id = ${input.tenantId}
-     AND tap.status = 'active'
-    WHERE rc.client_family = 'web'
-      AND rc.lifecycle_state = 'native'
-      AND rc.validation_status = 'valid'
-      AND apr.lifecycle_state = 'native'
-      AND apr.validation_status = 'valid'
-      AND rc.redirect_uris @> jsonb_build_array(${input.redirectUri}::text)
-  `);
-  if (routes.rows.length === 0) {
+    redirect_uri: string;
+  };
+  const targets = [
+    { clientFamily: "web", redirectUri: input.redirectUri },
+    ...(input.additionalRoutes ?? []),
+  ];
+  const routes: EnrollmentRoute[] = [];
+  for (const target of targets) {
+    const result = await db.execute<Omit<EnrollmentRoute, "redirect_uri">>(sql`
+      SELECT DISTINCT
+        rc.id AS route_client_id,
+        rc.route_key,
+        apr.id AS connection_id
+      FROM auth_route_clients rc
+      JOIN auth_provider_resources apr
+        ON apr.cognito_app_client_ids ? rc.cognito_app_client_id
+      JOIN tenant_auth_provider_references tapr
+        ON tapr.auth_provider_resource_id = apr.id
+       AND tapr.tenant_id = ${input.tenantId}
+       AND tapr.status = 'enabled'
+      JOIN tenant_auth_policies tap
+        ON tap.tenant_id = ${input.tenantId}
+       AND tap.status = 'active'
+      WHERE rc.client_family = ${target.clientFamily}
+        AND rc.lifecycle_state = 'native'
+        AND rc.validation_status = 'valid'
+        AND apr.lifecycle_state = 'native'
+        AND apr.validation_status = 'valid'
+        AND rc.redirect_uris @> jsonb_build_array(${target.redirectUri}::text)
+    `);
+    routes.push(
+      ...result.rows.map((route) => ({
+        ...route,
+        redirect_uri: target.redirectUri,
+      })),
+    );
+  }
+  if (routes.length === 0) {
     throw new Error("No admitted enrollment route is available");
   }
 
@@ -101,14 +120,14 @@ export async function issueEnrollmentGrants(input: {
         ),
       );
     await tx.insert(authIdentityEnrollments).values(
-      routes.rows.map((route) => ({
+      routes.map((route) => ({
         tenant_id: input.tenantId,
         intended_user_id: input.intendedUserId,
         recipient_grant_kind: "membership",
         recipient_grant_id: input.membershipId,
         auth_provider_resource_id: route.connection_id,
         auth_route_client_id: route.route_client_id,
-        redirect_uri: input.redirectUri,
+        redirect_uri: route.redirect_uri,
         nonce_digest: enrollmentDigest(startToken, route.route_client_id),
         recipient_challenge_digest: enrollmentDigest(
           recipientChallenge,
@@ -124,7 +143,7 @@ export async function issueEnrollmentGrants(input: {
     startToken,
     recipientChallenge,
     expiresAt,
-    routeKeys: routes.rows.map((route) => route.route_key),
+    routeKeys: routes.map((route) => route.route_key),
   };
 }
 
