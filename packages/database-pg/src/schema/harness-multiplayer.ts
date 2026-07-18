@@ -1,7 +1,7 @@
 /**
- * Managed AgentCore Harness proof state.
+ * Managed AgentCore Harness runtime state.
  *
- * The selected proof strategy is fresh-per-turn. These tables therefore keep
+ * The selected runtime strategy is fresh-per-turn. These tables therefore keep
  * canonical public ordering and durable turn/effect evidence without retaining
  * a reusable provider session or treating Harness state as authoritative.
  */

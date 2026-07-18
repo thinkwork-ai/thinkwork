@@ -1301,9 +1301,11 @@ module "agentcore_harness" {
 
 # The Harness depends on the public issuer/API, so feeding its generated ARN
 # back into the api module would create a Terraform cycle. Publish the
-# non-secret, attested readiness contract under a deterministic SSM key; the
+# non-secret, attested readiness contract under deterministic SSM keys; the
 # runner and DeploymentStatus resolver read it server-side. No browser token,
-# participant id, credential, prompt, or private result is stored here.
+# participant id, credential, prompt, or private result is stored here. Keep
+# the original address during the migration so deployed runners never lose
+# their profile between releases.
 resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
   count = var.enable_agentcore_multiplayer_proof ? 1 : 0
 
@@ -1337,6 +1339,27 @@ resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
   tags = {
     Name                   = "thinkwork-${var.stage}-agentcore-harness-proof-profile"
     "thinkwork:proof"      = "THINK-316"
+    "thinkwork:tenant"     = var.agentcore_multiplayer_proof_tenant_slug
+    "thinkwork:profile"    = "default"
+    "thinkwork:visibility" = "server-only-nonsecret"
+  }
+}
+
+# Managed per-tenant profile address. Runtime lookup reads this first and only
+# falls back to the original single-tenant key during the migration window.
+# Adding the scoped key is non-destructive and lets later tenants receive their
+# own attested profile without changing Lambda configuration or hot-path
+# control-plane resources.
+resource "aws_ssm_parameter" "agentcore_harness_profile" {
+  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
+
+  name  = "/thinkwork/${var.stage}/agentcore-harness-profiles/${var.agentcore_multiplayer_proof_tenant_slug}"
+  type  = aws_ssm_parameter.agentcore_harness_proof_profile[0].type
+  value = aws_ssm_parameter.agentcore_harness_proof_profile[0].value
+
+  tags = {
+    Name                   = "thinkwork-${var.stage}-agentcore-harness-profile-${var.agentcore_multiplayer_proof_tenant_slug}"
+    "thinkwork:managed-by" = "terraform"
     "thinkwork:tenant"     = var.agentcore_multiplayer_proof_tenant_slug
     "thinkwork:profile"    = "default"
     "thinkwork:visibility" = "server-only-nonsecret"

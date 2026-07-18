@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseHarnessProofProfile,
-  readHarnessProofReadiness,
+  harnessManagedProfileParameterName,
+  parseHarnessManagedProfile,
+  readHarnessReadiness,
 } from "./proof-profile.js";
 
 const profile = JSON.stringify({
@@ -28,9 +29,31 @@ function deps(value: string | null, stage = "dev") {
   };
 }
 
-describe("Harness proof profile", () => {
+describe("managed AgentCore Harness profile", () => {
+  it("uses a deterministic tenant-scoped SSM address", () => {
+    expect(
+      harnessManagedProfileParameterName("dev", "sleek-squirrel-230"),
+    ).toBe("/thinkwork/dev/agentcore-harness-profiles/sleek-squirrel-230");
+  });
+
+  it("falls back to the deployed legacy profile during rollout", async () => {
+    const requested: string[] = [];
+    const result = await readHarnessReadiness("sleek-squirrel-230", {
+      stage: "dev",
+      async getParameter(name) {
+        requested.push(name);
+        return requested.length === 1 ? null : profile;
+      },
+    });
+    expect(requested).toEqual([
+      "/thinkwork/dev/agentcore-harness-profiles/sleek-squirrel-230",
+      "/thinkwork/dev/agentcore-harness-proof-profile",
+    ]);
+    expect(result).toMatchObject({ ready: true, reasonCode: "ready" });
+  });
+
   it("accepts the enrolled tenant only when the named version is attested", async () => {
-    const result = await readHarnessProofReadiness(
+    const result = await readHarnessReadiness(
       "sleek-squirrel-230",
       deps(profile),
     );
@@ -45,20 +68,20 @@ describe("Harness proof profile", () => {
     });
   });
 
-  it("keeps a different tenant disabled", async () => {
+  it("fails closed when a tenant resolves another tenant's profile", async () => {
     await expect(
-      readHarnessProofReadiness("another-tenant", deps(profile)),
+      readHarnessReadiness("another-tenant", deps(profile)),
     ).resolves.toMatchObject({
       state: "disabled",
       ready: false,
-      reasonCode: "tenant_not_enrolled",
+      reasonCode: "profile_tenant_mismatch",
     });
   });
 
   it("fails closed when the endpoint version drifts", async () => {
     const drifted = profile.replace('"liveVersion":"4"', '"liveVersion":"5"');
     await expect(
-      readHarnessProofReadiness("sleek-squirrel-230", deps(drifted)),
+      readHarnessReadiness("sleek-squirrel-230", deps(drifted)),
     ).resolves.toMatchObject({
       state: "drifted",
       ready: false,
@@ -66,18 +89,28 @@ describe("Harness proof profile", () => {
     });
   });
 
-  it("is always disabled in production even if a profile exists", async () => {
+  it("supports the managed profile in production", async () => {
     await expect(
-      readHarnessProofReadiness("sleek-squirrel-230", deps(profile, "prod")),
+      readHarnessReadiness("sleek-squirrel-230", deps(profile, "prod")),
     ).resolves.toMatchObject({
-      state: "disabled",
+      state: "ready",
+      ready: true,
+      reasonCode: "ready",
+    });
+  });
+
+  it("fails closed without a trusted tenant identity", async () => {
+    await expect(
+      readHarnessReadiness("", deps(profile)),
+    ).resolves.toMatchObject({
+      state: "misconfigured",
       ready: false,
-      reasonCode: "production_disabled",
+      reasonCode: "tenant_identity_missing",
     });
   });
 
   it("rejects malformed profiles without exposing their content", () => {
-    expect(() => parseHarnessProofProfile('{"status":"ready"}')).toThrow(
+    expect(() => parseHarnessManagedProfile('{"status":"ready"}')).toThrow(
       /missing tenantSlug/,
     );
   });

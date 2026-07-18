@@ -75,8 +75,8 @@ type Thread {
   billingCode: String
   labels: AWSJSON
   metadata: AWSJSON
-  "True only for an explicitly enrolled managed Harness proof thread."
-  harnessProof: Boolean!
+  "True when the thread is pinned to an active managed AgentCore runtime enrollment."
+  agentcoreManaged: Boolean!
   goal: ThreadGoal
   dueAt: AWSDateTime
   startedAt: AWSDateTime

@@ -53,7 +53,7 @@ export function threadParticipantToCamel(row: Record<string, unknown>) {
 }
 
 export const threadTypeResolvers = {
-  harnessProof: async (thread: any) => {
+  agentcoreManaged: async (thread: any) => {
     const tenantId = thread.tenantId ?? thread.tenant_id ?? null;
     if (!tenantId || !thread.id) return false;
     const [enrollment] = await db

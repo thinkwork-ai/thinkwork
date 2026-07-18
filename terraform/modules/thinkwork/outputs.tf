@@ -711,8 +711,13 @@ output "agentcore_turn_assertion_active_kid" {
 }
 
 output "agentcore_harness_proof_profile_parameter_name" {
-  description = "Server-only SSM readiness/profile contract consumed by the Harness runner and operator DeploymentStatus resolver."
+  description = "Deprecated rollout-compatible SSM Harness profile address."
   value       = var.enable_agentcore_multiplayer_proof ? aws_ssm_parameter.agentcore_harness_proof_profile[0].name : ""
+}
+
+output "agentcore_harness_profile_parameter_name" {
+  description = "Server-only per-tenant SSM profile consumed by the managed Harness runtime."
+  value       = var.enable_agentcore_multiplayer_proof ? aws_ssm_parameter.agentcore_harness_profile[0].name : ""
 }
 
 output "agentcore_multiplayer_proof_gateway_arn" {

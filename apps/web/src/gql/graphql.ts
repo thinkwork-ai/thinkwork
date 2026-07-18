@@ -276,8 +276,8 @@ export type AgentCapabilityInput = {
   enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
-export type AgentCoreHarnessProofStatus = {
-  __typename?: "AgentCoreHarnessProofStatus";
+export type AgentCoreHarnessStatus = {
+  __typename?: "AgentCoreHarnessStatus";
   activeThreadId?: Maybe<Scalars["ID"]["output"]>;
   checkedAt: Scalars["AWSDateTime"]["output"];
   endpointName?: Maybe<Scalars["String"]["output"]>;
@@ -2325,7 +2325,7 @@ export type DeploymentStatus = {
   __typename?: "DeploymentStatus";
   accountId?: Maybe<Scalars["String"]["output"]>;
   adminUrl?: Maybe<Scalars["String"]["output"]>;
-  agentcoreHarnessProof: AgentCoreHarnessProofStatus;
+  agentcoreHarness: AgentCoreHarnessStatus;
   agentcoreStatus?: Maybe<Scalars["String"]["output"]>;
   apiEndpoint?: Maybe<Scalars["String"]["output"]>;
   appsyncRealtimeUrl?: Maybe<Scalars["String"]["output"]>;
@@ -3055,14 +3055,6 @@ export type HandleJsonRenderActionInput = {
   sourceMessageId: Scalars["ID"]["input"];
   specHash: Scalars["String"]["input"];
   threadId: Scalars["ID"]["input"];
-};
-
-export type HarnessProofThreadResult = {
-  __typename?: "HarnessProofThreadResult";
-  created: Scalars["Boolean"]["output"];
-  priorRuntime: AgentRuntime;
-  state: Scalars["String"]["output"];
-  threadId: Scalars["ID"]["output"];
 };
 
 export type HeartbeatActivityEvent = {
@@ -4517,7 +4509,6 @@ export type Mutation = {
   createEvalProfile: EvalProfile;
   createEvalTestCase: EvalTestCase;
   createExternalCapabilityClient: CapabilityRuntimeMutationResult;
-  createHarnessProofThread: HarnessProofThreadResult;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
   createQuickAction: UserQuickAction;
@@ -5217,10 +5208,6 @@ export type MutationCreateEvalTestCaseArgs = {
 
 export type MutationCreateExternalCapabilityClientArgs = {
   input: CreateExternalCapabilityClientInput;
-};
-
-export type MutationCreateHarnessProofThreadArgs = {
-  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationCreateInboxItemArgs = {
@@ -10570,6 +10557,8 @@ export type Thread = {
   __typename?: "Thread";
   agent?: Maybe<Agent>;
   agentId?: Maybe<Scalars["ID"]["output"]>;
+  /** True when the thread is pinned to an active managed AgentCore runtime enrollment. */
+  agentcoreManaged: Scalars["Boolean"]["output"];
   archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   assignee?: Maybe<User>;
   assigneeId?: Maybe<Scalars["ID"]["output"]>;
@@ -10590,8 +10579,6 @@ export type Thread = {
   createdByType?: Maybe<Scalars["String"]["output"]>;
   dueAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   goal?: Maybe<ThreadGoal>;
-  /** True only for an explicitly enrolled managed Harness proof thread. */
-  harnessProof: Scalars["Boolean"]["output"];
   id: Scalars["ID"]["output"];
   identifier?: Maybe<Scalars["String"]["output"]>;
   isBlocked: Scalars["Boolean"]["output"];
@@ -14919,8 +14906,8 @@ export type SettingsDeploymentStatusQuery = {
     twentyWorkerLogGroupName?: string | null;
     twentyAlbArn?: string | null;
     twentyTargetGroupArn?: string | null;
-    agentcoreHarnessProof: {
-      __typename?: "AgentCoreHarnessProofStatus";
+    agentcoreHarness: {
+      __typename?: "AgentCoreHarnessStatus";
       state: string;
       ready: boolean;
       reasonCode: string;
@@ -14962,21 +14949,6 @@ export type SettingsDeploymentStatusQuery = {
       workflowReadinessReasons: any;
       workflowCapabilityFlags: any;
     }>;
-  };
-};
-
-export type SettingsCreateHarnessProofThreadMutationVariables = Exact<{
-  tenantId: Scalars["ID"]["input"];
-}>;
-
-export type SettingsCreateHarnessProofThreadMutation = {
-  __typename?: "Mutation";
-  createHarnessProofThread: {
-    __typename?: "HarnessProofThreadResult";
-    threadId: string;
-    created: boolean;
-    state: string;
-    priorRuntime: AgentRuntime;
   };
 };
 
@@ -26527,7 +26499,7 @@ export const SettingsDeploymentStatusDocument = {
                 },
                 {
                   kind: "Field",
-                  name: { kind: "Name", value: "agentcoreHarnessProof" },
+                  name: { kind: "Name", value: "agentcoreHarness" },
                   selectionSet: {
                     kind: "SelectionSet",
                     selections: [
@@ -26743,63 +26715,6 @@ export const SettingsDeploymentStatusDocument = {
 } as unknown as DocumentNode<
   SettingsDeploymentStatusQuery,
   SettingsDeploymentStatusQueryVariables
->;
-export const SettingsCreateHarnessProofThreadDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "mutation",
-      name: { kind: "Name", value: "SettingsCreateHarnessProofThread" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: {
-            kind: "Variable",
-            name: { kind: "Name", value: "tenantId" },
-          },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "createHarnessProofThread" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "tenantId" },
-                value: {
-                  kind: "Variable",
-                  name: { kind: "Name", value: "tenantId" },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: "SelectionSet",
-              selections: [
-                { kind: "Field", name: { kind: "Name", value: "threadId" } },
-                { kind: "Field", name: { kind: "Name", value: "created" } },
-                { kind: "Field", name: { kind: "Name", value: "state" } },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "priorRuntime" },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  SettingsCreateHarnessProofThreadMutation,
-  SettingsCreateHarnessProofThreadMutationVariables
 >;
 export const SettingsEmailChannelDocument = {
   kind: "Document",

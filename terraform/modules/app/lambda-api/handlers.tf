@@ -505,9 +505,7 @@ locals {
     # THINK-316 U5: the runner reads the server-only attested profile and
     # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives
     # no Harness control-plane inputs or permissions.
-    "harness-runner" = {
-      HARNESS_PROOF_PROFILE_PARAMETER_NAME = "/thinkwork/${var.stage}/agentcore-harness-proof-profile"
-    }
+    "harness-runner" = {}
     # 240s: sync Hindsight retain (LLM extraction + auto-consolidation) can
     # exceed 60s; the client timeout must stay below the Lambda timeout (300s)
     # and below the Hindsight ALB idle_timeout (300s) so failures classify as
