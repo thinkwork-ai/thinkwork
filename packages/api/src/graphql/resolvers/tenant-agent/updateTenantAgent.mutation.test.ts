@@ -74,7 +74,7 @@ vi.mock("./shared.js", () => ({
     typeof value === "string" ? JSON.parse(value) : value,
 }));
 
-vi.mock("../../../lib/harness/proof-profile.js", () => ({
+vi.mock("../../../lib/harness/managed-profile.js", () => ({
   readHarnessReadiness: vi.fn(() =>
     Promise.resolve({ ready: true, reasonCode: "ready" }),
   ),

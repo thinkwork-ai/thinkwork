@@ -1277,20 +1277,19 @@ module "agentcore_pi" {
   okf_efs_read_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : ""
 }
 
-# AgentCore Harness trial (THINK-311 U4) — ship-inert, pure IAM. Provisions
-# the Harness microVM execution role; the api Lambda's Harness invoker grants
-# ride the grouped ai policy in lambda-api (keyed off this module's role-ARN
-# output). No handler creates or invokes a Harness until U5.
+# AgentCore Harness execution role and managed tenant/profile runtime. The
+# public root inputs retain their rollout-era names until the example-stack
+# compatibility window closes; this module boundary uses managed semantics.
 module "agentcore_harness" {
   source = "../app/agentcore-harness"
 
   enabled                       = var.enable_agentcore_harness
-  multiplayer_proof_enabled     = var.enable_agentcore_multiplayer_proof
+  managed_runtime_enabled       = var.enable_agentcore_multiplayer_proof
   stage                         = var.stage
   region                        = var.region
   account_id                    = var.account_id
   bucket_name                   = module.s3.bucket_name
-  pilot_tenant_slug             = var.agentcore_multiplayer_proof_tenant_slug
+  tenant_slug                   = var.agentcore_multiplayer_proof_tenant_slug
   discovery_url                 = "${module.api.agentcore_turn_assertion_issuer}/.well-known/openid-configuration"
   harness_audience              = module.api.agentcore_harness_audience
   gateway_arn                   = module.agentcore_proof_gateway.gateway_arn
@@ -1314,14 +1313,14 @@ resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
   value = jsonencode({
     tenantSlug                     = var.agentcore_multiplayer_proof_tenant_slug
     trustProfile                   = "default"
-    harnessArn                     = module.agentcore_harness.proof_harness_arn
-    endpointArn                    = module.agentcore_harness.proof_endpoint_arn
-    endpointName                   = module.agentcore_harness.proof_endpoint_name
-    expectedVersion                = module.agentcore_harness.proof_target_version
-    liveVersion                    = module.agentcore_harness.proof_live_version
-    modelId                        = module.agentcore_harness.proof_model_id
-    status                         = module.agentcore_harness.proof_status
-    configurationFingerprint       = module.agentcore_harness.proof_configuration_fingerprint
+    harnessArn                     = module.agentcore_harness.managed_harness_arn
+    endpointArn                    = module.agentcore_harness.managed_endpoint_arn
+    endpointName                   = module.agentcore_harness.managed_endpoint_name
+    expectedVersion                = module.agentcore_harness.managed_target_version
+    liveVersion                    = module.agentcore_harness.managed_live_version
+    modelId                        = module.agentcore_harness.managed_model_id
+    status                         = module.agentcore_harness.managed_status
+    configurationFingerprint       = module.agentcore_harness.managed_configuration_fingerprint
     authorizerAudience             = module.api.agentcore_harness_audience
     sessionStrategy                = "fresh"
     gatewayUrl                     = module.agentcore_proof_gateway.gateway_url

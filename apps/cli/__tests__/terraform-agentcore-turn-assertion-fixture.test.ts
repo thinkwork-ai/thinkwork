@@ -14,6 +14,16 @@ describe("AgentCore turn assertion Terraform fixture", () => {
   const handlers = read("terraform/modules/app/lambda-api/handlers.tf");
   const oauth = read("terraform/modules/app/lambda-api/mcp-oauth.tf");
   const groupedIam = read("terraform/modules/app/lambda-api/iam-grouped.tf");
+  const harnessModule = read(
+    "terraform/modules/app/agentcore-harness/main.tf",
+  );
+  const harnessVariables = read(
+    "terraform/modules/app/agentcore-harness/variables.tf",
+  );
+  const harnessOutputs = read(
+    "terraform/modules/app/agentcore-harness/outputs.tf",
+  );
+  const thinkworkOutputs = read("terraform/modules/thinkwork/outputs.tf");
   const identity = read("terraform/modules/app/agentcore-identity/main.tf");
   const identityReconciler = read(
     "terraform/modules/app/agentcore-identity/scripts/reconcile_twenty_identity.sh",
@@ -122,6 +132,23 @@ describe("AgentCore turn assertion Terraform fixture", () => {
     );
     expect(groupedIam).toContain(
       '"bedrock-agentcore:CompleteResourceTokenAuth"',
+    );
+  });
+
+  it("exposes managed Harness lifecycle semantics without replacing rollout-era outputs", () => {
+    expect(harnessVariables).toContain('variable "managed_runtime_enabled"');
+    expect(harnessVariables).toContain('variable "tenant_slug"');
+    expect(harnessVariables).not.toContain(
+      'variable "multiplayer_proof_enabled"',
+    );
+    expect(harnessVariables).not.toContain('variable "pilot_tenant_slug"');
+    expect(harnessModule).toContain('check "managed_harness_configuration"');
+    expect(harnessOutputs).toContain('output "managed_harness_arn"');
+    expect(harnessOutputs).toContain('output "managed_status"');
+    expect(thinkworkOutputs).toContain('output "agentcore_harness_arn"');
+    expect(thinkworkOutputs).toContain('output "agentcore_harness_status"');
+    expect(thinkworkOutputs).toMatch(
+      /output "agentcore_harness_proof_arn" \{[\s\S]*?Deprecated: use agentcore_harness_arn/,
     );
   });
 });

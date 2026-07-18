@@ -1,8 +1,8 @@
 ################################################################################
 # AgentCore Harness — App Module (THINK-316 managed multiplayer runtime)
 #
-# Stable execution role plus the optional single tenant/profile Harness and
-# named immutable-version endpoint used by the managed multiplayer proof.
+# Stable execution role plus the optional managed tenant/profile Harness and
+# named immutable-version endpoint.
 #
 # Trust-policy note: sibling agentcore roles (agentcore-pi, agentcore-runtime)
 # trust the bare `bedrock-agentcore.amazonaws.com` service principal with no
@@ -20,7 +20,7 @@ terraform {
 
 locals {
   normalized_stage   = replace(var.stage, "-", "_")
-  normalized_tenant  = replace(var.pilot_tenant_slug, "-", "_")
+  normalized_tenant  = replace(var.tenant_slug, "-", "_")
   normalized_profile = replace(var.trust_profile, "-", "_")
   harness_name       = "Thinkwork_${local.normalized_stage}_${local.normalized_tenant}_${local.normalized_profile}"
   endpoint_name      = "ThinkworkProof"
@@ -35,11 +35,11 @@ locals {
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___query_brain",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___send_email",
   ]
-  tenant_skill_prefix = var.pilot_tenant_slug != "" ? (
-    "tenants/${var.pilot_tenant_slug}/"
+  tenant_skill_prefix = var.tenant_slug != "" ? (
+    "tenants/${var.tenant_slug}/"
   ) : "tenants/"
   configuration_hash = nonsensitive(sha256(jsonencode({
-    tenant_slug      = var.pilot_tenant_slug
+    tenant_slug      = var.tenant_slug
     profile          = var.trust_profile
     discovery        = var.discovery_url
     audience         = var.harness_audience
@@ -58,11 +58,11 @@ locals {
   })))
 }
 
-check "managed_multiplayer_harness_configuration" {
+check "managed_harness_configuration" {
   assert {
-    condition = !var.multiplayer_proof_enabled || (
+    condition = !var.managed_runtime_enabled || (
       var.enabled &&
-      var.pilot_tenant_slug != "" &&
+      var.tenant_slug != "" &&
       can(regex("^https://", var.discovery_url)) &&
       var.harness_audience != "" &&
       can(regex("^arn:aws:bedrock-agentcore:", var.gateway_arn)) &&
@@ -70,7 +70,7 @@ check "managed_multiplayer_harness_configuration" {
       can(regex("^arn:aws:secretsmanager:", var.oauth_credential_secret_arn))
       && can(regex("^https://", var.oauth_return_url))
     )
-    error_message = "The multiplayer Harness requires the base role, pilot tenant, HTTPS discovery, exact audience, Gateway, OAuth provider, and provider secret."
+    error_message = "The managed AgentCore Harness requires the base role, tenant, HTTPS discovery, exact audience, Gateway, OAuth provider, and provider secret."
   }
 }
 
@@ -162,7 +162,7 @@ resource "aws_iam_role_policy" "harness_execution" {
         Sid      = "SelectedTenantGateway"
         Effect   = "Allow"
         Action   = ["bedrock-agentcore:InvokeGateway"]
-        Resource = var.multiplayer_proof_enabled ? var.gateway_arn : "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:gateway/disabled"
+        Resource = var.managed_runtime_enabled ? var.gateway_arn : "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:gateway/disabled"
       },
       {
         Sid    = "ExactUserIdentityExchange"
@@ -172,7 +172,7 @@ resource "aws_iam_role_policy" "harness_execution" {
           "bedrock-agentcore:GetWorkloadAccessToken",
           "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
         ]
-        Resource = var.multiplayer_proof_enabled ? [
+        Resource = var.managed_runtime_enabled ? [
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default",
           var.oauth_credential_provider_arn,
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default",
@@ -185,7 +185,7 @@ resource "aws_iam_role_policy" "harness_execution" {
         Sid      = "ExactOauthProviderSecret"
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = var.multiplayer_proof_enabled ? var.oauth_credential_secret_arn : "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:disabled"
+        Resource = var.managed_runtime_enabled ? var.oauth_credential_secret_arn : "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:disabled"
       },
       {
         # The service-managed Harness container resolves its public base image
@@ -215,7 +215,7 @@ resource "aws_iam_role_policy" "harness_execution" {
 }
 
 ################################################################################
-# One stable pilot tenant/profile Harness and named version-pinned endpoint.
+# One stable tenant/profile Harness and named version-pinned endpoint.
 ################################################################################
 
 moved {
@@ -227,7 +227,7 @@ moved {
 # revisions are reconciled separately so an ordinary prompt/tool/model update
 # creates a new immutable Harness version without replacing the Harness ARN.
 resource "terraform_data" "managed_multiplayer_harness_identity" {
-  count = var.multiplayer_proof_enabled ? 1 : 0
+  count = var.managed_runtime_enabled ? 1 : 0
 
   input = {
     region        = var.region
@@ -248,7 +248,7 @@ resource "terraform_data" "managed_multiplayer_harness_identity" {
 }
 
 resource "terraform_data" "managed_multiplayer_harness_configuration" {
-  count = var.multiplayer_proof_enabled ? 1 : 0
+  count = var.managed_runtime_enabled ? 1 : 0
 
   input            = local.configuration_hash
   triggers_replace = [local.configuration_hash]
@@ -267,7 +267,7 @@ resource "terraform_data" "managed_multiplayer_harness_configuration" {
       OAUTH_CREDENTIAL_PROVIDER_ARN = var.oauth_credential_provider_arn
       OAUTH_RETURN_URL              = var.oauth_return_url
       MODEL_ID                      = var.model_id
-      TENANT_SLUG                   = var.pilot_tenant_slug
+      TENANT_SLUG                   = var.tenant_slug
       TRUST_PROFILE                 = var.trust_profile
       CONFIGURATION_HASH            = local.configuration_hash
     }
@@ -277,7 +277,7 @@ resource "terraform_data" "managed_multiplayer_harness_configuration" {
 }
 
 data "external" "harness_state" {
-  count      = var.multiplayer_proof_enabled ? 1 : 0
+  count      = var.managed_runtime_enabled ? 1 : 0
   depends_on = [terraform_data.managed_multiplayer_harness_configuration]
   program    = ["bash", "${path.module}/scripts/read_harness.sh"]
 

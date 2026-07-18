@@ -3,7 +3,7 @@ import {
   harnessManagedProfileParameterName,
   parseHarnessManagedProfile,
   readHarnessReadiness,
-} from "./proof-profile.js";
+} from "./managed-profile.js";
 
 const profile = JSON.stringify({
   tenantSlug: "sleek-squirrel-230",
