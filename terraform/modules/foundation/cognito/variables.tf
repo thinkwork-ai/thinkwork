@@ -204,24 +204,6 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
-variable "custom_auth_lambda_zip" {
-  description = "Path to the Cognito custom-auth challenge Lambda zip file"
-  type        = string
-  default     = ""
-}
-
-variable "custom_auth_lambda_s3_bucket" {
-  description = "S3 bucket containing the Cognito custom-auth challenge Lambda release artifact"
-  type        = string
-  default     = ""
-}
-
-variable "custom_auth_lambda_s3_key" {
-  description = "S3 key for the Cognito custom-auth challenge Lambda release artifact"
-  type        = string
-  default     = ""
-}
-
 variable "pre_token_generation_lambda_s3_bucket" {
   description = "S3 bucket containing the Cognito pre-token client-deny Lambda release artifact"
   type        = string
@@ -241,7 +223,7 @@ variable "denied_app_client_ids" {
 }
 
 variable "api_auth_secret" {
-  description = "Shared signing secret used by the custom-auth challenge Lambda"
+  description = "Deprecated; retained temporarily for module input compatibility"
   type        = string
   sensitive   = true
   default     = ""

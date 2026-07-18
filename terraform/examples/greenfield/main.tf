@@ -863,7 +863,6 @@ module "thinkwork" {
   microsoft_oauth_client_secret               = var.microsoft_oauth_client_secret
   tenant_entra_connections                    = var.tenant_entra_connections
   pre_signup_lambda_zip                       = var.pre_signup_lambda_zip
-  cognito_custom_auth_lambda_zip              = var.cognito_custom_auth_lambda_zip
   lambda_zips_dir                             = var.lambda_zips_dir
   lambda_artifact_bucket                      = var.lambda_artifact_bucket
   lambda_artifact_prefix                      = var.lambda_artifact_prefix

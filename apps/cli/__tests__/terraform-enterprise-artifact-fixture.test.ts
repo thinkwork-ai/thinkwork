@@ -112,26 +112,16 @@ describe("enterprise Terraform release artifacts", () => {
     }
   });
 
-  it("Cognito custom auth consumes the same remote release artifacts", () => {
+  it("does not package the retired Cognito custom-auth bridge", () => {
     const variables = read(COGNITO_VARIABLES);
     const cognito = read(COGNITO_MAIN);
     const thinkwork = read(THINKWORK_MAIN);
 
-    expect(variables).toMatch(/variable "custom_auth_lambda_s3_bucket"/);
-    expect(variables).toMatch(/variable "custom_auth_lambda_s3_key"/);
-    expect(cognito).toMatch(/use_remote_custom_auth_artifact\s*=/);
-    expect(cognito).toMatch(
-      /s3_bucket\s*=\s*local\.use_remote_custom_auth_artifact \? var\.custom_auth_lambda_s3_bucket : null/,
+    expect(variables).not.toMatch(/custom_auth_lambda/);
+    expect(cognito).not.toMatch(
+      /cognito-custom-auth|custom_auth_lambda|define_auth_challenge|create_auth_challenge|verify_auth_challenge_response/,
     );
-    expect(cognito).toMatch(
-      /s3_key\s*=\s*local\.use_remote_custom_auth_artifact \? var\.custom_auth_lambda_s3_key : null/,
-    );
-    expect(thinkwork).toMatch(
-      /custom_auth_lambda_s3_bucket\s*=\s*var\.require_lambda_artifacts \? var\.lambda_artifact_bucket : ""/,
-    );
-    expect(thinkwork).toMatch(
-      /custom_auth_lambda_s3_key\s*=\s*var\.require_lambda_artifacts && var\.lambda_artifact_bucket != "" \? "\$\{trim\(trimspace\(var\.lambda_artifact_prefix\), "\/"\)\}\/cognito-custom-auth\.zip" : ""/,
-    );
+    expect(thinkwork).not.toMatch(/cognito-custom-auth|custom_auth_lambda/);
   });
 
   it("dependent routes, queues, schedules, and outputs turn on for remote artifacts", () => {

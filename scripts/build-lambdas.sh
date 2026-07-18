@@ -151,8 +151,6 @@ build_handler "cognito-pre-signup" \
 build_handler "cognito-pre-token-client-deny" \
   "$REPO_ROOT/packages/api/src/handlers/cognito-pre-token-client-deny.ts"
 
-build_handler "cognito-custom-auth" \
-  "$REPO_ROOT/packages/api/src/handlers/cognito-custom-auth.ts"
 
 build_handler "public-auth-options" \
   "$REPO_ROOT/packages/api/src/handlers/public-auth-options.ts"

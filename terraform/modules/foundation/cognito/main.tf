@@ -7,13 +7,9 @@
 ################################################################################
 
 locals {
-  create                          = var.create_cognito
-  create_pre_signup               = local.create && var.pre_signup_lambda_zip != ""
-  use_local_custom_auth_artifact  = trimspace(var.custom_auth_lambda_zip) != ""
-  use_remote_custom_auth_artifact = trimspace(var.custom_auth_lambda_s3_bucket) != ""
-  custom_auth_artifact_count      = (local.use_local_custom_auth_artifact ? 1 : 0) + (local.use_remote_custom_auth_artifact ? 1 : 0)
-  create_custom_auth              = local.create && local.custom_auth_artifact_count == 1
-  create_pre_token_generation     = local.create && trimspace(var.pre_token_generation_lambda_s3_bucket) != "" && trimspace(var.pre_token_generation_lambda_s3_key) != ""
+  create                      = var.create_cognito
+  create_pre_signup           = local.create && var.pre_signup_lambda_zip != ""
+  create_pre_token_generation = local.create && trimspace(var.pre_token_generation_lambda_s3_bucket) != "" && trimspace(var.pre_token_generation_lambda_s3_key) != ""
 
   user_pool_id     = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
   user_pool_arn    = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
@@ -97,22 +93,6 @@ locals {
     }
   ]...)
   auth_routes = merge(local.static_auth_routes, local.tenant_auth_routes)
-}
-
-resource "terraform_data" "custom_auth_artifact_validation" {
-  input = local.custom_auth_artifact_count
-
-  lifecycle {
-    precondition {
-      condition     = local.custom_auth_artifact_count <= 1
-      error_message = "Set only one Cognito custom-auth Lambda artifact source: custom_auth_lambda_zip or custom_auth_lambda_s3_bucket/custom_auth_lambda_s3_key."
-    }
-
-    precondition {
-      condition     = !local.use_remote_custom_auth_artifact || trimspace(var.custom_auth_lambda_s3_key) != ""
-      error_message = "custom_auth_lambda_s3_key must be set when custom_auth_lambda_s3_bucket is set."
-    }
-  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -213,69 +193,6 @@ resource "aws_lambda_permission" "cognito_pre_token_generation" {
 }
 
 ################################################################################
-# Custom Auth Challenge Lambda
-################################################################################
-
-resource "aws_iam_role" "custom_auth" {
-  count = local.create_custom_auth ? 1 : 0
-  # Release deployments use a distinct managed name so the first convergent
-  # apply does not collide with custom-auth Lambdas created during the legacy
-  # manual rollout. Local source deployments retain the original name.
-  name = local.use_remote_custom_auth_artifact ? "thinkwork-${var.stage}-cognito-custom-auth-release-role" : "thinkwork-${var.stage}-cognito-custom-auth-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "custom_auth_basic" {
-  count      = local.create_custom_auth ? 1 : 0
-  role       = aws_iam_role.custom_auth[0].name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_lambda_function" "custom_auth" {
-  count         = local.create_custom_auth ? 1 : 0
-  function_name = local.use_remote_custom_auth_artifact ? "thinkwork-${var.stage}-cognito-custom-auth-release" : "thinkwork-${var.stage}-cognito-custom-auth"
-  filename      = local.use_local_custom_auth_artifact ? var.custom_auth_lambda_zip : null
-  s3_bucket     = local.use_remote_custom_auth_artifact ? var.custom_auth_lambda_s3_bucket : null
-  s3_key        = local.use_remote_custom_auth_artifact ? var.custom_auth_lambda_s3_key : null
-  handler       = "index.handler"
-  runtime       = "nodejs20.x"
-  timeout       = 10
-  role          = aws_iam_role.custom_auth[0].arn
-
-  environment {
-    variables = {
-      API_AUTH_SECRET = var.api_auth_secret
-    }
-  }
-
-  source_code_hash = local.use_local_custom_auth_artifact ? filebase64sha256(var.custom_auth_lambda_zip) : null
-
-  lifecycle {
-    precondition {
-      condition     = var.api_auth_secret != ""
-      error_message = "A Cognito custom-auth Lambda artifact requires api_auth_secret so custom-auth challenges can be verified."
-    }
-  }
-}
-
-resource "aws_lambda_permission" "cognito_custom_auth" {
-  count         = local.create_custom_auth ? 1 : 0
-  statement_id  = "AllowCognitoInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.custom_auth[0].function_name
-  principal     = "cognito-idp.amazonaws.com"
-  source_arn    = aws_cognito_user_pool.main[0].arn
-}
-
-################################################################################
 # User Pool
 ################################################################################
 
@@ -368,13 +285,9 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   dynamic "lambda_config" {
-    for_each = local.create_pre_signup || local.create_custom_auth || local.create_pre_token_generation ? [1] : []
+    for_each = local.create_pre_signup || local.create_pre_token_generation ? [1] : []
     content {
-      pre_sign_up                    = local.create_pre_signup ? aws_lambda_function.pre_signup[0].arn : null
-      define_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
-      create_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
-      verify_auth_challenge_response = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
-
+      pre_sign_up = local.create_pre_signup ? aws_lambda_function.pre_signup[0].arn : null
       dynamic "pre_token_generation_config" {
         for_each = local.create_pre_token_generation ? [1] : []
         content {
