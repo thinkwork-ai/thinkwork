@@ -84,7 +84,6 @@ const defaultDependencies: AppSyncSubscriptionAuthorizerDependencies = {
     const route = await resolveCognitoRouteProvenance({
       userPoolId: poolId,
       appClientId: claims.appClientId,
-      cognitoSub: claims.cognitoSub,
     });
     const auth: AuthResult = {
       principalId: claims.cognitoSub,

@@ -147,7 +147,6 @@ export async function verifyCognitoApplicationToken(
     ).resolveCognitoRouteProvenance({
       userPoolId: poolId,
       appClientId,
-      cognitoSub: payload.sub,
     }),
   };
 }

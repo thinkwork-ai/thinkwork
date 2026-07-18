@@ -16,9 +16,8 @@ const CONNECTION_KINDS = new Set([
   "google",
   "microsoft_organizations",
   "microsoft_tenant",
-  "legacy_workos",
 ]);
-const LIFECYCLE_STATES = new Set(["coexistence", "native", "denied"]);
+const LIFECYCLE_STATES = new Set(["native", "denied"]);
 const CLIENT_FAMILIES = new Set(["web", "mobile", "desktop", "cli"]);
 
 export interface SafeAuthConnectionMetadata {
@@ -26,7 +25,7 @@ export interface SafeAuthConnectionMetadata {
   providerKey: string;
   providerKind: string;
   displayName: string;
-  lifecycleState: "coexistence" | "native" | "denied";
+  lifecycleState: "native" | "denied";
   cognitoUserPoolId: string;
   cognitoIdentityProviderName: string;
   issuerUrl?: string;
@@ -51,7 +50,7 @@ export interface SafeAuthRouteClientMetadata {
   explicitAuthFlows: string[];
   redirectUris: string[];
   logoutUris: string[];
-  lifecycleState: "coexistence" | "native" | "denied";
+  lifecycleState: "native" | "denied";
   resourceArn?: string;
 }
 

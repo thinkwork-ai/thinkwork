@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
 import {
   authProviderResources,
@@ -8,7 +8,6 @@ import {
   tenantMembers,
   userAuthIdentities,
   users,
-  workosAuthSessions,
 } from "@thinkwork/database-pg/schema";
 
 import { db } from "./db.js";
@@ -21,18 +20,11 @@ export interface CognitoRouteProvenance {
   routeKey: string;
   clientFamily: string;
   appClientId: string;
-  lifecycleState: "native" | "coexistence";
+  lifecycleState: "native";
   connectionId: string;
   connectionKey: string;
   providerKind: string;
   providerIssuer: string | null;
-  /** Present only for a bounded, currently active WorkOS coexistence session. */
-  coexistenceIdentity?: {
-    sessionId: string;
-    userId: string;
-    tenantId: string;
-    tenantReferenceId: string;
-  };
 }
 
 export interface RouteAdmissionCandidate {
@@ -81,14 +73,6 @@ export interface TenantConnectionReference {
   validationStatus: string;
 }
 
-export interface CoexistenceSessionCandidate {
-  sessionId: string;
-  userId: string;
-  tenantId: string;
-  tenantReferenceId: string;
-  authProviderResourceId: string;
-}
-
 export interface AuthAdmissionRepository {
   loadRouteCandidates(
     userPoolId: string,
@@ -101,10 +85,6 @@ export interface AuthAdmissionRepository {
   loadCompatibilityIdentities(
     cognitoSub: string,
   ): Promise<IdentityAdmissionCandidate[]>;
-  loadActiveCoexistenceSessions(
-    cognitoSub: string,
-    now: Date,
-  ): Promise<CoexistenceSessionCandidate[]>;
   loadMemberships(
     userId: string,
     requestedTenantId?: string,
@@ -137,7 +117,6 @@ export class AuthAdmissionError extends Error {
 
 export function evaluateRouteAdmission(
   candidates: RouteAdmissionCandidate[],
-  coexistenceSessions: CoexistenceSessionCandidate[] = [],
 ): CognitoRouteProvenance {
   const admittedNative = candidates.filter((candidate) => {
     if (
@@ -153,72 +132,35 @@ export function evaluateRouteAdmission(
     }
     return true;
   });
-  const admittedCoexistence = candidates.flatMap((candidate) => {
-    if (
-      candidate.routeLifecycleState !== "coexistence" ||
-      candidate.connectionLifecycleState !== "coexistence" ||
-      candidate.providerKind !== "legacy_workos" ||
-      !VALIDATION_STATES.has(candidate.routeValidationStatus) ||
-      !VALIDATION_STATES.has(candidate.connectionValidationStatus) ||
-      candidate.providerNames.length !== 1 ||
-      candidate.providerNames[0] !== candidate.identityProviderName ||
-      !candidate.connectionAppClientIds.includes(candidate.appClientId)
-    ) {
-      return [];
-    }
-    const sessions = coexistenceSessions.filter(
-      (session) => session.authProviderResourceId === candidate.connectionId,
-    );
-    const distinctBindings = new Map(
-      sessions.map((session) => [
-        `${session.userId}|${session.tenantId}|${session.authProviderResourceId}`,
-        session,
-      ]),
-    );
-    if (distinctBindings.size !== 1) return [];
-    return [{ candidate, session: [...distinctBindings.values()][0]! }];
-  });
-  const admittedCount = admittedNative.length + admittedCoexistence.length;
-  if (admittedCount !== 1) {
+  if (admittedNative.length !== 1) {
     throw new AuthAdmissionError(
-      admittedCount === 0 ? "unknown_client" : "ambiguous_client",
+      admittedNative.length === 0 ? "unknown_client" : "ambiguous_client",
       "Cognito app client is not admitted to exactly one authentication route.",
     );
   }
-  const coexistence = admittedCoexistence[0];
-  const candidate = admittedNative[0] ?? coexistence!.candidate;
+  const candidate = admittedNative[0]!;
   return {
     routeClientId: candidate.routeClientId,
     routeKey: candidate.routeKey,
     clientFamily: candidate.clientFamily,
     appClientId: candidate.appClientId,
-    lifecycleState: coexistence ? "coexistence" : "native",
+    lifecycleState: "native",
     connectionId: candidate.connectionId,
     connectionKey: candidate.connectionKey,
     providerKind: candidate.providerKind,
     providerIssuer: candidate.providerIssuer,
-    ...(coexistence
-      ? {
-          coexistenceIdentity: {
-            sessionId: coexistence.session.sessionId,
-            userId: coexistence.session.userId,
-            tenantId: coexistence.session.tenantId,
-            tenantReferenceId: coexistence.session.tenantReferenceId,
-          },
-        }
-      : {}),
   };
 }
 
 export async function resolveCognitoRouteProvenance(
-  args: { userPoolId: string; appClientId: string; cognitoSub: string },
+  args: { userPoolId: string; appClientId: string },
   repository: AuthAdmissionRepository = createDbAuthAdmissionRepository(),
 ): Promise<CognitoRouteProvenance> {
-  const [candidates, coexistenceSessions] = await Promise.all([
-    repository.loadRouteCandidates(args.userPoolId, args.appClientId),
-    repository.loadActiveCoexistenceSessions(args.cognitoSub, new Date()),
-  ]);
-  return evaluateRouteAdmission(candidates, coexistenceSessions);
+  const candidates = await repository.loadRouteCandidates(
+    args.userPoolId,
+    args.appClientId,
+  );
+  return evaluateRouteAdmission(candidates);
 }
 
 export function evaluateTenantAdmission(args: {
@@ -253,8 +195,6 @@ export function evaluateTenantAdmission(args: {
   const memberships = args.memberships.filter((membership) => {
     if (
       membership.status !== "active" ||
-      (args.route.coexistenceIdentity &&
-        membership.tenantId !== args.route.coexistenceIdentity.tenantId) ||
       (args.requestedTenantId && membership.tenantId !== args.requestedTenantId)
     ) {
       return false;
@@ -303,20 +243,10 @@ export async function admitCognitoTenant(
       "Cognito route provenance is required for tenant admission.",
     );
   }
-  let identities = auth.route.coexistenceIdentity
-    ? [
-        {
-          identityId: `workos-session:${auth.route.coexistenceIdentity.sessionId}`,
-          userId: auth.route.coexistenceIdentity.userId,
-          identityTenantId: auth.route.coexistenceIdentity.tenantId,
-          authProviderResourceId: auth.route.connectionId,
-          status: "active",
-        },
-      ]
-    : await repository.loadIdentityCandidates(
-        auth.cognitoIssuer,
-        auth.principalId,
-      );
+  let identities = await repository.loadIdentityCandidates(
+    auth.cognitoIssuer,
+    auth.principalId,
+  );
   if (identities.length === 0 && auth.route.providerKind === "local") {
     const compatibility = await repository.loadCompatibilityIdentities(
       auth.principalId,
@@ -347,8 +277,7 @@ export async function admitCognitoTenant(
       requestedTenantId,
     });
   }
-  const effectiveTenantId =
-    requestedTenantId ?? auth.route.coexistenceIdentity?.tenantId;
+  const effectiveTenantId = requestedTenantId;
   const memberships = await repository.loadMemberships(
     activeIdentity[0].userId,
     effectiveTenantId,
@@ -379,12 +308,6 @@ function tenantPolicyAllowsConnection(
       reference.lifecycleState === "native" &&
       VALIDATION_STATES.has(reference.validationStatus),
   );
-  const enabledCoexistenceReferences = references.filter(
-    (reference) =>
-      reference.status === "enabled" &&
-      reference.lifecycleState === "coexistence" &&
-      VALIDATION_STATES.has(reference.validationStatus),
-  );
   switch (route.providerKind) {
     case "local":
       return policy.localPasswordEnabled;
@@ -397,13 +320,6 @@ function tenantPolicyAllowsConnection(
     case "microsoft_tenant":
       return enabledNativeReferences.some(
         (reference) => reference.connectionId === route.connectionId,
-      );
-    case "legacy_workos":
-      return (
-        route.lifecycleState === "coexistence" &&
-        enabledCoexistenceReferences.some(
-          (reference) => reference.connectionId === route.connectionId,
-        )
       );
     default:
       return false;
@@ -491,26 +407,6 @@ export function createDbAuthAdmissionRepository(
         authProviderResourceId: null,
         status: "active",
       }));
-    },
-    async loadActiveCoexistenceSessions(cognitoSub, now) {
-      return database
-        .select({
-          sessionId: workosAuthSessions.id,
-          userId: workosAuthSessions.user_id,
-          tenantId: workosAuthSessions.tenant_id,
-          tenantReferenceId:
-            workosAuthSessions.tenant_auth_provider_reference_id,
-          authProviderResourceId: workosAuthSessions.auth_provider_resource_id,
-        })
-        .from(workosAuthSessions)
-        .where(
-          and(
-            eq(workosAuthSessions.cognito_principal_id, cognitoSub),
-            eq(workosAuthSessions.status, "active"),
-            gt(workosAuthSessions.expires_at, now),
-          ),
-        )
-        .orderBy(desc(workosAuthSessions.created_at));
     },
     async loadMemberships(userId, requestedTenantId) {
       return database

@@ -8,6 +8,7 @@
 
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { sql } from "drizzle-orm";
 import {
   CognitoIdentityProviderClient,
   ListUsersCommand,
@@ -69,9 +70,26 @@ export interface BackfillFinding {
   reasonCode: string;
 }
 
+export interface WorkosDirectoryUser {
+  id: string;
+}
+
+export interface WorkosSessionBinding {
+  workosUserId: string;
+  cognitoSub: string;
+}
+
+export interface WorkosDirectoryDisposition {
+  userDigest: string;
+  status: "mapped" | "quarantined" | "unresolved";
+  reasonCode: string | null;
+}
+
 export interface IdentityBackfillPlan {
   entries: BackfillPlanEntry[];
   findings: BackfillFinding[];
+  workosDirectoryComplete: boolean;
+  workosDispositions: WorkosDirectoryDisposition[];
   inventoryFingerprint: string;
 }
 
@@ -137,6 +155,9 @@ export function buildIdentityBackfillPlan(args: {
   cognitoUsers: CognitoInventoryUser[];
   connections: BackfillConnection[];
   cognitoIssuer: string;
+  workosDirectoryUsers?: WorkosDirectoryUser[];
+  workosSessionBindings?: WorkosSessionBinding[];
+  workosDirectoryComplete?: boolean;
 }): IdentityBackfillPlan {
   const entries: BackfillPlanEntry[] = [];
   const findings: BackfillFinding[] = [];
@@ -260,6 +281,46 @@ export function buildIdentityBackfillPlan(args: {
 
   entries.sort((a, b) => a.cognitoSub.localeCompare(b.cognitoSub));
   findings.sort((a, b) => a.subjectDigest.localeCompare(b.subjectDigest));
+  const entryBySub = new Map(entries.map((entry) => [entry.cognitoSub, entry]));
+  const bindingsByWorkosUser = new Map<string, Set<string>>();
+  for (const binding of args.workosSessionBindings ?? []) {
+    const subjects =
+      bindingsByWorkosUser.get(binding.workosUserId) ?? new Set();
+    subjects.add(binding.cognitoSub);
+    bindingsByWorkosUser.set(binding.workosUserId, subjects);
+  }
+  const workosDispositions = (args.workosDirectoryUsers ?? [])
+    .map((user): WorkosDirectoryDisposition => {
+      const subjects = [...(bindingsByWorkosUser.get(user.id) ?? [])];
+      if (subjects.length === 0) {
+        return {
+          userDigest: digest(user.id),
+          status: "unresolved",
+          reasonCode: "workos_directory_user_without_session_binding",
+        };
+      }
+      if (subjects.length !== 1) {
+        return {
+          userDigest: digest(user.id),
+          status: "unresolved",
+          reasonCode: "workos_directory_user_ambiguous_session_binding",
+        };
+      }
+      const entry = entryBySub.get(subjects[0]!);
+      if (!entry) {
+        return {
+          userDigest: digest(user.id),
+          status: "unresolved",
+          reasonCode: "workos_session_subject_missing_inventory_entry",
+        };
+      }
+      return {
+        userDigest: digest(user.id),
+        status: entry.status === "active" ? "mapped" : "quarantined",
+        reasonCode: entry.reasonCode,
+      };
+    })
+    .sort((a, b) => a.userDigest.localeCompare(b.userDigest));
   const inventoryFingerprint = digest(
     JSON.stringify({
       entries: entries.map((entry) => ({
@@ -269,9 +330,78 @@ export function buildIdentityBackfillPlan(args: {
         reasonCode: entry.reasonCode,
       })),
       findings,
+      workosDirectoryComplete: args.workosDirectoryComplete === true,
+      workosDispositions,
     }),
   );
-  return { entries, findings, inventoryFingerprint };
+  return {
+    entries,
+    findings,
+    workosDirectoryComplete: args.workosDirectoryComplete === true,
+    workosDispositions,
+    inventoryFingerprint,
+  };
+}
+
+export async function listEveryWorkosUser(
+  apiKey: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<WorkosDirectoryUser[]> {
+  const users: WorkosDirectoryUser[] = [];
+  let after: string | undefined;
+  do {
+    const url = new URL("https://api.workos.com/user_management/users");
+    url.searchParams.set("limit", "100");
+    url.searchParams.set("order", "asc");
+    if (after) url.searchParams.set("after", after);
+    const response = await fetchImpl(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `WorkOS user inventory failed with HTTP ${response.status}`,
+      );
+    }
+    const payload = (await response.json()) as {
+      data?: Array<{ id?: unknown }>;
+      list_metadata?: { after?: unknown };
+    };
+    if (!Array.isArray(payload.data)) {
+      throw new Error("WorkOS user inventory returned an invalid data list");
+    }
+    for (const user of payload.data) {
+      if (typeof user.id !== "string" || user.id.length === 0) {
+        throw new Error("WorkOS user inventory returned a user without an id");
+      }
+      users.push({ id: user.id });
+    }
+    after =
+      typeof payload.list_metadata?.after === "string" &&
+      payload.list_metadata.after.length > 0
+        ? payload.list_metadata.after
+        : undefined;
+  } while (after);
+  return users;
+}
+
+async function loadWorkosSessionBindings(): Promise<WorkosSessionBinding[]> {
+  const result = await db.execute<{
+    workos_user_id: string;
+    cognito_principal_id: string;
+  }>(sql`
+    SELECT DISTINCT workos_user_id, cognito_principal_id
+    FROM public.workos_auth_sessions
+  `);
+  const rows =
+    (
+      result as unknown as {
+        rows?: Array<{ workos_user_id: string; cognito_principal_id: string }>;
+      }
+    ).rows ?? [];
+  return rows.map((row) => ({
+    workosUserId: row.workos_user_id,
+    cognitoSub: row.cognito_principal_id,
+  }));
 }
 
 async function listEveryCognitoUser(
@@ -305,8 +435,21 @@ async function main(): Promise<void> {
       "COGNITO_USER_POOL_ID, AWS_REGION, and THINKWORK_STAGE are required",
     );
   }
+  const apply = process.argv.includes("--apply");
+  const workosApiKey = process.env.WORKOS_API_KEY;
+  if (apply && !workosApiKey) {
+    throw new Error(
+      "WORKOS_API_KEY is required with --apply so the inventory includes users absent from local sessions",
+    );
+  }
   const cognitoIssuer = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
-  const [databaseRows, connectionRows, cognitoUsers] = await Promise.all([
+  const [
+    databaseRows,
+    connectionRows,
+    cognitoUsers,
+    workosDirectoryUsers,
+    workosSessionBindings,
+  ] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -328,6 +471,8 @@ async function main(): Promise<void> {
       new CognitoIdentityProviderClient({ region }),
       userPoolId,
     ),
+    workosApiKey ? listEveryWorkosUser(workosApiKey) : Promise.resolve([]),
+    workosApiKey ? loadWorkosSessionBindings() : Promise.resolve([]),
   ]);
   const databaseUsers = databaseRows.flatMap((row) =>
     row.cognitoSub
@@ -339,9 +484,12 @@ async function main(): Promise<void> {
     cognitoUsers,
     connections: connectionRows,
     cognitoIssuer,
+    workosDirectoryUsers,
+    workosSessionBindings,
+    workosDirectoryComplete: Boolean(workosApiKey),
   });
 
-  if (process.argv.includes("--apply")) {
+  if (apply) {
     await db.transaction(async (tx) => {
       await tx
         .insert(authCutoverRuns)
@@ -356,6 +504,19 @@ async function main(): Promise<void> {
               (entry) => entry.status === "quarantined",
             ).length,
             findings: plan.findings,
+            workosDirectoryComplete: plan.workosDirectoryComplete,
+            workosMapped: plan.workosDispositions.filter(
+              (entry) => entry.status === "mapped",
+            ).length,
+            workosQuarantined: plan.workosDispositions.filter(
+              (entry) => entry.status === "quarantined",
+            ).length,
+            workosUnresolved: plan.workosDispositions.filter(
+              (entry) => entry.status === "unresolved",
+            ).length,
+            workosFindings: plan.workosDispositions.filter(
+              (entry) => entry.status !== "mapped",
+            ),
           },
         })
         .onConflictDoNothing();
@@ -412,7 +573,7 @@ async function main(): Promise<void> {
   process.stdout.write(
     `${JSON.stringify(
       {
-        mode: process.argv.includes("--apply") ? "apply" : "dry-run",
+        mode: apply ? "apply" : "dry-run",
         inventoryFingerprint: plan.inventoryFingerprint,
         cognitoUsers: cognitoUsers.length,
         databaseUsers: databaseUsers.length,
@@ -422,6 +583,17 @@ async function main(): Promise<void> {
           (entry) => entry.status === "quarantined",
         ).length,
         unresolved: plan.findings.length,
+        workosDirectoryComplete: plan.workosDirectoryComplete,
+        workosDirectoryUsers: plan.workosDispositions.length,
+        workosMapped: plan.workosDispositions.filter(
+          (entry) => entry.status === "mapped",
+        ).length,
+        workosQuarantined: plan.workosDispositions.filter(
+          (entry) => entry.status === "quarantined",
+        ).length,
+        workosUnresolved: plan.workosDispositions.filter(
+          (entry) => entry.status === "unresolved",
+        ).length,
       },
       null,
       2,

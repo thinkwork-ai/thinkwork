@@ -128,28 +128,10 @@ describe("migration 0173 — auth-provider resources", () => {
     );
   });
 
-  it("exposes admin-safe GraphQL types without client secret values", () => {
-    expect(pluginTypes).toContain("type AuthProviderResource");
-    expect(pluginTypes).toContain("clientSecretConfigured: Boolean!");
-    expect(pluginTypes).toContain("type TenantAuthProviderReference");
-    expect(pluginTypes).toContain("resource: AuthProviderResource!");
-    expect(typeBlock("AuthProviderResource")).not.toContain("clientSecret:");
-    expect(typeBlock("ConfigureWorkosAuthPluginResult")).not.toContain(
-      "clientSecret",
-    );
-    expect(pluginTypes).toContain("input ConfigureWorkosAuthPluginInput");
-    expect(pluginTypes).toContain(
-      "Write-only. Required for first-time setup; omit to keep the existing secret.",
-    );
-    expect(pluginTypes).toContain("clientSecret: String");
+  it("keeps provider resources internal after retiring the WorkOS settings API", () => {
+    expect(pluginTypes).not.toContain("type AuthProviderResource");
+    expect(pluginTypes).not.toContain("type TenantAuthProviderReference");
+    expect(pluginTypes).not.toContain("ConfigureWorkosAuthPlugin");
     expect(pluginTypes).not.toContain("clientSecretRef");
   });
 });
-
-function typeBlock(typeName: string): string {
-  return (
-    pluginTypes.match(
-      new RegExp(`type ${typeName} \\{[\\s\\S]*?\\n\\}`),
-    )?.[0] ?? ""
-  );
-}

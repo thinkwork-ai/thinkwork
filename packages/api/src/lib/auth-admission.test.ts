@@ -48,47 +48,6 @@ describe("Cognito route provenance", () => {
       "ambiguous_client",
     );
   });
-
-  it("admits coexistence only through one active WorkOS session binding", () => {
-    const legacyRoute = {
-      ...routeCandidate({
-        routeKey: "legacy-workos",
-        providerKind: "legacy_workos",
-        identityProviderName: "COGNITO",
-        connectionKey: "workos:legacy",
-      }),
-      routeLifecycleState: "coexistence",
-      connectionLifecycleState: "coexistence",
-    };
-    expectAdmissionCode(
-      () => evaluateRouteAdmission([legacyRoute]),
-      "unknown_client",
-    );
-
-    expect(
-      evaluateRouteAdmission(
-        [legacyRoute],
-        [
-          {
-            sessionId: "session-1",
-            userId: "user-1",
-            tenantId: "tenant-a",
-            tenantReferenceId: "reference-a",
-            authProviderResourceId: legacyRoute.connectionId,
-          },
-        ],
-      ),
-    ).toEqual(
-      expect.objectContaining({
-        lifecycleState: "coexistence",
-        providerKind: "legacy_workos",
-        coexistenceIdentity: expect.objectContaining({
-          userId: "user-1",
-          tenantId: "tenant-a",
-        }),
-      }),
-    );
-  });
 });
 
 describe("tenant admission", () => {
@@ -233,62 +192,6 @@ describe("tenant admission", () => {
             },
           ],
           requestedTenantId: "tenant-a",
-        }),
-      "tenant_not_admitted",
-    );
-  });
-
-  it("keeps a coexistence WorkOS session bound to its exact tenant reference", () => {
-    const route = evaluateRouteAdmission(
-      [
-        {
-          ...routeCandidate({
-            routeKey: "legacy-workos",
-            providerKind: "legacy_workos",
-            identityProviderName: "COGNITO",
-            connectionKey: "workos:legacy",
-          }),
-          routeLifecycleState: "coexistence",
-          connectionLifecycleState: "coexistence",
-        },
-      ],
-      [
-        {
-          sessionId: "session-1",
-          userId: "user-1",
-          tenantId: "tenant-a",
-          tenantReferenceId: "reference-a",
-          authProviderResourceId: "connection-legacy-workos",
-        },
-      ],
-    );
-    const legacyReference = {
-      tenantId: "tenant-a",
-      connectionId: route.connectionId,
-      providerKind: "legacy_workos",
-      status: "enabled",
-      lifecycleState: "coexistence",
-      validationStatus: "valid",
-    };
-    expect(
-      evaluateTenantAdmission({
-        route,
-        identities: [identity(route)],
-        memberships: [membership("tenant-a"), membership("tenant-b")],
-        policies: [policy("tenant-a"), policy("tenant-b")],
-        references: [legacyReference],
-        requestedTenantId: "tenant-a",
-      }).tenantId,
-    ).toBe("tenant-a");
-    expectAdmissionCode(
-      () =>
-        evaluateTenantAdmission({
-          route,
-          identities: [identity(route)],
-          memberships: [membership("tenant-a"), membership("tenant-b")],
-          policies: [policy("tenant-a"), policy("tenant-b")],
-          references: [legacyReference],
-          requestedTenantId: "tenant-b",
         }),
       "tenant_not_admitted",
     );

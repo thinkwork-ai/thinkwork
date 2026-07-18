@@ -43,11 +43,7 @@ export const AUTH_PROVIDER_PUBLIC_OPTION_MODES = [
 export type AuthProviderPublicOptionMode =
   (typeof AUTH_PROVIDER_PUBLIC_OPTION_MODES)[number];
 
-export const AUTH_CONNECTION_LIFECYCLE_STATES = [
-  "coexistence",
-  "native",
-  "denied",
-] as const;
+export const AUTH_CONNECTION_LIFECYCLE_STATES = ["native", "denied"] as const;
 
 export type AuthConnectionLifecycleState =
   (typeof AUTH_CONNECTION_LIFECYCLE_STATES)[number];
@@ -105,10 +101,10 @@ export const authProviderResources = pgTable(
       .primaryKey()
       .default(sql`gen_random_uuid()`),
     provider_key: text("provider_key").notNull(),
-    connection_key: text("connection_key").notNull().default("legacy"),
-    provider_kind: text("provider_kind").notNull().default("legacy_workos"),
+    connection_key: text("connection_key").notNull(),
+    provider_kind: text("provider_kind").notNull(),
     display_name: text("display_name").notNull(),
-    lifecycle_state: text("lifecycle_state").notNull().default("coexistence"),
+    lifecycle_state: text("lifecycle_state").notNull().default("native"),
     cognito_user_pool_id: text("cognito_user_pool_id").notNull(),
     cognito_app_client_ids: jsonb("cognito_app_client_ids")
       .$type<string[]>()
@@ -174,7 +170,7 @@ export const authProviderResources = pgTable(
     ),
     check(
       "auth_provider_resources_lifecycle_state_allowed",
-      sql`${table.lifecycle_state} IN ('coexistence', 'native', 'denied')`,
+      sql`${table.lifecycle_state} IN ('native', 'denied')`,
     ),
     check(
       "auth_provider_resources_public_option_mode_allowed",
@@ -366,7 +362,7 @@ export const authRouteClients = pgTable(
     ),
     check(
       "auth_route_clients_lifecycle_allowed",
-      sql`${table.lifecycle_state} IN ('coexistence', 'native', 'denied')`,
+      sql`${table.lifecycle_state} IN ('native', 'denied')`,
     ),
     check(
       "auth_route_clients_validation_allowed",

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildIdentityBackfillPlan,
+  listEveryWorkosUser,
   parseCognitoInventoryUser,
   type BackfillConnection,
   type CognitoInventoryUser,
@@ -189,5 +190,76 @@ describe("Cognito auth identity backfill", () => {
       "raw-duplicate-subject",
     );
     expect(JSON.stringify(plan.findings)).not.toContain("raw-unbound-subject");
+  });
+
+  it("classifies every WorkOS directory user from exact session-to-Cognito evidence", () => {
+    const plan = buildIdentityBackfillPlan({
+      databaseUsers: [
+        dbUser("mapped", "sub-mapped"),
+        dbUser("quarantined", "sub-quarantined"),
+      ],
+      cognitoUsers: [
+        cognitoUser("sub-mapped"),
+        cognitoUser("sub-quarantined", [
+          { providerName: "Unknown", userId: "external" },
+        ]),
+      ],
+      connections,
+      cognitoIssuer: issuer,
+      workosDirectoryComplete: true,
+      workosDirectoryUsers: [
+        { id: "workos-mapped" },
+        { id: "workos-quarantined" },
+        { id: "workos-unbound" },
+      ],
+      workosSessionBindings: [
+        { workosUserId: "workos-mapped", cognitoSub: "sub-mapped" },
+        {
+          workosUserId: "workos-quarantined",
+          cognitoSub: "sub-quarantined",
+        },
+      ],
+    });
+
+    expect(plan.workosDirectoryComplete).toBe(true);
+    expect(plan.workosDispositions.map((entry) => entry.status).sort()).toEqual(
+      ["mapped", "quarantined", "unresolved"],
+    );
+    expect(JSON.stringify(plan.workosDispositions)).not.toContain(
+      "workos-unbound",
+    );
+  });
+
+  it("paginates the WorkOS directory with bearer auth and retains ids only", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "user-1", email: "private@example.com" }],
+            list_metadata: { after: "user-1" },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "user-2", email: "private2@example.com" }],
+            list_metadata: { after: null },
+          }),
+          { status: 200 },
+        ),
+      );
+
+    await expect(listEveryWorkosUser("secret", fetchMock)).resolves.toEqual([
+      { id: "user-1" },
+      { id: "user-2" },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("after=user-1");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: { Authorization: "Bearer secret" },
+    });
   });
 });

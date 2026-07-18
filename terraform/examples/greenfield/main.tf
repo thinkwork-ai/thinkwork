@@ -358,12 +358,6 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
-variable "cognito_custom_auth_lambda_zip" {
-  description = "Path to the Cognito custom-auth challenge Lambda zip"
-  type        = string
-  default     = ""
-}
-
 variable "lambda_zips_dir" {
   description = "Local directory containing Lambda zip artifacts (from pnpm build:lambdas)"
   type        = string
