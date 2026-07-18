@@ -13,6 +13,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -265,6 +266,82 @@ export const harnessGovernedToolExecutions = pgTable(
     check(
       "harness_governed_tool_state_allowed",
       sql`${table.state} IN ('claimed','completed','failed','ambiguous')`,
+    ),
+  ],
+);
+
+/**
+ * Append-only target-side evidence for tools executed outside the Harness
+ * response stream. Each idempotency key owns exactly one `started` event and
+ * at most one terminal event; a database trigger enforces correlation and
+ * rejects mutation of existing evidence.
+ *
+ * Preview columns are populated only through the allowlist redaction boundary
+ * in packages/api. Credential material has no column in this contract.
+ */
+export const harnessToolExecutionEvents = pgTable(
+  "harness_tool_execution_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    thread_id: uuid("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    turn_id: uuid("turn_id")
+      .notNull()
+      .references(() => threadTurns.id, { onDelete: "cascade" }),
+    principal_type: text("principal_type").notNull(),
+    principal_id: text("principal_id").notNull(),
+    tool_use_id: text("tool_use_id").notNull(),
+    operation: text("operation").notNull(),
+    policy_revision: text("policy_revision").notNull(),
+    policy_decision_id: text("policy_decision_id"),
+    idempotency_key: text("idempotency_key").notNull(),
+    credential_owner_alias: text("credential_owner_alias"),
+    event_type: text("event_type").notNull(),
+    input_preview: jsonb("input_preview").$type<Record<string, unknown>>(),
+    output_preview: jsonb("output_preview").$type<Record<string, unknown>>(),
+    error_preview: jsonb("error_preview").$type<Record<string, unknown>>(),
+    provider_request_id: text("provider_request_id"),
+    duration_ms: integer("duration_ms"),
+    provider_cost_usd: numeric("provider_cost_usd", {
+      precision: 18,
+      scale: 8,
+    }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_harness_tool_execution_started")
+      .on(table.tenant_id, table.idempotency_key)
+      .where(sql`${table.event_type} = 'started'`),
+    uniqueIndex("uq_harness_tool_execution_terminal")
+      .on(table.tenant_id, table.idempotency_key)
+      .where(sql`${table.event_type} IN ('completed','failed','uncertain')`),
+    index("idx_harness_tool_execution_turn").on(
+      table.tenant_id,
+      table.thread_id,
+      table.turn_id,
+      table.id,
+    ),
+    check(
+      "harness_tool_execution_principal_type_allowed",
+      sql`${table.principal_type} IN ('user','service')`,
+    ),
+    check(
+      "harness_tool_execution_event_type_allowed",
+      sql`${table.event_type} IN ('started','completed','failed','uncertain')`,
+    ),
+    check(
+      "harness_tool_execution_measurements_nonnegative",
+      sql`(${table.duration_ms} IS NULL OR ${table.duration_ms} >= 0) AND (${table.provider_cost_usd} IS NULL OR ${table.provider_cost_usd} >= 0)`,
+    ),
+    check(
+      "harness_tool_execution_event_shape",
+      sql`(${table.event_type} = 'started' AND ${table.input_preview} IS NOT NULL AND ${table.output_preview} IS NULL AND ${table.error_preview} IS NULL AND ${table.provider_request_id} IS NULL AND ${table.duration_ms} IS NULL AND ${table.provider_cost_usd} IS NULL) OR (${table.event_type} IN ('completed','failed','uncertain') AND ${table.input_preview} IS NULL)`,
     ),
   ],
 );
