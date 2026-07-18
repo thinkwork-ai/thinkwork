@@ -14,14 +14,18 @@ describe("AgentCore turn assertion Terraform fixture", () => {
   const handlers = read("terraform/modules/app/lambda-api/handlers.tf");
   const oauth = read("terraform/modules/app/lambda-api/mcp-oauth.tf");
   const groupedIam = read("terraform/modules/app/lambda-api/iam-grouped.tf");
-  const harnessModule = read(
-    "terraform/modules/app/agentcore-harness/main.tf",
-  );
+  const harnessModule = read("terraform/modules/app/agentcore-harness/main.tf");
   const harnessVariables = read(
     "terraform/modules/app/agentcore-harness/variables.tf",
   );
   const harnessOutputs = read(
     "terraform/modules/app/agentcore-harness/outputs.tf",
+  );
+  const harnessLifecycle = read(
+    "terraform/modules/app/agentcore-harness/scripts/harness-lifecycle.mjs",
+  );
+  const gatewayReconciler = read(
+    "terraform/modules/app/agentcore-gateway/scripts/reconcile_gateway.sh",
   );
   const thinkworkOutputs = read("terraform/modules/thinkwork/outputs.tf");
   const identity = read("terraform/modules/app/agentcore-identity/main.tf");
@@ -150,5 +154,23 @@ describe("AgentCore turn assertion Terraform fixture", () => {
     expect(thinkworkOutputs).toMatch(
       /output "agentcore_harness_proof_arn" \{[\s\S]*?Deprecated: use agentcore_harness_arn/,
     );
+  });
+
+  it("keeps canonical dynamic workspace skills wired through Gateway, Cedar, Lambda, and Harness", () => {
+    for (const operation of ["list_workspace_skills", "load_workspace_skill"]) {
+      expect(gatewayReconciler).toContain(`operationId: "${operation}"`);
+      expect(gatewayReconciler).toContain(
+        `AgentCore::Action::"\${TARGET_NAME}___${operation}"`,
+      );
+      expect(harnessModule).toContain(`OwnerProof___${operation}`);
+      expect(harnessLifecycle).toContain(operation);
+    }
+    expect(handlers).toContain(
+      '"POST /agentcore/capabilities/workspace/skills/list"',
+    );
+    expect(handlers).toContain(
+      '"POST /agentcore/capabilities/workspace/skills/load"',
+    );
+    expect(handlers).toContain("platform-tools-v2-workspace-skills");
   });
 });

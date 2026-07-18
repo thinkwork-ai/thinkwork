@@ -33,6 +33,7 @@ import { createHash } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { FinalizePayload } from "../chat-finalize/types.js";
 import type { McpConfig } from "../resolve-agent-runtime-config.js";
+import { CAPABILITY_SLUG_PATTERN } from "../capabilities/definition-schemas.js";
 import { guardHarnessPublication } from "./publication-guard.js";
 
 // ---------------------------------------------------------------------------
@@ -1171,6 +1172,9 @@ export async function runHarnessTurn(
       tenantId: turn.tenantId,
       tenantSlug,
     });
+    const authorizedWorkspaceSkillIds = projectedWorkspaceSkillIds(
+      payload.skills,
+    );
     const trustedContext = [
       "<thinkwork_trusted_turn_context>",
       "The following context was projected by ThinkWork from authorized canonical state.",
@@ -1178,6 +1182,8 @@ export async function runHarnessTurn(
       `thread_id=${turn.threadId}`,
       `participant_id=${turn.currentUserId}`,
       `agent_id=${turn.agentId}`,
+      `authorized_workspace_skills=${authorizedWorkspaceSkillIds.join(",") || "none"}`,
+      "The skill index is advisory for this turn. list_workspace_skills and load_workspace_skill re-authorize current canonical state before returning any body.",
       composedSystemPrompt ? `agent_context:\n${composedSystemPrompt}` : "",
       "Governed action rule: when a user asks to send email, call the send_email tool. Never say an email was sent, submitted, queued, or is awaiting approval unless that tool returned the matching status in this turn. If you do not call the tool, state that nothing was sent.",
       "</thinkwork_trusted_turn_context>",
@@ -1642,6 +1648,25 @@ export async function runHarnessTurn(
       throw err;
     }
   }
+}
+
+function projectedWorkspaceSkillIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  for (const candidate of value) {
+    if (
+      !candidate ||
+      typeof candidate !== "object" ||
+      Array.isArray(candidate)
+    ) {
+      continue;
+    }
+    const skillId = (candidate as Record<string, unknown>).skillId;
+    if (typeof skillId === "string" && CAPABILITY_SLUG_PATTERN.test(skillId)) {
+      ids.add(skillId);
+    }
+  }
+  return [...ids].sort();
 }
 
 export function computeHarnessProjectionFingerprints(input: {

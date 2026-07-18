@@ -104,6 +104,21 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
       inboxItemId: "inbox-1",
       approvalUrl: "/approvals/inbox-1",
     })),
+    listWorkspaceSkills: vi.fn(async () => ({
+      manifestFingerprint: "manifest-1",
+      skills: [
+        { slug: "customer-qbr", scope: "space" as const },
+        { slug: "private-notes", scope: "user" as const },
+      ],
+    })),
+    loadWorkspaceSkill: vi.fn(async (_context, slug) => ({
+      slug,
+      scope: "space" as const,
+      content: "# Customer QBR\nUse CRM evidence and charts.\n",
+      contentSha256: "a".repeat(64),
+      sizeBytes: 47,
+      manifestFingerprint: "manifest-1",
+    })),
     claimEmail: vi.fn<HarnessPlatformToolsDeps["claimEmail"]>(async () => ({
       state: "claimed",
     })),
@@ -260,6 +275,101 @@ describe("Harness governed platform tools target", () => {
     expect(result.statusCode).toBe(403);
     expect(JSON.parse(result.body!)).toEqual({ error: "brain_not_authorized" });
     expect(deps.queryBrain).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("lists only the exact user's current canonical skill index", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/workspace/skills/list", {
+        tenant_id: "tenant-1",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body!)).toEqual({
+      manifestFingerprint: "manifest-1",
+      skills: [
+        { slug: "customer-qbr", scope: "space" },
+        { slug: "private-notes", scope: "user" },
+      ],
+    });
+    expect(deps.listWorkspaceSkills).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1", turnId: "turn-1" }),
+    );
+    expect(rows.map((row) => row.event_type)).toEqual(["started", "completed"]);
+    expect(rows[1]?.output_preview).toEqual({ skillCount: 2 });
+  });
+
+  it("loads one canonical skill body and records only non-content evidence", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/workspace/skills/load", {
+        tenant_id: "tenant-1",
+        skill: "customer-qbr",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body!)).toEqual({
+      slug: "customer-qbr",
+      scope: "space",
+      content: "# Customer QBR\nUse CRM evidence and charts.\n",
+      contentSha256: "a".repeat(64),
+      sizeBytes: 47,
+      manifestFingerprint: "manifest-1",
+    });
+    expect(deps.loadWorkspaceSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1", turnId: "turn-1" }),
+      "customer-qbr",
+    );
+    expect(rows.map((row) => row.event_type)).toEqual(["started", "completed"]);
+    expect(JSON.stringify(rows)).not.toContain("Use CRM evidence");
+    expect(rows[1]?.output_preview).toEqual({
+      slug: "customer-qbr",
+      scope: "space",
+      sizeBytes: 47,
+      contentSha256: "a".repeat(64),
+      manifestFingerprint: "manifest-1",
+    });
+  });
+
+  it("does not collapse an unauthorized skill into a model-invented success", async () => {
+    const { handler, rows } = setup({
+      loadWorkspaceSkill: vi.fn(async () => {
+        const error = new Error("denied") as Error & { code: string };
+        error.code = "workspace_skill_not_authorized";
+        throw error;
+      }),
+    });
+    const result = await handler(
+      event("/agentcore/capabilities/workspace/skills/load", {
+        tenant_id: "tenant-1",
+        skill: "alice-private",
+      }),
+    );
+
+    expect(result.statusCode).toBe(403);
+    expect(JSON.parse(result.body!)).toEqual({
+      error: "workspace_skill_not_authorized",
+    });
+    expect(rows.map((row) => row.event_type)).toEqual(["started", "failed"]);
+  });
+
+  it("rejects path traversal before the workspace reader is called", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/workspace/skills/load", {
+        tenant_id: "tenant-1",
+        skill: "../private",
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body!)).toEqual({
+      error: "invalid_workspace_skill",
+    });
+    expect(deps.loadWorkspaceSkill).not.toHaveBeenCalled();
     expect(rows).toHaveLength(0);
   });
 });

@@ -345,7 +345,7 @@ locals {
     "harness-platform-tools-target" = {
       AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
       AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_GATEWAY_POLICY_REVISION   = "platform-tools-v1-tenant-admission"
+      AGENTCORE_GATEWAY_POLICY_REVISION   = "platform-tools-v2-workspace-skills"
     }
     # Analyst query broker (THINK-228 U3). Reader role + caller credential
     # secrets, and the workspace bucket's analyst-staging/ prefix for
@@ -1699,6 +1699,8 @@ locals {
       "POST /agentcore/capabilities/web/search"                     = "harness-builtin-tools-target"
       "POST /agentcore/capabilities/web/extract"                    = "harness-builtin-tools-target"
       "POST /agentcore/capabilities/brain/query"                    = "harness-platform-tools-target"
+      "POST /agentcore/capabilities/workspace/skills/list"          = "harness-platform-tools-target"
+      "POST /agentcore/capabilities/workspace/skills/load"          = "harness-platform-tools-target"
       "POST /agentcore/capabilities/email/send"                     = "harness-platform-tools-target"
       "POST /mcp/oauth/register"                                    = "mcp-oauth"
       "GET /mcp/oauth/authorize"                                    = "mcp-oauth"
