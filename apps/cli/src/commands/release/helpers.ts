@@ -126,6 +126,10 @@ export interface PriorControllerInput {
   evidenceBucket: string;
   runnerSecretArn?: string;
   releaseVersion?: string;
+  releaseManifestUrl?: string;
+  releaseManifestSha256?: string;
+  terraformModuleSource?: string;
+  terraformModuleVersion?: string;
   agentcorePiSourceImageUri?: string;
   customerDomain?: string;
   customerDomainDelegated?: boolean;
@@ -190,6 +194,10 @@ export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
       typeof input.releaseVersion === "string"
         ? input.releaseVersion
         : undefined,
+    releaseManifestUrl: stringValue(input.releaseManifestUrl),
+    releaseManifestSha256: stringValue(input.releaseManifestSha256),
+    terraformModuleSource: stringValue(input.terraformModuleSource),
+    terraformModuleVersion: stringValue(input.terraformModuleVersion),
     agentcorePiSourceImageUri:
       typeof input.agentcorePiSourceImageUri === "string"
         ? input.agentcorePiSourceImageUri

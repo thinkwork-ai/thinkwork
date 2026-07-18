@@ -60,6 +60,84 @@ export interface EnterpriseIdentityProviderPlan {
   idpIdentifiers?: string[];
 }
 
+export interface TenantEntraConnectionMetadata {
+  connectionKey: string;
+  tenantId: string;
+  providerName: string;
+  displayName: string;
+  clientId: string;
+  clientSecretRef: string;
+  issuerUrl: string;
+  tenantBindings: Array<{
+    tenantId: string;
+    label: string;
+    hostnames: string[];
+  }>;
+}
+
+export interface TenantEntraConnectionInput {
+  directoryId: string;
+  thinkworkTenantId: string;
+  clientId: string;
+  clientSecretRef: string;
+  displayName: string;
+  label: string;
+  hostnames: string[];
+}
+
+/** Build the complete safe mutation envelope sent to the deployment runner. */
+export function buildTenantEntraConnectionMetadata(
+  input: TenantEntraConnectionInput,
+): TenantEntraConnectionMetadata {
+  const directoryId = input.directoryId.trim().toLowerCase();
+  const providerName = buildTenantEntraProviderName(directoryId);
+  const thinkworkTenantId = input.thinkworkTenantId.trim().toLowerCase();
+  if (!ENTRA_TENANT_GUID_RE.test(thinkworkTenantId)) {
+    throw new Error("ThinkWork tenant ID must be a UUID.");
+  }
+  const hostnames = [
+    ...new Set(input.hostnames.map(normalizeAuthHostname)),
+  ].sort();
+  if (hostnames.length === 0) {
+    throw new Error("Tenant Entra connection requires at least one hostname.");
+  }
+  const clientId = requireValue(
+    input.clientId,
+    "Tenant Entra connection requires a Microsoft application client ID.",
+  );
+  const clientSecretRef = requireValue(
+    input.clientSecretRef,
+    "Tenant Entra connection requires a Secrets Manager ARN.",
+  );
+  if (!clientSecretRef.startsWith("arn:aws:secretsmanager:")) {
+    throw new Error(
+      "Tenant Entra client-secret reference must be a Secrets Manager ARN.",
+    );
+  }
+  return {
+    connectionKey: `microsoft:tenant:${directoryId}`,
+    tenantId: directoryId,
+    providerName,
+    displayName: requireValue(
+      input.displayName,
+      "Tenant Entra connection requires a display name.",
+    ),
+    clientId,
+    clientSecretRef,
+    issuerUrl: `https://login.microsoftonline.com/${directoryId}/v2.0`,
+    tenantBindings: [
+      {
+        tenantId: thinkworkTenantId,
+        label: requireValue(
+          input.label,
+          "Tenant Entra connection requires a tenant label.",
+        ),
+        hostnames,
+      },
+    ],
+  };
+}
+
 export function buildEnterpriseIdentityProviderPlan(
   input: EnterpriseIdentityProviderInput | undefined,
 ): EnterpriseIdentityProviderPlan | undefined {
@@ -307,6 +385,19 @@ function validatePublicHttpsUrl(value: string, label: string): string {
     throw new Error(`${label} must not target localhost or private networks.`);
   }
   return parsed.toString();
+}
+
+function normalizeAuthHostname(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/\.$/, "");
+  if (
+    !normalized ||
+    normalized.length > 253 ||
+    !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(normalized) ||
+    normalized.includes("..")
+  ) {
+    throw new Error(`Invalid tenant auth hostname: ${value}`);
+  }
+  return normalized;
 }
 
 function isUnsafeHostname(hostname: string): boolean {

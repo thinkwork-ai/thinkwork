@@ -1,6 +1,7 @@
 import { Command } from "commander";
 
 import { registerEnterpriseBootstrapCommand } from "./enterprise/bootstrap.js";
+import { registerEnterpriseIdentityProviderCommand } from "./enterprise/identity-provider-command.js";
 import { registerEnterpriseOverlayCommand } from "./enterprise/overlay.js";
 
 export function registerEnterpriseCommand(program: Command): void {
@@ -11,5 +12,6 @@ export function registerEnterpriseCommand(program: Command): void {
     );
 
   registerEnterpriseBootstrapCommand(enterprise);
+  registerEnterpriseIdentityProviderCommand(enterprise);
   registerEnterpriseOverlayCommand(enterprise);
 }

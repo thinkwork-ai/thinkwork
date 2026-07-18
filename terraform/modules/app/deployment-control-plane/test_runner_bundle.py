@@ -215,6 +215,117 @@ def test_native_auth_reconciliation_builds_route_specific_secret_free_manifest(
     assert replay_state == state
 
 
+def tenant_entra_operation(action: str, revision: int = 1) -> dict:
+    tenant_id = "00000000-0000-4000-8000-000000000123"
+    return {
+        "action": "update",
+        "operation": {
+            "kind": "identity_provider",
+            "action": action,
+            "revision": revision,
+            "expectedPreviousRevision": revision - 1,
+            "connection": {
+                "connectionKey": f"microsoft:tenant:{tenant_id}",
+                "tenantId": tenant_id,
+                "providerName": "Entra_0000000000004000_deadbeef",
+                "displayName": "Acme Microsoft",
+                "clientId": "entra-client-id",
+                "clientSecretRef": (
+                    "arn:aws:secretsmanager:us-east-1:123456789012:"
+                    f"secret:thinkwork/dev/auth/entra/{tenant_id}-ABC123"
+                ),
+                "issuerUrl": f"https://login.microsoftonline.com/{tenant_id}/v2.0",
+                "tenantBindings": [
+                    {
+                        "tenantId": "019f762b-683c-7153-acff-24ee932d73f6",
+                        "label": "Acme",
+                        "hostnames": ["Login.Acme.Example", "login.acme.example"],
+                    }
+                ],
+            },
+        },
+    }
+
+
+def test_identity_provider_operation_builds_revisioned_secret_free_desired_state() -> None:
+    runner = load_runner()
+    payload = tenant_entra_operation("create")
+
+    desired = runner.identity_provider_desired_connections(
+        payload,
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={},
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )
+
+    assert len(desired) == 1
+    assert desired[0]["lifecycleState"] == "native"
+    assert desired[0]["tenantDirectoryId"] == "00000000-0000-4000-8000-000000000123"
+    assert desired[0]["tenantBindings"][0]["hostnames"] == ["login.acme.example"]
+    assert runner.tenant_entra_terraform_projection(desired) == [
+        {
+            "connection_key": "microsoft:tenant:00000000-0000-4000-8000-000000000123",
+            "tenant_id": "00000000-0000-4000-8000-000000000123",
+            "provider_name": "Entra_0000000000004000_deadbeef",
+            "display_name": "Acme Microsoft",
+        }
+    ]
+    assert "tenant-super-secret" not in json.dumps(desired)
+
+
+def test_identity_provider_disable_removes_route_before_provider_retirement() -> None:
+    runner = load_runner()
+    created = runner.identity_provider_desired_connections(
+        tenant_entra_operation("create"),
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={},
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )
+    disabled = runner.identity_provider_desired_connections(
+        tenant_entra_operation("disable", revision=2),
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={"desiredRevision": 1, "tenantConnections": created},
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )
+
+    assert disabled[0]["lifecycleState"] == "denied"
+    assert disabled[0]["tenantBindings"][0]["status"] == "disabled"
+    assert runner.tenant_entra_terraform_projection(disabled) == []
+
+
+def test_identity_provider_operation_rejects_cross_stage_secret_reference() -> None:
+    runner = load_runner()
+    payload = tenant_entra_operation("create")
+    payload["operation"]["connection"]["clientSecretRef"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789012:"
+        "secret:thinkwork/prod/auth/entra/example"
+    )
+
+    with pytest.raises(RuntimeError, match="account, region, stage"):
+        runner.identity_provider_desired_connections(
+            payload,
+            stage="dev",
+            account_id="123456789012",
+            region="us-east-1",
+            previous_state={},
+            current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+        )
+
+
+def test_identity_provider_update_does_not_require_agent_image_pin() -> None:
+    runner = load_runner()
+
+    assert runner.resolve_agentcore_pi_source_image_uri(
+        {"action": "update", "operation": {"kind": "identity_provider"}}
+    ) == ""
+
+
 def test_bootstrap_can_fall_back_to_release_agentcore_pi_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
