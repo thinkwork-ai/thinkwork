@@ -231,18 +231,6 @@ function buildDeps(options: { premium?: boolean } = {}): PluginEngineDeps {
         handlerRef,
         complete: true,
       }),
-      provisionAuthProvider: async ({ component }) => ({
-        status: "unconfigured",
-        provider: component.provider,
-        cognitoIdentityProviderName: component.cognitoIdentityProviderName,
-        issuerHost: null,
-        authProviderResourceId: null,
-        tenantAuthProviderReferenceId: null,
-        publicOptionsPublished: false,
-        providerOptions: [],
-        lastValidatedAt: null,
-        diagnosticCode: "AUTH_PROVIDER_CONFIG_MISSING",
-      }),
     },
     premiumAccess: {
       ensureInstallAllowed: async (input) => {

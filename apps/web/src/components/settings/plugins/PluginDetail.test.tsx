@@ -16,7 +16,6 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
     mocks: {
       activate: vi.fn(),
       activateCredentials: vi.fn(),
-      configureWorkos: vi.fn(),
       deactivate: vi.fn(),
       install: vi.fn(),
       navigate: vi.fn(),
@@ -27,15 +26,11 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
       updateN8nPackages: vi.fn(),
       upgrade: vi.fn(),
       useQuery: vi.fn(),
-      writeClipboard: vi.fn(),
     },
     queryDocs: {
       SettingsActivatePluginMutation: Symbol("activatePlugin"),
       SettingsActivatePluginWithCredentialsMutation: Symbol(
         "activatePluginWithCredentials",
-      ),
-      SettingsConfigureWorkosAuthPluginMutation: Symbol(
-        "configureWorkosAuthPlugin",
       ),
       SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
       SettingsInstallPluginMutation: Symbol("installPlugin"),
@@ -80,9 +75,6 @@ vi.mock("urql", () => ({
     }
     if (doc === queryDocs.SettingsActivatePluginWithCredentialsMutation) {
       return [{ fetching: false }, mocks.activateCredentials];
-    }
-    if (doc === queryDocs.SettingsConfigureWorkosAuthPluginMutation) {
-      return [{ fetching: false }, mocks.configureWorkos];
     }
     if (doc === queryDocs.SettingsDeactivatePluginMutation) {
       return [{ fetching: false }, mocks.deactivate];
@@ -289,29 +281,6 @@ beforeEach(() => {
   mocks.deactivate.mockResolvedValue({
     data: { deactivatePlugin: { id: "act-1", status: "revoked" } },
   });
-  mocks.configureWorkos.mockResolvedValue({
-    data: {
-      configureWorkosAuthPlugin: {
-        resource: {
-          issuerUrl: "https://customer.authkit.app",
-          clientId: "client_saved",
-          clientSecretConfigured: true,
-          validationStatus: "valid",
-          publicOptionsPublished: true,
-        },
-        reference: {
-          status: "enabled",
-          hostnames: ["api.example.test"],
-          publicOptionLabel: "Continue with SSO",
-        },
-      },
-    },
-  });
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: { writeText: mocks.writeClipboard },
-  });
-  mocks.writeClipboard.mockResolvedValue(undefined);
   mockQueries();
   paramsState.pluginKey = "lastmile";
   window.history.replaceState({}, "", "/settings/plugins/lastmile");
@@ -664,159 +633,6 @@ describe("PluginDetail", () => {
     expect(
       screen.queryByRole("link", { name: /open deployment details/i }),
     ).toBeNull();
-  });
-
-  it("opens WorkOS setup instructions for deployment operators", async () => {
-    paramsState.pluginKey = "workos-auth";
-    mockQueries({
-      install: workosInstall,
-      activations: [],
-      catalog: [workosEntry],
-    });
-    render(<PluginDetail />);
-
-    expect(
-      screen.getAllByText((content) =>
-        content.endsWith("/api/auth/workos/callback"),
-      ).length,
-    ).toBeGreaterThanOrEqual(1);
-    fireEvent.click(
-      screen.getByRole("button", { name: /copy workos callback url/i }),
-    );
-    await waitFor(() => {
-      expect(mocks.writeClipboard).toHaveBeenCalledWith(
-        expect.stringMatching(/\/api\/auth\/workos\/callback$/),
-      );
-    });
-
-    expect(screen.getByText("WorkOS configuration")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: /create account/i })).toBeNull();
-    expect(
-      screen.getByRole("link", { name: /workos dashboard/i }),
-    ).toBeTruthy();
-
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
-    const headerAction = lastHeaderAction();
-    expect(headerAction).toBeTruthy();
-    const headerRender = render(<>{headerAction}</>);
-    fireEvent.click(
-      headerRender.getByRole("button", { name: /open workos dashboard/i }),
-    );
-    expect(openSpy).toHaveBeenCalledWith(
-      "https://dashboard.workos.com/",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    headerRender.unmount();
-    openSpy.mockRestore();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /setup instructions/i }),
-    );
-
-    expect(
-      await screen.findByRole("heading", {
-        name: /workos setup instructions/i,
-      }),
-    ).toBeTruthy();
-    expect(screen.getByText(/customer-owned SSO deployments/i)).toBeTruthy();
-    expect(
-      screen.getByText(
-        /AuthKit issuer URL, OAuth client ID, and OAuth client secret/i,
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getAllByText((content) =>
-        content.endsWith("/api/auth/workos/callback"),
-      ).length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/Step-by-step field guide/i)).toBeTruthy();
-    expect(screen.getByText(/click Publish SSO/i)).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /admin portal docs/i }),
-    ).toBeTruthy();
-  });
-
-  it("hides WorkOS setup instructions from non-operators", () => {
-    paramsState.pluginKey = "workos-auth";
-    tenantState.isOperator = false;
-    mockQueries({
-      install: workosInstall,
-      activations: [],
-      catalog: [workosEntry],
-    });
-    render(<PluginDetail />);
-
-    expect(
-      screen.queryByRole("button", { name: /setup instructions/i }),
-    ).toBeNull();
-  });
-
-  it("saves WorkOS credentials before the auth provider is configured", async () => {
-    paramsState.pluginKey = "workos-auth";
-    mockQueries({
-      install: {
-        ...workosInstall,
-        components: workosInstall.components.map((component) => ({
-          ...component,
-          state: "pending",
-          handlerRef: null,
-        })),
-      },
-      activations: [],
-      catalog: [workosEntry],
-    });
-    render(<PluginDetail />);
-
-    expect(screen.getByText("Configure WorkOS")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: /workos dashboard/i })
-        .getAttribute("href"),
-    ).toBe("https://dashboard.workos.com/get-started");
-
-    fireEvent.change(screen.getByLabelText(/authkit issuer url/i), {
-      target: { value: "https://customer.authkit.app" },
-    });
-    fireEvent.change(screen.getByLabelText(/oauth client id/i), {
-      target: { value: "client_customer" },
-    });
-    fireEvent.change(screen.getByLabelText(/oauth client secret/i), {
-      target: { value: "sk_customer" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /publish sso/i }));
-
-    await waitFor(() => {
-      expect(mocks.configureWorkos).toHaveBeenCalledWith({
-        input: {
-          installId: "install-workos",
-          issuerUrl: "https://customer.authkit.app",
-          clientId: "client_customer",
-          clientSecret: "sk_customer",
-          publicOptionLabel: "Continue with SSO",
-        },
-      });
-    });
-    await waitFor(() => {
-      expect(refreshInstalls).toHaveBeenCalledWith({
-        requestPolicy: "network-only",
-      });
-      expect(refreshCatalog).toHaveBeenCalledWith({
-        requestPolicy: "network-only",
-      });
-    });
-
-    // No dashboard header affordance until the account is configured.
-    const headerAction = lastHeaderAction();
-    if (headerAction) {
-      const headerRender = render(<>{headerAction}</>);
-      expect(
-        headerRender.queryByRole("button", {
-          name: /open workos dashboard/i,
-        }),
-      ).toBeNull();
-      headerRender.unmount();
-    }
   });
 
   it("renders Resend provider setup for operators", () => {
@@ -1298,71 +1114,6 @@ const twentyActiveActivation = {
   grantedScopes: [],
   grantedAt: "2026-06-29T12:00:00Z",
   revokedAt: null,
-};
-
-// Returns the most recent non-empty `action` node handed to the (mocked)
-// page-header hook, so tests can assert on header affordances rendered
-// outside the PluginDetail subtree.
-function lastHeaderAction() {
-  const calls = mocks.setHeader.mock.calls;
-  for (let i = calls.length - 1; i >= 0; i--) {
-    const action = calls[i]?.[0]?.action;
-    if (action) return action;
-  }
-  return null;
-}
-
-const workosInstall = {
-  ...baseInstall,
-  id: "install-workos",
-  pluginKey: "workos-auth",
-  pinnedVersion: "0.1.0",
-  state: "installed",
-  activatedUserCount: 0,
-  components: [
-    {
-      __typename: "PluginComponent" as const,
-      id: "component-workos-auth",
-      componentKey: "workos-auth",
-      componentType: "auth-provider",
-      state: "provisioned",
-      handlerRef: {
-        status: "valid",
-        issuerUrl: "https://customer.authkit.app",
-        clientId: "client_saved",
-        publicOptionsPublished: true,
-        publicOptionLabel: "Continue with SSO",
-      },
-      lastError: null,
-    },
-  ],
-};
-
-const workosEntry = {
-  __typename: "PluginCatalogEntry" as const,
-  pluginKey: "workos-auth",
-  displayName: "WorkOS Auth",
-  description:
-    "WorkOS-backed SSO broker that federates through Cognito while keeping Cognito as ThinkWork's final session issuer.",
-  latestVersion: "0.1.0",
-  updateAvailable: false,
-  premium: null,
-  entitlement: null,
-  versions: [
-    {
-      version: "0.1.0",
-      payloadSha256: "sha256:workos",
-      requiredOauthScopes: [],
-      components: [
-        {
-          key: "workos-auth",
-          type: "auth-provider",
-          displayName: "WorkOS Auth settings",
-        },
-      ],
-    },
-  ],
-  install: null,
 };
 
 const emailChannelEntry = {

@@ -1,27 +1,11 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import {
-  Badge,
-  Button,
-  Input,
-  Label,
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  TooltipIconButton,
-} from "@thinkwork/ui";
+import { Badge, Button } from "@thinkwork/ui";
 import {
   ArrowDownToLine,
-  BookOpenCheck,
   Brain,
-  Check,
-  Copy,
-  ExternalLink,
-  KeyRound,
   LogIn,
   LogOut,
   RotateCw,
@@ -34,7 +18,6 @@ import { useTenant } from "@/context/TenantContext";
 import { getDesktopBridge } from "@/lib/desktop-runtime";
 import {
   SettingsActivatePluginMutation,
-  SettingsConfigureWorkosAuthPluginMutation,
   SettingsDeactivatePluginMutation,
   SettingsInstallPluginMutation,
   SettingsManagedApplicationDeploymentQuery,
@@ -50,17 +33,10 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
-import { apiBaseUrl as deploymentApiBaseUrl } from "@/lib/deployment-sessions";
 import { EmailChannelSettings } from "./email-channel/EmailChannelSettings";
 import { InstallKeyDialog } from "./InstallKeyDialog";
 import { N8nSettings } from "./n8n/N8nSettings";
 import { UninstallPluginDialog } from "./UninstallPluginDialog";
-import {
-  isWorkosAccountConfigured,
-  WORKOS_AUTH_PLUGIN_KEY,
-  WORKOS_DASHBOARD_URL,
-  workosPublishedConfig,
-} from "./workos";
 import {
   broadenedScopes,
   componentStateChipClassName,
@@ -90,16 +66,6 @@ export function PluginDetail() {
   const [installKeyError, setInstallKeyError] = useState<string | null>(null);
   const [installKeyOpen, setInstallKeyOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
-  const [workosInstructionsOpen, setWorkosInstructionsOpen] = useState(false);
-  const [workosConfigError, setWorkosConfigError] = useState<string | null>(
-    null,
-  );
-  const [workosConfigForm, setWorkosConfigForm] = useState({
-    issuerUrl: "",
-    clientId: "",
-    clientSecret: "",
-    publicOptionLabel: "Continue with SSO",
-  });
 
   const [catalogResult, refreshCatalog] = useQuery({
     query: SettingsPluginCatalogQuery,
@@ -128,9 +94,6 @@ export function PluginDetail() {
   );
   const [deactivateState, deactivatePlugin] = useMutation(
     SettingsDeactivatePluginMutation,
-  );
-  const [configureWorkosState, configureWorkosAuthPlugin] = useMutation(
-    SettingsConfigureWorkosAuthPluginMutation,
   );
 
   const entry =
@@ -163,7 +126,6 @@ export function PluginDetail() {
   const installNeedsKey = Boolean(
     premium?.installKeyRequired && !hasActiveEntitlement,
   );
-  const isWorkosAuth = pluginKey === WORKOS_AUTH_PLUGIN_KEY;
   const twentyDeploymentProvisioned = Boolean(
     pluginKey === "twenty" &&
     install?.components.some(
@@ -172,22 +134,6 @@ export function PluginDetail() {
         component.state === "provisioned",
     ),
   );
-  const workosCallbackUrl = isWorkosAuth ? workosAuthCallbackUrl() : null;
-  const workosSignOutRedirectUrl = isWorkosAuth
-    ? workosAuthSignOutRedirectUrl()
-    : null;
-  const workosAccountConfigured = isWorkosAccountConfigured(
-    install?.components,
-  );
-  const workosSavedConfig = workosPublishedConfig(install?.components);
-  const workosSavedIssuerUrl = workosSavedConfig?.issuerUrl ?? "";
-  const workosSavedClientId = workosSavedConfig?.clientId ?? "";
-  const workosSavedPublicOptionLabel =
-    workosSavedConfig?.publicOptionLabel ?? "";
-  // When WorkOS is configured, surface a direct dashboard link from the
-  // detail header (mirrors the list-row external-link affordance).
-  const workosDashboardUrl =
-    isWorkosAuth && workosAccountConfigured ? WORKOS_DASHBOARD_URL : null;
   const emailProviderSettingsProvider =
     pluginKey === "sendgrid"
       ? "sendgrid"
@@ -203,31 +149,6 @@ export function PluginDetail() {
     refreshCatalog({ requestPolicy: "network-only" });
     refreshActivations({ requestPolicy: "network-only" });
   }
-
-  useEffect(() => {
-    if (
-      !isWorkosAuth ||
-      (!workosSavedIssuerUrl &&
-        !workosSavedClientId &&
-        !workosSavedPublicOptionLabel)
-    ) {
-      return;
-    }
-    setWorkosConfigForm((current) => ({
-      issuerUrl: current.issuerUrl || workosSavedIssuerUrl,
-      clientId: current.clientId || workosSavedClientId,
-      clientSecret: "",
-      publicOptionLabel:
-        current.publicOptionLabel ||
-        workosSavedPublicOptionLabel ||
-        "Continue with SSO",
-    }));
-  }, [
-    isWorkosAuth,
-    workosSavedClientId,
-    workosSavedIssuerUrl,
-    workosSavedPublicOptionLabel,
-  ]);
 
   // OAuth callback landing: /settings/plugins/$pluginKey?pluginOAuth=...
   // Read + clear the params on mount, show the notice, refetch activations
@@ -265,18 +186,6 @@ export function PluginDetail() {
       { label: "Plugins", href: "/settings/plugins" },
       { label: displayName },
     ],
-    action: workosDashboardUrl ? (
-      <TooltipIconButton
-        type="button"
-        label="Open WorkOS dashboard"
-        onClick={() => {
-          window.open(workosDashboardUrl, "_blank", "noopener,noreferrer");
-        }}
-      >
-        <ExternalLink className="size-4" />
-      </TooltipIconButton>
-    ) : undefined,
-    actionKey: workosDashboardUrl ? "workos-dashboard" : undefined,
   });
 
   async function install_(installKey?: string) {
@@ -361,64 +270,6 @@ export function PluginDetail() {
       return;
     }
     window.location.assign(authorizeUrl);
-  }
-
-  async function saveWorkosConfig(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!install) return;
-    setNotice(null);
-    setError(null);
-    setWorkosConfigError(null);
-
-    const issuerUrl = workosConfigForm.issuerUrl.trim();
-    const clientId = workosConfigForm.clientId.trim();
-    const clientSecret = workosConfigForm.clientSecret.trim();
-    const publicOptionLabel =
-      workosConfigForm.publicOptionLabel.trim() || "Continue with SSO";
-
-    if (
-      !issuerUrl ||
-      !clientId ||
-      (!workosAccountConfigured && !clientSecret)
-    ) {
-      setWorkosConfigError(
-        workosAccountConfigured
-          ? "Enter the WorkOS issuer URL and client ID."
-          : "Enter the WorkOS issuer URL, client ID, and client secret.",
-      );
-      return;
-    }
-
-    const result = await configureWorkosAuthPlugin({
-      input: {
-        installId: install.id,
-        issuerUrl,
-        clientId,
-        clientSecret: clientSecret || null,
-        publicOptionLabel,
-      },
-    });
-    if (result.error) {
-      setWorkosConfigError(
-        `Could not save WorkOS configuration: ${result.error.message}`,
-      );
-      return;
-    }
-
-    const resource = result.data?.configureWorkosAuthPlugin.resource;
-    const reference = result.data?.configureWorkosAuthPlugin.reference;
-    setWorkosConfigForm({
-      issuerUrl: resource?.issuerUrl ?? issuerUrl,
-      clientId: resource?.clientId ?? clientId,
-      clientSecret: "",
-      publicOptionLabel: reference?.publicOptionLabel ?? publicOptionLabel,
-    });
-    setNotice(
-      "WorkOS configuration saved. SSO is published on the login page.",
-    );
-    toast.success("WorkOS configuration saved.");
-    refreshInstalls({ requestPolicy: "network-only" });
-    refreshCatalog({ requestPolicy: "network-only" });
   }
 
   async function disconnect() {
@@ -673,57 +524,6 @@ export function PluginDetail() {
           />
         ) : null}
 
-        {isWorkosAuth && showOperatorActions ? (
-          <SettingsSection
-            label="Setup"
-            action={
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setWorkosInstructionsOpen(true)}
-              >
-                <BookOpenCheck className="size-4" />
-                Setup Instructions
-              </Button>
-            }
-          >
-            <SettingsRow
-              label="Callback URL"
-              description="Add this URL to the WorkOS application Redirects list."
-              layout="stacked"
-            >
-              <CopyablePluginValue
-                value={workosCallbackUrl ?? ""}
-                label="WorkOS callback URL"
-              />
-            </SettingsRow>
-            <SettingsRow
-              label="Sign-out redirect"
-              description="Add this URL to the WorkOS application's Sign-out redirects list."
-              layout="stacked"
-            >
-              <CopyablePluginValue
-                value={workosSignOutRedirectUrl ?? ""}
-                label="WorkOS sign-out redirect URL"
-              />
-            </SettingsRow>
-            <WorkosConfigurationRow
-              configured={workosAccountConfigured}
-              error={workosConfigError}
-              form={workosConfigForm}
-              saving={configureWorkosState.fetching}
-              onChange={(field, value) =>
-                setWorkosConfigForm((current) => ({
-                  ...current,
-                  [field]: value,
-                }))
-              }
-              onSubmit={(event) => void saveWorkosConfig(event)}
-            />
-          </SettingsSection>
-        ) : null}
-
         {install && authCapable ? (
           <SettingsSection label="Connection">
             <OAuthConnectionRow
@@ -776,367 +576,9 @@ export function PluginDetail() {
             onSubmit={(key) => void install_(key)}
           />
         ) : null}
-        {isWorkosAuth ? (
-          <WorkosSetupInstructionsSheet
-            open={workosInstructionsOpen}
-            onOpenChange={setWorkosInstructionsOpen}
-            callbackUrl={workosCallbackUrl ?? ""}
-            signOutRedirectUrl={workosSignOutRedirectUrl ?? ""}
-          />
-        ) : null}
       </div>
     </div>
   );
-}
-
-function WorkosSetupInstructionsSheet({
-  open,
-  onOpenChange,
-  callbackUrl,
-  signOutRedirectUrl,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  callbackUrl: string;
-  signOutRedirectUrl: string;
-}) {
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-2xl">
-        <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
-          <SheetTitle>WorkOS setup instructions</SheetTitle>
-          <SheetDescription>
-            Use this checklist for customer-owned SSO deployments.
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="space-y-6 px-6 py-5 text-sm">
-          <section className="space-y-2">
-            <h3 className="font-medium text-foreground">
-              What each deployment needs
-            </h3>
-            <ul className="list-disc space-y-1.5 pl-5 text-muted-foreground">
-              <li>
-                A WorkOS account, environment, or application owned by that
-                customer or deployment operator.
-              </li>
-              <li>
-                The AuthKit issuer URL, OAuth client ID, and OAuth client secret
-                from the customer WorkOS application.
-              </li>
-              <li>
-                The ThinkWork WorkOS callback URL from this plugin detail page
-                allowlisted in WorkOS Redirects.
-              </li>
-              <li>
-                A WorkOS organization for the customer and at least one active
-                SSO connection or OAuth provider.
-              </li>
-              <li>
-                ThinkWork users must be assigned to a workspace before SSO
-                sign-in can create a usable session.
-              </li>
-            </ul>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="font-medium text-foreground">
-              Step-by-step field guide
-            </h3>
-            <ol className="list-decimal space-y-3 pl-5 text-muted-foreground">
-              <li>
-                Open the WorkOS Dashboard and switch to the customer
-                environment. Use Sandbox for test tenants and Production for
-                live customer traffic.
-              </li>
-              <li>
-                Create or open the WorkOS AuthKit application for this customer.
-                In that application's Redirects settings, add this ThinkWork
-                callback URL:
-                <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
-                  {callbackUrl}
-                </code>
-              </li>
-              <li>
-                In the same WorkOS application, add this ThinkWork Sign-out
-                redirect:
-                <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
-                  {signOutRedirectUrl}
-                </code>
-              </li>
-              <li>
-                For AuthKit issuer URL, stay in the same WorkOS application and
-                copy the AuthKit issuer or domain value. It should look like
-                <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
-                  https://example.authkit.app
-                </code>
-                .
-              </li>
-              <li>
-                For OAuth client ID, open the application's OAuth credentials
-                and copy the Client ID. It should start with
-                <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
-                  client_
-                </code>
-                .
-              </li>
-              <li>
-                For OAuth client secret, reveal or create the Client Secret in
-                the same OAuth credentials area. Paste it into ThinkWork once;
-                after Publish SSO, ThinkWork stores it server-side and clears
-                the field.
-              </li>
-              <li>
-                For Login button label, enter the customer-facing text that
-                should appear on the ThinkWork login page. The default is
-                <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
-                  Continue with SSO
-                </code>
-                .
-              </li>
-              <li>
-                In WorkOS, create or select the customer organization and make
-                sure it has at least one active SSO connection or OAuth provider
-                before publishing.
-              </li>
-              <li>
-                Back in ThinkWork, paste the three WorkOS values, confirm the
-                label, and click Publish SSO. Then open the ThinkWork login page
-                and confirm the SSO button appears.
-              </li>
-            </ol>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="font-medium text-foreground">Customer IdP setup</h3>
-            <p className="text-muted-foreground">
-              For enterprise SAML or OIDC, invite the customer's IT admin
-              through WorkOS Admin Portal. WorkOS hosts the provider-specific
-              setup flow and records the active connection under the customer
-              organization.
-            </p>
-            <p className="text-muted-foreground">
-              For Google or Microsoft testing, enable the provider in WorkOS and
-              test with an account on an approved customer domain before turning
-              on production traffic.
-            </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button asChild variant="outline" size="sm">
-                <a href={WORKOS_DASHBOARD_URL} target="_blank" rel="noreferrer">
-                  WorkOS dashboard
-                  <ExternalLink className="size-3.5" />
-                </a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a
-                  href="https://workos.com/docs/admin-portal"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Admin Portal docs
-                  <ExternalLink className="size-3.5" />
-                </a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a
-                  href="https://workos.com/docs/reference/authkit/authentication/get-authorization-url"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  AuthKit redirect docs
-                  <ExternalLink className="size-3.5" />
-                </a>
-              </Button>
-            </div>
-          </section>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function CopyablePluginValue({
-  value,
-  label,
-}: {
-  value: string;
-  label: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const resetCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-
-  useEffect(() => {
-    return () => {
-      if (resetCopiedTimeoutRef.current) {
-        clearTimeout(resetCopiedTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  async function copy() {
-    if (!value || !navigator?.clipboard?.writeText) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      toast.success(`${label} copied.`);
-      if (resetCopiedTimeoutRef.current) {
-        clearTimeout(resetCopiedTimeoutRef.current);
-      }
-      resetCopiedTimeoutRef.current = setTimeout(() => {
-        setCopied(false);
-        resetCopiedTimeoutRef.current = null;
-      }, 1500);
-    } catch {
-      toast.error(`Could not copy ${label}.`);
-    }
-  }
-
-  return (
-    <div className="flex w-full min-w-0 items-center gap-2">
-      <code
-        className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-1.5 font-mono text-xs text-muted-foreground"
-        title={value}
-      >
-        {value}
-      </code>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={`Copy ${label}`}
-        title={`Copy ${label}`}
-        onClick={() => void copy()}
-      >
-        {copied ? (
-          <Check className="size-4 text-emerald-400" />
-        ) : (
-          <Copy className="size-4" />
-        )}
-      </Button>
-    </div>
-  );
-}
-
-function WorkosConfigurationRow({
-  configured,
-  error,
-  form,
-  saving,
-  onChange,
-  onSubmit,
-}: {
-  configured: boolean;
-  error: string | null;
-  form: {
-    issuerUrl: string;
-    clientId: string;
-    clientSecret: string;
-    publicOptionLabel: string;
-  };
-  saving: boolean;
-  onChange: (
-    field: "issuerUrl" | "clientId" | "clientSecret" | "publicOptionLabel",
-    value: string,
-  ) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <SettingsRow
-      label={configured ? "WorkOS configuration" : "Configure WorkOS"}
-      description={
-        configured
-          ? "Update the customer-owned WorkOS AuthKit application used for SSO."
-          : "Enter the customer-owned WorkOS AuthKit application credentials."
-      }
-      layout="stacked"
-    >
-      <form className="grid w-full gap-4" onSubmit={onSubmit}>
-        <div className="grid gap-1.5">
-          <Label htmlFor="workos-issuer-url">AuthKit issuer URL</Label>
-          <Input
-            id="workos-issuer-url"
-            type="url"
-            autoComplete="off"
-            placeholder="https://example.authkit.app"
-            value={form.issuerUrl}
-            onChange={(event) =>
-              onChange("issuerUrl", event.currentTarget.value)
-            }
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="workos-client-id">OAuth client ID</Label>
-          <Input
-            id="workos-client-id"
-            autoComplete="off"
-            placeholder="client_..."
-            value={form.clientId}
-            onChange={(event) =>
-              onChange("clientId", event.currentTarget.value)
-            }
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="workos-client-secret">
-            OAuth client secret
-            {configured ? (
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                leave blank to keep current
-              </span>
-            ) : null}
-          </Label>
-          <Input
-            id="workos-client-secret"
-            type="password"
-            autoComplete="off"
-            value={form.clientSecret}
-            onChange={(event) =>
-              onChange("clientSecret", event.currentTarget.value)
-            }
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="workos-public-label">Login button label</Label>
-          <Input
-            id="workos-public-label"
-            autoComplete="off"
-            value={form.publicOptionLabel}
-            onChange={(event) =>
-              onChange("publicOptionLabel", event.currentTarget.value)
-            }
-          />
-        </div>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button asChild type="button" variant="outline" size="sm">
-            <a
-              href="https://dashboard.workos.com/get-started"
-              target="_blank"
-              rel="noreferrer"
-            >
-              WorkOS dashboard
-              <ExternalLink className="size-3.5" />
-            </a>
-          </Button>
-          <Button type="submit" size="sm" disabled={saving}>
-            <KeyRound className="size-4" />
-            {saving ? "Saving..." : configured ? "Update SSO" : "Publish SSO"}
-          </Button>
-        </div>
-      </form>
-    </SettingsRow>
-  );
-}
-
-function workosAuthCallbackUrl(): string {
-  const baseUrl = deploymentApiBaseUrl() || window.location.origin;
-  return `${baseUrl}/api/auth/workos/callback`;
-}
-
-function workosAuthSignOutRedirectUrl(): string {
-  return `${window.location.origin}/`;
 }
 
 function OAuthConnectionRow({

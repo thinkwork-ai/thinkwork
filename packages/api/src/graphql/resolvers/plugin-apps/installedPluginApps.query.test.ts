@@ -76,7 +76,6 @@ function buildDeps(): PluginEngineDeps {
       teardownSkills: async () => {},
       provisionInfra: async () => ({}),
       teardownInfra: async () => ({ handlerRef: {}, complete: true }),
-      provisionAuthProvider: async () => ({}),
     },
     premiumAccess: { ensureInstallAllowed: async () => {} },
     deleteSecrets: async () => {},

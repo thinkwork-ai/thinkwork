@@ -2147,44 +2147,6 @@ export const SettingsDeactivatePluginMutation = graphql(`
   }
 `);
 
-export const SettingsConfigureWorkosAuthPluginMutation = graphql(`
-  mutation SettingsConfigureWorkosAuthPlugin(
-    $input: ConfigureWorkosAuthPluginInput!
-  ) {
-    configureWorkosAuthPlugin(input: $input) {
-      install {
-        id
-        pluginKey
-        pinnedVersion
-        state
-        lastTransitionAt
-        lastError
-        activatedUserCount
-        components {
-          id
-          componentKey
-          componentType
-          state
-          handlerRef
-          lastError
-        }
-      }
-      resource {
-        issuerUrl
-        clientId
-        clientSecretConfigured
-        validationStatus
-        publicOptionsPublished
-      }
-      reference {
-        status
-        hostnames
-        publicOptionLabel
-      }
-    }
-  }
-`);
-
 // Grant/detach mutations (capability-mapping plan U8, KTD-5): every
 // assignment write in the web app goes through these two — the legacy
 // surfaces are clients of the same contract.

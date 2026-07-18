@@ -1041,39 +1041,6 @@ export type ArtifactVersion = {
   version: Scalars["Int"]["output"];
 };
 
-/**
- * Deployment-scoped auth-provider bridge configuration. Secret values are never
- * exposed here; `clientSecretConfigured` means a server-side secret ref exists.
- */
-export type AuthProviderResource = {
-  __typename?: "AuthProviderResource";
-  authorizeScopes: Scalars["String"]["output"];
-  clientId: Scalars["String"]["output"];
-  clientSecretConfigured: Scalars["Boolean"]["output"];
-  cognitoAppClientIds: Array<Scalars["String"]["output"]>;
-  cognitoIdentityProviderName: Scalars["String"]["output"];
-  cognitoUserPoolId: Scalars["String"]["output"];
-  createdAt: Scalars["AWSDateTime"]["output"];
-  diagnostics: Scalars["AWSJSON"]["output"];
-  displayName: Scalars["String"]["output"];
-  id: Scalars["ID"]["output"];
-  issuerUrl: Scalars["String"]["output"];
-  lastErrorCode?: Maybe<Scalars["String"]["output"]>;
-  lastValidatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  /** 'workos' in v1. */
-  providerKey: Scalars["String"]["output"];
-  providerOptions: Scalars["AWSJSON"]["output"];
-  /** 'single_sso' | 'provider_specific'. */
-  publicOptionMode: Scalars["String"]["output"];
-  publicOptionsPublished: Scalars["Boolean"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
-  /**
-   * 'unconfigured' | 'validating' | 'valid' | 'partially_valid' | 'invalid' |
-   * 'rotating_secret' | 'disabled'.
-   */
-  validationStatus: Scalars["String"]["output"];
-};
-
 export type AutomationBuilderSession = {
   __typename?: "AutomationBuilderSession";
   draft: Scalars["AWSJSON"]["output"];
@@ -1764,22 +1731,6 @@ export type ConfigureEmailProviderInput = {
   providerInstallId?: InputMaybe<Scalars["ID"]["input"]>;
   status?: InputMaybe<EmailProviderInstallStatus>;
   webhookSecretRef?: InputMaybe<Scalars["String"]["input"]>;
-};
-
-export type ConfigureWorkosAuthPluginInput = {
-  clientId: Scalars["String"]["input"];
-  /** Write-only. Required for first-time setup; omit to keep the existing secret. */
-  clientSecret?: InputMaybe<Scalars["String"]["input"]>;
-  installId: Scalars["ID"]["input"];
-  issuerUrl: Scalars["String"]["input"];
-  publicOptionLabel?: InputMaybe<Scalars["String"]["input"]>;
-};
-
-export type ConfigureWorkosAuthPluginResult = {
-  __typename?: "ConfigureWorkosAuthPluginResult";
-  install: PluginInstall;
-  reference: TenantAuthProviderReference;
-  resource: AuthProviderResource;
 };
 
 export type ConfirmAutomationDraftInput = {
@@ -4492,12 +4443,6 @@ export type Mutation = {
    */
   compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
-  /**
-   * Tenant-admin: configure the installed WorkOS Auth plugin with customer-owned
-   * AuthKit credentials. Stores the secret server-side, publishes the public SSO
-   * option, and updates the auth-provider component state.
-   */
-  configureWorkosAuthPlugin: ConfigureWorkosAuthPluginResult;
   confirmAutomationDraft: AgentLoop;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
@@ -4627,6 +4572,7 @@ export type Mutation = {
    * handler sequence.
    */
   installPlugin: PluginInstall;
+  invalidateSubscription?: Maybe<SubscriptionInvalidationEvent>;
   inviteMember: TenantMember;
   /**
    * ThinkWork-operator-only: issue a one-time premium plugin install key for a
@@ -5167,10 +5113,6 @@ export type MutationConfigureEmailProviderArgs = {
   input: ConfigureEmailProviderInput;
 };
 
-export type MutationConfigureWorkosAuthPluginArgs = {
-  input: ConfigureWorkosAuthPluginInput;
-};
-
 export type MutationConfirmAutomationDraftArgs = {
   input: ConfirmAutomationDraftInput;
 };
@@ -5505,6 +5447,15 @@ export type MutationInstallManagedApplicationMcpServerArgs = {
 
 export type MutationInstallPluginArgs = {
   input: InstallPluginInput;
+};
+
+export type MutationInvalidateSubscriptionArgs = {
+  resourceId?: InputMaybe<Scalars["ID"]["input"]>;
+  resourceKind?: InputMaybe<Scalars["String"]["input"]>;
+  scope: Scalars["String"]["input"];
+  subscriptionField: SubscriptionInvalidationField;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationInviteMemberArgs = {
@@ -6958,7 +6909,7 @@ export type PluginCatalogComponent = {
   /** Display name where the manifest declares one; null → render falls back to key. */
   displayName?: Maybe<Scalars["String"]["output"]>;
   key: Scalars["String"]["output"];
-  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'. */
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
   type: Scalars["String"]["output"];
 };
 
@@ -7062,14 +7013,13 @@ export type PluginComponent = {
   __typename?: "PluginComponent";
   /** Component key from the pinned manifest version (unique within the install). */
   componentKey: Scalars["String"]["output"];
-  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'. */
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
   componentType: Scalars["String"]["output"];
   createdAt: Scalars["AWSDateTime"]["output"];
   /**
    * Handler linkage into real runtime rows, shape by component type:
    * mcp-server { tenantMcpServerId }, skills { seededCatalogPrefix,
    * workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId },
-   * auth-provider { status, publicOptionsPublished }.
    */
   handlerRef: Scalars["AWSJSON"]["output"];
   id: Scalars["ID"]["output"];
@@ -10279,6 +10229,31 @@ export type SubscriptionOnWorkspaceAccessRevokedArgs = {
   userId: Scalars["ID"]["input"];
 };
 
+export type SubscriptionInvalidationEvent = {
+  __typename?: "SubscriptionInvalidationEvent";
+  resourceId?: Maybe<Scalars["ID"]["output"]>;
+  resourceKind?: Maybe<Scalars["String"]["output"]>;
+  scope: Scalars["String"]["output"];
+  subscriptionField: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  userId?: Maybe<Scalars["ID"]["output"]>;
+};
+
+export enum SubscriptionInvalidationField {
+  OnAgentStatusChanged = "ON_AGENT_STATUS_CHANGED",
+  OnCostRecorded = "ON_COST_RECORDED",
+  OnEvalRunUpdated = "ON_EVAL_RUN_UPDATED",
+  OnHeartbeatActivity = "ON_HEARTBEAT_ACTIVITY",
+  OnInboxItemStatusChanged = "ON_INBOX_ITEM_STATUS_CHANGED",
+  OnNewMessage = "ON_NEW_MESSAGE",
+  OnOrgUpdated = "ON_ORG_UPDATED",
+  OnThreadActivity = "ON_THREAD_ACTIVITY",
+  OnThreadTurnStep = "ON_THREAD_TURN_STEP",
+  OnThreadTurnUpdated = "ON_THREAD_TURN_UPDATED",
+  OnThreadUpdated = "ON_THREAD_UPDATED",
+  OnWorkspaceAccessRevoked = "ON_WORKSPACE_ACCESS_REVOKED",
+}
+
 export type Tenant = {
   __typename?: "Tenant";
   agents: Array<Agent>;
@@ -10348,29 +10323,6 @@ export type TenantAgentSummary = {
   status: AgentStatus;
   tenantId: Scalars["ID"]["output"];
   type: AgentType;
-};
-
-/**
- * Tenant/deployment opt-in for a deployment auth resource. Public login options
- * may be derived from this only after the linked resource validates.
- */
-export type TenantAuthProviderReference = {
-  __typename?: "TenantAuthProviderReference";
-  authProviderResourceId: Scalars["ID"]["output"];
-  createdAt: Scalars["AWSDateTime"]["output"];
-  disabledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  enabledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  hostnames: Array<Scalars["String"]["output"]>;
-  id: Scalars["ID"]["output"];
-  lastErrorCode?: Maybe<Scalars["String"]["output"]>;
-  metadata: Scalars["AWSJSON"]["output"];
-  pluginInstallId: Scalars["ID"]["output"];
-  publicOptionLabel: Scalars["String"]["output"];
-  resource: AuthProviderResource;
-  /** 'disabled' | 'enabled' | 'invalid' | 'decommissioning'. */
-  status: Scalars["String"]["output"];
-  tenantId: Scalars["ID"]["output"];
-  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 /**

@@ -45,11 +45,6 @@ import {
 import { createDefaultTwentyCutoverDeps } from "../../../lib/plugins/cutover/deps.js";
 import { cutoverTwentyPluginForTenant } from "@thinkwork/plugin-twenty/api/cutover";
 import {
-  authProviderResourcePayload,
-  configureWorkosAuthPluginForTenant,
-  tenantAuthProviderReferencePayload,
-} from "./workos-settings.js";
-import {
   pluginActorFor,
   pluginRequestMetadata,
   requirePluginTenantAdmin,
@@ -185,40 +180,6 @@ export async function cutoverTwentyPlugin(
     },
     createDefaultTwentyCutoverDeps(),
   );
-}
-
-export async function configureWorkosAuthPlugin(
-  _parent: unknown,
-  args: {
-    input: {
-      installId: string;
-      issuerUrl: string;
-      clientId: string;
-      clientSecret?: string | null;
-      publicOptionLabel?: string | null;
-    };
-  },
-  ctx: GraphQLContext,
-) {
-  const { tenantId } = await requirePluginTenantAdmin(ctx);
-  const result = await configureWorkosAuthPluginForTenant({
-    tenantId,
-    installId: args.input.installId,
-    issuerUrl: args.input.issuerUrl,
-    clientId: args.input.clientId,
-    clientSecret: args.input.clientSecret,
-    publicOptionLabel: args.input.publicOptionLabel,
-  });
-
-  const deps = createDefaultPluginEngineDeps();
-  return {
-    install: await installResultPayload(result.install, deps),
-    resource: authProviderResourcePayload(result.resource),
-    reference: tenantAuthProviderReferencePayload(
-      result.reference,
-      result.resource,
-    ),
-  };
 }
 
 export async function refreshPluginCatalog(
