@@ -608,6 +608,7 @@ describe("GraphQL Schema Contract", () => {
       "updateOntologyChangeSet",
       "approveOntologyChangeSet",
       "rejectOntologyChangeSet",
+      "rejectOntologyChangeSetItem",
       "updateOntologyEntityType",
       "updateOntologyRelationshipType",
       // Inbox

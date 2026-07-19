@@ -450,6 +450,18 @@ input RejectOntologyChangeSetInput {
   reason: String
 }
 
+"""
+Item-level reject from the Living Map evidence panel (THINK-320 U6, R13):
+marks a single still-reviewable item rejected and writes its rejection
+fingerprint so scans never re-propose the candidate. The owning change set
+stays open and no ontology version is minted.
+"""
+input RejectOntologyChangeSetItemInput {
+  tenantId: ID!
+  itemId: ID!
+  reason: String
+}
+
 input UpdateOntologyEntityTypeInput {
   tenantId: ID!
   entityTypeId: ID!
@@ -519,6 +531,9 @@ extend type Mutation {
   ): OntologyChangeSet!
   rejectOntologyChangeSet(
     input: RejectOntologyChangeSetInput!
+  ): OntologyChangeSet!
+  rejectOntologyChangeSetItem(
+    input: RejectOntologyChangeSetItemInput!
   ): OntologyChangeSet!
   updateOntologyEntityType(
     input: UpdateOntologyEntityTypeInput!

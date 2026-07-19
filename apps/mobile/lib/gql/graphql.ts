@@ -4751,6 +4751,7 @@ export type Mutation = {
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
+  rejectOntologyChangeSetItem: OntologyChangeSet;
   rejectPiExtensionVersion: PiExtension;
   rejectRoutineProposal: RoutineProposalMutationResult;
   /** Tenant-operator rejection with rationale. */
@@ -5796,6 +5797,10 @@ export type MutationRejectManagedApplicationDeploymentArgs = {
 
 export type MutationRejectOntologyChangeSetArgs = {
   input: RejectOntologyChangeSetInput;
+};
+
+export type MutationRejectOntologyChangeSetItemArgs = {
+  input: RejectOntologyChangeSetItemInput;
 };
 
 export type MutationRejectPiExtensionVersionArgs = {
@@ -9030,6 +9035,18 @@ export type RejectManagedApplicationDeploymentInput = {
 
 export type RejectOntologyChangeSetInput = {
   changeSetId: Scalars["ID"]["input"];
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+/**
+ * Item-level reject from the Living Map evidence panel (THINK-320 U6, R13):
+ * marks a single still-reviewable item rejected and writes its rejection
+ * fingerprint so scans never re-propose the candidate. The owning change set
+ * stays open and no ontology version is minted.
+ */
+export type RejectOntologyChangeSetItemInput = {
+  itemId: Scalars["ID"]["input"];
   reason?: InputMaybe<Scalars["String"]["input"]>;
   tenantId: Scalars["ID"]["input"];
 };

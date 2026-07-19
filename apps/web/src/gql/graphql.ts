@@ -4751,6 +4751,7 @@ export type Mutation = {
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
+  rejectOntologyChangeSetItem: OntologyChangeSet;
   rejectPiExtensionVersion: PiExtension;
   rejectRoutineProposal: RoutineProposalMutationResult;
   /** Tenant-operator rejection with rationale. */
@@ -5796,6 +5797,10 @@ export type MutationRejectManagedApplicationDeploymentArgs = {
 
 export type MutationRejectOntologyChangeSetArgs = {
   input: RejectOntologyChangeSetInput;
+};
+
+export type MutationRejectOntologyChangeSetItemArgs = {
+  input: RejectOntologyChangeSetItemInput;
 };
 
 export type MutationRejectPiExtensionVersionArgs = {
@@ -9030,6 +9035,18 @@ export type RejectManagedApplicationDeploymentInput = {
 
 export type RejectOntologyChangeSetInput = {
   changeSetId: Scalars["ID"]["input"];
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+/**
+ * Item-level reject from the Living Map evidence panel (THINK-320 U6, R13):
+ * marks a single still-reviewable item rejected and writes its rejection
+ * fingerprint so scans never re-propose the candidate. The owning change set
+ * stays open and no ontology version is minted.
+ */
+export type RejectOntologyChangeSetItemInput = {
+  itemId: Scalars["ID"]["input"];
   reason?: InputMaybe<Scalars["String"]["input"]>;
   tenantId: Scalars["ID"]["input"];
 };
@@ -17866,6 +17883,248 @@ export type SettingsMergeCanonicalEntitiesMutation = {
       memoryClaimCount: number;
       graphEntityCount: number;
     };
+  };
+};
+
+export type SettingsOntologySchemaGraphQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsOntologySchemaGraphQuery = {
+  __typename?: "Query";
+  ontologySchemaGraph: {
+    __typename?: "OntologySchemaGraph";
+    tenantId: string;
+    types: Array<{
+      __typename?: "OntologySchemaGraphType";
+      slug: string;
+      name: string;
+      instanceCount: number;
+      lifecycleStatus: OntologyLifecycleStatus;
+    }>;
+    relationships: Array<{
+      __typename?: "OntologySchemaGraphRelationship";
+      slug: string;
+      name: string;
+      sourceTypeSlugs: Array<string>;
+      targetTypeSlugs: Array<string>;
+    }>;
+    candidates: Array<{
+      __typename?: "OntologySchemaGraphCandidate";
+      itemId: string;
+      changeSetId: string;
+      itemType: OntologyChangeItemType;
+      slug?: string | null;
+      proposedValue: any;
+      editedValue?: any | null;
+      evidenceCount: number;
+      origin: string;
+      status: OntologyChangeSetStatus;
+    }>;
+  };
+};
+
+export type SettingsOntologyChangeSetsQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsOntologyChangeSetsQuery = {
+  __typename?: "Query";
+  ontologyChangeSets: Array<{
+    __typename?: "OntologyChangeSet";
+    id: string;
+    title: string;
+    summary?: string | null;
+    status: OntologyChangeSetStatus;
+    proposedBy: string;
+    createdAt: any;
+    updatedAt: any;
+    items: Array<{
+      __typename?: "OntologyChangeSetItem";
+      id: string;
+      changeSetId: string;
+      itemType: OntologyChangeItemType;
+      action: OntologyChangeAction;
+      status: OntologyChangeSetStatus;
+      targetSlug?: string | null;
+      title: string;
+      description?: string | null;
+      proposedValue: any;
+      editedValue?: any | null;
+      confidence?: number | null;
+      updatedAt: any;
+      evidenceExamples: Array<{
+        __typename?: "OntologyEvidenceExample";
+        id: string;
+        sourceKind: string;
+        sourceRef?: string | null;
+        sourceLabel?: string | null;
+        quote: string;
+        observedAt?: any | null;
+      }>;
+    }>;
+  }>;
+};
+
+export type SettingsCreateOntologyChangeSetMutationVariables = Exact<{
+  input: CreateOntologyChangeSetInput;
+}>;
+
+export type SettingsCreateOntologyChangeSetMutation = {
+  __typename?: "Mutation";
+  createOntologyChangeSet: {
+    __typename?: "CreateOntologyChangeSetPayload";
+    mergedItemIds: Array<string>;
+    changeSet?: {
+      __typename?: "OntologyChangeSet";
+      id: string;
+      status: OntologyChangeSetStatus;
+      updatedAt: any;
+      items: Array<{
+        __typename?: "OntologyChangeSetItem";
+        id: string;
+        targetSlug?: string | null;
+        status: OntologyChangeSetStatus;
+        updatedAt: any;
+      }>;
+    } | null;
+    conflicts: Array<{
+      __typename?: "OntologyChangeSetSlugConflict";
+      slug: string;
+      itemType: OntologyChangeItemType;
+      reason: string;
+    }>;
+  };
+};
+
+export type SettingsUpdateOntologyChangeSetMutationVariables = Exact<{
+  input: UpdateOntologyChangeSetInput;
+}>;
+
+export type SettingsUpdateOntologyChangeSetMutation = {
+  __typename?: "Mutation";
+  updateOntologyChangeSet: {
+    __typename?: "OntologyChangeSet";
+    id: string;
+    status: OntologyChangeSetStatus;
+    updatedAt: any;
+    items: Array<{
+      __typename?: "OntologyChangeSetItem";
+      id: string;
+      status: OntologyChangeSetStatus;
+      editedValue?: any | null;
+      updatedAt: any;
+    }>;
+  };
+};
+
+export type SettingsApproveOntologyChangeSetMutationVariables = Exact<{
+  input: ApproveOntologyChangeSetInput;
+}>;
+
+export type SettingsApproveOntologyChangeSetMutation = {
+  __typename?: "Mutation";
+  approveOntologyChangeSet: {
+    __typename?: "OntologyChangeSet";
+    id: string;
+    status: OntologyChangeSetStatus;
+    updatedAt: any;
+    items: Array<{
+      __typename?: "OntologyChangeSetItem";
+      id: string;
+      status: OntologyChangeSetStatus;
+      updatedAt: any;
+    }>;
+  };
+};
+
+export type SettingsRejectOntologyChangeSetMutationVariables = Exact<{
+  input: RejectOntologyChangeSetInput;
+}>;
+
+export type SettingsRejectOntologyChangeSetMutation = {
+  __typename?: "Mutation";
+  rejectOntologyChangeSet: {
+    __typename?: "OntologyChangeSet";
+    id: string;
+    status: OntologyChangeSetStatus;
+    updatedAt: any;
+  };
+};
+
+export type SettingsRejectOntologyChangeSetItemMutationVariables = Exact<{
+  input: RejectOntologyChangeSetItemInput;
+}>;
+
+export type SettingsRejectOntologyChangeSetItemMutation = {
+  __typename?: "Mutation";
+  rejectOntologyChangeSetItem: {
+    __typename?: "OntologyChangeSet";
+    id: string;
+    status: OntologyChangeSetStatus;
+    updatedAt: any;
+    items: Array<{
+      __typename?: "OntologyChangeSetItem";
+      id: string;
+      status: OntologyChangeSetStatus;
+      updatedAt: any;
+    }>;
+  };
+};
+
+export type SettingsOntologyPacksQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsOntologyPacksQuery = {
+  __typename?: "Query";
+  ontologyPacks: Array<{
+    __typename?: "OntologyPack";
+    slug: string;
+    name: string;
+    description: string;
+    types: Array<{
+      __typename?: "OntologyPackType";
+      slug: string;
+      name: string;
+      description?: string | null;
+      state: OntologyPackTypeState;
+    }>;
+  }>;
+};
+
+export type SettingsInstallOntologyPackMutationVariables = Exact<{
+  input: InstallOntologyPackInput;
+}>;
+
+export type SettingsInstallOntologyPackMutation = {
+  __typename?: "Mutation";
+  installOntologyPack: {
+    __typename?: "InstallOntologyPackPayload";
+    mergedItemIds: Array<string>;
+    skippedRejectedSlugs: Array<string>;
+    changeSet?: {
+      __typename?: "OntologyChangeSet";
+      id: string;
+      status: OntologyChangeSetStatus;
+      updatedAt: any;
+      items: Array<{
+        __typename?: "OntologyChangeSetItem";
+        id: string;
+        status: OntologyChangeSetStatus;
+        itemType: OntologyChangeItemType;
+        targetSlug?: string | null;
+        title: string;
+        proposedValue: any;
+        editedValue?: any | null;
+      }>;
+    } | null;
+    conflicts: Array<{
+      __typename?: "OntologyChangeSetSlugConflict";
+      slug: string;
+      itemType: OntologyChangeItemType;
+      reason: string;
+    }>;
   };
 };
 
@@ -37640,6 +37899,881 @@ export const SettingsMergeCanonicalEntitiesDocument = {
 } as unknown as DocumentNode<
   SettingsMergeCanonicalEntitiesMutation,
   SettingsMergeCanonicalEntitiesMutationVariables
+>;
+export const SettingsOntologySchemaGraphDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsOntologySchemaGraph" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "ontologySchemaGraph" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "types" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "instanceCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lifecycleStatus" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "relationships" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceTypeSlugs" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetTypeSlugs" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "candidates" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "itemId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "changeSetId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "itemType" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "proposedValue" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "editedValue" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidenceCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "origin" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsOntologySchemaGraphQuery,
+  SettingsOntologySchemaGraphQueryVariables
+>;
+export const SettingsOntologyChangeSetsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsOntologyChangeSets" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "ontologyChangeSets" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "title" } },
+                { kind: "Field", name: { kind: "Name", value: "summary" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "proposedBy" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "changeSetId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "itemType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "action" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "targetSlug" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "title" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "proposedValue" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "editedValue" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "confidence" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidenceExamples" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "sourceKind" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "sourceRef" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "sourceLabel" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "quote" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "observedAt" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsOntologyChangeSetsQuery,
+  SettingsOntologyChangeSetsQueryVariables
+>;
+export const SettingsCreateOntologyChangeSetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsCreateOntologyChangeSet" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "CreateOntologyChangeSetInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "createOntologyChangeSet" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "changeSet" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "items" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "targetSlug" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "status" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "updatedAt" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "mergedItemIds" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "conflicts" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "itemType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "reason" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsCreateOntologyChangeSetMutation,
+  SettingsCreateOntologyChangeSetMutationVariables
+>;
+export const SettingsUpdateOntologyChangeSetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpdateOntologyChangeSet" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdateOntologyChangeSetInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateOntologyChangeSet" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "editedValue" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpdateOntologyChangeSetMutation,
+  SettingsUpdateOntologyChangeSetMutationVariables
+>;
+export const SettingsApproveOntologyChangeSetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsApproveOntologyChangeSet" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "ApproveOntologyChangeSetInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "approveOntologyChangeSet" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsApproveOntologyChangeSetMutation,
+  SettingsApproveOntologyChangeSetMutationVariables
+>;
+export const SettingsRejectOntologyChangeSetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRejectOntologyChangeSet" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "RejectOntologyChangeSetInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "rejectOntologyChangeSet" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRejectOntologyChangeSetMutation,
+  SettingsRejectOntologyChangeSetMutationVariables
+>;
+export const SettingsRejectOntologyChangeSetItemDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRejectOntologyChangeSetItem" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "RejectOntologyChangeSetItemInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "rejectOntologyChangeSetItem" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRejectOntologyChangeSetItemMutation,
+  SettingsRejectOntologyChangeSetItemMutationVariables
+>;
+export const SettingsOntologyPacksDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsOntologyPacks" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "ontologyPacks" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "types" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "state" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsOntologyPacksQuery,
+  SettingsOntologyPacksQueryVariables
+>;
+export const SettingsInstallOntologyPackDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsInstallOntologyPack" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "InstallOntologyPackInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "installOntologyPack" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "changeSet" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "items" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "status" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "itemType" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "targetSlug" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "title" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "proposedValue" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "editedValue" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "mergedItemIds" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "skippedRejectedSlugs" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "conflicts" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "itemType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "reason" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsInstallOntologyPackMutation,
+  SettingsInstallOntologyPackMutationVariables
 >;
 export const SettingsMySlackLinksDocument = {
   kind: "Document",

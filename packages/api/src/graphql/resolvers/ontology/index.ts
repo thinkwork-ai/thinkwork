@@ -10,6 +10,7 @@ import { installOntologyPackMutation } from "./installOntologyPack.mutation.js";
 import { updateOntologyChangeSetMutation } from "./updateOntologyChangeSet.mutation.js";
 import { approveOntologyChangeSetMutation } from "./approveOntologyChangeSet.mutation.js";
 import { rejectOntologyChangeSetMutation } from "./rejectOntologyChangeSet.mutation.js";
+import { rejectOntologyChangeSetItemMutation } from "./rejectOntologyChangeSetItem.mutation.js";
 import { updateOntologyEntityTypeMutation } from "./updateOntologyEntityType.mutation.js";
 import { updateOntologyRelationshipTypeMutation } from "./updateOntologyRelationshipType.mutation.js";
 import { setOntologyEntityTypeIdentityRulesMutation } from "./setOntologyEntityTypeIdentityRules.mutation.js";
@@ -30,6 +31,7 @@ export const ontologyMutations = {
   updateOntologyChangeSet: updateOntologyChangeSetMutation,
   approveOntologyChangeSet: approveOntologyChangeSetMutation,
   rejectOntologyChangeSet: rejectOntologyChangeSetMutation,
+  rejectOntologyChangeSetItem: rejectOntologyChangeSetItemMutation,
   updateOntologyEntityType: updateOntologyEntityTypeMutation,
   updateOntologyRelationshipType: updateOntologyRelationshipTypeMutation,
   setOntologyEntityTypeIdentityRules:

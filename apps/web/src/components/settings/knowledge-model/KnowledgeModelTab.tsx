@@ -10,14 +10,32 @@ import {
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { KnowledgeGraphTab } from "@/components/settings/knowledge-graph/KnowledgeGraphTab";
 import { IdentityList } from "./IdentityList";
+import type { OntologyFocus } from "./OntologyCandidateSheet";
+import { OntologyMapView } from "./OntologyMapView";
+import { OntologyPacksView } from "./OntologyPacksView";
 import { ResolutionQueue } from "./ResolutionQueue";
 
-type KnowledgeModelView = "definitions" | "identity" | "resolution-queue";
+type KnowledgeModelView =
+  | "map"
+  | "packs"
+  | "definitions"
+  | "identity"
+  | "resolution-queue";
 
 const VIEW_TITLES: Record<
   KnowledgeModelView,
   { title: string; description: string }
 > = {
+  map: {
+    title: "Living Map",
+    description:
+      "Your domain's schema graph. Ghost nodes are pending candidates — focus one to review its evidence, or add a triple directly on the canvas.",
+  },
+  packs: {
+    title: "Starter Packs",
+    description:
+      "Installable domain-schema bundles. Installing stages the pack's types as a pending change set for review — nothing applies without approval.",
+  },
   definitions: {
     title: "Definitions",
     description: "Inspect approved terms and relationship definitions.",
@@ -38,6 +56,8 @@ const VIEW_OPTIONS: ReadonlyArray<{
   value: KnowledgeModelView;
   label: string;
 }> = [
+  { value: "map", label: "Living Map" },
+  { value: "packs", label: "Starter Packs" },
   { value: "definitions", label: "Definitions" },
   { value: "identity", label: "Identity" },
   { value: "resolution-queue", label: "Resolution Queue" },
@@ -46,13 +66,19 @@ const VIEW_OPTIONS: ReadonlyArray<{
 /**
  * Ontology tab of the unified Memory page (THINK-193 U4). The active
  * sub-view's title is also the view selector, keeping the page hierarchy clear
- * while preserving three content-only views: term Definitions (the
- * pre-existing knowledge-graph tab content), the canonical-entity Identity
- * list, and the entity Resolution Queue. Selection is component-local state so
- * the existing /settings/memory/ontology route keeps working unchanged.
+ * across five content-only views: the Living Map schema canvas (THINK-320 U6,
+ * KTD-8 — the default landing view), the Starter Packs browser (THINK-320
+ * U7), term Definitions (the pre-existing knowledge-graph tab content), the
+ * canonical-entity Identity list, and the entity Resolution Queue. Selection
+ * is component-local state so the existing
+ * /settings/memory/ontology route keeps working unchanged.
  */
 export function KnowledgeModelTab() {
-  const [view, setView] = useState<KnowledgeModelView>("definitions");
+  const [view, setView] = useState<KnowledgeModelView>("map");
+  // Pack-install handoff (THINK-320 U7, AE4): the packs view stages a change
+  // set and asks the map to open it in the review flow. Cleared once the map
+  // captures it so a later return to the map doesn't re-open the sheet.
+  const [pendingFocus, setPendingFocus] = useState<OntologyFocus | null>(null);
   const { title, description } = VIEW_TITLES[view];
 
   return (
@@ -98,6 +124,21 @@ export function KnowledgeModelTab() {
         description={description}
       />
       <div className="min-h-0 flex-1">
+        {view === "map" ? (
+          <OntologyMapView
+            initialFocus={pendingFocus}
+            onInitialFocusConsumed={() => setPendingFocus(null)}
+            onOpenPacks={() => setView("packs")}
+          />
+        ) : null}
+        {view === "packs" ? (
+          <OntologyPacksView
+            onOpenChangeSet={(focus) => {
+              setPendingFocus(focus);
+              setView("map");
+            }}
+          />
+        ) : null}
         {view === "definitions" ? <KnowledgeGraphTab /> : null}
         {view === "identity" ? <IdentityList /> : null}
         {view === "resolution-queue" ? <ResolutionQueue /> : null}
