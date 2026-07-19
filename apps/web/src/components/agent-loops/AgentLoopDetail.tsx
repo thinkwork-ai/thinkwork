@@ -67,6 +67,37 @@ type AgentLoopDetailData = { agentLoop?: AgentLoopRow | null };
 type AgentLoopLinkData = {
   agentLoop?: Pick<AgentLoopRow, "id" | "linkedWorkflow"> | null;
 };
+type AgentLoopPendingAction =
+  | "run"
+  | "pause"
+  | "archive"
+  | "refresh"
+  | null;
+
+export function agentLoopHeaderActionKey(
+  agentLoopId: string,
+  loop:
+    | Pick<
+        AgentLoopRow,
+        | "lifecycleStatus"
+        | "currentVersionId"
+        | "currentVersionNumber"
+        | "updatedAt"
+      >
+    | null,
+  pendingAction: AgentLoopPendingAction,
+) {
+  return [
+    "agent-loop",
+    agentLoopId,
+    loop?.lifecycleStatus ?? "loading",
+    loop?.currentVersionId ?? "no-version",
+    loop?.currentVersionNumber ?? "no-version-number",
+    loop?.updatedAt ?? "not-updated",
+    pendingAction ?? "idle",
+  ].join(":");
+}
+
 export function AgentLoopDetail({
   agentLoopId,
   routeScope = "settings",
@@ -85,9 +116,8 @@ export function AgentLoopDetail({
     defaultSpaceId,
   } = useAutomationEditorData();
   const navigate = useNavigate();
-  const [pendingAction, setPendingAction] = useState<
-    "run" | "pause" | "archive" | "refresh" | null
-  >(null);
+  const [pendingAction, setPendingAction] =
+    useState<AgentLoopPendingAction>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [loopResult, refetchLoop] = useQuery<AgentLoopDetailData>({
@@ -160,9 +190,7 @@ export function AgentLoopDetail({
         onArchive={() => void archiveLoop(loop)}
       />
     ) : undefined,
-    actionKey: `agent-loop:${agentLoopId}:${
-      loop?.lifecycleStatus ?? "loading"
-    }:${pendingAction ?? "idle"}`,
+    actionKey: agentLoopHeaderActionKey(agentLoopId, loop, pendingAction),
   });
 
   async function saveLoop(payload: SaveAgentLoopPayload) {
