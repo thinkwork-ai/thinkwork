@@ -1384,6 +1384,12 @@ variable "knowledge_graph_observations_ingest_enabled" {
   default     = false
 }
 
+variable "ontology_scan_sweep_enabled" {
+  description = "Enable the recurring per-tenant ontology suggestion scan sweep (THINK-320 U4/KTD-3). Ships disabled."
+  type        = bool
+  default     = false
+}
+
 variable "wiki_source" {
   description = "Wiki compile pipeline source: 'planner' or 'graph' (THINK-133 U8/KTD-4)."
   type        = string

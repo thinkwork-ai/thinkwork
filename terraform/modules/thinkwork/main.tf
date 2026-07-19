@@ -1215,6 +1215,7 @@ module "api" {
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
+  ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   enable_workspace_orchestration                = var.enable_workspace_orchestration

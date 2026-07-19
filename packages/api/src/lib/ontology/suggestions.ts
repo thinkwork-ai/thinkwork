@@ -1,11 +1,16 @@
 import { getConfig } from "@thinkwork/runtime-config";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
+  kgEntities,
   kgIngestRuns,
+  ontologyCandidateRejections,
   ontologyChangeSetItems,
   ontologyChangeSets,
+  ontologyEntityTypes,
   ontologyEvidenceExamples,
+  ontologyFacetTemplates,
+  ontologyRelationshipTypes,
   ontologySuggestionScanJobs,
   tenantEntityExternalRefs,
   users,
@@ -20,6 +25,11 @@ import { invokeClaudeJson, parseJsonResponse } from "../wiki/bedrock.js";
 import {
   listOntologyDefinitions,
   loadOntologySuggestionScanJob,
+  ontologyCandidateFingerprint,
+  planOntologyChangeSetItemWrites,
+  type CreateOntologyChangeSetItemInput,
+  type OntologyChangeSetItemEvidenceInput,
+  type OntologyChangeSetSlugConflict,
 } from "./repository.js";
 import { toOntologySuggestionScanJob } from "./mappers.js";
 import {
@@ -42,13 +52,21 @@ const TERMINAL_OBSERVATION_RUN_STATUSES = [
 ] as const;
 const HINDSIGHT_SCAN_USER_LIMIT = 25;
 const HINDSIGHT_SCAN_RECORD_LIMIT = 75;
+const UNTYPED_ENTITY_SCAN_LIMIT = 300;
+/** Minimum cluster size before untyped kg entities become a candidate. */
+const UNTYPED_ENTITY_CLUSTER_MIN = 2;
 const SUPPORT_CASE_SOURCE_RE =
   /(support|case|ticket|zendesk|intercom|helpdesk)/i;
 const COMMITMENT_TEXT_RE =
   /\b(commitment|committed|promise|promised|due|follow[-\s]?up|owner|deliver by|by \d{1,2}\/\d{1,2}|by (mon|tue|wed|thu|fri|sat|sun|january|february|march|april|may|june|july|august|september|october|november|december))/i;
 
 export interface OntologyScanProviderStatus {
-  provider: "observation_runs" | "external_refs" | "hindsight" | "llm";
+  provider:
+    | "observation_runs"
+    | "external_refs"
+    | "hindsight"
+    | "untyped_entities"
+    | "llm";
   state: "ok" | "degraded" | "unavailable" | "skipped" | "error";
   detail?: string;
   count?: number;
@@ -59,7 +77,11 @@ export interface OntologySuggestionObservation extends OntologyEvidenceInput {
 }
 
 export interface OntologySuggestionFeature {
-  kind: "customer_commitment" | "support_case_refs" | "rejected_entity_type";
+  kind:
+    | "customer_commitment"
+    | "support_case_refs"
+    | "rejected_entity_type"
+    | "untyped_entity_cluster";
   title: string;
   evidence: OntologyEvidenceInput[];
   frequency: number;
@@ -362,6 +384,9 @@ export async function runOntologySuggestionScan(args: {
         proposals: proposals.length,
         createdChangeSets: persisted.createdChangeSetIds.length,
         updatedChangeSets: persisted.updatedChangeSetIds.length,
+        mergedItems: persisted.mergedItemIds.length,
+        slugConflicts: persisted.conflicts.length,
+        skippedRejected: persisted.skippedRejectedSlugs.length,
       },
       providerStatuses: sourceBundle.providerStatuses,
     };
@@ -520,6 +545,57 @@ export async function collectOntologySuggestionSources(args: {
   });
   observations.push(...hindsightSources.observations);
   providerStatuses.push(hindsightSources.providerStatus);
+
+  // Untyped kg entities (THINK-320 KTD-2 / R10): entities the extractor kept
+  // but that carry no approved ontology type enter as a scan source. They are
+  // clustered by raw type into one typed candidate downstream — never
+  // per-entity ghosts.
+  const untypedRows = await db
+    .select({
+      id: kgEntities.id,
+      label: kgEntities.label,
+      typeLabel: kgEntities.type_label,
+      summary: kgEntities.summary,
+      lastSeenAt: kgEntities.last_seen_at,
+      updatedAt: kgEntities.updated_at,
+    })
+    .from(kgEntities)
+    .where(
+      and(
+        eq(kgEntities.tenant_id, args.tenantId),
+        isNull(kgEntities.ontology_type_slug),
+      ),
+    )
+    .orderBy(desc(kgEntities.updated_at))
+    .limit(UNTYPED_ENTITY_SCAN_LIMIT);
+  let untypedCount = 0;
+  for (const row of untypedRows) {
+    const rawType = stringValue(row.typeLabel);
+    const entityTypeSlug = normalizeOntologySlug(rawType);
+    if (!entityTypeSlug) continue;
+    const text = `Knowledge-graph entity "${row.label}" has raw type "${rawType}" but no approved ontology type.${row.summary ? ` ${row.summary}` : ""}`;
+    const evidence = evidenceFromText({
+      sourceKind: "untyped_kg_entity",
+      sourceRef: `kg_entity:${row.id}`,
+      sourceLabel: row.label,
+      text,
+      observedAt: row.lastSeenAt ?? row.updatedAt,
+      metadata: {
+        kgEntityId: row.id,
+        entitySubtype: entityTypeSlug,
+        rawType,
+      },
+    });
+    if (evidence) {
+      observations.push({ ...evidence, text });
+      untypedCount += 1;
+    }
+  }
+  providerStatuses.push({
+    provider: "untyped_entities",
+    state: "ok",
+    count: untypedCount,
+  });
 
   return { observations, providerStatuses };
 }
@@ -815,6 +891,41 @@ export function extractOntologySuggestionFeatures(args: {
     features.push({
       kind: "rejected_entity_type",
       title: `Repeated rejected ${entityTypeSlug} entity candidates`,
+      evidence: dedupeEvidence(bucket.evidence, 8),
+      frequency: bucket.frequency,
+      metadata: { entityTypeSlug },
+    });
+  }
+
+  // Untyped kg entities (KTD-2): cluster by proposed type slug so a whole
+  // cohort of untyped entities becomes at most one typed candidate, with the
+  // member entities as evidence.
+  const untypedClusters = new Map<
+    string,
+    { evidence: OntologyEvidenceInput[]; frequency: number }
+  >();
+  for (const observation of args.observations) {
+    if (observation.sourceKind !== "untyped_kg_entity") continue;
+    const entityTypeSlug = stringValue(observation.metadata?.entitySubtype);
+    if (
+      !entityTypeSlug ||
+      args.activeOntology.entityTypeSlugs.has(entityTypeSlug)
+    ) {
+      continue;
+    }
+    const bucket = untypedClusters.get(entityTypeSlug) ?? {
+      evidence: [] as OntologyEvidenceInput[],
+      frequency: 0,
+    };
+    bucket.evidence.push(observation);
+    bucket.frequency += 1;
+    untypedClusters.set(entityTypeSlug, bucket);
+  }
+  for (const [entityTypeSlug, bucket] of untypedClusters) {
+    if (bucket.frequency < UNTYPED_ENTITY_CLUSTER_MIN) continue;
+    features.push({
+      kind: "untyped_entity_cluster",
+      title: `Untyped ${entityTypeSlug} entities`,
       evidence: dedupeEvidence(bucket.evidence, 8),
       frequency: bucket.frequency,
       metadata: { entityTypeSlug },
@@ -1135,6 +1246,7 @@ function deterministicProposals(
     });
   }
 
+  const proposedEntityTypeSlugs = new Set<string>();
   for (const rejectedEntity of features.filter(
     (feature) => feature.kind === "rejected_entity_type",
   )) {
@@ -1142,6 +1254,7 @@ function deterministicProposals(
     if (!entityTypeSlug || activeOntology.entityTypeSlugs.has(entityTypeSlug)) {
       continue;
     }
+    proposedEntityTypeSlugs.add(entityTypeSlug);
     const evidence = dedupeEvidence(rejectedEntity.evidence, 5);
     proposals.push({
       key: `rejected-${entityTypeSlug}-entity-type`,
@@ -1177,38 +1290,273 @@ function deterministicProposals(
     });
   }
 
+  // Untyped-entity clusters (KTD-2): at most one candidate per proposed type.
+  // Clusters whose slug already has a rejected-entity-type proposal in this
+  // pass (or an approved definition) are skipped, never duplicated.
+  for (const cluster of features.filter(
+    (feature) => feature.kind === "untyped_entity_cluster",
+  )) {
+    const entityTypeSlug = stringValue(cluster.metadata?.entityTypeSlug);
+    if (
+      !entityTypeSlug ||
+      activeOntology.entityTypeSlugs.has(entityTypeSlug) ||
+      proposedEntityTypeSlugs.has(entityTypeSlug)
+    ) {
+      continue;
+    }
+    proposedEntityTypeSlugs.add(entityTypeSlug);
+    const evidence = dedupeEvidence(cluster.evidence, 5);
+    proposals.push({
+      key: `untyped-${entityTypeSlug}-entity-type`,
+      title: `Type untyped ${entityTypeSlug} entities`,
+      summary:
+        "Multiple knowledge-graph entities share this raw type but have no approved ontology type. Approving it types the whole cluster on the next reprocess.",
+      confidence: 0.66,
+      observedFrequency: cluster.frequency,
+      expectedImpact: {
+        entityTypes: [entityTypeSlug],
+        untypedEntityCount: cluster.frequency,
+      },
+      items: [
+        {
+          itemType: "entity_type",
+          action: "create",
+          targetKind: "entity_type",
+          targetSlug: entityTypeSlug,
+          title: `Add ${formatTitleFromSlug(entityTypeSlug)} entity type`,
+          description:
+            "Created from a cluster of untyped knowledge-graph entities sharing this raw type. Review the member entities before approval.",
+          proposedValue: {
+            slug: entityTypeSlug,
+            name: formatTitleFromSlug(entityTypeSlug),
+            broadType: "business_object",
+            aliases: [],
+            guidanceNotes:
+              "Created from untyped knowledge-graph entities. Review member entities before approval.",
+          },
+          confidence: 0.66,
+          evidence,
+        },
+      ],
+    });
+  }
+
   return proposals;
 }
 
-async function persistOntologyChangeSetProposals(args: {
+export interface PersistOntologyChangeSetProposalsResult {
+  createdChangeSetIds: string[];
+  updatedChangeSetIds: string[];
+  mergedItemIds: string[];
+  conflicts: OntologyChangeSetSlugConflict[];
+  /** Candidate slugs dropped because their (kind, slug) fingerprint is in
+   * ontology.candidate_rejections (R13). */
+  skippedRejectedSlugs: string[];
+}
+
+/**
+ * Persist synthesized proposals into governed change sets (THINK-320 KTD-4).
+ *
+ * Write path is a slug-level upsert — never delete-reinsert: a proposal item
+ * whose (kind, slug) fingerprint matches a still-reviewable pending item
+ * updates that item's proposal in place (operator `editedValue` untouched)
+ * and unions its evidence; fresh slugs insert into the proposal's own change
+ * set. Items colliding with approved definitions surface as conflicts (R14),
+ * and fingerprints in ontology.candidate_rejections drop candidates before
+ * any write (R13). Callers: the suggestion scan (`proposedBy:
+ * 'suggestion_engine'`) and pack install (`proposedBy: 'pack_install'`,
+ * evidence-optional).
+ */
+export async function persistOntologyChangeSetProposals(args: {
   tenantId: string;
-  jobId: string;
   proposals: OntologyChangeSetProposal[];
-  db: DbLike;
-}) {
+  proposedBy?: "suggestion_engine" | "pack_install";
+  jobId?: string | null;
+  /** Keep zero-evidence items (pack installs have no founding evidence).
+   * Defaults to true for proposedBy 'pack_install'. */
+  evidenceOptional?: boolean;
+  db?: DbLike;
+}): Promise<PersistOntologyChangeSetProposalsResult> {
+  const db = args.db ?? defaultDb;
+  const proposedBy = args.proposedBy ?? "suggestion_engine";
+  const evidenceOptional =
+    args.evidenceOptional ?? proposedBy === "pack_install";
+
+  // R13: rejection fingerprints filter candidates before any write.
+  const rejectionRows = await db
+    .select({ fingerprint: ontologyCandidateRejections.fingerprint })
+    .from(ontologyCandidateRejections)
+    .where(eq(ontologyCandidateRejections.tenant_id, args.tenantId));
+  const rejectedFingerprints = new Set(
+    rejectionRows.map((row) => row.fingerprint),
+  );
+
+  // R14: approved definitions are conflicts, not upsert targets.
+  const [entitySlugRows, relationshipSlugRows, facetSlugRows] =
+    await Promise.all([
+      db
+        .select({ slug: ontologyEntityTypes.slug })
+        .from(ontologyEntityTypes)
+        .where(
+          and(
+            eq(ontologyEntityTypes.tenant_id, args.tenantId),
+            eq(ontologyEntityTypes.lifecycle_status, "approved"),
+          ),
+        ),
+      db
+        .select({ slug: ontologyRelationshipTypes.slug })
+        .from(ontologyRelationshipTypes)
+        .where(
+          and(
+            eq(ontologyRelationshipTypes.tenant_id, args.tenantId),
+            eq(ontologyRelationshipTypes.lifecycle_status, "approved"),
+          ),
+        ),
+      db
+        .select({ slug: ontologyFacetTemplates.slug })
+        .from(ontologyFacetTemplates)
+        .where(
+          and(
+            eq(ontologyFacetTemplates.tenant_id, args.tenantId),
+            eq(ontologyFacetTemplates.lifecycle_status, "approved"),
+          ),
+        ),
+    ]);
+  const approvedFingerprints = new Set<string>([
+    ...entitySlugRows.map((row) =>
+      ontologyCandidateFingerprint("entity_type", row.slug),
+    ),
+    ...relationshipSlugRows.map((row) =>
+      ontologyCandidateFingerprint("relationship_type", row.slug),
+    ),
+    ...facetSlugRows.map((row) =>
+      ontologyCandidateFingerprint("facet_template", row.slug),
+    ),
+  ]);
+
+  const openSets = await db
+    .select()
+    .from(ontologyChangeSets)
+    .where(
+      and(
+        eq(ontologyChangeSets.tenant_id, args.tenantId),
+        inArray(ontologyChangeSets.status, [...OPEN_CHANGE_SET_STATUSES]),
+      ),
+    )
+    .orderBy(desc(ontologyChangeSets.updated_at));
+  const openSetIds = openSets.map((row) => row.id);
+  const pendingItems: Array<{
+    id: string;
+    change_set_id: string;
+    item_type: string;
+    target_slug: string | null;
+    proposed_value: unknown;
+    position?: number | null;
+  }> =
+    openSetIds.length > 0
+      ? await db
+          .select()
+          .from(ontologyChangeSetItems)
+          .where(
+            and(
+              eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+              inArray(ontologyChangeSetItems.change_set_id, openSetIds),
+              inArray(ontologyChangeSetItems.status, [
+                "pending_review",
+                "deferred",
+              ]),
+            ),
+          )
+      : [];
+
   const createdChangeSetIds: string[] = [];
   const updatedChangeSetIds: string[] = [];
+  const mergedItemIds: string[] = [];
+  const conflicts: OntologyChangeSetSlugConflict[] = [];
+  const skippedRejectedSlugs: string[] = [];
+
+  const touchUpdated = (changeSetId: string) => {
+    if (
+      !createdChangeSetIds.includes(changeSetId) &&
+      !updatedChangeSetIds.includes(changeSetId)
+    ) {
+      updatedChangeSetIds.push(changeSetId);
+    }
+  };
+
   for (const proposal of args.proposals) {
-    const items = proposal.items.filter((item) => item.evidence.length > 0);
-    if (items.length === 0) continue;
-    const [existing] = await args.db
-      .select()
-      .from(ontologyChangeSets)
-      .where(
-        and(
-          eq(ontologyChangeSets.tenant_id, args.tenantId),
-          eq(ontologyChangeSets.title, proposal.title),
-          eq(ontologyChangeSets.proposed_by, "suggestion_engine"),
-          inArray(ontologyChangeSets.status, [...OPEN_CHANGE_SET_STATUSES]),
+    const survivingItems: CreateOntologyChangeSetItemInput[] = [];
+    for (const item of proposal.items) {
+      if (!evidenceOptional && item.evidence.length === 0) continue;
+      const fingerprint = ontologyCandidateFingerprint(
+        item.itemType,
+        item.targetSlug,
+      );
+      if (rejectedFingerprints.has(fingerprint)) {
+        skippedRejectedSlugs.push(item.targetSlug);
+        continue;
+      }
+      survivingItems.push({
+        itemType: item.itemType,
+        action: item.action,
+        slug: item.targetSlug,
+        title: item.title,
+        description: item.description,
+        proposedValue: item.proposedValue,
+        confidence: item.confidence,
+        evidence: item.evidence.map((evidence) =>
+          toItemEvidenceInput(evidence, {
+            scanJobId: args.jobId ?? null,
+            proposalKey: proposal.key,
+          }),
         ),
-      )
-      .orderBy(desc(ontologyChangeSets.updated_at))
-      .limit(1);
+      });
+    }
+    if (survivingItems.length === 0) continue;
+
+    const plan = planOntologyChangeSetItemWrites({
+      items: survivingItems,
+      pendingItems,
+      approvedFingerprints,
+    });
+    conflicts.push(...plan.conflicts);
 
     const now = new Date();
-    const changeSetId = existing?.id;
-    const [changeSet] = changeSetId
-      ? await args.db
+
+    // Slug upsert (KTD-4): merge targets update in place, preserving
+    // operator edited_value (never touched) and unioning evidence.
+    for (const merge of plan.merges) {
+      await db
+        .update(ontologyChangeSetItems)
+        .set({
+          proposed_value: merge.proposedValue,
+          status: "pending_review",
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(ontologyChangeSetItems.id, merge.itemId),
+            eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+          ),
+        );
+      await unionItemEvidence({
+        db,
+        tenantId: args.tenantId,
+        changeSetId: merge.changeSetId,
+        itemId: merge.itemId,
+        evidence: merge.evidence,
+      });
+      mergedItemIds.push(merge.itemId);
+      touchUpdated(merge.changeSetId);
+    }
+
+    if (plan.inserts.length === 0) continue;
+
+    const existing = openSets.find(
+      (row) => row.title === proposal.title && row.proposed_by === proposedBy,
+    );
+    const [changeSet] = existing
+      ? await db
           .update(ontologyChangeSets)
           .set({
             summary: proposal.summary,
@@ -1218,9 +1566,9 @@ async function persistOntologyChangeSetProposals(args: {
             expected_impact: proposal.expectedImpact,
             updated_at: now,
           })
-          .where(eq(ontologyChangeSets.id, changeSetId))
+          .where(eq(ontologyChangeSets.id, existing.id))
           .returning()
-      : await args.db
+      : await db
           .insert(ontologyChangeSets)
           .values({
             tenant_id: args.tenantId,
@@ -1230,62 +1578,151 @@ async function persistOntologyChangeSetProposals(args: {
             confidence: String(proposal.confidence),
             observed_frequency: proposal.observedFrequency,
             expected_impact: proposal.expectedImpact,
-            proposed_by: "suggestion_engine",
+            proposed_by: proposedBy,
           })
           .returning();
-
     if (!changeSet) continue;
-    if (existing) updatedChangeSetIds.push(changeSet.id);
+    if (existing) touchUpdated(changeSet.id);
     else createdChangeSetIds.push(changeSet.id);
 
-    if (existing) {
-      await args.db
-        .delete(ontologyEvidenceExamples)
-        .where(eq(ontologyEvidenceExamples.change_set_id, changeSet.id));
-      await args.db
-        .delete(ontologyChangeSetItems)
-        .where(eq(ontologyChangeSetItems.change_set_id, changeSet.id));
-    }
-
-    for (const [position, item] of items.entries()) {
-      const [insertedItem] = await args.db
+    let position = pendingItems
+      .filter((item) => item.change_set_id === changeSet.id)
+      .reduce((max, item) => Math.max(max, (item.position ?? 0) + 1), 0);
+    for (const insert of plan.inserts) {
+      const [insertedItem] = await db
         .insert(ontologyChangeSetItems)
         .values({
           tenant_id: args.tenantId,
           change_set_id: changeSet.id,
-          item_type: item.itemType,
-          action: item.action,
+          item_type: insert.itemType,
+          action: insert.action ?? "create",
           status: "pending_review",
-          target_kind: item.targetKind,
-          target_slug: item.targetSlug,
-          title: item.title,
-          description: item.description,
-          proposed_value: item.proposedValue,
-          confidence: String(item.confidence),
+          target_kind: insert.itemType,
+          target_slug: insert.slug,
+          title: insert.title ?? "Ontology item",
+          description: insert.description ?? null,
+          proposed_value: insert.proposedValue ?? {},
+          confidence:
+            insert.confidence === null || insert.confidence === undefined
+              ? null
+              : String(insert.confidence),
           position,
         })
         .returning({ id: ontologyChangeSetItems.id });
+      position += 1;
       if (!insertedItem) continue;
-      await args.db.insert(ontologyEvidenceExamples).values(
-        item.evidence.map((evidence) => ({
-          tenant_id: args.tenantId,
-          change_set_id: changeSet.id,
-          item_id: insertedItem.id,
-          source_kind: evidence.sourceKind,
-          source_ref: evidence.sourceRef,
-          source_label: evidence.sourceLabel,
-          quote: evidence.quote,
-          observed_at: toDateOrNull(evidence.observedAt),
-          metadata: {
-            ...(evidence.metadata ?? {}),
-            scanJobId: args.jobId,
-            proposalKey: proposal.key,
-          },
-        })),
-      );
+      if (insert.evidence.length > 0) {
+        await db.insert(ontologyEvidenceExamples).values(
+          insert.evidence.map((evidence) => ({
+            tenant_id: args.tenantId,
+            change_set_id: changeSet.id,
+            item_id: insertedItem.id,
+            source_kind: evidence.sourceKind,
+            source_ref: evidence.sourceRef ?? null,
+            source_label: evidence.sourceLabel ?? null,
+            quote: evidence.quote,
+            observed_at: toDateOrNull(evidence.observedAt),
+            metadata: evidence.metadata ?? {},
+          })),
+        );
+      }
+      // Later proposals in this call (and later re-runs of the loop) must
+      // merge into what was just written instead of duplicating it.
+      pendingItems.push({
+        id: insertedItem.id,
+        change_set_id: changeSet.id,
+        item_type: insert.itemType,
+        target_slug: insert.slug,
+        proposed_value: insert.proposedValue ?? {},
+        position: position - 1,
+      });
     }
   }
-  return { createdChangeSetIds, updatedChangeSetIds };
+
+  return {
+    createdChangeSetIds,
+    updatedChangeSetIds,
+    mergedItemIds,
+    conflicts,
+    skippedRejectedSlugs,
+  };
+}
+
+function toItemEvidenceInput(
+  evidence: OntologyEvidenceInput,
+  extraMetadata: Record<string, unknown>,
+): OntologyChangeSetItemEvidenceInput {
+  const observedAt = toDateOrNull(evidence.observedAt);
+  return {
+    sourceKind: evidence.sourceKind,
+    sourceRef: evidence.sourceRef,
+    sourceLabel: evidence.sourceLabel,
+    quote: evidence.quote,
+    observedAt: observedAt ? observedAt.toISOString() : null,
+    metadata: { ...(evidence.metadata ?? {}), ...extraMetadata },
+  };
+}
+
+/** Union evidence onto a merged item, skipping rows already present
+ * (matched on sourceKind + sourceRef + quote). Never deletes. */
+async function unionItemEvidence(args: {
+  db: DbLike;
+  tenantId: string;
+  changeSetId: string;
+  itemId: string;
+  evidence: OntologyChangeSetItemEvidenceInput[];
+}) {
+  if (args.evidence.length === 0) return;
+  const existingRows = await args.db
+    .select({
+      source_kind: ontologyEvidenceExamples.source_kind,
+      source_ref: ontologyEvidenceExamples.source_ref,
+      quote: ontologyEvidenceExamples.quote,
+    })
+    .from(ontologyEvidenceExamples)
+    .where(
+      and(
+        eq(ontologyEvidenceExamples.item_id, args.itemId),
+        eq(ontologyEvidenceExamples.tenant_id, args.tenantId),
+      ),
+    );
+  const seen = new Set(
+    existingRows.map((row) =>
+      evidenceKey(row.source_kind, row.source_ref, row.quote),
+    ),
+  );
+  const fresh = args.evidence.filter((entry) => {
+    const key = evidenceKey(
+      entry.sourceKind,
+      entry.sourceRef ?? null,
+      entry.quote,
+    );
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (fresh.length === 0) return;
+  await args.db.insert(ontologyEvidenceExamples).values(
+    fresh.map((entry) => ({
+      tenant_id: args.tenantId,
+      change_set_id: args.changeSetId,
+      item_id: args.itemId,
+      source_kind: entry.sourceKind,
+      source_ref: entry.sourceRef ?? null,
+      source_label: entry.sourceLabel ?? null,
+      quote: entry.quote,
+      observed_at: entry.observedAt ? new Date(entry.observedAt) : null,
+      metadata: entry.metadata ?? {},
+    })),
+  );
+}
+
+function evidenceKey(
+  sourceKind: string,
+  sourceRef: string | null,
+  quote: string,
+) {
+  return [sourceKind, sourceRef ?? "", quote.toLowerCase()].join(":");
 }
 
 function activeOntologySnapshot(
