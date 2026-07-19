@@ -5,10 +5,12 @@ const {
   mockRequireTenantAdmin,
   mockResolveCallerUserId,
   mockListOntologyDefinitions,
+  mockGetOntologySchemaGraph,
   mockListOntologyChangeSets,
   mockLoadOntologySuggestionScanJob,
   mockLoadOntologyReprocessJob,
   mockStartOntologySuggestionScan,
+  mockCreateOntologyChangeSet,
   mockUpdateOntologyChangeSet,
   mockApproveOntologyChangeSet,
   mockRejectOntologyChangeSet,
@@ -18,10 +20,12 @@ const {
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
   mockListOntologyDefinitions: vi.fn(),
+  mockGetOntologySchemaGraph: vi.fn(),
   mockListOntologyChangeSets: vi.fn(),
   mockLoadOntologySuggestionScanJob: vi.fn(),
   mockLoadOntologyReprocessJob: vi.fn(),
   mockStartOntologySuggestionScan: vi.fn(),
+  mockCreateOntologyChangeSet: vi.fn(),
   mockUpdateOntologyChangeSet: vi.fn(),
   mockApproveOntologyChangeSet: vi.fn(),
   mockRejectOntologyChangeSet: vi.fn(),
@@ -43,9 +47,11 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 
 vi.mock("../../../lib/ontology/repository.js", () => ({
   listOntologyDefinitions: mockListOntologyDefinitions,
+  getOntologySchemaGraph: mockGetOntologySchemaGraph,
   listOntologyChangeSets: mockListOntologyChangeSets,
   loadOntologySuggestionScanJob: mockLoadOntologySuggestionScanJob,
   loadOntologyReprocessJob: mockLoadOntologyReprocessJob,
+  createOntologyChangeSet: mockCreateOntologyChangeSet,
   updateOntologyChangeSet: mockUpdateOntologyChangeSet,
   approveOntologyChangeSet: mockApproveOntologyChangeSet,
   rejectOntologyChangeSet: mockRejectOntologyChangeSet,
@@ -58,6 +64,7 @@ vi.mock("../../../lib/ontology/suggestions.js", () => ({
 }));
 
 import { approveOntologyChangeSetMutation } from "./approveOntologyChangeSet.mutation.js";
+import { createOntologyChangeSetMutation } from "./createOntologyChangeSet.mutation.js";
 import {
   changeSetStatusFromGraphQL,
   itemStatusFromGraphQL,
@@ -65,6 +72,7 @@ import {
 import { ontologyChangeSets } from "./ontologyChangeSets.query.js";
 import { ontologyDefinitions } from "./ontologyDefinitions.query.js";
 import { ontologyReprocessJob } from "./ontologyReprocessJob.query.js";
+import { ontologySchemaGraph } from "./ontologySchemaGraph.query.js";
 import { ontologySuggestionScanJob } from "./ontologySuggestionScanJob.query.js";
 import { rejectOntologyChangeSetMutation } from "./rejectOntologyChangeSet.mutation.js";
 import { startOntologySuggestionScanMutation } from "./startOntologySuggestionScan.mutation.js";
@@ -79,10 +87,12 @@ describe("ontology GraphQL resolvers", () => {
     mockRequireTenantAdmin.mockReset();
     mockResolveCallerUserId.mockReset();
     mockListOntologyDefinitions.mockReset();
+    mockGetOntologySchemaGraph.mockReset();
     mockListOntologyChangeSets.mockReset();
     mockLoadOntologySuggestionScanJob.mockReset();
     mockLoadOntologyReprocessJob.mockReset();
     mockStartOntologySuggestionScan.mockReset();
+    mockCreateOntologyChangeSet.mockReset();
     mockUpdateOntologyChangeSet.mockReset();
     mockApproveOntologyChangeSet.mockReset();
     mockRejectOntologyChangeSet.mockReset();
@@ -128,6 +138,58 @@ describe("ontology GraphQL resolvers", () => {
       tenantId: "tenant-1",
     });
     expect(result.entityTypes[0].externalMappings[0].mappingKind).toBe("BROAD");
+  });
+
+  it("serves the Living Map schema graph after an admin gate", async () => {
+    const graph = {
+      tenantId: "tenant-1",
+      types: [
+        { slug: "customer", name: "Customer", instanceCount: 12 },
+        { slug: "person", name: "Person", instanceCount: 0 },
+      ],
+      relationships: [
+        {
+          slug: "owns",
+          name: "Owns",
+          sourceTypeSlugs: ["customer"],
+          targetTypeSlugs: ["asset"],
+        },
+      ],
+      candidates: [
+        {
+          itemId: "item-1",
+          changeSetId: "change-set-1",
+          slug: "work_order",
+          evidenceCount: 12,
+          origin: "suggestion_engine",
+        },
+      ],
+    };
+    mockGetOntologySchemaGraph.mockResolvedValue(graph);
+
+    const result = await ontologySchemaGraph(
+      null,
+      { tenantId: "tenant-1" },
+      ctx,
+    );
+
+    expect(result).toBe(graph);
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(ctx, "tenant-1");
+    expect(mockGetOntologySchemaGraph).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+    });
+  });
+
+  it("does not leak another tenant's schema graph to unauthorized callers", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(
+      new GraphQLError("Forbidden", { extensions: { code: "FORBIDDEN" } }),
+    );
+
+    await expect(
+      ontologySchemaGraph(null, { tenantId: "tenant-2" }, ctx),
+    ).rejects.toThrow("Forbidden");
+
+    expect(mockGetOntologySchemaGraph).not.toHaveBeenCalled();
   });
 
   it("maps change-set status filters before listing suggestions", async () => {
@@ -225,8 +287,104 @@ describe("ontology GraphQL resolvers", () => {
     expect(mockApproveOntologyChangeSet).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       changeSetId: "change-set-1",
+      excludedItemIds: undefined,
+      excludedDisposition: null,
       actorUserId: "user-1",
     });
+  });
+
+  it("passes per-item exclusions and a normalized disposition to approval (R15)", async () => {
+    mockApproveOntologyChangeSet.mockResolvedValue({
+      id: "change-set-1",
+      status: "APPROVED",
+    });
+
+    await approveOntologyChangeSetMutation(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          changeSetId: "change-set-1",
+          excludedItemIds: ["item-b"],
+          excludedDisposition: "REJECTED",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockApproveOntologyChangeSet).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      changeSetId: "change-set-1",
+      excludedItemIds: ["item-b"],
+      excludedDisposition: "rejected",
+      actorUserId: "user-1",
+    });
+  });
+
+  it("stages manual authoring through createOntologyChangeSet with normalized item kinds (KTD-5)", async () => {
+    mockCreateOntologyChangeSet.mockResolvedValue({
+      changeSet: { id: "draft-1", status: "DRAFT" },
+      mergedItemIds: ["item-merged"],
+      conflicts: [
+        {
+          slug: "order",
+          itemType: "entity_type",
+          reason: "approved_definition",
+        },
+      ],
+    });
+
+    const result = await createOntologyChangeSetMutation(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          items: [
+            {
+              itemType: "ENTITY_TYPE",
+              slug: "shipment",
+              proposedValue: '{"slug":"shipment","name":"Shipment"}',
+            },
+          ],
+        },
+      },
+      ctx,
+    );
+
+    expect(mockCreateOntologyChangeSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        actorUserId: "user-1",
+        items: [
+          expect.objectContaining({
+            itemType: "entity_type",
+            action: "create",
+            slug: "shipment",
+            // AWSJSON string payloads are parsed before hitting the repository.
+            proposedValue: { slug: "shipment", name: "Shipment" },
+          }),
+        ],
+      }),
+    );
+    // Conflicts round-trip back to the GraphQL enum casing.
+    expect(result.conflicts).toEqual([
+      { slug: "order", itemType: "ENTITY_TYPE", reason: "approved_definition" },
+    ]);
+    expect(result.mergedItemIds).toEqual(["item-merged"]);
+  });
+
+  it("does not stage manual authoring for non-admin callers", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(new Error("forbidden"));
+
+    await expect(
+      createOntologyChangeSetMutation(
+        null,
+        { input: { tenantId: "tenant-1", items: [] } },
+        ctx,
+      ),
+    ).rejects.toThrow("forbidden");
+
+    expect(mockCreateOntologyChangeSet).not.toHaveBeenCalled();
   });
 
   it("does not mutate ontology change sets for non-admin callers", async () => {

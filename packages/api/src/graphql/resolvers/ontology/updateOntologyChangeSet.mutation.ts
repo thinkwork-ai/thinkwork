@@ -18,6 +18,7 @@ interface UpdateOntologyChangeSetArgs {
       id: string;
       status?: string | null;
       editedValue?: unknown;
+      expectedUpdatedAt?: string | null;
     }> | null;
   };
 }

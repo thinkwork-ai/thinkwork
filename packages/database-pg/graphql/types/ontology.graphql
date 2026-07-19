@@ -13,12 +13,28 @@ enum OntologyMappingKind {
   RELATED
 }
 
+"""
+Shared status vocabulary for change sets and their items. DEFERRED is
+item-only (an item excluded from an approval that stays re-reviewable,
+THINK-320 R15) — passing it as a change-set status is rejected.
+"""
 enum OntologyChangeSetStatus {
   DRAFT
   PENDING_REVIEW
   APPROVED
   REJECTED
   APPLIED
+  DEFERRED
+}
+
+"""
+What happens to items excluded from a per-item approval (THINK-320 R15):
+DEFERRED keeps them re-reviewable; REJECTED fingerprints them so scans
+never re-propose the candidate (R13).
+"""
+enum OntologyExcludedItemDisposition {
+  DEFERRED
+  REJECTED
 }
 
 enum OntologyChangeItemType {
@@ -226,6 +242,50 @@ type OntologyReprocessJob {
   updatedAt: AWSDateTime!
 }
 
+"""
+Approved entity type projected for the Living Map canvas (THINK-320 U1):
+slug/name plus a live count of kg entities carrying the type.
+"""
+type OntologySchemaGraphType {
+  slug: String!
+  name: String!
+  instanceCount: Int!
+  lifecycleStatus: OntologyLifecycleStatus!
+}
+
+"""
+Approved relationship type projected as a labeled schema-graph edge.
+"""
+type OntologySchemaGraphRelationship {
+  slug: String!
+  name: String!
+  sourceTypeSlugs: [String!]!
+  targetTypeSlugs: [String!]!
+}
+
+"""
+Pending change-set item surfaced as a ghost candidate on the map. `origin`
+is the owning change set's proposedBy (suggestion_engine, user, ...).
+"""
+type OntologySchemaGraphCandidate {
+  itemId: ID!
+  changeSetId: ID!
+  itemType: OntologyChangeItemType!
+  slug: String
+  proposedValue: AWSJSON!
+  editedValue: AWSJSON
+  evidenceCount: Int!
+  origin: String!
+  status: OntologyChangeSetStatus!
+}
+
+type OntologySchemaGraph {
+  tenantId: ID!
+  types: [OntologySchemaGraphType!]!
+  relationships: [OntologySchemaGraphRelationship!]!
+  candidates: [OntologySchemaGraphCandidate!]!
+}
+
 type OntologyDefinitions {
   tenantId: ID!
   activeVersion: OntologyVersion
@@ -245,6 +305,12 @@ input UpdateOntologyChangeSetItemInput {
   id: ID!
   status: OntologyChangeSetStatus
   editedValue: AWSJSON
+  """
+  Optimistic concurrency guard (THINK-320 R16): the item's updatedAt as
+  loaded by the client. If the item changed since, the mutation fails with
+  a conflict instead of overwriting; omit to skip the check.
+  """
+  expectedUpdatedAt: AWSDateTime
 }
 
 input UpdateOntologyChangeSetInput {
@@ -259,6 +325,69 @@ input UpdateOntologyChangeSetInput {
 input ApproveOntologyChangeSetInput {
   tenantId: ID!
   changeSetId: ID!
+  """
+  Per-item approval (THINK-320 R15): items to leave out of this approval.
+  Excluded items get the excludedDisposition status instead of approved.
+  """
+  excludedItemIds: [ID!]
+  excludedDisposition: OntologyExcludedItemDisposition = DEFERRED
+}
+
+input OntologyChangeSetItemEvidenceInput {
+  sourceKind: String!
+  sourceRef: String
+  sourceLabel: String
+  quote: String!
+  metadata: AWSJSON
+  observedAt: AWSDateTime
+}
+
+input CreateOntologyChangeSetItemInput {
+  itemType: OntologyChangeItemType!
+  action: OntologyChangeAction = CREATE
+  slug: String!
+  title: String
+  description: String
+  proposedValue: AWSJSON!
+  confidence: Float
+  evidence: [OntologyChangeSetItemEvidenceInput!]
+}
+
+"""
+Manual authoring entry point (THINK-320 U2, KTD-5): creates or appends to
+the caller's open manual draft change set. Each item runs the R14
+slug-collision check server-side — colliding pending slugs merge into the
+existing item, colliding approved slugs come back as conflicts.
+"""
+input CreateOntologyChangeSetInput {
+  tenantId: ID!
+  title: String
+  summary: String
+  items: [CreateOntologyChangeSetItemInput!]!
+}
+
+"""
+R14 collision that could not be staged: the slug already exists as an
+approved definition, so no duplicate row was created.
+"""
+type OntologyChangeSetSlugConflict {
+  slug: String!
+  itemType: OntologyChangeItemType!
+  reason: String!
+}
+
+type CreateOntologyChangeSetPayload {
+  """
+  Null when every submitted item merged into other pending items or
+  conflicted with approved definitions (no draft was created or touched).
+  """
+  changeSet: OntologyChangeSet
+  """
+  Items whose slug matched an existing pending item — evidence was
+  unioned onto that item and its proposal updated in place.
+  """
+  mergedItemIds: [ID!]!
+  conflicts: [OntologyChangeSetSlugConflict!]!
 }
 
 input RejectOntologyChangeSetInput {
@@ -293,6 +422,11 @@ input UpdateOntologyRelationshipTypeInput {
 
 extend type Query {
   ontologyDefinitions(tenantId: ID!): OntologyDefinitions!
+  """
+  Living Map feed (THINK-320 U1): approved types with live instance
+  counts, approved relationships, and pending candidate items.
+  """
+  ontologySchemaGraph(tenantId: ID!): OntologySchemaGraph!
   ontologyChangeSets(
     tenantId: ID!
     status: OntologyChangeSetStatus
@@ -308,6 +442,9 @@ extend type Mutation {
   startOntologySuggestionScan(
     input: StartOntologySuggestionScanInput!
   ): OntologySuggestionScanJob!
+  createOntologyChangeSet(
+    input: CreateOntologyChangeSetInput!
+  ): CreateOntologyChangeSetPayload!
   updateOntologyChangeSet(
     input: UpdateOntologyChangeSetInput!
   ): OntologyChangeSet!

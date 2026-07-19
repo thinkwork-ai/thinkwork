@@ -62,6 +62,22 @@ export const ONTOLOGY_CHANGE_ITEM_TYPES = [
 export type OntologyChangeItemType =
   (typeof ONTOLOGY_CHANGE_ITEM_TYPES)[number];
 
+/**
+ * Item-level statuses (THINK-320 U2). Superset of the change-set statuses'
+ * item-relevant values plus `deferred`: an item excluded from an approval
+ * (R15) that stays re-reviewable, unlike `rejected` which is fingerprinted
+ * so scans never re-propose it (R13).
+ */
+export const ONTOLOGY_CHANGE_SET_ITEM_STATUSES = [
+  "pending_review",
+  "approved",
+  "rejected",
+  "applied",
+  "deferred",
+] as const;
+export type OntologyChangeSetItemStatus =
+  (typeof ONTOLOGY_CHANGE_SET_ITEM_STATUSES)[number];
+
 export const ONTOLOGY_CHANGE_ACTIONS = [
   "create",
   "update",
@@ -466,7 +482,7 @@ export const ontologyChangeSetItems = ontology.table(
     ),
     check(
       "ontology_change_set_items_status_allowed",
-      sql`${table.status} IN ('pending_review','approved','rejected','applied')`,
+      sql`${table.status} IN ('pending_review','approved','rejected','applied','deferred')`,
     ),
   ],
 );
@@ -504,6 +520,56 @@ export const ontologyEvidenceExamples = ontology.table(
       table.source_kind,
     ),
   ],
+);
+
+/**
+ * Durable candidate-rejection fingerprints (THINK-320 U2, KTD-6 / R13).
+ * Written when a candidate is rejected (change-set rejection or an
+ * excluded-as-rejected item at approval time) and consulted by the
+ * suggestion pipeline before insert so scans never re-propose a candidate
+ * the operator already dismissed. Fingerprint = normalized `kind:slug`.
+ */
+export const ontologyCandidateRejections = ontology.table(
+  "candidate_rejections",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    kind: text("kind").notNull(),
+    slug: text("slug").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    rejected_by: uuid("rejected_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    rejected_at: timestamp("rejected_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_ontology_candidate_rejections_fingerprint").on(
+      table.tenant_id,
+      table.kind,
+      table.fingerprint,
+    ),
+    index("idx_ontology_candidate_rejections_tenant").on(table.tenant_id),
+    check(
+      "ontology_candidate_rejections_kind_allowed",
+      sql`${table.kind} IN ('entity_type','relationship_type','facet_template','external_mapping')`,
+    ),
+  ],
+);
+
+export const ontologyCandidateRejectionsRelations = relations(
+  ontologyCandidateRejections,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [ontologyCandidateRejections.tenant_id],
+      references: [tenants.id],
+    }),
+  }),
 );
 
 export const ontologySuggestionScanJobs = ontology.table(
