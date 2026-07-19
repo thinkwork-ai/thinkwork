@@ -105,6 +105,23 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wakeupSource).toContain("goal_mode: toRuntimeGoalModePayload");
   });
 
+  it("forwards the canonical wakeup source to both runtime payload builders", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    const primaryPayload = wakeupSource.slice(
+      wakeupSource.indexOf("const agentCorePayload: Record<string, unknown>"),
+      wakeupSource.indexOf(
+        'if (wakeup.source === "chat_message" && runThreadId && messageId)',
+      ),
+    );
+    const loopPayload = wakeupSource.slice(
+      wakeupSource.indexOf("const loopResponse = await invokeAgentCore("),
+      wakeupSource.indexOf("if (!loopResponse.ok)"),
+    );
+
+    expect(primaryPayload).toContain("invocation_source: wakeup.source");
+    expect(loopPayload).toContain("invocation_source: wakeup.source");
+  });
+
   it("carries the workflowRun block into agentCorePayload for a workflow_step wakeup (THINK-219 U6)", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
 

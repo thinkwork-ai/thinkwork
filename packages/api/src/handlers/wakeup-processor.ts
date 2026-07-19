@@ -2532,6 +2532,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_engine_config: effectiveContextEngineConfig,
       knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
       runtime_type: runtimeType,
+      // The Harness runner uses the canonical wakeup source to apply
+      // source-specific control-plane behavior (for example, AgentLoop's
+      // isolated goal_complete correction). The thread-turn ledger already
+      // stores this value; keep the runtime payload in parity with it.
+      invocation_source: wakeup.source,
       model: agentModel,
       requested_model:
         requestedParentModel && agentModel === requestedParentModel
@@ -3320,6 +3325,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             knowledge_graph_enabled:
               effectiveKnowledgeGraphEnabled || undefined,
             runtime_type: runtimeType,
+            invocation_source: wakeup.source,
             model: agentModel,
             skills:
               effectiveSkillsConfig.length > 0
