@@ -1,6 +1,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AgentLoopDetailContent } from "./AgentLoopDetail";
+import {
+  AgentLoopDetailContent,
+  agentLoopHeaderActionKey,
+} from "./AgentLoopDetail";
 import type { AgentLoopRow } from "./agent-loop-types";
 
 vi.mock("@thinkwork/ui", () => ({
@@ -139,6 +142,28 @@ describe("AgentLoopDetailContent", () => {
     expect(
       screen.queryByRole("button", { name: "Advanced details" }),
     ).toBeNull();
+  });
+});
+
+describe("agentLoopHeaderActionKey", () => {
+  it("invalidates cached header callbacks when a save creates a new version", () => {
+    const beforeSave = loopFixture();
+    const afterSave = {
+      ...beforeSave,
+      currentVersionId: "version-2",
+      currentVersionNumber: 4,
+      currentVersion: {
+        ...beforeSave.currentVersion,
+        id: "version-2",
+        versionNumber: 4,
+        triggerSpec: beforeSave.currentVersion?.triggerSpec ?? {},
+      },
+      updatedAt: "2026-06-23T13:05:00.000Z",
+    } satisfies AgentLoopRow;
+
+    expect(agentLoopHeaderActionKey(beforeSave.id, beforeSave, null)).not.toBe(
+      agentLoopHeaderActionKey(afterSave.id, afterSave, null),
+    );
   });
 });
 
