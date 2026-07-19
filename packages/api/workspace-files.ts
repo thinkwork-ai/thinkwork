@@ -31,6 +31,8 @@
  * Auth model:
  *   - Cognito JWT required. Unauthenticated → 401.
  *   - Caller's tenant is resolved via resolveCallerFromAuth. Missing → 401.
+ *   - Any admitted user may write only their own user workspace target.
+ *     Writing another user's workspace remains admin/owner-only.
  *   - agentId / templateId are validated against the caller's tenant.
  *     Mismatch → 404 (no "this exists in another tenant" leakage).
  *   - Put on a pinned file via agentId without `acceptTemplateUpdate: true`
@@ -4792,16 +4794,25 @@ export async function handler(
     return json(404, { ok: false, error: "Target not found in your tenant" });
   }
 
-  // Write actions require admin/owner role (U31). Reads stay open to any
-  // tenant member. The apikey path bypasses the role check — it's the
-  // platform-credential trust boundary used by the Strands container and
+  // Write actions require admin/owner role (U31), except that every admitted
+  // user may write their own user workspace. The target has already been
+  // resolved inside the caller-derived tenant, so this equality is an exact
+  // users.id check — never an email or Cognito-substitution shortcut. Reads
+  // stay open to any tenant member. The apikey path bypasses the role check —
+  // it's the platform-credential trust boundary used by the runtime and
   // CI/ops bootstrap; per-tenant role doesn't apply.
   //
   // Use the resolved users.id, NOT auth.principalId. tenantMembers.principal_id
   // holds users.id, and Google-federated users have users.id ≠ Cognito sub.
+  const isSelfUserWorkspaceWrite =
+    WRITE_ACTIONS.has(action) &&
+    target.kind === "user" &&
+    Boolean(userId) &&
+    target.userId === userId;
   if (
     (WRITE_ACTIONS.has(action) || target.kind === "catalog") &&
     target.kind !== "skillDraft" &&
+    !isSelfUserWorkspaceWrite &&
     auth.authType !== "apikey"
   ) {
     const isAdmin = await callerIsTenantAdmin(tenantId, userId);

@@ -5,7 +5,11 @@ import type { WorkspaceFilesTarget } from "@/lib/workspace-files-api";
 
 const { editorSpy, tenant, apiFetch } = vi.hoisted(() => ({
   editorSpy: vi.fn(),
-  tenant: { isOperator: true, roleResolved: true },
+  tenant: {
+    isOperator: true,
+    roleResolved: true,
+    userId: "user-1" as string | null,
+  },
   apiFetch: vi.fn(),
 }));
 
@@ -36,6 +40,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   tenant.isOperator = true;
   tenant.roleResolved = true;
+  tenant.userId = "user-1";
 });
 
 describe("ScopedWorkspaceEditor", () => {
@@ -77,6 +82,32 @@ describe("ScopedWorkspaceEditor", () => {
   });
 
   it("renders read-only for a non-operator", () => {
+    tenant.isOperator = false;
+    render(
+      <ScopedWorkspaceEditor
+        target={{ userId: "user-9" }}
+        targetKey="user:user-9"
+      />,
+    );
+    expect(screen.getByTestId("editor").getAttribute("data-readonly")).toBe(
+      "true",
+    );
+  });
+
+  it("lets a non-operator edit their own user workspace", () => {
+    tenant.isOperator = false;
+    render(
+      <ScopedWorkspaceEditor
+        target={{ userId: "user-1" }}
+        targetKey="user:user-1"
+      />,
+    );
+    expect(screen.getByTestId("editor").getAttribute("data-readonly")).toBe(
+      "false",
+    );
+  });
+
+  it("keeps another user's workspace read-only for a non-operator", () => {
     tenant.isOperator = false;
     render(
       <ScopedWorkspaceEditor

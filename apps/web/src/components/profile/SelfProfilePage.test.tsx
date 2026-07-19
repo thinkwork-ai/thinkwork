@@ -42,6 +42,13 @@ const tenantMocks = vi.hoisted(() => ({
   role: "member" as string | null,
   tenantId: "tenant-1" as string | null,
 }));
+const searchState = vi.hoisted(
+  () =>
+    ({ view: undefined, file: undefined }) as {
+      view?: "workspace";
+      file?: string;
+    },
+);
 const headerMocks = vi.hoisted(() => ({
   usePageHeaderActions: vi.fn(),
 }));
@@ -50,6 +57,13 @@ const userModelsMocks = vi.hoisted(() => ({
 }));
 const accountUsageMocks = vi.hoisted(() => ({
   props: [] as Array<{ tenantId?: string | null; userId?: string | null }>,
+}));
+const workspaceEditorMocks = vi.hoisted(() => ({
+  props: [] as Array<{
+    target: Record<string, string>;
+    targetKey: string;
+    defaultOpenFile?: string;
+  }>,
 }));
 const meMock = vi.hoisted(() => ({
   current: {
@@ -82,6 +96,28 @@ const meMock = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    search,
+    to,
+  }: {
+    children: React.ReactNode;
+    search?: Record<string, string>;
+    to: string;
+  }) => (
+    <a
+      href={`${to}${
+        search && Object.keys(search).length
+          ? `?${new URLSearchParams(search).toString()}`
+          : ""
+      }`}
+    >
+      {children}
+    </a>
+  ),
+  useSearch: () => searchState,
+}));
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMocks,
 }));
@@ -110,6 +146,23 @@ vi.mock("@/components/settings/UserModelsSection", () => ({
       <section data-readonly={String(props.readOnly)} data-testid="models">
         Models
       </section>
+    );
+  },
+}));
+vi.mock("@/components/workspace-settings/ScopedWorkspaceEditor", () => ({
+  ScopedWorkspaceEditor: (props: {
+    target: Record<string, string>;
+    targetKey: string;
+    defaultOpenFile?: string;
+  }) => {
+    workspaceEditorMocks.props.push(props);
+    return (
+      <div
+        data-testid="user-workspace-editor"
+        data-target={JSON.stringify(props.target)}
+        data-targetkey={props.targetKey}
+        data-default-open={props.defaultOpenFile}
+      />
     );
   },
 }));
@@ -193,13 +246,17 @@ vi.mock("@thinkwork/ui", () => ({
     <span>{children}</span>
   ),
   Button: ({
+    asChild,
     children,
     ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) =>
+    asChild ? (
+      <>{children}</>
+    ) : (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    ),
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input {...props} />
   ),
@@ -238,6 +295,22 @@ vi.mock("@thinkwork/ui", () => ({
   Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
     <textarea {...props} />
   ),
+  TooltipIconButton: ({
+    asChild,
+    children,
+    label: _label,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    asChild?: boolean;
+    label: string;
+  }) =>
+    asChild ? (
+      <>{children}</>
+    ) : (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    ),
   cn: (...classes: Array<string | undefined>) =>
     classes.filter(Boolean).join(" "),
 }));
@@ -245,6 +318,8 @@ vi.mock("@thinkwork/ui", () => ({
 import { SelfProfilePage } from "./SelfProfilePage";
 
 beforeEach(() => {
+  searchState.view = undefined;
+  searchState.file = undefined;
   meMock.current = {
     email: "eric@example.com",
     id: "user-1",
@@ -272,6 +347,7 @@ afterEach(() => {
   tenantMocks.tenantId = "tenant-1";
   accountUsageMocks.props = [];
   userModelsMocks.props = [];
+  workspaceEditorMocks.props = [];
   for (const mock of Object.values(urqlMocks)) {
     mock.mockReset();
   }
@@ -286,7 +362,10 @@ describe("SelfProfilePage", () => {
     expect(screen.getAllByText("Member").length).toBeGreaterThan(0);
     expect(screen.getByText("Unlimited")).toBeTruthy();
     expect(screen.queryByTestId("sign-in-methods-section")).toBeNull();
-    expect(screen.queryByText("Workspace files")).toBeNull();
+    expect(screen.getByText("Workspace files")).toBeTruthy();
+    expect(
+      screen.getByText("Open files").closest("a")?.getAttribute("href"),
+    ).toBe("/profile?view=workspace");
     expect(screen.queryByText("Danger zone")).toBeNull();
     expect(screen.getByTestId("profile-scroll-pane").className).toContain(
       "overflow-y-auto",
@@ -320,6 +399,24 @@ describe("SelfProfilePage", () => {
       readOnly: false,
       userId: "user-1",
     });
+  });
+
+  it("renders the signed-in user's full-height workspace editor", () => {
+    searchState.view = "workspace";
+    searchState.file = "memory/preferences.md";
+
+    render(<SelfProfilePage />);
+
+    const editor = screen.getByTestId("user-workspace-editor");
+    expect(JSON.parse(editor.getAttribute("data-target")!)).toEqual({
+      userId: "user-1",
+    });
+    expect(editor.getAttribute("data-targetkey")).toBe("user:user-1");
+    expect(editor.getAttribute("data-default-open")).toBe(
+      "memory/preferences.md",
+    );
+    expect(screen.queryByTestId("account-usage-section")).toBeNull();
+    expect(workspaceEditorMocks.props).toHaveLength(1);
   });
 
   it("saves profile edits without role or budget mutations", async () => {

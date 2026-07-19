@@ -96,6 +96,7 @@ export function classifyFile(path: string): FileClass {
 const USER_MD = `# USER.md - About Your Human
 
 - **Name:** {{HUMAN_NAME}}
+- **Email:** {{HUMAN_EMAIL}}
 - **What to call them:** {{HUMAN_CALL_BY}}
 - **Pronouns:** {{HUMAN_PRONOUNS}}
 - **Timezone:** {{HUMAN_TIMEZONE}}
@@ -1489,7 +1490,7 @@ operator can revoke it at any time.
  *     byte-identical to a previously shipped default version (see
  *     `src/historical.ts`).
  */
-export const DEFAULTS_VERSION = 41;
+export const DEFAULTS_VERSION = 42;
 
 // ---------------------------------------------------------------------------
 // Aggregator

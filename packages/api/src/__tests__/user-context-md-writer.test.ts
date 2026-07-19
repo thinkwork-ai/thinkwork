@@ -34,6 +34,7 @@ describe("renderUserContextMd", () => {
 
     expect(rendered).toContain("# USER.md - About Your Human");
     expect(rendered).toContain("- **Name:** Eric Odom");
+    expect(rendered).toContain("- **Email:** eric@example.com");
     expect(rendered).toContain("- **What to call them:** Eric");
     expect(rendered).toContain("- **Timezone:** America/Chicago");
     expect(rendered).toContain("Local context belongs under the user prefix.");
@@ -63,6 +64,7 @@ describe("renderUserContextMd", () => {
     });
 
     expect(rendered).toContain("- **Name:** —");
+    expect(rendered).toContain("- **Email:** —");
     expect(rendered).toContain("- **What to call them:** —");
     expect(rendered).toContain("- **Phone:** —");
   });
