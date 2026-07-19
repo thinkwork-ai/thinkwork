@@ -648,6 +648,12 @@ interface AssembledSegment {
   text: string;
   toolUses: AssembledToolUse[];
   /**
+   * Tools the managed Harness fulfilled inside the streamed invocation.
+   * These must never be relayed back by the caller, but they are durable
+   * execution evidence and belong in the turn's tool/trace ledger.
+   */
+  internalToolUses: AssembledToolUse[];
+  /**
    * The final assistant message's content blocks in stream order (text +
    * toolUse), reconstructed for the continuation call: the harness does
    * NOT persist the stream-ending assistant message to session memory —
@@ -709,6 +715,7 @@ async function assembleStream(
   const segment: AssembledSegment = {
     text: "",
     toolUses: [],
+    internalToolUses: [],
     finalAssistantContent: [],
     stopReason: null,
     usage: {
@@ -808,6 +815,32 @@ async function assembleStream(
   const lastAssistant = [...messages]
     .reverse()
     .find((m) => m.role === "assistant");
+  for (const message of messages) {
+    if (message.role !== "assistant" || message === lastAssistant) continue;
+    for (const [, block] of [...message.blocks.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
+      if (block.kind !== "toolUse" || !block.toolUseId || !block.name) {
+        continue;
+      }
+      let input: unknown = {};
+      let parseError: string | undefined;
+      if (block.inputJson.trim()) {
+        try {
+          input = JSON.parse(block.inputJson);
+        } catch (err) {
+          parseError = `malformed tool input JSON: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
+      segment.internalToolUses.push({
+        toolUseId: block.toolUseId,
+        name: block.name,
+        input,
+        inputRaw: block.inputJson,
+        parseError,
+      });
+    }
+  }
   for (const [, block] of [...(lastAssistant?.blocks.entries() ?? [])].sort(
     (a, b) => a[0] - b[0],
   )) {
@@ -1862,6 +1895,20 @@ export async function runHarnessTurn(
         // never changes ThinkWork's model semantics. `requested_model` is a
         // separate audit field and is intentionally not the execution source.
         ...(turn.modelId ? { modelId: turn.modelId } : {}),
+        ...(!documentCompositionPhase &&
+        payload.browser_automation_enabled === true
+          ? {
+              // Native Harness tools are invocation-scoped. AWS requires the
+              // Browser declaration on every InvokeHarness request even when
+              // the Harness configuration and allowlist already name it.
+              tools: [
+                {
+                  type: "agentcore_browser",
+                  name: "browser_automation",
+                },
+              ],
+            }
+          : {}),
         ...(documentEmissionRequired && !documentCompositionPhase
           ? {
               // Use the Harness's configured Gateway allowlist. Live testing
@@ -1892,6 +1939,17 @@ export async function runHarnessTurn(
       usage.cacheReadTokens += segment.usage.cacheReadTokens;
       usage.cacheWriteTokens += segment.usage.cacheWriteTokens;
       if (segment.text.trim()) finalText = segment.text;
+      for (const toolUse of segment.internalToolUses) {
+        toolInvocations.push({
+          tool_name: toolUse.name,
+          tool_use_id: toolUse.toolUseId,
+          status: toolUse.parseError ? "failed" : "completed",
+          protocol: "agentcore_harness_internal_v1",
+          result_summary:
+            toolUse.parseError ??
+            "AgentCore Harness fulfilled this managed tool inside the invocation.",
+        });
+      }
 
       if (
         segment.stopReason === "max_iterations_exceeded" &&
