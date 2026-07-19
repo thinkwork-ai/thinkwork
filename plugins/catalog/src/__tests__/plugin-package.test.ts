@@ -20,7 +20,6 @@ describe("first-party plugin packages", () => {
       "n8n",
       "sendgrid",
       "twenty",
-      "workos-auth",
     ]);
 
     expect(n8nPluginPackage.sourceRoot).toBe("plugins/n8n");
@@ -53,7 +52,6 @@ describe("first-party plugin packages", () => {
       "company-data",
       "company-etl",
       "twenty",
-      "workos-auth",
     ]);
   });
 

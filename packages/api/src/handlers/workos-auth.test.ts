@@ -31,6 +31,22 @@ describe("workos-auth handler", () => {
     );
   });
 
+  it("rejects new authorize starts during cutover while the rollback callback remains deployed", async () => {
+    const workosAuthDeps = depsForHandler();
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps,
+      bridgeDeps: bridgeDepsForHandler(),
+      retirementPhase: "cutover",
+    });
+
+    const response = await handler(
+      event({ path: "/api/auth/workos/authorize" }),
+    );
+
+    expect(response.statusCode).toBe(410);
+    expect(workosAuthDeps.loadPublicationForHost).not.toHaveBeenCalled();
+  });
+
   it("redirects successful callbacks back to the web callback with a bridge code", async () => {
     const state = signWorkosAuthorizeState(
       {
@@ -307,6 +323,8 @@ function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
       tenantId: "tenant-123",
       email: "eric@homecareintel.com",
       name: "Eric",
+      cognitoPrincipalId: "cognito-sub-123",
+      cognitoUsername: "cognito-user-123",
       hasActiveTenantMembership: true,
     })),
     startCognitoCustomAuth: vi.fn(async () => ({

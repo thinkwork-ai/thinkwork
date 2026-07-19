@@ -14,6 +14,12 @@ locals {
   # deployment jobs — plan 2026-06-12-001 U10); the TWENTY config key is
   # retired.
   optional_integration_handler_names = concat(
+    var.auth_retirement_phase == "retired" ? [
+      # The native login UI never publishes this handler. It remains reachable
+      # only as an operator-controlled rollback seam through coexistence and
+      # cutover/soak, then Terraform removes the Lambda and routes atomically.
+      "workos-auth",
+    ] : [],
     var.deployment_control_plane_enabled ? [] : [
       # Host-only onboarding/deployment API. Customer foundations disable the
       # deployment control plane, so release-based customer installs must not
@@ -56,15 +62,19 @@ locals {
   # The reader-coverage fixture test in apps/cli fails CI if a key in this
   # map still has a direct process.env reader. Identity values (STAGE,
   # AWS_ACCOUNT_ID, NODE_OPTIONS) and secrets (DATABASE_URL,
-  # API_AUTH_SECRET, APPSYNC_API_KEY) stay out of this map — identity stays
+  # API_AUTH_SECRET) stay out of this map — identity stays
   # env forever, secrets live in Secrets Manager (R4), never in the String
   # document.
   config_env = merge({
     # THINK-173: PUBLIC verification key (not a secret) + the NAME of the
     # private-key secret (resolved via runtime-config's secret loader —
     # the PEM itself never enters the env or the String document).
-    CAPABILITY_SIGNING_PUBLIC_KEY         = var.capability_signing_public_key
-    CAPABILITY_SIGNING_PRIVATE_KEY_SECRET = var.capability_signing_private_key_secret
+    CAPABILITY_SIGNING_PUBLIC_KEY          = var.capability_signing_public_key
+    CAPABILITY_SIGNING_PRIVATE_KEY_SECRET  = var.capability_signing_private_key_secret
+    SUBSCRIPTION_TICKET_SIGNING_KEY_ID     = var.subscription_ticket_signing_key_id
+    SUBSCRIPTION_TICKET_PUBLIC_KEYS        = var.subscription_ticket_public_keys
+    SUBSCRIPTION_TICKET_PRIVATE_KEY_SECRET = var.subscription_ticket_private_key_secret
+    APPSYNC_API_ID                         = var.appsync_api_id
     # THINK-229 U3/KTD5 — the analyst policy-source enforcement flip.
     # "row" (default) keeps sidecar policy shadow-only; "sidecar" makes the
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
@@ -98,7 +108,7 @@ locals {
     CAPABILITY_EXTERNAL_SEARCH_ENABLED = var.enable_capability_broker ? "true" : "false"
     ENABLE_CAPABILITY_BROKER           = var.enable_capability_broker ? "true" : "false"
     # BUCKET_NAME and USER_POOL_ID were duplicate aliases of WORKSPACE_BUCKET
-    # and COGNITO_USER_POOL_ID; GRAPHQL_API_KEY duplicated APPSYNC_API_KEY;
+    # and COGNITO_USER_POOL_ID; the legacy GRAPHQL_API_KEY alias is retired;
     # THINKWORK_API_SECRET and EMAIL_HMAC_SECRET duplicated API_AUTH_SECRET
     # (~310 serialized bytes total). graphql-http sits at Lambda's hard 4KB
     # env ceiling (#2375) — every reader falls back to the canonical name.
@@ -240,13 +250,12 @@ locals {
   # window (R8). Config-class keys live ONLY in the SSM runtime-config
   # document now — adding a key here is guarded by the identity-allowlist
   # fixture test in apps/cli (R10). Follow-up release: DATABASE_URL,
-  # APPSYNC_API_KEY, and API_AUTH_SECRET drop too (readers already resolve
+  # API_AUTH_SECRET drops too (readers already resolve
   # via Secrets Manager prefetch when the env copies are absent), bringing
   # every handler under the ≤1KB R1 target.
   common_env = {
     STAGE           = var.stage
     DATABASE_URL    = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    APPSYNC_API_KEY = var.appsync_api_key
     API_AUTH_SECRET = var.api_auth_secret
     AWS_ACCOUNT_ID  = var.account_id
     NODE_OPTIONS    = "--enable-source-maps"
@@ -346,6 +355,21 @@ locals {
       AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
       AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
       AGENTCORE_GATEWAY_POLICY_REVISION   = "platform-tools-v4-user-questions"
+    }
+    "workos-auth" = {
+      # During cutover/soak the callback, bridge, and logout paths remain for
+      # already-issued state, but the handler independently refuses every new
+      # WorkOS authorize start. Terraform removes the handler in retired.
+      AUTH_RETIREMENT_PHASE = var.auth_retirement_phase
+    }
+    "public-auth-options" = {
+      AUTH_RETIREMENT_PHASE = var.auth_retirement_phase
+    }
+    "auth-me" = {
+      AUTH_MIGRATION_RECOVERY_DEADLINE = var.auth_migration_recovery_deadline
+    }
+    "auth-enrollment" = {
+      AUTH_MIGRATION_RECOVERY_DEADLINE = var.auth_migration_recovery_deadline
     }
     # Analyst query broker (THINK-228 U3). Reader role + caller credential
     # secrets, and the workspace bucket's analyst-staging/ prefix for
@@ -769,7 +793,13 @@ resource "aws_lambda_function" "handler" {
     "stripe-subscription",
     "deployment-sessions",
     "auth-me",
+    "auth-revoke",
+    "auth-enrollment",
+    "auth-subscription-ticket",
+    "appsync-subscription-authorizer",
+    "subscription-invalidation",
     "public-auth-options",
+    "auth-provider-reconcile",
     "workos-auth",
     # Public artifact share links (THINK-208): GET /share/{token}, token
     # verified in handler code (no gateway auth, uniform 404 on any miss).
@@ -1048,7 +1078,6 @@ resource "aws_lambda_function" "handler" {
   depends_on = [
     aws_ssm_parameter.runtime_config,
     aws_secretsmanager_secret_version.api_auth,
-    aws_secretsmanager_secret_version.appsync_api_key,
   ]
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run
@@ -1580,8 +1609,13 @@ locals {
       # Public login capabilities. Unauthenticated by design; the handler
       # resolves tenant-scoped OAuth options only from trusted API Gateway
       # domain metadata and fails closed for unknown/shared hosts.
-      "GET /api/auth/options"              = "public-auth-options"
-      "OPTIONS /api/auth/options"          = "public-auth-options"
+      "GET /api/auth/options"     = "public-auth-options"
+      "OPTIONS /api/auth/options" = "public-auth-options"
+      # Operator/deployment-only metadata seam. The Lambda independently
+      # verifies API_AUTH_SECRET and rejects raw secret values.
+      "POST /api/auth/providers/reconcile" = "auth-provider-reconcile"
+      # Rollback-only routes. No native client links to these, and the entire
+      # handler is filtered from Lambda/API Gateway in the retired phase.
       "GET /api/auth/workos/authorize"     = "workos-auth"
       "OPTIONS /api/auth/workos/authorize" = "workos-auth"
       "GET /api/auth/workos/callback"      = "workos-auth"
@@ -1757,6 +1791,16 @@ locals {
       "OPTIONS /api/deployment-sessions/{sessionId}/teardown"                   = "deployment-sessions"
       "GET /api/auth/me"                                                        = "auth-me"
       "OPTIONS /api/auth/me"                                                    = "auth-me"
+      "POST /api/auth/revoke"                                                   = "auth-revoke"
+      "OPTIONS /api/auth/revoke"                                                = "auth-revoke"
+      "POST /api/auth/subscription-ticket"                                      = "auth-subscription-ticket"
+      "OPTIONS /api/auth/subscription-ticket"                                   = "auth-subscription-ticket"
+      "POST /api/auth/enrollment/consume"                                       = "auth-enrollment"
+      "OPTIONS /api/auth/enrollment/consume"                                    = "auth-enrollment"
+      "POST /api/auth/enrollment/recover"                                       = "auth-enrollment"
+      "OPTIONS /api/auth/enrollment/recover"                                    = "auth-enrollment"
+      "POST /api/auth/enrollment/migrate"                                       = "auth-enrollment"
+      "OPTIONS /api/auth/enrollment/migrate"                                    = "auth-enrollment"
       "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
       "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 
@@ -1994,6 +2038,16 @@ resource "aws_apigatewayv2_route" "handler" {
   target    = "integrations/${aws_apigatewayv2_integration.handler[each.key].id}"
 }
 
+resource "aws_lambda_permission" "appsync_subscription_authorizer" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  statement_id  = "AllowAppSyncSubscriptionAuthorization"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.handler["appsync-subscription-authorizer"].function_name
+  principal     = "appsync.amazonaws.com"
+  source_arn    = "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}"
+}
+
 resource "aws_lambda_permission" "handler_apigw" {
   for_each = local.deploy_lambda_handlers ? toset(distinct(values(local.api_routes))) : toset([])
 
@@ -2066,6 +2120,32 @@ resource "aws_scheduler_schedule" "wakeup_processor" {
   target {
     arn      = aws_lambda_function.handler["wakeup-processor"].arn
     role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# Replays durable authorization-revocation invalidations. The worker owns its
+# retry state in Aurora and suppresses tenant realtime fan-out until AppSync
+# confirms every sensitive subscription class has been invalidated.
+resource "aws_scheduler_schedule" "subscription_invalidation" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-subscription-invalidation"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["subscription-invalidation"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ limit = 25 })
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
   }
 }
 

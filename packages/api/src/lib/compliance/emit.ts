@@ -122,6 +122,35 @@ export interface EmitAuditEventResult {
   redactedFields: string[];
 }
 
+export type AuthControlEventType = Extract<
+  ComplianceEventType,
+  | "auth.provider_reconciled"
+  | "auth.provider_reconciliation_rejected"
+  | "auth.identity_backfilled"
+  | "auth.identity_quarantined"
+  | "auth.enrollment_consumed"
+>;
+
+/**
+ * Auth control-plane events are always control evidence: callers pass their
+ * current transaction and allow a failed outbox insert to roll the mutation
+ * back. Keeping this wrapper narrow prevents auth reconciliation code from
+ * accidentally emitting a telemetry-only event outside the transaction.
+ */
+export function emitAuthControlEvent(
+  tx: AuditTx,
+  input: Omit<EmitAuditEventInput, "eventType" | "source" | "actorType"> & {
+    eventType: AuthControlEventType;
+  },
+): Promise<EmitAuditEventResult> {
+  return emitAuditEvent(tx, {
+    ...input,
+    eventType: input.eventType,
+    source: "lambda",
+    actorType: "system",
+  });
+}
+
 /**
  * Insert a redacted audit event into `compliance.audit_outbox`.
  *

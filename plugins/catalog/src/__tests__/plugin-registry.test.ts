@@ -53,11 +53,6 @@ describe("generated first-party plugin registry", () => {
         packageName: "@thinkwork/plugin-twenty",
         exportName: "twentyPluginPackage",
       },
-      {
-        packageKey: "workos-auth",
-        packageName: "@thinkwork/plugin-workos-auth",
-        exportName: "workosAuthPluginPackage",
-      },
     ]);
   });
 

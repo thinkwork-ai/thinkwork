@@ -122,7 +122,6 @@ function runtimeConfig(): EnvironmentRuntimeConfig {
     graphqlHttpUrl: "https://api.example.com/graphql",
     graphqlUrl: "https://appsync.example.com/graphql",
     graphqlWsUrl: "wss://appsync.example.com/graphql",
-    graphqlApiKey: "key",
     cognitoDomain: "auth.example.com",
     cognitoUserPoolId: "us-east-1_pool",
     cognitoClientId: "client-id",

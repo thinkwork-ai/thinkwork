@@ -51,9 +51,9 @@ locals {
 # ----------------------------------------------------------------------------
 # Platform secrets (plan 2026-06-11-006 U5/R4)
 #
-# API_AUTH_SECRET and APPSYNC_API_KEY leave plaintext Lambda env: the
-# runtime-config loader prefetches these at cold start (getApiAuthSecret /
-# getAppsyncApiKey accessors, env-wins during the transition window). Names
+# API_AUTH_SECRET leaves plaintext Lambda env: the runtime-config loader
+# prefetches it at cold start (getApiAuthSecret, env-wins during the transition
+# window). Names
 # use the `thinkwork/${stage}/...` prefix so the shared role's existing
 # `secretsmanager:GetSecretValue` grant on `thinkwork/*` covers them.
 # The env copies in common_env are dropped one release AFTER this ships
@@ -81,24 +81,6 @@ resource "aws_secretsmanager_secret_version" "api_auth" {
   # TEI (v174 apply), which becomes a fleet-wide 401 once the env copy
   # drops (R8). Rotation goes through tfvars / runner secrets, not the
   # console.
-}
-
-resource "aws_secretsmanager_secret" "appsync_api_key" {
-  name        = "thinkwork/${var.stage}/appsync-api-key"
-  description = "AppSync API key for subscription notify fan-out. Prefetched at Lambda cold start by @thinkwork/runtime-config."
-  tags = {
-    Name  = "thinkwork-${var.stage}-appsync-api-key"
-    Stage = var.stage
-  }
-}
-
-resource "aws_secretsmanager_secret_version" "appsync_api_key" {
-  secret_id     = aws_secretsmanager_secret.appsync_api_key.id
-  secret_string = var.appsync_api_key
-
-  # AppSync keys are terraform-rotated (the appsync module recreates them),
-  # so track the var here — unlike api_auth there is no operator rotation
-  # path outside terraform.
 }
 
 # The standalone compliance Lambdas (anchor, export-runner) bundle the

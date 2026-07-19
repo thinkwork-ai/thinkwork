@@ -84,13 +84,14 @@ describe("deployment control plane Terraform fixture", () => {
     expect(runner).toMatch(/seed_platform_bootstrap_defaults/);
     expect(runner).toMatch(/public\.model_catalog/);
     expect(runner).toMatch(/public\.user_model_approvals/);
-    expect(runner).toMatch(/output "appsync_api_key"/);
+    expect(runner).not.toMatch(/output "appsync_api_key"/);
     expect(runner).toMatch(/output "auth_domain"/);
     expect(runner).toMatch(/thinkwork-runtime-config\.json/);
     expect(runner).toMatch(/index\.html/);
     expect(runner).toMatch(/--cache-control/);
     expect(runner).toMatch(/profile\/web-env/);
     expect(runner).toMatch(/VITE_GRAPHQL_HTTP_URL/);
+    expect(runner).not.toMatch(/VITE_GRAPHQL_API_KEY/);
     expect(runner).toMatch(/VITE_COGNITO_DOMAIN/);
     expect(runner).toMatch(/managed_app_terraform_overrides/);
     expect(runner).toMatch(

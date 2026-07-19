@@ -8,6 +8,7 @@ import subprocess
 import tarfile
 from hashlib import sha256
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -125,18 +126,324 @@ def test_customer_update_rejects_non_customer_agentcore_pi_source_image() -> Non
 def test_customer_update_accepts_customer_ecr_agentcore_pi_source_image() -> None:
     runner = load_runner()
     image = (
-        "637423202447.dkr.ecr.us-east-1.amazonaws.com/"
-        "thinkwork-tei-e2e-agentcore:pinned@sha256:abc"
+        "637423202447.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned@sha256:abc"
     )
 
-    assert runner.resolve_agentcore_pi_source_image_uri(
+    assert (
+        runner.resolve_agentcore_pi_source_image_uri(
+            {
+                "action": "update",
+                "awsAccountId": "637423202447",
+                "awsRegion": "us-east-1",
+                "agentcorePiSourceImageUri": image,
+            }
+        )
+        == image
+    )
+
+
+def test_native_auth_reconciliation_builds_route_specific_secret_free_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    outputs = {
+        "user_pool_id": {"value": "us-east-1_Example123"},
+        "auth_route_clients": {
+            "value": {
+                "web:local": {
+                    "client_id": "1234567890abcdefghijklmnop",
+                    "route_key": "local",
+                    "client_family": "web",
+                    "provider_names": ["COGNITO"],
+                    "explicit_auth_flows": [
+                        "ALLOW_USER_PASSWORD_AUTH",
+                        "ALLOW_USER_SRP_AUTH",
+                        "ALLOW_REFRESH_TOKEN_AUTH",
+                    ],
+                    "callback_urls": ["https://app.example/auth/callback"],
+                    "logout_urls": ["https://app.example"],
+                    "lifecycle_state": "native",
+                },
+                "web:google": {
+                    "client_id": "abcdefghijklmnopqrstuvwxyz",
+                    "route_key": "google",
+                    "client_family": "web",
+                    "provider_names": ["Google"],
+                    "explicit_auth_flows": ["ALLOW_REFRESH_TOKEN_AUTH"],
+                    "callback_urls": ["https://app.example/auth/callback"],
+                    "logout_urls": ["https://app.example"],
+                    "lifecycle_state": "native",
+                },
+                "web:microsoft": {
+                    "client_id": "zyxwvutsrqponmlkjihgfedcba",
+                    "route_key": "microsoft",
+                    "client_family": "web",
+                    "provider_names": ["MicrosoftOrganizations"],
+                    "explicit_auth_flows": ["ALLOW_REFRESH_TOKEN_AUTH"],
+                    "callback_urls": ["https://app.example/auth/callback"],
+                    "logout_urls": ["https://app.example"],
+                    "lifecycle_state": "native",
+                },
+            }
+        },
+    }
+    scope = {
+        "stage": "dev",
+        "account_id": "123456789012",
+        "region": "us-east-1",
+        "microsoft_oauth_tenant": "00000000-0000-4000-8000-000000000123",
+    }
+
+    payload, state = runner.native_auth_reconciliation_payload(outputs, scope, {})
+
+    assert payload["revision"] == 1
+    assert [item["connectionKey"] for item in payload["connections"]] == [
+        "google",
+        "local",
+        "microsoft:organizations",
+    ]
+    by_route = {item["routeKey"]: item for item in payload["routeClients"]}
+    assert by_route["local"]["providerNames"] == ["COGNITO"]
+    assert by_route["google"]["providerNames"] == ["Google"]
+    assert by_route["microsoft"]["providerNames"] == ["MicrosoftOrganizations"]
+    microsoft_connection = next(
+        item
+        for item in payload["connections"]
+        if item["connectionKey"] == "microsoft:organizations"
+    )
+    assert microsoft_connection["issuerUrl"] == (
+        "https://login.microsoftonline.com/00000000-0000-4000-8000-000000000123/v2.0"
+    )
+    assert "secret" not in json.dumps(payload).lower()
+    assert len(payload["manifestFingerprint"]) == 64
+
+    retry_payload, _ = runner.native_auth_reconciliation_payload(outputs, scope, {})
+    assert retry_payload["idempotencyKey"] == payload["idempotencyKey"]
+    assert retry_payload["manifestFingerprint"] == payload["manifestFingerprint"]
+
+    replay, replay_state = runner.native_auth_reconciliation_payload(outputs, scope, state)
+    assert replay is None
+    assert replay_state == state
+
+
+def tenant_entra_operation(action: str, revision: int = 1) -> dict:
+    tenant_id = "00000000-0000-4000-8000-000000000123"
+    payload = {
+        "action": "update",
+        "operation": {
+            "kind": "identity_provider",
+            "action": action,
+            "revision": revision,
+            "expectedPreviousRevision": revision - 1,
+            "connection": {
+                "connectionKey": f"microsoft:tenant:{tenant_id}",
+                "tenantId": tenant_id,
+                "providerName": "Entra_0000000000004000_deadbeef",
+                "displayName": "Acme Microsoft",
+                "clientId": "entra-client-id",
+                "clientSecretRef": (
+                    "arn:aws:secretsmanager:us-east-1:123456789012:"
+                    f"secret:thinkwork/dev/auth/entra/{tenant_id}-ABC123"
+                ),
+                "issuerUrl": f"https://login.microsoftonline.com/{tenant_id}/v2.0",
+                "tenantBindings": [
+                    {
+                        "tenantId": "019f762b-683c-7153-acff-24ee932d73f6",
+                        "label": "Acme",
+                        "hostnames": ["Login.Acme.Example", "login.acme.example"],
+                    }
+                ],
+            },
+        },
+    }
+    if action == "rotate":
+        payload["operation"]["connection"]["clientSecretVersionStage"] = "AWSPENDING"
+    return payload
+
+
+def test_identity_provider_operation_builds_revisioned_secret_free_desired_state() -> None:
+    runner = load_runner()
+    payload = tenant_entra_operation("create")
+
+    desired = runner.identity_provider_desired_connections(
+        payload,
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={},
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )
+
+    assert len(desired) == 1
+    assert desired[0]["lifecycleState"] == "native"
+    assert desired[0]["tenantDirectoryId"] == "00000000-0000-4000-8000-000000000123"
+    assert desired[0]["tenantBindings"][0]["hostnames"] == ["login.acme.example"]
+    assert runner.tenant_entra_terraform_projection(desired) == [
         {
-            "action": "update",
-            "awsAccountId": "637423202447",
-            "awsRegion": "us-east-1",
-            "agentcorePiSourceImageUri": image,
+            "connection_key": "microsoft:tenant:00000000-0000-4000-8000-000000000123",
+            "tenant_id": "00000000-0000-4000-8000-000000000123",
+            "provider_name": "Entra_0000000000004000_deadbeef",
+            "display_name": "Acme Microsoft",
         }
-    ) == image
+    ]
+    assert "tenant-super-secret" not in json.dumps(desired)
+
+
+def test_identity_provider_disable_removes_route_before_provider_retirement() -> None:
+    runner = load_runner()
+    created = runner.identity_provider_desired_connections(
+        tenant_entra_operation("create"),
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={},
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )
+    disabled = runner.identity_provider_desired_connections(
+        tenant_entra_operation("disable", revision=2),
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={"desiredRevision": 1, "tenantConnections": created},
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )
+
+    assert disabled[0]["lifecycleState"] == "denied"
+    assert disabled[0]["tenantBindings"][0]["status"] == "disabled"
+    assert runner.tenant_entra_terraform_projection(disabled) == []
+
+
+def test_identity_provider_operation_rejects_cross_stage_secret_reference() -> None:
+    runner = load_runner()
+    payload = tenant_entra_operation("create")
+    payload["operation"]["connection"]["clientSecretRef"] = (
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/prod/auth/entra/example"
+    )
+
+    with pytest.raises(RuntimeError, match="account, region, stage"):
+        runner.identity_provider_desired_connections(
+            payload,
+            stage="dev",
+            account_id="123456789012",
+            region="us-east-1",
+            previous_state={},
+            current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+        )
+
+
+def test_identity_provider_operation_rejects_invalid_secret_version_stage() -> None:
+    runner = load_runner()
+    payload = tenant_entra_operation("rotate", revision=2)
+    payload["operation"]["connection"]["clientSecretVersionStage"] = "AWS_PENDING"
+
+    with pytest.raises(RuntimeError, match="must be AWSPENDING"):
+        runner.identity_provider_desired_connections(
+            payload,
+            stage="dev",
+            account_id="123456789012",
+            region="us-east-1",
+            previous_state={"desiredRevision": 1, "tenantConnections": []},
+            current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+        )
+
+
+def test_identity_provider_operation_rejects_pending_stage_outside_rotation() -> None:
+    runner = load_runner()
+    payload = tenant_entra_operation("create")
+    payload["operation"]["connection"]["clientSecretVersionStage"] = "AWSPENDING"
+
+    with pytest.raises(RuntimeError, match="valid only.*rotation"):
+        runner.identity_provider_desired_connections(
+            payload,
+            stage="dev",
+            account_id="123456789012",
+            region="us-east-1",
+            previous_state={},
+            current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+        )
+
+
+def test_identity_provider_rotation_requires_pending_stage() -> None:
+    runner = load_runner()
+    created = runner.identity_provider_desired_connections(
+        tenant_entra_operation("create"),
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={},
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )
+    payload = tenant_entra_operation("rotate", revision=2)
+    payload["operation"]["connection"].pop("clientSecretVersionStage")
+
+    with pytest.raises(RuntimeError, match="requires clientSecretVersionStage AWSPENDING"):
+        runner.identity_provider_desired_connections(
+            payload,
+            stage="dev",
+            account_id="123456789012",
+            region="us-east-1",
+            previous_state={"desiredRevision": 1, "tenantConnections": created},
+            current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+        )
+
+
+def test_identity_provider_update_does_not_require_agent_image_pin() -> None:
+    runner = load_runner()
+
+    assert (
+        runner.resolve_agentcore_pi_source_image_uri(
+            {"action": "update", "operation": {"kind": "identity_provider"}}
+        )
+        == ""
+    )
+
+
+def test_identity_provider_rotate_reads_pending_secret_and_promotes_only_after_reconcile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    connection = runner.identity_provider_desired_connections(
+        tenant_entra_operation("rotate", revision=2),
+        stage="dev",
+        account_id="123456789012",
+        region="us-east-1",
+        previous_state={
+            "desiredRevision": 1,
+            "tenantConnections": runner.identity_provider_desired_connections(
+                tenant_entra_operation("create"),
+                stage="dev",
+                account_id="123456789012",
+                region="us-east-1",
+                previous_state={},
+                current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+            ),
+        },
+        current_outputs={"user_pool_id": {"value": "us-east-1_Example123"}},
+    )[0]
+    calls = []
+
+    def fake_output(args, **_kwargs):
+        calls.append(args)
+        if "get-secret-value" in args:
+            return json.dumps({"clientId": "entra-client-id", "clientSecret": "pending-secret"})
+        if "describe-secret" in args:
+            return json.dumps(
+                {"pending-version": ["AWSPENDING"], "current-version": ["AWSCURRENT"]}
+            )
+        return "{}"
+
+    monkeypatch.setattr(runner, "output", fake_output)
+    assert runner._read_tenant_entra_secret(connection) == "pending-secret"
+    assert "AWSPENDING" in calls[0]
+
+    vars_json = {"auth_tenant_connection_metadata": [connection]}
+    promoted = runner.promote_tenant_entra_pending_secret(
+        tenant_entra_operation("rotate", revision=2), vars_json
+    )
+    assert promoted["status"] == "promoted"
+    promotion = next(args for args in calls if "update-secret-version-stage" in args)
+    assert "pending-version" in promotion
+    assert "current-version" in promotion
 
 
 def test_bootstrap_can_fall_back_to_release_agentcore_pi_image(
@@ -146,9 +453,11 @@ def test_bootstrap_can_fall_back_to_release_agentcore_pi_image(
     monkeypatch.setattr(
         runner,
         "release_runtime_image",
-        lambda name: "ghcr.io/thinkwork-ai/thinkwork-agentcore@sha256:abc"
-        if name == "agentcore-pi-amd64"
-        else "",
+        lambda name: (
+            "ghcr.io/thinkwork-ai/thinkwork-agentcore@sha256:abc"
+            if name == "agentcore-pi-amd64"
+            else ""
+        ),
     )
 
     assert runner.resolve_agentcore_pi_source_image_uri({"action": "deploy"}) == (
@@ -624,6 +933,61 @@ def run_push_database_schema(
     return db.events
 
 
+def test_prepare_additive_schema_before_app_applies_data_before_app_retirement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    commands: list[list[str]] = []
+    pushed_vars: list[dict] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(runner, "TF", tmp_path)
+    monkeypatch.setattr(runner, "TERRAFORM_EVIDENCE", {})
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    monkeypatch.setattr(runner, "output", lambda *_args, **_kwargs: "{}")
+    monkeypatch.setattr(
+        runner,
+        "push_database_schema",
+        lambda _outputs_path, vars_json: pushed_vars.append(vars_json),
+    )
+
+    result = runner.prepare_additive_schema_before_app(
+        {"action": "deploy"},
+        {
+            "stage": "prod",
+            "auth_retirement_phase": "retired",
+            "finalize_auth_retirement": True,
+        },
+    )
+
+    assert result.returncode == 0
+    assert commands == [
+        [
+            "terraform",
+            "plan",
+            "-target=module.thinkwork.module.database",
+            "-out=tfplan-data",
+            "-no-color",
+        ],
+        ["terraform", "apply", "-auto-approve", "-no-color", "tfplan-data"],
+    ]
+    assert pushed_vars == [
+        {
+            "stage": "prod",
+            "auth_retirement_phase": "retired",
+            "finalize_auth_retirement": False,
+        }
+    ]
+    assert runner.TERRAFORM_EVIDENCE["schemaOrdering"] == {
+        "status": "succeeded",
+        "target": "module.thinkwork.module.database",
+        "phase": "foundation-data-additive-before-app",
+    }
+
+
 def test_push_database_schema_checks_out_release_selected_module_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -710,6 +1074,47 @@ def test_push_database_schema_applies_only_unrecorded_migrations(
     )
 
 
+@pytest.mark.parametrize(
+    ("phase", "finalize", "expected"),
+    [
+        ("coexistence", False, []),
+        ("coexistence", True, []),
+        ("cutover", False, []),
+        ("cutover", True, []),
+        ("retired", False, []),
+        ("retired", True, ["0263_drop_workos_auth_runtime.sql"]),
+    ],
+)
+def test_push_database_schema_requires_retired_phase_and_explicit_finalization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    phase: str,
+    finalize: bool,
+    expected: list[str],
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "POST_SEED_MIGRATIONS", [])
+    db = FakeLedgerDb(tenants_exist=True, ledger=set())
+    run_push_database_schema(
+        runner,
+        tmp_path,
+        monkeypatch,
+        db,
+        ["0263_drop_workos_auth_runtime.sql"],
+        migration_bodies={
+            "0263_drop_workos_auth_runtime.sql": ("-- deployment-phase: auth-retired\nSELECT 1;\n")
+        },
+        vars_json={
+            "stage": "tei-e2e",
+            "auth_retirement_phase": phase,
+            "finalize_auth_retirement": finalize,
+        },
+    )
+
+    assert db.applied_files == expected
+    assert ("0263_drop_workos_auth_runtime.sql" in db.ledger) is bool(expected)
+
+
 def test_push_database_schema_transition_backfills_ledger_via_markers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -745,6 +1150,40 @@ def test_push_database_schema_transition_backfills_ledger_via_markers(
     assert db.ledger["0158_pending_user_questions.sql"] == "transition-assumed"
     # no markers -> assumed applied
     assert db.ledger["0001_ancient.sql"] == "transition-assumed"
+
+
+def test_push_database_schema_transition_applies_post_cutoff_migrations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    db = FakeLedgerDb(
+        tenants_exist=True,
+        ledger=None,
+        present_objects={"public.existing_native_auth_table"},
+    )
+    run_push_database_schema(
+        runner,
+        tmp_path,
+        monkeypatch,
+        db,
+        [
+            "0155_tenant_model_catalog.sql",
+            "0261_native_auth_control_plane.sql",
+            "0262_auth_subscription_tickets.sql",
+        ],
+        migration_bodies={
+            "0261_native_auth_control_plane.sql": (
+                "-- creates: public.missing_native_auth_table\nSELECT 1;\n"
+            ),
+            "0262_auth_subscription_tickets.sql": (
+                "-- creates: public.existing_native_auth_table\nSELECT 1;\n"
+            ),
+        },
+    )
+
+    assert "0261_native_auth_control_plane.sql" in db.applied_files
+    assert db.ledger["0261_native_auth_control_plane.sql"] == "runner"
+    assert db.ledger["0262_auth_subscription_tickets.sql"] == "transition-verified"
 
 
 def test_push_database_schema_greenfield_records_full_ledger(
@@ -1057,6 +1496,7 @@ def _cognito_email_runner_env(runner, tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("THINKWORK_TERRAFORM_LOCK_TABLE", "thinkwork-locks")
     monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
     monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.150")
+    monkeypatch.setenv("AUTH_MIGRATION_RECOVERY_DEADLINE", "2099-01-01T00:00:00Z")
     monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", file_url(manifest_path))
     monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", manifest_sha)
     return tf_dir
@@ -1163,9 +1603,17 @@ def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default
             "apiAuthSecret": "api-secret",
             "cognitoEmailSourceArn": "arn:aws:ses:us-east-1:637423202447:identity/payload.example.com",
         },
-        {"cognitoEmailSourceArn": secret_arn},
+        {
+            "cognitoEmailSourceArn": secret_arn,
+            "authRetirementPhase": "cutover",
+        },
     )
     assert vars_json["cognito_email_source_arn"] == secret_arn
+    assert vars_json["auth_retirement_phase"] == "cutover"
+    assert vars_json["finalize_auth_retirement"] is False
+    assert "auth_retirement_phase = var.auth_retirement_phase" in (runner.TF / "main.tf").read_text(
+        encoding="utf-8"
+    )
 
     vars_json_default = runner.write_runner_files(
         {
@@ -1182,6 +1630,114 @@ def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default
     assert vars_json_default["cognito_reply_to_email_address"] == ""
     assert vars_json_default["app_domain"] == ""
     assert vars_json_default["app_certificate_arn"] == ""
+    assert vars_json_default["auth_retirement_phase"] == "retired"
+    assert vars_json_default["finalize_auth_retirement"] is False
+
+    vars_json_retired = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "authRetirementPhase": "retired",
+            "finalizeAuthRetirement": True,
+        },
+        {},
+    )
+    assert vars_json_retired["auth_retirement_phase"] == "retired"
+    assert vars_json_retired["finalize_auth_retirement"] is True
+
+
+def test_write_runner_files_defaults_existing_preauth_stack_to_coexistence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {"user_pool_id": {"value": "us-east-1_Existing"}},
+            "resources": [{"type": "aws_cognito_user_pool", "name": "main"}],
+        },
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+
+    assert vars_json["auth_retirement_phase"] == "coexistence"
+    assert vars_json["auth_migration_recovery_deadline"] == "2099-01-01T00:00:00Z"
+
+
+def test_write_runner_files_requires_deadline_for_coexistence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.delenv("AUTH_MIGRATION_RECOVERY_DEADLINE")
+
+    with pytest.raises(RuntimeError, match="authMigrationRecoveryDeadline is required"):
+        runner.write_runner_files(
+            {
+                "stage": "tei-e2e",
+                "awsRegion": "us-east-1",
+                "awsAccountId": "637423202447",
+                "dbPassword": "db-secret",
+                "apiAuthSecret": "api-secret",
+                "authRetirementPhase": "coexistence",
+            },
+            {},
+        )
+
+
+def test_write_runner_files_preserves_deployed_auth_retirement_phase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "auth_retirement_phase": {"value": "cutover"},
+                "user_pool_id": {"value": "us-east-1_Existing"},
+            }
+        },
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+
+    assert vars_json["auth_retirement_phase"] == "cutover"
+
+
+def test_main_reconciles_native_auth_before_destructive_schema() -> None:
+    source = Path(__file__).with_name("runner.py").read_text(encoding="utf-8")
+    post_apply = source[source.index("def main():") :]
+    reconciliation = post_apply.index(
+        "CONTROLLER_EVIDENCE[\"authReconciliation\"] = reconcile_native_auth_metadata"
+    )
+    schema = post_apply.index("push_database_schema(outputs_path, vars_json)", reconciliation)
+
+    assert reconciliation < schema
 
 
 def test_write_runner_files_wires_analyst_lambda_vpc_egress(
@@ -1201,15 +1757,19 @@ def test_write_runner_files_wires_analyst_lambda_vpc_egress(
         "apiAuthSecret": "api-secret",
     }
 
-    assert runner.write_runner_files(base_payload, {})[
-        "analyst_lambda_vpc_egress"
-    ] is False
-    assert runner.write_runner_files(
-        base_payload, {"analystLambdaVpcEgress": "true"}
-    )["analyst_lambda_vpc_egress"] is True
-    assert runner.write_runner_files(
-        {**base_payload, "analystLambdaVpcEgress": True}, {}
-    )["analyst_lambda_vpc_egress"] is True
+    assert runner.write_runner_files(base_payload, {})["analyst_lambda_vpc_egress"] is False
+    assert (
+        runner.write_runner_files(base_payload, {"analystLambdaVpcEgress": "true"})[
+            "analyst_lambda_vpc_egress"
+        ]
+        is True
+    )
+    assert (
+        runner.write_runner_files({**base_payload, "analystLambdaVpcEgress": True}, {})[
+            "analyst_lambda_vpc_egress"
+        ]
+        is True
+    )
 
     main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
     assert 'variable "analyst_lambda_vpc_egress"' in main_tf
@@ -2814,7 +3374,6 @@ def test_runtime_profile_contains_customer_authority_metadata(
         "app_url": {"value": "https://app.example.com"},
         "appsync_api_url": {"value": "https://appsync.example.com/graphql"},
         "appsync_realtime_url": {"value": "wss://appsync.example.com/graphql"},
-        "appsync_api_key": {"value": "api-key"},
         "auth_domain": {"value": "thinkwork-tei-e2e"},
         "user_pool_id": {"value": "us-east-1_abc"},
         "admin_client_id": {"value": "client-id"},

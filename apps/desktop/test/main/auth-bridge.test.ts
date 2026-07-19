@@ -261,7 +261,6 @@ describe("auth bridge handlers", () => {
     registerAuthBridgeHandlers({
       ipcMain,
       storage: createStorage({
-        "thinkwork:auth-source": "workos",
         "CognitoIdentityServiceProvider.client.LastAuthUser": "user-id",
         "CognitoIdentityServiceProvider.client.user-id.idToken": "id-token",
         "CognitoIdentityServiceProvider.client.user-id.refreshToken":
@@ -283,7 +282,6 @@ describe("auth bridge handlers", () => {
     });
 
     expect(signOut).toHaveBeenCalledWith({
-      authSource: "workos",
       idToken: "id-token",
       refreshToken: "refresh-token",
     });

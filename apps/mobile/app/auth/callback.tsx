@@ -6,7 +6,10 @@ import * as auth from "@/lib/auth";
 import { setAuthToken } from "@/lib/graphql/client";
 
 export default function AuthCallbackScreen() {
-  const { code } = useLocalSearchParams<{ code: string }>();
+  const { code, state } = useLocalSearchParams<{
+    code: string;
+    state: string;
+  }>();
   const [error, setError] = useState<string | null>(null);
   const handledRef = useRef(false);
 
@@ -20,15 +23,43 @@ export default function AuthCallbackScreen() {
     // legitimate in-context exchange to fail with `invalid_grant`. Bail out on
     // native and let the routing guard + AuthProvider drive navigation.
     if (Platform.OS !== "web") return;
-    if (!code || handledRef.current) return;
+    if (!code || !state || handledRef.current) return;
     handledRef.current = true;
 
     const redirectUri = window.location.origin + "/auth/callback";
 
+    const storageKey = `thinkwork:mobile-oauth:${state}`;
+    const rawRequest = window.sessionStorage.getItem(storageKey);
+    window.sessionStorage.removeItem(storageKey);
+    if (!rawRequest) {
+      setError("Sign-in state expired. Please try again.");
+      return;
+    }
+    let request: auth.OAuthAuthorizeRequest;
+    try {
+      request = JSON.parse(rawRequest) as auth.OAuthAuthorizeRequest;
+    } catch {
+      setError("Sign-in state could not be verified.");
+      return;
+    }
+    if (request.state !== state || request.redirectUri !== redirectUri) {
+      setError("Sign-in state could not be verified.");
+      return;
+    }
+
     auth
-      .exchangeCodeForTokens(code, redirectUri)
+      .exchangeCodeForTokens(
+        code,
+        redirectUri,
+        request.clientId,
+        request.codeVerifier,
+      )
       .then((tokens) => {
-        auth.storeOAuthTokens(tokens);
+        auth.validateOAuthTokens(tokens, {
+          clientId: request.clientId,
+          nonce: request.nonce,
+        });
+        auth.storeOAuthTokens(tokens, request.clientId);
         setAuthToken(tokens.id_token);
         // Full reload so AuthProvider picks up the stored session
         window.location.href = "/";
@@ -37,7 +68,7 @@ export default function AuthCallbackScreen() {
         console.error("[AuthCallback] token exchange failed:", err);
         setError("Sign-in failed. Please try again.");
       });
-  }, [code]);
+  }, [code, state]);
 
   return (
     <View className="flex-1 items-center justify-center bg-white dark:bg-neutral-950">

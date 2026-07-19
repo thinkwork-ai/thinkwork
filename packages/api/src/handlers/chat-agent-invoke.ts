@@ -24,7 +24,6 @@ import {
   deriveFunctionName,
   getConfig,
   getApiAuthSecret,
-  getAppsyncApiKey,
 } from "@thinkwork/runtime-config";
 import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -132,11 +131,8 @@ function getTraceId(): string {
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
 // document may load after module init, and vitest stubs env after import.
-// Secret-class values are read at call time via getApiAuthSecret /
-// getAppsyncApiKey — never captured at module load.
-function appsyncEndpoint(): string {
-  return getConfig("APPSYNC_ENDPOINT", "");
-}
+// Secret-class values are read at call time via getApiAuthSecret, never
+// captured at module load.
 function workspaceBucket(): string {
   return getConfig("WORKSPACE_BUCKET", "");
 }
@@ -736,7 +732,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
   // at module load (vitest stubs env after import; the secret cache fills
   // during cold-start prime).
   const apiAuthSecret = getApiAuthSecret();
-  const appsyncApiKey = getAppsyncApiKey();
   const { threadId, tenantId, agentId, userMessage } = event;
   const existingThreadTurnId = event.existingThreadTurnId?.trim();
   const traceId = getTraceId();
@@ -812,7 +807,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         logPrefix: "[chat-agent-invoke]",
         thinkworkApiUrl: thinkworkApiUrl(),
         thinkworkApiSecret: apiAuthSecret,
-        appsyncApiKey,
       });
     } catch (err) {
       if (err instanceof AgentNotFoundError) {
@@ -1599,8 +1593,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       system_prompt: runtimeConfig.agentSystemPrompt || undefined,
       human_name: humanName || undefined,
       workspace_bucket: workspaceBucket() || undefined,
-      appsync_endpoint: appsyncEndpoint() || undefined,
-      appsync_api_key: appsyncApiKey || undefined,
       computer_id: event.computerId || undefined,
       computer_task_id: event.computerTaskId || undefined,
       computer_response_mode: "thread_turn",

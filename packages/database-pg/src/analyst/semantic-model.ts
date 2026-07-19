@@ -34,6 +34,13 @@ const dialect = new PgDialect();
 export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "agent_api_keys", // API key hashes
   "auth_provider_resources", // client_secret_ref + provider auth wiring
+  "auth_cutover_runs", // identity migration and session-drain evidence
+  "auth_identity_enrollments", // single-use challenge and nonce digests
+  "auth_identity_proofs", // durable identity proof digests
+  "auth_reconciliation_sets", // Cognito desired-state identifiers
+  "auth_route_clients", // Cognito app-client and callback wiring
+  "auth_subscription_invalidations", // authorization revocation delivery state
+  "auth_subscription_tickets", // one-use realtime authorization tickets
   // THINK-234: platform billing/infra ledgers with no tenant-analytics value.
   // These carry no `tenant_id`, so they cannot be row-scoped; rather than
   // grant them tenant-wide they are dropped from the analyst surface entirely.
@@ -70,9 +77,12 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "routine_approval_tokens", // task_token — raw bearer values
   "slack_workspaces", // bot token secret paths
   "tenant_auth_provider_references", // provider auth wiring
+  "tenant_auth_hosts", // login host-to-tenant trust boundary
+  "tenant_auth_policies", // tenant login admission policy
   "tenant_credentials", // credential secret refs
   "tenant_mcp_admin_keys", // admin key hashes
   "user_mcp_tokens", // per-user MCP token refs
+  "user_auth_identities", // immutable external identity subjects/evidence
   "user_plugin_activation_tokens", // activation token secret refs
   "search_queries", // THINK-263: search telemetry — raw query text + per-user rows, operational sensor not tenant analytics
   "webhook_deliveries", // signature material + raw delivery payloads

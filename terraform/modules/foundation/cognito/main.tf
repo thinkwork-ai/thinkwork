@@ -9,15 +9,21 @@
 locals {
   create                          = var.create_cognito
   create_pre_signup               = local.create && var.pre_signup_lambda_zip != ""
+  create_pre_token_generation     = local.create && trimspace(var.pre_token_generation_lambda_s3_bucket) != "" && trimspace(var.pre_token_generation_lambda_s3_key) != ""
+  workos_rollback_enabled         = var.auth_retirement_phase != "retired"
   use_local_custom_auth_artifact  = trimspace(var.custom_auth_lambda_zip) != ""
   use_remote_custom_auth_artifact = trimspace(var.custom_auth_lambda_s3_bucket) != ""
   custom_auth_artifact_count      = (local.use_local_custom_auth_artifact ? 1 : 0) + (local.use_remote_custom_auth_artifact ? 1 : 0)
-  create_custom_auth              = local.create && local.custom_auth_artifact_count == 1
+  create_custom_auth              = local.create && local.workos_rollback_enabled && local.custom_auth_artifact_count == 1
 
-  user_pool_id     = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
-  user_pool_arn    = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
-  admin_client_id  = local.create ? aws_cognito_user_pool_client.admin[0].id : var.existing_admin_client_id
-  mobile_client_id = local.create ? aws_cognito_user_pool_client.mobile[0].id : var.existing_mobile_client_id
+  user_pool_id  = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
+  user_pool_arn = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
+  admin_client_id = local.create ? (
+    local.workos_rollback_enabled ? aws_cognito_user_pool_client.admin[0].id : aws_cognito_user_pool_client.auth_route["web:local"].id
+  ) : var.existing_admin_client_id
+  mobile_client_id = local.create ? (
+    local.workos_rollback_enabled ? aws_cognito_user_pool_client.mobile[0].id : aws_cognito_user_pool_client.auth_route["mobile:local"].id
+  ) : var.existing_mobile_client_id
   identity_pool_id = local.create ? aws_cognito_identity_pool.main[0].id : var.existing_identity_pool_id
   oidc_identity_providers = {
     for provider in var.oidc_identity_providers : provider.provider_name => provider
@@ -25,10 +31,84 @@ locals {
   saml_identity_providers = {
     for provider in var.saml_identity_providers : provider.provider_name => provider
   }
+  auth_client_families = {
+    web = {
+      callback_urls      = [for url in var.admin_callback_urls : url if !strcontains(url, ":42010/")]
+      logout_urls        = var.admin_logout_urls
+      refresh_token_days = 30
+    }
+    mobile = {
+      callback_urls      = var.mobile_callback_urls
+      logout_urls        = var.mobile_logout_urls
+      refresh_token_days = 90
+    }
+    desktop = {
+      callback_urls      = var.desktop_callback_urls
+      logout_urls        = var.desktop_callback_urls
+      refresh_token_days = 30
+    }
+    cli = {
+      callback_urls      = var.cli_callback_urls
+      logout_urls        = var.cli_logout_urls
+      refresh_token_days = 30
+    }
+  }
+  static_auth_routes = merge(
+    {
+      for family, config in local.auth_client_families : "${family}:local" => {
+        route_key           = "local"
+        client_family       = family
+        provider_names      = ["COGNITO"]
+        explicit_auth_flows = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    },
+    var.google_oauth_client_id != "" ? {
+      for family, config in local.auth_client_families : "${family}:google" => {
+        route_key           = "google"
+        client_family       = family
+        provider_names      = ["Google"]
+        explicit_auth_flows = ["ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    } : {},
+    var.microsoft_oauth_client_id != "" ? {
+      for family, config in local.auth_client_families : "${family}:microsoft" => {
+        route_key           = "microsoft"
+        client_family       = family
+        provider_names      = ["MicrosoftOrganizations"]
+        explicit_auth_flows = ["ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    } : {},
+  )
+  tenant_auth_routes = merge({}, [
+    for connection in var.tenant_entra_connections : {
+      for family, config in local.auth_client_families : "${family}:entra:${lower(connection.tenant_id)}" => {
+        route_key           = "entra-${replace(lower(connection.tenant_id), "-", "")}"
+        client_family       = family
+        provider_names      = [connection.provider_name]
+        explicit_auth_flows = ["ALLOW_REFRESH_TOKEN_AUTH"]
+        callback_urls       = config.callback_urls
+        logout_urls         = config.logout_urls
+        refresh_token_days  = config.refresh_token_days
+      }
+    }
+  ]...)
+  auth_routes = merge(local.static_auth_routes, local.tenant_auth_routes)
 }
 
 resource "terraform_data" "custom_auth_artifact_validation" {
-  input = local.custom_auth_artifact_count
+  input = {
+    phase          = var.auth_retirement_phase
+    artifact_count = local.custom_auth_artifact_count
+  }
 
   lifecycle {
     precondition {
@@ -39,6 +119,16 @@ resource "terraform_data" "custom_auth_artifact_validation" {
     precondition {
       condition     = !local.use_remote_custom_auth_artifact || trimspace(var.custom_auth_lambda_s3_key) != ""
       error_message = "custom_auth_lambda_s3_key must be set when custom_auth_lambda_s3_bucket is set."
+    }
+
+    precondition {
+      condition     = !local.create_custom_auth || var.api_auth_secret != ""
+      error_message = "The WorkOS rollback custom-auth Lambda requires api_auth_secret until auth_retirement_phase is retired."
+    }
+
+    precondition {
+      condition     = var.microsoft_oauth_client_id == "" || var.microsoft_oauth_tenant != ""
+      error_message = "microsoft_oauth_tenant is required when microsoft_oauth_client_id is configured because Cognito requires an exact tenant issuer."
     }
   }
 }
@@ -69,26 +159,6 @@ resource "aws_iam_role_policy_attachment" "pre_signup_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy" "pre_signup_cognito" {
-  count = local.create_pre_signup ? 1 : 0
-  name  = "cognito-access"
-  role  = aws_iam_role.pre_signup[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "cognito-idp:ListUsers",
-        "cognito-idp:AdminLinkProviderForUser",
-        "cognito-idp:AdminCreateUser",
-        "cognito-idp:AdminSetUserPassword"
-      ]
-      Resource = aws_cognito_user_pool.main[0].arn
-    }]
-  })
-}
-
 resource "aws_lambda_function" "pre_signup" {
   count         = local.create_pre_signup ? 1 : 0
   function_name = "thinkwork-${var.stage}-cognito-pre-signup"
@@ -111,15 +181,62 @@ resource "aws_lambda_permission" "cognito_pre_signup" {
 }
 
 ################################################################################
-# Custom Auth Challenge Lambda
+# Pre Token Generation Client Cutoff Lambda
+################################################################################
+
+resource "aws_iam_role" "pre_token_generation" {
+  count = local.create_pre_token_generation ? 1 : 0
+  name  = "thinkwork-${var.stage}-cognito-pre-token-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "pre_token_generation_basic" {
+  count      = local.create_pre_token_generation ? 1 : 0
+  role       = aws_iam_role.pre_token_generation[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "pre_token_generation" {
+  count         = local.create_pre_token_generation ? 1 : 0
+  function_name = "thinkwork-${var.stage}-cognito-pre-token-client-deny"
+  s3_bucket     = var.pre_token_generation_lambda_s3_bucket
+  s3_key        = var.pre_token_generation_lambda_s3_key
+  handler       = "index.handler"
+  runtime       = "nodejs20.x"
+  timeout       = 5
+  role          = aws_iam_role.pre_token_generation[0].arn
+
+  environment {
+    variables = {
+      COGNITO_DENIED_APP_CLIENT_IDS = join(",", var.denied_app_client_ids)
+    }
+  }
+}
+
+resource "aws_lambda_permission" "cognito_pre_token_generation" {
+  count         = local.create_pre_token_generation ? 1 : 0
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.pre_token_generation[0].function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main[0].arn
+}
+
+################################################################################
+# Legacy WorkOS Custom Auth Challenge Lambda (rollback runtime only)
 ################################################################################
 
 resource "aws_iam_role" "custom_auth" {
   count = local.create_custom_auth ? 1 : 0
-  # Release deployments use a distinct managed name so the first convergent
-  # apply does not collide with custom-auth Lambdas created during the legacy
-  # manual rollout. Local source deployments retain the original name.
-  name = local.use_remote_custom_auth_artifact ? "thinkwork-${var.stage}-cognito-custom-auth-release-role" : "thinkwork-${var.stage}-cognito-custom-auth-role"
+  name  = local.use_remote_custom_auth_artifact ? "thinkwork-${var.stage}-cognito-custom-auth-release-role" : "thinkwork-${var.stage}-cognito-custom-auth-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -155,13 +272,6 @@ resource "aws_lambda_function" "custom_auth" {
   }
 
   source_code_hash = local.use_local_custom_auth_artifact ? filebase64sha256(var.custom_auth_lambda_zip) : null
-
-  lifecycle {
-    precondition {
-      condition     = var.api_auth_secret != ""
-      error_message = "A Cognito custom-auth Lambda artifact requires api_auth_secret so custom-auth challenges can be verified."
-    }
-  }
 }
 
 resource "aws_lambda_permission" "cognito_custom_auth" {
@@ -214,6 +324,30 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   schema {
+    name                = "entra_tenant_id"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+
+    string_attribute_constraints {
+      min_length = 0
+      max_length = 36
+    }
+  }
+
+  schema {
+    name                = "entra_object_id"
+    attribute_data_type = "String"
+    required            = false
+    mutable             = true
+
+    string_attribute_constraints {
+      min_length = 0
+      max_length = 36
+    }
+  }
+
+  schema {
     name                = "tenant_id"
     attribute_data_type = "String"
     required            = false
@@ -242,12 +376,19 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   dynamic "lambda_config" {
-    for_each = local.create_pre_signup || local.create_custom_auth ? [1] : []
+    for_each = local.create_pre_signup || local.create_pre_token_generation || local.create_custom_auth ? [1] : []
     content {
       pre_sign_up                    = local.create_pre_signup ? aws_lambda_function.pre_signup[0].arn : null
       define_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
       create_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
       verify_auth_challenge_response = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
+      dynamic "pre_token_generation_config" {
+        for_each = local.create_pre_token_generation ? [1] : []
+        content {
+          lambda_arn     = aws_lambda_function.pre_token_generation[0].arn
+          lambda_version = "V2_0"
+        }
+      }
     }
   }
 
@@ -304,13 +445,96 @@ resource "aws_cognito_identity_provider" "google" {
   }
 }
 
+resource "aws_cognito_identity_provider" "microsoft_organizations" {
+  count         = local.create && var.microsoft_oauth_client_id != "" ? 1 : 0
+  user_pool_id  = aws_cognito_user_pool.main[0].id
+  provider_name = "MicrosoftOrganizations"
+  provider_type = "OIDC"
+
+  provider_details = {
+    client_id                 = var.microsoft_oauth_client_id
+    client_secret             = var.microsoft_oauth_client_secret
+    authorize_scopes          = "openid email profile"
+    oidc_issuer               = "https://login.microsoftonline.com/${lower(var.microsoft_oauth_tenant)}/v2.0"
+    attributes_request_method = "GET"
+  }
+
+  attribute_mapping = {
+    # Entra v2 does not guarantee an `email` claim for every work/school
+    # account. `preferred_username` is the supported sign-in hint and keeps
+    # Cognito's required email attribute populated without treating it as an
+    # authorization boundary.
+    email                    = "preferred_username"
+    name                     = "name"
+    username                 = "sub"
+    "custom:entra_tenant_id" = "tid"
+    "custom:entra_object_id" = "oid"
+  }
+}
+
 locals {
   identity_providers = concat(
     var.google_oauth_client_id != "" ? ["Google"] : [],
+    var.microsoft_oauth_client_id != "" ? ["MicrosoftOrganizations"] : [],
     keys(local.oidc_identity_providers),
     keys(local.saml_identity_providers),
     ["COGNITO"]
   )
+}
+
+################################################################################
+# Route-specific public app clients
+################################################################################
+
+resource "aws_cognito_user_pool_client" "auth_route" {
+  for_each = local.create ? local.auth_routes : {}
+
+  name         = "Thinkwork-${title(each.value.client_family)}-${title(each.value.route_key)}"
+  user_pool_id = aws_cognito_user_pool.main[0].id
+
+  generate_secret                      = false
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  explicit_auth_flows                  = each.value.explicit_auth_flows
+  supported_identity_providers         = each.value.provider_names
+  callback_urls                        = distinct(each.value.callback_urls)
+  logout_urls                          = distinct(each.value.logout_urls)
+  enable_token_revocation              = true
+  prevent_user_existence_errors        = "ENABLED"
+  access_token_validity                = 1
+  id_token_validity                    = 1
+  refresh_token_validity               = each.value.refresh_token_days
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
+
+  read_attributes = [
+    "email",
+    "email_verified",
+    "name",
+    "custom:tenant_id",
+    "custom:entra_tenant_id",
+    "custom:entra_object_id",
+  ]
+
+  write_attributes = [
+    "email",
+    "name",
+    "custom:tenant_id",
+    "custom:entra_tenant_id",
+    "custom:entra_object_id",
+  ]
+
+  depends_on = [
+    aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.microsoft_organizations,
+    aws_cognito_identity_provider.oidc,
+    aws_cognito_identity_provider.saml,
+  ]
 }
 
 resource "aws_cognito_identity_provider" "oidc" {
@@ -363,8 +587,8 @@ resource "aws_cognito_identity_provider" "saml" {
 ################################################################################
 
 resource "aws_cognito_user_pool_client" "admin" {
-  count        = local.create ? 1 : 0
-  name         = "ThinkworkAdmin"
+  count        = local.create && local.workos_rollback_enabled ? 1 : 0
+  name         = "ThinkworkAdminLegacy"
   user_pool_id = aws_cognito_user_pool.main[0].id
 
   allowed_oauth_flows_user_pool_client = true
@@ -380,8 +604,8 @@ resource "aws_cognito_user_pool_client" "admin" {
 
   supported_identity_providers = local.identity_providers
 
-  callback_urls = distinct(concat(var.admin_callback_urls, var.desktop_callback_urls))
-  logout_urls   = distinct(concat(var.admin_logout_urls, var.desktop_callback_urls))
+  callback_urls = distinct(concat(var.admin_callback_urls, var.desktop_callback_urls, var.cli_callback_urls))
+  logout_urls   = distinct(concat(var.admin_logout_urls, var.desktop_callback_urls, var.cli_logout_urls))
 
   access_token_validity  = 1
   id_token_validity      = 1
@@ -418,8 +642,8 @@ resource "aws_cognito_user_pool_client" "admin" {
 ################################################################################
 
 resource "aws_cognito_user_pool_client" "mobile" {
-  count        = local.create ? 1 : 0
-  name         = "ThinkworkMobile"
+  count        = local.create && local.workos_rollback_enabled ? 1 : 0
+  name         = "ThinkworkMobileLegacy"
   user_pool_id = aws_cognito_user_pool.main[0].id
 
   explicit_auth_flows = [
@@ -477,16 +701,25 @@ resource "aws_cognito_identity_pool" "main" {
   identity_pool_name               = var.identity_pool_name != "" ? var.identity_pool_name : "thinkwork-${var.stage}-identity-pool"
   allow_unauthenticated_identities = false
 
-  cognito_identity_providers {
-    client_id               = aws_cognito_user_pool_client.admin[0].id
-    provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
-    server_side_token_check = false
+  dynamic "cognito_identity_providers" {
+    for_each = local.workos_rollback_enabled ? {
+      admin  = aws_cognito_user_pool_client.admin[0].id
+      mobile = aws_cognito_user_pool_client.mobile[0].id
+    } : {}
+    content {
+      client_id               = cognito_identity_providers.value
+      provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
+      server_side_token_check = false
+    }
   }
 
-  cognito_identity_providers {
-    client_id               = aws_cognito_user_pool_client.mobile[0].id
-    provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
-    server_side_token_check = false
+  dynamic "cognito_identity_providers" {
+    for_each = aws_cognito_user_pool_client.auth_route
+    content {
+      client_id               = cognito_identity_providers.value.id
+      provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
+      server_side_token_check = true
+    }
   }
 
   tags = {
@@ -516,21 +749,6 @@ resource "aws_iam_role" "authenticated" {
           "cognito-identity.amazonaws.com:amr" = "authenticated"
         }
       }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "authenticated_appsync" {
-  count = local.create ? 1 : 0
-  name  = "appsync-access"
-  role  = aws_iam_role.authenticated[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "appsync:GraphQL"
-      Resource = "*"
     }]
   })
 }

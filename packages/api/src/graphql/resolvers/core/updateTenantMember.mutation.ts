@@ -1,4 +1,5 @@
 import { GraphQLError } from "graphql";
+import { authSubscriptionInvalidations } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, tenantMembers, snakeToCamel } from "../../utils.js";
 import { resolveCaller } from "./resolve-auth-user.js";
@@ -80,6 +81,19 @@ export const updateTenantMember = async (
     if (!row) {
       throw new GraphQLError("Member not found", {
         extensions: { code: "NOT_FOUND" },
+      });
+    }
+    if (
+      target.principal_type === "user" &&
+      target.status === "active" &&
+      args.input.status !== undefined &&
+      args.input.status !== "active"
+    ) {
+      await tx.insert(authSubscriptionInvalidations).values({
+        tenant_id: target.tenant_id,
+        user_id: target.principal_id,
+        resource_kind: "membership",
+        reason: "membership_disabled",
       });
     }
     return snakeToCamel(row);

@@ -14,10 +14,19 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockInstallRows, mockUserRows } = vi.hoisted(() => ({
-  mockInstallRows: vi.fn(),
-  mockUserRows: vi.fn(),
-}));
+const { mockAdmitCognitoTenant, mockInstallRows, mockUserRows } = vi.hoisted(
+  () => ({
+    mockAdmitCognitoTenant: vi.fn(),
+    mockInstallRows: vi.fn(),
+    mockUserRows: vi.fn(),
+  }),
+);
+
+vi.mock("../lib/auth-admission.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/auth-admission.js")>();
+  return { ...actual, admitCognitoTenant: mockAdmitCognitoTenant };
+});
 
 vi.mock("@thinkwork/database-pg", async (importOriginal) => {
   const actual =
@@ -47,6 +56,8 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
 import type { PluginVersion } from "@thinkwork/plugin-catalog";
 // eslint-disable-next-line import/first
 import type { AuthResult } from "../lib/cognito-auth.js";
+// eslint-disable-next-line import/first
+import { AuthAdmissionError } from "../lib/auth-admission.js";
 // eslint-disable-next-line import/first
 import type { PluginActivationDeps } from "../lib/plugins/activation.js";
 // eslint-disable-next-line import/first
@@ -130,6 +141,13 @@ beforeEach(() => {
   });
   mockInstallRows.mockReturnValue([{ id: installId, tenant_id: TENANT }]);
   mockUserRows.mockReturnValue([{ id: CANONICAL_USER }]);
+  mockAdmitCognitoTenant.mockResolvedValue({
+    userId: CANONICAL_USER,
+    tenantId: TENANT,
+    role: "member",
+    identityId: "identity-1",
+    route: {},
+  });
 
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status });
@@ -199,13 +217,35 @@ describe("GET /api/skills/plugin-oauth/authorize", () => {
   });
 
   it("403 when the principal does not resolve to a user in the install's tenant", async () => {
-    mockUserRows.mockReturnValue([]);
+    mockAdmitCognitoTenant.mockRejectedValueOnce(
+      new AuthAdmissionError(
+        "identity_not_bound",
+        "Cognito identity is not bound to an active ThinkWork user.",
+      ),
+    );
     const res = await pluginOAuthAuthorize(
       event({ pluginInstallId: installId }),
       cognitoAuth("foreign-sub"),
       deps,
     );
     expect(res.statusCode).toBe(403);
+    expect(mockUserRows).not.toHaveBeenCalled();
+  });
+
+  it("403 when immutable admission rejects a revoked or inactive caller", async () => {
+    mockAdmitCognitoTenant.mockRejectedValueOnce(
+      new AuthAdmissionError(
+        "membership_inactive",
+        "ThinkWork membership is not active.",
+      ),
+    );
+    const res = await pluginOAuthAuthorize(
+      event({ pluginInstallId: installId }),
+      cognitoAuth("revoked-sub"),
+      deps,
+    );
+    expect(res.statusCode).toBe(403);
+    expect(store.activations.size).toBe(0);
   });
 
   it("404 on unknown install; 400 without pluginInstallId; 400 on bad returnTo", async () => {

@@ -16,6 +16,10 @@ import type {
 import { and, eq } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
 import {
+  admitCognitoTenant,
+  AuthAdmissionError,
+} from "../lib/auth-admission.js";
+import {
   handleCors,
   json,
   error,
@@ -31,7 +35,7 @@ import {
 } from "../lib/builtin-tools/web-search.js";
 import { validateTemplateWebSearch } from "../lib/templates/web-search-config.js";
 
-const { users, agents } = schema;
+const { agents } = schema;
 
 const LOG_PREFIX = "[mobile-tools]";
 
@@ -76,16 +80,19 @@ export async function handler(
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!auth || auth.authType !== "cognito" || !auth.email) {
+  if (!auth || auth.authType !== "cognito") {
     return unauthorized("Authentication required");
   }
-
-  const [userRow] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, auth.email.toLowerCase()))
-    .limit(1);
-  if (!userRow || !userRow.tenant_id) {
+  const requestedTenantId =
+    event.headers["x-tenant-id"]?.trim() ||
+    event.headers["X-Tenant-Id"]?.trim() ||
+    auth.tenantId ||
+    undefined;
+  let admitted: Awaited<ReturnType<typeof admitCognitoTenant>>;
+  try {
+    admitted = await admitCognitoTenant(auth, requestedTenantId);
+  } catch (cause) {
+    if (!(cause instanceof AuthAdmissionError)) throw cause;
     return forbidden("No tenant resolved for caller");
   }
 
@@ -107,7 +114,7 @@ export async function handler(
     })
     .from(agents)
     .where(
-      and(eq(agents.id, body.agentId), eq(agents.tenant_id, userRow.tenant_id)),
+      and(eq(agents.id, body.agentId), eq(agents.tenant_id, admitted.tenantId)),
     )
     .limit(1);
   if (!agent) return notFound("Agent not found");
@@ -115,7 +122,7 @@ export async function handler(
     return notFound("web_search is not enabled for this agent");
   }
 
-  const config = await loadTenantWebSearchConfig(userRow.tenant_id);
+  const config = await loadTenantWebSearchConfig(admitted.tenantId);
   if (!config) {
     return notFound("web_search is not configured for this tenant");
   }
@@ -136,8 +143,8 @@ export async function handler(
       LOG_PREFIX,
       JSON.stringify({
         op: "web_search",
-        tenantId: userRow.tenant_id,
-        userId: userRow.id,
+        tenantId: admitted.tenantId,
+        userId: admitted.userId,
         agentId: body.agentId,
         provider: config.provider,
         resultCount: results.length,

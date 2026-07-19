@@ -79,7 +79,6 @@ const {
 
 vi.mock("@thinkwork/runtime-config", () => ({
   getApiAuthSecret: () => "service-secret",
-  getAppsyncApiKey: () => "",
 }));
 
 vi.mock("./mcp-oauth.js", () => ({

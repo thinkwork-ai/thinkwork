@@ -51,22 +51,38 @@ variable "google_oauth_client_secret" {
 }
 
 variable "microsoft_oauth_client_id" {
-  description = "Microsoft OAuth client ID reserved for future Cognito/OAuth wiring. Accepted here so deployment-control-plane generated wrappers stay forward-compatible."
+  description = "Microsoft Entra application client ID for the deployment's default tenant-specific Cognito OIDC route."
   type        = string
   default     = ""
 }
 
 variable "microsoft_oauth_client_secret" {
-  description = "Microsoft OAuth client secret reserved for future Cognito/OAuth wiring."
+  description = "Microsoft Entra application client secret for the deployment's default tenant-specific Cognito OIDC route."
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "microsoft_oauth_tenant" {
-  description = "Microsoft OAuth tenant reserved for future Cognito/OAuth wiring."
+  description = "Microsoft Entra directory GUID for the deployment's default Microsoft login route. Cognito requires the exact tenant issuer; organizations/common authorities are not valid token issuers."
   type        = string
-  default     = "organizations"
+  default     = ""
+
+  validation {
+    condition     = var.microsoft_oauth_tenant == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
+    error_message = "microsoft_oauth_tenant must be an Entra directory GUID."
+  }
+}
+
+variable "tenant_entra_connections" {
+  description = "Safe tenant-specific Entra provider metadata. Secrets are reconciled outside Terraform and are never accepted here."
+  type = list(object({
+    connection_key = string
+    tenant_id      = string
+    provider_name  = string
+    display_name   = string
+  }))
+  default = []
 }
 
 variable "oidc_identity_providers" {
@@ -319,6 +335,21 @@ variable "existing_mobile_client_id" {
 variable "existing_identity_pool_id" {
   type    = string
   default = null
+}
+
+variable "existing_auth_route_clients" {
+  description = "Safe route-client manifest for BYO Cognito pools."
+  type = map(object({
+    client_id           = string
+    route_key           = string
+    client_family       = string
+    provider_names      = list(string)
+    explicit_auth_flows = list(string)
+    callback_urls       = list(string)
+    logout_urls         = list(string)
+    lifecycle_state     = string
+  }))
+  default = {}
 }
 
 variable "create_database" {
@@ -1004,8 +1035,12 @@ variable "admin_callback_urls" {
   default = [
     "http://localhost:5174",
     "http://localhost:5174/auth/callback",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5174/auth/callback",
     "http://localhost:5175",
     "http://localhost:5175/auth/callback",
+    "http://127.0.0.1:5175",
+    "http://127.0.0.1:5175/auth/callback",
     "http://127.0.0.1:42010/callback",
     "http://localhost:42010/callback",
   ]
@@ -1015,7 +1050,9 @@ variable "admin_logout_urls" {
   type = list(string)
   default = [
     "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "http://localhost:5175",
+    "http://127.0.0.1:5175",
   ]
 }
 
@@ -1025,6 +1062,22 @@ variable "desktop_callback_urls" {
     "thinkwork://oauth/callback",
     "thinkwork-dev://oauth/callback",
     "thinkwork-canary://oauth/callback",
+  ]
+}
+
+variable "cli_callback_urls" {
+  type = list(string)
+  default = [
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
+  ]
+}
+
+variable "cli_logout_urls" {
+  type = list(string)
+  default = [
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
   ]
 }
 
@@ -1048,10 +1101,40 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
-variable "cognito_custom_auth_lambda_zip" {
-  description = "Path to the Cognito custom-auth challenge Lambda zip"
+variable "auth_retirement_phase" {
+  description = "Native-auth migration phase. Fresh deployments default to retired (no WorkOS runtime); existing deployments must explicitly select coexistence/cutover until their evidence-gated retirement is complete."
+  type        = string
+  default     = "retired"
+
+  validation {
+    condition     = contains(["coexistence", "cutover", "retired"], var.auth_retirement_phase)
+    error_message = "auth_retirement_phase must be coexistence, cutover, or retired."
+  }
+}
+
+variable "auth_migration_recovery_deadline" {
+  description = "RFC3339 deadline for legacy-session identity migration. Must be supplied explicitly for coexistence deployments."
   type        = string
   default     = ""
+
+  validation {
+    condition = trimspace(var.auth_migration_recovery_deadline) == "" || (
+      can(timecmp(var.auth_migration_recovery_deadline, var.auth_migration_recovery_deadline))
+    )
+    error_message = "auth_migration_recovery_deadline must be empty or an RFC3339 timestamp."
+  }
+}
+
+variable "cognito_custom_auth_lambda_zip" {
+  description = "Local WorkOS bridge custom-auth artifact retained only as a rollback runtime before auth retirement."
+  type        = string
+  default     = ""
+}
+
+variable "cognito_denied_app_client_ids" {
+  description = "Cognito app clients denied new and refresh token issuance during native-auth cutover"
+  type        = list(string)
+  default     = []
 }
 
 # ---------------------------------------------------------------------------

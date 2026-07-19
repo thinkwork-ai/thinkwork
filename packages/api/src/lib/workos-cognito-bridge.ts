@@ -3,15 +3,15 @@ import {
   AdminRespondToAuthChallengeCommand,
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
 import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
-import {
-  tenantMembers,
-  users,
-  workosAuthBridges,
-} from "@thinkwork/database-pg/schema";
+import { tenantMembers, users } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "./db.js";
+import {
+  legacyWorkosAuthBridges as workosAuthBridges,
+  legacyWorkosAuthSessions as workosAuthSessions,
+} from "./legacy-workos-schema.js";
 import { digestBridgeCode } from "./workos-auth.js";
 import { recordWorkosAuthSession } from "./workos-auth-session.js";
 import { emitAuditEvent } from "./compliance/emit.js";
@@ -40,7 +40,17 @@ export interface WorkosBridgeUser {
   tenantId: string;
   email: string;
   name: string | null;
+  cognitoPrincipalId: string;
+  cognitoUsername: string;
   hasActiveTenantMembership: boolean;
+}
+
+export interface WorkosBridgeIdentityBinding extends WorkosBridgeUser {}
+
+export interface WorkosBridgeUserRepository {
+  loadIdentityBindings(
+    bridge: WorkosBridgeRecord,
+  ): Promise<WorkosBridgeIdentityBinding[]>;
 }
 
 export interface CognitoTokenSet {
@@ -65,7 +75,9 @@ export interface WorkosCognitoBridgeDeps {
     bridgeCodeDigest: string;
     now: Date;
   }): Promise<WorkosBridgeRecord | null>;
-  resolveBridgeUser(bridge: WorkosBridgeRecord): Promise<WorkosBridgeUser | null>;
+  resolveBridgeUser(
+    bridge: WorkosBridgeRecord,
+  ): Promise<WorkosBridgeUser | null>;
   startCognitoCustomAuth(args: {
     username: string;
     signedChallenge: string;
@@ -118,7 +130,8 @@ export function createDefaultWorkosCognitoBridgeDeps(
 ): WorkosCognitoBridgeDeps {
   return {
     consumePendingBridge: (args) => consumePendingBridge(args, db),
-    resolveBridgeUser: (bridge) => resolveBridgeUser(bridge, db),
+    resolveBridgeUser: (bridge) =>
+      resolveBridgeUser(bridge, createDbWorkosBridgeUserRepository(db)),
     startCognitoCustomAuth: (args) => startCognitoCustomAuth(args, cognito),
     recordWorkosSession: (args) => recordWorkosAuthSession(args, db),
     emitSignInSuccess: (args) => emitWorkosSignInSuccessAudit(args, db),
@@ -159,14 +172,20 @@ export async function exchangeWorkosBridgeForCognitoTokens(args: {
       userId: user?.id ?? null,
       reason: "tenant_user_not_mapped",
     });
-    throw new WorkosBridgeError("WorkOS user is not assigned to this tenant", 403);
+    throw new WorkosBridgeError(
+      "WorkOS user is not assigned to this tenant",
+      403,
+    );
   }
-  if (user.email.toLowerCase() !== bridge.workosEmail.toLowerCase()) {
+  if (!user.hasActiveTenantMembership) {
     await emitBridgeFailureAudit(deps, bridge, {
       userId: user.id,
-      reason: "email_mismatch",
+      reason: "inactive_tenant_membership",
     });
-    throw new WorkosBridgeError("WorkOS user email mismatch", 403);
+    throw new WorkosBridgeError(
+      "WorkOS user is not an active member of this tenant",
+      403,
+    );
   }
 
   const answer = deps.randomToken(32);
@@ -185,11 +204,21 @@ export async function exchangeWorkosBridgeForCognitoTokens(args: {
   );
 
   const tokens = await deps.startCognitoCustomAuth({
-    username: user.email,
+    username: user.cognitoUsername,
     signedChallenge,
     answer,
   });
   const cognitoClaims = parseCognitoBridgeTokenClaims(tokens.id_token);
+  if (cognitoClaims.sub !== user.cognitoPrincipalId) {
+    await emitBridgeFailureAudit(deps, bridge, {
+      userId: user.id,
+      reason: "cognito_subject_mismatch",
+    });
+    throw new WorkosBridgeError(
+      "Cognito bridge returned a different principal",
+      403,
+    );
+  }
   await deps.recordWorkosSession({
     tenantId: user.tenantId,
     userId: user.id,
@@ -325,41 +354,76 @@ async function consumePendingBridge(
   return row ?? null;
 }
 
-async function resolveBridgeUser(
+export async function resolveBridgeUser(
   bridge: WorkosBridgeRecord,
-  db: DbLike,
+  repository: WorkosBridgeUserRepository,
 ): Promise<WorkosBridgeUser | null> {
-  const [row] = await db
-    .select({
-      id: users.id,
-      tenantId: users.tenant_id,
-      email: users.email,
-      name: users.name,
-      membershipId: tenantMembers.id,
-    })
-    .from(users)
-    .leftJoin(
-      tenantMembers,
-      and(
-        eq(tenantMembers.tenant_id, bridge.tenantId),
-        eq(tenantMembers.principal_type, "user"),
-        eq(tenantMembers.principal_id, users.id),
-        eq(tenantMembers.status, "active"),
-      ),
-    )
-    .where(
-      and(
-        eq(users.tenant_id, bridge.tenantId),
-        sql`lower(${users.email}) = ${bridge.workosEmail.toLowerCase()}`,
-      ),
+  const bindings = await repository.loadIdentityBindings(bridge);
+  const unique = new Map<string, WorkosBridgeIdentityBinding>();
+  for (const binding of bindings) {
+    unique.set(
+      [
+        binding.id,
+        binding.tenantId,
+        binding.cognitoPrincipalId,
+        binding.cognitoUsername,
+      ].join("\u0000"),
+      binding,
     );
-  if (!row?.tenantId || !row.email) return null;
+  }
+  if (unique.size !== 1) return null;
+  return [...unique.values()][0] ?? null;
+}
+
+export function createDbWorkosBridgeUserRepository(
+  db: DbLike = defaultDb,
+): WorkosBridgeUserRepository {
   return {
-    id: row.id,
-    tenantId: row.tenantId,
-    email: row.email,
-    name: row.name,
-    hasActiveTenantMembership: Boolean(row.membershipId),
+    async loadIdentityBindings(bridge) {
+      const rows = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          cognitoPrincipalId: workosAuthSessions.cognito_principal_id,
+          cognitoUsername: workosAuthSessions.cognito_username,
+          membershipId: tenantMembers.id,
+        })
+        .from(workosAuthSessions)
+        .innerJoin(users, eq(users.id, workosAuthSessions.user_id))
+        .leftJoin(
+          tenantMembers,
+          and(
+            eq(tenantMembers.tenant_id, bridge.tenantId),
+            eq(tenantMembers.principal_type, "user"),
+            eq(tenantMembers.principal_id, workosAuthSessions.user_id),
+            eq(tenantMembers.status, "active"),
+          ),
+        )
+        .where(
+          and(
+            eq(workosAuthSessions.tenant_id, bridge.tenantId),
+            eq(
+              workosAuthSessions.tenant_auth_provider_reference_id,
+              bridge.tenantReferenceId,
+            ),
+            eq(
+              workosAuthSessions.auth_provider_resource_id,
+              bridge.authProviderResourceId,
+            ),
+            eq(workosAuthSessions.workos_user_id, bridge.workosUserId),
+          ),
+        );
+      return rows.map((row) => ({
+        id: row.id,
+        tenantId: bridge.tenantId,
+        email: row.email ?? bridge.workosEmail,
+        name: row.name,
+        cognitoPrincipalId: row.cognitoPrincipalId,
+        cognitoUsername: row.cognitoUsername,
+        hasActiveTenantMembership: Boolean(row.membershipId),
+      }));
+    },
   };
 }
 
@@ -469,7 +533,10 @@ async function startCognitoCustomAuth(
     }),
   );
   if (start.ChallengeName !== "CUSTOM_CHALLENGE" || !start.Session) {
-    throw new WorkosBridgeError("Cognito did not issue a bridge challenge", 502);
+    throw new WorkosBridgeError(
+      "Cognito did not issue a bridge challenge",
+      502,
+    );
   }
 
   const response = await cognito.send(
@@ -486,11 +553,7 @@ async function startCognitoCustomAuth(
     }),
   );
   const tokens = response.AuthenticationResult;
-  if (
-    !tokens?.IdToken ||
-    !tokens.AccessToken ||
-    !tokens.RefreshToken
-  ) {
+  if (!tokens?.IdToken || !tokens.AccessToken || !tokens.RefreshToken) {
     throw new WorkosBridgeError("Cognito bridge returned no tokens", 502);
   }
   return {

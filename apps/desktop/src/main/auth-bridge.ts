@@ -26,7 +26,6 @@ import {
   type StartOAuthRequest,
   type StartOAuthResponse,
   type TokenStorageSnapshot,
-  type WorkosBridgeCallback,
 } from "@thinkwork/desktop-ipc";
 import type { ICognitoStorage } from "./cognito-storage.js";
 import type { DeepLinkDispatcher } from "./deep-link.js";
@@ -71,7 +70,7 @@ export interface AuthBridgeState {
 export interface OAuthBridgeController {
   startOAuth(request?: StartOAuthRequest): Promise<StartOAuthResponse>;
   completeOAuthCallback(
-    callback: OAuthSuccessCallback | WorkosBridgeCallback,
+    callback: OAuthSuccessCallback,
   ): Promise<PendingOAuthCallback>;
   signOut(session: SignOutSession): Promise<SignOutResponse>;
 }
@@ -79,7 +78,6 @@ export interface OAuthBridgeController {
 export interface SignOutSession {
   refreshToken: string | null;
   idToken: string | null;
-  authSource: string | null;
 }
 
 export function registerAuthBridgeHandlers(
@@ -249,12 +247,16 @@ function formatOAuthError(callback: {
 }
 
 function currentSignOutSession(items: Record<string, string>): SignOutSession {
-  const lastAuthUserEntry = Object.entries(items).find(([key]) =>
-    key.endsWith(".LastAuthUser"),
-  );
+  const activeClientId = items["thinkwork:auth-client-id"];
+  const activeLastUserKey = activeClientId
+    ? `CognitoIdentityServiceProvider.${activeClientId}.LastAuthUser`
+    : null;
+  const lastAuthUserEntry =
+    activeLastUserKey && items[activeLastUserKey]
+      ? ([activeLastUserKey, items[activeLastUserKey]] as const)
+      : Object.entries(items).find(([key]) => key.endsWith(".LastAuthUser"));
   if (!lastAuthUserEntry) {
     return {
-      authSource: items["thinkwork:auth-source"] ?? null,
       idToken: null,
       refreshToken: null,
     };
@@ -263,7 +265,6 @@ function currentSignOutSession(items: Record<string, string>): SignOutSession {
   const [lastAuthUserKey, username] = lastAuthUserEntry;
   const prefix = lastAuthUserKey.slice(0, -".LastAuthUser".length);
   return {
-    authSource: items["thinkwork:auth-source"] ?? null,
     idToken: items[`${prefix}.${username}.idToken`] ?? null,
     refreshToken: items[`${prefix}.${username}.refreshToken`] ?? null,
   };

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assertLocalAuthRetirementSupported,
   buildControllerDeployInput,
+  buildLocalDeployExecutionSteps,
   controllerStateMachineArn,
   runDeployCommand,
   type DeployCommandOptions,
@@ -43,6 +45,8 @@ describe("deploy controller path", () => {
     // The state machine resolves $.terraformModuleVersion via JsonPath — a
     // payload without it fails the execution before CodeBuild starts.
     expect(payload.terraformModuleVersion).toBe("0.1.0-canary.134");
+    expect(payload.authRetirementPhase).toBeUndefined();
+    expect(payload.finalizeAuthRetirement).toBe(false);
     // The runner reads runner secrets only from this field; without it the
     // stage's configured secrets (domain gates, adminEmail) are ignored.
     expect(payload.runnerSecretArn).toBe(
@@ -142,6 +146,101 @@ describe("deploy controller path", () => {
 
     expect(controllerDeploy).toHaveBeenCalledTimes(1);
     expect(localDeploy).not.toHaveBeenCalled();
+  });
+
+  it("rejects auth retirement finalization on the unsupported controller path", async () => {
+    const controllerDeploy = vi.fn();
+
+    await expect(
+      runDeployCommand(
+        {
+          component: "all",
+          controller: true,
+          finalizeAuthRetirement: true,
+        } as DeployCommandOptions,
+        { controllerDeploy },
+      ),
+    ).rejects.toThrow(/not supported by deploy --controller/);
+
+    expect(controllerDeploy).not.toHaveBeenCalled();
+  });
+});
+
+describe("local deploy execution ordering", () => {
+  it("rejects finalization for non-scaffolded local layouts", () => {
+    expect(() =>
+      assertLocalAuthRetirementSupported({
+        requested: true,
+        scaffolded: false,
+        hasCaller: true,
+        tiers: ["foundation", "data", "app"],
+        retirementPhase: "retired",
+      }),
+    ).toThrow(/requires a scaffolded local deployment/);
+  });
+
+  it("rejects finalization when the app retirement tier is omitted", () => {
+    expect(() =>
+      assertLocalAuthRetirementSupported({
+        requested: true,
+        scaffolded: true,
+        hasCaller: true,
+        tiers: ["data"],
+        retirementPhase: "retired",
+      }),
+    ).toThrow(/requires component app or all/);
+  });
+
+  it("rejects finalization until the deployed auth phase is retired", () => {
+    expect(() =>
+      assertLocalAuthRetirementSupported({
+        requested: true,
+        scaffolded: true,
+        hasCaller: true,
+        tiers: ["foundation", "data", "app"],
+        retirementPhase: "cutover",
+      }),
+    ).toThrow(/auth_retirement_phase to be retired/);
+  });
+
+  it("applies additive schema after data and before app", () => {
+    expect(
+      buildLocalDeployExecutionSteps(
+        ["foundation", "data", "app"],
+        true,
+        false,
+      ),
+    ).toEqual([
+      { kind: "terraform", tier: "foundation" },
+      { kind: "terraform", tier: "data" },
+      { kind: "schema", retirement: false },
+      { kind: "terraform", tier: "app" },
+    ]);
+  });
+
+  it("defers irreversible retirement until native reconciliation succeeds", () => {
+    expect(
+      buildLocalDeployExecutionSteps(["foundation", "data", "app"], true, true),
+    ).toEqual([
+      { kind: "terraform", tier: "foundation" },
+      { kind: "terraform", tier: "data" },
+      { kind: "schema", retirement: false },
+      { kind: "terraform", tier: "app" },
+    ]);
+  });
+
+  it("applies schema before an app-only update", () => {
+    expect(buildLocalDeployExecutionSteps(["app"], true, false)).toEqual([
+      { kind: "schema", retirement: false },
+      { kind: "terraform", tier: "app" },
+    ]);
+  });
+
+  it("applies schema after a data-only update", () => {
+    expect(buildLocalDeployExecutionSteps(["data"], true, false)).toEqual([
+      { kind: "terraform", tier: "data" },
+      { kind: "schema", retirement: false },
+    ]);
   });
 });
 

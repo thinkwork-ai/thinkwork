@@ -750,11 +750,6 @@ variable "pre_signup_lambda_zip" {
   default = ""
 }
 
-variable "cognito_custom_auth_lambda_zip" {
-  type    = string
-  default = ""
-}
-
 variable "lambda_zips_dir" {
   type    = string
   default = ""
@@ -904,7 +899,6 @@ module "thinkwork" {
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip                = var.pre_signup_lambda_zip
-  cognito_custom_auth_lambda_zip = var.cognito_custom_auth_lambda_zip
   lambda_zips_dir                      = var.lambda_zips_dir
   api_auth_secret                      = var.api_auth_secret
   admin_callback_urls                  = var.admin_callback_urls
@@ -934,11 +928,6 @@ output "appsync_api_url" {
 
 output "appsync_realtime_url" {
   value = module.thinkwork.appsync_realtime_url
-}
-
-output "appsync_api_key" {
-  value     = module.thinkwork.appsync_api_key
-  sensitive = true
 }
 
 output "admin_client_id_out" {

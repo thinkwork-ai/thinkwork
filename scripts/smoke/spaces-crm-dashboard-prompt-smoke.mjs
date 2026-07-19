@@ -11,7 +11,7 @@
  *   DATABASE_URL
  *   SMOKE_COMPUTER_URL
  *   VITE_GRAPHQL_HTTP_URL, GRAPHQL_HTTP_URL, or API_GRAPHQL_URL
- *   API_AUTH_SECRET, THINKWORK_API_SECRET, VITE_GRAPHQL_API_KEY, or GRAPHQL_API_KEY
+ *   API_AUTH_SECRET or THINKWORK_API_SECRET
  */
 
 import { execFileSync } from "node:child_process";
@@ -38,11 +38,7 @@ const apiUrl = first(
   env.API_GRAPHQL_URL,
 );
 const apiSecret = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
-const apiKey = first(
-  env.VITE_GRAPHQL_API_KEY,
-  env.APPSYNC_API_KEY,
-  env.GRAPHQL_API_KEY,
-);
+const apiKey = apiSecret;
 const computerUrl = first(env.SMOKE_COMPUTER_URL, env.COMPUTER_URL);
 const context = {};
 

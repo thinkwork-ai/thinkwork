@@ -35,6 +35,35 @@ describe("buildControllerUpdateInput", () => {
     expect(input).toMatchObject({
       terraformModuleSource: "thinkwork-ai/thinkwork/aws",
       terraformModuleVersion: "0.1.0-canary.270",
+      finalizeAuthRetirement: false,
+    });
+    expect(input.authRetirementPhase).toBeUndefined();
+  });
+
+  it("preserves the retirement phase without allowing release finalization", () => {
+    const prior: PriorControllerInput = {
+      customerName: "ThinkWork",
+      environmentName: "tei-e2e",
+      awsAccountId: "123456789012",
+      awsRegion: "us-east-1",
+      availabilityZones: [],
+      evidenceBucket: "thinkwork-tei-e2e-deploy-evidence",
+      agentcorePiSourceImageUri:
+        "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned@sha256:abc",
+      authRetirementPhase: "retired",
+    };
+    const release: ResolvedReleaseManifest = {
+      version: "v0.1.0-canary.271",
+      manifestUrl:
+        "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.271/thinkwork-release.json",
+      manifestSha256: "abc123",
+    };
+
+    expect(
+      buildControllerUpdateInput({ prior, release, sessionId: "session-2" }),
+    ).toMatchObject({
+      authRetirementPhase: "retired",
+      finalizeAuthRetirement: false,
     });
   });
 

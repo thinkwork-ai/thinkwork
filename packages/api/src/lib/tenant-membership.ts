@@ -118,7 +118,7 @@ export async function requireTenantMembership(
   }
 
   // Cognito path: resolve users.id, then check membership.
-  const { userId } = await resolveCallerFromAuth(auth);
+  const { userId } = await resolveCallerFromAuth(auth, tenantId);
   if (!userId) {
     return {
       ok: false,

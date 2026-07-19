@@ -79,7 +79,6 @@ export const PLUGIN_COMPONENT_TYPES = [
   "skills",
   "infrastructure",
   "ui-surface",
-  "auth-provider",
 ] as const;
 
 export type PluginComponentTypeValue = (typeof PLUGIN_COMPONENT_TYPES)[number];
@@ -127,55 +126,6 @@ export const PLUGIN_INSTALL_KEY_STATUSES = [
 
 export type PluginInstallKeyStatus =
   (typeof PLUGIN_INSTALL_KEY_STATUSES)[number];
-
-export const AUTH_PROVIDER_VALIDATION_STATUSES = [
-  "unconfigured",
-  "validating",
-  "valid",
-  "partially_valid",
-  "invalid",
-  "rotating_secret",
-  "disabled",
-] as const;
-
-export type AuthProviderValidationStatus =
-  (typeof AUTH_PROVIDER_VALIDATION_STATUSES)[number];
-
-export const AUTH_PROVIDER_PUBLIC_OPTION_MODES = [
-  "single_sso",
-  "provider_specific",
-] as const;
-
-export type AuthProviderPublicOptionMode =
-  (typeof AUTH_PROVIDER_PUBLIC_OPTION_MODES)[number];
-
-export const TENANT_AUTH_PROVIDER_REFERENCE_STATUSES = [
-  "disabled",
-  "enabled",
-  "invalid",
-  "decommissioning",
-] as const;
-
-export type TenantAuthProviderReferenceStatus =
-  (typeof TENANT_AUTH_PROVIDER_REFERENCE_STATUSES)[number];
-
-export const WORKOS_AUTH_BRIDGE_STATUSES = [
-  "pending",
-  "consumed",
-  "expired",
-] as const;
-
-export type WorkosAuthBridgeStatus =
-  (typeof WORKOS_AUTH_BRIDGE_STATUSES)[number];
-
-export const WORKOS_AUTH_SESSION_STATUSES = [
-  "active",
-  "logged_out",
-  "expired",
-] as const;
-
-export type WorkosAuthSessionStatus =
-  (typeof WORKOS_AUTH_SESSION_STATUSES)[number];
 
 // ---------------------------------------------------------------------------
 // Premium plugin entitlements and one-time install keys
@@ -385,7 +335,7 @@ export const pluginComponents = pgTable(
       .references(() => pluginInstalls.id, { onDelete: "cascade" }),
     /** Component key from the manifest (unique within the install). */
     component_key: text("component_key").notNull(),
-    /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'. */
+    /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
     component_type: text("component_type").notNull(),
     state: text("state").notNull().default("pending"),
     /**
@@ -395,7 +345,6 @@ export const pluginComponents = pgTable(
      *   - skills:         { seededCatalogPrefix, workspaceFolders: string[] }
      *   - infrastructure: { managedApplicationId, deploymentJobId }
      *   - ui-surface:     {} (declared-only in v1)
-     *   - auth-provider:  { status: 'unconfigured', publicOptionsPublished: false }
      */
     handler_ref: jsonb("handler_ref")
       .$type<Record<string, unknown>>()
@@ -421,268 +370,7 @@ export const pluginComponents = pgTable(
     ),
     check(
       "plugin_components_type_allowed",
-      sql`${table.component_type} IN ('mcp-server', 'skills', 'infrastructure', 'ui-surface', 'auth-provider')`,
-    ),
-  ],
-);
-
-// ---------------------------------------------------------------------------
-// Auth-provider configuration — deployment resource + tenant references
-// ---------------------------------------------------------------------------
-
-export const authProviderResources = pgTable(
-  "auth_provider_resources",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    /** Catalog/provider key, currently "workos". */
-    provider_key: text("provider_key").notNull(),
-    display_name: text("display_name").notNull(),
-    cognito_user_pool_id: text("cognito_user_pool_id").notNull(),
-    cognito_app_client_ids: jsonb("cognito_app_client_ids")
-      .$type<string[]>()
-      .notNull()
-      .default(sql`'[]'::jsonb`),
-    cognito_identity_provider_name: text(
-      "cognito_identity_provider_name",
-    ).notNull(),
-    issuer_url: text("issuer_url").notNull(),
-    client_id: text("client_id").notNull(),
-    /**
-     * Secrets Manager/SSM reference only. The WorkOS client secret value is
-     * never stored in Postgres or exposed through GraphQL.
-     */
-    client_secret_ref: text("client_secret_ref").notNull(),
-    authorize_scopes: text("authorize_scopes")
-      .notNull()
-      .default("openid profile email"),
-    public_option_mode: text("public_option_mode")
-      .notNull()
-      .default("single_sso"),
-    provider_options: jsonb("provider_options")
-      .$type<Array<Record<string, unknown>>>()
-      .notNull()
-      .default(sql`'[]'::jsonb`),
-    validation_status: text("validation_status")
-      .notNull()
-      .default("unconfigured"),
-    public_options_published: boolean("public_options_published")
-      .notNull()
-      .default(false),
-    last_validated_at: timestamp("last_validated_at", {
-      withTimezone: true,
-    }),
-    last_error_code: text("last_error_code"),
-    diagnostics: jsonb("diagnostics")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-    updated_at: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-  },
-  (table) => [
-    uniqueIndex("uq_auth_provider_resources_cognito_idp").on(
-      table.provider_key,
-      table.cognito_user_pool_id,
-      table.cognito_identity_provider_name,
-    ),
-    index("idx_auth_provider_resources_provider_status").on(
-      table.provider_key,
-      table.validation_status,
-    ),
-    check(
-      "auth_provider_resources_validation_status_allowed",
-      sql`${table.validation_status} IN ('unconfigured', 'validating', 'valid', 'partially_valid', 'invalid', 'rotating_secret', 'disabled')`,
-    ),
-    check(
-      "auth_provider_resources_public_option_mode_allowed",
-      sql`${table.public_option_mode} IN ('single_sso', 'provider_specific')`,
-    ),
-    check(
-      "auth_provider_resources_no_public_without_valid",
-      sql`${table.public_options_published} = false OR ${table.validation_status} IN ('valid', 'partially_valid')`,
-    ),
-  ],
-);
-
-export const tenantAuthProviderReferences = pgTable(
-  "tenant_auth_provider_references",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    tenant_id: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
-    plugin_install_id: uuid("plugin_install_id")
-      .notNull()
-      .references(() => pluginInstalls.id, { onDelete: "cascade" }),
-    auth_provider_resource_id: uuid("auth_provider_resource_id")
-      .notNull()
-      .references(() => authProviderResources.id, { onDelete: "cascade" }),
-    status: text("status").notNull().default("disabled"),
-    hostnames: jsonb("hostnames")
-      .$type<string[]>()
-      .notNull()
-      .default(sql`'[]'::jsonb`),
-    public_option_label: text("public_option_label")
-      .notNull()
-      .default("Continue with SSO"),
-    enabled_at: timestamp("enabled_at", { withTimezone: true }),
-    disabled_at: timestamp("disabled_at", { withTimezone: true }),
-    last_error_code: text("last_error_code"),
-    metadata: jsonb("metadata")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-    updated_at: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-  },
-  (table) => [
-    uniqueIndex("uq_tenant_auth_provider_references_install_resource").on(
-      table.tenant_id,
-      table.plugin_install_id,
-      table.auth_provider_resource_id,
-    ),
-    index("idx_tenant_auth_provider_references_tenant_status").on(
-      table.tenant_id,
-      table.status,
-    ),
-    index("idx_tenant_auth_provider_references_resource").on(
-      table.auth_provider_resource_id,
-    ),
-    check(
-      "tenant_auth_provider_references_status_allowed",
-      sql`${table.status} IN ('disabled', 'enabled', 'invalid', 'decommissioning')`,
-    ),
-  ],
-);
-
-export const workosAuthBridges = pgTable(
-  "workos_auth_bridges",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    tenant_id: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
-    tenant_auth_provider_reference_id: uuid("tenant_auth_provider_reference_id")
-      .notNull()
-      .references(() => tenantAuthProviderReferences.id, {
-        onDelete: "cascade",
-      }),
-    auth_provider_resource_id: uuid("auth_provider_resource_id")
-      .notNull()
-      .references(() => authProviderResources.id, { onDelete: "cascade" }),
-    bridge_code_digest: text("bridge_code_digest").notNull(),
-    workos_user_id: text("workos_user_id").notNull(),
-    workos_session_id: text("workos_session_id").notNull(),
-    workos_session_expires_at: timestamp("workos_session_expires_at", {
-      withTimezone: true,
-    }),
-    workos_email: text("workos_email").notNull(),
-    workos_email_verified: boolean("workos_email_verified")
-      .notNull()
-      .default(false),
-    workos_profile: jsonb("workos_profile")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
-    state_nonce: text("state_nonce").notNull(),
-    redirect_uri: text("redirect_uri").notNull(),
-    return_to: text("return_to").notNull(),
-    status: text("status").notNull().default("pending"),
-    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
-    consumed_at: timestamp("consumed_at", { withTimezone: true }),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-    updated_at: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-  },
-  (table) => [
-    uniqueIndex("uq_workos_auth_bridges_code_digest").on(
-      table.bridge_code_digest,
-    ),
-    index("idx_workos_auth_bridges_tenant_status").on(
-      table.tenant_id,
-      table.status,
-      table.expires_at,
-    ),
-    index("idx_workos_auth_bridges_reference").on(
-      table.tenant_auth_provider_reference_id,
-    ),
-    check(
-      "workos_auth_bridges_status_allowed",
-      sql`${table.status} IN ('pending', 'consumed', 'expired')`,
-    ),
-  ],
-);
-
-export const workosAuthSessions = pgTable(
-  "workos_auth_sessions",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .default(sql`gen_random_uuid()`),
-    tenant_id: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
-    user_id: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    tenant_auth_provider_reference_id: uuid("tenant_auth_provider_reference_id")
-      .notNull()
-      .references(() => tenantAuthProviderReferences.id, {
-        onDelete: "cascade",
-      }),
-    auth_provider_resource_id: uuid("auth_provider_resource_id")
-      .notNull()
-      .references(() => authProviderResources.id, { onDelete: "cascade" }),
-    cognito_principal_id: text("cognito_principal_id").notNull(),
-    cognito_username: text("cognito_username").notNull(),
-    workos_user_id: text("workos_user_id").notNull(),
-    workos_session_id: text("workos_session_id").notNull(),
-    workos_email: text("workos_email").notNull(),
-    status: text("status").notNull().default("active"),
-    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
-    logged_out_at: timestamp("logged_out_at", { withTimezone: true }),
-    created_at: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-    updated_at: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .default(sql`now()`),
-  },
-  (table) => [
-    index("idx_workos_auth_sessions_cognito_active").on(
-      table.cognito_principal_id,
-      table.status,
-      table.expires_at,
-    ),
-    index("idx_workos_auth_sessions_user_active").on(
-      table.tenant_id,
-      table.user_id,
-      table.status,
-      table.expires_at,
-    ),
-    index("idx_workos_auth_sessions_workos_session").on(
-      table.workos_session_id,
-    ),
-    check(
-      "workos_auth_sessions_status_allowed",
-      sql`${table.status} IN ('active', 'logged_out', 'expired')`,
+      sql`${table.component_type} IN ('mcp-server', 'skills', 'infrastructure', 'ui-surface')`,
     ),
   ],
 );
@@ -847,71 +535,6 @@ export const pluginComponentsRelations = relations(
     install: one(pluginInstalls, {
       fields: [pluginComponents.plugin_install_id],
       references: [pluginInstalls.id],
-    }),
-  }),
-);
-
-export const authProviderResourcesRelations = relations(
-  authProviderResources,
-  ({ many }) => ({
-    tenantReferences: many(tenantAuthProviderReferences),
-  }),
-);
-
-export const tenantAuthProviderReferencesRelations = relations(
-  tenantAuthProviderReferences,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [tenantAuthProviderReferences.tenant_id],
-      references: [tenants.id],
-    }),
-    install: one(pluginInstalls, {
-      fields: [tenantAuthProviderReferences.plugin_install_id],
-      references: [pluginInstalls.id],
-    }),
-    resource: one(authProviderResources, {
-      fields: [tenantAuthProviderReferences.auth_provider_resource_id],
-      references: [authProviderResources.id],
-    }),
-  }),
-);
-
-export const workosAuthBridgesRelations = relations(
-  workosAuthBridges,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [workosAuthBridges.tenant_id],
-      references: [tenants.id],
-    }),
-    tenantReference: one(tenantAuthProviderReferences, {
-      fields: [workosAuthBridges.tenant_auth_provider_reference_id],
-      references: [tenantAuthProviderReferences.id],
-    }),
-    resource: one(authProviderResources, {
-      fields: [workosAuthBridges.auth_provider_resource_id],
-      references: [authProviderResources.id],
-    }),
-  }),
-);
-
-export const workosAuthSessionsRelations = relations(
-  workosAuthSessions,
-  ({ one }) => ({
-    tenant: one(tenants, {
-      fields: [workosAuthSessions.tenant_id],
-      references: [tenants.id],
-    }),
-    user: one(users, {
-      fields: [workosAuthSessions.user_id],
-      references: [users.id],
-    }),
-    tenantReference: one(tenantAuthProviderReferences, {
-      fields: [workosAuthSessions.tenant_auth_provider_reference_id],
-      references: [tenantAuthProviderReferences.id],
-    }),
-    resource: one(authProviderResources, {
-      fields: [workosAuthSessions.auth_provider_resource_id],
-      references: [authProviderResources.id],
     }),
   }),
 );

@@ -16,6 +16,7 @@ const {
   returningQueue,
   bootstrapDefaultCalls,
   bootstrapDefaultFailures,
+  resolveCallerFromAuthMock,
 } = vi.hoisted(() => {
   const insertCalls: Array<{
     table: string;
@@ -32,6 +33,7 @@ const {
   const bootstrapDefaultFailures: Error[] = [];
   const selectQueue: unknown[][] = [];
   const returningQueue: unknown[][] = [];
+  const resolveCallerFromAuthMock = vi.fn();
 
   const mockDb = {
     select: vi.fn(() => {
@@ -75,6 +77,7 @@ const {
     returningQueue,
     bootstrapDefaultCalls,
     bootstrapDefaultFailures,
+    resolveCallerFromAuthMock,
   };
 });
 
@@ -128,6 +131,10 @@ vi.mock("../../../lib/spaces/default-space.js", () => ({
   ),
 }));
 
+vi.mock("./resolve-auth-user.js", () => ({
+  resolveCallerFromAuth: resolveCallerFromAuthMock,
+}));
+
 import { bootstrapUser } from "./bootstrapUser.mutation.js";
 import { __setNamespaceCheckDepsForTests } from "./tenantSlugValidation.js";
 
@@ -135,6 +142,32 @@ import { __setNamespaceCheckDepsForTests } from "./tenantSlugValidation.js";
 // new-tenant path validates the generated slug through the same
 // validateTenantSlug pipeline as createTenant.
 const namespaceListRecords = vi.fn();
+
+function localAuth(overrides: Record<string, unknown> = {}) {
+  return {
+    authType: "cognito",
+    principalId: "sub-new",
+    email: "new@example.com",
+    emailVerified: true,
+    name: "New User",
+    cognitoIssuer:
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_example",
+    route: {
+      routeClientId: "route-local-web",
+      routeKey: "local",
+      clientFamily: "web",
+      appClientId: "client-local",
+      lifecycleState: "native",
+      connectionId: "connection-local",
+      connectionKey: "local",
+      providerKind: "local",
+      providerIssuer: null,
+    },
+    tenantId: null,
+    agentId: null,
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   insertCalls.length = 0;
@@ -145,6 +178,10 @@ beforeEach(() => {
   bootstrapDefaultFailures.length = 0;
   defaultSpaceCalls.length = 0;
   namespaceListRecords.mockReset().mockResolvedValue([]);
+  resolveCallerFromAuthMock.mockReset().mockResolvedValue({
+    userId: null,
+    tenantId: null,
+  });
   __setNamespaceCheckDepsForTests({
     resolveToken: async () => "cf-token",
     createDns: () => ({ listRecords: namespaceListRecords }),
@@ -156,19 +193,34 @@ afterEach(() => {
 });
 
 describe("bootstrapUser", () => {
+  it("requires enrollment instead of auto-bootstrapping a federated identity", async () => {
+    await expect(
+      bootstrapUser({}, {}, {
+        auth: localAuth({
+          route: {
+            ...localAuth().route,
+            routeKey: "google",
+            appClientId: "client-google",
+            connectionId: "connection-google",
+            connectionKey: "google",
+            providerKind: "google",
+            providerIssuer: "https://accounts.google.com",
+          },
+        }),
+        headers: {},
+      } as any),
+    ).rejects.toThrow(/Identity enrollment is required/);
+    expect(insertCalls).toEqual([]);
+  });
+
   it("stamps cognito_sub on the created user row (default new-tenant path)", async () => {
     selectQueue.push([]); // existing user lookup → none
-    selectQueue.push([]); // pending (paid) tenant lookup → none
+    selectQueue.push([]); // existing email lookup → none
     returningQueue.push([{ id: "tenant-1", slug: "happy-otter" }]); // insert tenants
     returningQueue.push([{ id: "user-1", email: "new@example.com" }]); // insert users
 
     const result = await bootstrapUser({}, {}, {
-      auth: {
-        authType: "cognito",
-        principalId: "sub-new",
-        email: "new@example.com",
-        name: "New User",
-      },
+      auth: localAuth(),
       headers: {},
     } as any);
 
@@ -191,7 +243,7 @@ describe("bootstrapUser", () => {
 
   it("rejects when the generated slug is deployment-claimed in the namespace — no tenant row", async () => {
     selectQueue.push([]); // existing user lookup → none
-    selectQueue.push([]); // pending (paid) tenant lookup → none
+    selectQueue.push([]); // existing email lookup → none
     namespaceListRecords.mockResolvedValue([
       {
         id: "rec-1",
@@ -208,12 +260,7 @@ describe("bootstrapUser", () => {
 
     await expect(
       bootstrapUser({}, {}, {
-        auth: {
-          authType: "cognito",
-          principalId: "sub-new",
-          email: "new@example.com",
-          name: "New User",
-        },
+        auth: localAuth(),
         headers: {},
       } as any),
     ).rejects.toMatchObject({ extensions: { code: "SLUG_UNAVAILABLE" } });
@@ -228,17 +275,12 @@ describe("bootstrapUser", () => {
   it("fails CLOSED on a Cloudflare API error — no tenant row is created", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     selectQueue.push([]); // existing user lookup → none
-    selectQueue.push([]); // pending (paid) tenant lookup → none
+    selectQueue.push([]); // existing email lookup → none
     namespaceListRecords.mockRejectedValue(new Error("cloudflare 500"));
 
     await expect(
       bootstrapUser({}, {}, {
-        auth: {
-          authType: "cognito",
-          principalId: "sub-new",
-          email: "new@example.com",
-          name: "New User",
-        },
+        auth: localAuth(),
         headers: {},
       } as any),
     ).rejects.toMatchObject({
@@ -251,6 +293,10 @@ describe("bootstrapUser", () => {
   });
 
   it("repairs tenant bootstrap defaults for existing users", async () => {
+    resolveCallerFromAuthMock.mockResolvedValue({
+      userId: "user-existing",
+      tenantId: "tenant-existing",
+    });
     selectQueue.push([
       {
         id: "user-existing",
@@ -261,12 +307,11 @@ describe("bootstrapUser", () => {
     selectQueue.push([{ id: "tenant-existing", slug: "existing" }]);
 
     const result = await bootstrapUser({}, {}, {
-      auth: {
-        authType: "cognito",
+      auth: localAuth({
         principalId: "sub-existing",
         email: "existing@example.com",
         name: "Existing User",
-      },
+      }),
       headers: {},
     } as any);
 
@@ -279,118 +324,16 @@ describe("bootstrapUser", () => {
     expect(result.isNew).toBe(false);
   });
 
-  it("claims a pending tenant only for a verified matching email", async () => {
-    selectQueue.push([]); // existing user lookup -> none
-    selectQueue.push([
-      {
-        id: "tenant-claim",
-        slug: "acme",
-        plan: "pro",
-        pending_owner_email: "Admin@Example.com",
-        first_admin_claim_required: true,
-      },
-    ]);
-    selectQueue.push([]); // existing users in tenant
-    returningQueue.push([{ id: "user-claim", email: "admin@example.com" }]);
-    returningQueue.push([
-      {
-        id: "tenant-claim",
-        slug: "acme",
-        pending_owner_email: null,
-        first_admin_claim_required: false,
-      },
-    ]);
-
-    const result = await bootstrapUser({}, {}, {
-      auth: {
-        authType: "cognito",
-        principalId: "sub-claim",
-        email: "admin@example.com",
-        emailVerified: true,
-        name: "Admin User",
-      },
-      headers: {},
-    } as any);
-
-    const userInsert = insertCalls.find((c) => c.table === "users");
-    const memberInsert = insertCalls.find((c) => c.table === "tenant_members");
-    const tenantUpdate = updateCalls.find((c) => c.table === "tenants");
-
-    expect(userInsert?.values).toEqual(
-      expect.objectContaining({
-        tenant_id: "tenant-claim",
-        email: "admin@example.com",
-        cognito_sub: "sub-claim",
-      }),
-    );
-    expect(memberInsert?.values).toEqual(
-      expect.objectContaining({
-        tenant_id: "tenant-claim",
-        principal_id: "user-claim",
-        role: "owner",
-      }),
-    );
-    expect(tenantUpdate?.values).toEqual(
-      expect.objectContaining({
-        pending_owner_email: null,
-        first_admin_claim_required: false,
-        first_admin_claimed_user_id: "user-claim",
-      }),
-    );
-    expect(bootstrapDefaultCalls).toEqual([
-      { tenantId: "tenant-claim", userId: "user-claim" },
-    ]);
-    expect(defaultSpaceCalls).toEqual([
-      { tenantId: "tenant-claim", userId: "user-claim" },
-    ]);
-    expect(result.tenant.id).toBe("tenant-claim");
-    expect(result.isNew).toBe(true);
-  });
-
-  it("rejects a pending tenant claim when the matching email is not verified", async () => {
-    selectQueue.push([]); // existing user lookup -> none
-    selectQueue.push([
-      {
-        id: "tenant-claim",
-        slug: "acme",
-        plan: "pro",
-        pending_owner_email: "admin@example.com",
-        first_admin_claim_required: true,
-      },
-    ]);
-
-    await expect(
-      bootstrapUser({}, {}, {
-        auth: {
-          authType: "cognito",
-          principalId: "sub-unverified",
-          email: "admin@example.com",
-          emailVerified: false,
-          name: "Admin User",
-        },
-        headers: {},
-      } as any),
-    ).rejects.toThrow(/Verified email is required/);
-
-    expect(insertCalls).toEqual([]);
-    expect(updateCalls).toEqual([]);
-  });
-
   it("does not fail bootstrap when tenant default seeding is unavailable", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     bootstrapDefaultFailures.push(new Error("relation does not exist"));
     selectQueue.push([]); // existing user lookup → none
-    selectQueue.push([]); // pending (paid) tenant lookup → none
+    selectQueue.push([]); // existing email lookup → none
     returningQueue.push([{ id: "tenant-1", slug: "happy-otter" }]);
     returningQueue.push([{ id: "user-1", email: "new@example.com" }]);
 
     const result = await bootstrapUser({}, {}, {
-      auth: {
-        authType: "cognito",
-        principalId: "sub-new",
-        email: "new@example.com",
-        name: "New User",
-      },
+      auth: localAuth(),
       headers: {},
     } as any);
 

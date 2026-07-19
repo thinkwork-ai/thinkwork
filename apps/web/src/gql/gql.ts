@@ -16,7 +16,6 @@ import { TypedDocumentNode as DocumentNode } from "@graphql-typed-document-node/
 type Documents = {
   "\n  query AppletState($appId: ID!, $instanceId: ID!, $key: String!) {\n    appletState(appId: $appId, instanceId: $instanceId, key: $key) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n": typeof types.AppletStateDocument;
   "\n  mutation SaveAppletState($input: SaveAppletStateInput!) {\n    saveAppletState(input: $input) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n": typeof types.SaveAppletStateDocument;
-  "\n  mutation TenantContextClaimPendingTenant {\n    bootstrapUser {\n      tenant {\n        id\n      }\n    }\n  }\n": typeof types.TenantContextClaimPendingTenantDocument;
   "\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      mentioned\n      shouldNotify\n      createdAt\n    }\n  }\n": typeof types.SpacesThreadActivityDocument;
   "\n  query AdminApplets(\n    $tenantId: ID!\n    $userId: ID\n    $cursor: String\n    $limit: Int\n  ) {\n    adminApplets(\n      tenantId: $tenantId\n      userId: $userId\n      cursor: $cursor\n      limit: $limit\n    ) {\n      nodes {\n        appId\n        name\n        version\n        tenantId\n        threadId\n        prompt\n        agentVersion\n        modelId\n        generatedAt\n        stdlibVersionAtGeneration\n        artifact {\n          id\n          favoritedAt\n        }\n      }\n      nextCursor\n    }\n  }\n": typeof types.AdminAppletsDocument;
   "\n  mutation AdminUpdateAppletSource($input: AdminUpdateAppletSourceInput!) {\n    adminUpdateAppletSource(input: $input) {\n      ok\n      appId\n      version\n      validated\n      persisted\n      errors\n    }\n  }\n": typeof types.AdminUpdateAppletSourceDocument;
@@ -205,7 +204,6 @@ type Documents = {
   "\n  mutation SettingsActivatePlugin($input: ActivatePluginInput!) {\n    activatePlugin(input: $input) {\n      authorizeUrl\n    }\n  }\n": typeof types.SettingsActivatePluginDocument;
   "\n  mutation SettingsActivatePluginWithCredentials(\n    $input: ActivatePluginWithCredentialsInput!\n  ) {\n    activatePluginWithCredentials(input: $input) {\n      id\n      pluginInstallId\n      pluginKey\n      status\n      grantedAt\n      revokedAt\n    }\n  }\n": typeof types.SettingsActivatePluginWithCredentialsDocument;
   "\n  mutation SettingsDeactivatePlugin($input: DeactivatePluginInput!) {\n    deactivatePlugin(input: $input) {\n      id\n      status\n      revokedAt\n    }\n  }\n": typeof types.SettingsDeactivatePluginDocument;
-  "\n  mutation SettingsConfigureWorkosAuthPlugin(\n    $input: ConfigureWorkosAuthPluginInput!\n  ) {\n    configureWorkosAuthPlugin(input: $input) {\n      install {\n        id\n        pluginKey\n        pinnedVersion\n        state\n        lastTransitionAt\n        lastError\n        activatedUserCount\n        components {\n          id\n          componentKey\n          componentType\n          state\n          handlerRef\n          lastError\n        }\n      }\n      resource {\n        issuerUrl\n        clientId\n        clientSecretConfigured\n        validationStatus\n        publicOptionsPublished\n      }\n      reference {\n        status\n        hostnames\n        publicOptionLabel\n      }\n    }\n  }\n": typeof types.SettingsConfigureWorkosAuthPluginDocument;
   "\n  mutation SettingsGrantCapability($input: GrantCapabilityInput!) {\n    grantCapability(input: $input) {\n      outcome\n      inspectionState\n      computedAt\n      configFingerprint\n      item {\n        capabilityClass\n        capabilityId\n        displayName\n        active\n        provenance\n        reason\n        detail\n        tokenStatus\n      }\n    }\n  }\n": typeof types.SettingsGrantCapabilityDocument;
   "\n  mutation SettingsDetachCapability($input: DetachCapabilityInput!) {\n    detachCapability(input: $input) {\n      outcome\n      inspectionState\n      computedAt\n      configFingerprint\n      item {\n        capabilityClass\n        capabilityId\n        displayName\n        active\n        provenance\n        reason\n        detail\n        tokenStatus\n      }\n    }\n  }\n": typeof types.SettingsDetachCapabilityDocument;
   "\n  query SettingsCapabilityInspector(\n    $tenantId: ID!\n    $agentId: ID\n    $spaceId: ID\n    $agentProfileId: ID\n    $perspectiveUserId: ID\n  ) {\n    capabilityInspector(\n      tenantId: $tenantId\n      agentId: $agentId\n      spaceId: $spaceId\n      agentProfileId: $agentProfileId\n      perspectiveUserId: $perspectiveUserId\n    ) {\n      state\n      stateDetail\n      agentId\n      spaceId\n      agentProfileId\n      perspectiveUserId\n      noUserBaseline\n      predicted {\n        variant\n        computedAt\n        configFingerprint\n        items {\n          capabilityClass\n          capabilityId\n          displayName\n          active\n          provenance\n          reason\n          detail\n          tokenStatus\n        }\n      }\n      observed {\n        variant\n        computedAt\n        configFingerprint\n        items {\n          capabilityClass\n          capabilityId\n          displayName\n          active\n          provenance\n          reason\n          detail\n          tokenStatus\n        }\n      }\n      divergence {\n        state\n        manifestId\n        manifestCreatedAt\n        manifestFingerprint\n        deltas {\n          capabilityClass\n          capabilityId\n          kind\n        }\n      }\n    }\n  }\n": typeof types.SettingsCapabilityInspectorDocument;
@@ -229,15 +227,12 @@ type Documents = {
   "\n  mutation PublishSkillDraft($input: PublishSkillDraftInput!) {\n    publishSkillDraft(input: $input) {\n      id\n      slug\n      displayName\n      status\n      currentContentHash\n      publishedCatalogSlug\n      publishedContentHash\n      updatedAt\n    }\n  }\n": typeof types.PublishSkillDraftDocument;
   "\n  mutation AnswerUserQuestion($questionId: ID!, $answers: AWSJSON!) {\n    answerUserQuestion(questionId: $questionId, answers: $answers) {\n      id\n      threadId\n      messageId\n      status\n      answers\n      answeredVia\n      answeredBy\n      answeredAt\n    }\n  }\n": typeof types.AnswerUserQuestionDocument;
   "\n  query WebhookOwningLoop($id: ID!) {\n    webhook(id: $id) {\n      id\n      agentLoopId\n    }\n  }\n": typeof types.WebhookOwningLoopDocument;
-  "\n  mutation OnboardingBootstrapUser {\n    bootstrapUser {\n      tenant {\n        id\n        name\n        slug\n        plan\n      }\n    }\n  }\n": typeof types.OnboardingBootstrapUserDocument;
 };
 const documents: Documents = {
   "\n  query AppletState($appId: ID!, $instanceId: ID!, $key: String!) {\n    appletState(appId: $appId, instanceId: $instanceId, key: $key) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n":
     types.AppletStateDocument,
   "\n  mutation SaveAppletState($input: SaveAppletStateInput!) {\n    saveAppletState(input: $input) {\n      appId\n      instanceId\n      key\n      value\n      updatedAt\n    }\n  }\n":
     types.SaveAppletStateDocument,
-  "\n  mutation TenantContextClaimPendingTenant {\n    bootstrapUser {\n      tenant {\n        id\n      }\n    }\n  }\n":
-    types.TenantContextClaimPendingTenantDocument,
   "\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      mentioned\n      shouldNotify\n      createdAt\n    }\n  }\n":
     types.SpacesThreadActivityDocument,
   "\n  query AdminApplets(\n    $tenantId: ID!\n    $userId: ID\n    $cursor: String\n    $limit: Int\n  ) {\n    adminApplets(\n      tenantId: $tenantId\n      userId: $userId\n      cursor: $cursor\n      limit: $limit\n    ) {\n      nodes {\n        appId\n        name\n        version\n        tenantId\n        threadId\n        prompt\n        agentVersion\n        modelId\n        generatedAt\n        stdlibVersionAtGeneration\n        artifact {\n          id\n          favoritedAt\n        }\n      }\n      nextCursor\n    }\n  }\n":
@@ -614,8 +609,6 @@ const documents: Documents = {
     types.SettingsActivatePluginWithCredentialsDocument,
   "\n  mutation SettingsDeactivatePlugin($input: DeactivatePluginInput!) {\n    deactivatePlugin(input: $input) {\n      id\n      status\n      revokedAt\n    }\n  }\n":
     types.SettingsDeactivatePluginDocument,
-  "\n  mutation SettingsConfigureWorkosAuthPlugin(\n    $input: ConfigureWorkosAuthPluginInput!\n  ) {\n    configureWorkosAuthPlugin(input: $input) {\n      install {\n        id\n        pluginKey\n        pinnedVersion\n        state\n        lastTransitionAt\n        lastError\n        activatedUserCount\n        components {\n          id\n          componentKey\n          componentType\n          state\n          handlerRef\n          lastError\n        }\n      }\n      resource {\n        issuerUrl\n        clientId\n        clientSecretConfigured\n        validationStatus\n        publicOptionsPublished\n      }\n      reference {\n        status\n        hostnames\n        publicOptionLabel\n      }\n    }\n  }\n":
-    types.SettingsConfigureWorkosAuthPluginDocument,
   "\n  mutation SettingsGrantCapability($input: GrantCapabilityInput!) {\n    grantCapability(input: $input) {\n      outcome\n      inspectionState\n      computedAt\n      configFingerprint\n      item {\n        capabilityClass\n        capabilityId\n        displayName\n        active\n        provenance\n        reason\n        detail\n        tokenStatus\n      }\n    }\n  }\n":
     types.SettingsGrantCapabilityDocument,
   "\n  mutation SettingsDetachCapability($input: DetachCapabilityInput!) {\n    detachCapability(input: $input) {\n      outcome\n      inspectionState\n      computedAt\n      configFingerprint\n      item {\n        capabilityClass\n        capabilityId\n        displayName\n        active\n        provenance\n        reason\n        detail\n        tokenStatus\n      }\n    }\n  }\n":
@@ -662,8 +655,6 @@ const documents: Documents = {
     types.AnswerUserQuestionDocument,
   "\n  query WebhookOwningLoop($id: ID!) {\n    webhook(id: $id) {\n      id\n      agentLoopId\n    }\n  }\n":
     types.WebhookOwningLoopDocument,
-  "\n  mutation OnboardingBootstrapUser {\n    bootstrapUser {\n      tenant {\n        id\n        name\n        slug\n        plan\n      }\n    }\n  }\n":
-    types.OnboardingBootstrapUserDocument,
 };
 
 /**
@@ -695,9 +686,6 @@ export function graphql(
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(
-  source: "\n  mutation TenantContextClaimPendingTenant {\n    bootstrapUser {\n      tenant {\n        id\n      }\n    }\n  }\n",
-): (typeof documents)["\n  mutation TenantContextClaimPendingTenant {\n    bootstrapUser {\n      tenant {\n        id\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -1829,9 +1817,6 @@ export function graphql(
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(
-  source: "\n  mutation SettingsConfigureWorkosAuthPlugin(\n    $input: ConfigureWorkosAuthPluginInput!\n  ) {\n    configureWorkosAuthPlugin(input: $input) {\n      install {\n        id\n        pluginKey\n        pinnedVersion\n        state\n        lastTransitionAt\n        lastError\n        activatedUserCount\n        components {\n          id\n          componentKey\n          componentType\n          state\n          handlerRef\n          lastError\n        }\n      }\n      resource {\n        issuerUrl\n        clientId\n        clientSecretConfigured\n        validationStatus\n        publicOptionsPublished\n      }\n      reference {\n        status\n        hostnames\n        publicOptionLabel\n      }\n    }\n  }\n",
-): (typeof documents)["\n  mutation SettingsConfigureWorkosAuthPlugin(\n    $input: ConfigureWorkosAuthPluginInput!\n  ) {\n    configureWorkosAuthPlugin(input: $input) {\n      install {\n        id\n        pluginKey\n        pinnedVersion\n        state\n        lastTransitionAt\n        lastError\n        activatedUserCount\n        components {\n          id\n          componentKey\n          componentType\n          state\n          handlerRef\n          lastError\n        }\n      }\n      resource {\n        issuerUrl\n        clientId\n        clientSecretConfigured\n        validationStatus\n        publicOptionsPublished\n      }\n      reference {\n        status\n        hostnames\n        publicOptionLabel\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -1973,9 +1958,6 @@ export function graphql(
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(
-  source: "\n  mutation OnboardingBootstrapUser {\n    bootstrapUser {\n      tenant {\n        id\n        name\n        slug\n        plan\n      }\n    }\n  }\n",
-): (typeof documents)["\n  mutation OnboardingBootstrapUser {\n    bootstrapUser {\n      tenant {\n        id\n        name\n        slug\n        plan\n      }\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as SignInRouteImport } from "./routes/sign-in";
 import { Route as DeploymentProfileRouteImport } from "./routes/deployment-profile";
+import { Route as AcceptInviteRouteImport } from "./routes/accept-invite";
 import { Route as AuthedRouteImport } from "./routes/_authed";
 import { Route as SplatRouteImport } from "./routes/$";
 import { Route as IndexRouteImport } from "./routes/index";
@@ -128,6 +129,11 @@ const SignInRoute = SignInRouteImport.update({
 const DeploymentProfileRoute = DeploymentProfileRouteImport.update({
   id: "/deployment-profile",
   path: "/deployment-profile",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const AcceptInviteRoute = AcceptInviteRouteImport.update({
+  id: "/accept-invite",
+  path: "/accept-invite",
   getParentRoute: () => rootRouteImport,
 } as any);
 const AuthedRoute = AuthedRouteImport.update({
@@ -752,6 +758,7 @@ const AuthedShellSpacesSpaceIdThreadsThreadIdRoute =
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/$": typeof SplatRoute;
+  "/accept-invite": typeof AcceptInviteRoute;
   "/deployment-profile": typeof DeploymentProfileRoute;
   "/sign-in": typeof SignInRoute;
   "/settings": typeof AuthedSettingsRouteWithChildren;
@@ -862,6 +869,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/$": typeof SplatRoute;
+  "/accept-invite": typeof AcceptInviteRoute;
   "/deployment-profile": typeof DeploymentProfileRoute;
   "/sign-in": typeof SignInRoute;
   "/auth/callback": typeof AuthCallbackRoute;
@@ -970,6 +978,7 @@ export interface FileRoutesById {
   "/": typeof IndexRoute;
   "/$": typeof SplatRoute;
   "/_authed": typeof AuthedRouteWithChildren;
+  "/accept-invite": typeof AcceptInviteRoute;
   "/deployment-profile": typeof DeploymentProfileRoute;
   "/sign-in": typeof SignInRoute;
   "/_authed/_shell": typeof AuthedShellRouteWithChildren;
@@ -1083,6 +1092,7 @@ export interface FileRouteTypes {
   fullPaths:
     | "/"
     | "/$"
+    | "/accept-invite"
     | "/deployment-profile"
     | "/sign-in"
     | "/settings"
@@ -1193,6 +1203,7 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/$"
+    | "/accept-invite"
     | "/deployment-profile"
     | "/sign-in"
     | "/auth/callback"
@@ -1300,6 +1311,7 @@ export interface FileRouteTypes {
     | "/"
     | "/$"
     | "/_authed"
+    | "/accept-invite"
     | "/deployment-profile"
     | "/sign-in"
     | "/_authed/_shell"
@@ -1413,6 +1425,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   SplatRoute: typeof SplatRoute;
   AuthedRoute: typeof AuthedRouteWithChildren;
+  AcceptInviteRoute: typeof AcceptInviteRoute;
   DeploymentProfileRoute: typeof DeploymentProfileRoute;
   SignInRoute: typeof SignInRoute;
   AuthCallbackRoute: typeof AuthCallbackRoute;
@@ -1434,6 +1447,13 @@ declare module "@tanstack/react-router" {
       path: "/deployment-profile";
       fullPath: "/deployment-profile";
       preLoaderRoute: typeof DeploymentProfileRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/accept-invite": {
+      id: "/accept-invite";
+      path: "/accept-invite";
+      fullPath: "/accept-invite";
+      preLoaderRoute: typeof AcceptInviteRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/_authed": {
@@ -2565,6 +2585,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   AuthedRoute: AuthedRouteWithChildren,
+  AcceptInviteRoute: AcceptInviteRoute,
   DeploymentProfileRoute: DeploymentProfileRoute,
   SignInRoute: SignInRoute,
   AuthCallbackRoute: AuthCallbackRoute,

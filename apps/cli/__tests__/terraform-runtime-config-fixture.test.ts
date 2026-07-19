@@ -35,7 +35,7 @@ const read = (path: string) => readFileSync(path, "utf8");
  *
  * - Identity: STAGE, AWS_ACCOUNT_ID, NODE_OPTIONS (FUNCTION_NAME is merged
  *   per-function at the aws_lambda_function resource).
- * - Transition window (R8): DATABASE_URL, APPSYNC_API_KEY, API_AUTH_SECRET
+ * - Transition window (R8): DATABASE_URL and API_AUTH_SECRET
  *   stay one release while the Secrets Manager prefetch path soaks on dev;
  *   the follow-up release deletes them from this list AND from common_env.
  *
@@ -50,7 +50,6 @@ const COMMON_ENV_ALLOWLIST = new Set([
   "NODE_OPTIONS",
   // R8 transition window — drop next release:
   "DATABASE_URL",
-  "APPSYNC_API_KEY",
   "API_AUTH_SECRET",
 ]);
 
@@ -228,10 +227,9 @@ describe("R10 — every document-only key has zero remaining direct process.env 
 });
 
 describe("R4 — secrets live in Secrets Manager, never the String document", () => {
-  it("provisions the api-auth and appsync-api-key secrets under thinkwork/<stage>/", () => {
+  it("provisions the api-auth secret under thinkwork/<stage>/", () => {
     const source = read(RUNTIME_CONFIG);
     expect(source).toMatch(/"thinkwork\/\$\{var\.stage\}\/api-auth"/);
-    expect(source).toMatch(/"thinkwork\/\$\{var\.stage\}\/appsync-api-key"/);
   });
 
   it("keeps secret values out of the runtime-config document locals", () => {
@@ -241,7 +239,6 @@ describe("R4 — secrets live in Secrets Manager, never the String document", ()
     const commonStart = handlers.indexOf("common_env = {");
     const configSection = handlers.slice(configEnvStart, commonStart);
     expect(configSection).not.toMatch(/var\.api_auth_secret/);
-    expect(configSection).not.toMatch(/var\.appsync_api_key/);
     expect(configSection).not.toMatch(/var\.db_password/);
   });
 });

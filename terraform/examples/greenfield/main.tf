@@ -328,14 +328,68 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  description = "Microsoft Entra application client ID for direct Cognito organizations login"
+  type        = string
+  default     = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  description = "Microsoft Entra application client secret for direct Cognito organizations login"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "microsoft_oauth_tenant" {
+  description = "Microsoft Entra directory GUID for the deployment's default Microsoft login route"
+  type        = string
+  default     = ""
+}
+
+variable "tenant_entra_connections" {
+  description = "Safe tenant-specific Entra provider metadata. Secret values must never be placed in tfvars."
+  type = list(object({
+    connection_key = string
+    tenant_id      = string
+    provider_name  = string
+    display_name   = string
+  }))
+  default = []
+}
+
 variable "pre_signup_lambda_zip" {
   description = "Path to the Cognito pre-signup Lambda zip"
   type        = string
   default     = ""
 }
 
+variable "auth_retirement_phase" {
+  description = "Native-auth migration phase. Greenfield installs are native-only; use coexistence/cutover only for an existing deployment migration."
+  type        = string
+  default     = "retired"
+
+  validation {
+    condition     = contains(["coexistence", "cutover", "retired"], var.auth_retirement_phase)
+    error_message = "auth_retirement_phase must be coexistence, cutover, or retired."
+  }
+}
+
+variable "auth_migration_recovery_deadline" {
+  description = "RFC3339 deadline for legacy-session identity migration; required only when explicitly deploying coexistence."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = trimspace(var.auth_migration_recovery_deadline) == "" || (
+      can(timecmp(var.auth_migration_recovery_deadline, var.auth_migration_recovery_deadline))
+    )
+    error_message = "auth_migration_recovery_deadline must be empty or an RFC3339 timestamp."
+  }
+}
+
 variable "cognito_custom_auth_lambda_zip" {
-  description = "Path to the Cognito custom-auth challenge Lambda zip"
+  description = "Path to the WorkOS rollback Cognito custom-auth Lambda zip for source-checkout deployments."
   type        = string
   default     = ""
 }
@@ -835,7 +889,13 @@ module "thinkwork" {
   n8n_certificate_arn                         = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
   google_oauth_client_id                      = var.google_oauth_client_id
   google_oauth_client_secret                  = var.google_oauth_client_secret
+  microsoft_oauth_client_id                   = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret               = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant                      = var.microsoft_oauth_tenant
+  tenant_entra_connections                    = var.tenant_entra_connections
   pre_signup_lambda_zip                       = var.pre_signup_lambda_zip
+  auth_retirement_phase                       = var.auth_retirement_phase
+  auth_migration_recovery_deadline            = var.auth_migration_recovery_deadline
   cognito_custom_auth_lambda_zip              = var.cognito_custom_auth_lambda_zip
   lambda_zips_dir                             = var.lambda_zips_dir
   lambda_artifact_bucket                      = var.lambda_artifact_bucket
@@ -1046,12 +1106,6 @@ output "appsync_realtime_url" {
   value       = module.thinkwork.appsync_realtime_url
 }
 
-output "appsync_api_key" {
-  description = "AppSync API key"
-  value       = module.thinkwork.appsync_api_key
-  sensitive   = true
-}
-
 output "mapbox_public_token" {
   description = "Mapbox public token used by apps/web MapView. Read by scripts/build-web.sh to inline VITE_MAPBOX_PUBLIC_TOKEN at build time; empty string lets MapView fall back to OpenStreetMap tiles."
   value       = module.thinkwork.mapbox_public_token
@@ -1071,6 +1125,21 @@ output "user_pool_id" {
 output "admin_client_id" {
   description = "Cognito app client ID for web admin"
   value       = module.thinkwork.admin_client_id
+}
+
+output "auth_route_clients" {
+  description = "Safe Cognito app-client manifest for local, Google, Microsoft, and tenant Entra routes."
+  value       = module.thinkwork.auth_route_clients
+}
+
+output "auth_retirement_phase" {
+  description = "Applied authentication retirement phase used for safe controller upgrades."
+  value       = module.thinkwork.auth_retirement_phase
+}
+
+output "web_local_client_id" {
+  description = "Local-password-only Cognito app client used by the web runtime."
+  value       = module.thinkwork.web_local_client_id
 }
 
 output "mobile_client_id" {

@@ -9,9 +9,6 @@
  * mobile Settings consume this.
  *
  *   200 → { email, userId, tenantId, role, name }
- *         (+ pendingClaim when the caller has no user row: true iff a
- *          tenants row holds this email in pending_owner_email, i.e. a
- *          Stripe- or deploy-pre-provisioned owner who may bootstrapUser)
  *   401 → unauthenticated
  *   403 → authenticated but no tenant resolved (pre-bootstrap state)
  *
@@ -25,13 +22,18 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
+import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
+import {
+  AuthAdmissionError,
+  discoverCognitoTenantAdmissions,
+} from "../lib/auth-admission.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
 
-const { users, tenantMembers, tenants } = schema;
+const { users, tenantMembers } = schema;
 
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -50,49 +52,78 @@ export async function handler(
     return unauthorized("Authentication required");
   }
 
-  const emailLower = auth.email.toLowerCase();
+  const migration = {
+    migrationRequired:
+      auth.authType === "cognito" &&
+      auth.route?.providerKind === "legacy_workos" &&
+      auth.route.lifecycleState === "coexistence",
+    migrationRecoveryDeadline:
+      process.env.AUTH_MIGRATION_RECOVERY_DEADLINE?.trim() || null,
+  };
 
-  // Resolve user row (canonical source for id + tenant_id + name).
-  const [userRow] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, emailLower))
-    .limit(1);
+  const requestedTenantId =
+    event.queryStringParameters?.tenantId?.trim() ||
+    event.headers["x-tenant-id"]?.trim() ||
+    event.headers["X-Tenant-Id"]?.trim();
+  let admitted: { userId: string | null; tenantId: string | null };
+  let availableTenants: Array<{ tenantId: string; role: string }> = [];
+  if (auth.authType === "cognito") {
+    try {
+      const discovery = await discoverCognitoTenantAdmissions(auth);
+      availableTenants = discovery.tenants;
+      const selected = requestedTenantId
+        ? discovery.tenants.find(
+            (tenant) => tenant.tenantId === requestedTenantId,
+          )
+        : discovery.tenants.length === 1
+          ? discovery.tenants[0]
+          : undefined;
+      admitted = {
+        userId: discovery.userId,
+        tenantId: selected?.tenantId ?? null,
+      };
+    } catch (cause) {
+      if (!(cause instanceof AuthAdmissionError)) throw cause;
+      admitted = { userId: null, tenantId: null };
+    }
+  } else {
+    admitted = await resolveCallerFromAuth(auth, requestedTenantId);
+  }
+  // Resolve user row only by the identity admitted from the Cognito subject.
+  const [userRow] = admitted.userId
+    ? await db
+        .select()
+        .from(users)
+        .where(eq(users.id, admitted.userId))
+        .limit(1)
+    : [];
 
   if (!userRow) {
-    // Pre-provisioned owner claim (Stripe checkout or `thinkwork deploy`):
-    // a tenants row carrying this email in pending_owner_email means the
-    // caller is the designated first owner and the web shell may safely
-    // call bootstrapUser — its claim path attaches ONLY to this row, so
-    // this does not reopen ADV-9's auto-provisioning hole.
-    const [pendingTenant] = await db
-      .select({ id: tenants.id })
-      .from(tenants)
-      .where(eq(sql`lower(${tenants.pending_owner_email})`, emailLower))
-      .limit(1);
-
     return json(
       {
+        ...migration,
         email: auth.email,
         userId: null,
         tenantId: null,
         role: null,
         name: null,
-        pendingClaim: Boolean(pendingTenant),
         note: "user_not_bootstrapped",
       },
       200,
     );
   }
 
-  const tenantId = userRow.tenant_id;
+  const tenantId = admitted.tenantId;
   if (!tenantId) {
     return json({
+      ...migration,
       email: userRow.email,
       userId: userRow.id,
       tenantId: null,
       role: null,
       name: userRow.name ?? null,
+      tenantSelectionRequired: availableTenants.length > 1,
+      availableTenants,
     });
   }
 
@@ -114,6 +145,7 @@ export async function handler(
 
   if (!memberRow) {
     return json({
+      ...migration,
       email: userRow.email,
       userId: userRow.id,
       tenantId: null,
@@ -124,10 +156,13 @@ export async function handler(
   }
 
   return json({
+    ...migration,
     email: userRow.email,
     userId: userRow.id,
     tenantId,
     role: memberRow?.role ?? null,
     name: userRow.name ?? null,
+    tenantSelectionRequired: false,
+    availableTenants,
   });
 }

@@ -20,5 +20,12 @@ describe("enterprise command registration", () => {
     );
     expect(bootstrap).toBeDefined();
     expect(bootstrap?.options.filter((option) => option.mandatory)).toEqual([]);
+    const authRecovery = enterprise?.commands.find(
+      (cmd) => cmd.name() === "auth-recovery",
+    );
+    expect(authRecovery).toBeDefined();
+    expect(authRecovery?.options.filter((option) => option.mandatory)).toEqual(
+      [],
+    );
   });
 });

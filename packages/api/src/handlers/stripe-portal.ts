@@ -22,12 +22,13 @@ import type {
 } from "aws-lambda";
 import { eq } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
+import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 import { getStripeClient } from "../lib/stripe-client.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
 
-const { stripeCustomers, stripeSubscriptions, users } = schema;
+const { stripeCustomers, stripeSubscriptions } = schema;
 
 type PortalFlow =
   | "payment_method_update"
@@ -69,23 +70,10 @@ export async function handler(
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!auth || (!auth.tenantId && !auth.email)) {
+  if (!auth || auth.authType !== "cognito") {
     return unauthorized("Authentication required");
   }
-
-  // Resolve tenant: prefer JWT tenant claim; fall back to email lookup
-  // (Google-federated users don't have custom:tenant_id until the
-  // pre-token trigger lands — memory feedback_oauth_tenant_resolver).
-  let tenantId = auth.tenantId;
-  const emailLower = auth.email ? auth.email.toLowerCase() : null;
-  if (!tenantId && emailLower) {
-    const [userRow] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, emailLower))
-      .limit(1);
-    tenantId = userRow?.tenant_id ?? null;
-  }
+  const { tenantId } = await resolveCallerFromAuth(auth);
   if (!tenantId) {
     return json({ error: "No tenant resolved for the caller" }, 403);
   }

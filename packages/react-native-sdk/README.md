@@ -41,7 +41,6 @@ import { ThinkworkProvider } from "@thinkwork/react-native-sdk";
   graphqlUrl: string;          // HTTPS endpoint
   graphqlWsUrl?: string;        // WSS endpoint for AppSync subscriptions
   apiBaseUrl?: string;
-  graphqlApiKey?: string;       // unusual; normally auth is Cognito
   cognito: {
     userPoolId: string;
     userPoolClientId: string;

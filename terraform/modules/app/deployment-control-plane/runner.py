@@ -7,8 +7,10 @@ import re
 import secrets
 import subprocess
 import tarfile
+import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -42,6 +44,8 @@ RELEASE_MANIFEST_TRUST_POLICIES = {
 POST_SEED_MIGRATIONS = [
     "0155_tenant_model_catalog.sql",
 ]
+AUTH_RETIREMENT_MIGRATION_MARKER = "-- deployment-phase: auth-retired"
+PLATFORM_MIGRATION_LEDGER_CUTOFF = 260
 MIGRATION_MARKER_KINDS = [
     ("-- creates-column:", "column"),
     ("-- creates-constraint:", "constraint"),
@@ -506,6 +510,7 @@ def redacted_tfvars(vars_json):
         "api_auth_secret",
         "db_password",
         "google_oauth_client_secret",
+        "microsoft_oauth_client_secret",
     ]:
         if key in redacted:
             redacted[key] = "[redacted]"
@@ -1951,19 +1956,13 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
     # plans a destroy of a cert still attached to the n8n ALB (observed:
     # McPherson update to v0.1.0-canary.314). When state shows the root
     # managed cert, reproduce the install-time inputs instead.
-    managed_n8n_cert = state_root_resource_attributes(
-        current_state, "aws_acm_certificate", "n8n"
-    )
+    managed_n8n_cert = state_root_resource_attributes(current_state, "aws_acm_certificate", "n8n")
     if managed_n8n_cert:
         overrides["n8n_domain"] = (
-            managed_n8n_cert.get("domain_name")
-            or url_hostname(overrides["n8n_public_url"])
-            or ""
+            managed_n8n_cert.get("domain_name") or url_hostname(overrides["n8n_public_url"]) or ""
         )
         overrides["n8n_certificate_arn"] = ""
-    foundation_n8n_dns_name = overrides["n8n_domain"] or url_hostname(
-        overrides["n8n_public_url"]
-    )
+    foundation_n8n_dns_name = overrides["n8n_domain"] or url_hostname(overrides["n8n_public_url"])
     if overrides["n8n_provisioned"] and foundation_n8n_dns_name:
         # State-derived zone lookup goes blank once the cloudflare_record
         # resources are absent (e.g. a prior partial destroy) — fall back
@@ -2081,7 +2080,9 @@ def resolve_agentcore_pi_source_image_uri(payload):
         safe_get(operation, "action", default=safe_get(payload, "action", "phase", default=""))
     ).lower()
     kind = str(safe_get(operation, "kind", default="")).lower()
-    is_customer_update = action == "update" or kind == "foundation"
+    is_customer_update = (
+        action == "update" or kind == "foundation"
+    ) and kind != "identity_provider"
     explicit = safe_get(payload, "agentcorePiSourceImageUri", default="")
     if explicit:
         if is_customer_update:
@@ -2298,9 +2299,24 @@ def ensure_compliance_roles(database_url, outputs, vars_json):
     )
 
 
-def migration_files():
+def migration_files(vars_json=None):
     migrations = SOURCE / "packages/database-pg/drizzle"
-    return sorted(path for path in migrations.glob("*.sql") if "rollback" not in path.name)
+    allow_auth_retirement = bool(
+        isinstance(vars_json, dict)
+        and vars_json.get("auth_retirement_phase") == "retired"
+        and vars_json.get("finalize_auth_retirement") is True
+    )
+    paths = []
+    for path in migrations.glob("*.sql"):
+        if "rollback" in path.name:
+            continue
+        if (
+            AUTH_RETIREMENT_MIGRATION_MARKER in path.read_text(encoding="utf-8")
+            and not allow_auth_retirement
+        ):
+            continue
+        paths.append(path)
+    return sorted(paths)
 
 
 def apply_migration_file(database_url, outputs, vars_json, path):
@@ -2334,7 +2350,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
 """,
     )
-    for path in migration_files():
+    for path in migration_files(vars_json):
         apply_migration_file(database_url, outputs, vars_json, path)
 
 
@@ -2454,7 +2470,7 @@ def platform_migration_object_present(database_url, kind, name):
     return None
 
 
-def backfill_platform_migration_ledger(database_url):
+def backfill_platform_migration_ledger(database_url, vars_json):
     """One-time ledger bootstrap for environments installed before the ledger
     existed. Every file shipping with this release is recorded as assumed
     applied — auto-re-running old files is unsafe (markers can name objects
@@ -2463,11 +2479,29 @@ def backfill_platform_migration_ledger(database_url):
     transition apply through the exact pending path."""
     verified = []
     assumed = []
-    for path in migration_files():
+    for path in migration_files(vars_json):
+        match = re.match(r"^(\d{4})_", path.name)
+        migration_number = int(match.group(1)) if match else None
         verdicts = [
             platform_migration_object_present(database_url, kind, name)
             for kind, name in declared_migration_objects(path)
         ]
+        # The ledger ships with the native-auth release. Files through 0260 may
+        # already have been applied by the old deploy paths and cannot safely be
+        # replayed. Files introduced with this release must never be silently
+        # assumed: record them only when every declared object is present;
+        # otherwise leave them pending so apply_pending_platform_migrations runs
+        # them before the app is published.
+        if (
+            migration_number is not None
+            and migration_number > PLATFORM_MIGRATION_LEDGER_CUTOFF
+            and (not verdicts or any(verdict is not True for verdict in verdicts))
+        ):
+            print(
+                f"[migrations] transition: {path.name} is newer than the pre-ledger cutoff "
+                "and remains pending"
+            )
+            continue
         if any(verdict is False for verdict in verdicts):
             print(
                 f"[migrations] transition WARNING: {path.name} declares objects missing from "
@@ -2484,7 +2518,7 @@ def backfill_platform_migration_ledger(database_url):
 
 def apply_pending_platform_migrations(database_url, outputs, vars_json):
     recorded = recorded_platform_migrations(database_url)
-    for path in migration_files():
+    for path in migration_files(vars_json):
         if path.name in recorded:
             continue
         print(f"[migrations] applying {path.name}")
@@ -2966,10 +3000,10 @@ def push_database_schema(outputs_path, vars_json):
     ensure_migration_ledger(database_url)
     if fresh:
         record_platform_migrations(
-            database_url, [path.name for path in migration_files()], "greenfield"
+            database_url, [path.name for path in migration_files(vars_json)], "greenfield"
         )
     elif not ledger_present:
-        backfill_platform_migration_ledger(database_url)
+        backfill_platform_migration_ledger(database_url, vars_json)
     apply_pending_platform_migrations(database_url, outputs, vars_json)
     seed_platform_bootstrap_defaults(database_url)
     migrations = SOURCE / "packages/database-pg/drizzle"
@@ -2978,6 +3012,55 @@ def push_database_schema(outputs_path, vars_json):
         if not path.is_file():
             raise RuntimeError(f"Required platform migration is missing: {path}")
         apply_migration_file(database_url, outputs, vars_json, path)
+
+
+def prepare_additive_schema_before_app(payload, vars_json):
+    """Materialize foundation/data dependencies and apply additive schema before
+    the full app plan can publish Lambdas that consume it. Retirement stays
+    disabled here and, when explicitly requested, runs only after the app
+    retirement phase has deployed."""
+    action = str(payload.get("action") or "").lower()
+    if (
+        action not in {"deploy", "update"}
+        or is_managed_app_operation(payload)
+        or identity_provider_operation(payload) is not None
+    ):
+        return None
+    target = "module.thinkwork.module.database"
+    plan = subprocess.run(
+        [
+            "terraform",
+            "plan",
+            f"-target={target}",
+            "-out=tfplan-data",
+            "-no-color",
+        ],
+        cwd=TF,
+        text=True,
+    )
+    if plan.returncode != 0:
+        return plan
+    applied = subprocess.run(
+        ["terraform", "apply", "-auto-approve", "-no-color", "tfplan-data"],
+        cwd=TF,
+        text=True,
+    )
+    if applied.returncode != 0:
+        return applied
+    outputs_path = TF / "pre-app-outputs.json"
+    outputs_path.write_text(
+        output(["terraform", "output", "-json"], cwd=TF),
+        encoding="utf-8",
+    )
+    additive_vars = dict(vars_json)
+    additive_vars["finalize_auth_retirement"] = False
+    push_database_schema(outputs_path, additive_vars)
+    TERRAFORM_EVIDENCE["schemaOrdering"] = {
+        "status": "succeeded",
+        "target": target,
+        "phase": "foundation-data-additive-before-app",
+    }
+    return applied
 
 
 def write_runner_files(payload, runner_secrets):
@@ -3065,12 +3148,70 @@ def write_runner_files(payload, runner_secrets):
     if not api_auth_secret:
         api_auth_secret = secrets.token_urlsafe(48)
 
+    auth_state = auth_reconciliation_state(stage)
+    tenant_auth_metadata = identity_provider_desired_connections(
+        payload,
+        stage=stage,
+        account_id=account_id,
+        region=region,
+        previous_state=auth_state,
+        current_outputs=current_outputs,
+    )
+    prior_phase_output = current_outputs.get("auth_retirement_phase")
+    prior_phase = (
+        prior_phase_output.get("value")
+        if isinstance(prior_phase_output, dict)
+        else None
+    )
+    if prior_phase not in {"coexistence", "cutover", "retired"}:
+        # An existing pre-native-auth stack must enter through coexistence.
+        # A truly empty state is greenfield and has no WorkOS runtime to keep.
+        prior_phase = "coexistence" if current_state else "retired"
+    auth_retirement_phase = safe_get(
+        runner_secrets,
+        "authRetirementPhase",
+        default=safe_get(
+            reviewed_payload,
+            "authRetirementPhase",
+            default=prior_phase,
+        ),
+    )
+    if auth_retirement_phase not in {"coexistence", "cutover", "retired"}:
+        raise RuntimeError("authRetirementPhase must be coexistence, cutover, or retired")
+    auth_migration_recovery_deadline = safe_get(
+        runner_secrets,
+        "authMigrationRecoveryDeadline",
+        default=safe_get(
+            reviewed_payload,
+            "authMigrationRecoveryDeadline",
+            default=os.environ.get("AUTH_MIGRATION_RECOVERY_DEADLINE", ""),
+        ),
+    ).strip()
+    if auth_migration_recovery_deadline:
+        try:
+            parsed_recovery_deadline = datetime.fromisoformat(
+                auth_migration_recovery_deadline.replace("Z", "+00:00")
+            )
+            if parsed_recovery_deadline.tzinfo is None:
+                raise ValueError("timezone required")
+        except ValueError as exc:
+            raise RuntimeError(
+                "authMigrationRecoveryDeadline must be an RFC3339 timestamp"
+            ) from exc
+    if auth_retirement_phase == "coexistence" and not auth_migration_recovery_deadline:
+        raise RuntimeError(
+            "authMigrationRecoveryDeadline is required while authRetirementPhase is coexistence"
+        )
+    finalize_auth_retirement = payload.get("finalizeAuthRetirement") is True
     vars_json = {
         "stage": stage,
         "region": region,
         "account_id": account_id,
         "db_password": db_password,
         "api_auth_secret": api_auth_secret,
+        "auth_retirement_phase": auth_retirement_phase,
+        "auth_migration_recovery_deadline": auth_migration_recovery_deadline,
+        "finalize_auth_retirement": finalize_auth_retirement,
         "database_engine": safe_get(
             reviewed_payload,
             "databaseEngine",
@@ -3131,6 +3272,38 @@ def write_runner_files(payload, runner_secrets):
                 default="",
             ),
         ),
+        "microsoft_oauth_client_id": safe_get(
+            runner_secrets,
+            "microsoftOauthClientId",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthClientId",
+                default="",
+            ),
+        ),
+        "microsoft_oauth_client_secret": safe_get(
+            runner_secrets,
+            "microsoftOauthClientSecret",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthClientSecret",
+                default="",
+            ),
+        ),
+        "microsoft_oauth_tenant": safe_get(
+            runner_secrets,
+            "microsoftOauthTenant",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthTenant",
+                default="",
+            ),
+        ),
+        # Secret-free desired metadata. The compact Terraform projection only
+        # creates provider-specific public app clients; the runner reconciles
+        # the secret-bearing Cognito IdP before Terraform plans those clients.
+        "tenant_entra_connections": tenant_entra_terraform_projection(tenant_auth_metadata),
+        "auth_tenant_connection_metadata": tenant_auth_metadata,
         "cognito_email_source_arn": safe_get(
             runner_secrets,
             "cognitoEmailSourceArn",
@@ -3289,6 +3462,16 @@ variable "api_auth_secret" {{
   sensitive = true
 }}
 
+variable "auth_retirement_phase" {{
+  type    = string
+  default = "coexistence"
+}}
+
+variable "auth_migration_recovery_deadline" {{
+  type    = string
+  default = ""
+}}
+
 variable "database_engine" {{
   type = string
 }}
@@ -3350,6 +3533,35 @@ variable "google_oauth_client_id" {{
 variable "google_oauth_client_secret" {{
   type      = string
   sensitive = true
+}}
+
+variable "microsoft_oauth_client_id" {{
+  type = string
+}}
+
+variable "microsoft_oauth_client_secret" {{
+  type      = string
+  sensitive = true
+}}
+
+variable "microsoft_oauth_tenant" {{
+  type    = string
+  default = ""
+}}
+
+variable "tenant_entra_connections" {{
+  type = list(object({{
+    connection_key = string
+    tenant_id      = string
+    provider_name  = string
+    display_name   = string
+  }}))
+  default = []
+}}
+
+variable "auth_tenant_connection_metadata" {{
+  type    = list(any)
+  default = []
 }}
 
 variable "lambda_artifact_bucket" {{
@@ -3672,10 +3884,16 @@ module "thinkwork" {{
 
   db_password     = var.db_password
   api_auth_secret = var.api_auth_secret
+  auth_retirement_phase = var.auth_retirement_phase
+  auth_migration_recovery_deadline = var.auth_migration_recovery_deadline
   database_engine = var.database_engine
 
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
+  microsoft_oauth_client_id     = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant        = var.microsoft_oauth_tenant
+  tenant_entra_connections      = var.tenant_entra_connections
   platform_operator_emails   = var.platform_operator_emails
 
   cognito_email_source_arn       = var.cognito_email_source_arn
@@ -3778,10 +3996,6 @@ output "app_distribution_id" {{ value = module.thinkwork.app_distribution_id }}
 output "api_endpoint" {{ value = module.thinkwork.api_endpoint }}
 output "appsync_api_url" {{ value = module.thinkwork.appsync_api_url }}
 output "appsync_realtime_url" {{ value = module.thinkwork.appsync_realtime_url }}
-output "appsync_api_key" {{
-  value     = module.thinkwork.appsync_api_key
-  sensitive = true
-}}
 output "auth_domain" {{ value = module.thinkwork.auth_domain }}
 output "customer_domain" {{ value = module.thinkwork.customer_domain }}
 output "customer_domain_name_servers" {{ value = module.thinkwork.customer_domain_name_servers }}
@@ -3790,6 +4004,9 @@ output "db_secret_arn" {{ value = module.thinkwork.db_secret_arn }}
 output "database_name" {{ value = module.thinkwork.database_name }}
 output "user_pool_id" {{ value = module.thinkwork.user_pool_id }}
 output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
+output "web_local_client_id" {{ value = module.thinkwork.web_local_client_id }}
+output "auth_route_clients" {{ value = module.thinkwork.auth_route_clients }}
+output "auth_retirement_phase" {{ value = module.thinkwork.auth_retirement_phase }}
   output "docs_bucket_name" {{ value = module.thinkwork.docs_bucket_name }}
   output "docs_distribution_id" {{ value = module.thinkwork.docs_distribution_id }}
   output "docs_distribution_domain" {{ value = module.thinkwork.docs_distribution_domain }}
@@ -4013,7 +4230,6 @@ def write_outputs_to_ssm(outputs_path, vars_json):
         "profile/graphql-http-url": None,
         "profile/appsync-url": "appsync_api_url",
         "profile/appsync-realtime-url": "appsync_realtime_url",
-        "profile/appsync-api-key": "appsync_api_key",
         "profile/cognito-domain": None,
         "profile/cognito-user-pool-id": "user_pool_id",
         "profile/cognito-client-id": "admin_client_id",
@@ -4154,7 +4370,6 @@ def runtime_profile(outputs, vars_json):
         "graphqlHttpUrl": graphql_http_url,
         "appsyncUrl": output_value("appsync_api_url"),
         "appsyncRealtimeUrl": output_value("appsync_realtime_url"),
-        "appsyncApiKey": output_value("appsync_api_key"),
         "cognitoDomain": cognito_domain,
         "cognitoUserPoolId": output_value("user_pool_id"),
         "cognitoClientId": output_value("admin_client_id"),
@@ -4185,7 +4400,6 @@ def runtime_profile(outputs, vars_json):
         "VITE_GRAPHQL_HTTP_URL": profile["graphqlHttpUrl"],
         "VITE_GRAPHQL_URL": profile["appsyncUrl"],
         "VITE_GRAPHQL_WS_URL": profile["appsyncRealtimeUrl"],
-        "VITE_GRAPHQL_API_KEY": profile["appsyncApiKey"],
         "VITE_COGNITO_DOMAIN": profile["cognitoDomain"],
         "VITE_COGNITO_USER_POOL_ID": profile["cognitoUserPoolId"],
         "VITE_COGNITO_CLIENT_ID": profile["cognitoClientId"],
@@ -4209,6 +4423,700 @@ def runtime_profile(outputs, vars_json):
     profile["viteEnv"] = vite_env
     web_env = "\n".join(f"{key}={value or ''}" for key, value in sorted(vite_env.items()))
     return profile, web_env + "\n"
+
+
+IDENTITY_PROVIDER_ACTIONS = {"create", "validate", "rotate", "disable"}
+ENTRA_TENANT_GUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+ENTRA_PROVIDER_NAME_RE = re.compile(r"^Entra_[a-f0-9]{16}_[a-f0-9]{8}$")
+
+
+def identity_provider_operation(payload):
+    operation = payload.get("operation")
+    if not isinstance(operation, dict) or operation.get("kind") != "identity_provider":
+        return None
+    return operation
+
+
+def _identity_string(value, label):
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"Identity-provider operation requires {label}")
+    return value.strip()
+
+
+def _current_output_value(current_outputs, key):
+    value = current_outputs.get(key) if isinstance(current_outputs, dict) else None
+    if isinstance(value, dict) and "value" in value:
+        return value.get("value")
+    return value
+
+
+def validate_identity_provider_secret_arn(secret_arn, stage, account_id, region):
+    expected = f"arn:aws:secretsmanager:{region}:{account_id}:secret:thinkwork/{stage}/auth/entra/"
+    if not isinstance(secret_arn, str) or not secret_arn.startswith(expected):
+        raise RuntimeError(
+            "Tenant Entra secret ARN must belong to this account, region, stage, "
+            "and thinkwork/<stage>/auth/entra namespace"
+        )
+    return secret_arn
+
+
+def validate_identity_provider_connection(raw, stage, account_id, region, user_pool_id):
+    if not isinstance(raw, dict):
+        raise RuntimeError("Identity-provider operation requires safe connection metadata")
+    tenant_id = _identity_string(raw.get("tenantId"), "connection.tenantId").lower()
+    if not ENTRA_TENANT_GUID_RE.fullmatch(tenant_id):
+        raise RuntimeError("Tenant Entra directory ID must be a GUID")
+    provider_name = _identity_string(raw.get("providerName"), "connection.providerName")
+    if not ENTRA_PROVIDER_NAME_RE.fullmatch(provider_name):
+        raise RuntimeError("Tenant Entra provider name is not deterministic")
+    connection_key = f"microsoft:tenant:{tenant_id}"
+    if raw.get("connectionKey") != connection_key:
+        raise RuntimeError("Tenant Entra connection key does not match its directory ID")
+    client_id = _identity_string(raw.get("clientId"), "connection.clientId")
+    display_name = _identity_string(raw.get("displayName"), "connection.displayName")
+    secret_arn = validate_identity_provider_secret_arn(
+        raw.get("clientSecretRef"), stage, account_id, region
+    )
+    client_secret_version_stage = raw.get("clientSecretVersionStage")
+    if client_secret_version_stage is not None and client_secret_version_stage != "AWSPENDING":
+        raise RuntimeError("Tenant Entra clientSecretVersionStage must be AWSPENDING when supplied")
+    bindings = raw.get("tenantBindings")
+    if not isinstance(bindings, list) or len(bindings) != 1:
+        raise RuntimeError("Tenant Entra connection requires exactly one tenant binding")
+    binding = bindings[0]
+    if not isinstance(binding, dict):
+        raise RuntimeError("Tenant Entra binding must be an object")
+    thinkwork_tenant_id = _identity_string(binding.get("tenantId"), "tenant binding ID")
+    try:
+        uuid.UUID(thinkwork_tenant_id)
+    except (ValueError, AttributeError) as error:
+        raise RuntimeError("ThinkWork tenant binding ID must be a UUID") from error
+    hostnames = binding.get("hostnames")
+    if not isinstance(hostnames, list) or not hostnames:
+        raise RuntimeError("Tenant Entra binding requires at least one hostname")
+    normalized_hostnames = []
+    for value in hostnames:
+        hostname = _identity_string(value, "tenant binding hostname").lower().rstrip(".")
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", hostname):
+            raise RuntimeError(f"Invalid tenant auth hostname: {hostname}")
+        normalized_hostnames.append(hostname)
+    issuer_url = f"https://login.microsoftonline.com/{tenant_id}/v2.0"
+    if raw.get("issuerUrl") != issuer_url:
+        raise RuntimeError("Tenant Entra issuer must use its tenant GUID v2.0 authority")
+    return {
+        "connectionKey": connection_key,
+        "providerKey": "microsoft",
+        "providerKind": "microsoft_tenant",
+        "displayName": display_name,
+        "lifecycleState": "native",
+        "cognitoUserPoolId": _identity_string(user_pool_id, "Cognito user pool ID"),
+        "cognitoIdentityProviderName": provider_name,
+        "issuerUrl": issuer_url,
+        "clientId": client_id,
+        "clientSecretRef": secret_arn,
+        **(
+            {"clientSecretVersionStage": client_secret_version_stage}
+            if client_secret_version_stage is not None
+            else {}
+        ),
+        "authorizeScopes": "openid email profile",
+        "tenantBindings": [
+            {
+                "tenantId": thinkwork_tenant_id,
+                "label": _identity_string(binding.get("label"), "tenant binding label"),
+                "hostnames": sorted(set(normalized_hostnames)),
+                "status": "enabled",
+            }
+        ],
+        # Kept in runner/SSM safe state for the Terraform projection only.
+        "tenantDirectoryId": tenant_id,
+    }
+
+
+def identity_provider_desired_connections(
+    payload, *, stage, account_id, region, previous_state, current_outputs
+):
+    previous = previous_state.get("tenantConnections") or []
+    if not isinstance(previous, list):
+        raise RuntimeError("Auth reconciliation tenantConnections state must be an array")
+    desired = [dict(value) for value in previous if isinstance(value, dict)]
+    operation = identity_provider_operation(payload)
+    if operation is None:
+        return desired
+
+    action = str(operation.get("action") or "").lower()
+    if action not in IDENTITY_PROVIDER_ACTIONS:
+        raise RuntimeError(f"Unsupported identity-provider action: {action}")
+    expected_previous = int(operation.get("expectedPreviousRevision", -1))
+    revision = int(operation.get("revision", -1))
+    current_revision = int(previous_state.get("desiredRevision") or 0)
+    if expected_previous != current_revision or revision != current_revision + 1:
+        raise RuntimeError(f"Identity-provider revision conflict: expected {current_revision + 1}")
+
+    user_pool_id = _current_output_value(current_outputs, "user_pool_id")
+    connection = validate_identity_provider_connection(
+        operation.get("connection"), stage, account_id, region, user_pool_id
+    )
+    client_secret_version_stage = connection.get("clientSecretVersionStage")
+    if action == "rotate" and client_secret_version_stage != "AWSPENDING":
+        raise RuntimeError("Tenant Entra rotation requires clientSecretVersionStage AWSPENDING")
+    if action != "rotate" and client_secret_version_stage is not None:
+        raise RuntimeError(
+            "clientSecretVersionStage AWSPENDING is valid only for Tenant Entra rotation"
+        )
+    existing = next(
+        (value for value in desired if value.get("connectionKey") == connection["connectionKey"]),
+        None,
+    )
+    if action == "create" and existing and existing.get("lifecycleState") != "denied":
+        raise RuntimeError("Tenant Entra connection already exists; use rotate or validate")
+    if action in {"validate", "rotate", "disable"} and not existing:
+        raise RuntimeError(f"Tenant Entra connection does not exist for {action}")
+    if action in {"validate", "rotate", "disable"} and existing != connection:
+        # Disable may change lifecycle; rotate may add only its runner-owned
+        # pending-version label. Safe connection metadata must remain exact.
+        comparable = dict(existing)
+        comparable["lifecycleState"] = "native"
+        submitted_comparable = dict(connection)
+        comparable.pop("clientSecretVersionStage", None)
+        submitted_comparable.pop("clientSecretVersionStage", None)
+        if comparable != submitted_comparable:
+            raise RuntimeError(
+                "Identity-provider metadata differs from the active desired connection"
+            )
+
+    desired = [
+        value for value in desired if value.get("connectionKey") != connection["connectionKey"]
+    ]
+    if action == "disable":
+        connection["lifecycleState"] = "denied"
+        connection["tenantBindings"][0]["status"] = "disabled"
+    desired.append(connection)
+    return sorted(desired, key=lambda value: value["connectionKey"])
+
+
+def tenant_entra_terraform_projection(connections):
+    projected = []
+    for connection in connections:
+        if connection.get("lifecycleState") != "native":
+            continue
+        projected.append(
+            {
+                "connection_key": connection["connectionKey"],
+                "tenant_id": connection["tenantDirectoryId"],
+                "provider_name": connection["cognitoIdentityProviderName"],
+                "display_name": connection["displayName"],
+            }
+        )
+    return projected
+
+
+def native_auth_reconciliation_payload(outputs, vars_json, previous_state=None):
+    """Build the complete secret-free Cognito desired set from Terraform outputs."""
+    previous_state = previous_state if isinstance(previous_state, dict) else {}
+    route_manifest = outputs.get("auth_route_clients", {}).get("value") or {}
+    if not isinstance(route_manifest, dict):
+        raise RuntimeError("auth_route_clients Terraform output must be an object")
+    user_pool_id = str(outputs.get("user_pool_id", {}).get("value") or "")
+    if not user_pool_id:
+        raise RuntimeError("Native auth reconciliation requires user_pool_id output")
+
+    routes = []
+    provider_client_ids = {}
+    for manifest_key, raw in sorted(route_manifest.items()):
+        if not isinstance(raw, dict):
+            raise RuntimeError(f"Invalid auth route manifest entry: {manifest_key}")
+        provider_names = [str(value) for value in raw.get("provider_names") or []]
+        client_id = str(raw.get("client_id") or "")
+        for provider_name in provider_names:
+            provider_client_ids.setdefault(provider_name, []).append(client_id)
+        routes.append(
+            {
+                "routeKey": str(raw.get("route_key") or ""),
+                "clientFamily": str(raw.get("client_family") or ""),
+                "cognitoUserPoolId": user_pool_id,
+                "cognitoAppClientId": client_id,
+                "providerNames": provider_names,
+                "explicitAuthFlows": [str(value) for value in raw.get("explicit_auth_flows") or []],
+                "redirectUris": [str(value) for value in raw.get("callback_urls") or []],
+                "logoutUris": [str(value) for value in raw.get("logout_urls") or []],
+                "lifecycleState": str(raw.get("lifecycle_state") or "native"),
+            }
+        )
+
+    connections = [
+        {
+            "connectionKey": "local",
+            "providerKey": "cognito",
+            "providerKind": "local",
+            "displayName": "Email and password",
+            "lifecycleState": "native",
+            "cognitoUserPoolId": user_pool_id,
+            "cognitoIdentityProviderName": "COGNITO",
+            "authorizeScopes": "openid email profile",
+            "tenantBindings": [],
+        }
+    ]
+    if provider_client_ids.get("Google"):
+        connections.append(
+            {
+                "connectionKey": "google",
+                "providerKey": "google",
+                "providerKind": "google",
+                "displayName": "Google",
+                "lifecycleState": "native",
+                "cognitoUserPoolId": user_pool_id,
+                "cognitoIdentityProviderName": "Google",
+                "authorizeScopes": "openid email profile",
+                "tenantBindings": [],
+            }
+        )
+    if provider_client_ids.get("MicrosoftOrganizations"):
+        microsoft_tenant = str(vars_json.get("microsoft_oauth_tenant") or "").lower()
+        if not microsoft_tenant:
+            raise RuntimeError(
+                "Microsoft native auth reconciliation requires microsoft_oauth_tenant"
+            )
+        connections.append(
+            {
+                "connectionKey": "microsoft:organizations",
+                "providerKey": "microsoft",
+                "providerKind": "microsoft_organizations",
+                "displayName": "Microsoft",
+                "lifecycleState": "native",
+                "cognitoUserPoolId": user_pool_id,
+                "cognitoIdentityProviderName": "MicrosoftOrganizations",
+                "issuerUrl": (f"https://login.microsoftonline.com/{microsoft_tenant}/v2.0"),
+                "authorizeScopes": "openid email profile",
+                "tenantBindings": [],
+            }
+        )
+
+    # Identity-provider operations store the complete tenant connection set in
+    # safe SSM state. Standard releases carry it forward; omission is not
+    # interpreted as deletion.
+    tenant_connections = vars_json.get("auth_tenant_connection_metadata")
+    if tenant_connections is None:
+        tenant_connections = previous_state.get("tenantConnections") or []
+    for connection in tenant_connections:
+        if isinstance(connection, dict):
+            # tenantDirectoryId is runner-owned projection metadata, not part
+            # of the public/API reconciliation contract.
+            connections.append(
+                {
+                    key: value
+                    for key, value in connection.items()
+                    if key not in {"tenantDirectoryId", "clientSecretVersionStage"}
+                }
+            )
+
+    desired = {
+        "connections": sorted(connections, key=lambda item: item["connectionKey"]),
+        "routeClients": sorted(
+            routes,
+            key=lambda item: f"{item['routeKey']}:{item['clientFamily']}",
+        ),
+    }
+    desired_fingerprint = hashlib.sha256(canonical_json(desired).encode("utf-8")).hexdigest()
+    if desired_fingerprint == previous_state.get("desiredFingerprint"):
+        return None, previous_state
+
+    previous_revision = int(previous_state.get("revision") or 0)
+    payload = {
+        "stage": vars_json["stage"],
+        "awsAccountId": vars_json["account_id"],
+        "awsRegion": vars_json["region"],
+        "revision": previous_revision + 1,
+        "expectedPreviousRevision": previous_revision,
+        "idempotencyKey": str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"thinkwork-auth:{vars_json['stage']}:{previous_revision + 1}:{desired_fingerprint}",
+            )
+        ),
+        "connections": desired["connections"],
+        "routeClients": desired["routeClients"],
+    }
+    payload["manifestFingerprint"] = hashlib.sha256(
+        json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    next_state = {
+        "revision": payload["revision"],
+        "desiredFingerprint": desired_fingerprint,
+        "tenantConnections": tenant_connections,
+        "desiredRevision": previous_state.get("desiredRevision", 0),
+    }
+    return payload, next_state
+
+
+def auth_reconciliation_state(stage):
+    name = f"/thinkwork/{stage}/auth/reconciliation/state"
+    try:
+        encoded = output(
+            [
+                "aws",
+                "ssm",
+                "get-parameter",
+                "--name",
+                name,
+                "--query",
+                "Parameter.Value",
+                "--output",
+                "text",
+            ]
+        )
+        return json.loads(encoded)
+    except Exception:
+        return {}
+
+
+def _describe_cognito_identity_provider(user_pool_id, provider_name):
+    try:
+        raw = output(
+            [
+                "aws",
+                "cognito-idp",
+                "describe-identity-provider",
+                "--user-pool-id",
+                user_pool_id,
+                "--provider-name",
+                provider_name,
+                "--output",
+                "json",
+            ],
+            stderr=subprocess.PIPE,
+        )
+        value = json.loads(raw or "{}")
+        return value.get("IdentityProvider") if isinstance(value, dict) else None
+    except subprocess.CalledProcessError as error:
+        stderr = str(getattr(error, "stderr", "") or "")
+        if "ResourceNotFoundException" in stderr:
+            return None
+        raise RuntimeError(
+            "Tenant Entra Cognito identity provider could not be described"
+        ) from error
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "Tenant Entra Cognito identity provider returned malformed metadata"
+        ) from error
+
+
+def _read_tenant_entra_secret(connection):
+    try:
+        args = [
+            "aws",
+            "secretsmanager",
+            "get-secret-value",
+            "--secret-id",
+            connection["clientSecretRef"],
+        ]
+        version_stage = connection.get("clientSecretVersionStage")
+        if version_stage:
+            args.extend(["--version-stage", version_stage])
+        args.extend(
+            [
+                "--query",
+                "SecretString",
+                "--output",
+                "text",
+            ]
+        )
+        body = output(
+            args,
+            stderr=subprocess.DEVNULL,
+        )
+        secret = json.loads(body or "{}")
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as error:
+        raise RuntimeError("Tenant Entra secret could not be read") from error
+    client_id = secret.get("clientId") if isinstance(secret, dict) else None
+    client_secret = secret.get("clientSecret") if isinstance(secret, dict) else None
+    if (
+        client_id != connection["clientId"]
+        or not isinstance(client_secret, str)
+        or not client_secret
+    ):
+        raise RuntimeError("Tenant Entra secret document is missing matching credentials")
+    return client_secret
+
+
+def promote_tenant_entra_pending_secret(payload, vars_json):
+    operation = identity_provider_operation(payload)
+    if operation is None or str(operation.get("action") or "").lower() != "rotate":
+        return None
+    connection_key = operation["connection"]["connectionKey"]
+    connection = next(
+        value
+        for value in vars_json["auth_tenant_connection_metadata"]
+        if value["connectionKey"] == connection_key
+    )
+    if connection.get("clientSecretVersionStage") != "AWSPENDING":
+        raise RuntimeError("Tenant Entra rotation is missing its pending secret version")
+    raw = output(
+        [
+            "aws",
+            "secretsmanager",
+            "describe-secret",
+            "--secret-id",
+            connection["clientSecretRef"],
+            "--query",
+            "VersionIdsToStages",
+            "--output",
+            "json",
+        ],
+        stderr=subprocess.DEVNULL,
+    )
+    versions = json.loads(raw or "{}")
+    pending = next(
+        (version for version, stages in versions.items() if "AWSPENDING" in stages),
+        None,
+    )
+    current = next(
+        (version for version, stages in versions.items() if "AWSCURRENT" in stages),
+        None,
+    )
+    if not pending:
+        raise RuntimeError("Tenant Entra pending secret version was not found")
+    if pending != current:
+        args = [
+            "aws",
+            "secretsmanager",
+            "update-secret-version-stage",
+            "--secret-id",
+            connection["clientSecretRef"],
+            "--version-stage",
+            "AWSCURRENT",
+            "--move-to-version-id",
+            pending,
+        ]
+        if current:
+            args.extend(["--remove-from-version-id", current])
+        output(args, stderr=subprocess.DEVNULL)
+    return {"status": "promoted", "connectionKey": connection_key}
+
+
+def _assert_tenant_entra_provider_matches(existing, connection):
+    details = existing.get("ProviderDetails") if isinstance(existing, dict) else None
+    mapping = existing.get("AttributeMapping") if isinstance(existing, dict) else None
+    expected_mapping = {
+        "email": "preferred_username",
+        "name": "name",
+        "username": "sub",
+        "custom:entra_tenant_id": "tid",
+        "custom:entra_object_id": "oid",
+    }
+    if (
+        not isinstance(existing, dict)
+        or existing.get("ProviderName") != connection["cognitoIdentityProviderName"]
+        or existing.get("ProviderType") != "OIDC"
+        or not isinstance(details, dict)
+        or details.get("client_id") != connection["clientId"]
+        or str(details.get("oidc_issuer") or "").rstrip("/") != connection["issuerUrl"].rstrip("/")
+        or details.get("authorize_scopes") != "openid email profile"
+        or mapping != expected_mapping
+    ):
+        raise RuntimeError("Tenant Entra Cognito identity provider has drifted")
+
+
+def reconcile_identity_provider_resource(payload, vars_json):
+    operation = identity_provider_operation(payload)
+    if operation is None:
+        return None
+    action = str(operation["action"]).lower()
+    connection_key = operation["connection"]["connectionKey"]
+    connection = next(
+        value
+        for value in vars_json["auth_tenant_connection_metadata"]
+        if value["connectionKey"] == connection_key
+    )
+    user_pool_id = connection["cognitoUserPoolId"]
+    provider_name = connection["cognitoIdentityProviderName"]
+    existing = _describe_cognito_identity_provider(user_pool_id, provider_name)
+
+    if action == "disable":
+        return {
+            "action": action,
+            "connectionKey": connection_key,
+            "providerName": provider_name,
+            "status": "pending_route_removal",
+        }
+
+    # Validation intentionally reads the secret as well: a provider whose
+    # referenced credential is inaccessible or malformed is not valid.
+    client_secret = _read_tenant_entra_secret(connection)
+    if action == "validate":
+        if existing is None:
+            raise RuntimeError("Tenant Entra Cognito identity provider does not exist")
+        _assert_tenant_entra_provider_matches(existing, connection)
+        return {
+            "action": action,
+            "connectionKey": connection_key,
+            "providerName": provider_name,
+            "status": "valid",
+        }
+
+    cli_input = {
+        "UserPoolId": user_pool_id,
+        "ProviderName": provider_name,
+        "ProviderDetails": {
+            "client_id": connection["clientId"],
+            "client_secret": client_secret,
+            "attributes_request_method": "GET",
+            "oidc_issuer": connection["issuerUrl"],
+            "authorize_scopes": "openid email profile",
+        },
+        "AttributeMapping": {
+            "email": "preferred_username",
+            "name": "name",
+            "username": "sub",
+            "custom:entra_tenant_id": "tid",
+            "custom:entra_object_id": "oid",
+        },
+        "IdpIdentifiers": [],
+    }
+    aws_action = "update-identity-provider" if existing else "create-identity-provider"
+    try:
+        subprocess.run(
+            [
+                "aws",
+                "cognito-idp",
+                aws_action,
+                "--cli-input-json",
+                "file:///dev/stdin",
+                "--output",
+                "json",
+            ],
+            input=json.dumps(cli_input, separators=(",", ":")),
+            text=True,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError("Tenant Entra Cognito reconciliation failed") from error
+    described = _describe_cognito_identity_provider(user_pool_id, provider_name)
+    _assert_tenant_entra_provider_matches(described, connection)
+    return {
+        "action": action,
+        "connectionKey": connection_key,
+        "providerName": provider_name,
+        "status": "reconciled",
+    }
+
+
+def finalize_disabled_identity_provider(payload, vars_json):
+    operation = identity_provider_operation(payload)
+    if operation is None or str(operation.get("action") or "").lower() != "disable":
+        return None
+    connection = operation["connection"]
+    user_pool_id = next(
+        value["cognitoUserPoolId"]
+        for value in vars_json["auth_tenant_connection_metadata"]
+        if value["connectionKey"] == connection["connectionKey"]
+    )
+    provider_name = connection["providerName"]
+    if _describe_cognito_identity_provider(user_pool_id, provider_name) is not None:
+        try:
+            output(
+                [
+                    "aws",
+                    "cognito-idp",
+                    "delete-identity-provider",
+                    "--user-pool-id",
+                    user_pool_id,
+                    "--provider-name",
+                    provider_name,
+                ],
+                stderr=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError("Tenant Entra Cognito provider could not be disabled") from error
+    return {
+        "action": "disable",
+        "connectionKey": connection["connectionKey"],
+        "providerName": provider_name,
+        "status": "disabled",
+    }
+
+
+def record_identity_provider_operation_state(payload, vars_json):
+    operation = identity_provider_operation(payload)
+    if operation is None:
+        return
+    current = auth_reconciliation_state(vars_json["stage"])
+    expected = int(operation["expectedPreviousRevision"])
+    if int(current.get("desiredRevision") or 0) != expected:
+        raise RuntimeError("Identity-provider desired revision changed during reconciliation")
+    current["desiredRevision"] = int(operation["revision"])
+    current["tenantConnections"] = [
+        {key: value for key, value in connection.items() if key != "clientSecretVersionStage"}
+        for connection in vars_json["auth_tenant_connection_metadata"]
+    ]
+    run(
+        [
+            "aws",
+            "ssm",
+            "put-parameter",
+            "--overwrite",
+            "--type",
+            "String",
+            "--name",
+            f"/thinkwork/{vars_json['stage']}/auth/reconciliation/state",
+            "--value",
+            json.dumps(current, separators=(",", ":")),
+        ]
+    )
+
+
+def reconcile_native_auth_metadata(outputs_path, vars_json):
+    outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
+    previous = auth_reconciliation_state(vars_json["stage"])
+    payload, next_state = native_auth_reconciliation_payload(outputs, vars_json, previous)
+    if payload is None:
+        return {"status": "unchanged", "revision": previous.get("revision", 0)}
+    api_endpoint = str(outputs.get("api_endpoint", {}).get("value") or "").rstrip("/")
+    api_auth_secret = str(vars_json.get("api_auth_secret") or "")
+    if not api_endpoint or not api_auth_secret:
+        raise RuntimeError("Native auth reconciliation requires API endpoint and service auth")
+    request = urllib.request.Request(
+        f"{api_endpoint}/api/auth/providers/reconcile",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_auth_secret}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as error:
+        safe_body = error.read().decode("utf-8", errors="replace")[:1000]
+        raise RuntimeError(
+            f"Native auth metadata reconciliation failed with HTTP {error.code}: {safe_body}"
+        ) from error
+    run(
+        [
+            "aws",
+            "ssm",
+            "put-parameter",
+            "--overwrite",
+            "--type",
+            "String",
+            "--name",
+            f"/thinkwork/{vars_json['stage']}/auth/reconciliation/state",
+            "--value",
+            json.dumps(next_state, separators=(",", ":")),
+        ]
+    )
+    return {
+        "status": str(result.get("status") or "applied"),
+        "revision": int(result.get("revision") or payload["revision"]),
+        "manifestFingerprint": payload["manifestFingerprint"],
+    }
 
 
 def sync_static(outputs_path, static_files, vars_json, artifact_names=None):
@@ -4508,8 +5416,13 @@ def main():
 
     runner_secrets = secret_payload(payload)
     web_only = is_web_only_operation(payload, action)
+    identity_operation = identity_provider_operation(payload)
     static_files = {}
-    if action in {"deploy", "update", "web"} and not is_managed_app_operation(payload):
+    if (
+        action in {"deploy", "update", "web"}
+        and not is_managed_app_operation(payload)
+        and identity_operation is None
+    ):
         static_files = sync_release_artifacts(
             artifact_types={"static-site"} if web_only else None,
             artifact_names={"web"} if web_only else None,
@@ -4551,6 +5464,11 @@ def main():
         write_evidence("succeeded", vars_json, 0)
         return 0
 
+    if identity_operation is not None:
+        CONTROLLER_EVIDENCE["identityProvider"] = reconcile_identity_provider_resource(
+            payload, vars_json
+        )
+
     configure_cloudflare_provider_auth(vars_json["stage"])
     configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
@@ -4565,7 +5483,10 @@ def main():
         if selected.returncode != 0:
             run(["terraform", "workspace", "new", workspace, "-no-color"], cwd=TF)
     target_args = managed_app_terraform_target_args(payload)
-    if action == "destroy":
+    pre_app_schema = prepare_additive_schema_before_app(payload, vars_json)
+    if pre_app_schema is not None and pre_app_schema.returncode != 0:
+        result = pre_app_schema
+    elif action == "destroy":
         plan = subprocess.run(
             ["terraform", "plan", "-destroy", *target_args, "-out=tfplan", "-no-color"],
             cwd=TF,
@@ -4599,6 +5520,10 @@ def main():
 
     outputs_path = TF / "outputs.json"
     if result.returncode == 0 and action in {"deploy", "update"}:
+        if identity_operation is not None:
+            finalized = finalize_disabled_identity_provider(payload, vars_json)
+            if finalized is not None:
+                CONTROLLER_EVIDENCE["identityProvider"] = finalized
         write_outputs_after_apply(payload, vars_json, outputs_path)
         if is_managed_app_operation(payload):
             sync_twenty_thinkwork_app(
@@ -4608,7 +5533,21 @@ def main():
                 runner_secrets,
                 managed_app_artifacts,
             )
+        elif identity_operation is not None:
+            CONTROLLER_EVIDENCE["authReconciliation"] = reconcile_native_auth_metadata(
+                outputs_path, vars_json
+            )
+            promoted = promote_tenant_entra_pending_secret(payload, vars_json)
+            if promoted is not None:
+                CONTROLLER_EVIDENCE["identityProviderSecret"] = promoted
+            write_outputs_to_ssm(outputs_path, vars_json)
+            record_identity_provider_operation_state(payload, vars_json)
         else:
+            CONTROLLER_EVIDENCE["authReconciliation"] = reconcile_native_auth_metadata(
+                outputs_path, vars_json
+            )
+            # Destructive retirement migrations are permitted only after the
+            # deployed native routes have reconciled successfully.
             push_database_schema(outputs_path, vars_json)
             ensure_first_admin(outputs_path, vars_json, payload, runner_secrets)
             write_outputs_to_ssm(outputs_path, vars_json)

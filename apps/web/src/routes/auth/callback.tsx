@@ -1,50 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  consumePostAuthRedirect,
+  exchangeLegacyWorkosBridge,
   exchangeCodeForSession,
-  exchangeWorkosBridgeForSession,
   storeTokensInCognitoStorage,
-  getGoogleSignInUrl,
 } from "@/lib/auth";
 
 export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
   validateSearch: (search: Record<string, unknown>) => ({
     code: (search.code as string) || "",
-    workos_bridge: (search.workos_bridge as string) || "",
-    next: (search.next as string) || "",
+    state: (search.state as string) || "",
     error: (search.error as string) || "",
     error_description: (search.error_description as string) || "",
+    workos_bridge: (search.workos_bridge as string) || "",
   }),
 });
 
 export function AuthCallback() {
   const {
     code,
-    workos_bridge,
-    next,
+    state,
     error: oauthError,
     error_description,
+    workos_bridge,
   } = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
   const exchanged = useRef(false);
 
   useEffect(() => {
     if (oauthError) {
-      // PreSignUp trigger throws on first Google sign-in to link accounts.
-      // Cognito retries automatically, but the redirect carries the error.
-      // Tell user to try again — the link is now established.
-      if (
-        error_description?.includes("PreSignUp") ||
-        error_description?.includes("Provider linked")
-      ) {
-        setError(
-          "Account linking in progress. Please try signing in with Google again.",
-        );
-      } else {
-        setError(error_description || oauthError || "OAuth failed");
-      }
+      setError(error_description || oauthError || "OAuth failed");
       return;
     }
 
@@ -57,14 +43,13 @@ export function AuthCallback() {
     if (exchanged.current) return;
     exchanged.current = true;
 
-    const exchange = workos_bridge
-      ? exchangeWorkosBridgeForSession(workos_bridge)
-      : exchangeCodeForSession(code);
-
-    exchange
-      .then((tokens) => {
-        storeTokensInCognitoStorage(tokens, workos_bridge ? "workos" : "cognito");
-        const nextTarget = consumePostAuthRedirect(safeCallbackNext(next));
+    (workos_bridge
+      ? exchangeLegacyWorkosBridge(workos_bridge)
+      : exchangeCodeForSession(code, state)
+    )
+      .then((session) => {
+        storeTokensInCognitoStorage(session.tokens, session.clientId);
+        const nextTarget = session.next;
         // If opened as popup, notify parent and close
         if (window.opener) {
           window.opener.location.href = nextTarget;
@@ -77,25 +62,13 @@ export function AuthCallback() {
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");
       });
-  }, [code, error_description, next, oauthError, workos_bridge]);
+  }, [code, error_description, oauthError, state, workos_bridge]);
 
   if (error) {
-    const isLinking = error.includes("linking") || error.includes("try again");
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-background">
         <div className="text-center space-y-3">
           <p className="text-sm text-destructive">{error}</p>
-          {isLinking && (
-            <button
-              onClick={() => {
-                // Retry Google sign-in from the popup
-                window.location.href = getGoogleSignInUrl();
-              }}
-              className="text-sm font-medium underline underline-offset-2"
-            >
-              Try again
-            </button>
-          )}
           <a href="/sign-in" className="block text-sm underline">
             Back to sign in
           </a>
@@ -109,14 +82,4 @@ export function AuthCallback() {
       <p className="text-sm text-muted-foreground">Signing you in...</p>
     </div>
   );
-}
-
-function safeCallbackNext(value: string): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/new";
-  try {
-    const url = new URL(value, window.location.origin);
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return "/new";
-  }
 }

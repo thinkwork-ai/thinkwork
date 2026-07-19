@@ -3,17 +3,23 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
 const {
   mockAuthenticate,
+  mockAdmitCognitoTenant,
   mockSelectLimit,
   mockLoadTenantWebSearchConfig,
   mockRunWebSearch,
 } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
+  mockAdmitCognitoTenant: vi.fn(),
   mockSelectLimit: vi.fn(),
   mockLoadTenantWebSearchConfig: vi.fn(),
   mockRunWebSearch: vi.fn(),
 }));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
+vi.mock("../lib/auth-admission.js", () => ({
+  admitCognitoTenant: mockAdmitCognitoTenant,
+  AuthAdmissionError: class AuthAdmissionError extends Error {},
+}));
 
 vi.mock("../lib/db.js", () => ({
   db: {
@@ -29,7 +35,6 @@ vi.mock("../lib/db.js", () => ({
 
 vi.mock("@thinkwork/database-pg", () => ({
   schema: {
-    users: { email: "users.email" },
     agents: {
       id: "agents.id",
       tenant_id: "agents.tenant_id",
@@ -45,6 +50,7 @@ vi.mock("../lib/builtin-tools/web-search.js", () => ({
 }));
 
 import { handler } from "./mobile-tools";
+import { AuthAdmissionError } from "../lib/auth-admission.js";
 
 function event(
   path: string,
@@ -67,6 +73,7 @@ const PATH = "/api/mobile/tools/web-search";
 
 beforeEach(() => {
   mockAuthenticate.mockReset();
+  mockAdmitCognitoTenant.mockReset();
   mockSelectLimit.mockReset();
   mockLoadTenantWebSearchConfig.mockReset();
   mockRunWebSearch.mockReset();
@@ -77,16 +84,22 @@ beforeEach(() => {
     email: "eric@example.com",
     authType: "cognito",
     agentId: null,
+    route: { routeClientId: "route-1" },
   });
-  mockSelectLimit
-    .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-    .mockReturnValueOnce([
-      {
-        id: "ag1",
-        web_search: { enabled: true },
-        blocked_tools: [],
-      },
-    ]);
+  mockAdmitCognitoTenant.mockResolvedValue({
+    userId: "u1",
+    tenantId: "t1",
+    role: "member",
+    identityId: "identity-1",
+    route: { routeClientId: "route-1" },
+  });
+  mockSelectLimit.mockReturnValueOnce([
+    {
+      id: "ag1",
+      web_search: { enabled: true },
+      blocked_tools: [],
+    },
+  ]);
   mockLoadTenantWebSearchConfig.mockResolvedValue({
     provider: "exa",
     apiKey: "secret",
@@ -133,17 +146,42 @@ describe("mobile-tools handler", () => {
     expect(JSON.stringify(body)).not.toContain("secret");
   });
 
+  it("uses immutable Cognito identity admission and an explicit tenant selection", async () => {
+    const request = event(PATH, { agentId: "ag1", query: "OpenAI News" });
+    request.headers["x-tenant-id"] = "t1";
+    mockRunWebSearch.mockResolvedValue([]);
+
+    const res = await handler(request);
+
+    expect(res.statusCode).toBe(200);
+    expect(mockAdmitCognitoTenant).toHaveBeenCalledWith(
+      expect.objectContaining({ principalId: "p1", authType: "cognito" }),
+      "t1",
+    );
+  });
+
+  it("denies a valid email when the immutable Cognito identity is not admitted", async () => {
+    mockAdmitCognitoTenant.mockRejectedValue(
+      new AuthAdmissionError("identity_not_bound", "Identity is not bound"),
+    );
+
+    const res = await handler(
+      event(PATH, { agentId: "ag1", query: "OpenAI News" }),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(mockSelectLimit).not.toHaveBeenCalled();
+  });
+
   it("hides web_search when blocked for the agent", async () => {
     mockSelectLimit.mockReset();
-    mockSelectLimit
-      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-      .mockReturnValueOnce([
-        {
-          id: "ag1",
-          web_search: { enabled: true },
-          blocked_tools: ["web_search"],
-        },
-      ]);
+    mockSelectLimit.mockReturnValueOnce([
+      {
+        id: "ag1",
+        web_search: { enabled: true },
+        blocked_tools: ["web_search"],
+      },
+    ]);
 
     const res = await handler(
       event(PATH, { agentId: "ag1", query: "OpenAI News" }),

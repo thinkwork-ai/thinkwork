@@ -11,13 +11,11 @@ import {
   primeRuntimeConfig,
 } from "@thinkwork/runtime-config";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
+import type { CognitoJwtPayload } from "aws-jwt-verify/jwt-model";
+import type { CognitoRouteProvenance } from "./auth-admission.js";
 
 function userPoolId(): string {
   return getConfig("COGNITO_USER_POOL_ID", "");
-}
-
-function clientIds(): string[] {
-  return getConfig("COGNITO_APP_CLIENT_IDS", "").split(",").filter(Boolean);
 }
 
 /**
@@ -48,11 +46,8 @@ export interface AuthResult {
   email: string | null;
   /**
    * Whether the Cognito-verified ID token asserts `email_verified: true`.
-   * Gates the *permanent* sub↔user backfill on the email-fallback resolution
-   * path (resolve-auth-user.ts): resolving via email may read an existing row,
-   * but binding a Cognito sub to that row only happens for a verified email,
-   * so a recycled/unverified email can't permanently capture another user's
-   * row (and tenant). Always false for apikey/service callers.
+   * This is delivery/enrollment metadata only; identity and tenant admission
+   * never resolve by email. Always false for apikey/service callers.
    */
   emailVerified: boolean;
   /**
@@ -82,35 +77,78 @@ export interface AuthResult {
    * blast radius of the shared service key narrow.
    */
   agentId: string | null;
+  /** Raw token claim retained only as a non-authoritative routing hint. */
+  tenantClaimHint?: string | null;
+  /** Exact Cognito issuer validated by the verifier. */
+  cognitoIssuer?: string | null;
+  /** Dynamically admitted app-client/provider provenance. */
+  route?: CognitoRouteProvenance | null;
 }
 
 let verifier: ReturnType<typeof CognitoJwtVerifier.create> | null = null;
 let verifierConfigKey: string | null = null;
 
-async function getVerifier() {
+async function getVerifier(tokenUse: "id" | "access") {
   let poolId = userPoolId();
-  let ids = clientIds();
 
-  if (!poolId || ids.length === 0) {
+  if (!poolId) {
     await primeRuntimeConfig({ force: true });
     poolId = userPoolId();
-    ids = clientIds();
   }
 
-  if (!poolId || ids.length === 0) {
+  if (!poolId) {
     throw new Error("Cognito verifier config missing");
   }
 
-  const configKey = `${poolId}|${ids.join(",")}`;
+  const configKey = `${poolId}|${tokenUse}`;
   if (!verifier || verifierConfigKey !== configKey) {
     verifier = CognitoJwtVerifier.create({
       userPoolId: poolId,
-      tokenUse: "id",
-      clientId: ids,
+      tokenUse,
+      // Signature, issuer, expiry, and token_use are checked here. The token
+      // audience is admitted dynamically against auth_route_clients below.
+      clientId: null,
     });
     verifierConfigKey = configKey;
   }
   return verifier;
+}
+
+/**
+ * Verify Cognito token type and derive app-client provenance from the correct
+ * claim: `aud` for ID tokens, `client_id` for access tokens.
+ */
+export async function verifyCognitoApplicationToken(
+  token: string,
+  tokenUse: "id" | "access",
+): Promise<{
+  payload: CognitoJwtPayload;
+  route: CognitoRouteProvenance;
+}> {
+  const payload = await (await getVerifier(tokenUse)).verify(token);
+  const poolId = userPoolId();
+  const appClientId =
+    tokenUse === "id"
+      ? typeof payload.aud === "string"
+        ? payload.aud
+        : undefined
+      : typeof payload.client_id === "string"
+        ? payload.client_id
+        : undefined;
+  if (!poolId || !appClientId || typeof payload.iss !== "string") {
+    throw new Error(
+      `Cognito ${tokenUse} token is missing issuer or app-client provenance`,
+    );
+  }
+  return {
+    payload,
+    route: await (
+      await import("./auth-admission.js")
+    ).resolveCognitoRouteProvenance({
+      userPoolId: poolId,
+      appClientId,
+    }),
+  };
 }
 
 /**
@@ -136,16 +174,24 @@ export async function authenticate(
   // 1. Cognito JWT in the Authorization header.
   if (authHeader) {
     try {
-      const payload = await (await getVerifier()).verify(bearerToken);
+      const { payload, route } = await verifyCognitoApplicationToken(
+        bearerToken,
+        "id",
+      );
       return {
         principalId: payload.sub,
-        tenantId: (payload as any)["custom:tenant_id"] || null,
+        // A Cognito tenant attribute is never authorization. Admission sets
+        // tenant scope only after route, identity, policy, and membership agree.
+        tenantId: null,
+        tenantClaimHint: (payload as any)["custom:tenant_id"] || null,
         email: (payload as any).email || null,
         emailVerified:
           (payload as any).email_verified === true ||
           (payload as any).email_verified === "true",
         authType: "cognito",
         agentId: null,
+        cognitoIssuer: payload.iss,
+        route,
       };
     } catch (err) {
       console.warn(

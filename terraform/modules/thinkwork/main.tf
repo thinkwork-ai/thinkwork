@@ -736,30 +736,35 @@ module "cognito" {
   stage  = var.stage
   region = var.region
 
-  create_cognito            = var.create_cognito
-  existing_user_pool_id     = var.existing_user_pool_id
-  existing_user_pool_arn    = var.existing_user_pool_arn
-  existing_admin_client_id  = var.existing_admin_client_id
-  existing_mobile_client_id = var.existing_mobile_client_id
-  existing_identity_pool_id = var.existing_identity_pool_id
+  create_cognito              = var.create_cognito
+  existing_user_pool_id       = var.existing_user_pool_id
+  existing_user_pool_arn      = var.existing_user_pool_arn
+  existing_admin_client_id    = var.existing_admin_client_id
+  existing_mobile_client_id   = var.existing_mobile_client_id
+  existing_identity_pool_id   = var.existing_identity_pool_id
+  existing_auth_route_clients = var.existing_auth_route_clients
 
-  google_oauth_client_id     = var.google_oauth_client_id
-  google_oauth_client_secret = var.google_oauth_client_secret
-  oidc_identity_providers    = var.oidc_identity_providers
-  saml_identity_providers    = var.saml_identity_providers
-  pre_signup_lambda_zip      = var.pre_signup_lambda_zip
-  custom_auth_lambda_zip     = var.cognito_custom_auth_lambda_zip
-  # Remote custom auth is part of the pinned enterprise release bundle. Keep
-  # the shared artifact bucket inert for direct module consumers that have not
-  # opted into required release artifacts; local zip configuration remains an
-  # independent explicit opt-in below.
-  custom_auth_lambda_s3_bucket = var.require_lambda_artifacts ? var.lambda_artifact_bucket : ""
-  custom_auth_lambda_s3_key    = var.require_lambda_artifacts && var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-custom-auth.zip" : ""
-  api_auth_secret              = var.api_auth_secret
-  email_source_arn             = var.cognito_email_source_arn
-  from_email_address           = var.cognito_from_email_address
-  reply_to_email_address       = var.cognito_reply_to_email_address
-  invite_email_subject         = var.cognito_invite_email_subject
+  google_oauth_client_id                = var.google_oauth_client_id
+  google_oauth_client_secret            = var.google_oauth_client_secret
+  microsoft_oauth_client_id             = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret         = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant                = var.microsoft_oauth_tenant
+  tenant_entra_connections              = var.tenant_entra_connections
+  oidc_identity_providers               = var.oidc_identity_providers
+  saml_identity_providers               = var.saml_identity_providers
+  pre_signup_lambda_zip                 = var.pre_signup_lambda_zip
+  auth_retirement_phase                 = var.auth_retirement_phase
+  custom_auth_lambda_zip                = var.cognito_custom_auth_lambda_zip
+  custom_auth_lambda_s3_bucket          = var.require_lambda_artifacts ? var.lambda_artifact_bucket : ""
+  custom_auth_lambda_s3_key             = var.require_lambda_artifacts && var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-custom-auth.zip" : ""
+  api_auth_secret                       = var.api_auth_secret
+  pre_token_generation_lambda_s3_bucket = var.require_lambda_artifacts ? var.lambda_artifact_bucket : ""
+  pre_token_generation_lambda_s3_key    = var.require_lambda_artifacts && var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-pre-token-client-deny.zip" : ""
+  denied_app_client_ids                 = var.cognito_denied_app_client_ids
+  email_source_arn                      = var.cognito_email_source_arn
+  from_email_address                    = var.cognito_from_email_address
+  reply_to_email_address                = var.cognito_reply_to_email_address
+  invite_email_subject                  = var.cognito_invite_email_subject
   invite_email_message = (
     var.cognito_invite_email_message != ""
     ? var.cognito_invite_email_message
@@ -790,8 +795,12 @@ module "cognito" {
     local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}", "https://${local.legacy_end_user_app_domain}/auth/callback"] : []),
     local.customer_domain_web_enabled ? ["https://${var.customer_domain}", "https://${var.customer_domain}/auth/callback"] : [],
     local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : []),
-    ["http://localhost:5180", "http://localhost:5180/auth/callback"],
-    var.desktop_callback_urls
+    [
+      "http://localhost:5180",
+      "http://localhost:5180/auth/callback",
+      "http://127.0.0.1:5180",
+      "http://127.0.0.1:5180/auth/callback",
+    ]
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
@@ -799,10 +808,11 @@ module "cognito" {
     local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}"] : []),
     local.customer_domain_web_enabled ? ["https://${var.customer_domain}"] : [],
     local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}"] : []),
-    ["http://localhost:5180"],
-    var.desktop_callback_urls
+    ["http://localhost:5180", "http://127.0.0.1:5180"]
   ))
   desktop_callback_urls = var.desktop_callback_urls
+  cli_callback_urls     = var.cli_callback_urls
+  cli_logout_urls       = var.cli_logout_urls
   mobile_callback_urls  = var.mobile_callback_urls
   mobile_logout_urls    = var.mobile_logout_urls
 }
@@ -930,6 +940,7 @@ module "appsync" {
 
   stage               = var.stage
   region              = var.region
+  account_id          = var.account_id
   user_pool_id        = module.cognito.user_pool_id
   subscription_schema = local.subscription_schema
 }
@@ -1005,15 +1016,40 @@ resource "aws_secretsmanager_secret_version" "capability_signing_key" {
   secret_string = tls_private_key.capability_signing.private_key_pem
 }
 
+# AppSync subscription tickets use a separate key and domain from capability
+# envelopes. The authorizer receives only the public key; ticket issuance
+# resolves the private key by secret name at runtime.
+resource "tls_private_key" "subscription_ticket_signing" {
+  algorithm = "ED25519"
+}
+
+resource "aws_secretsmanager_secret" "subscription_ticket_signing_key" {
+  name        = "thinkwork/${var.stage}/subscription-ticket-signing-key"
+  description = "Ed25519 private key signing one-use AppSync subscription tickets."
+}
+
+resource "aws_secretsmanager_secret_version" "subscription_ticket_signing_key" {
+  secret_id     = aws_secretsmanager_secret.subscription_ticket_signing_key.id
+  secret_string = tls_private_key.subscription_ticket_signing.private_key_pem
+}
+
 module "api" {
   source = "../app/lambda-api"
 
   capability_signing_public_key         = tls_private_key.capability_signing.public_key_pem
   capability_signing_private_key_secret = aws_secretsmanager_secret.capability_signing_key.name
+  subscription_ticket_signing_key_id    = "${var.stage}-subscription-v1"
+  subscription_ticket_public_keys = jsonencode([{
+    keyId     = "${var.stage}-subscription-v1"
+    publicKey = tls_private_key.subscription_ticket_signing.public_key_pem
+  }])
+  subscription_ticket_private_key_secret = aws_secretsmanager_secret.subscription_ticket_signing_key.name
 
-  stage      = var.stage
-  account_id = var.account_id
-  region     = var.region
+  stage                            = var.stage
+  account_id                       = var.account_id
+  region                           = var.region
+  auth_retirement_phase            = var.auth_retirement_phase
+  auth_migration_recovery_deadline = var.auth_migration_recovery_deadline
 
   lambda_artifact_bucket   = var.lambda_artifact_bucket
   lambda_artifact_prefix   = var.lambda_artifact_prefix
@@ -1116,8 +1152,8 @@ module "api" {
   mobile_client_id    = module.cognito.mobile_client_id
   cognito_auth_domain = module.cognito.auth_domain
 
+  appsync_api_id  = module.appsync.graphql_api_id
   appsync_api_url = module.appsync.graphql_api_url
-  appsync_api_key = module.appsync.graphql_api_key
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 

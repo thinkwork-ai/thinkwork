@@ -1,11 +1,9 @@
 import { and, desc, eq, gt } from "drizzle-orm";
-import {
-  authProviderResources,
-  workosAuthSessions,
-} from "@thinkwork/database-pg/schema";
+import { authProviderResources } from "@thinkwork/database-pg/schema";
 import { authenticate, type AuthResult } from "./cognito-auth.js";
 import { emitAuditEvent } from "./compliance/emit.js";
 import { db as defaultDb } from "./db.js";
+import { legacyWorkosAuthSessions as workosAuthSessions } from "./legacy-workos-schema.js";
 import { createSecretsManagerPluginSecrets } from "./plugins/secrets.js";
 
 type DbLike = typeof defaultDb;
@@ -276,7 +274,14 @@ async function findActiveWorkosSession(
     )
     .orderBy(desc(workosAuthSessions.created_at))
     .limit(1);
-  return row ?? null;
+  // Native provider records make secret references nullable. A coexistence
+  // WorkOS session without its legacy secret reference is not usable rollback
+  // evidence, so fail closed instead of attempting a provider call.
+  if (!row?.clientSecretRef?.trim()) return null;
+  return {
+    ...row,
+    clientSecretRef: row.clientSecretRef,
+  };
 }
 
 async function revokeWorkosSession(args: {

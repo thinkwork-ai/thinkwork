@@ -4,7 +4,8 @@ export interface ThinkworkConfig {
   apiBaseUrl: string;
   graphqlUrl: string;
   graphqlWsUrl?: string;
-  graphqlApiKey?: string;
+  /** Explicit selected tenant for realtime ticket admission. */
+  tenantId?: string;
   cognito: {
     userPoolId: string;
     userPoolClientId: string;

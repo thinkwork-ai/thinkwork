@@ -79,7 +79,8 @@ function extensionBaseUrl(): string | null {
     return null;
   }
   const port =
-    envValue("PARAMETERS_SECRETS_EXTENSION_HTTP_PORT") ?? String(DEFAULT_EXTENSION_PORT);
+    envValue("PARAMETERS_SECRETS_EXTENSION_HTTP_PORT") ??
+    String(DEFAULT_EXTENSION_PORT);
   return `http://localhost:${port}`;
 }
 
@@ -87,11 +88,15 @@ async function extensionGet(path: string): Promise<unknown> {
   const base = extensionBaseUrl();
   if (!base) throw new Error("parameters-and-secrets extension not available");
   const response = await fetch(`${base}${path}`, {
-    headers: { "X-Aws-Parameters-Secrets-Token": process.env.AWS_SESSION_TOKEN ?? "" },
+    headers: {
+      "X-Aws-Parameters-Secrets-Token": process.env.AWS_SESSION_TOKEN ?? "",
+    },
     signal: AbortSignal.timeout(EXTENSION_TIMEOUT_MS),
   });
   if (!response.ok) {
-    throw new Error(`extension responded ${response.status}: ${await response.text()}`);
+    throw new Error(
+      `extension responded ${response.status}: ${await response.text()}`,
+    );
   }
   return response.json();
 }
@@ -104,7 +109,9 @@ function loadSsmModule() {
   return (ssmModule ??= import("@aws-sdk/client-ssm"));
 }
 
-let secretsModule: Promise<typeof import("@aws-sdk/client-secrets-manager")> | null = null;
+let secretsModule: Promise<
+  typeof import("@aws-sdk/client-secrets-manager")
+> | null = null;
 function loadSecretsModule() {
   return (secretsModule ??= import("@aws-sdk/client-secrets-manager"));
 }
@@ -115,7 +122,9 @@ function isParameterNotFound(error: unknown): boolean {
   return name === "ParameterNotFound" || message.includes("ParameterNotFound");
 }
 
-async function fetchParameterValue(parameterName: string): Promise<string | null> {
+async function fetchParameterValue(
+  parameterName: string,
+): Promise<string | null> {
   if (extensionBaseUrl()) {
     try {
       const payload = (await extensionGet(
@@ -172,7 +181,9 @@ async function loadDocument(): Promise<void> {
     // treats "" as unset (see envValue), so the document layer must too —
     // otherwise `getConfig("X") ?? fallback` and 2-arg fallbacks would pin
     // "" instead of falling through.
-    state.doc = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v !== ""));
+    state.doc = Object.fromEntries(
+      Object.entries(parsed).filter(([, v]) => v !== ""),
+    );
     state.loadedAt = Date.now();
     state.lastLoadFailed = false;
   } catch (error) {
@@ -197,7 +208,9 @@ function isStale(): boolean {
   // expires after NEGATIVE_TTL_MS — 15s — instead of the full TTL, so a
   // boot-time outage doesn't pin env/defaults for 5 minutes. Clamped to
   // ttlMs so tests running with tiny TTLs stay immediately stale.
-  const ttl = state.lastLoadFailed ? Math.min(NEGATIVE_TTL_MS, state.ttlMs) : state.ttlMs;
+  const ttl = state.lastLoadFailed
+    ? Math.min(NEGATIVE_TTL_MS, state.ttlMs)
+    : state.ttlMs;
   return Date.now() - state.loadedAt >= ttl;
 }
 
@@ -271,9 +284,12 @@ async function fetchSecretValue(secretId: string): Promise<string> {
       // paths before surfacing an error to the caller.
     }
   }
-  const { SecretsManagerClient, GetSecretValueCommand } = await loadSecretsModule();
+  const { SecretsManagerClient, GetSecretValueCommand } =
+    await loadSecretsModule();
   const client = new SecretsManagerClient({});
-  const result = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
+  const result = await client.send(
+    new GetSecretValueCommand({ SecretId: secretId }),
+  );
   if (result.SecretString === undefined) {
     throw new Error(`secret ${secretId} has no SecretString`);
   }
@@ -341,9 +357,6 @@ async function prefetchPlatformSecrets(): Promise<void> {
   if (!envValue("THINKWORK_API_SECRET") && !envValue("API_AUTH_SECRET")) {
     wanted.push("api-auth");
   }
-  if (!envValue("APPSYNC_API_KEY")) {
-    wanted.push("appsync-api-key");
-  }
   await Promise.all(
     wanted.map(async (suffix) => {
       const name = stageSecretName(suffix);
@@ -353,7 +366,10 @@ async function prefetchPlatformSecrets(): Promise<void> {
       } catch (error) {
         if (!warnedSecretPrefetch) {
           warnedSecretPrefetch = true;
-          console.warn(`[runtime-config] failed to prefetch secret ${name}`, error);
+          console.warn(
+            `[runtime-config] failed to prefetch secret ${name}`,
+            error,
+          );
         }
       }
     }),
@@ -378,11 +394,6 @@ export function getApiAuthSecret(): string {
   );
 }
 
-/** AppSync API key for subscription-notify fan-out. Same contract as getApiAuthSecret. */
-export function getAppsyncApiKey(): string {
-  return envValue("APPSYNC_API_KEY") ?? cachedSecret("appsync-api-key") ?? "";
-}
-
 /**
  * Derive an api handler function name from the per-stage naming pattern.
  * Anything shaped `thinkwork-<stage>-api-<name>` is computed, never stored
@@ -391,7 +402,9 @@ export function getAppsyncApiKey(): string {
 export function deriveFunctionName(shortName: string): string {
   const stage = envValue("STAGE") ?? getConfig("STAGE");
   if (!stage) {
-    throw new Error(`[runtime-config] cannot derive function name for ${shortName}: STAGE unset`);
+    throw new Error(
+      `[runtime-config] cannot derive function name for ${shortName}: STAGE unset`,
+    );
   }
   return `thinkwork-${stage}-api-${shortName}`;
 }

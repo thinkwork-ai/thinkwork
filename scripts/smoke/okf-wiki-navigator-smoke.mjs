@@ -53,17 +53,8 @@ const graphqlUrl = first(
   env.GRAPHQL_HTTP_URL,
   env.API_GRAPHQL_URL,
 );
-const graphqlApiKey = first(
-  env.THINKWORK_GRAPHQL_API_KEY,
-  env.VITE_GRAPHQL_API_KEY,
-  env.APPSYNC_API_KEY,
-  env.GRAPHQL_API_KEY,
-);
-const contextBearer = first(
-  env.API_AUTH_SECRET,
-  env.THINKWORK_API_SECRET,
-  graphqlApiKey,
-);
+const apiAuthSecret = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
+const contextBearer = apiAuthSecret;
 const contextEngineUrl = deriveContextEngineUrl(env, graphqlUrl);
 const tenantId = first(env.SMOKE_TENANT_ID, env.THINKWORK_TENANT_ID);
 const tenantSlug = first(env.SMOKE_TENANT_SLUG, env.THINKWORK_TENANT_SLUG);
@@ -450,10 +441,10 @@ async function callContextEngineTool(name, query) {
 }
 
 async function callKnowledgeGraphSearch(query) {
-  if (!graphqlUrl || !graphqlApiKey) {
+  if (!graphqlUrl || !apiAuthSecret) {
     return {
       status: "skipped",
-      reason: "missing_graphql_url_or_api_key",
+      reason: "missing_graphql_url_or_service_auth",
       hitCount: 0,
     };
   }
@@ -638,7 +629,7 @@ async function gql(query, variables) {
   const body = await postJson(
     graphqlUrl,
     { query, variables },
-    { "x-api-key": graphqlApiKey },
+    { Authorization: `Bearer ${apiAuthSecret}` },
   );
   if (body.errors?.length) {
     throw new Error(`GraphQL failed: ${JSON.stringify(body.errors)}`);
@@ -806,7 +797,7 @@ function dryRunReport() {
         "SMOKE_AGENT_ID",
         "SMOKE_USER_ID",
         "VITE_GRAPHQL_HTTP_URL or THINKWORK_GRAPHQL_URL",
-        "VITE_GRAPHQL_API_KEY or THINKWORK_GRAPHQL_API_KEY",
+        "API_AUTH_SECRET or THINKWORK_API_SECRET",
         "SMOKE_OKF_MATERIALIZE_LAMBDA",
         "SMOKE_OKF_EFS_REFRESH_LAMBDA",
         "AWS CLI credentials for lambda invoke",
@@ -853,8 +844,8 @@ function missingLiveEnv() {
   if (!userId) missing.push("SMOKE_USER_ID");
   if (!graphqlUrl)
     missing.push("VITE_GRAPHQL_HTTP_URL or THINKWORK_GRAPHQL_URL");
-  if (!graphqlApiKey) {
-    missing.push("VITE_GRAPHQL_API_KEY or THINKWORK_GRAPHQL_API_KEY");
+  if (!apiAuthSecret) {
+    missing.push("API_AUTH_SECRET or THINKWORK_API_SECRET");
   }
   if (!materializeLambda) missing.push("SMOKE_OKF_MATERIALIZE_LAMBDA");
   if (!efsRefreshLambda) missing.push("SMOKE_OKF_EFS_REFRESH_LAMBDA");

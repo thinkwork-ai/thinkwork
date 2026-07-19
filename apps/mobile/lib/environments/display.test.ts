@@ -28,7 +28,6 @@ function platformConfig(): MobilePlatformConfig {
     graphqlHttpUrl: "",
     graphqlUrl: "",
     graphqlWsUrl: "",
-    graphqlApiKey: "",
     cognitoUserPoolId: "",
     cognitoClientId: "",
     cognitoDomain: "",

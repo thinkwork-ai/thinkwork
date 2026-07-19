@@ -3,6 +3,7 @@ import {
   WORKOS_BRIDGE_CHALLENGE_METADATA_KEY,
   exchangeWorkosBridgeForCognitoTokens,
   handleCognitoCustomAuthChallenge,
+  resolveBridgeUser,
   signWorkosCognitoChallenge,
   verifyWorkosCognitoChallenge,
   type CognitoCustomAuthEvent,
@@ -39,7 +40,7 @@ describe("exchangeWorkosBridgeForCognitoTokens", () => {
     });
     expect(deps.resolveBridgeUser).toHaveBeenCalledWith(bridge);
     expect(deps.startCognitoCustomAuth).toHaveBeenCalledWith({
-      username: "eric@homecareintel.com",
+      username: "cognito-user-123",
       signedChallenge: expect.any(String),
       answer: "answer-token",
     });
@@ -109,6 +110,8 @@ describe("exchangeWorkosBridgeForCognitoTokens", () => {
         tenantId: "tenant-other",
         email: "eric@homecareintel.com",
         name: "Eric",
+        cognitoPrincipalId: "cognito-sub-123",
+        cognitoUsername: "cognito-user-123",
         hasActiveTenantMembership: true,
       },
     });
@@ -131,13 +134,15 @@ describe("exchangeWorkosBridgeForCognitoTokens", () => {
     });
   });
 
-  it("still mints Cognito tokens for mapped users without active tenant membership so the app can render no-workspace", async () => {
+  it("rejects mapped users without active membership in the bridge tenant", async () => {
     const deps = depsForBridge({
       user: {
         id: "user-123",
         tenantId: "tenant-123",
         email: "eric@homecareintel.com",
         name: "Eric",
+        cognitoPrincipalId: "cognito-sub-123",
+        cognitoUsername: "cognito-user-123",
         hasActiveTenantMembership: false,
       },
     });
@@ -147,19 +152,65 @@ describe("exchangeWorkosBridgeForCognitoTokens", () => {
         bridgeCode: "browser-bridge-code",
         deps,
       }),
-    ).resolves.toMatchObject({
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(deps.startCognitoCustomAuth).not.toHaveBeenCalled();
+  });
+
+  it("rejects Cognito tokens minted for a different subject", async () => {
+    const deps = depsForBridge();
+    vi.mocked(deps.startCognitoCustomAuth).mockResolvedValue({
+      id_token: jwt({ sub: "wrong-sub", exp: 1781870400 }),
       access_token: "access-token",
       refresh_token: "refresh-token",
     });
-    expect(deps.emitSignInSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: "tenant-123",
-        userId: "user-123",
-        workosUserId: "workos-user-123",
-        cognitoSub: "cognito-sub-123",
-        hasActiveTenantMembership: false,
+
+    await expect(
+      exchangeWorkosBridgeForCognitoTokens({
+        bridgeCode: "browser-bridge-code",
+        deps,
       }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(deps.recordWorkosSession).not.toHaveBeenCalled();
+    expect(deps.emitSignInFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "cognito_subject_mismatch" }),
     );
+  });
+});
+
+describe("resolveBridgeUser", () => {
+  const binding = {
+    id: "user-123",
+    tenantId: "tenant-123",
+    email: "old-address@example.com",
+    name: "Eric",
+    cognitoPrincipalId: "cognito-sub-123",
+    cognitoUsername: "cognito-user-123",
+    hasActiveTenantMembership: true,
+  };
+
+  it("resolves one immutable WorkOS binding even when email and the user's home tenant differ", async () => {
+    const repository = {
+      loadIdentityBindings: vi.fn(async () => [binding, { ...binding }]),
+    };
+
+    await expect(resolveBridgeUser(bridge, repository)).resolves.toEqual(
+      binding,
+    );
+    expect(repository.loadIdentityBindings).toHaveBeenCalledWith(bridge);
+  });
+
+  it("fails closed for zero or ambiguous WorkOS subject bindings", async () => {
+    await expect(
+      resolveBridgeUser(bridge, { loadIdentityBindings: async () => [] }),
+    ).resolves.toBeNull();
+    await expect(
+      resolveBridgeUser(bridge, {
+        loadIdentityBindings: async () => [
+          binding,
+          { ...binding, id: "other-user", cognitoPrincipalId: "other-sub" },
+        ],
+      }),
+    ).resolves.toBeNull();
   });
 });
 
@@ -222,12 +273,15 @@ describe("Cognito custom auth challenge handler", () => {
 
   it("verifies the custom answer without exposing the answer in public parameters", () => {
     const signed = signedChallenge("answer-token");
-    const event = customAuthEvent("VerifyAuthChallengeResponse_Authentication", {
-      privateChallengeParameters: {
-        [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signed,
+    const event = customAuthEvent(
+      "VerifyAuthChallengeResponse_Authentication",
+      {
+        privateChallengeParameters: {
+          [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signed,
+        },
+        challengeAnswer: "answer-token",
       },
-      challengeAnswer: "answer-token",
-    });
+    );
 
     const result = handleCognitoCustomAuthChallenge(event, "api-secret");
 
@@ -236,13 +290,16 @@ describe("Cognito custom auth challenge handler", () => {
 
   it("verifies the custom answer from respond-to-challenge client metadata when private params are empty", () => {
     const signed = signedChallenge("answer-token");
-    const event = customAuthEvent("VerifyAuthChallengeResponse_Authentication", {
-      privateChallengeParameters: {},
-      clientMetadata: {
-        [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signed,
+    const event = customAuthEvent(
+      "VerifyAuthChallengeResponse_Authentication",
+      {
+        privateChallengeParameters: {},
+        clientMetadata: {
+          [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signed,
+        },
+        challengeAnswer: "answer-token",
       },
-      challengeAnswer: "answer-token",
-    });
+    );
 
     const result = handleCognitoCustomAuthChallenge(event, "api-secret");
 
@@ -251,12 +308,15 @@ describe("Cognito custom auth challenge handler", () => {
 
   it("rejects wrong answers", () => {
     const signed = signedChallenge("answer-token");
-    const event = customAuthEvent("VerifyAuthChallengeResponse_Authentication", {
-      privateChallengeParameters: {
-        [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signed,
+    const event = customAuthEvent(
+      "VerifyAuthChallengeResponse_Authentication",
+      {
+        privateChallengeParameters: {
+          [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signed,
+        },
+        challengeAnswer: "wrong-token",
       },
-      challengeAnswer: "wrong-token",
-    });
+    );
 
     const result = handleCognitoCustomAuthChallenge(event, "api-secret");
 
@@ -264,16 +324,20 @@ describe("Cognito custom auth challenge handler", () => {
   });
 });
 
-function depsForBridge(overrides: {
-  bridge?: WorkosBridgeRecord | null;
-  user?: {
-    id: string;
-    tenantId: string;
-    email: string;
-    name: string | null;
-    hasActiveTenantMembership: boolean;
-  } | null;
-} = {}): WorkosCognitoBridgeDeps {
+function depsForBridge(
+  overrides: {
+    bridge?: WorkosBridgeRecord | null;
+    user?: {
+      id: string;
+      tenantId: string;
+      email: string;
+      name: string | null;
+      cognitoPrincipalId: string;
+      cognitoUsername: string;
+      hasActiveTenantMembership: boolean;
+    } | null;
+  } = {},
+): WorkosCognitoBridgeDeps {
   return {
     consumePendingBridge: vi.fn(async () =>
       Object.prototype.hasOwnProperty.call(overrides, "bridge")
@@ -288,6 +352,8 @@ function depsForBridge(overrides: {
             tenantId: "tenant-123",
             email: "eric@homecareintel.com",
             name: "Eric",
+            cognitoPrincipalId: "cognito-sub-123",
+            cognitoUsername: "cognito-user-123",
             hasActiveTenantMembership: true,
           },
     ),

@@ -53,18 +53,16 @@ describe("mobile platform config", () => {
   });
 
   it("prefers an active environment over legacy profile and build-time env", async () => {
-    seedEnvConfig("env-key");
+    seedEnvConfig();
     await importDeploymentProfile(JSON.stringify(baseProfile()));
     await addOrUpdateEnvironment({
       host: "environment.thinkwork.ai",
       config: environmentConfig({
-        graphqlApiKey: "environment-key",
         cognitoClientId: "environment-client",
       }),
     });
 
     expect(getPlatformConfig()).toMatchObject({
-      graphqlApiKey: "environment-key",
       cognitoClientId: "environment-client",
       deployment: {
         source: "environment",
@@ -73,36 +71,22 @@ describe("mobile platform config", () => {
     });
   });
 
-  it("prefers profile GraphQL API key over build-time env", async () => {
-    seedEnvConfig("env-key");
+  it("uses the active deployment profile when no environment is selected", async () => {
+    seedEnvConfig();
     await importDeploymentProfile(JSON.stringify(baseProfile()));
 
     expect(getPlatformConfig()).toMatchObject({
-      graphqlApiKey: "profile-key",
-      cognitoClientId: "profile-client",
-      deployment: { source: "profile" },
-    });
-  });
-
-  it("falls back to build-time GraphQL API key when the active profile has none", async () => {
-    seedEnvConfig("env-key");
-    const { graphqlApiKey: _graphqlApiKey, ...profile } = baseProfile();
-    await importDeploymentProfile(JSON.stringify(profile));
-
-    expect(getPlatformConfig()).toMatchObject({
-      graphqlApiKey: "env-key",
       cognitoClientId: "profile-client",
       deployment: { source: "profile" },
     });
   });
 
   it("uses build-time env when no environment or profile is active", async () => {
-    seedEnvConfig("env-key");
+    seedEnvConfig();
 
     await hydratePlatformConfig();
 
     expect(getPlatformConfig()).toMatchObject({
-      graphqlApiKey: "env-key",
       cognitoClientId: "env-client",
       deployment: { source: "env" },
     });
@@ -135,15 +119,15 @@ describe("mobile platform config", () => {
   });
 });
 
-function seedEnvConfig(graphqlApiKey: string) {
+function seedEnvConfig() {
   process.env.EXPO_PUBLIC_STAGE = "env";
   process.env.EXPO_PUBLIC_API_URL = "https://env-api.example.com";
   process.env.EXPO_PUBLIC_GRAPHQL_HTTP_URL =
     "https://env-api.example.com/graphql";
-  process.env.EXPO_PUBLIC_GRAPHQL_URL = "https://env-appsync.example.com/graphql";
+  process.env.EXPO_PUBLIC_GRAPHQL_URL =
+    "https://env-appsync.example.com/graphql";
   process.env.EXPO_PUBLIC_GRAPHQL_WS_URL =
     "wss://env-appsync.example.com/graphql";
-  process.env.EXPO_PUBLIC_GRAPHQL_API_KEY = graphqlApiKey;
   process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID = "us-east-1_env";
   process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID = "env-client";
   process.env.EXPO_PUBLIC_COGNITO_DOMAIN = "env-auth.example.com";
@@ -157,7 +141,6 @@ function environmentConfig(
     graphqlHttpUrl: "https://environment-api.example.com/graphql",
     graphqlUrl: "https://environment-appsync.example.com/graphql",
     graphqlWsUrl: "wss://environment-appsync.example.com/graphql",
-    graphqlApiKey: "environment-key",
     cognitoDomain: "environment-auth.example.com",
     cognitoUserPoolId: "us-east-1_environment",
     cognitoClientId: "environment-client",
@@ -181,7 +164,6 @@ function baseProfile(): DeploymentProfile {
     graphqlHttpUrl: "https://profile-api.example.com/graphql",
     appsyncHttpUrl: "https://profile-appsync.example.com/graphql",
     appsyncWsUrl: "wss://profile-appsync.example.com/graphql",
-    graphqlApiKey: "profile-key",
     cognitoDomain: "profile-auth.example.com",
     cognitoUserPoolId: "us-east-1_profile",
     cognitoClientId: "profile-client",

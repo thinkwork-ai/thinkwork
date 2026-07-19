@@ -13,6 +13,30 @@ variable "region" {
   type        = string
 }
 
+variable "auth_retirement_phase" {
+  description = "Native-auth migration phase. Fresh deployments default to retired; WorkOS callback/bridge routes exist only for explicitly configured upgrade rollback windows."
+  type        = string
+  default     = "retired"
+
+  validation {
+    condition     = contains(["coexistence", "cutover", "retired"], var.auth_retirement_phase)
+    error_message = "auth_retirement_phase must be coexistence, cutover, or retired."
+  }
+}
+
+variable "auth_migration_recovery_deadline" {
+  description = "RFC3339 deadline for completing legacy-session identity migration. Required while auth_retirement_phase is coexistence."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = trimspace(var.auth_migration_recovery_deadline) == "" || (
+      can(timecmp(var.auth_migration_recovery_deadline, var.auth_migration_recovery_deadline))
+    )
+    error_message = "auth_migration_recovery_deadline must be empty or an RFC3339 timestamp."
+  }
+}
+
 variable "lambda_artifact_bucket" {
   description = "S3 bucket containing Lambda deployment artifacts"
   type        = string
@@ -135,10 +159,9 @@ variable "appsync_api_url" {
   type        = string
 }
 
-variable "appsync_api_key" {
-  description = "AppSync API key"
+variable "appsync_api_id" {
+  description = "AppSync subscriptions API ID used as the subscription-ticket audience"
   type        = string
-  sensitive   = true
 }
 
 variable "kb_service_role_arn" {
@@ -842,6 +865,24 @@ variable "capability_signing_public_key" {
 
 variable "capability_signing_private_key_secret" {
   description = "Secrets Manager name holding the Ed25519 private signing key. Empty disables signing (grants fail loudly with signing_unavailable)."
+  type        = string
+  default     = ""
+}
+
+variable "subscription_ticket_signing_key_id" {
+  description = "Active Ed25519 subscription-ticket signing key ID."
+  type        = string
+  default     = ""
+}
+
+variable "subscription_ticket_public_keys" {
+  description = "JSON verifier keyring for AppSync subscription tickets; contains public material only."
+  type        = string
+  default     = "[]"
+}
+
+variable "subscription_ticket_private_key_secret" {
+  description = "Secrets Manager name holding the isolated subscription-ticket Ed25519 private key."
   type        = string
   default     = ""
 }

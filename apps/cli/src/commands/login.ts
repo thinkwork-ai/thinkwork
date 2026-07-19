@@ -8,7 +8,7 @@
  *
  *   With --stage <s>
  *     Cognito OAuth2 authorization-code flow over a local loopback listener
- *     (default port 42010 — registered in the admin client's callback list).
+ *     using a provider-specific CLI route and S256 PKCE.
  *     After sign-in we exchange the code for id/refresh tokens, call
  *     bootstrapUser to guarantee the DB row + tenant exist, and cache the
  *     session + default tenant in ~/.thinkwork/config.json under
@@ -43,6 +43,7 @@ import {
   CLI_LOOPBACK_PORT,
 } from "../cognito-oauth.js";
 import { getApiEndpoint, listDeployedStages } from "../aws-discovery.js";
+import { fetchCliAuthOptions, type CliAuthOption } from "../auth-options.js";
 import { isCancellation, isInteractive } from "../lib/interactive.js";
 import {
   checkEnterpriseDeployReadiness,
@@ -447,6 +448,8 @@ async function doCognitoLogin(opts: {
   region: string;
   port: number;
   noBrowser: boolean;
+  provider?: string;
+  authHost?: string;
 }): Promise<void> {
   printHeader("login", opts.stage);
 
@@ -458,14 +461,41 @@ async function doCognitoLogin(opts: {
     process.exit(1);
   }
 
-  console.log(`  User pool:     ${cognito.userPoolId}`);
-  console.log(`  Client:        ${cognito.clientId}`);
+  const apiBaseUrl = getApiEndpoint(opts.stage, opts.region);
+  if (!apiBaseUrl) {
+    printError(
+      `Could not discover the API endpoint for stage "${opts.stage}".`,
+    );
+    process.exit(1);
+  }
+
+  let authOption: CliAuthOption;
+  try {
+    const options = await fetchCliAuthOptions({
+      apiBaseUrl,
+      host: opts.authHost,
+      fallbackClientId: cognito.clientId,
+    });
+    authOption = await selectCliAuthOption(options, opts.provider);
+  } catch (err) {
+    printError(
+      `Could not select a Cognito login route: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
+  const routeCognito = { ...cognito, clientId: authOption.clientId };
+
+  console.log(`  User pool:     ${routeCognito.userPoolId}`);
+  console.log(`  Sign-in:       ${authOption.label}`);
+  console.log(`  Client:        ${routeCognito.clientId}`);
   console.log(`  Hosted UI:     ${cognito.domainUrl}`);
   console.log(`  Callback port: ${opts.port}`);
 
   try {
     const tokens = await loginWithCognito({
-      cognito,
+      cognito: routeCognito,
+      identityProvider: authOption.identityProvider,
+      prompt: authOption.prompt,
       port: opts.port,
       openBrowser: !opts.noBrowser,
     });
@@ -483,10 +513,10 @@ async function doCognitoLogin(opts: {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt,
-      userPoolId: cognito.userPoolId,
-      userPoolClientId: cognito.clientId,
-      cognitoDomain: cognito.domain,
-      region: cognito.region,
+      userPoolId: routeCognito.userPoolId,
+      userPoolClientId: routeCognito.clientId,
+      cognitoDomain: routeCognito.domain,
+      region: routeCognito.region,
       principalId: claims.sub,
       email: claims.email,
       tenantId: bootstrap?.tenantId,
@@ -523,6 +553,39 @@ async function doCognitoLogin(opts: {
     );
     process.exit(1);
   }
+}
+
+async function selectCliAuthOption(
+  options: CliAuthOption[],
+  requestedKey?: string,
+): Promise<CliAuthOption> {
+  if (options.length === 0) {
+    throw new Error("The deployment published no valid CLI login routes.");
+  }
+  if (requestedKey) {
+    const selected = options.find((option) => option.key === requestedKey);
+    if (!selected) {
+      throw new Error(
+        `Unknown --provider "${requestedKey}". Available keys: ${options.map((option) => option.key).join(", ")}.`,
+      );
+    }
+    return selected;
+  }
+  if (options.length === 1) return options[0];
+  if (!isInteractive()) {
+    throw new Error(
+      `Multiple routes are available; pass --provider <key>. Available keys: ${options.map((option) => option.key).join(", ")}.`,
+    );
+  }
+  return select({
+    message: "Sign in with",
+    choices: options.map((option) => ({
+      name: option.label,
+      value: option,
+      description: option.key,
+    })),
+    loop: false,
+  });
 }
 
 async function doApiKeyLogin(opts: {
@@ -604,6 +667,14 @@ export function registerLoginCommand(program: Command): void {
       "--no-browser",
       "Don't attempt to open the browser automatically — print the URL instead.",
     )
+    .option(
+      "--provider <key>",
+      "Select a published Cognito route without prompting (for example local, google, or microsoft).",
+    )
+    .option(
+      "--auth-host <hostname>",
+      "Resolve tenant-specific login policy for this verified hostname.",
+    )
     .addHelpText(
       "after",
       `
@@ -611,8 +682,11 @@ Examples:
   # Configure AWS credentials (profile picker) — used before deploy/destroy/list.
   $ thinkwork login
 
-  # Sign in to a deployed stack with Cognito (opens your browser, supports Google SSO).
+  # Sign in with local Cognito, Google, Microsoft, or tenant Entra.
   $ thinkwork login --stage dev
+
+  # Select a route without the interactive provider picker.
+  $ thinkwork login --stage dev --provider microsoft
 
   # Non-interactive CI login against prod using the api_auth_secret.
   $ thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant acme
@@ -629,10 +703,9 @@ How the session is stored:
   resolve auth from this file; Cognito tokens are refreshed transparently.
 
 Registered callback URL:
-  The Cognito admin client must list \`http://127.0.0.1:${CLI_LOOPBACK_PORT}/callback\` in its
-  callback URLs. The default terraform module already does — if you deployed
-  before that default existed, run \`terraform apply\` in the foundation tier
-  to pick it up. Or use \`--api-key\` to skip the browser entirely.
+  Every published Cognito CLI route client must list
+  \`http://127.0.0.1:${CLI_LOOPBACK_PORT}/callback\`. The default terraform module
+  provisions this callback for local, Google, Microsoft, and tenant Entra.
 `,
     )
     .action(
@@ -646,6 +719,8 @@ Registered callback URL:
         tenant?: string;
         port: string;
         browser: boolean; // commander exposes --no-browser as `browser: false`
+        provider?: string;
+        authHost?: string;
       }) => {
         // Stack-login branch.
         if (opts.stage) {
@@ -673,6 +748,8 @@ Registered callback URL:
             region: opts.region,
             port,
             noBrowser: opts.browser === false,
+            provider: opts.provider,
+            authHost: opts.authHost,
           });
           return;
         }

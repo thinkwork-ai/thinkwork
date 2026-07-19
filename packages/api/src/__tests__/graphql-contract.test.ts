@@ -31,6 +31,7 @@ directive @aws_subscribe(mutations: [String!]!) on FIELD_DEFINITION
 directive @aws_auth(cognito_groups: [String!]!) on FIELD_DEFINITION
 directive @aws_api_key on FIELD_DEFINITION | OBJECT
 directive @aws_iam on FIELD_DEFINITION | OBJECT
+directive @aws_lambda on FIELD_DEFINITION | OBJECT
 directive @aws_cognito_user_pools(cognito_groups: [String!]) on FIELD_DEFINITION | OBJECT
 `;
 
@@ -1001,19 +1002,33 @@ describe("GraphQL Schema Contract", () => {
       expect(field?.args.map((a) => a.name)).toEqual(["threadId"]);
     });
 
-    it("does not allow API-key revocation subscriptions", () => {
+    it("leaves every subscription on the default Lambda authorizer only", () => {
       const sdl = readFileSync(TF_SCHEMA, "utf-8");
-      const block = sdl.match(
-        /onWorkspaceAccessRevoked\(userId: ID!\): WorkspaceAccessRevokedEvent[\s\S]*?@aws_subscribe\(mutations: \["notifyWorkspaceAccessRevoked"\]\)/,
-      );
-      expect(block?.[0]).toContain("@aws_cognito_user_pools");
-      expect(block?.[0]).toContain("@aws_iam");
-      expect(block?.[0]).not.toContain("@aws_api_key");
+      const subscriptionBlock = sdl.match(
+        /type Subscription \{[\s\S]*?\n\}/,
+      )?.[0];
+      expect(subscriptionBlock).toBeDefined();
+      expect(subscriptionBlock).not.toContain("@aws_api_key");
+      expect(subscriptionBlock).not.toContain("@aws_cognito_user_pools");
+      expect(subscriptionBlock).not.toContain("@aws_iam");
+      expect(subscriptionBlock).not.toContain("@aws_oidc");
+    });
+
+    it("keeps notification and invalidation mutations IAM-only", () => {
+      const sdl = readFileSync(TF_SCHEMA, "utf-8");
+      const mutationBlock = sdl.match(/type Mutation \{[\s\S]*?\n\}/)?.[0];
+      expect(mutationBlock).toContain("invalidateSubscription(");
+      expect(mutationBlock).toContain("@aws_iam");
+      expect(mutationBlock).not.toContain("@aws_api_key");
+      expect(mutationBlock).not.toContain("@aws_cognito_user_pools");
     });
 
     it("wires notification mutations to AppSync resolvers", () => {
       const terraform = readFileSync(TF_APPSYNC_SUBSCRIPTIONS, "utf-8");
       expect(terraform).toContain('"notifyWorkspaceAccessRevoked"');
+      expect(terraform).toContain('field       = "invalidateSubscription"');
+      expect(terraform).toContain("setSubscriptionInvalidationFilter");
+      expect(terraform).toContain("invalidateSubscriptions");
     });
 
     // Regression guard: a subscription bound via @aws_subscribe to a notify

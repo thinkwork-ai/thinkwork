@@ -1,19 +1,21 @@
 import { getPlatformConfig } from "./platform-config";
+import { getActiveEnvironmentEntry } from "./environments/store";
 
 export interface PublicAuthOptions {
-  password: { enabled: boolean };
+  password: { enabled: boolean; clientId?: string };
   oauthOptions: PublicOAuthOption[];
 }
 
 export interface PublicOAuthOption {
   key: string;
   label: string;
-  icon: "sso" | "google" | "microsoft";
-  provider: "workos";
-  providerSpecific: boolean;
+  icon: "google" | "microsoft";
+  provider: "google" | "microsoft" | "entra";
+  providerSpecific: true;
   route: {
-    type: "workosAuthorize";
-    authorizePath: "/api/auth/workos/authorize";
+    type: "cognitoHostedUi";
+    clientId: string;
+    identityProvider: string;
     prompt?: string;
   };
 }
@@ -24,7 +26,9 @@ export interface PublicAuthOptionsResult {
 }
 
 export const FALLBACK_AUTH_OPTIONS: PublicAuthOptions = {
-  password: { enabled: true },
+  // A failed catalog lookup must not fall back to the deployment-profile
+  // client: only a reconciled route-specific client is admitted server-side.
+  password: { enabled: false },
   oauthOptions: [],
 };
 
@@ -33,7 +37,11 @@ export async function fetchAuthOptionsForActiveEnvironment(
 ): Promise<PublicAuthOptionsResult> {
   try {
     const baseUrl = trimTrailingSlash(getPlatformConfig().apiUrl);
-    const response = await fetchImpl(`${baseUrl}/api/auth/options`, {
+    const url = new URL(`${baseUrl}/api/auth/options`);
+    url.searchParams.set("platform", "mobile");
+    const environmentHost = getActiveEnvironmentEntry()?.host;
+    if (environmentHost) url.searchParams.set("host", environmentHost);
+    const response = await fetchImpl(url.toString(), {
       method: "GET",
       headers: { accept: "application/json" },
     });
@@ -55,12 +63,13 @@ export function parsePublicAuthOptions(raw: unknown): PublicAuthOptions {
   }
   const record = raw as Record<string, unknown>;
   const password = parsePassword(record.password);
-  const oauthOptions = Array.isArray(record.oauthOptions)
-    ? record.oauthOptions.flatMap((entry) => {
-        const option = parseOAuthOption(entry);
-        return option ? [option] : [];
-      })
+  const rawOAuthOptions = Array.isArray(record.oauthOptions)
+    ? record.oauthOptions
     : [];
+  const oauthOptions = rawOAuthOptions.flatMap((entry) => {
+    const option = parseOAuthOption(entry);
+    return option ? [option] : [];
+  });
   return { password, oauthOptions };
 }
 
@@ -71,26 +80,31 @@ export interface AuthOptionsUiState {
 }
 
 export function deriveAuthOptionsDisplay(state: AuthOptionsUiState) {
-  const ssoOption = state.options.oauthOptions[0] ?? null;
-  const showSsoButton = !state.loading && Boolean(ssoOption);
+  const oauthOptions = state.options.oauthOptions;
+  const showOAuthButtons = !state.loading && oauthOptions.length > 0;
   const showPasswordForm = state.options.password.enabled;
   return {
-    ssoOption,
-    showSsoButton,
+    oauthOptions,
+    showOAuthButtons,
     showPasswordForm,
-    showDivider: showSsoButton && showPasswordForm,
+    showDivider: showOAuthButtons && showPasswordForm,
     showRetry: !state.loading && state.failed,
     showUnavailable:
-      !state.loading && !showSsoButton && !showPasswordForm && !state.failed,
+      !state.loading && !showOAuthButtons && !showPasswordForm && !state.failed,
   };
 }
 
-function parsePassword(raw: unknown): { enabled: boolean } {
+function parsePassword(raw: unknown): { enabled: boolean; clientId?: string } {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return FALLBACK_AUTH_OPTIONS.password;
   }
+  const record = raw as Record<string, unknown>;
+  const clientId =
+    safeString(record.clientId) ||
+    (record.enabled === true ? getPlatformConfig().cognitoClientId.trim() : "");
   return {
-    enabled: (raw as Record<string, unknown>).enabled !== false,
+    enabled: record.enabled !== false && Boolean(clientId),
+    ...(clientId ? { clientId } : {}),
   };
 }
 
@@ -105,17 +119,19 @@ function parseOAuthOption(raw: unknown): PublicOAuthOption | null {
   const key = safeString(record.key);
   const label = safeString(record.label);
   const icon = safeIcon(record.icon);
-  const authorizePath = safeString(routeRecord.authorizePath);
+  const clientId = safeString(routeRecord.clientId);
+  const identityProvider = safeString(routeRecord.identityProvider);
   const prompt = safeString(routeRecord.prompt);
 
   if (
     !key ||
     !label ||
     !icon ||
-    record.provider !== "workos" ||
-    typeof record.providerSpecific !== "boolean" ||
-    routeRecord.type !== "workosAuthorize" ||
-    authorizePath !== "/api/auth/workos/authorize"
+    !isNativeProvider(record.provider) ||
+    record.providerSpecific !== true ||
+    routeRecord.type !== "cognitoHostedUi" ||
+    !clientId ||
+    !identityProvider
   ) {
     return null;
   }
@@ -124,11 +140,12 @@ function parseOAuthOption(raw: unknown): PublicOAuthOption | null {
     key,
     label,
     icon,
-    provider: "workos",
-    providerSpecific: record.providerSpecific,
+    provider: record.provider,
+    providerSpecific: true,
     route: {
-      type: "workosAuthorize",
-      authorizePath,
+      type: "cognitoHostedUi",
+      clientId,
+      identityProvider,
       ...(prompt ? { prompt } : {}),
     },
   };
@@ -143,7 +160,11 @@ function safeString(value: unknown): string {
 }
 
 function safeIcon(value: unknown): PublicOAuthOption["icon"] | null {
-  return value === "sso" || value === "google" || value === "microsoft"
-    ? value
-    : null;
+  return value === "google" || value === "microsoft" ? value : null;
+}
+
+function isNativeProvider(
+  value: unknown,
+): value is PublicOAuthOption["provider"] {
+  return value === "google" || value === "microsoft" || value === "entra";
 }

@@ -25,7 +25,7 @@ type Query {
 # Event payload types
 # ────────────────────────────────────────────────────────────────────
 
-type AgentStatusEvent {
+type AgentStatusEvent @aws_iam @aws_lambda {
   agentId: ID!
   tenantId: ID!
   status: String!
@@ -33,7 +33,7 @@ type AgentStatusEvent {
   updatedAt: AWSDateTime!
 }
 
-type NewMessageEvent {
+type NewMessageEvent @aws_iam @aws_lambda {
   messageId: ID!
   threadId: ID!
   tenantId: ID!
@@ -46,7 +46,7 @@ type NewMessageEvent {
   createdAt: AWSDateTime!
 }
 
-type HeartbeatActivityEvent {
+type HeartbeatActivityEvent @aws_iam @aws_lambda {
   heartbeatId: ID!
   tenantId: ID!
   status: String!
@@ -54,7 +54,7 @@ type HeartbeatActivityEvent {
   createdAt: AWSDateTime!
 }
 
-type ThreadUpdateEvent {
+type ThreadUpdateEvent @aws_iam @aws_lambda {
   threadId: ID!
   tenantId: ID!
   status: String!
@@ -62,7 +62,7 @@ type ThreadUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type ThreadActivityEvent {
+type ThreadActivityEvent @aws_iam @aws_lambda {
   userId: ID!
   tenantId: ID!
   threadId: ID!
@@ -76,7 +76,7 @@ type ThreadActivityEvent {
   shouldNotify: Boolean
 }
 
-type InboxItemStatusEvent {
+type InboxItemStatusEvent @aws_iam @aws_lambda {
   inboxItemId: ID!
   tenantId: ID!
   status: String!
@@ -84,7 +84,7 @@ type InboxItemStatusEvent {
   updatedAt: AWSDateTime!
 }
 
-type ThreadTurnUpdateEvent {
+type ThreadTurnUpdateEvent @aws_iam @aws_lambda {
   runId: ID!
   triggerId: ID
   tenantId: ID!
@@ -99,7 +99,7 @@ type ThreadTurnUpdateEvent {
 # render live (tool/skill/phase steps in Phase 1, coalesced text deltas in
 # Phase 2) without a refetch. seq gives total order; payload carries the
 # step detail (AWSJSON). Subscribe by threadId.
-type ThreadTurnStepEvent {
+type ThreadTurnStepEvent @aws_iam @aws_lambda {
   runId: ID!
   threadId: ID!
   tenantId: ID!
@@ -113,7 +113,7 @@ type ThreadTurnStepEvent {
   createdAt: AWSDateTime!
 }
 
-type OrgUpdateEvent {
+type OrgUpdateEvent @aws_iam @aws_lambda {
   tenantId: ID!
   changeType: String!
   entityType: String
@@ -121,7 +121,7 @@ type OrgUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type CostRecordedEvent {
+type CostRecordedEvent @aws_iam @aws_lambda {
   tenantId: ID!
   agentId: ID
   agentName: String
@@ -134,7 +134,7 @@ type CostRecordedEvent {
   updatedAt: AWSDateTime!
 }
 
-type EvalRunUpdateEvent {
+type EvalRunUpdateEvent @aws_iam @aws_lambda {
   runId: ID!
   tenantId: ID!
   agentId: ID
@@ -147,11 +147,35 @@ type EvalRunUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type WorkspaceAccessRevokedEvent {
+type WorkspaceAccessRevokedEvent @aws_iam @aws_lambda {
   tenantId: ID!
   spaceId: ID!
   userId: ID!
   revokedAt: AWSDateTime!
+}
+
+type SubscriptionInvalidationEvent @aws_iam @aws_lambda {
+  subscriptionField: String!
+  scope: String!
+  tenantId: ID!
+  userId: ID
+  resourceKind: String
+  resourceId: ID
+}
+
+enum SubscriptionInvalidationField {
+  ON_AGENT_STATUS_CHANGED
+  ON_NEW_MESSAGE
+  ON_HEARTBEAT_ACTIVITY
+  ON_THREAD_UPDATED
+  ON_THREAD_ACTIVITY
+  ON_INBOX_ITEM_STATUS_CHANGED
+  ON_THREAD_TURN_UPDATED
+  ON_THREAD_TURN_STEP
+  ON_ORG_UPDATED
+  ON_COST_RECORDED
+  ON_EVAL_RUN_UPDATED
+  ON_WORKSPACE_ACCESS_REVOKED
 }
 
 # ────────────────────────────────────────────────────────────────────
@@ -164,12 +188,21 @@ type WorkspaceAccessRevokedEvent {
 
 type Mutation {
   _empty: String
+  invalidateSubscription(
+    subscriptionField: SubscriptionInvalidationField!
+    scope: String!
+    tenantId: ID!
+    userId: ID
+    resourceKind: String
+    resourceId: ID
+  ): SubscriptionInvalidationEvent @aws_iam
+
   notifyAgentStatus(
     agentId: ID!
     tenantId: ID!
     status: String!
     name: String!
-  ): AgentStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): AgentStatusEvent @aws_iam
 
   notifyNewMessage(
     messageId: ID!
@@ -181,21 +214,21 @@ type Mutation {
     senderId: ID
     ownerType: String
     ownerId: ID
-  ): NewMessageEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): NewMessageEvent @aws_iam
 
   notifyHeartbeatActivity(
     heartbeatId: ID!
     tenantId: ID!
     status: String!
     message: String
-  ): HeartbeatActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): HeartbeatActivityEvent @aws_iam
 
   notifyThreadUpdate(
     threadId: ID!
     tenantId: ID!
     status: String!
     title: String!
-  ): ThreadUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): ThreadUpdateEvent @aws_iam
 
   notifyThreadActivity(
     userId: ID!
@@ -209,14 +242,14 @@ type Mutation {
     createdAt: AWSDateTime
     mentioned: Boolean
     shouldNotify: Boolean
-  ): ThreadActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): ThreadActivityEvent @aws_iam
 
   notifyInboxItemUpdate(
     inboxItemId: ID!
     tenantId: ID!
     status: String!
     title: String
-  ): InboxItemStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): InboxItemStatusEvent @aws_iam
 
   notifyThreadTurnUpdate(
     runId: ID!
@@ -226,7 +259,7 @@ type Mutation {
     agentId: ID
     status: String!
     triggerName: String
-  ): ThreadTurnUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): ThreadTurnUpdateEvent @aws_iam
 
   notifyThreadTurnStep(
     runId: ID!
@@ -240,14 +273,14 @@ type Mutation {
     message: String
     payload: AWSJSON
     createdAt: AWSDateTime!
-  ): ThreadTurnStepEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): ThreadTurnStepEvent @aws_iam
 
   notifyOrgUpdate(
     tenantId: ID!
     changeType: String!
     entityType: String
     entityId: ID
-  ): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): OrgUpdateEvent @aws_iam
 
   notifyCostRecorded(
     tenantId: ID!
@@ -259,7 +292,7 @@ type Mutation {
     eventType: String!
     amountUsd: Float!
     model: String
-  ): CostRecordedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): CostRecordedEvent @aws_iam
 
   notifyEvalRunUpdate(
     runId: ID!
@@ -271,51 +304,51 @@ type Mutation {
     failed: Int
     passRate: Float
     errorMessage: String
-  ): EvalRunUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): EvalRunUpdateEvent @aws_iam
 
   notifyWorkspaceAccessRevoked(
     tenantId: ID!
     spaceId: ID!
     userId: ID!
     revokedAt: AWSDateTime!
-  ): WorkspaceAccessRevokedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  ): WorkspaceAccessRevokedEvent @aws_iam
 }
 
 type Subscription {
   _empty: String
-  onAgentStatusChanged(tenantId: ID!): AgentStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onAgentStatusChanged(tenantId: ID!): AgentStatusEvent
     @aws_subscribe(mutations: ["notifyAgentStatus"])
 
-  onNewMessage(threadId: ID!): NewMessageEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onNewMessage(threadId: ID!): NewMessageEvent
     @aws_subscribe(mutations: ["notifyNewMessage"])
 
-  onHeartbeatActivity(tenantId: ID!): HeartbeatActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onHeartbeatActivity(tenantId: ID!): HeartbeatActivityEvent
     @aws_subscribe(mutations: ["notifyHeartbeatActivity"])
 
-  onThreadUpdated(tenantId: ID!): ThreadUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onThreadUpdated(tenantId: ID!): ThreadUpdateEvent
     @aws_subscribe(mutations: ["notifyThreadUpdate"])
 
-  onThreadActivity(userId: ID!): ThreadActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onThreadActivity(userId: ID!): ThreadActivityEvent
     @aws_subscribe(mutations: ["notifyThreadActivity"])
 
-  onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent
     @aws_subscribe(mutations: ["notifyInboxItemUpdate"])
 
-  onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent
     @aws_subscribe(mutations: ["notifyThreadTurnUpdate"])
 
-  onThreadTurnStep(threadId: ID!): ThreadTurnStepEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onThreadTurnStep(threadId: ID!): ThreadTurnStepEvent
     @aws_subscribe(mutations: ["notifyThreadTurnStep"])
 
-  onOrgUpdated(tenantId: ID!): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onOrgUpdated(tenantId: ID!): OrgUpdateEvent
     @aws_subscribe(mutations: ["notifyOrgUpdate"])
 
-  onCostRecorded(tenantId: ID!): CostRecordedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onCostRecorded(tenantId: ID!): CostRecordedEvent
     @aws_subscribe(mutations: ["notifyCostRecorded"])
 
-  onEvalRunUpdated(tenantId: ID!): EvalRunUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onEvalRunUpdated(tenantId: ID!): EvalRunUpdateEvent
     @aws_subscribe(mutations: ["notifyEvalRunUpdate"])
 
-  onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_cognito_user_pools @aws_iam
+  onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent
     @aws_subscribe(mutations: ["notifyWorkspaceAccessRevoked"])
 }

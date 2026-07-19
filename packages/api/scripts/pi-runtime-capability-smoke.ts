@@ -106,9 +106,9 @@ function usage(exitCode = 2): never {
     [--timeout 90000] [--json]
 
 Environment:
-  THINKWORK_GRAPHQL_URL / THINKWORK_GRAPHQL_API_KEY
+  THINKWORK_GRAPHQL_URL / API_AUTH_SECRET
   THINKWORK_USER_ID or PI_SMOKE_SENDER_ID for sandbox-backed execute_code
-  or apps/web/.env with VITE_GRAPHQL_HTTP_URL / VITE_GRAPHQL_API_KEY`);
+  or apps/web/.env with VITE_GRAPHQL_HTTP_URL plus API_AUTH_SECRET`);
   process.exit(exitCode);
 }
 
@@ -184,10 +184,7 @@ function parseArgs(): Args {
     env.VITE_GRAPHQL_HTTP_URL ||
     "";
   const apiKey =
-    process.env.THINKWORK_GRAPHQL_API_KEY ||
-    process.env.VITE_GRAPHQL_API_KEY ||
-    env.VITE_GRAPHQL_API_KEY ||
-    "";
+    process.env.API_AUTH_SECRET || process.env.THINKWORK_API_SECRET || "";
 
   if (!tenantId || !agentId || !graphqlUrl || !apiKey) usage();
   return {

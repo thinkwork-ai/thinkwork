@@ -1,58 +1,41 @@
-/**
- * Public auth options endpoint (THNK-43 U4).
- *
- * Login clients need an unauthenticated, public-safe projection of available
- * auth controls. This handler resolves tenant-scoped WorkOS options only from
- * API Gateway's trusted domainName and fails closed for shared/unknown hosts.
- */
+/** Public, provider-neutral Cognito login catalog. */
 
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { domainToASCII } from "node:url";
 import {
   authProviderResources,
-  pluginComponents,
-  pluginInstalls,
+  authRouteClients,
+  tenantAuthHosts,
+  tenantAuthPolicies,
   tenantAuthProviderReferences,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../lib/db.js";
+import {
+  resolveNativeAuthPolicy,
+  type AuthPolicySnapshot,
+  type NativeAuthOption,
+} from "../lib/auth-provider-policy.js";
 import { handleCors } from "../lib/response.js";
 
 type DbLike = typeof defaultDb;
 
 export interface PublicAuthOptionsResponse {
-  password: { enabled: boolean };
-  oauthOptions: PublicOAuthOption[];
+  password: { enabled: boolean; clientId?: string };
+  oauthOptions: NativeAuthOption[];
+  legacyMigration?: { authorizePath: string };
 }
 
-export interface PublicOAuthOption {
-  key: string;
-  label: string;
-  icon: "sso" | "google" | "microsoft";
-  provider: "workos";
-  providerSpecific: boolean;
-  route: {
-    type: "workosAuthorize";
-    authorizePath: "/api/auth/workos/authorize";
-    prompt: "select_account";
-  };
-}
-
-interface AuthProviderPublication {
-  displayName: string;
-  publicOptionMode: string;
-  providerOptions: Array<Record<string, unknown>>;
-  publicOptionLabel: string;
-  hostnames: string[];
-  componentHandlerRef: Record<string, unknown>;
-}
+export type PublicOAuthOption = NativeAuthOption;
 
 export interface PublicAuthOptionsDeps {
-  loadPublicationForHost(host: string): Promise<AuthProviderPublication | null>;
-  passwordSignInEnabled(): boolean;
+  loadPolicy(
+    host: string | null,
+    clientFamily: string,
+  ): Promise<AuthPolicySnapshot>;
 }
 
 export function createPublicAuthOptionsHandler(
@@ -71,15 +54,29 @@ export function createPublicAuthOptionsHandler(
       return publicJson({ error: "Not found" }, 404);
     }
 
+    const query = new URLSearchParams(event.rawQueryString ?? "");
+    const platform = query.get("platform") || "web";
+    if (!["web", "mobile", "desktop", "cli"].includes(platform)) {
+      return publicJson(emptyOptions());
+    }
+
+    // The requested browser host selects public presentation only. It is not
+    // trusted for authorization; authenticated admission checks the route
+    // client, exact identity, target tenant, and active membership separately.
+    const requestedHost = normalizeTrustedHost(query.get("host") ?? undefined);
+    const gatewayHost = normalizeTrustedHost(event.requestContext.domainName);
+
     try {
-      const options = await resolvePublicAuthOptions({
-        trustedDomainName: event.requestContext.domainName,
-        deps,
-      });
-      return publicJson(options);
+      return publicJson(
+        await resolvePublicAuthOptions({
+          routingHost: requestedHost ?? gatewayHost,
+          clientFamily: platform,
+          deps,
+        }),
+      );
     } catch (error) {
       console.error("[public-auth-options] failed:", error);
-      return publicJson(defaultOptions(deps), 200);
+      return publicJson(emptyOptions(), 200);
     }
   };
 }
@@ -87,141 +84,134 @@ export function createPublicAuthOptionsHandler(
 export const handler = createPublicAuthOptionsHandler();
 
 export async function resolvePublicAuthOptions(args: {
+  routingHost?: string | null;
+  /** Backward-compatible name for characterization callers. */
   trustedDomainName?: string;
+  clientFamily?: string;
   deps?: PublicAuthOptionsDeps;
 }): Promise<PublicAuthOptionsResponse> {
   const deps = args.deps ?? createDefaultPublicAuthOptionsDeps();
-  const base = defaultOptions(deps);
-  const host = normalizeTrustedHost(args.trustedDomainName);
-  if (!host) return base;
-
-  const publication = await deps.loadPublicationForHost(host);
-  if (!publication) return base;
-
-  const option = publicOption(publication);
-  if (!option) return base;
-  return { ...base, oauthOptions: [option] };
+  const host =
+    args.routingHost === undefined
+      ? normalizeTrustedHost(args.trustedDomainName)
+      : args.routingHost;
+  const clientFamily = args.clientFamily ?? "web";
+  const resolved = resolveNativeAuthPolicy(
+    await deps.loadPolicy(host ?? null, clientFamily),
+    clientFamily,
+  );
+  return {
+    ...resolved,
+    ...(process.env.AUTH_RETIREMENT_PHASE === "coexistence"
+      ? {
+          legacyMigration: {
+            authorizePath: "/api/auth/workos/authorize",
+          },
+        }
+      : {}),
+  };
 }
 
 export function createDefaultPublicAuthOptionsDeps(
   db: DbLike = defaultDb,
 ): PublicAuthOptionsDeps {
   return {
-    loadPublicationForHost: (host) => loadPublicationForHost(host, db),
-    passwordSignInEnabled: () =>
-      process.env.THINKWORK_PASSWORD_SIGN_IN_ENABLED !== "false",
+    loadPolicy: (host, clientFamily) => loadPolicy(host, clientFamily, db),
   };
 }
 
-function defaultOptions(
-  deps: Pick<PublicAuthOptionsDeps, "passwordSignInEnabled">,
-): PublicAuthOptionsResponse {
-  return {
-    password: { enabled: deps.passwordSignInEnabled() },
-    oauthOptions: [],
-  };
-}
-
-async function loadPublicationForHost(
-  host: string,
+async function loadPolicy(
+  host: string | null,
+  clientFamily: string,
   db: DbLike,
-): Promise<AuthProviderPublication | null> {
-  const rows = await db
+): Promise<AuthPolicySnapshot> {
+  const hostRows = host
+    ? await db
+        .select({
+          tenantId: tenantAuthHosts.tenant_id,
+          localPasswordEnabled: tenantAuthPolicies.local_password_enabled,
+        })
+        .from(tenantAuthHosts)
+        .innerJoin(
+          tenantAuthPolicies,
+          eq(tenantAuthPolicies.tenant_id, tenantAuthHosts.tenant_id),
+        )
+        .where(
+          and(
+            eq(tenantAuthHosts.hostname, host),
+            eq(tenantAuthHosts.status, "verified"),
+            eq(tenantAuthPolicies.status, "active"),
+          ),
+        )
+    : [];
+
+  if (hostRows.length > 1) {
+    return {
+      scope: "ambiguous",
+      localPasswordEnabled: false,
+      routes: [],
+      connections: [],
+    };
+  }
+
+  const routeRows = await db
     .select({
-      displayName: authProviderResources.display_name,
-      publicOptionMode: authProviderResources.public_option_mode,
-      providerOptions: authProviderResources.provider_options,
-      publicOptionLabel: tenantAuthProviderReferences.public_option_label,
-      hostnames: tenantAuthProviderReferences.hostnames,
-      componentHandlerRef: pluginComponents.handler_ref,
+      routeKey: authRouteClients.route_key,
+      clientFamily: authRouteClients.client_family,
+      cognitoAppClientId: authRouteClients.cognito_app_client_id,
+      providerNames: authRouteClients.provider_names,
+      lifecycleState: authRouteClients.lifecycle_state,
+      validationStatus: authRouteClients.validation_status,
     })
-    .from(tenantAuthProviderReferences)
-    .innerJoin(
-      authProviderResources,
+    .from(authRouteClients)
+    .where(eq(authRouteClients.client_family, clientFamily));
+
+  const connectionRows = await db
+    .select({
+      resourceId: authProviderResources.id,
+      connectionKey: authProviderResources.connection_key,
+      providerKind: authProviderResources.provider_kind,
+      displayName: authProviderResources.display_name,
+      cognitoIdentityProviderName:
+        authProviderResources.cognito_identity_provider_name,
+      cognitoAppClientIds: authProviderResources.cognito_app_client_ids,
+      lifecycleState: authProviderResources.lifecycle_state,
+      validationStatus: authProviderResources.validation_status,
+      publicOptionsPublished: authProviderResources.public_options_published,
+      tenantId: tenantAuthProviderReferences.tenant_id,
+      tenantReferenceStatus: tenantAuthProviderReferences.status,
+      publicOptionLabel: tenantAuthProviderReferences.public_option_label,
+    })
+    .from(authProviderResources)
+    .leftJoin(
+      tenantAuthProviderReferences,
       eq(
         tenantAuthProviderReferences.auth_provider_resource_id,
         authProviderResources.id,
       ),
-    )
-    .innerJoin(
-      pluginInstalls,
-      eq(tenantAuthProviderReferences.plugin_install_id, pluginInstalls.id),
-    )
-    .innerJoin(
-      pluginComponents,
-      and(
-        eq(pluginComponents.plugin_install_id, pluginInstalls.id),
-        eq(pluginComponents.component_type, "auth-provider"),
-      ),
-    )
-    .where(
-      and(
-        eq(tenantAuthProviderReferences.status, "enabled"),
-        inArray(pluginInstalls.state, ["installed", "partially_installed"]),
-        eq(pluginComponents.state, "provisioned"),
-        eq(authProviderResources.provider_key, "workos"),
-        inArray(authProviderResources.validation_status, [
-          "valid",
-          "partially_valid",
-        ]),
-        eq(authProviderResources.public_options_published, true),
-      ),
     );
 
-  const matches = rows.filter((row) =>
-    row.hostnames.some((candidate) => normalizeTrustedHost(candidate) === host),
-  );
-  if (matches.length !== 1) return null;
-  return matches[0];
-}
-
-function publicOption(
-  publication: AuthProviderPublication,
-): PublicOAuthOption | null {
-  if (!componentAllowsPublication(publication.componentHandlerRef)) {
-    return null;
-  }
-
-  // U1 proved only the single WorkOS-backed SSO fallback. Provider-specific
-  // Google/Microsoft buttons stay hidden until a later unit proves routing.
-  if (publication.publicOptionMode !== "single_sso") {
-    return null;
-  }
-
-  const label =
-    safeDisplayString(publication.publicOptionLabel) ||
-    safeDisplayString(publication.displayName) ||
-    "Continue with SSO";
-
+  const tenant = hostRows[0];
   return {
-    key: "workos-sso",
-    label,
-    icon: "sso",
-    provider: "workos",
-    providerSpecific: false,
-    route: {
-      type: "workosAuthorize",
-      authorizePath: "/api/auth/workos/authorize",
-      prompt: "select_account",
-    },
+    scope: tenant ? "tenant" : "deployment",
+    ...(tenant ? { tenantId: tenant.tenantId } : {}),
+    localPasswordEnabled: tenant
+      ? tenant.localPasswordEnabled
+      : process.env.THINKWORK_PASSWORD_SIGN_IN_ENABLED !== "false",
+    routes: routeRows,
+    connections: connectionRows,
   };
 }
 
-function componentAllowsPublication(handlerRef: Record<string, unknown>) {
-  return (
-    handlerRef.status === "valid" && handlerRef.publicOptionsPublished === true
-  );
-}
-
-function safeDisplayString(value: unknown): string {
-  return typeof value === "string" ? value.trim().slice(0, 80) : "";
+function emptyOptions(): PublicAuthOptionsResponse {
+  return { password: { enabled: false }, oauthOptions: [] };
 }
 
 export function normalizeTrustedHost(value: string | undefined): string | null {
   if (!value) return null;
-  const trimmed = value.trim().replace(/\.+$/, "");
-  if (!trimmed) return null;
-  const ascii = domainToASCII(trimmed);
+  const withoutPort = value.trim().replace(/:\d+$/, "").replace(/\.+$/, "");
+  if (!withoutPort) return null;
+  const ascii = domainToASCII(withoutPort);
   return ascii ? ascii.toLowerCase() : null;
 }
 

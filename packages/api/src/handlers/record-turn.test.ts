@@ -3,12 +3,14 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
 const {
   mockAuthenticate,
+  mockAdmitCognitoTenant,
   mockSelectLimit,
   mockReturning,
   mockUpdateSet,
   mockUpdateWhere,
 } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
+  mockAdmitCognitoTenant: vi.fn(),
   mockSelectLimit: vi.fn(),
   mockReturning: vi.fn(),
   mockUpdateSet: vi.fn(),
@@ -16,6 +18,11 @@ const {
 }));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
+vi.mock("../lib/auth-admission.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/auth-admission.js")>();
+  return { ...actual, admitCognitoTenant: mockAdmitCognitoTenant };
+});
 
 vi.mock("../lib/db.js", () => ({
   db: {
@@ -47,7 +54,6 @@ vi.mock("../lib/db.js", () => ({
 
 vi.mock("@thinkwork/database-pg", () => ({
   schema: {
-    users: { email: "users.email" },
     threads: {
       id: "threads.id",
       tenant_id: "threads.tenant_id",
@@ -60,6 +66,7 @@ vi.mock("@thinkwork/database-pg", () => ({
 }));
 
 import { handler } from "./record-turn";
+import { AuthAdmissionError } from "../lib/auth-admission.js";
 
 function event(body: unknown, method = "POST"): APIGatewayProxyEventV2 {
   return {
@@ -78,6 +85,7 @@ const VALID = {
 
 beforeEach(() => {
   mockAuthenticate.mockReset();
+  mockAdmitCognitoTenant.mockReset();
   mockSelectLimit.mockReset();
   mockReturning.mockReset();
   mockUpdateSet.mockReset();
@@ -89,10 +97,14 @@ beforeEach(() => {
     authType: "cognito",
     agentId: null,
   });
-  // 1st select → user row; 2nd select → thread row
-  mockSelectLimit
-    .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-    .mockReturnValueOnce([{ id: "thr_1" }]);
+  mockAdmitCognitoTenant.mockResolvedValue({
+    userId: "u1",
+    tenantId: "t1",
+    role: "member",
+    identityId: "identity-1",
+    route: {},
+  });
+  mockSelectLimit.mockReturnValueOnce([{ id: "thr_1" }]);
   // 1st insert → user message id; 2nd insert → assistant message id
   mockReturning
     .mockReturnValueOnce([{ id: "um_1" }])
@@ -119,16 +131,15 @@ describe("record-turn handler", () => {
 
   it("404s when the thread is not found for the caller's tenant", async () => {
     mockSelectLimit.mockReset();
-    mockSelectLimit
-      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-      .mockReturnValueOnce([]); // no thread
+    mockSelectLimit.mockReturnValueOnce([]); // no thread
     const res = await handler(event(VALID));
     expect(res.statusCode).toBe(404);
   });
 
   it("403s when the caller has no resolved tenant", async () => {
-    mockSelectLimit.mockReset();
-    mockSelectLimit.mockReturnValueOnce([]); // no user row
+    mockAdmitCognitoTenant.mockRejectedValueOnce(
+      new AuthAdmissionError("tenant_not_admitted", "not admitted"),
+    );
     const res = await handler(event(VALID));
     expect(res.statusCode).toBe(403);
   });

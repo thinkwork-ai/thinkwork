@@ -14,7 +14,7 @@
  *
  * Required env:
  *   DATABASE_URL
- *   API_AUTH_SECRET or VITE_GRAPHQL_API_KEY
+ *   API_AUTH_SECRET or THINKWORK_API_SECRET
  *   SMOKE_COMPUTER_URL
  *   VITE_GRAPHQL_HTTP_URL, GRAPHQL_HTTP_URL, or API_GRAPHQL_URL
  */
@@ -37,11 +37,7 @@ const apiUrl = first(
   env.API_GRAPHQL_URL,
 );
 const apiSecret = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
-const apiKey = first(
-  env.VITE_GRAPHQL_API_KEY,
-  env.APPSYNC_API_KEY,
-  env.GRAPHQL_API_KEY,
-);
+const apiKey = apiSecret;
 const computerUrl = first(env.SMOKE_COMPUTER_URL, env.COMPUTER_URL);
 const smokeAppletId =
   env.SMOKE_APPLET_ID || "44444444-4444-4444-8444-444444444444";
@@ -50,7 +46,7 @@ const crmAppletId =
 
 if (!databaseUrl) fail("Missing DATABASE_URL.");
 if (!apiUrl || (!apiSecret && !apiKey)) {
-  fail("Missing GraphQL HTTP config or API_AUTH_SECRET/VITE_GRAPHQL_API_KEY.");
+  fail("Missing GraphQL HTTP config or API_AUTH_SECRET.");
 }
 if (!computerUrl) fail("Missing SMOKE_COMPUTER_URL.");
 

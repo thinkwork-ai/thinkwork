@@ -1364,6 +1364,15 @@ jobs:
           # The deprecated graph memory path is disabled for all deploys.
           # Hindsight is the authoritative user and Space memory engine.
           MEMORY_ENGINE="hindsight"
+          AUTH_RETIREMENT_PHASE="${{ vars.AUTH_RETIREMENT_PHASE || 'retired' }}"
+          AUTH_MIGRATION_RECOVERY_DEADLINE="${{ vars.AUTH_MIGRATION_RECOVERY_DEADLINE || '' }}"
+          if [ "$AUTH_RETIREMENT_PHASE" = "coexistence" ]; then
+            if ! [[ "$AUTH_MIGRATION_RECOVERY_DEADLINE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$ ]] || \
+              ! date --date="$AUTH_MIGRATION_RECOVERY_DEADLINE" +%s >/dev/null 2>&1; then
+              echo "AUTH_MIGRATION_RECOVERY_DEADLINE must be an RFC3339 timestamp while AUTH_RETIREMENT_PHASE=coexistence" >&2
+              exit 1
+            fi
+          fi
 
           TF_VAR_ARGS=(
             -var "stage=${{ env.STAGE }}"
@@ -1372,6 +1381,8 @@ jobs:
             -var "database_engine=aurora-serverless"
             -var "enable_hindsight=true"
             -var "memory_engine=$MEMORY_ENGINE"
+            -var "auth_retirement_phase=$AUTH_RETIREMENT_PHASE"
+            -var "auth_migration_recovery_deadline=$AUTH_MIGRATION_RECOVERY_DEADLINE"
             -var "twenty_provisioned=$TWENTY_PROVISIONED"
             -var "twenty_runtime_enabled=$TWENTY_RUNTIME_ENABLED"
             -var "twenty_image_uri=$TWENTY_IMAGE_URI"
@@ -1439,6 +1450,49 @@ jobs:
             -var "agentcore_multiplayer_proof_tenant_slug=${{ vars.AGENTCORE_MULTIPLAYER_PROOF_TENANT_SLUG || '' }}"
             -var "agentcore_multiplayer_proof_owner_allowlist=${{ vars.AGENTCORE_MULTIPLAYER_PROOF_OWNER_ALLOWLIST || '' }}"
           )
+
+          # Native-auth Lambdas query these tables immediately. Materialize the
+          # database tier first on greenfield, then finish every additive auth
+          # migration before the full Terraform plan can publish application
+          # code. Migration 0263 remains a separate signed-evidence operation.
+          source ../../../scripts/lib/terraform-output.sh
+          DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
+          DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
+          if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
+            terraform plan -refresh=false -lock-timeout=10m \
+              -target=module.thinkwork.module.database \
+              -out=tfplan-native-auth-data "${TF_VAR_ARGS[@]}"
+            terraform apply -auto-approve -refresh=false -lock-timeout=10m tfplan-native-auth-data
+            DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint)
+            DB_SECRET_ARN=$(tf_output_raw db_secret_arn)
+          fi
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text | jq -r .password)
+          echo "::add-mask::$DB_PASS"
+          DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${DB_ENDPOINT}:5432/thinkwork?sslmode=require"
+          for migration in \
+            0261_native_auth_control_plane.sql \
+            0262_auth_subscription_tickets.sql \
+            0264_auth_enrollment_attempt_limits.sql \
+            0265_require_fully_valid_auth_publication.sql \
+            0266_auth_identity_recovery_grants.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -f "../../../packages/database-pg/drizzle/$migration"
+          done
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.auth_provider_resources') IS NULL
+              OR to_regclass('public.auth_route_clients') IS NULL
+              OR to_regclass('public.user_auth_identities') IS NULL
+              OR to_regclass('public.auth_subscription_tickets') IS NULL
+            THEN
+              RAISE EXCEPTION 'Cognito-native auth schema gate failed';
+            END IF;
+          END
+          $$;
+          SQL
 
           resolve_existing_api_id() {
             aws apigatewayv2 get-apis \

@@ -9,7 +9,7 @@
  * Required env:
  *   DATABASE_URL
  *   VITE_GRAPHQL_HTTP_URL, GRAPHQL_HTTP_URL, or API_GRAPHQL_URL
- *   VITE_GRAPHQL_API_KEY, GRAPHQL_API_KEY, API_AUTH_SECRET, or THINKWORK_API_SECRET
+ *   API_AUTH_SECRET or THINKWORK_API_SECRET
  *
  * Optional identity overrides:
  *   SMOKE_TENANT_ID, SMOKE_COMPUTER_ID, SMOKE_USER_A_ID, SMOKE_USER_B_ID
@@ -31,12 +31,7 @@ const apiUrl = first(
   env.GRAPHQL_HTTP_URL,
   env.API_GRAPHQL_URL,
 );
-const apiKey = first(
-  env.VITE_GRAPHQL_API_KEY,
-  env.GRAPHQL_API_KEY,
-  env.API_AUTH_SECRET,
-  env.THINKWORK_API_SECRET,
-);
+const apiKey = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
 
 if (!databaseUrl) fail("Missing DATABASE_URL.");
 if (!apiUrl || !apiKey) {

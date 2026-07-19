@@ -55,21 +55,11 @@ $SUBSCRIPTION_FIELDS
 }
 SCHEMA
 
-# Add AppSync auth directives to all mutation and subscription fields
-# Every field needs @aws_api_key @aws_cognito_user_pools @aws_iam for multi-auth
-AUTH="@aws_api_key @aws_cognito_user_pools @aws_iam"
-
-# Add to mutation return types (lines with "): XxxEvent" or "): XxxEvent!")
-sed -i '' "s/): \([A-Za-z]*Event\)\(!\{0,1\}\)$/): \1\2 ${AUTH}/" "$DST"
-
-# Add to subscription fields — on the line with the return type (before @aws_subscribe)
-# Pattern: "  onXxx(tenantId: ID!): XxxEvent"
-sed -i '' "s/): \([A-Za-z]*Event\)\(!\{0,1\}\)$/): \1\2 ${AUTH}/" "$DST"
-
-# Revocation subscriptions are user-scoped and must not be openable with the
-# public API key. The notification mutation keeps API key auth for Lambda.
-sed -i '' \
-  "s/onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_api_key @aws_cognito_user_pools @aws_iam/onWorkspaceAccessRevoked(userId: ID!): WorkspaceAccessRevokedEvent @aws_cognito_user_pools @aws_iam/" \
-  "$DST"
+# Authorization is explicit in the canonical fragment. Notification and
+# invalidation mutations carry @aws_iam. Subscription fields intentionally
+# carry no auth directive so they inherit the API's default AWS_LAMBDA mode;
+# adding an additional-mode directive here would bypass one-use admission.
+# Shared event object types carry both @aws_iam and @aws_lambda because IAM
+# publishers return them and Lambda-authorized subscribers select their fields.
 
 echo "Done — $(wc -l < "$DST" | tr -d ' ') lines written"

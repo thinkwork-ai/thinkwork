@@ -27,12 +27,16 @@ export interface WorkosAuthHandlerDeps {
   workosAuthDeps?: WorkosAuthDeps;
   bridgeDeps?: WorkosCognitoBridgeDeps;
   logoutDeps?: WorkosLogoutDeps;
+  retirementPhase?: "coexistence" | "cutover" | "retired";
 }
 
 export function createWorkosAuthHandler(deps: WorkosAuthHandlerDeps = {}) {
   const workosAuthDeps = deps.workosAuthDeps ?? createDefaultWorkosAuthDeps();
   const bridgeDeps = deps.bridgeDeps ?? createDefaultWorkosCognitoBridgeDeps();
   const logoutDeps = deps.logoutDeps ?? createDefaultWorkosLogoutDeps();
+  const retirementPhase =
+    deps.retirementPhase ??
+    parseRetirementPhase(process.env.AUTH_RETIREMENT_PHASE);
 
   return async function workosAuthHandler(
     event: APIGatewayProxyEventV2,
@@ -43,6 +47,12 @@ export function createWorkosAuthHandler(deps: WorkosAuthHandlerDeps = {}) {
     try {
       const method = event.requestContext.http.method;
       if (event.rawPath === "/api/auth/workos/authorize" && method === "GET") {
+        if (retirementPhase !== "coexistence") {
+          throw new WorkosAuthError(
+            "New WorkOS authorization starts are disabled",
+            410,
+          );
+        }
         const query = event.queryStringParameters ?? {};
         const redirect = await createWorkosAuthorizeRedirect({
           trustedDomainName: event.requestContext.domainName,
@@ -124,6 +134,13 @@ export function createWorkosAuthHandler(deps: WorkosAuthHandlerDeps = {}) {
 }
 
 export const handler = createWorkosAuthHandler();
+
+function parseRetirementPhase(
+  value: string | undefined,
+): "coexistence" | "cutover" | "retired" {
+  if (value === "cutover" || value === "retired") return value;
+  return "coexistence";
+}
 
 function redirectResponse(location: string): APIGatewayProxyStructuredResultV2 {
   return {

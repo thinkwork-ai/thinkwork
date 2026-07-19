@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "@/lib/auth-context";
 import { useMe } from "@/lib/hooks/use-users";
+import { getStoredOAuthIdToken } from "@/lib/auth";
 
 /**
  * Shared hook for the tenant's connection rows, served by the REST
@@ -16,7 +17,6 @@ const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   /\/graphql$/,
   "",
 );
-const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 export type ConnectionRow = {
   id: string;
@@ -70,9 +70,11 @@ async function fetchNow(tenantId: string, userId: string): Promise<void> {
   emit();
   const p = (async () => {
     try {
+      const token = getStoredOAuthIdToken();
+      if (!token) throw new Error("Authentication is not ready");
       const res = await fetch(`${API_BASE}/api/connections`, {
         headers: {
-          "x-api-key": GRAPHQL_API_KEY,
+          Authorization: `Bearer ${token}`,
           "x-tenant-id": tenantId,
           "x-principal-id": userId,
         },

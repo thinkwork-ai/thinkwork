@@ -1,4 +1,5 @@
 import { GraphQLError } from "graphql";
+import { authSubscriptionInvalidations } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, tenantMembers } from "../../utils.js";
 import { resolveCaller } from "./resolve-auth-user.js";
@@ -62,6 +63,14 @@ export const removeTenantMember = async (
       .delete(tenantMembers)
       .where(eq(tenantMembers.id, args.id))
       .returning();
+    if (row && target.principal_type === "user") {
+      await tx.insert(authSubscriptionInvalidations).values({
+        tenant_id: target.tenant_id,
+        user_id: target.principal_id,
+        resource_kind: "membership",
+        reason: "membership_removed",
+      });
+    }
     return !!row;
   });
 };

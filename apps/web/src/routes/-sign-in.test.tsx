@@ -11,7 +11,10 @@ import { SignInPage } from "./sign-in";
 
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  search: { next: undefined as string | undefined },
+  search: {
+    next: undefined as string | undefined,
+    legacyMigration: undefined as "workos" | undefined,
+  },
 }));
 
 const authContextMocks = vi.hoisted(() => ({
@@ -19,9 +22,11 @@ const authContextMocks = vi.hoisted(() => ({
 }));
 
 const authMocks = vi.hoisted(() => ({
+  configurePasswordAuthClient: vi.fn(),
   confirmForgotPassword: vi.fn(),
   forgotPassword: vi.fn(),
   getAuthOptionSignInUrl: vi.fn(),
+  getLegacyIdentityMigrationStartUrl: vi.fn(),
   isPasswordSignInConfigured: vi.fn(),
 }));
 
@@ -64,9 +69,12 @@ vi.mock("@/context/AuthContext", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
+  configurePasswordAuthClient: authMocks.configurePasswordAuthClient,
   confirmForgotPassword: authMocks.confirmForgotPassword,
   forgotPassword: authMocks.forgotPassword,
   getAuthOptionSignInUrl: authMocks.getAuthOptionSignInUrl,
+  getLegacyIdentityMigrationStartUrl:
+    authMocks.getLegacyIdentityMigrationStartUrl,
   isPasswordSignInConfigured: authMocks.isPasswordSignInConfigured,
 }));
 
@@ -91,6 +99,27 @@ function setWindowLocation(url: string): void {
   });
 }
 
+function publishDesktopGoogleOption(): void {
+  authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+    password: { enabled: false },
+    oauthOptions: [
+      {
+        key: "google",
+        label: "Continue with Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "desktop-google-client",
+          identityProvider: "Google",
+          prompt: "select_account",
+        },
+      },
+    ],
+  });
+}
+
 beforeEach(() => {
   vi.stubEnv("VITE_API_URL", "https://api.example.com");
   vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
@@ -107,15 +136,18 @@ beforeEach(() => {
     isAuthenticated: false,
     isLoading: false,
   });
-  authMocks.getAuthOptionSignInUrl.mockReturnValue(
-    "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
+  authMocks.getAuthOptionSignInUrl.mockResolvedValue(
+    "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=google-client",
+  );
+  authMocks.getLegacyIdentityMigrationStartUrl.mockReturnValue(
+    "https://api.example.com/api/auth/workos/authorize?migration=1",
   );
   authMocks.isPasswordSignInConfigured.mockReturnValue(false);
   authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-    password: { enabled: true },
+    password: { enabled: true, clientId: "local-client" },
     oauthOptions: [],
   });
-  routerMocks.search = { next: undefined };
+  routerMocks.search = { next: undefined, legacyMigration: undefined };
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
 
@@ -131,6 +163,57 @@ afterEach(() => {
 });
 
 describe("SignInPage", () => {
+  it("never renders the legacy migration action on the normal sign-in route", async () => {
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: false },
+      oauthOptions: [],
+      legacyMigration: { authorizePath: "/api/auth/workos/authorize" },
+    });
+
+    render(<SignInPage />);
+
+    await waitFor(() =>
+      expect(authOptionsMocks.fetchPublicAuthOptions).toHaveBeenCalled(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Continue account migration" }),
+    ).toBeNull();
+  });
+
+  it("renders the dedicated migration action only for an explicit coexistence entry", async () => {
+    routerMocks.search = { next: "/new", legacyMigration: "workos" };
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true, clientId: "local-client" },
+      oauthOptions: [],
+      legacyMigration: { authorizePath: "/api/auth/workos/authorize" },
+    });
+    const navigations: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        set href(target: string) {
+          navigations.push(target);
+        },
+        get href() {
+          return navigations.at(-1) ?? "https://app.example/sign-in";
+        },
+      },
+    });
+
+    render(<SignInPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue account migration" }),
+    );
+
+    expect(screen.queryByLabelText("Email")).toBeNull();
+    expect(authMocks.getLegacyIdentityMigrationStartUrl).toHaveBeenCalledWith(
+      "/api/auth/workos/authorize",
+      "/new",
+    );
+    expect(navigations).toEqual([
+      "https://api.example.com/api/auth/workos/authorize?migration=1",
+    ]);
+  });
   it("renders no browser OAuth button when public auth options are empty", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
@@ -177,17 +260,18 @@ describe("SignInPage", () => {
       isLoading: true,
     });
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [
         {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
           route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
             prompt: "select_account",
           },
         },
@@ -198,9 +282,9 @@ describe("SignInPage", () => {
 
     expect(
       (
-        await screen.findByRole("button", {
+        (await screen.findByRole("button", {
           name: "Checking session...",
-        }) as HTMLButtonElement
+        })) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
   });
@@ -211,32 +295,45 @@ describe("SignInPage", () => {
       state: "xyz",
     });
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    publishDesktopGoogleOption();
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
       startOAuth,
       onOAuthError: () => () => {},
     });
-    routerMocks.search = { next: "/automations/123" };
+    routerMocks.search = {
+      next: "/automations/123",
+      legacyMigration: undefined,
+    };
 
     render(<SignInPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    );
 
     await waitFor(() =>
-      expect(startOAuth).toHaveBeenCalledWith({ next: "/automations/123" }),
+      expect(startOAuth).toHaveBeenCalledWith({
+        authOptionKey: "google",
+        next: "/automations/123",
+      }),
     );
   });
 
-  it("renders draggable desktop chrome in the Electron sign-in shell", () => {
+  it("renders draggable desktop chrome in the Electron sign-in shell", async () => {
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    publishDesktopGoogleOption();
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
     expect(screen.getByRole("banner").textContent).toContain("ThinkWork");
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    ).toBeTruthy();
   });
 
   it("shows incomplete packaged desktop configuration before OAuth starts", async () => {
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
+    publishDesktopGoogleOption();
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
       getDesktopConfig: vi.fn().mockResolvedValue({
         stage: "dev",
@@ -260,9 +357,10 @@ describe("SignInPage", () => {
     await screen.findByText("Configuration incomplete for dev");
     expect(screen.getByText(/Missing VITE_API_URL/)).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+      (await screen.findByRole("button", {
+        name: "Continue with Google",
+      })) as HTMLButtonElement,
+    ).toHaveProperty("disabled", true);
   });
 
   it("shows the active desktop deployment profile before OAuth starts", async () => {
@@ -393,19 +491,20 @@ describe("SignInPage", () => {
     );
   });
 
-  it("uses the WorkOS SSO option from public auth options outside desktop mode", async () => {
+  it("uses the direct Google option from public auth options outside desktop mode", async () => {
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [
         {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
           route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
             prompt: "select_account",
           },
         },
@@ -427,18 +526,21 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Continue with SSO" }),
+      await screen.findByRole("button", { name: "Continue with Google" }),
     );
 
-    expect(navigations).toEqual([
-      "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
-    ]);
+    await waitFor(() =>
+      expect(navigations).toEqual([
+        "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=google-client",
+      ]),
+    );
     expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalledWith(
       expect.objectContaining({
-        key: "workos-sso",
+        key: "google",
         route: {
-          type: "workosAuthorize",
-          authorizePath: "/api/auth/workos/authorize",
+          type: "cognitoHostedUi",
+          clientId: "google-client",
+          identityProvider: "Google",
           prompt: "select_account",
         },
       }),
@@ -529,13 +631,13 @@ describe("SignInPage", () => {
     await screen.findByText("No in-flight OAuth attempt for callback state");
   });
 
-  it("renders the email/password form when password sign-in is configured", () => {
+  it("renders the email/password form when password sign-in is configured", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
-    expect(screen.getByLabelText("Email")).toBeTruthy();
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reset password" })).toBeTruthy();
@@ -543,20 +645,34 @@ describe("SignInPage", () => {
     expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
   });
 
-  it("renders WorkOS SSO before password when a public option is returned", async () => {
+  it("renders Google and Microsoft before password when native options are returned", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-      password: { enabled: true },
+      password: { enabled: true, clientId: "local-client" },
       oauthOptions: [
         {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
           route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
+            prompt: "select_account",
+          },
+        },
+        {
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
             prompt: "select_account",
           },
         },
@@ -578,32 +694,58 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
     expect(
-      await screen.findByRole("button", { name: "Continue with SSO" }),
+      await screen.findByRole("button", { name: "Continue with Google" }),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue with Microsoft" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Google")).toBeTruthy();
+    expect(screen.getByText("Microsoft")).toBeTruthy();
     expect(screen.getByText("or")).toBeTruthy();
     expect(screen.getByLabelText("Email")).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Continue with SSO" }),
+      screen.getByRole("button", { name: "Continue with Google" }),
     );
 
-    expect(navigations).toEqual([
-      "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
-    ]);
+    await waitFor(() =>
+      expect(navigations).toEqual([
+        "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=google-client",
+      ]),
+    );
     expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalledWith(
       expect.any(Object),
       "/new",
     );
   });
 
-  it("hides the email/password form in the desktop shell", () => {
+  it("renders published email/password and OAuth options in the desktop shell", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
     desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true, clientId: "desktop-local-client" },
+      oauthOptions: [
+        {
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "desktop-microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
+          },
+        },
+      ],
+    });
 
     render(<SignInPage />);
 
-    expect(screen.queryByLabelText("Email")).toBeNull();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue with Microsoft" }),
+    ).toBeTruthy();
   });
 });

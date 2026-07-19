@@ -6,10 +6,10 @@ import {
   pluginComponents,
   pluginInstalls,
   tenantAuthProviderReferences,
-  workosAuthBridges,
 } from "@thinkwork/database-pg/schema";
 import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import { db as defaultDb } from "./db.js";
+import { legacyWorkosAuthBridges as workosAuthBridges } from "./legacy-workos-schema.js";
 import { createSecretsManagerPluginSecrets } from "./plugins/secrets.js";
 import { signObject, verifyObject } from "./mcp-oauth/state.js";
 
@@ -461,7 +461,16 @@ async function loadWorkosPublicationForHost(
     row.hostnames.some((candidate) => normalizeTrustedHost(candidate) === host),
   );
   if (matches.length !== 1) return null;
-  return matches[0];
+  const [match] = matches;
+  // Native Cognito resources intentionally allow provider client metadata to
+  // be absent. The rollback seam must never publish or invoke WorkOS unless
+  // both legacy references are present and non-empty.
+  if (!match.clientId?.trim() || !match.clientSecretRef?.trim()) return null;
+  return {
+    ...match,
+    clientId: match.clientId,
+    clientSecretRef: match.clientSecretRef,
+  };
 }
 
 async function exchangeWorkosCode(

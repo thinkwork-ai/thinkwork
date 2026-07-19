@@ -1,4 +1,4 @@
-import { getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -1722,14 +1722,25 @@ function bearerToken(event: APIGatewayProxyEventV2): string | null {
 }
 
 function isServiceBearer(bearer: string): boolean {
-  return [getApiAuthSecret(), process.env.GRAPHQL_API_KEY, getAppsyncApiKey()]
+  return [getApiAuthSecret()]
     .filter(Boolean)
     .some((secret) => secret === bearer);
 }
 
 async function tryFirstPartyAuth(event: APIGatewayProxyEventV2) {
   const { authenticate } = await import("../lib/cognito-auth.js");
-  return authenticate(event.headers);
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
+  const auth = await authenticate(event.headers);
+  if (!auth) return null;
+  if (auth.authType !== "cognito") return auth;
+  const admitted = await resolveCallerFromAuth(
+    auth,
+    event.headers["x-tenant-id"],
+  );
+  return admitted.userId && admitted.tenantId
+    ? { ...auth, principalId: admitted.userId, tenantId: admitted.tenantId }
+    : null;
 }
 
 function resourceUrl(event: APIGatewayProxyEventV2): string {

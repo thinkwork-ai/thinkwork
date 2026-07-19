@@ -3,13 +3,10 @@
  * Stripe Checkout Session. Called by stripe-webhook after
  * provisionTenantFromStripeSession commits.
  *
- * Non-fatal: if SES fails, we log + return false so the webhook still
- * ack's 200 (the tenant row exists with pending_owner_email set, so the
- * operator has a manual-recovery path). Stripe already ack'd the event
- * via the stripe_events idempotency gate, so letting the webhook fail
- * here would just put Stripe into retry → PK conflict → 200 replay,
- * which never re-triggers the email. Better to leave a single loud log
- * line for the operator.
+ * Returns false when SES fails. The webhook releases its idempotency claim and
+ * asks Stripe to retry; provisioning then revokes the unreachable enrollment,
+ * issues a new link/code pair, and retries delivery without creating a second
+ * tenant.
  *
  * Sender defaults to hello@agents.thinkwork.ai (the already-verified SES
  * inbound domain). Override via STRIPE_WELCOME_FROM_EMAIL env var once a
@@ -25,6 +22,11 @@ export interface WelcomeEmailInput {
   tenantId: string;
   sessionId: string;
   appUrl: string;
+  enrollment: {
+    startToken: string;
+    recipientChallenge: string;
+    expiresAt: Date;
+  };
 }
 
 const DEFAULT_FROM_EMAIL = "hello@agents.thinkwork.ai";
@@ -47,19 +49,26 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function buildWelcomeLink(appUrl: string, sessionId: string): string {
-  // Mirrors the Stripe success_url. Clicking this link is equivalent to
-  // re-visiting the post-checkout landing page (which kicks Google OAuth
-  // and lets bootstrapUser claim the paid tenant).
+function buildWelcomeLink(
+  appUrl: string,
+  startToken: string,
+  sessionId: string,
+): string {
   const base = appUrl.replace(/\/$/, "");
-  return `${base}/onboarding/welcome?session_id=${encodeURIComponent(sessionId)}`;
+  const next = `/onboarding/welcome?session_id=${encodeURIComponent(sessionId)}`;
+  return `${base}/accept-invite?token=${encodeURIComponent(startToken)}&next=${encodeURIComponent(next)}`;
 }
 
 export async function sendStripeWelcomeEmail(
   input: WelcomeEmailInput,
 ): Promise<boolean> {
-  const fromEmail = getConfig("STRIPE_WELCOME_FROM_EMAIL") || DEFAULT_FROM_EMAIL;
-  const link = buildWelcomeLink(input.appUrl, input.sessionId);
+  const fromEmail =
+    getConfig("STRIPE_WELCOME_FROM_EMAIL") || DEFAULT_FROM_EMAIL;
+  const link = buildWelcomeLink(
+    input.appUrl,
+    input.enrollment.startToken,
+    input.sessionId,
+  );
 
   const planLabel =
     input.plan && input.plan !== "unknown"
@@ -79,7 +88,10 @@ export async function sendStripeWelcomeEmail(
     `Finish setting up your account:`,
     link,
     ``,
-    `You'll sign in with Google to claim your workspace. If you paid with a different email than the one tied to your Google account, let us know — hello@thinkwork.ai.`,
+    `Enrollment code: ${input.enrollment.recipientChallenge}`,
+    `Enrollment expires: ${input.enrollment.expiresAt.toISOString()}`,
+    ``,
+    `Sign in with the local Cognito, Google, or Microsoft identity you want to bind to this workspace, then enter the enrollment code.`,
     ``,
     `— ThinkWork`,
   ].join("\n");
@@ -96,7 +108,7 @@ export async function sendStripeWelcomeEmail(
               ${planLabel ? `Welcome to ThinkWork ${escapeHtml(planLabel)}.` : `Welcome to ThinkWork.`}
             </td></tr>
             <tr><td style="padding-top:12px;font-size:15px;line-height:1.6;color:#cbd5e1;">
-              Your workspace is ready. Sign in with Google to claim it and finish onboarding.
+              Your workspace is ready. Sign in with the identity you want to bind to it, then enter the one-time enrollment code below.
             </td></tr>
             <tr><td style="padding-top:28px;">
               <a href="${escapeHtml(link)}" style="display:inline-block;background:#38bdf8;color:#020617;text-decoration:none;font-weight:600;font-size:14px;padding:12px 20px;border-radius:12px;">Finish setting up my account</a>
@@ -105,8 +117,10 @@ export async function sendStripeWelcomeEmail(
               If the button doesn't work, paste this URL into your browser:<br>
               <span style="word-break:break-all;">${escapeHtml(link)}</span>
             </td></tr>
-            <tr><td style="padding-top:28px;font-size:12px;line-height:1.6;color:#64748b;">
-              Paid with a different email than your Google account? Reply to this message or email hello@thinkwork.ai.
+            <tr><td style="padding-top:24px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;">Enrollment code</td></tr>
+            <tr><td style="padding-top:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:24px;font-weight:700;letter-spacing:0.16em;color:#f1f5f9;">${escapeHtml(input.enrollment.recipientChallenge)}</td></tr>
+            <tr><td style="padding-top:12px;font-size:12px;line-height:1.6;color:#64748b;">
+              This enrollment expires ${escapeHtml(input.enrollment.expiresAt.toISOString())}. The link and code are both required.
             </td></tr>
           </table>
         </td>

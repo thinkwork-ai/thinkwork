@@ -13,7 +13,7 @@
  * Required env:
  *   DATABASE_URL
  *   VITE_GRAPHQL_HTTP_URL, GRAPHQL_HTTP_URL, or API_GRAPHQL_URL
- *   VITE_GRAPHQL_API_KEY, APPSYNC_API_KEY, or GRAPHQL_API_KEY
+ *   API_AUTH_SECRET or THINKWORK_API_SECRET
  *
  * Optional:
  *   SMOKE_TENANT_ID, SMOKE_COMPUTER_ID, SMOKE_USER_ID, SMOKE_AGENT_ID
@@ -38,11 +38,7 @@ const apiUrl = first(
   env.GRAPHQL_HTTP_URL,
   env.API_GRAPHQL_URL,
 );
-const apiKey = first(
-  env.VITE_GRAPHQL_API_KEY,
-  env.APPSYNC_API_KEY,
-  env.GRAPHQL_API_KEY,
-);
+const apiKey = first(env.API_AUTH_SECRET, env.THINKWORK_API_SECRET);
 const requireBrowserEvidence = env.SMOKE_REQUIRE_BROWSER_EVIDENCE === "1";
 const runBrowserScenario = env.SMOKE_BROWSER_SCENARIO === "1";
 const requireBrowserCompleted = env.SMOKE_REQUIRE_BROWSER_COMPLETED === "1";
@@ -52,9 +48,7 @@ const BROWSER_SCENARIO_TIMEOUT_MS = Number(
 
 if (!databaseUrl) fail("Missing DATABASE_URL.");
 if (!apiUrl || !apiKey) {
-  fail(
-    "Missing GraphQL HTTP config. Set VITE_GRAPHQL_HTTP_URL and VITE_GRAPHQL_API_KEY.",
-  );
+  fail("Missing GraphQL HTTP config or API_AUTH_SECRET.");
 }
 
 const identity = resolveComputerIdentity(env);

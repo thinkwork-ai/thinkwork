@@ -28,6 +28,30 @@ output "identity_provider_names" {
   value       = module.cognito.identity_provider_names
 }
 
+output "auth_route_clients" {
+  description = "Safe Cognito app-client manifest for local, Google, Microsoft, and tenant Entra routes."
+  value       = module.cognito.auth_route_clients
+}
+
+output "auth_retirement_phase" {
+  description = "Applied authentication retirement phase used for safe controller upgrades."
+  value       = module.cognito.auth_retirement_phase
+}
+
+output "web_local_client_id" {
+  description = "Local-password-only Cognito app client for web login."
+  value       = module.cognito.web_local_client_id
+}
+
+output "mobile_local_client_id" {
+  description = "Local-password-only Cognito app client for mobile login."
+  value       = module.cognito.mobile_local_client_id
+}
+
+output "microsoft_identity_provider_name" {
+  value = module.cognito.microsoft_identity_provider_name
+}
+
 output "kms_key_arn" {
   value = module.kms.key_arn
 }
@@ -105,11 +129,6 @@ output "appsync_api_url" {
 
 output "appsync_realtime_url" {
   value = module.appsync.graphql_realtime_url
-}
-
-output "appsync_api_key" {
-  value     = module.appsync.graphql_api_key
-  sensitive = true
 }
 
 output "auth_domain" {

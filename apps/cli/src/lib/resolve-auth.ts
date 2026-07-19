@@ -125,12 +125,18 @@ async function ensureCognitoFresh(
 
   // Re-discover Cognito config — cached fields on the session may be stale
   // after a re-deploy (client rotation, domain change).
-  const cognito = discoverCognitoConfig(stage, region) ?? {
-    userPoolId: session.userPoolId,
+  const discovered = discoverCognitoConfig(stage, region);
+  const cognito = {
+    userPoolId: discovered?.userPoolId ?? session.userPoolId,
+    // Refresh tokens are bound to the route-specific client that issued them.
+    // Discovery still returns the legacy/default client for compatibility, so
+    // it must never override the client persisted with this session.
     clientId: session.userPoolClientId,
-    domain: session.cognitoDomain,
-    domainUrl: `https://${session.cognitoDomain}.auth.${session.region}.amazoncognito.com`,
-    region: session.region,
+    domain: discovered?.domain ?? session.cognitoDomain,
+    domainUrl:
+      discovered?.domainUrl ??
+      `https://${session.cognitoDomain}.auth.${session.region}.amazoncognito.com`,
+    region: discovered?.region ?? session.region,
   };
 
   try {

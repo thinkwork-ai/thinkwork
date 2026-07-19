@@ -112,25 +112,24 @@ describe("enterprise Terraform release artifacts", () => {
     }
   });
 
-  it("Cognito custom auth consumes the same remote release artifacts", () => {
+  it("retains the rollback bridge through cutover and removes it only when retired", () => {
     const variables = read(COGNITO_VARIABLES);
     const cognito = read(COGNITO_MAIN);
     const thinkwork = read(THINKWORK_MAIN);
+    const handlers = read(LAMBDA_API_HANDLERS);
 
+    expect(variables).toMatch(/variable "auth_retirement_phase"/);
     expect(variables).toMatch(/variable "custom_auth_lambda_s3_bucket"/);
-    expect(variables).toMatch(/variable "custom_auth_lambda_s3_key"/);
-    expect(cognito).toMatch(/use_remote_custom_auth_artifact\s*=/);
     expect(cognito).toMatch(
-      /s3_bucket\s*=\s*local\.use_remote_custom_auth_artifact \? var\.custom_auth_lambda_s3_bucket : null/,
+      /workos_rollback_enabled\s*=\s*var\.auth_retirement_phase != "retired"/,
     );
-    expect(cognito).toMatch(
-      /s3_key\s*=\s*local\.use_remote_custom_auth_artifact \? var\.custom_auth_lambda_s3_key : null/,
-    );
-    expect(thinkwork).toMatch(
-      /custom_auth_lambda_s3_bucket\s*=\s*var\.require_lambda_artifacts \? var\.lambda_artifact_bucket : ""/,
-    );
-    expect(thinkwork).toMatch(
-      /custom_auth_lambda_s3_key\s*=\s*var\.require_lambda_artifacts && var\.lambda_artifact_bucket != "" \? "\$\{trim\(trimspace\(var\.lambda_artifact_prefix\), "\/"\)\}\/cognito-custom-auth\.zip" : ""/,
+    expect(cognito).toMatch(/local\.workos_rollback_enabled/);
+    expect(cognito).toMatch(/define_auth_challenge/);
+    expect(cognito).toMatch(/create_auth_challenge/);
+    expect(cognito).toMatch(/verify_auth_challenge_response/);
+    expect(thinkwork).toMatch(/cognito-custom-auth\.zip/);
+    expect(handlers).toMatch(
+      /var\.auth_retirement_phase == "retired" \? \[\s*#.*\n(?:.*\n)*?\s*"workos-auth"/,
     );
   });
 

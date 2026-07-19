@@ -1,33 +1,42 @@
 import { readRuntimeEnv } from "./runtime-config";
 
 export interface PublicAuthOptions {
-  password: { enabled: boolean };
+  password: { enabled: boolean; clientId?: string };
   oauthOptions: PublicOAuthOption[];
+  legacyMigration?: { authorizePath: string };
 }
 
 export interface PublicOAuthOption {
   key: string;
   label: string;
-  icon: "sso" | "google" | "microsoft";
-  provider: "workos";
-  providerSpecific: boolean;
+  icon: "google" | "microsoft";
+  provider: "google" | "microsoft" | "entra";
+  providerSpecific: true;
   route: {
-    type: "workosAuthorize";
-    authorizePath: "/api/auth/workos/authorize";
+    type: "cognitoHostedUi";
+    clientId: string;
+    identityProvider: string;
     prompt?: string;
   };
 }
 
 const FALLBACK_AUTH_OPTIONS: PublicAuthOptions = {
-  password: { enabled: true },
+  password: { enabled: false },
   oauthOptions: [],
 };
 
 export async function fetchPublicAuthOptions(
   fetchImpl: typeof fetch = fetch,
+  platform: "web" | "desktop" = "web",
 ): Promise<PublicAuthOptions> {
   try {
-    const response = await fetchImpl(`${apiBaseUrl()}/api/auth/options`, {
+    const url = new URL(
+      `${apiBaseUrl()}/api/auth/options`,
+      window.location.origin,
+    );
+    url.searchParams.set("host", window.location.hostname);
+    url.searchParams.set("platform", platform);
+    const response = await fetchImpl(url.toString(), {
       method: "GET",
       cache: "no-store",
       headers: { accept: "application/json" },
@@ -45,21 +54,49 @@ export function parsePublicAuthOptions(raw: unknown): PublicAuthOptions {
   }
   const record = raw as Record<string, unknown>;
   const password = parsePassword(record.password);
-  const oauthOptions = Array.isArray(record.oauthOptions)
-    ? record.oauthOptions.flatMap((entry) => {
-        const option = parseOAuthOption(entry);
-        return option ? [option] : [];
-      })
+  const rawOAuthOptions = Array.isArray(record.oauthOptions)
+    ? record.oauthOptions
     : [];
-  return { password, oauthOptions };
+  const oauthOptions = rawOAuthOptions.flatMap((entry) => {
+    const option = parseOAuthOption(entry);
+    return option ? [option] : [];
+  });
+  const legacyMigration = parseLegacyMigration(record.legacyMigration);
+  return {
+    password,
+    oauthOptions,
+    ...(legacyMigration ? { legacyMigration } : {}),
+  };
 }
 
-function parsePassword(raw: unknown): { enabled: boolean } {
+function parseLegacyMigration(
+  raw: unknown,
+): PublicAuthOptions["legacyMigration"] | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const authorizePath = safeString(
+    (raw as Record<string, unknown>).authorizePath,
+  );
+  return authorizePath === "/api/auth/workos/authorize"
+    ? { authorizePath }
+    : undefined;
+}
+
+function parsePassword(raw: unknown): { enabled: boolean; clientId?: string } {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return FALLBACK_AUTH_OPTIONS.password;
   }
+  const record = raw as Record<string, unknown>;
+  // During the staged rollout the deployed options endpoint may still return
+  // the legacy `{ enabled: true }` password shape. The static deployment
+  // profile already contains the exact Cognito app client used by that
+  // environment, so preserve local/password access until the control-plane
+  // reconciliation starts publishing route-specific client IDs.
+  const clientId =
+    safeString(record.clientId) ||
+    (record.enabled === true ? readRuntimeEnv("VITE_COGNITO_CLIENT_ID") : "");
   return {
-    enabled: (raw as Record<string, unknown>).enabled !== false,
+    enabled: record.enabled === true && Boolean(clientId),
+    ...(clientId ? { clientId } : {}),
   };
 }
 
@@ -74,17 +111,19 @@ function parseOAuthOption(raw: unknown): PublicOAuthOption | null {
   const key = safeString(record.key);
   const label = safeString(record.label);
   const icon = safeIcon(record.icon);
-  const authorizePath = safeString(routeRecord.authorizePath);
+  const clientId = safeString(routeRecord.clientId);
+  const identityProvider = safeString(routeRecord.identityProvider);
   const prompt = safeString(routeRecord.prompt);
 
   if (
     !key ||
     !label ||
     !icon ||
-    record.provider !== "workos" ||
-    typeof record.providerSpecific !== "boolean" ||
-    routeRecord.type !== "workosAuthorize" ||
-    authorizePath !== "/api/auth/workos/authorize"
+    !isNativeProvider(record.provider) ||
+    record.providerSpecific !== true ||
+    routeRecord.type !== "cognitoHostedUi" ||
+    !clientId ||
+    !identityProvider
   ) {
     return null;
   }
@@ -93,11 +132,12 @@ function parseOAuthOption(raw: unknown): PublicOAuthOption | null {
     key,
     label,
     icon,
-    provider: "workos",
-    providerSpecific: record.providerSpecific,
+    provider: record.provider,
+    providerSpecific: true,
     route: {
-      type: "workosAuthorize",
-      authorizePath,
+      type: "cognitoHostedUi",
+      clientId,
+      identityProvider,
       ...(prompt ? { prompt } : {}),
     },
   };
@@ -120,7 +160,11 @@ function safeString(value: unknown): string {
 }
 
 function safeIcon(value: unknown): PublicOAuthOption["icon"] | null {
-  return value === "sso" || value === "google" || value === "microsoft"
-    ? value
-    : null;
+  return value === "google" || value === "microsoft" ? value : null;
+}
+
+function isNativeProvider(
+  value: unknown,
+): value is PublicOAuthOption["provider"] {
+  return value === "google" || value === "microsoft" || value === "entra";
 }

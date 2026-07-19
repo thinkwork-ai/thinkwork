@@ -93,6 +93,46 @@ describe("psql compatibility helpers", () => {
 });
 
 describe("applyMigrations (direct pg)", () => {
+  it("defers irreversible auth retirement unless explicitly enabled", async () => {
+    const dir = makeDrizzleDir({
+      "0262_native.sql": "CREATE TABLE native_auth(id integer);",
+      "0263_drop_workos.sql":
+        "-- deployment-phase: auth-retired\nDROP TABLE workos_auth_sessions;",
+    });
+    const deferred = fakeRunner();
+    const summary = await applyMigrations({
+      drizzleDir: dir,
+      stage: "dev",
+      region: "us-east-1",
+      connection: {
+        host: "h",
+        port: 5432,
+        user: "u",
+        password: "p",
+        database: "thinkwork",
+      },
+      connect: async () => deferred.runner,
+    });
+    expect(summary.applied).toEqual(["0262_native"]);
+    expect(summary.skippedFiles).toContain("0263_drop_workos.sql");
+
+    const enabled = fakeRunner();
+    const enabledSummary = await applyMigrations({
+      drizzleDir: dir,
+      stage: "dev",
+      region: "us-east-1",
+      connection: {
+        host: "h",
+        port: 5432,
+        user: "u",
+        password: "p",
+        database: "thinkwork",
+      },
+      connect: async () => enabled.runner,
+      includeAuthRetirement: true,
+    });
+    expect(enabledSummary.applied).toEqual(["0262_native", "0263_drop_workos"]);
+  });
   it("applies files in order with stage substitution and records hashes", async () => {
     const dir = makeDrizzleDir({
       "0001_b.sql": "CREATE TABLE b (id int);",
@@ -119,9 +159,9 @@ describe("applyMigrations (direct pg)", () => {
     expect(applied).toContain("'hp1'");
     expect(applied).not.toContain(":'stage'");
     expect(applied).not.toContain("\\set");
-    expect(queries.filter((q) => q.includes("INSERT INTO drizzle"))).toHaveLength(
-      2,
-    );
+    expect(
+      queries.filter((q) => q.includes("INSERT INTO drizzle")),
+    ).toHaveLength(2);
   });
 
   it("skips already-applied hashes (idempotent rerun)", async () => {
@@ -173,8 +213,7 @@ describe("applyMigrations (direct pg)", () => {
 
   it("resolves compliance passwords from Secrets Manager (0070)", async () => {
     const dir = makeDrizzleDir({
-      "0070_roles.sql":
-        "SET LOCAL \"thinkwork.writer_pass\" = :'writer_pass';",
+      "0070_roles.sql": "SET LOCAL \"thinkwork.writer_pass\" = :'writer_pass';",
     });
     const { runner, queries } = fakeRunner();
     const execCalls: string[][] = [];
@@ -273,20 +312,28 @@ describe("dependency-order retries", () => {
       },
       connect: async () => runner,
     });
-    expect(summary.applied).toEqual(["0105_spaces_domain", "0021_crm_work_links"]);
+    expect(summary.applied).toEqual([
+      "0105_spaces_domain",
+      "0021_crm_work_links",
+    ]);
   });
 });
 
 describe("ensureCompliancePassword", () => {
   it("mints and stores a password when the container is empty", () => {
     const calls: string[][] = [];
-    const password = ensureCompliancePassword("hp1", "writer", "us-east-1", (args) => {
-      calls.push(args);
-      if (args[1] === "get-secret-value") {
-        return { status: 254, stdout: "", stderr: "empty" };
-      }
-      return ok();
-    });
+    const password = ensureCompliancePassword(
+      "hp1",
+      "writer",
+      "us-east-1",
+      (args) => {
+        calls.push(args);
+        if (args[1] === "get-secret-value") {
+          return { status: 254, stdout: "", stderr: "empty" };
+        }
+        return ok();
+      },
+    );
     expect(password.length).toBeGreaterThan(20);
     const put = calls.find((c) => c[1] === "put-secret-value")!;
     expect(put).toContain("thinkwork/hp1/compliance/writer-credentials");
@@ -317,7 +364,8 @@ describe("splitSqlStatements", () => {
   });
 
   it("ignores semicolons in comments and quoted strings", () => {
-    const sql = "-- not a stmt; still comment\nSELECT 'x;y'; /* z;q */ SELECT 2;";
+    const sql =
+      "-- not a stmt; still comment\nSELECT 'x;y'; /* z;q */ SELECT 2;";
     const parts = splitSqlStatements(sql);
     expect(parts).toHaveLength(2);
   });
@@ -356,7 +404,9 @@ describe("transaction wrapping (psql autocommit semantics)", () => {
   });
 
   it("requiresAutocommit detects create/drop index concurrently", () => {
-    expect(requiresAutocommit("CREATE INDEX CONCURRENTLY i ON t(a);")).toBe(true);
+    expect(requiresAutocommit("CREATE INDEX CONCURRENTLY i ON t(a);")).toBe(
+      true,
+    );
     expect(requiresAutocommit("DROP INDEX CONCURRENTLY i;")).toBe(true);
     expect(requiresAutocommit("CREATE INDEX i ON t(a);")).toBe(false);
   });

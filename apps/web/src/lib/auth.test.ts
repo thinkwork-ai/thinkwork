@@ -15,6 +15,7 @@ beforeEach(() => {
     configurable: true,
     value: createMemoryStorage(),
   });
+  window.sessionStorage.clear();
 });
 
 function stubLocation(origin: string): { navigations: string[] } {
@@ -23,6 +24,8 @@ function stubLocation(origin: string): { navigations: string[] } {
     configurable: true,
     value: {
       origin,
+      host: new URL(origin).host,
+      hostname: new URL(origin).hostname,
       set href(target: string) {
         navigations.push(target);
       },
@@ -58,62 +61,186 @@ function makeIdToken(payload: object): string {
   return ["header", base64Url(payload), "signature"].join(".");
 }
 
-describe("getGoogleSignInUrl", () => {
-  it("forces the Google account chooser with prompt=select_account", async () => {
-    stubLocation("https://app.example");
-    const { getGoogleSignInUrl } = await import("./auth");
-
-    const url = new URL(getGoogleSignInUrl());
-    expect(url.pathname).toBe("/oauth2/authorize");
-    expect(url.searchParams.get("identity_provider")).toBe("Google");
-    expect(url.searchParams.get("prompt")).toBe("select_account");
-  });
-});
-
-describe("getHostedSignInUrl", () => {
-  it("uses the Cognito hosted UI without forcing an identity provider", async () => {
-    stubLocation("https://app.example");
-    const { getHostedSignInUrl } = await import("./auth");
-
-    const url = new URL(getHostedSignInUrl());
-    expect(url.pathname).toBe("/oauth2/authorize");
-    expect(url.searchParams.get("identity_provider")).toBeNull();
-    expect(url.searchParams.get("prompt")).toBeNull();
-    expect(url.searchParams.get("client_id")).toBe("test-client-id");
-  });
-});
-
 describe("getAuthOptionSignInUrl", () => {
-  it("routes public auth options through the WorkOS API authorize endpoint", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
+  it("starts direct Cognito authorization with state, nonce, and S256 PKCE", async () => {
     stubLocation("https://app.example");
     const { getAuthOptionSignInUrl } = await import("./auth");
 
     const url = new URL(
-      getAuthOptionSignInUrl(
+      await getAuthOptionSignInUrl(
         {
-        key: "workos-sso",
-        label: "Continue with SSO",
-        icon: "sso",
-        provider: "workos",
-        providerSpecific: false,
-        route: {
-          type: "workosAuthorize",
-          authorizePath: "/api/auth/workos/authorize",
-          prompt: "select_account",
-        },
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
+            prompt: "select_account",
+          },
         },
         "/automations/123",
       ),
     );
 
-    expect(url.origin).toBe("https://api.example.com");
-    expect(url.pathname).toBe("/api/auth/workos/authorize");
+    expect(url.origin).toBe(
+      "https://thinkwork-test.auth.us-east-1.amazoncognito.com",
+    );
+    expect(url.pathname).toBe("/oauth2/authorize");
+    expect(url.searchParams.get("client_id")).toBe("microsoft-client");
+    expect(url.searchParams.get("identity_provider")).toBe(
+      "MicrosoftOrganizations",
+    );
     expect(url.searchParams.get("redirect_uri")).toBe(
       "https://app.example/auth/callback",
     );
-    expect(url.searchParams.get("return_to")).toBe("/automations/123");
     expect(url.searchParams.get("prompt")).toBe("select_account");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("code_challenge")).toMatch(
+      /^[A-Za-z0-9_-]{43}$/,
+    );
+    expect(url.searchParams.get("nonce")).toBeTruthy();
+    const state = url.searchParams.get("state");
+    expect(state).toBeTruthy();
+    const stored = JSON.parse(
+      window.sessionStorage.getItem(`thinkwork:oauth-flow:${state}`) ?? "{}",
+    );
+    expect(stored).toEqual(
+      expect.objectContaining({
+        clientId: "microsoft-client",
+        initiatingOrigin: "https://app.example",
+        next: "/automations/123",
+      }),
+    );
+  });
+});
+
+describe("native Cognito callback exchange", () => {
+  it("uses the selected route client and one-time PKCE state", async () => {
+    stubLocation("https://app.example");
+    const auth = await import("./auth");
+    const authorizeUrl = new URL(
+      await auth.getAuthOptionSignInUrl({
+        key: "google",
+        label: "Continue with Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "google-client",
+          identityProvider: "Google",
+          prompt: "select_account",
+        },
+      }),
+    );
+    const state = authorizeUrl.searchParams.get("state")!;
+    const nonce = authorizeUrl.searchParams.get("nonce")!;
+    const issuer =
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool";
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        id_token: makeIdToken({
+          token_use: "id",
+          aud: "google-client",
+          nonce,
+          iss: issuer,
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        access_token: makeIdToken({
+          token_use: "access",
+          client_id: "google-client",
+          iss: issuer,
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        refresh_token: "refresh-token",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await auth.exchangeCodeForSession("one-time-code", state);
+    expect(result.clientId).toBe("google-client");
+    expect(result.next).toBe("/new");
+    const request = fetchMock.mock.calls[0][1];
+    const body = request?.body as URLSearchParams;
+    expect(body.get("client_id")).toBe("google-client");
+    expect(body.get("code_verifier")).toBeTruthy();
+    await expect(
+      auth.exchangeCodeForSession("replayed-code", state),
+    ).rejects.toThrow(/missing, expired, or already used/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds a native subject with the one-use legacy-session migration grant before returning tokens", async () => {
+    stubLocation("https://app.example");
+    const auth = await import("./auth");
+    const authorizeUrl = new URL(
+      await auth.getAuthOptionIdentityMigrationUrl(
+        {
+          key: "microsoft",
+          label: "Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
+          },
+        },
+        {
+          startToken: "migration-start-token",
+          recipientChallenge: "12345678",
+        },
+        "/spaces",
+      ),
+    );
+    const state = authorizeUrl.searchParams.get("state")!;
+    const nonce = authorizeUrl.searchParams.get("nonce")!;
+    const issuer =
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool";
+    const idToken = makeIdToken({
+      token_use: "id",
+      aud: "microsoft-client",
+      nonce,
+      iss: issuer,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          id_token: idToken,
+          access_token: makeIdToken({
+            token_use: "access",
+            client_id: "microsoft-client",
+            iss: issuer,
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          }),
+          refresh_token: "refresh-token",
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ outcome: "consumed" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await auth.exchangeCodeForSession("one-time-code", state);
+
+    expect(result.next).toBe("/spaces");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchMock.mock.calls[1][0])).pathname).toBe(
+      "/api/auth/enrollment/consume",
+    );
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: `Bearer ${idToken}` }),
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      startToken: "migration-start-token",
+      recipientChallenge: "12345678",
+      redirectUri: "https://app.example/auth/callback",
+    });
   });
 });
 
@@ -133,78 +260,66 @@ describe("signOut", () => {
     expect(target.searchParams.get("logout_uri")).toBe("https://app.example");
   });
 
-  it("redirects through WorkOS logout when the API returns a WorkOS session URL", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        logout_url:
-          "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example",
-      }),
-    } as Response);
-    vi.stubGlobal("fetch", fetchMock);
+  it("revokes the refresh token before deleting local credentials", async () => {
     const { signOut, storeTokensInCognitoStorage } = await import("./auth");
     const { navigations } = stubLocation("https://app.example");
     const idToken = makeIdToken({
-      sub: "cognito-sub-123",
-      "cognito:username": "cognito-user-123",
+      sub: "user-sub",
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
-    storeTokensInCognitoStorage(
-      {
-        id_token: idToken,
-        access_token: "access-token",
-        refresh_token: "refresh-token",
+    storeTokensInCognitoStorage({
+      id_token: idToken,
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(
+          window.localStorage.getItem(`${prefix}.user-sub.refreshToken`),
+        ).toBe("refresh-token");
+        expect(init).toMatchObject({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${idToken}`,
+          }),
+          body: JSON.stringify({ refreshToken: "refresh-token" }),
+        });
+        return Response.json({ revoked: true });
       },
-      "workos",
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     await signOut();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.com/api/auth/workos/logout",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          return_to: "https://app.example/",
-        }),
-      },
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(new URL(String(fetchMock.mock.calls[0][0])).pathname).toBe(
+      "/api/auth/revoke",
     );
-    expect(navigations).toEqual([
-      "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example",
-    ]);
+    expect(
+      window.localStorage.getItem(`${prefix}.user-sub.refreshToken`),
+    ).toBeNull();
+    expect(new URL(navigations[0]).pathname).toBe("/logout");
   });
 
-  it("does not fall back to Cognito logout when WorkOS has no session URL", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
-      ok: true,
-      json: async () => ({ logout_url: null }),
-    } as Response);
-    vi.stubGlobal("fetch", fetchMock);
+  it("still clears local credentials and logs out when revocation fails", async () => {
     const { signOut, storeTokensInCognitoStorage } = await import("./auth");
     const { navigations } = stubLocation("https://app.example");
-    storeTokensInCognitoStorage(
-      {
-        id_token: makeIdToken({
-          sub: "cognito-sub-123",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        }),
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      },
-      "workos",
+    storeTokensInCognitoStorage({
+      id_token: makeIdToken({ sub: "user-sub" }),
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
     );
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-    await signOut();
+    await expect(signOut()).resolves.toBeUndefined();
 
-    expect(fetchMock).toHaveBeenCalled();
-    expect(navigations).toEqual(["/sign-in"]);
+    expect(window.localStorage.length).toBe(0);
+    expect(new URL(navigations[0]).pathname).toBe("/logout");
   });
 });
 
@@ -318,18 +433,17 @@ describe("Cognito token storage", () => {
       sub: "user-sub",
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
-    window.localStorage.setItem(`${prefix}.LastAuthUser`, "workos-user");
-    window.localStorage.setItem(`${prefix}.workos-user.idToken`, idToken);
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "federated-user");
+    window.localStorage.setItem(`${prefix}.federated-user.idToken`, idToken);
     window.localStorage.setItem(
-      `${prefix}.workos-user.accessToken`,
+      `${prefix}.federated-user.accessToken`,
       "access-token",
     );
     window.localStorage.setItem(
-      `${prefix}.workos-user.refreshToken`,
+      `${prefix}.federated-user.refreshToken`,
       "refresh-token",
     );
-    window.localStorage.setItem(`${prefix}.workos-user.clockDrift`, "0");
-    window.localStorage.setItem("thinkwork:auth-source", "workos");
+    window.localStorage.setItem(`${prefix}.federated-user.clockDrift`, "0");
 
     vi.resetModules();
     const { clearLocalAuthSession, getIdToken } = await import("./auth");
@@ -338,15 +452,14 @@ describe("Cognito token storage", () => {
 
     expect(window.localStorage.getItem(`${prefix}.LastAuthUser`)).toBeNull();
     expect(
-      window.localStorage.getItem(`${prefix}.workos-user.idToken`),
+      window.localStorage.getItem(`${prefix}.federated-user.idToken`),
     ).toBeNull();
     expect(
-      window.localStorage.getItem(`${prefix}.workos-user.accessToken`),
+      window.localStorage.getItem(`${prefix}.federated-user.accessToken`),
     ).toBeNull();
     expect(
-      window.localStorage.getItem(`${prefix}.workos-user.refreshToken`),
+      window.localStorage.getItem(`${prefix}.federated-user.refreshToken`),
     ).toBeNull();
-    expect(window.localStorage.getItem("thinkwork:auth-source")).toBeNull();
     await expect(getIdToken()).resolves.toBeNull();
   });
 
@@ -410,42 +523,6 @@ describe("Cognito token storage", () => {
         method: "POST",
         body: expect.any(URLSearchParams),
       }),
-    );
-  });
-});
-
-describe("exchangeWorkosBridgeForSession", () => {
-  it("posts the one-time WorkOS bridge code to the API and validates Cognito tokens", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        id_token: "id-token",
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      }),
-    } as Response);
-    vi.stubGlobal("fetch", fetchMock);
-    const { exchangeWorkosBridgeForSession } = await import("./auth");
-
-    await expect(
-      exchangeWorkosBridgeForSession("browser-bridge-code"),
-    ).resolves.toEqual({
-      id_token: "id-token",
-      access_token: "access-token",
-      refresh_token: "refresh-token",
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.com/api/auth/workos/bridge",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ bridge_code: "browser-bridge-code" }),
-      },
     );
   });
 });

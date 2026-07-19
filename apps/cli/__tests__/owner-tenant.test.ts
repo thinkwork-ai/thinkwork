@@ -1,8 +1,7 @@
 /**
  * Deploy-time owner-tenant pre-provision (self-hosted first-owner path).
  * A fresh stack has no code path that creates the first tenant — deploy
- * seeds a pending tenant (pending_owner_email) that bootstrapUser's claim
- * path attaches on first sign-in.
+ * binds the exact Cognito subject to the first owner without email claims.
  */
 
 import { describe, expect, it } from "vitest";
@@ -61,13 +60,18 @@ describe("buildEnsureOwnerTenantSql", () => {
       name: "HCI",
       slug: "hci",
       email: "Service@HomeCareIntel.com",
+      cognitoSub: "cognito-sub-1",
+      cognitoUserPoolId: "us-east-1_pool",
+      cognitoIssuer:
+        "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_pool",
     });
     expect(sql).toContain("WHERE NOT EXISTS (SELECT 1 FROM tenants)");
-    expect(sql).toContain("pending_owner_email");
-    expect(sql).toContain("first_admin_claim_required");
+    expect(sql).toContain("INSERT INTO user_auth_identities");
+    expect(sql).toContain("deploy_exact_cognito_sub");
+    expect(sql).toContain("provider_kind = 'local'");
     expect(sql).toContain("'service@homecareintel.com'");
     expect(sql).toContain("INSERT INTO tenant_settings (tenant_id)");
-    expect(sql).toContain("RETURNING tenant_id");
+    expect(sql).not.toContain("pending_owner_email");
   });
 
   it("escapes single quotes", () => {
@@ -75,6 +79,10 @@ describe("buildEnsureOwnerTenantSql", () => {
       name: "O'Brien's Workspace",
       slug: "obrien",
       email: "o'brien@example.com",
+      cognitoSub: "sub'o",
+      cognitoUserPoolId: "us-east-1_pool",
+      cognitoIssuer:
+        "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_pool",
     });
     expect(sql).toContain("'O''Brien''s Workspace'");
     expect(sql).toContain("'o''brien@example.com'");
@@ -105,10 +113,15 @@ const connection = {
 
 describe("ensureOwnerTenant", () => {
   it("reports created=true when the insert returned a row", async () => {
-    const { runner } = fakeRunner([{ hash: "tenant-id" }]);
+    const { runner } = fakeRunner([
+      { tenant_id: "tenant-id", local_connection_ready: true },
+    ]);
     const result = await ensureOwnerTenant({
       stage: "hci",
       email: "Service@HomeCareIntel.com",
+      cognitoSub: "cognito-sub-1",
+      cognitoUserPoolId: "us-east-1_pool",
+      region: "us-east-1",
       connection,
       connect: async () => runner,
     });
@@ -120,13 +133,35 @@ describe("ensureOwnerTenant", () => {
   });
 
   it("reports created=false when tenants already exist (rerun / claimed)", async () => {
-    const { runner } = fakeRunner([]);
+    const { runner } = fakeRunner([
+      { tenant_id: null, local_connection_ready: true },
+    ]);
     const result = await ensureOwnerTenant({
       stage: "hci",
       email: "service@homecareintel.com",
+      cognitoSub: "cognito-sub-1",
+      cognitoUserPoolId: "us-east-1_pool",
+      region: "us-east-1",
       connection,
       connect: async () => runner,
     });
     expect(result.created).toBe(false);
+  });
+
+  it("fails closed when native local route metadata is not reconciled", async () => {
+    const { runner } = fakeRunner([
+      { tenant_id: null, local_connection_ready: false },
+    ]);
+    await expect(
+      ensureOwnerTenant({
+        stage: "hci",
+        email: "service@homecareintel.com",
+        cognitoSub: "cognito-sub-1",
+        cognitoUserPoolId: "us-east-1_pool",
+        region: "us-east-1",
+        connection,
+        connect: async () => runner,
+      }),
+    ).rejects.toThrow(/metadata is not reconciled/);
   });
 });

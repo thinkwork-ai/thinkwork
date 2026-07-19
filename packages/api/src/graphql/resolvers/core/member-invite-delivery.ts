@@ -83,12 +83,19 @@ export async function deliverInviteViaEmailChannel(input: {
   name: string | null;
   tempPassword: string;
   delivery: InviteEmailChannelDelivery;
+  enrollment?: {
+    startToken: string;
+    recipientChallenge: string;
+    expiresAt: Date;
+  };
   idempotencyKey?: string;
 }) {
   const appUrl = (getConfig("ADMIN_URL", "") || "https://app.thinkwork.ai")
     .trim()
     .replace(/\/$/, "");
-  const signInUrl = `${appUrl}/sign-in`;
+  const signInUrl = input.enrollment
+    ? `${appUrl}/accept-invite?token=${encodeURIComponent(input.enrollment.startToken)}`
+    : `${appUrl}/sign-in`;
   const logoUrl = `${appUrl}/logo.png`;
   const displayName = input.name || input.email;
   const text = [
@@ -98,6 +105,12 @@ export async function deliverInviteViaEmailChannel(input: {
     "",
     `Sign in: ${signInUrl}`,
     `Temporary password: ${input.tempPassword}`,
+    ...(input.enrollment
+      ? [
+          `Enrollment code: ${input.enrollment.recipientChallenge}`,
+          `Enrollment expires: ${input.enrollment.expiresAt.toISOString()}`,
+        ]
+      : []),
     "",
     "You'll be asked to choose a new password after signing in.",
   ].join("\n");
@@ -142,6 +155,7 @@ export async function deliverInviteViaEmailChannel(input: {
                     </table>
                     <p style="margin:0 0 8px; font-size:13px; line-height:18px; color:#6b7280; text-transform:uppercase; font-weight:700;">Temporary password</p>
                     <div style="margin:0 0 20px; padding:14px 16px; background:#f9fafb; border:1px solid #d1d5db; border-radius:8px; color:#111827; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace; font-size:18px; line-height:24px; font-weight:700;">${escapeHtml(input.tempPassword)}</div>
+                    ${input.enrollment ? `<p style="margin:0 0 8px; font-size:13px; line-height:18px; color:#6b7280; text-transform:uppercase; font-weight:700;">Enrollment code</p><div style="margin:0 0 20px; padding:14px 16px; background:#f9fafb; border:1px solid #d1d5db; border-radius:8px; color:#111827; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace; font-size:18px; line-height:24px; font-weight:700; letter-spacing:0.16em;">${escapeHtml(input.enrollment.recipientChallenge)}</div>` : ""}
                     <p style="margin:0 0 20px; font-size:15px; line-height:23px; color:#4b5563;">You'll be asked to choose a new password after signing in.</p>
                     <p style="margin:0; font-size:13px; line-height:20px; color:#6b7280;">If the button does not work, paste this URL into your browser:<br /><a href="${escapeHtml(signInUrl)}" style="color:#2563eb; text-decoration:underline;">${escapeHtml(signInUrl)}</a></p>
                   </td>

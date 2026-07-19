@@ -12,14 +12,11 @@
  * 5. On failure: mark connection status="expired" + notify
  */
 
-import {
-  getConfig,
-  getApiAuthSecret,
-  getAppsyncApiKey,
-} from "@thinkwork/runtime-config";
+import { getConfig, getApiAuthSecret } from "@thinkwork/runtime-config";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { schema } from "@thinkwork/database-pg";
+import { publishAppSyncMutation } from "./appsync-iam-publisher.js";
 
 const {
   connections,
@@ -41,10 +38,6 @@ import {
 } from "./oauth-client-credentials.js";
 
 const STAGE = process.env.STAGE || process.env.APP_STAGE || "dev";
-
-function appsyncEndpoint(): string {
-  return getConfig("APPSYNC_ENDPOINT", "");
-}
 
 const sm = new SecretsManagerClient({
   region: process.env.AWS_REGION || "us-east-1",
@@ -568,10 +561,7 @@ export async function notifyConnectionExpired(
   const message = `Your ${conn.provider_name} connection has expired (${reason}). Please reconnect in Settings → Integrations.`;
 
   // Send AppSync notification if configured
-  const endpoint = appsyncEndpoint();
-  const apiKey = getAppsyncApiKey();
-  if (endpoint && apiKey) {
-    const mutation = `
+  const mutation = `
 			mutation NotifyNewMessage(
 				$messageId: ID!
 				$threadId: ID!
@@ -597,29 +587,14 @@ export async function notifyConnectionExpired(
 			}
 		`;
 
-    try {
-      await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          query: mutation,
-          variables: {
-            messageId: `system-${connectionId}-expired`,
-            threadId: `system-${tenantId}`,
-            tenantId,
-            role: "system",
-            content: message,
-            senderType: "system",
-          },
-        }),
-      });
-    } catch (err) {
-      console.error(`[oauth-token] AppSync notification failed:`, err);
-    }
-  }
+  await publishAppSyncMutation(mutation, {
+    messageId: `system-${connectionId}-expired`,
+    threadId: `system-${tenantId}`,
+    tenantId,
+    role: "system",
+    content: message,
+    senderType: "system",
+  });
 
   console.log(`[oauth-token] Connection ${connectionId} expired: ${reason}`);
 }

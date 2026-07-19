@@ -2,10 +2,8 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, eq } from "drizzle-orm";
-import { schema } from "@thinkwork/database-pg";
-import { db } from "../lib/db.js";
 import { authenticate } from "../lib/cognito-auth.js";
+import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 import { validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 import {
@@ -14,8 +12,6 @@ import {
   type TaskStatusToolActor,
 } from "../lib/task-status-tool.js";
 import { setWorkItemStatus } from "../lib/work-items/work-item-status-tool.js";
-
-const { users } = schema;
 
 interface TaskStatusToolBody {
   tenantId?: string;
@@ -174,33 +170,21 @@ async function resolveAuth(
   const cognito = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!cognito || cognito.authType !== "cognito" || !cognito.email) {
+  if (!cognito || cognito.authType !== "cognito") {
     return null;
   }
-  const cognitoTenantId = stringValue(cognito.tenantId);
-  const userWhere = cognitoTenantId
-    ? and(
-        eq(users.email, cognito.email.toLowerCase()),
-        eq(users.tenant_id, cognitoTenantId),
-      )
-    : eq(users.email, cognito.email.toLowerCase());
-  const [user] = await db
-    .select({
-      id: users.id,
-      tenantId: users.tenant_id,
-      email: users.email,
-    })
-    .from(users)
-    .where(userWhere)
-    .limit(1);
-  const tenantId = cognitoTenantId || user?.tenantId || null;
+  const requestedTenantId = stringValue(body.tenantId) || undefined;
+  const { userId, tenantId } = await resolveCallerFromAuth(
+    cognito,
+    requestedTenantId,
+  );
   const threadId = stringValue(body.threadId);
-  if (!tenantId || !threadId || !user?.id) return null;
+  if (!tenantId || !threadId || !userId) return null;
   return {
     tenantId,
     threadId,
     agentId: stringValue(body.agentId) || null,
-    actor: { type: "user", id: user.id, email: user.email },
+    actor: { type: "user", id: userId, email: cognito.email ?? undefined },
   };
 }
 

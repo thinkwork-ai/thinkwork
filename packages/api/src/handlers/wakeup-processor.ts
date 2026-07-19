@@ -14,10 +14,10 @@ import {
   deriveFunctionName,
   getConfig,
   getApiAuthSecret,
-  getAppsyncApiKey,
 } from "@thinkwork/runtime-config";
 import { randomBytes } from "crypto";
 import { jsonSafePreview } from "../lib/json-safe-text.js";
+import { publishAppSyncMutation } from "../lib/appsync-iam-publisher.js";
 import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -167,13 +167,10 @@ import {
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
 // document may load after module init, and vitest stubs env after import.
-// Secret-class values are read at call time via getApiAuthSecret /
-// getAppsyncApiKey — never captured at module load. The remaining
+// Secret-class values are read at call time via getApiAuthSecret, never
+// captured at module load. The remaining
 // process.env reads stay as-is until their own migration unit.
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
-function appsyncEndpoint(): string {
-  return getConfig("APPSYNC_ENDPOINT", "");
-}
 const MCP_BASE_URL = process.env.MCP_BASE_URL || "";
 const MCP_AUTH_SECRET = process.env.MCP_AUTH_SECRET || "";
 const AGENTCORE_GATEWAY_URL = process.env.AGENTCORE_GATEWAY_URL || "";
@@ -1257,7 +1254,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       const env: Record<string, string> = {
         THINKWORK_API_URL: thinkworkApiUrl(),
         THINKWORK_API_SECRET: getApiAuthSecret(),
-        GRAPHQL_API_KEY: getAppsyncApiKey(),
         AGENT_ID: wakeup.agent_id,
       };
       skillsConfig.push({
@@ -1601,8 +1597,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         secretRef: undefined,
         mcpServer: undefined,
         envOverrides: {
-          THINKWORK_API_URL: appsyncEndpoint(),
-          THINKWORK_API_SECRET: getAppsyncApiKey(),
+          THINKWORK_API_URL: thinkworkApiUrl(),
+          THINKWORK_API_SECRET: getApiAuthSecret(),
           AGENT_ID: wakeup.agent_id,
           TENANT_ID: wakeup.tenant_id,
           CURRENT_THREAD_ID: runThreadId,
@@ -2514,8 +2510,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       human_name: humanName || undefined,
       workspace_bucket: workspaceBucket() || undefined,
       workspace_prefix: workspacePrefix,
-      appsync_endpoint: appsyncEndpoint() || undefined,
-      appsync_api_key: getAppsyncApiKey() || undefined,
       hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: effectiveWebSearchConfig,
       web_extract_config: effectiveWebExtractConfig
@@ -3284,8 +3278,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             human_name: humanName || undefined,
             workspace_bucket: workspaceBucket() || undefined,
             workspace_prefix: workspacePrefix,
-            appsync_endpoint: appsyncEndpoint() || undefined,
-            appsync_api_key: getAppsyncApiKey() || undefined,
             hindsight_endpoint: hindsightEndpoint() || undefined,
             web_search_config: effectiveWebSearchConfig,
             web_extract_config: effectiveWebExtractConfig
@@ -4258,9 +4250,6 @@ async function notifyThreadTurnUpdate(payload: {
   status: string;
   triggerName: string | null;
 }): Promise<void> {
-  const appsyncApiKey = getAppsyncApiKey();
-  if (!appsyncEndpoint() || !appsyncApiKey) return;
-
   const mutation = `
 		mutation NotifyThreadTurnUpdate(
 			$runId: ID!
@@ -4292,27 +4281,7 @@ async function notifyThreadTurnUpdate(payload: {
 		}
 	`;
 
-  try {
-    const response = await fetch(appsyncEndpoint(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": appsyncApiKey,
-      },
-      body: JSON.stringify({ query: mutation, variables: payload }),
-    });
-    const responseBody = await response.text();
-    if (!response.ok || responseBody.includes('"errors"')) {
-      console.error(
-        `[wakeup-processor] AppSync notifyThreadTurnUpdate issue: ${response.status} ${responseBody}`,
-      );
-    }
-  } catch (err) {
-    console.error(
-      `[wakeup-processor] AppSync notifyThreadTurnUpdate error:`,
-      err,
-    );
-  }
+  await publishAppSyncMutation(mutation, payload);
 }
 
 async function notifyNewMessage(payload: {
@@ -4324,14 +4293,6 @@ async function notifyNewMessage(payload: {
   senderType: string;
   senderId: string;
 }): Promise<void> {
-  const appsyncApiKey = getAppsyncApiKey();
-  if (!appsyncEndpoint() || !appsyncApiKey) {
-    console.warn(
-      `[wakeup-processor] AppSync not configured, skipping notification`,
-    );
-    return;
-  }
-
   const mutation = `
 		mutation NotifyNewMessage(
 			$messageId: ID!
@@ -4369,30 +4330,10 @@ async function notifyNewMessage(payload: {
 		}
 	`;
 
-  try {
-    const response = await fetch(appsyncEndpoint(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": appsyncApiKey,
-      },
-      body: JSON.stringify({
-        query: mutation,
-        variables: {
-          ...payload,
-          ownerType:
-            payload.senderType === "assistant" ? "agent" : payload.senderType,
-          ownerId: payload.senderId,
-        },
-      }),
-    });
-    const responseBody = await response.text();
-    if (!response.ok || responseBody.includes('"errors"')) {
-      console.error(
-        `[wakeup-processor] AppSync notify issue: ${response.status} ${responseBody}`,
-      );
-    }
-  } catch (err) {
-    console.error(`[wakeup-processor] AppSync notify error:`, err);
-  }
+  await publishAppSyncMutation(mutation, {
+    ...payload,
+    ownerType:
+      payload.senderType === "assistant" ? "agent" : payload.senderType,
+    ownerId: payload.senderId,
+  });
 }

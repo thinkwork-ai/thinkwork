@@ -211,7 +211,6 @@ function baseProfile(): DeploymentProfile {
     cognitoDomain: "customer.auth.us-east-1.amazoncognito.com",
     cognitoUserPoolId: "us-east-1_profile",
     cognitoClientId: "profile-client",
-    graphqlApiKey: "profile-api-key",
     signature: null,
   });
 }

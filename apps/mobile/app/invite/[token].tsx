@@ -1,286 +1,168 @@
 import { useState } from "react";
-import {
-  View,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
-} from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { Image } from "react-native";
+import { ActivityIndicator, Image, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+
 import { Button } from "@/components/ui/button";
-import { Text, H2, Muted } from "@/components/ui/typography";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { H2, Muted, Text } from "@/components/ui/typography";
+import { useAuth } from "@/lib/auth-context";
+import { getPlatformConfig } from "@/lib/platform-config";
+
+type EnrollmentOutcome =
+  | "consumed"
+  | "invalid_grant"
+  | "invalid_challenge"
+  | "expired"
+  | "already_consumed"
+  | "wrong_route"
+  | "wrong_redirect"
+  | "identity_conflict";
 
 export default function AcceptInvitationScreen() {
   const router = useRouter();
-  const { token } = useLocalSearchParams<{ token: string }>();
-  // TODO: Migrate invitation queries to GraphQL
-  const invitation = undefined as any; // Stub
-  const acceptInvite = async (args: any) => {
-    console.log("TODO: acceptInvite", args);
-  };
-
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const { token = "" } = useLocalSearchParams<{ token?: string }>();
+  const { isAuthenticated, isLoading, getToken, retryBootstrap } = useAuth();
+  const [challenge, setChallenge] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [accepted, setAccepted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!name.trim()) {
-      setError("Please enter your name");
-      return;
-    }
-    if (!password.trim()) {
-      setError("Please enter a password");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
+  const returnPath = `/invite/${encodeURIComponent(token)}`;
 
-    setLoading(true);
+  async function consumeEnrollment() {
     setError(null);
-
+    setSubmitting(true);
     try {
-      await acceptInvite({
-        token: token!,
-        name: name.trim(),
-        password,
+      const idToken = await getToken();
+      if (!idToken) throw new Error("Sign in before accepting the invitation.");
+      const apiUrl = getPlatformConfig().apiUrl?.replace(/\/+$/, "");
+      if (!apiUrl) throw new Error("Deployment API is not configured.");
+      const response = await fetch(`${apiUrl}/api/auth/enrollment/consume`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          startToken: token,
+          recipientChallenge: challenge,
+          redirectUri: "thinkwork://auth/callback",
+        }),
       });
-      setAccepted(true);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please try again.";
-      setError(message);
-      setLoading(false);
+      const body = (await response.json().catch(() => ({}))) as {
+        outcome?: EnrollmentOutcome;
+      };
+      if (body.outcome === "consumed" || body.outcome === "already_consumed") {
+        await retryBootstrap();
+        router.replace("/" as never);
+        return;
+      }
+      setError(enrollmentOutcomeMessage(body.outcome));
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The invitation could not be accepted.",
+      );
+    } finally {
+      setSubmitting(false);
     }
-  };
-
-  // Success state (check BEFORE expired — acceptInvite marks it used, triggering reactive update)
-  if (accepted) {
-    return (
-      <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
-        <View className="flex-1 items-center justify-center p-4">
-          <Card className="w-full max-w-md self-center">
-            <CardHeader className="items-center pb-4">
-              <View className="mb-3">
-                <Image
-                  source={require("@/assets/logo.png")}
-                  style={{ width: 80, height: 64 }}
-                  resizeMode="contain"
-                />
-              </View>
-              <CardTitle>
-                <H2 className="tracking-wider uppercase text-center">
-                  Welcome!
-                </H2>
-              </CardTitle>
-              <CardDescription>
-                <Muted className="text-center">
-                  Your account has been created. Sign in to get started.
-                </Muted>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onPress={() => router.replace("/sign-in")} size="lg">
-                Sign In
-              </Button>
-            </CardContent>
-          </Card>
-        </View>
-      </SafeAreaView>
-    );
   }
 
-  // Loading state
-  if (invitation === undefined) {
+  if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950 items-center justify-center">
+      <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-neutral-950">
         <ActivityIndicator size="large" />
       </SafeAreaView>
     );
   }
 
-  // Invalid or expired
-  if (invitation === null || invitation.expired) {
-    return (
-      <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
-        <View className="flex-1 items-center justify-center p-4">
-          <Card className="w-full max-w-md self-center">
-            <CardHeader className="items-center pb-4">
-              <View className="mb-3">
-                <Image
-                  source={require("@/assets/logo.png")}
-                  style={{ width: 80, height: 64 }}
-                  resizeMode="contain"
-                />
-              </View>
-              <CardTitle>
-                <H2 className="tracking-wider uppercase text-center">
-                  Invitation {invitation?.expired ? "Expired" : "Not Found"}
-                </H2>
-              </CardTitle>
-              <CardDescription>
-                <Muted className="text-center">
-                  {invitation?.expired
-                    ? "This invitation has expired or has already been used."
-                    : "This invitation link is invalid. Please check with the person who invited you."}
-                </Muted>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onPress={() => router.replace("/sign-in")} size="lg">
-                Go to Sign In
-              </Button>
-            </CardContent>
-          </Card>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Accept form
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-      >
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            padding: 16,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Card className="w-full max-w-md self-center">
-            <CardHeader className="items-center pb-4">
-              <View className="mb-3">
-                <Image
-                  source={require("@/assets/logo.png")}
-                  style={{ width: 80, height: 64 }}
-                  resizeMode="contain"
-                />
-              </View>
-              <CardTitle>
-                <H2 className="tracking-wider uppercase text-center">
-                  You're Invited!
-                </H2>
-              </CardTitle>
-              <CardDescription>
-                <Muted className="text-center">
-                  Join{" "}
-                  <Text className="font-semibold">{invitation.tenantName}</Text>{" "}
-                  on ThinkWork
-                </Muted>
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="gap-3">
+    <SafeAreaView className="flex-1 items-center justify-center bg-white p-4 dark:bg-neutral-950">
+      <Card className="w-full max-w-md self-center">
+        <CardHeader className="items-center pb-4">
+          <Image
+            source={require("@/assets/logo.png")}
+            style={{ width: 80, height: 64 }}
+            resizeMode="contain"
+          />
+          <H2 className="text-center">Accept your invitation</H2>
+          <Muted className="text-center">
+            Sign in with the identity you want to use, then enter the one-time
+            code from your invitation email.
+          </Muted>
+        </CardHeader>
+        <CardContent className="gap-4">
+          {!token ? (
+            <Text size="sm" className="text-center text-destructive">
+              This invitation link is incomplete. Ask your workspace admin to
+              resend it.
+            </Text>
+          ) : !isAuthenticated ? (
+            <Button
+              onPress={() =>
+                router.push(
+                  `/sign-in?next=${encodeURIComponent(returnPath)}` as never,
+                )
+              }
+            >
+              Continue to sign in
+            </Button>
+          ) : (
+            <>
               <Input
-                label="Email"
-                value={invitation.email}
-                editable={false}
-                containerClassName="opacity-60"
+                label="Enrollment code"
+                value={challenge}
+                onChangeText={(value) =>
+                  setChallenge(value.replace(/\D/g, "").slice(0, 8))
+                }
+                keyboardType="number-pad"
+                autoComplete="one-time-code"
+                maxLength={8}
+                editable={!submitting}
               />
-
-              <Input
-                label="Name"
-                placeholder="Your name"
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-                autoCorrect={false}
-                returnKeyType="next"
-                autoFocus
-              />
-
-              <View>
-                <Input
-                  label="Password"
-                  placeholder="At least 8 characters"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                />
-                <Pressable
-                  className="absolute right-3 top-9 p-2"
-                  onPress={() => setShowPassword(!showPassword)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Text size="sm" variant="muted">
-                    {showPassword ? "Hide" : "Show"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <Input
-                label="Confirm Password"
-                placeholder="Re-enter your password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                returnKeyType="done"
-                onSubmitEditing={handleSubmit}
-              />
-
               {error && (
-                <View className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
-                  <Text size="sm" className="text-destructive">
-                    {error}
-                  </Text>
-                </View>
-              )}
-
-              <Button
-                onPress={handleSubmit}
-                loading={loading}
-                size="lg"
-                className="mt-2"
-              >
-                Accept & Create Account
-              </Button>
-
-              <Pressable
-                className="py-2"
-                onPress={() => router.replace("/sign-in")}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text size="sm" variant="muted" className="text-center">
-                  Already have an account? Sign in.
+                <Text size="sm" className="text-center text-destructive">
+                  {error}
                 </Text>
-              </Pressable>
-            </CardContent>
-          </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
+              )}
+              <Button
+                onPress={consumeEnrollment}
+                loading={submitting}
+                disabled={submitting || challenge.length !== 8}
+              >
+                Accept invitation
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </SafeAreaView>
   );
+}
+
+export function enrollmentOutcomeMessage(
+  outcome: EnrollmentOutcome | undefined,
+): string {
+  switch (outcome) {
+    case "invalid_challenge":
+      return "That enrollment code is not valid.";
+    case "expired":
+      return "This invitation has expired. Ask your workspace admin to resend it.";
+    case "wrong_route":
+      return "This sign-in method is not allowed for the invitation.";
+    case "wrong_redirect":
+      return "This invitation must be completed from its original ThinkWork environment.";
+    case "identity_conflict":
+      return "This sign-in identity is already attached to another ThinkWork user.";
+    case "invalid_grant":
+      return "This invitation is invalid or has been replaced.";
+    case "already_consumed":
+      return "This invitation has already been accepted.";
+    case "consumed":
+      return "Invitation accepted.";
+    default:
+      return "The invitation could not be accepted.";
+  }
 }

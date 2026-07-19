@@ -7,189 +7,195 @@ import {
   type PublicAuthOptionsDeps,
 } from "./public-auth-options.js";
 
-const validPublication = {
-  displayName: "WorkOS Auth",
-  publicOptionMode: "single_sso",
-  providerOptions: [
+const snapshot = {
+  scope: "deployment" as const,
+  localPasswordEnabled: true,
+  routes: [
     {
-      key: "google",
-      displayName: "Google",
-      clientSecretRef: "secret-should-never-leak",
+      routeKey: "local",
+      clientFamily: "web",
+      cognitoAppClientId: "local-client",
+      providerNames: ["COGNITO"],
+      lifecycleState: "native",
+      validationStatus: "valid",
+    },
+    {
+      routeKey: "google",
+      clientFamily: "web",
+      cognitoAppClientId: "google-client",
+      providerNames: ["Google"],
+      lifecycleState: "native",
+      validationStatus: "valid",
+    },
+    {
+      routeKey: "microsoft",
+      clientFamily: "web",
+      cognitoAppClientId: "microsoft-client",
+      providerNames: ["MicrosoftOrganizations"],
+      lifecycleState: "native",
+      validationStatus: "valid",
     },
   ],
-  publicOptionLabel: "Continue with SSO",
-  hostnames: ["login.customer.example"],
-  componentHandlerRef: {
-    status: "valid",
-    publicOptionsPublished: true,
-    diagnosticCode: null,
-    authProviderResourceId: "resource-1",
-    tenantAuthProviderReferenceId: "tenant-ref-1",
-    clientSecretRef: "secret-should-never-leak",
-  },
+  connections: [
+    {
+      resourceId: "google-resource",
+      connectionKey: "google",
+      providerKind: "google",
+      displayName: "Google",
+      cognitoIdentityProviderName: "Google",
+      cognitoAppClientIds: ["google-client"],
+      lifecycleState: "native",
+      validationStatus: "valid",
+      publicOptionsPublished: true,
+      diagnostics: { secret: "must-not-leak" },
+    },
+    {
+      resourceId: "microsoft-resource",
+      connectionKey: "microsoft:organizations",
+      providerKind: "microsoft_organizations",
+      displayName: "Microsoft",
+      cognitoIdentityProviderName: "MicrosoftOrganizations",
+      cognitoAppClientIds: ["microsoft-client"],
+      lifecycleState: "native",
+      validationStatus: "valid",
+      publicOptionsPublished: true,
+      clientSecretRef: "must-not-leak",
+    },
+  ],
 };
 
-function deps(
-  publication: typeof validPublication | null,
-): PublicAuthOptionsDeps {
-  return {
-    loadPublicationForHost: vi.fn(async (host: string) =>
-      host === "login.customer.example" ? publication : null,
-    ),
-    passwordSignInEnabled: () => true,
-  };
+function deps(): PublicAuthOptionsDeps {
+  return { loadPolicy: vi.fn(async () => snapshot) };
 }
 
 describe("resolvePublicAuthOptions", () => {
-  it("returns password availability and no OAuth options when no host matches", async () => {
-    const d = deps(validPublication);
-
-    const options = await resolvePublicAuthOptions({
-      trustedDomainName: "shared.thinkwork.example",
-      deps: d,
+  it("returns direct Cognito Google and Microsoft routes plus local password", async () => {
+    const result = await resolvePublicAuthOptions({
+      routingHost: "app.thinkwork.ai",
+      deps: deps(),
     });
 
-    expect(options).toEqual({
-      password: { enabled: true },
-      oauthOptions: [],
+    expect(result.password).toEqual({
+      enabled: true,
+      clientId: "local-client",
     });
-    expect(d.loadPublicationForHost).toHaveBeenCalledWith(
-      "shared.thinkwork.example",
-    );
+    expect(result.oauthOptions.map((option) => option.label)).toEqual([
+      "Continue with Google",
+      "Continue with Microsoft",
+    ]);
+    expect(
+      result.oauthOptions.every(
+        (option) => option.route.type === "cognitoHostedUi",
+      ),
+    ).toBe(true);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("workos");
+    expect(serialized).not.toContain("must-not-leak");
+    expect(serialized).not.toContain("resource");
   });
 
-  it("fails closed before DB lookup when API Gateway does not provide a trusted domain", async () => {
-    const d = deps(validPublication);
-
-    const options = await resolvePublicAuthOptions({
-      trustedDomainName: undefined,
-      deps: d,
-    });
-
-    expect(options.oauthOptions).toEqual([]);
-    expect(d.loadPublicationForHost).not.toHaveBeenCalled();
-  });
-
-  it("publishes the single WorkOS SSO fallback for a valid publication", async () => {
-    const options = await resolvePublicAuthOptions({
-      trustedDomainName: "LOGIN.CUSTOMER.EXAMPLE.",
-      deps: deps(validPublication),
-    });
-
-    expect(options).toEqual({
-      password: { enabled: true },
-      oauthOptions: [
-        {
-          key: "workos-sso",
-          label: "Continue with SSO",
-          icon: "sso",
-          provider: "workos",
-          providerSpecific: false,
-          route: {
-            type: "workosAuthorize",
-            authorizePath: "/api/auth/workos/authorize",
-            prompt: "select_account",
-          },
-        },
-      ],
-    });
-  });
-
-  it("does not publish provider-specific options before route proof exists", async () => {
-    const options = await resolvePublicAuthOptions({
-      trustedDomainName: "login.customer.example",
-      deps: deps({
-        ...validPublication,
-        publicOptionMode: "provider_specific",
+  it("publishes a dedicated legacy migration start only during coexistence", async () => {
+    vi.stubEnv("AUTH_RETIREMENT_PHASE", "coexistence");
+    await expect(
+      resolvePublicAuthOptions({
+        routingHost: "app.thinkwork.ai",
+        deps: deps(),
       }),
+    ).resolves.toMatchObject({
+      legacyMigration: { authorizePath: "/api/auth/workos/authorize" },
     });
 
-    expect(options.oauthOptions).toEqual([]);
-  });
-
-  it("does not publish when component validation is not valid", async () => {
-    const options = await resolvePublicAuthOptions({
-      trustedDomainName: "login.customer.example",
-      deps: deps({
-        ...validPublication,
-        componentHandlerRef: {
-          ...validPublication.componentHandlerRef,
-          status: "invalid",
-          publicOptionsPublished: true,
-        },
+    vi.stubEnv("AUTH_RETIREMENT_PHASE", "cutover");
+    await expect(
+      resolvePublicAuthOptions({
+        routingHost: "app.thinkwork.ai",
+        deps: deps(),
       }),
-    });
-
-    expect(options.oauthOptions).toEqual([]);
-  });
-
-  it("keeps tenant ids, secret refs, diagnostics, and raw provider config out of the public payload", async () => {
-    const options = await resolvePublicAuthOptions({
-      trustedDomainName: "login.customer.example",
-      deps: deps(validPublication),
-    });
-
-    const serialized = JSON.stringify(options);
-    expect(serialized).not.toContain("tenant-ref-1");
-    expect(serialized).not.toContain("resource-1");
-    expect(serialized).not.toContain("secret-should-never-leak");
-    expect(serialized).not.toContain("diagnosticCode");
-    expect(serialized).not.toContain("providerOptions");
+    ).resolves.not.toHaveProperty("legacyMigration");
   });
 });
 
 describe("createPublicAuthOptionsHandler", () => {
-  it("ignores spoofable Host and Origin headers during tenant resolution", async () => {
-    const d = deps(validPublication);
+  it("uses the requested host only as public routing input and returns no-store", async () => {
+    const d = deps();
     const handler = createPublicAuthOptionsHandler(d);
-
     const response = await handler(
       event({
-        domainName: "shared.thinkwork.example",
-        headers: {
-          host: "login.customer.example",
-          origin: "https://login.customer.example",
-          "x-forwarded-host": "login.customer.example",
-        },
+        domainName: "api.execute-api.us-east-1.amazonaws.com",
+        rawQueryString: "host=LOGIN.CUSTOMER.EXAMPLE.&platform=web",
       }),
     );
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body ?? "{}").oauthOptions).toEqual([]);
-    expect(d.loadPublicationForHost).toHaveBeenCalledWith(
-      "shared.thinkwork.example",
-    );
+    expect(response.headers?.["Cache-Control"]).toBe("no-store, max-age=0");
+    expect(d.loadPolicy).toHaveBeenCalledWith("login.customer.example", "web");
   });
 
-  it("returns no-store cache headers", async () => {
-    const handler = createPublicAuthOptionsHandler(deps(validPublication));
-
-    const response = await handler(
-      event({ domainName: "login.customer.example" }),
+  it("publishes the same provider contract for the mobile route family", async () => {
+    const mobileSnapshot = {
+      ...snapshot,
+      routes: snapshot.routes.map((route) => ({
+        ...route,
+        clientFamily: "mobile",
+        cognitoAppClientId: `mobile-${route.routeKey}-client`,
+      })),
+      connections: snapshot.connections.map((connection) => ({
+        ...connection,
+        cognitoAppClientIds: [
+          `mobile-${connection.providerKind === "google" ? "google" : "microsoft"}-client`,
+        ],
+      })),
+    };
+    const d: PublicAuthOptionsDeps = {
+      loadPolicy: vi.fn(async () => mobileSnapshot),
+    };
+    const response = await createPublicAuthOptionsHandler(d)(
+      event({
+        domainName: "api.example",
+        rawQueryString: "host=customer.example&platform=mobile",
+      }),
     );
+    const body = JSON.parse(response.body ?? "{}");
+    expect(body.password.clientId).toBe("mobile-local-client");
+    expect(
+      body.oauthOptions.map((option: { label: string }) => option.label),
+    ).toEqual(["Continue with Google", "Continue with Microsoft"]);
+    expect(d.loadPolicy).toHaveBeenCalledWith("customer.example", "mobile");
+  });
 
-    expect(response.headers?.["Cache-Control"]).toBe("no-store, max-age=0");
+  it("fails closed when catalog loading fails", async () => {
+    const handler = createPublicAuthOptionsHandler({
+      loadPolicy: vi.fn(async () => {
+        throw new Error("database unavailable");
+      }),
+    });
+    const response = await handler(event({ domainName: "api.example" }));
+    expect(JSON.parse(response.body ?? "{}")).toEqual({
+      password: { enabled: false },
+      oauthOptions: [],
+    });
   });
 });
 
 describe("normalizeTrustedHost", () => {
-  it("normalizes case, punycode, and trailing dots", () => {
+  it("normalizes case, punycode, trailing dots, and local ports", () => {
     expect(normalizeTrustedHost("BÜCHER.example.")).toBe(
       "xn--bcher-kva.example",
     );
+    expect(normalizeTrustedHost("LOCALHOST:5180")).toBe("localhost");
   });
 });
 
 function event(args: {
   domainName: string;
-  headers?: Record<string, string>;
+  rawQueryString?: string;
 }): APIGatewayProxyEventV2 {
   return {
     version: "2.0",
     routeKey: "GET /api/auth/options",
     rawPath: "/api/auth/options",
-    rawQueryString: "",
-    headers: args.headers ?? {},
+    rawQueryString: args.rawQueryString ?? "",
+    headers: {},
     requestContext: {
       accountId: "123",
       apiId: "api",
@@ -205,8 +211,8 @@ function event(args: {
       requestId: "req",
       routeKey: "GET /api/auth/options",
       stage: "$default",
-      time: "18/Jun/2026:20:00:00 +0000",
-      timeEpoch: 1781812800000,
+      time: "18/Jul/2026:20:00:00 +0000",
+      timeEpoch: 1784404800000,
     },
     isBase64Encoded: false,
   };

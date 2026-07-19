@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
 import { useConnections } from "@/lib/hooks/use-connections";
+import { getStoredOAuthIdToken } from "@/lib/auth";
 import {
   MySlackLinksQuery,
   UnlinkSlackIdentityMutation,
@@ -32,7 +33,6 @@ const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(
   /\/graphql$/,
   "",
 );
-const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 // Deep-link scheme used as `returnUrl` so `oauth-callback` redirects back into
 // the app at the end of consent. `openAuthSessionAsync` auto-closes the in-app
@@ -105,10 +105,12 @@ export function IntegrationsSection({ refreshSignal }: Props) {
           style: "destructive",
           onPress: async () => {
             try {
+              const token = getStoredOAuthIdToken();
+              if (!token) throw new Error("Authentication is not ready");
               await fetch(`${API_BASE}/api/connections/${connectionId}`, {
                 method: "DELETE",
                 headers: {
-                  "x-api-key": GRAPHQL_API_KEY,
+                  Authorization: `Bearer ${token}`,
                   "x-tenant-id": tenantId || "",
                 },
               });

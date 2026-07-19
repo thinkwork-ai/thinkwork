@@ -4,7 +4,6 @@ import { extractProfileJson } from "../../../../mobile/lib/deployment-profile";
 import { SetUpMobileCard } from "./SetUpMobileCard";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import {
-  buildMobileDeploymentProfileLink,
   encodeDeploymentProfileForMobile,
 } from "@/lib/mobile-setup-link";
 import { setRuntimeConfigForTest } from "@/lib/runtime-config";
@@ -33,18 +32,6 @@ describe("SetUpMobileCard", () => {
     );
 
     expect(decoded).toBe(JSON.stringify(snapshot.profile));
-  });
-
-  it("includes the GraphQL API key in the mobile setup payload", () => {
-    vi.stubEnv("VITE_GRAPHQL_API_KEY", "web-api-key");
-    const snapshot = getSpacesDeploymentProfileSnapshot();
-    expect(snapshot.profile).not.toBeNull();
-
-    const decoded = JSON.parse(
-      extractProfileJson(buildMobileDeploymentProfileLink(snapshot.profile!)),
-    );
-
-    expect(decoded.graphqlApiKey).toBe("web-api-key");
   });
 
   it("renders a QR code and copy fields when deployment config is usable", () => {
@@ -83,7 +70,6 @@ function completeProfileEnv(): Record<string, string> {
     VITE_GRAPHQL_HTTP_URL: "https://api.example.com/graphql",
     VITE_GRAPHQL_URL: "https://appsync.example.com/graphql",
     VITE_GRAPHQL_WS_URL: "wss://appsync.example.com/graphql",
-    VITE_GRAPHQL_API_KEY: "web-api-key",
     VITE_COGNITO_USER_POOL_ID: "us-east-1_TestPool",
     VITE_COGNITO_CLIENT_ID: "test-client-id",
     VITE_COGNITO_DOMAIN: "thinkwork-test",

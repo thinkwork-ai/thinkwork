@@ -1,22 +1,20 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthCallback } from "./callback";
 
 const routerMocks = vi.hoisted(() => ({
   search: {
     code: "",
-    workos_bridge: "",
-    next: "",
+    state: "",
     error: "",
     error_description: "",
+    workos_bridge: "",
   },
 }));
 
 const authMocks = vi.hoisted(() => ({
-  consumePostAuthRedirect: vi.fn(),
   exchangeCodeForSession: vi.fn(),
-  exchangeWorkosBridgeForSession: vi.fn(),
-  getGoogleSignInUrl: vi.fn(),
+  exchangeLegacyWorkosBridge: vi.fn(),
   storeTokensInCognitoStorage: vi.fn(),
 }));
 
@@ -34,15 +32,12 @@ const ORIGINAL_LOCATION = window.location;
 beforeEach(() => {
   routerMocks.search = {
     code: "",
-    workos_bridge: "",
-    next: "",
+    state: "",
     error: "",
     error_description: "",
+    workos_bridge: "",
   };
-  authMocks.consumePostAuthRedirect.mockImplementation((fallback = "/new") => fallback);
   authMocks.exchangeCodeForSession.mockReset();
-  authMocks.exchangeWorkosBridgeForSession.mockReset();
-  authMocks.getGoogleSignInUrl.mockReturnValue("/google");
   authMocks.storeTokensInCognitoStorage.mockReset();
 
   Object.defineProperty(window, "location", {
@@ -63,8 +58,42 @@ afterEach(() => {
   });
 });
 
-describe("AuthCallback WorkOS bridge", () => {
-  it("stores Cognito tokens returned by the verified WorkOS bridge", async () => {
+describe("AuthCallback native Cognito route", () => {
+  it("exchanges code and state with the selected app client", async () => {
+    const tokens = {
+      id_token: "id-token",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    };
+    routerMocks.search = {
+      code: "native-code",
+      state: "bound-state",
+      error: "",
+      error_description: "",
+      workos_bridge: "",
+    };
+    authMocks.exchangeCodeForSession.mockResolvedValue({
+      tokens,
+      clientId: "google-client",
+      next: "/new",
+    });
+
+    render(<AuthCallback />);
+
+    await waitFor(() =>
+      expect(authMocks.storeTokensInCognitoStorage).toHaveBeenCalledWith(
+        tokens,
+        "google-client",
+      ),
+    );
+    expect(authMocks.exchangeCodeForSession).toHaveBeenCalledWith(
+      "native-code",
+      "bound-state",
+    );
+    expect(window.location.href).toBe("/new");
+  });
+
+  it("exchanges the dedicated legacy migration bridge without native OAuth state", async () => {
     const tokens = {
       id_token: "id-token",
       access_token: "access-token",
@@ -72,45 +101,28 @@ describe("AuthCallback WorkOS bridge", () => {
     };
     routerMocks.search = {
       code: "",
-      workos_bridge: "one-time-bridge",
-      next: "/new",
+      state: "",
       error: "",
       error_description: "",
+      workos_bridge: "one-use-bridge",
     };
-    authMocks.exchangeWorkosBridgeForSession.mockResolvedValue(tokens);
+    authMocks.exchangeLegacyWorkosBridge.mockResolvedValue({
+      tokens,
+      clientId: "legacy-client",
+      next: "/new",
+    });
 
     render(<AuthCallback />);
 
     await waitFor(() =>
       expect(authMocks.storeTokensInCognitoStorage).toHaveBeenCalledWith(
         tokens,
-        "workos",
+        "legacy-client",
       ),
     );
-    expect(authMocks.exchangeWorkosBridgeForSession).toHaveBeenCalledWith(
-      "one-time-bridge",
+    expect(authMocks.exchangeLegacyWorkosBridge).toHaveBeenCalledWith(
+      "one-use-bridge",
     );
     expect(authMocks.exchangeCodeForSession).not.toHaveBeenCalled();
-    expect(authMocks.consumePostAuthRedirect).toHaveBeenCalledWith("/new");
-    expect(window.location.href).toBe("/new");
-  });
-
-  it("does not store Cognito tokens when the WorkOS bridge exchange fails", async () => {
-    routerMocks.search = {
-      code: "",
-      workos_bridge: "bad-bridge",
-      next: "/new",
-      error: "",
-      error_description: "",
-    };
-    authMocks.exchangeWorkosBridgeForSession.mockRejectedValue(
-      new Error("WorkOS bridge exchange failed"),
-    );
-
-    render(<AuthCallback />);
-
-    await screen.findByText("WorkOS bridge exchange failed");
-    expect(authMocks.storeTokensInCognitoStorage).not.toHaveBeenCalled();
-    expect(window.location.href).toBe("https://app.example/auth/callback");
   });
 });

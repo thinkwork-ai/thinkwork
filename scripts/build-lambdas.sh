@@ -149,15 +149,25 @@ build_handler "graphql-http" \
 
 build_handler "cognito-pre-signup" \
   "$REPO_ROOT/packages/api/src/handlers/cognito-pre-signup.ts"
+build_handler "cognito-pre-token-client-deny" \
+  "$REPO_ROOT/packages/api/src/handlers/cognito-pre-token-client-deny.ts"
 
+# Rollback-only WorkOS bridge artifacts remain in release bundles until the
+# explicit auth retirement phase removes their Terraform resources. They are
+# never referenced by the native login UI or public auth options.
 build_handler "cognito-custom-auth" \
   "$REPO_ROOT/packages/api/src/handlers/cognito-custom-auth.ts"
+
 
 build_handler "public-auth-options" \
   "$REPO_ROOT/packages/api/src/handlers/public-auth-options.ts"
 
+build_handler "auth-provider-reconcile" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-provider-reconcile.ts"
+
 build_handler "workos-auth" \
   "$REPO_ROOT/packages/api/src/handlers/workos-auth.ts"
+
 
 # Public artifact share links (THINK-208): unauthenticated GET /share/{token}.
 build_handler "artifact-share" \
@@ -372,6 +382,17 @@ build_handler "deployment-sessions" \
 
 build_handler "auth-me" \
   "$REPO_ROOT/packages/api/src/handlers/auth-me.ts"
+
+build_handler "auth-revoke" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-revoke.ts"
+build_handler "auth-subscription-ticket" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-subscription-ticket.ts"
+build_handler "auth-enrollment" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-enrollment.ts"
+build_handler "appsync-subscription-authorizer" \
+  "$REPO_ROOT/packages/api/src/handlers/appsync-subscription-authorizer.ts"
+build_handler "subscription-invalidation" \
+  "$REPO_ROOT/packages/api/src/handlers/subscription-invalidation.ts"
 
 build_handler "extension-proxy" \
   "$REPO_ROOT/packages/api/src/handlers/extension-proxy.ts"

@@ -16,7 +16,6 @@ import type { GraphQLContext } from "../../context.js";
 import {
   db,
   eq,
-  sql,
   tenants,
   users,
   tenantMembers,
@@ -28,6 +27,8 @@ import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-fold
 import { ensureTenantBootstrapDefaults } from "../../../lib/tenant-bootstrap-defaults.js";
 import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
 import { validateTenantSlug } from "./tenantSlugValidation.js";
+import { resolveCallerFromAuth } from "./resolve-auth-user.js";
+import { userAuthIdentities } from "@thinkwork/database-pg/schema";
 
 async function seedTenantBootstrapDefaults(tenantId: string, userId: string) {
   try {
@@ -69,12 +70,25 @@ export const bootstrapUser = async (
   const email = ctx.auth.email;
   const name = (ctx.auth as any).name || email.split("@")[0];
 
-  // Check if user already exists
-  const [existingUser] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+  if (
+    ctx.auth.authType !== "cognito" ||
+    !ctx.auth.route ||
+    !ctx.auth.cognitoIssuer
+  ) {
+    throw new Error("Cognito route admission is required");
+  }
+
+  // Existing users are returned only through an exact active identity,
+  // connection, policy, and membership admission. Email can never select an
+  // existing account for a newly presented provider subject.
+  const admitted = await resolveCallerFromAuth(ctx.auth);
+  const [existingUser] = admitted.userId
+    ? await db
+        .select()
+        .from(users)
+        .where(eq(users.id, admitted.userId))
+        .limit(1)
+    : [];
 
   if (existingUser) {
     // User exists — return existing data
@@ -100,110 +114,28 @@ export const bootstrapUser = async (
     };
   }
 
-  // Paid-signup claim path: if the Stripe webhook pre-provisioned a tenant
-  // for this email, attach this user to that (already-paid) tenant instead
-  // of creating a new "free" one.
-  //
-  // Match on lowercased email — the partial unique index in
-  // drizzle/0022_stripe_billing_indexes.sql stores lower(email) so there's
-  // at most one candidate row. Returns the claimed tenant with plan set
-  // from Stripe (written by provisionTenantFromStripeSession).
-  const [pendingTenant] = await db
-    .select()
-    .from(tenants)
-    .where(eq(sql`lower(${tenants.pending_owner_email})`, email.toLowerCase()))
-    .limit(1);
-
-  if (pendingTenant) {
-    if (ctx.auth.emailVerified !== true) {
-      throw new Error(
-        "Verified email is required to claim the pending tenant.",
-      );
-    }
-
-    console.log(
-      `[bootstrapUser] Claiming pre-provisioned paid tenant ${pendingTenant.id} (plan=${pendingTenant.plan}) for ${email}`,
+  if (ctx.auth.route.providerKind !== "local") {
+    throw new Error(
+      "Identity enrollment is required before a federated account can create or claim a workspace.",
     );
-    const existingUsers = await db
-      .select({
-        id: users.id,
-        workspaceFolderName: users.workspace_folder_name,
-      })
-      .from(users)
-      .where(eq(users.tenant_id, pendingTenant.id));
-
-    const [user] = await db
-      .insert(users)
-      .values({
-        tenant_id: pendingTenant.id,
-        email,
-        name,
-        workspace_folder_name: workspaceFolderName(
-          name,
-          existingUsers.map((row) => row.workspaceFolderName ?? row.id),
-          "user",
-        ),
-        // Stable identity link captured at creation, where email (and thus
-        // the Cognito sub) is guaranteed present — so the user resolves by
-        // sub forever, independent of whether later tokens carry email.
-        cognito_sub: cognitoSub,
-      })
-      .returning();
-
-    await db.insert(tenantMembers).values({
-      tenant_id: pendingTenant.id,
-      principal_type: "user",
-      principal_id: user.id,
-      role: "owner",
-      status: "active",
-    });
-
-    const [claimedTenant] = await db
-      .update(tenants)
-      .set({
-        pending_owner_email: null,
-        first_admin_claim_required: false,
-        first_admin_claimed_at: sql`now()`,
-        first_admin_claimed_user_id: user.id,
-        updated_at: sql`now()`,
-      })
-      .where(eq(tenants.id, pendingTenant.id))
-      .returning();
-
-    try {
-      const {
-        CognitoIdentityProviderClient,
-        AdminUpdateUserAttributesCommand,
-      } = await import("@aws-sdk/client-cognito-identity-provider");
-      const cognito = new CognitoIdentityProviderClient({});
-      await cognito.send(
-        new AdminUpdateUserAttributesCommand({
-          UserPoolId:
-            getConfig("COGNITO_USER_POOL_ID") || process.env.USER_POOL_ID,
-          Username: cognitoSub,
-          UserAttributes: [
-            { Name: "custom:tenant_id", Value: pendingTenant.id },
-          ],
-        }),
-      );
-    } catch (err) {
-      console.warn(
-        "[bootstrapUser] Failed to update Cognito tenant_id (claim path):",
-        err,
-      );
-    }
-
-    await seedTenantBootstrapDefaults(pendingTenant.id, user.id);
-    await seedDefaultThreadSpace(pendingTenant.id, user.id);
-
-    return {
-      user,
-      tenant: claimedTenant ?? pendingTenant,
-      isNew: true,
-    };
   }
 
-  // Default path — no pending tenant, create a fresh free-tier workspace.
+  // A local Cognito sign-up may create a new account, but it may not capture
+  // an existing row that happens to share its email.
+  const [emailCandidate] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  if (emailCandidate) {
+    throw new Error(
+      "Identity enrollment is required for this existing account.",
+    );
+  }
+
+  // A local Cognito sign-up may create a fresh free-tier workspace. Paid and
+  // deploy-provisioned owners must consume an exact enrollment instead of
+  // selecting an account or tenant by email.
   const tenantName = `${name}'s Workspace`;
   const tenantSlug = generateSlug();
 
@@ -254,6 +186,8 @@ export const bootstrapUser = async (
     status: "active",
   });
 
+  await activateLocalIdentity(ctx, tenant.id, user.id);
+
   // Create default agent template
   await db
     .insert(agentTemplates)
@@ -292,3 +226,33 @@ export const bootstrapUser = async (
     isNew: true,
   };
 };
+
+async function activateLocalIdentity(
+  ctx: GraphQLContext,
+  tenantId: string,
+  userId: string,
+): Promise<void> {
+  const route = ctx.auth.route;
+  if (!route || !ctx.auth.principalId || !ctx.auth.cognitoIssuer) {
+    throw new Error("Cognito identity evidence is incomplete");
+  }
+  await db
+    .insert(userAuthIdentities)
+    .values({
+      tenant_id: tenantId,
+      user_id: userId,
+      auth_provider_resource_id: route.connectionId,
+      cognito_issuer: ctx.auth.cognitoIssuer,
+      cognito_sub: ctx.auth.principalId,
+      provider_issuer: ctx.auth.cognitoIssuer,
+      provider_subject: ctx.auth.principalId,
+      status: "active",
+      proof_kind: "local_cognito_signup",
+      evidence: {
+        appClientId: route.appClientId,
+        connectionKey: route.connectionKey,
+      },
+      activated_at: new Date(),
+    })
+    .onConflictDoNothing();
+}

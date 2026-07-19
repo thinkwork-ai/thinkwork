@@ -72,10 +72,24 @@ db_password = "CHANGE_ME_strong_password_here"
 # Google OAuth (optional — leave empty to skip Google social login)
 # google_oauth_client_id     = ""
 # google_oauth_client_secret = ""
+# microsoft_oauth_client_id     = ""
+# microsoft_oauth_client_secret = "" # Supply securely; never commit a real value.
+# microsoft_oauth_tenant        = "" # Entra directory GUID; organizations/common are not valid Cognito issuers.
+
+# Tenant-specific Entra IdPs are reconciled by `thinkwork enterprise
+# identity-provider`; Terraform receives safe provider metadata only.
+# tenant_entra_connections = [{
+#   connection_key = "microsoft:tenant:00000000-0000-4000-8000-000000000000"
+#   tenant_id      = "00000000-0000-4000-8000-000000000000"
+#   provider_name  = "Entra_0000000000004000_ab12cd34"
+#   display_name   = "Example organization"
+# }]
 
 # Cognito trigger Lambdas (optional — leave empty if not using custom auth logic)
 # pre_signup_lambda_zip           = "./lambdas/cognito-pre-signup.zip"
-# cognito_custom_auth_lambda_zip  = "./lambdas/cognito-custom-auth.zip"
+# auth_retirement_phase          = "retired" # greenfield default; existing upgrades explicitly use coexistence -> cutover -> retired
+# auth_migration_recovery_deadline = "2026-08-01T00:00:00Z" # required when auth_retirement_phase = "coexistence"
+# cognito_custom_auth_lambda_zip = "./lambdas/cognito-custom-auth.zip" # rollback only
 
 # Lambda artifacts:
 # - Source checkout deploys can set lambda_zips_dir after `pnpm build:lambdas`.

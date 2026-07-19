@@ -16,7 +16,6 @@ import {
   activatePluginWithCredentials,
   cutoverTwentyPlugin,
   deactivatePlugin,
-  configureWorkosAuthPlugin,
   installPlugin,
   issuePremiumPluginInstallKey,
   redeemPremiumPluginInstallKey,
@@ -52,5 +51,4 @@ export const pluginMutations = {
   updateN8nPluginPackageSettings,
   updateN8nPluginApiCredential,
   cutoverTwentyPlugin,
-  configureWorkosAuthPlugin,
 };

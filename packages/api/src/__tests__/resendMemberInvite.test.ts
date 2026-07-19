@@ -10,6 +10,7 @@ const {
   runWithIdempotencyMock,
   selectRowsQueue,
   whereCalls,
+  issueEnrollmentGrantsMock,
 } = vi.hoisted(() => ({
   cognitoSendMock: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
@@ -20,6 +21,11 @@ const {
   runWithIdempotencyMock: vi.fn(),
   selectRowsQueue: [] as unknown[][],
   whereCalls: [] as unknown[],
+  issueEnrollmentGrantsMock: vi.fn(),
+}));
+
+vi.mock("../handlers/auth-enrollment.js", () => ({
+  issueEnrollmentGrants: issueEnrollmentGrantsMock,
 }));
 
 vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
@@ -130,6 +136,7 @@ describe("resendMemberInvite", () => {
     generateTemporaryPasswordMock.mockReset();
     resolveInviteEmailChannelMock.mockReset();
     runWithIdempotencyMock.mockReset();
+    issueEnrollmentGrantsMock.mockReset();
     selectRowsQueue.length = 0;
     whereCalls.length = 0;
 
@@ -138,6 +145,12 @@ describe("resendMemberInvite", () => {
     deliverInviteViaEmailChannelMock.mockResolvedValue(undefined);
     generateTemporaryPasswordMock.mockReturnValue("TempPass123!Aa1!");
     resolveInviteEmailChannelMock.mockResolvedValue(null);
+    issueEnrollmentGrantsMock.mockResolvedValue({
+      startToken: "enrollment-token",
+      recipientChallenge: "12345678",
+      expiresAt: new Date("2026-07-18T18:00:00Z"),
+      routeKeys: ["google-web"],
+    });
     runWithIdempotencyMock.mockImplementation(
       async ({ fn }: { fn: () => Promise<unknown> }) => fn(),
     );
@@ -244,6 +257,12 @@ describe("resendMemberInvite", () => {
         provider: "resend",
         from: "noreply@thinkwork.ai",
         credential: "re_test",
+      },
+      enrollment: {
+        startToken: "enrollment-token",
+        recipientChallenge: "12345678",
+        expiresAt: new Date("2026-07-18T18:00:00Z"),
+        routeKeys: ["google-web"],
       },
     });
   });

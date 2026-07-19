@@ -99,11 +99,11 @@ describe("desktop IPC schemas", () => {
       }),
     ).toEqual({ code: "abc", next: "/automations/123", state: "xyz" });
     expect(
-      ChannelSchemas.consumePendingOAuth.response.parse({
-        workos_bridge: "bridge-code",
+      ChannelSchemas.startOAuth.request.parse({
+        authOptionKey: "microsoft",
         next: "/work-items/123",
       }),
-    ).toEqual({ workos_bridge: "bridge-code", next: "/work-items/123" });
+    ).toEqual({ authOptionKey: "microsoft", next: "/work-items/123" });
     expect(
       ChannelSchemas.importDeploymentProfile.request.parse({
         json: '{"schemaVersion":1}',

@@ -5,12 +5,14 @@ const {
   getApiAuthSecretMock,
   getConfigMock,
   primeRuntimeConfigMock,
+  routeAdmissionMock,
   verifyMock,
 } = vi.hoisted(() => ({
   cognitoVerifierCreateMock: vi.fn(),
   getApiAuthSecretMock: vi.fn(),
   getConfigMock: vi.fn(),
   primeRuntimeConfigMock: vi.fn(),
+  routeAdmissionMock: vi.fn(),
   verifyMock: vi.fn(),
 }));
 
@@ -26,7 +28,11 @@ vi.mock("aws-jwt-verify", () => ({
   },
 }));
 
-import { authenticate } from "./cognito-auth.js";
+vi.mock("./auth-admission.js", () => ({
+  resolveCognitoRouteProvenance: routeAdmissionMock,
+}));
+
+import { authenticate, verifyCognitoApplicationToken } from "./cognito-auth.js";
 
 describe("authenticate — apikey path", () => {
   const prev = process.env.API_AUTH_SECRET;
@@ -38,10 +44,24 @@ describe("authenticate — apikey path", () => {
     getConfigMock.mockReset();
     primeRuntimeConfigMock.mockReset();
     verifyMock.mockReset();
+    routeAdmissionMock.mockReset();
     getApiAuthSecretMock.mockReturnValue("");
-    getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
+    getConfigMock.mockImplementation(
+      (_: string, fallback?: string) => fallback,
+    );
     primeRuntimeConfigMock.mockResolvedValue(undefined);
     cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
+    routeAdmissionMock.mockResolvedValue({
+      routeClientId: "route-web",
+      routeKey: "google",
+      clientFamily: "web",
+      appClientId: "client-web",
+      lifecycleState: "native",
+      connectionId: "connection-google",
+      connectionKey: "google",
+      providerKind: "google",
+      providerIssuer: "https://accounts.google.com",
+    });
   });
 
   afterEach(() => {
@@ -89,24 +109,6 @@ describe("authenticate — apikey path", () => {
     });
   });
 
-  it("does not accept public AppSync API keys as GraphQL HTTP service auth", async () => {
-    process.env.API_AUTH_SECRET = "";
-    process.env.GRAPHQL_API_KEY = "public-appsync-key";
-    process.env.APPSYNC_API_KEY = "public-appsync-key";
-
-    try {
-      expect(
-        await authenticate({
-          "x-api-key": "public-appsync-key",
-          "x-tenant-id": "tenant-abc",
-        }),
-      ).toBeNull();
-    } finally {
-      delete process.env.GRAPHQL_API_KEY;
-      delete process.env.APPSYNC_API_KEY;
-    }
-  });
-
   it("returns email=null when x-principal-email is absent", async () => {
     const auth = await authenticate({ "x-api-key": "tw-test-secret" });
     expect(auth).not.toBeNull();
@@ -124,10 +126,24 @@ describe("authenticate — Bearer-as-apikey fallback (CLI/Strands back-compat)",
     getConfigMock.mockReset();
     primeRuntimeConfigMock.mockReset();
     verifyMock.mockReset();
+    routeAdmissionMock.mockReset();
     getApiAuthSecretMock.mockReturnValue("");
-    getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
+    getConfigMock.mockImplementation(
+      (_: string, fallback?: string) => fallback,
+    );
     primeRuntimeConfigMock.mockResolvedValue(undefined);
     cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
+    routeAdmissionMock.mockResolvedValue({
+      routeClientId: "route-web",
+      routeKey: "google",
+      clientFamily: "web",
+      appClientId: "client-web",
+      lifecycleState: "native",
+      connectionId: "connection-google",
+      connectionKey: "google",
+      providerKind: "google",
+      providerIssuer: "https://accounts.google.com",
+    });
   });
 
   afterEach(() => {
@@ -219,9 +235,21 @@ describe("authenticate — Cognito JWT path", () => {
     getConfigMock.mockReset();
     primeRuntimeConfigMock.mockReset();
     verifyMock.mockReset();
+    routeAdmissionMock.mockReset();
     getApiAuthSecretMock.mockReturnValue("");
     primeRuntimeConfigMock.mockResolvedValue(undefined);
     cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
+    routeAdmissionMock.mockResolvedValue({
+      routeClientId: "route-web",
+      routeKey: "google",
+      clientFamily: "web",
+      appClientId: "client-web",
+      lifecycleState: "native",
+      connectionId: "connection-google",
+      connectionKey: "google",
+      providerKind: "google",
+      providerIssuer: "https://accounts.google.com",
+    });
   });
 
   afterEach(() => {
@@ -235,10 +263,11 @@ describe("authenticate — Cognito JWT path", () => {
     });
     primeRuntimeConfigMock.mockImplementation(async () => {
       config.set("COGNITO_USER_POOL_ID", "us-east-1_test");
-      config.set("COGNITO_APP_CLIENT_IDS", "client-web,client-mobile");
     });
     verifyMock.mockResolvedValue({
       sub: "user-sub",
+      iss: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_test",
+      aud: "client-web",
       email: "operator@example.com",
       email_verified: "true",
       "custom:tenant_id": "tenant-A",
@@ -250,24 +279,85 @@ describe("authenticate — Cognito JWT path", () => {
     expect(cognitoVerifierCreateMock).toHaveBeenCalledWith({
       userPoolId: "us-east-1_test",
       tokenUse: "id",
-      clientId: ["client-web", "client-mobile"],
+      clientId: null,
     });
     expect(auth).toEqual({
       principalId: "user-sub",
-      tenantId: "tenant-A",
+      tenantId: null,
+      tenantClaimHint: "tenant-A",
       email: "operator@example.com",
       emailVerified: true,
       authType: "cognito",
       agentId: null,
+      cognitoIssuer:
+        "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_test",
+      route: expect.objectContaining({
+        appClientId: "client-web",
+        connectionKey: "google",
+      }),
+    });
+    expect(routeAdmissionMock).toHaveBeenCalledWith({
+      userPoolId: "us-east-1_test",
+      appClientId: "client-web",
     });
   });
 
   it("does not cache a verifier when runtime config remains unavailable", async () => {
-    getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
+    getConfigMock.mockImplementation(
+      (_: string, fallback?: string) => fallback,
+    );
 
-    expect(await authenticate({ authorization: "Bearer jwt-token" })).toBeNull();
+    expect(
+      await authenticate({ authorization: "Bearer jwt-token" }),
+    ).toBeNull();
 
     expect(primeRuntimeConfigMock).toHaveBeenCalledWith({ force: true });
     expect(cognitoVerifierCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("uses client_id for access-token provenance and never access-token aud", async () => {
+    getConfigMock.mockImplementation((key: string, fallback?: string) =>
+      key === "COGNITO_USER_POOL_ID" ? "us-east-1_test" : fallback,
+    );
+    verifyMock.mockResolvedValue({
+      token_use: "access",
+      sub: "user-sub",
+      iss: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_test",
+      client_id: "client-access",
+      aud: "must-not-be-used",
+      exp: 9999999999,
+      iat: 1,
+      auth_time: 1,
+      jti: "jti",
+      origin_jti: "origin",
+    });
+
+    await verifyCognitoApplicationToken("access-token", "access");
+
+    expect(cognitoVerifierCreateMock).toHaveBeenLastCalledWith({
+      userPoolId: "us-east-1_test",
+      tokenUse: "access",
+      clientId: null,
+    });
+    expect(routeAdmissionMock).toHaveBeenLastCalledWith({
+      userPoolId: "us-east-1_test",
+      appClientId: "client-access",
+    });
+  });
+
+  it("does not substitute access-token client_id for a missing ID-token aud", async () => {
+    getConfigMock.mockImplementation((key: string, fallback?: string) =>
+      key === "COGNITO_USER_POOL_ID" ? "us-east-1_test" : fallback,
+    );
+    verifyMock.mockResolvedValue({
+      token_use: "id",
+      sub: "user-sub",
+      iss: "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_test",
+      client_id: "access-style-client",
+    });
+
+    await expect(
+      verifyCognitoApplicationToken("id-token", "id"),
+    ).rejects.toThrow(/missing issuer or app-client provenance/);
   });
 });

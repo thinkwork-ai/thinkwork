@@ -22,7 +22,6 @@
         "EXPO_PUBLIC_COGNITO_CLIENT_ID": "4hmooifj2surt62sjks45kemuh",
         "EXPO_PUBLIC_COGNITO_DOMAIN": "https://thinkwork-dev.auth.us-east-1.amazoncognito.com",
         "EXPO_PUBLIC_GRAPHQL_URL": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/graphql",
-        "EXPO_PUBLIC_GRAPHQL_API_KEY": "da2-agfhgx54sfeydoqzid5gpr3vpm",
         "EXPO_PUBLIC_GRAPHQL_WS_URL": "wss://dcrs2rau6nfk7djkuwia4oaczq.appsync-realtime-api.us-east-1.amazonaws.com/graphql",
         "EXPO_PUBLIC_API_URL": "https://api.thinkwork.ai"
       }
@@ -36,7 +35,6 @@
         "EXPO_PUBLIC_COGNITO_CLIENT_ID": "4hmooifj2surt62sjks45kemuh",
         "EXPO_PUBLIC_COGNITO_DOMAIN": "https://thinkwork-dev.auth.us-east-1.amazoncognito.com",
         "EXPO_PUBLIC_GRAPHQL_URL": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/graphql",
-        "EXPO_PUBLIC_GRAPHQL_API_KEY": "da2-agfhgx54sfeydoqzid5gpr3vpm",
         "EXPO_PUBLIC_GRAPHQL_WS_URL": "wss://dcrs2rau6nfk7djkuwia4oaczq.appsync-realtime-api.us-east-1.amazonaws.com/graphql",
         "EXPO_PUBLIC_API_URL": "https://api.thinkwork.ai"
       }

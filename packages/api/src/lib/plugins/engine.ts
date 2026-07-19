@@ -22,8 +22,7 @@
  *                                     components exist — the destroy job
  *                                     completes via read-time reconcile)
  *
- * Handlers run skills → infrastructure → mcp-server → auth-provider →
- * ui-surface and MUST
+ * Handlers run skills → infrastructure → mcp-server → ui-surface and MUST
  * be idempotent (create-or-repair) so a crash mid-sequence converges on
  * re-drive. A component failure aborts the sequence: later components stay
  * `pending`, the failed one records `last_error`, and the install holds at
@@ -52,7 +51,6 @@
 import { GraphQLError } from "graphql";
 import { createHash } from "node:crypto";
 import type {
-  AuthProviderComponent,
   InfrastructureComponent,
   McpServerComponent,
   PremiumPluginMetadata,
@@ -67,7 +65,6 @@ import {
   provisionPluginInfraComponent,
   teardownPluginInfraComponent,
 } from "./handlers/infra.js";
-import { provisionPluginAuthProviderComponent } from "./handlers/auth-provider.js";
 import {
   provisionPluginMcpComponent,
   teardownPluginMcpComponent,
@@ -189,12 +186,6 @@ export interface PluginEngineDeps {
       handlerRef: Record<string, unknown>;
       requestedByUserId: string | null;
     }) => Promise<{ handlerRef: Record<string, unknown>; complete: boolean }>;
-    provisionAuthProvider: (args: {
-      tenantId: string;
-      pluginInstallId: string;
-      component: AuthProviderComponent;
-      handlerRef: Record<string, unknown>;
-    }) => Promise<Record<string, unknown>>;
   };
   premiumAccess: {
     ensureInstallAllowed(input: PremiumInstallGateInput): Promise<void>;
@@ -215,8 +206,6 @@ export function createDefaultPluginEngineDeps(): PluginEngineDeps {
       teardownSkills: (args) => teardownPluginSkillsComponent(args),
       provisionInfra: (args) => provisionPluginInfraComponent(args),
       teardownInfra: (args) => teardownPluginInfraComponent(args),
-      provisionAuthProvider: (args) =>
-        provisionPluginAuthProviderComponent(args),
     },
     premiumAccess: {
       ensureInstallAllowed: ensurePremiumInstallAllowed,
@@ -267,8 +256,7 @@ async function ensurePremiumInstallAllowed(
 // ---------------------------------------------------------------------------
 
 /**
- * Provision order: skills → infrastructure → mcp-server → auth-provider →
- * ui-surface.
+ * Provision order: skills → infrastructure → mcp-server → ui-surface.
  *
  * Managed-app-backed MCP components resolve their endpoint from the
  * managed_applications row, so infrastructure must run before MCP.
@@ -277,22 +265,19 @@ const COMPONENT_PROVISION_ORDER: Record<string, number> = {
   skills: 0,
   infrastructure: 1,
   "mcp-server": 2,
-  "auth-provider": 3,
-  "ui-surface": 4,
+  "ui-surface": 3,
 };
 
 /**
- * Teardown order: skills → mcp-server → auth-provider → ui-surface →
- * infrastructure.
+ * Teardown order: skills → mcp-server → ui-surface → infrastructure.
  * Infra destroy jobs stay last so plugin-managed MCP rows disappear before
  * their backing application begins teardown.
  */
 const COMPONENT_TEARDOWN_ORDER: Record<string, number> = {
   skills: 0,
   "mcp-server": 1,
-  "auth-provider": 2,
-  "ui-surface": 3,
-  infrastructure: 4,
+  "ui-surface": 2,
+  infrastructure: 3,
 };
 
 function provisionOrder(componentType: string): number {
@@ -728,16 +713,6 @@ async function provisionComponent(
     case "ui-surface":
       // Declared-only in v1: recorded as a provisioned no-op.
       return { handlerRef: {}, provisioned: true };
-    case "auth-provider":
-      return {
-        handlerRef: await deps.handlers.provisionAuthProvider({
-          tenantId: install.tenant_id,
-          pluginInstallId: install.id,
-          component,
-          handlerRef: row.handler_ref ?? {},
-        }),
-        provisioned: true,
-      };
     default:
       throw pluginEngineError(
         "PLUGIN_COMPONENT_UNSUPPORTED",
@@ -830,7 +805,8 @@ async function runComponentSequence(
 ): Promise<void> {
   const rows = await deps.store.listComponents(install.id);
   const ordered = [...rows].sort(
-    (a, b) => provisionOrder(a.component_type) - provisionOrder(b.component_type),
+    (a, b) =>
+      provisionOrder(a.component_type) - provisionOrder(b.component_type),
   );
   for (const row of ordered) {
     if (row.state === "provisioned") continue;
@@ -1261,7 +1237,8 @@ async function retryTeardownComponent(
     (await deps.store.updateComponent(row.id, {
       state: "pending",
       lastError: null,
-    })) ?? ({ ...row, state: "pending", last_error: null } as PluginComponentRow);
+    })) ??
+    ({ ...row, state: "pending", last_error: null } as PluginComponentRow);
 
   try {
     const outcome = await removeComponentRow(

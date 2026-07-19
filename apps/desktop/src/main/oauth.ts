@@ -4,7 +4,7 @@ import {
   randomFillSync,
   type BinaryLike,
 } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   DeepLinkCallback,
@@ -13,7 +13,6 @@ import type {
   SignOutResponse,
   StartOAuthRequest,
   StartOAuthResponse,
-  WorkosBridgeCallback,
 } from "@thinkwork/desktop-ipc";
 import type { SignOutSession } from "./auth-bridge.js";
 import type { ICognitoStorage } from "./cognito-storage.js";
@@ -23,9 +22,7 @@ import type { DesktopEnvSnapshot } from "./env.js";
 const DEFAULT_PKCE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_IN_FLIGHT = 5;
 const DEFAULT_EVICTION_INTERVAL_MS = 60 * 1000;
-const DEFAULT_REVOKE_ATTEMPTS = 3;
-const DEFAULT_REVOKE_BUDGET_MS = 5_000;
-const AUTH_SOURCE_STORAGE_KEY = "thinkwork:auth-source";
+const AUTH_CLIENT_STORAGE_KEY = "thinkwork:auth-client-id";
 
 export interface DesktopAppPathLike {
   getPath(name: "userData"): string;
@@ -47,18 +44,16 @@ export interface DesktopOAuthOptions {
   shell: DesktopShellLike;
   fetch?: FetchLike;
   now?: () => number;
-  sleep?: (ms: number) => Promise<void>;
   logger?: Pick<typeof console, "warn" | "error">;
   pkceTtlMs?: number;
   maxInFlight?: number;
   evictionIntervalMs?: number | null;
-  revokeAttempts?: number;
-  revokeBudgetMs?: number;
 }
 
 export interface InFlightAttempt {
   verifierBytes: Buffer;
   challenge: string;
+  clientId: string;
   createdAt: number;
   env: DesktopEnvSnapshot;
   next?: string;
@@ -71,16 +66,14 @@ export interface OAuthTokens {
 }
 
 interface PublicOAuthOption {
-  route:
-    | {
-        type: "workosAuthorize";
-        authorizePath: "/api/auth/workos/authorize";
-        prompt?: string;
-      }
-    | {
-        type: "cognitoHostedUi";
-        identityProvider: string;
-      };
+  key: string;
+  label: string;
+  route: {
+    type: "cognitoHostedUi";
+    clientId: string;
+    identityProvider: string;
+    prompt?: string;
+  };
 }
 
 interface PublicAuthOptionsResponse {
@@ -99,12 +92,9 @@ export class DesktopOAuthController {
   private readonly shell: DesktopShellLike;
   private readonly fetchImpl: FetchLike;
   private readonly now: () => number;
-  private readonly sleep: (ms: number) => Promise<void>;
   private readonly logger: Pick<typeof console, "warn" | "error">;
   private readonly pkceTtlMs: number;
   private readonly maxInFlight: number;
-  private readonly revokeAttempts: number;
-  private readonly revokeBudgetMs: number;
   private readonly inFlight = new Map<string, InFlightAttempt>();
   private evictionTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -114,14 +104,9 @@ export class DesktopOAuthController {
     this.shell = options.shell;
     this.fetchImpl = options.fetch ?? fetch;
     this.now = options.now ?? Date.now;
-    this.sleep =
-      options.sleep ??
-      ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.logger = options.logger ?? console;
     this.pkceTtlMs = options.pkceTtlMs ?? DEFAULT_PKCE_TTL_MS;
     this.maxInFlight = options.maxInFlight ?? DEFAULT_MAX_IN_FLIGHT;
-    this.revokeAttempts = options.revokeAttempts ?? DEFAULT_REVOKE_ATTEMPTS;
-    this.revokeBudgetMs = options.revokeBudgetMs ?? DEFAULT_REVOKE_BUDGET_MS;
     this.pendingRevocationsPath = join(
       options.app.getPath("userData"),
       "pending-revocations.json",
@@ -141,19 +126,8 @@ export class DesktopOAuthController {
     request: StartOAuthRequest = undefined,
   ): Promise<StartOAuthResponse> {
     const env = await this.currentEnv();
-    const option = await this.fetchPublicAuthOption(env);
-
-    if (option?.route.type === "workosAuthorize") {
-      const state = randomBytes(16).toString("hex");
-      const url = this.buildWorkosAuthorizeUrl({
-        env,
-        next: request?.next,
-        prompt: option.route.prompt,
-        route: option.route,
-      });
-      await this.shell.openExternal(url);
-      return { url, state };
-    }
+    const options = await this.fetchPublicAuthOptions(env);
+    const option = selectPublicAuthOption(options, request?.authOptionKey);
 
     const verifierBytes = randomBytes(32);
     const verifier = verifierString(verifierBytes);
@@ -166,6 +140,7 @@ export class DesktopOAuthController {
     this.inFlight.set(state, {
       verifierBytes,
       challenge,
+      clientId: option.route.clientId,
       createdAt,
       env,
       next: request?.next,
@@ -173,9 +148,10 @@ export class DesktopOAuthController {
 
     const url = this.buildAuthorizeUrl({
       challenge,
-      clientId: requireConfig(env.cognito.clientId, "client id"),
+      clientId: option.route.clientId,
       env,
-      identityProvider: option?.route.identityProvider ?? "Google",
+      identityProvider: option.route.identityProvider,
+      prompt: option.route.prompt,
       state,
     });
     try {
@@ -189,23 +165,8 @@ export class DesktopOAuthController {
   }
 
   async completeOAuthCallback(
-    callback: OAuthSuccessCallback | WorkosBridgeCallback,
+    callback: OAuthSuccessCallback,
   ): Promise<PendingOAuthCallback> {
-    if ("workos_bridge" in callback) {
-      const env = await this.currentEnv();
-      const tokens = await this.exchangeWorkosBridgeForTokens(
-        callback.workos_bridge,
-        env,
-      );
-      this.persistTokens(
-        tokens,
-        resolveCognitoUsername(tokens.id_token),
-        env,
-        "workos",
-      );
-      return callback;
-    }
-
     this.evictExpiredAttempts();
 
     const attempt = this.inFlight.get(callback.state);
@@ -217,11 +178,11 @@ export class DesktopOAuthController {
     this.inFlight.delete(callback.state);
     try {
       const tokens = await this.exchangeCodeForTokens(callback.code, attempt);
+      verifyTokenAudience(tokens.id_token, attempt.clientId);
       this.persistTokens(
         tokens,
         resolveCognitoUsername(tokens.id_token),
-        attempt.env,
-        "cognito",
+        attempt.clientId,
       );
 
       return {
@@ -235,44 +196,21 @@ export class DesktopOAuthController {
   }
 
   async signOut(session: SignOutSession): Promise<SignOutResponse> {
-    let revokeFailed = false;
-
-    if (session.authSource === "workos" && session.idToken) {
-      try {
-        await this.revokeWorkosSession(session.idToken);
-      } catch (error) {
-        this.logger.warn("[desktop:oauth] WorkOS session revoke failed", error);
-        revokeFailed = true;
-      }
-    }
-
-    if (!session.refreshToken) return { ok: true, revokeFailed };
+    if (!session.refreshToken) return { ok: true, revokeFailed: false };
+    if (!session.idToken) return { ok: true, revokeFailed: true };
 
     try {
-      await this.revokeRefreshTokenWithRetry(session.refreshToken);
-      return { ok: true, revokeFailed };
+      await this.revokeNativeSession(session.idToken, session.refreshToken);
+      return { ok: true, revokeFailed: false };
     } catch (error) {
       this.logger.warn("[desktop:oauth] refresh-token revoke failed", error);
-      await this.queuePendingRevocation(session.refreshToken);
       return { ok: true, revokeFailed: true };
     }
   }
 
   async drainPendingRevocations(): Promise<void> {
-    const pending = await this.readPendingRevocations();
-    if (pending.length === 0) return;
-
-    const stillPending: string[] = [];
-    for (const token of pending) {
-      try {
-        await this.revokeRefreshTokenWithRetry(token);
-      } catch (error) {
-        this.logger.warn("[desktop:oauth] pending revoke retry failed", error);
-        stillPending.push(token);
-      }
-    }
-
-    await this.writePendingRevocations(stillPending);
+    // Retire any credential-bearing retry file left by a pre-native build.
+    await unlink(this.pendingRevocationsPath).catch(() => undefined);
   }
 
   zeroizeInFlightAttempts(): void {
@@ -299,6 +237,7 @@ export class DesktopOAuthController {
     clientId: string;
     env: DesktopEnvSnapshot;
     identityProvider: string;
+    prompt?: string;
     state: string;
   }): string {
     const params = new URLSearchParams({
@@ -311,61 +250,47 @@ export class DesktopOAuthController {
       code_challenge_method: "S256",
       state: options.state,
     });
-    if (options.identityProvider === "Google") {
-      params.set("prompt", "select_account");
-    }
+    if (options.prompt) params.set("prompt", options.prompt);
     return `${this.cognitoDomainBase(
       options.env,
     )}/oauth2/authorize?${params.toString()}`;
   }
 
-  private buildWorkosAuthorizeUrl(options: {
-    env: DesktopEnvSnapshot;
-    next?: string;
-    prompt?: string;
-    route: { authorizePath: "/api/auth/workos/authorize" };
-  }): string {
-    const apiBaseUrl = requireConfig(apiBaseUrlForEnv(options.env), "API URL");
-    const url = new URL(`${apiBaseUrl}${options.route.authorizePath}`);
-    url.searchParams.set("redirect_uri", this.redirectUri(options.env));
-    url.searchParams.set("return_to", normalizeNext(options.next));
-    if (options.prompt) url.searchParams.set("prompt", options.prompt);
-    return url.toString();
-  }
-
-  private async fetchPublicAuthOption(
+  private async fetchPublicAuthOptions(
     env: DesktopEnvSnapshot,
-  ): Promise<PublicOAuthOption | null> {
+  ): Promise<PublicOAuthOption[]> {
     const apiBaseUrl = apiBaseUrlForEnv(env);
-    if (!apiBaseUrl) return null;
+    if (!apiBaseUrl) throw new Error("Missing desktop API URL");
 
     try {
-      const response = await this.fetchImpl(`${apiBaseUrl}/api/auth/options`, {
+      const url = new URL(`${apiBaseUrl}/api/auth/options`);
+      url.searchParams.set("platform", "desktop");
+      const response = await this.fetchImpl(url, {
         method: "GET",
         cache: "no-store",
         headers: { accept: "application/json" },
       });
-      if (!response?.ok) return null;
+      if (!response?.ok) throw new Error(`HTTP ${response.status}`);
       const raw = (await response.json()) as PublicAuthOptionsResponse;
       const options = Array.isArray(raw.oauthOptions) ? raw.oauthOptions : [];
-      for (const entry of options) {
+      return options.flatMap((entry) => {
         const option = parsePublicOAuthOption(entry);
-        if (option) return option;
-      }
+        return option ? [option] : [];
+      });
     } catch (error) {
       this.logger.warn(
         "[desktop:oauth] public auth options unavailable",
         error,
       );
+      throw new Error("Desktop login options are unavailable");
     }
-    return null;
   }
 
   private async exchangeCodeForTokens(
     code: string,
     attempt: InFlightAttempt,
   ): Promise<OAuthTokens> {
-    const clientId = requireConfig(attempt.env.cognito.clientId, "client id");
+    const clientId = attempt.clientId;
     const response = await this.fetchImpl(
       `${this.cognitoDomainBase(attempt.env)}/oauth2/token`,
       {
@@ -401,51 +326,11 @@ export class DesktopOAuthController {
     };
   }
 
-  private async exchangeWorkosBridgeForTokens(
-    bridgeCode: string,
-    env: DesktopEnvSnapshot,
-  ): Promise<OAuthTokens> {
-    const apiBaseUrl = requireConfig(apiBaseUrlForEnv(env), "API URL");
-    const response = await this.fetchImpl(
-      `${apiBaseUrl}/api/auth/workos/bridge`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ bridge_code: bridgeCode }),
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `WorkOS bridge exchange failed: ${await response.text()}`,
-      );
-    }
-
-    const raw = (await response.json()) as Record<string, unknown>;
-    if (
-      typeof raw.id_token !== "string" ||
-      typeof raw.access_token !== "string" ||
-      typeof raw.refresh_token !== "string"
-    ) {
-      throw new Error("WorkOS bridge returned an unexpected response shape");
-    }
-    return {
-      id_token: raw.id_token,
-      access_token: raw.access_token,
-      refresh_token: raw.refresh_token,
-    };
-  }
-
   private persistTokens(
     tokens: OAuthTokens,
     username: string,
-    env: DesktopEnvSnapshot,
-    authSource: "cognito" | "workos",
+    clientId: string,
   ): void {
-    const clientId = requireConfig(env.cognito.clientId, "client id");
     const prefix = `CognitoIdentityServiceProvider.${clientId}`;
     this.storage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);
     this.storage.setItem(
@@ -458,84 +343,24 @@ export class DesktopOAuthController {
     );
     this.storage.setItem(`${prefix}.${username}.clockDrift`, "0");
     this.storage.setItem(`${prefix}.LastAuthUser`, username);
-    this.storage.setItem(AUTH_SOURCE_STORAGE_KEY, authSource);
+    this.storage.setItem(AUTH_CLIENT_STORAGE_KEY, clientId);
   }
 
-  private async revokeWorkosSession(idToken: string): Promise<void> {
-    const env = await this.currentEnv();
-    const apiBaseUrl = requireConfig(apiBaseUrlForEnv(env), "API URL");
-    const response = await this.fetchImpl(
-      `${apiBaseUrl}/api/auth/workos/logout`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          return_to: this.redirectUri(env),
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`WorkOS logout failed: ${await response.text()}`);
-    }
-
-    const raw = (await response.json().catch(() => null)) as Record<
-      string,
-      unknown
-    > | null;
-    if (typeof raw?.logout_url === "string" && raw.logout_url) {
-      await this.shell.openExternal(raw.logout_url);
-    }
-  }
-
-  private async revokeRefreshTokenWithRetry(
+  private async revokeNativeSession(
+    idToken: string,
     refreshToken: string,
   ): Promise<void> {
-    const startedAt = this.now();
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt < this.revokeAttempts; attempt += 1) {
-      try {
-        await this.revokeRefreshToken(refreshToken);
-        return;
-      } catch (error) {
-        lastError = error;
-        const elapsed = this.now() - startedAt;
-        if (
-          attempt === this.revokeAttempts - 1 ||
-          elapsed >= this.revokeBudgetMs
-        ) {
-          break;
-        }
-        await this.sleep(
-          Math.min(250 * 2 ** attempt, this.revokeBudgetMs - elapsed),
-        );
-      }
-    }
-
-    throw lastError instanceof Error
-      ? lastError
-      : new Error("Token revoke failed");
-  }
-
-  private async revokeRefreshToken(refreshToken: string): Promise<void> {
     const env = await this.currentEnv();
-    const clientId = requireConfig(env.cognito.clientId, "client id");
-    const response = await this.fetchImpl(
-      `${this.cognitoDomainBase(env)}/oauth2/revoke`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: clientId,
-          token: refreshToken,
-        }),
+    const apiBaseUrl = requireConfig(apiBaseUrlForEnv(env), "API URL");
+    const response = await this.fetchImpl(`${apiBaseUrl}/api/auth/revoke`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
-    );
+      body: JSON.stringify({ refreshToken }),
+    });
 
     if (!response.ok) {
       throw new Error(`Token revoke failed: ${await response.text()}`);
@@ -566,33 +391,6 @@ export class DesktopOAuthController {
     this.inFlight.delete(state);
   }
 
-  private async queuePendingRevocation(refreshToken: string): Promise<void> {
-    const pending = await this.readPendingRevocations();
-    if (!pending.includes(refreshToken)) pending.push(refreshToken);
-    await this.writePendingRevocations(pending);
-  }
-
-  private async readPendingRevocations(): Promise<string[]> {
-    try {
-      const parsed = JSON.parse(
-        await readFile(this.pendingRevocationsPath, "utf8"),
-      );
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
-        (value): value is string => typeof value === "string",
-      );
-    } catch {
-      return [];
-    }
-  }
-
-  private async writePendingRevocations(tokens: string[]): Promise<void> {
-    await writeFile(
-      this.pendingRevocationsPath,
-      JSON.stringify([...new Set(tokens)], null, 2),
-    );
-  }
-
   private async currentEnv(): Promise<DesktopEnvSnapshot> {
     if (typeof this.envProvider === "function") {
       return this.envProvider();
@@ -612,7 +410,15 @@ export class DesktopOAuthController {
       "",
     );
     if (raw.startsWith("https://")) return raw;
-    return `https://${raw}.auth.us-east-1.amazoncognito.com`;
+    const userPoolId = requireConfig(
+      env.cognito.userPoolId,
+      "Cognito user pool ID",
+    );
+    const region = userPoolId.split("_", 1)[0];
+    if (!region || !/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(region)) {
+      throw new Error("Cognito user pool ID does not contain a valid region");
+    }
+    return `https://${raw}.auth.${region}.amazoncognito.com`;
   }
 }
 
@@ -640,42 +446,50 @@ function parsePublicOAuthOption(raw: unknown): PublicOAuthOption | null {
   if (!route || typeof route !== "object" || Array.isArray(route)) return null;
 
   const routeRecord = route as Record<string, unknown>;
-  if (record.provider !== "workos") {
-    return null;
-  }
-
+  const key = safeString(record.key);
+  const label = safeString(record.label);
+  const clientId = safeString(routeRecord.clientId);
+  const identityProvider = safeString(routeRecord.identityProvider);
+  const prompt = safeString(routeRecord.prompt);
   if (
-    routeRecord.type === "workosAuthorize" &&
-    routeRecord.authorizePath === "/api/auth/workos/authorize"
+    key &&
+    label &&
+    clientId &&
+    record.providerSpecific === true &&
+    routeRecord.type === "cognitoHostedUi" &&
+    identityProvider
   ) {
-    const prompt = safeString(routeRecord.prompt);
     return {
+      key,
+      label,
       route: {
-        type: "workosAuthorize",
-        authorizePath: "/api/auth/workos/authorize",
+        type: "cognitoHostedUi",
+        clientId,
+        identityProvider,
         ...(prompt ? { prompt } : {}),
       },
     };
   }
 
-  const cognitoIdentityProviderName = safeString(
-    record.cognitoIdentityProviderName,
-  );
-  const identityProvider = safeString(routeRecord.identityProvider);
-  if (
-    cognitoIdentityProviderName &&
-    routeRecord.type === "cognitoHostedUi" &&
-    identityProvider === cognitoIdentityProviderName
-  ) {
-    return {
-      route: {
-        type: "cognitoHostedUi",
-        identityProvider,
-      },
-    };
-  }
-
   return null;
+}
+
+function selectPublicAuthOption(
+  options: PublicOAuthOption[],
+  requestedKey: string | undefined,
+): PublicOAuthOption {
+  if (requestedKey) {
+    const selected = options.find((option) => option.key === requestedKey);
+    if (selected) return selected;
+    throw new Error(
+      `The selected login option "${requestedKey}" is unavailable`,
+    );
+  }
+  if (options.length === 1) return options[0];
+  if (options.length === 0) {
+    throw new Error("The deployment published no desktop OAuth routes");
+  }
+  throw new Error("Select a desktop login option before starting OAuth");
 }
 
 function safeString(value: unknown): string {
@@ -689,16 +503,6 @@ function sha256Base64Url(value: BinaryLike): string {
 function requireConfig(value: string | null, label: string): string {
   if (!value) throw new Error(`Missing Cognito ${label}`);
   return value;
-}
-
-function normalizeNext(value: string | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/new";
-  try {
-    const url = new URL(value, "https://thinkwork.local");
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return "/new";
-  }
 }
 
 function resolveCognitoUsername(idToken: string): string {
@@ -719,4 +523,20 @@ function resolveCognitoUsername(idToken: string): string {
     throw new Error("ID token did not include a Cognito username");
   }
   return username;
+}
+
+function verifyTokenAudience(idToken: string, expectedClientId: string): void {
+  const [, payloadSegment] = idToken.split(".");
+  if (!payloadSegment) throw new Error("ID token is not a JWT");
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(Buffer.from(payloadSegment, "base64url").toString());
+  } catch {
+    throw new Error("ID token payload could not be decoded");
+  }
+  if (payload.aud !== expectedClientId) {
+    throw new Error(
+      "ID token audience did not match the selected desktop route",
+    );
+  }
 }

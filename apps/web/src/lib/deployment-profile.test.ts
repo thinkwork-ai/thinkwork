@@ -7,7 +7,6 @@ beforeEach(() => {
   vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
   vi.stubEnv("VITE_GRAPHQL_URL", "https://appsync.example.com/graphql");
   vi.stubEnv("VITE_GRAPHQL_WS_URL", "wss://appsync.example.com/graphql");
-  vi.stubEnv("VITE_GRAPHQL_API_KEY", "web-api-key");
   vi.stubEnv("VITE_COGNITO_USER_POOL_ID", "us-east-1_TestPool");
   vi.stubEnv("VITE_COGNITO_CLIENT_ID", "test-client-id");
   vi.stubEnv("VITE_COGNITO_DOMAIN", "thinkwork-test");
@@ -55,22 +54,4 @@ describe("getSpacesDeploymentProfileSnapshot", () => {
     );
   });
 
-  it("carries the GraphQL API key when it is present", () => {
-    const snapshot = getSpacesDeploymentProfileSnapshot();
-
-    expect(snapshot.profile?.graphqlApiKey).toBe("web-api-key");
-    expect(JSON.parse(snapshot.profileJson)).toMatchObject({
-      graphqlApiKey: "web-api-key",
-    });
-  });
-
-  it("keeps snapshot generation valid without a GraphQL API key", () => {
-    vi.stubEnv("VITE_GRAPHQL_API_KEY", "");
-
-    const snapshot = getSpacesDeploymentProfileSnapshot();
-
-    expect(snapshot.profile).not.toBeNull();
-    expect(snapshot.missing).toEqual([]);
-    expect(snapshot.profile).not.toHaveProperty("graphqlApiKey");
-  });
 });

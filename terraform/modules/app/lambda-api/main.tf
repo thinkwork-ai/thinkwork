@@ -73,6 +73,14 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 20
   }
 
+  # Session revocation is authenticated and independently rate-limited in the
+  # handler per principal. This edge throttle also bounds aggregate abuse.
+  route_settings {
+    route_key              = "POST /api/auth/revoke"
+    throttling_rate_limit  = 5
+    throttling_burst_limit = 10
+  }
+
   # UpdateStage 404s ("Unable to find Route by key … within the provided
   # RouteSettings") if the stage update races the route creation — Terraform
   # sees no reference edge between route_settings.route_key and the route
@@ -255,4 +263,20 @@ resource "aws_lambda_permission" "placeholder_apigw" {
   function_name = aws_lambda_function.placeholder.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+resource "terraform_data" "auth_migration_recovery_deadline_guard" {
+  input = {
+    phase    = var.auth_retirement_phase
+    deadline = var.auth_migration_recovery_deadline
+  }
+
+  lifecycle {
+    precondition {
+      condition = var.auth_retirement_phase != "coexistence" || (
+        trimspace(var.auth_migration_recovery_deadline) != "" &&
+        can(timecmp(var.auth_migration_recovery_deadline, var.auth_migration_recovery_deadline))
+      )
+      error_message = "auth_migration_recovery_deadline must be an RFC3339 timestamp when auth_retirement_phase is coexistence."
+    }
+  }
 }
