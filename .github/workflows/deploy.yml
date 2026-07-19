@@ -2047,6 +2047,8 @@ jobs:
     needs: [terraform-apply, compliance-bootstrap]
     if: always() && needs.terraform-apply.result == 'success' && needs.compliance-bootstrap.result == 'success'
     runs-on: ubuntu-latest
+    env:
+      AUTH_RETIREMENT_PHASE: ${{ vars.AUTH_RETIREMENT_PHASE || 'retired' }}
     steps:
       - uses: actions/checkout@v4
 
