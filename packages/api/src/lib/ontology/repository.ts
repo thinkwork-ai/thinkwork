@@ -54,7 +54,8 @@ export type OntologyChangeItemKind =
   | "entity_type"
   | "relationship_type"
   | "facet_template"
-  | "external_mapping";
+  | "external_mapping"
+  | "identity_map";
 
 /**
  * Concurrency/settlement conflict on a change-set item (THINK-320 R16):
@@ -542,6 +543,78 @@ export async function setOntologyEntityTypeIdentityRules(args: {
     tenantId: args.tenantId,
     entityTypeId: updated.id,
     db,
+  });
+}
+
+export interface OntologySystemMapEntry {
+  facet: string;
+  sourceSystem: string;
+  note?: string;
+}
+
+/**
+ * Parse a type-level system map (THINK-321 U3 / KTD-3). Mirrors
+ * parseIdentityRules: malformed entries drop silently rather than failing
+ * the whole submission.
+ */
+export function parseOntologySystemMap(raw: unknown): OntologySystemMapEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const entries: OntologySystemMapEntry[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Record<string, unknown>;
+    const facet =
+      typeof candidate.facet === "string" ? candidate.facet.trim() : "";
+    const sourceSystem =
+      typeof candidate.sourceSystem === "string"
+        ? candidate.sourceSystem.trim()
+        : "";
+    if (!facet || !sourceSystem) continue;
+    entries.push({
+      facet,
+      sourceSystem,
+      ...(typeof candidate.note === "string" && candidate.note.trim()
+        ? { note: candidate.note.trim() }
+        : {}),
+    });
+  }
+  return entries;
+}
+
+/**
+ * Stage a type-level system-map edit as a DRAFT `identity_map` change-set
+ * item (THINK-321 U3 / R6). Never writes entity_types directly — the map
+ * only lands via applyIdentityMapItem when the change set is approved and
+ * applied. Draft-append semantics come from createOntologyChangeSet: a
+ * second submission for the same entity type merges into the pending item
+ * (R14) instead of duplicating it.
+ */
+export async function stageOntologyEntityTypeSystemMap(args: {
+  tenantId: string;
+  entityTypeSlug: string;
+  systemMap: unknown;
+  actorUserId: string | null;
+  db?: DbLike;
+}) {
+  const slug = normalizeOntologySlug(args.entityTypeSlug);
+  if (!slug) throw new Error("Entity type slug required");
+  const entries = parseOntologySystemMap(args.systemMap);
+  return createOntologyChangeSet({
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    items: [
+      {
+        itemType: "identity_map",
+        action: "update",
+        slug,
+        title: `System map for ${slug.replace(/_/g, " ")}`,
+        proposedValue: {
+          entityTypeSlug: slug,
+          systemMap: entries as unknown as Array<Record<string, unknown>>,
+        },
+      },
+    ],
+    db: args.db,
   });
 }
 

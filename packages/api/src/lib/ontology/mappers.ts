@@ -70,6 +70,8 @@ export function toOntologyEntityType(
     propertiesSchema: row.properties_schema ?? {},
     identityRules: row.identity_rules ?? [],
     identityRulesVersion: row.identity_rules_version ?? 0,
+    systemMap: row.system_map ?? [],
+    systemMapVersion: row.system_map_version ?? 0,
     guidanceNotes: row.guidance_notes,
     lifecycleStatus: enumValue(row.lifecycle_status),
     approvedAt: iso(row.approved_at),

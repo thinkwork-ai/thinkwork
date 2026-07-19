@@ -37,11 +37,17 @@ enum OntologyExcludedItemDisposition {
   REJECTED
 }
 
+"""
+IDENTITY_MAP (THINK-321 U3): a type-level system-map edit — value carries
+{ entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Operator
+authored only; the suggestion pipeline never proposes it.
+"""
 enum OntologyChangeItemType {
   ENTITY_TYPE
   RELATIONSHIP_TYPE
   FACET_TEMPLATE
   EXTERNAL_MAPPING
+  IDENTITY_MAP
 }
 
 enum OntologyChangeAction {
@@ -88,6 +94,14 @@ type OntologyEntityType {
   """
   identityRules: AWSJSON!
   identityRulesVersion: Int!
+  """
+  Type-level system map (THINK-321 U3 / R6): array of
+  { facet, sourceSystem, note? } entries declaring which attached system
+  holds which facets for this type. Edited only through identity_map
+  change-set items — never a direct write.
+  """
+  systemMap: AWSJSON!
+  systemMapVersion: Int!
   guidanceNotes: String
   lifecycleStatus: OntologyLifecycleStatus!
   approvedAt: AWSDateTime
@@ -550,4 +564,16 @@ extend type Mutation {
     entityTypeId: ID!
     rules: AWSJSON!
   ): OntologyEntityType!
+  """
+  Stage a type-level system-map edit (THINK-321 U3 / R6): creates or
+  updates a DRAFT identity_map change-set item carrying
+  { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Never a
+  direct write — entity_types.system_map only changes when the change set
+  is approved and applied. Tenant-admin gated.
+  """
+  setOntologyEntityTypeSystemMap(
+    tenantId: ID
+    entityTypeSlug: String!
+    systemMap: AWSJSON!
+  ): CreateOntologyChangeSetPayload!
 }

@@ -19,6 +19,7 @@ const {
   mockUpdateOntologyRelationshipType,
   mockListOntologyPacks,
   mockInstallOntologyPack,
+  mockStageOntologyEntityTypeSystemMap,
 } = vi.hoisted(() => ({
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
@@ -37,6 +38,7 @@ const {
   mockUpdateOntologyRelationshipType: vi.fn(),
   mockListOntologyPacks: vi.fn(),
   mockInstallOntologyPack: vi.fn(),
+  mockStageOntologyEntityTypeSystemMap: vi.fn(),
 }));
 
 vi.mock("../core/authz.js", () => ({
@@ -49,6 +51,7 @@ vi.mock("../core/authz.js", () => ({
 
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mockResolveCallerUserId,
+  resolveCallerTenantId: vi.fn().mockResolvedValue("tenant-1"),
 }));
 
 vi.mock("../../../lib/ontology/repository.js", () => ({
@@ -64,6 +67,7 @@ vi.mock("../../../lib/ontology/repository.js", () => ({
   rejectOntologyChangeSetItem: mockRejectOntologyChangeSetItem,
   updateOntologyEntityType: mockUpdateOntologyEntityType,
   updateOntologyRelationshipType: mockUpdateOntologyRelationshipType,
+  stageOntologyEntityTypeSystemMap: mockStageOntologyEntityTypeSystemMap,
 }));
 
 vi.mock("../../../lib/ontology/suggestions.js", () => ({
@@ -94,6 +98,8 @@ import { startOntologySuggestionScanMutation } from "./startOntologySuggestionSc
 import { updateOntologyChangeSetMutation } from "./updateOntologyChangeSet.mutation.js";
 import { updateOntologyEntityTypeMutation } from "./updateOntologyEntityType.mutation.js";
 import { updateOntologyRelationshipTypeMutation } from "./updateOntologyRelationshipType.mutation.js";
+import { setOntologyEntityTypeSystemMapMutation } from "./setOntologyEntityTypeSystemMap.mutation.js";
+import { changeItemTypeFromGraphQL } from "./coercion.js";
 
 const ctx = { auth: { authType: "cognito" } } as any;
 
@@ -116,6 +122,7 @@ describe("ontology GraphQL resolvers", () => {
     mockUpdateOntologyRelationshipType.mockReset();
     mockListOntologyPacks.mockReset();
     mockInstallOntologyPack.mockReset();
+    mockStageOntologyEntityTypeSystemMap.mockReset();
 
     mockRequireTenantAdmin.mockResolvedValue("admin");
     mockResolveCallerUserId.mockResolvedValue("user-1");
@@ -635,6 +642,60 @@ describe("ontology GraphQL resolvers", () => {
     expect(() => itemStatusFromGraphQL("DRAFT")).toThrow(
       /not a valid ontology change-set item status/,
     );
+  });
+
+  it("coerces IDENTITY_MAP to the identity_map storage kind (THINK-321 U3)", () => {
+    expect(changeItemTypeFromGraphQL("IDENTITY_MAP")).toBe("identity_map");
+  });
+
+  it("stages a system-map edit as a draft identity_map item behind the admin gate (THINK-321 U3)", async () => {
+    mockStageOntologyEntityTypeSystemMap.mockResolvedValue({
+      changeSet: { id: "draft-1", status: "DRAFT" },
+      mergedItemIds: [],
+      conflicts: [],
+    });
+
+    const result = await setOntologyEntityTypeSystemMapMutation(
+      null,
+      {
+        tenantId: "tenant-1",
+        entityTypeSlug: "customer",
+        // AWSJSON string payloads are parsed before hitting the repository.
+        systemMap:
+          '[{"facet":"invoices","sourceSystem":"lastmile"},{"facet":"touchpoints","sourceSystem":"twenty"}]',
+      },
+      ctx,
+    );
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(ctx, "tenant-1");
+    expect(mockStageOntologyEntityTypeSystemMap).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      entityTypeSlug: "customer",
+      systemMap: [
+        { facet: "invoices", sourceSystem: "lastmile" },
+        { facet: "touchpoints", sourceSystem: "twenty" },
+      ],
+      actorUserId: "user-1",
+    });
+    expect(result.changeSet).toEqual({ id: "draft-1", status: "DRAFT" });
+  });
+
+  it("does not stage system-map edits for non-admin callers", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(new Error("forbidden"));
+
+    await expect(
+      setOntologyEntityTypeSystemMapMutation(
+        null,
+        {
+          tenantId: "tenant-1",
+          entityTypeSlug: "customer",
+          systemMap: [],
+        },
+        ctx,
+      ),
+    ).rejects.toThrow("forbidden");
+
+    expect(mockStageOntologyEntityTypeSystemMap).not.toHaveBeenCalled();
   });
 
   it("lists ontology packs behind the admin gate with uppercased states", async () => {

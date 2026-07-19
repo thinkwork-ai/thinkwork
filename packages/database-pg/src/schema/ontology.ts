@@ -166,6 +166,19 @@ export const ontologyEntityTypes = ontology.table(
     identity_rules_version: integer("identity_rules_version")
       .notNull()
       .default(0),
+    /**
+     * Type-level system map (THINK-321 U3 / KTD-3 / R6). Array of
+     * `{ facet: string, sourceSystem: string, note?: string }` entries
+     * declaring which attached system holds which facets for this type
+     * ("Customer invoices live in lastmile; touchpoints live in Twenty").
+     * Edited only through `identity_map` change-set items — never via a
+     * direct write.
+     */
+    system_map: jsonb("system_map")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    system_map_version: integer("system_map_version").notNull().default(0),
     guidance_notes: text("guidance_notes"),
     lifecycle_status: text("lifecycle_status").notNull().default("proposed"),
     proposed_by_user_id: uuid("proposed_by_user_id").references(
@@ -474,7 +487,7 @@ export const ontologyChangeSetItems = ontology.table(
     ),
     check(
       "ontology_change_set_items_type_allowed",
-      sql`${table.item_type} IN ('entity_type','relationship_type','facet_template','external_mapping')`,
+      sql`${table.item_type} IN ('entity_type','relationship_type','facet_template','external_mapping','identity_map')`,
     ),
     check(
       "ontology_change_set_items_action_allowed",

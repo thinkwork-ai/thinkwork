@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { analyzeOntologyReprocessImpact } from "./impact.js";
 import {
+  applyOntologyChangeSetItems,
   buildOntologyReprocessDedupeKey,
   dispatchObservationsReingestForOntologyApproval,
   enqueueObservationsReingestForOntologyApproval,
 } from "./reprocess.js";
 import { rejectOntologyChangeSet } from "./repository.js";
+import { ontologyEntityTypes } from "@thinkwork/database-pg/schema";
 
 class FakeImpactDb {
   constructor(private rows: unknown[][]) {}
@@ -295,5 +297,143 @@ describe("ontology reprocess", () => {
     // No rows inserted anywhere: no ontology reprocess job and no
     // knowledge-graph observations run were enqueued by the rejection.
     expect(db.inserts).toEqual([]);
+  });
+});
+
+// Table-aware capture for the change-set apply dispatch (THINK-321 U3).
+class FakeApplyDb {
+  inserts: Array<{ table: unknown; values: unknown }> = [];
+  updates: Array<{ table: unknown; patch: Record<string, unknown> }> = [];
+
+  insert(table: unknown) {
+    return {
+      values: (values: unknown) => {
+        this.inserts.push({ table, values });
+        const ret: any = {
+          onConflictDoUpdate: () => Promise.resolve([]),
+          onConflictDoNothing: () => ret,
+          returning: () => Promise.resolve([]),
+          then: (resolve: any, reject: any) =>
+            Promise.resolve([]).then(resolve, reject),
+        };
+        return ret;
+      },
+    };
+  }
+
+  update(table: unknown) {
+    return {
+      set: (patch: Record<string, unknown>) => {
+        this.updates.push({ table, patch });
+        return { where: () => Promise.resolve([]) };
+      },
+    };
+  }
+}
+
+describe("applyOntologyChangeSetItems (THINK-321 U3)", () => {
+  it("applies an approved identity_map item onto the target entity type with a version bump", async () => {
+    const db = new FakeApplyDb();
+
+    await applyOntologyChangeSetItems({
+      tenantId: "tenant-1",
+      ontologyVersionId: "version-1",
+      items: [
+        {
+          item_type: "identity_map",
+          action: "update",
+          status: "approved",
+          target_slug: "customer",
+          proposed_value: {
+            entityTypeSlug: "customer",
+            systemMap: [
+              { facet: "invoices", sourceSystem: "lastmile" },
+              { facet: "touchpoints", sourceSystem: "twenty", note: "CRM" },
+            ],
+          },
+        },
+      ],
+      db: db as any,
+    });
+
+    expect(db.inserts).toEqual([]);
+    expect(db.updates).toHaveLength(1);
+    expect(db.updates[0].table).toBe(ontologyEntityTypes);
+    expect(db.updates[0].patch.system_map).toEqual([
+      { facet: "invoices", sourceSystem: "lastmile" },
+      { facet: "touchpoints", sourceSystem: "twenty", note: "CRM" },
+    ]);
+    // Version bump is a SQL expression (system_map_version + 1), not a
+    // literal — assert it is present without depending on drizzle internals.
+    expect(db.updates[0].patch.system_map_version).toBeDefined();
+    expect(typeof db.updates[0].patch.system_map_version).not.toBe("number");
+  });
+
+  it("dispatches a mixed change set: entity_type upsert plus identity_map map write", async () => {
+    const db = new FakeApplyDb();
+
+    await applyOntologyChangeSetItems({
+      tenantId: "tenant-1",
+      ontologyVersionId: "version-1",
+      items: [
+        {
+          item_type: "identity_map",
+          action: "update",
+          status: "approved",
+          // No entityTypeSlug in the value — target_slug is the fallback,
+          // mirroring applyEntityTypeItem's target resolution.
+          target_slug: "shipment",
+          proposed_value: {
+            systemMap: [{ facet: "orders", sourceSystem: "lastmile" }],
+          },
+        },
+        {
+          item_type: "entity_type",
+          action: "create",
+          status: "approved",
+          target_slug: "shipment",
+          proposed_value: { slug: "shipment", name: "Shipment" },
+        },
+      ],
+      db: db as any,
+    });
+
+    // The entity type upsert lands as an insert, the identity_map as an
+    // update — and the map write runs after the type item so a same-set
+    // freshly minted type is a valid target.
+    const entityInsert = db.inserts.find(
+      (entry) => entry.table === ontologyEntityTypes,
+    );
+    expect(entityInsert).toBeDefined();
+    expect(entityInsert!.values).toMatchObject({ slug: "shipment" });
+    const mapUpdate = db.updates.find(
+      (entry) => entry.table === ontologyEntityTypes,
+    );
+    expect(mapUpdate).toBeDefined();
+    expect(mapUpdate!.patch.system_map).toEqual([
+      { facet: "orders", sourceSystem: "lastmile" },
+    ]);
+  });
+
+  it("skips an identity_map item with no resolvable target slug", async () => {
+    const db = new FakeApplyDb();
+
+    await applyOntologyChangeSetItems({
+      tenantId: "tenant-1",
+      ontologyVersionId: null,
+      items: [
+        {
+          item_type: "identity_map",
+          action: "update",
+          status: "approved",
+          target_slug: null,
+          proposed_value: { systemMap: [] },
+        },
+      ],
+      db: db as any,
+    });
+
+    expect(db.inserts).toEqual([]);
+    expect(db.updates).toEqual([]);
   });
 });

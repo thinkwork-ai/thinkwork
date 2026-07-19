@@ -548,6 +548,9 @@ export async function applyOntologyChangeSetItems(args: {
   const mappingItems = args.items.filter(
     (item) => item.item_type === "external_mapping",
   );
+  const identityMapItems = args.items.filter(
+    (item) => item.item_type === "identity_map",
+  );
 
   for (const item of entityItems) {
     await applyEntityTypeItem({ ...args, item, db });
@@ -560,6 +563,11 @@ export async function applyOntologyChangeSetItems(args: {
   }
   for (const item of mappingItems) {
     await applyExternalMappingItem({ ...args, item, db });
+  }
+  // After entity items so an identity_map item in the same set can target an
+  // entity type minted by that set (THINK-321 U3).
+  for (const item of identityMapItems) {
+    await applyIdentityMapItem({ ...args, item, db });
   }
 }
 
@@ -805,6 +813,44 @@ async function applyExternalMappingItem(args: {
         updated_at: new Date(),
       },
     });
+}
+
+/**
+ * Apply an approved `identity_map` item (THINK-321 U3 / KTD-3 / R6): the
+ * item's value `{ entityTypeSlug, systemMap: [{ facet, sourceSystem,
+ * note? }] }` replaces the target entity type's `system_map` and bumps
+ * `system_map_version`. The change-set loop is the only writer — there is
+ * no direct-write mutation for the system map.
+ */
+async function applyIdentityMapItem(args: {
+  tenantId: string;
+  ontologyVersionId: string | null;
+  item: OntologyImpactItem;
+  db: DbLike;
+}) {
+  const value = itemValue(args.item);
+  const slug =
+    stringValue(value.entityTypeSlug) || stringValue(args.item.target_slug);
+  if (!slug) return;
+  const systemMap = Array.isArray(value.systemMap)
+    ? (value.systemMap.filter(
+        (entry) => entry && typeof entry === "object",
+      ) as Array<Record<string, unknown>>)
+    : [];
+
+  await args.db
+    .update(ontologyEntityTypes)
+    .set({
+      system_map: systemMap,
+      system_map_version: sql`${ontologyEntityTypes.system_map_version} + 1`,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(ontologyEntityTypes.tenant_id, args.tenantId),
+        eq(ontologyEntityTypes.slug, slug),
+      ),
+    );
 }
 
 export async function completeOntologyReprocessJob(args: {
