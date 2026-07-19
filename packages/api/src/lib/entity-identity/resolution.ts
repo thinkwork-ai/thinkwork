@@ -461,7 +461,14 @@ export async function appendResolutionEvent(
     tenantId: string;
     caseId: string | null;
     canonicalEntityId: string | null;
-    eventType: "create" | "link" | "defer" | "reject" | "merge";
+    eventType:
+      | "create"
+      | "link"
+      | "defer"
+      | "reject"
+      | "merge"
+      | "revoke"
+      | "split";
     actorUserId: string | null;
     payload?: Record<string, unknown>;
   },

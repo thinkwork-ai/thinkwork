@@ -16,8 +16,17 @@
  * private item without one is `private_unmapped`: it never creates tenant
  * mappings, canonical rows, or resolution cases (no identity side channel).
  *
+ * Negative evidence (THINK-321 U2, KTD-6): a `mapping_rejections` row for a
+ * (source identity ↔ canonical id) pairing demotes that pairing from
+ * auto-link to at most a suggestion verdict — the suggestion path feeds the
+ * operator resolution queue, so a revoked/split pairing can still surface as
+ * a case but never silently re-links. Exact mappings still win: an existing
+ * `entity_source_mappings` row is authoritative (an operator re-authoring a
+ * previously rejected pairing overrides the rejection).
+ *
  * The decision core (`decideMatch`) is pure; `matchCanonicalEntity` wraps it
- * with the Aurora lookups.
+ * with the Aurora lookups (rejections load in the wrapper and pass into the
+ * pure core).
  */
 
 import { and, eq, inArray, or, sql } from "drizzle-orm";
@@ -25,6 +34,7 @@ import {
   canonicalEntities,
   entityIdentityClaims,
   entitySourceMappings,
+  mappingRejections,
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../db.js";
 import type { DatabaseTransaction } from "../knowledge-graph/repository.js";
@@ -92,7 +102,15 @@ export function decideMatch(args: {
   exactCanonicalEntityId: string | null;
   claimMatches: ClaimMatch[];
   nameCandidates: NameCandidate[];
+  /**
+   * Canonical ids with a `mapping_rejections` row against the request's
+   * source identity (KTD-6). A rejected pairing is demoted from auto-link
+   * to at most a suggestion — it can still surface as a resolution case,
+   * but never auto-links again.
+   */
+  rejectedCanonicalEntityIds?: ReadonlySet<string>;
 }): MatchVerdict {
+  const rejected = args.rejectedCanonicalEntityIds ?? new Set<string>();
   if (args.exactCanonicalEntityId) {
     return { kind: "exact", canonicalEntityId: args.exactCanonicalEntityId };
   }
@@ -106,11 +124,14 @@ export function decideMatch(args: {
   const ruleByKeyKind = new Map(args.rules.map((rule) => [rule.keyKind, rule]));
 
   // -- Strong keys: unique + autoLink rules only ----------------------------
+  // Rejected pairings are excluded here and fall through to the weak pool:
+  // a strong match against a rejected canonical becomes a suggestion.
   const strongTargets = new Map<string, MatchCandidate>();
   let strongRuleSlug: string | null = null;
   for (const match of args.claimMatches) {
     const rule = ruleByKeyKind.get(match.keyKind);
     if (!rule || !rule.unique || !rule.autoLink) continue;
+    if (rejected.has(match.canonicalEntityId)) continue;
     const existing = strongTargets.get(match.canonicalEntityId);
     if (existing) {
       if (!existing.matchedKeyKinds.includes(match.keyKind)) {
@@ -142,7 +163,10 @@ export function decideMatch(args: {
   const weakTargets = new Map<string, MatchCandidate>();
   for (const match of args.claimMatches) {
     const rule = ruleByKeyKind.get(match.keyKind);
-    if (rule && rule.unique && rule.autoLink) continue; // handled above
+    const isStrongRule = !!rule && rule.unique && rule.autoLink;
+    // Strong matches were handled above UNLESS the pairing is rejected —
+    // rejected strong matches demote into the weak (suggestion) pool.
+    if (isStrongRule && !rejected.has(match.canonicalEntityId)) continue;
     const existing = weakTargets.get(match.canonicalEntityId);
     if (existing) {
       if (!existing.matchedKeyKinds.includes(match.keyKind)) {
@@ -241,6 +265,31 @@ async function findExactMappingTarget(
     );
   if (rows.length === 0) return null;
   return resolveMergedRedirect(db, tenantId, rows[0]!.canonical_entity_id);
+}
+
+/**
+ * Load canonical ids with a negative-evidence row (`mapping_rejections`)
+ * against ANY of the request's source keys (KTD-6). Loaded in the DB
+ * wrapper and passed into the pure decision core.
+ */
+export async function findRejectedCanonicalIds(
+  db: IdentityDbClient,
+  tenantId: string,
+  sourceKeys: MatchSourceKey[],
+): Promise<Set<string>> {
+  if (sourceKeys.length === 0) return new Set();
+  const predicates = sourceKeys.map((key) =>
+    and(
+      eq(mappingRejections.source_system, key.sourceSystem),
+      eq(mappingRejections.namespace, key.namespace ?? ""),
+      eq(mappingRejections.external_id, key.externalId),
+    ),
+  );
+  const rows = await db
+    .select({ canonical_entity_id: mappingRejections.canonical_entity_id })
+    .from(mappingRejections)
+    .where(and(eq(mappingRejections.tenant_id, tenantId), or(...predicates)));
+  return new Set(rows.map((row) => row.canonical_entity_id));
 }
 
 async function findClaimMatches(
@@ -363,6 +412,14 @@ export async function matchCanonicalEntity(
     return { kind: "private_unmapped" };
   }
 
+  // Negative evidence for this source identity (KTD-6): canonical ids the
+  // matcher must never auto-link this source record to again.
+  const rejectedCanonicalEntityIds = await findRejectedCanonicalIds(
+    db,
+    request.tenantId,
+    request.sourceKeys ?? [],
+  );
+
   const normalizedKeys = normalizeNaturalKeys(request, rules);
   const claimMatches = await findClaimMatches(
     db,
@@ -403,6 +460,7 @@ export async function matchCanonicalEntity(
     exactCanonicalEntityId: null,
     claimMatches,
     nameCandidates: [],
+    rejectedCanonicalEntityIds,
   });
 }
 
