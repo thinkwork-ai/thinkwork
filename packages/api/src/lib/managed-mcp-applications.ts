@@ -345,15 +345,17 @@ async function ensureManagedMcpDefaultAgentAssignments(
   // bucket-gated — a no-op in DB-mocked tests.
   const agentIds = platformAgents.map((agent) => agent.id);
   try {
-    const { materializeMcpAssignmentFoldersForAgents } =
-      await import("./mcp/assignment-state.js");
+    const { materializeMcpAssignmentFoldersForAgents } = await import(
+      "./mcp/assignment-state.js"
+    );
     await materializeMcpAssignmentFoldersForAgents({
       agentIds,
       tenantId,
       registryServerId: serverId,
     });
-    const { writeConnectionFoldersForAgents } =
-      await import("./capabilities/reconcile-connection-folders.js");
+    const { writeConnectionFoldersForAgents } = await import(
+      "./capabilities/reconcile-connection-folders.js"
+    );
     await writeConnectionFoldersForAgents({
       agentIds,
       tenantId,
@@ -517,8 +519,9 @@ async function destroyTwentyManagedMcp(
   // folders get removed too. Bucket-gated; null in DB-mocked tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } =
-      await import("./mcp/assignment-state.js");
+    const { snapshotMcpServerAttachment } = await import(
+      "./mcp/assignment-state.js"
+    );
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId,
       registryServerId: existing.id,
@@ -584,14 +587,17 @@ async function destroyTwentyManagedMcp(
 
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } =
-        await import("./mcp/assignment-state.js");
+      const { removeMcpAssignmentFoldersForAgents } = await import(
+        "./mcp/assignment-state.js"
+      );
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
-      const { removeConnectionFoldersForAgents } =
-        await import("./capabilities/reconcile-connection-folders.js");
+      const { removeConnectionFoldersForAgents } = await import(
+        "./capabilities/reconcile-connection-folders.js"
+      );
       await removeConnectionFoldersForAgents({
         agentIds: folderSnapshot.agentIds,
         registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+        tenantId,
       });
     } catch (err) {
       console.warn(

@@ -462,8 +462,9 @@ export async function teardownPluginMcpComponent(args: {
   // DB-mocked unit tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } =
-      await import("../../mcp/assignment-state.js");
+    const { snapshotMcpServerAttachment } = await import(
+      "../../mcp/assignment-state.js"
+    );
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId: args.tenantId,
       registryServerId: serverId,
@@ -530,14 +531,17 @@ export async function teardownPluginMcpComponent(args: {
   // Remove the per-agent workspace folders now that the DB rows are gone.
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } =
-        await import("../../mcp/assignment-state.js");
+      const { removeMcpAssignmentFoldersForAgents } = await import(
+        "../../mcp/assignment-state.js"
+      );
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
-      const { removeConnectionFoldersForAgents } =
-        await import("../../capabilities/reconcile-connection-folders.js");
+      const { removeConnectionFoldersForAgents } = await import(
+        "../../capabilities/reconcile-connection-folders.js"
+      );
       await removeConnectionFoldersForAgents({
         agentIds: folderSnapshot.agentIds,
         registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+        tenantId: args.tenantId,
       });
     } catch (err) {
       console.warn(
@@ -568,15 +572,17 @@ async function ensurePluginMcpDefaultAgentAssignments(
   // converges. Bucket-gated — a no-op in DB-mocked unit tests.
   const agentIds = platformAgents.map((agent) => agent.id);
   try {
-    const { materializeMcpAssignmentFoldersForAgents } =
-      await import("../../mcp/assignment-state.js");
+    const { materializeMcpAssignmentFoldersForAgents } = await import(
+      "../../mcp/assignment-state.js"
+    );
     await materializeMcpAssignmentFoldersForAgents({
       agentIds,
       tenantId,
       registryServerId: serverId,
     });
-    const { writeConnectionFoldersForAgents } =
-      await import("../../capabilities/reconcile-connection-folders.js");
+    const { writeConnectionFoldersForAgents } = await import(
+      "../../capabilities/reconcile-connection-folders.js"
+    );
     await writeConnectionFoldersForAgents({
       agentIds,
       tenantId,

@@ -23,6 +23,7 @@ import {
   type OntologyReprocessImpact,
 } from "./impact.js";
 import { materializeOntologyTemplatesForImpact } from "./materializer.js";
+import { refreshRoutingMapFile } from "../entity-identity/routing-map-file.js";
 
 type DbLike = typeof defaultDb;
 
@@ -523,10 +524,66 @@ async function processClaimedOntologyReprocessJob(args: {
     );
   }
 
+  // Post-apply hook (THINK-321 U4, KTD-4): an applied identity_map item
+  // changed `entity_types.system_map`, so the workspace routing-map
+  // projection must follow. Best-effort like the re-ingest dispatch above
+  // — the change set is already `applied`, so a projection failure is
+  // recorded on metrics and logged, never thrown.
+  metrics = await refreshRoutingMapProjectionForApply({
+    tenantId: args.job.tenant_id,
+    items: applicableItems,
+    baseMetrics: metrics,
+    db: args.db,
+  });
+
   return {
     impact: persistedImpact,
     metrics,
   };
+}
+
+/**
+ * Re-project the workspace routing map after a change-set apply that
+ * included `identity_map` items (THINK-321 U4). No-op for change sets
+ * without one. Exported for tests; failures land on the returned metrics
+ * under `routingMapProjection` and are logged — never thrown.
+ */
+export async function refreshRoutingMapProjectionForApply(args: {
+  tenantId: string;
+  items: OntologyImpactItem[];
+  baseMetrics: Record<string, unknown>;
+  db?: DbLike;
+  refresh?: typeof refreshRoutingMapFile;
+}): Promise<Record<string, unknown>> {
+  const hasIdentityMapItems = args.items.some(
+    (item) => item.item_type === "identity_map",
+  );
+  if (!hasIdentityMapItems) return args.baseMetrics;
+  const refresh = args.refresh ?? refreshRoutingMapFile;
+  try {
+    const result = await refresh(
+      (args.db ?? defaultDb) as Parameters<typeof refreshRoutingMapFile>[0],
+      args.tenantId,
+    );
+    return {
+      ...args.baseMetrics,
+      routingMapProjection: {
+        agents: result.agents,
+        written: result.written,
+        skipped: result.skipped.length,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[ontology-reprocess] routing-map projection refresh failed",
+      { tenantId: args.tenantId, error: message },
+    );
+    return {
+      ...args.baseMetrics,
+      routingMapProjection: { error: message },
+    };
+  }
 }
 
 export async function applyOntologyChangeSetItems(args: {

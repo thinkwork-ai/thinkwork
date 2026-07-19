@@ -198,8 +198,9 @@ async function requireProfileFolder(
     throw badInput("agent-profile scope requires agentProfileId");
   }
   const slug = agentProfileId.trim();
-  const { getAgentFolderProfileForTenant } =
-    await import("../../../lib/agent-profile-workspace-files.js");
+  const { getAgentFolderProfileForTenant } = await import(
+    "../../../lib/agent-profile-workspace-files.js"
+  );
   const profile = await getAgentFolderProfileForTenant(tenantId, slug);
   if (!profile) throw notFound("agent profile not found in tenant");
   return { slug };
@@ -327,8 +328,9 @@ async function skillAgentMutation(
       }
       throw err;
     }
-    const { regenerateManifest } =
-      await import("../../../lib/workspace-manifest.js");
+    const { regenerateManifest } = await import(
+      "../../../lib/workspace-manifest.js"
+    );
     await regenerateManifest(bucket, target.tenantSlug, target.workspaceFolder);
     return {
       outcome: "applied",
@@ -341,8 +343,9 @@ async function skillAgentMutation(
     };
   }
 
-  const { uninstallCatalogSkill, CatalogUninstallError } =
-    await import("../../../lib/catalog-uninstall.js");
+  const { uninstallCatalogSkill, CatalogUninstallError } = await import(
+    "../../../lib/catalog-uninstall.js"
+  );
   let deletedPaths: string[];
   try {
     const result = await uninstallCatalogSkill({
@@ -359,8 +362,9 @@ async function skillAgentMutation(
   if (deletedPaths.length === 0) {
     return { outcome: "noop", auditEmitted: false };
   }
-  const { regenerateManifest } =
-    await import("../../../lib/workspace-manifest.js");
+  const { regenerateManifest } = await import(
+    "../../../lib/workspace-manifest.js"
+  );
   await regenerateManifest(bucket, target.tenantSlug, target.workspaceFolder);
   return {
     outcome: "applied",
@@ -546,8 +550,9 @@ async function mcpAgentMutation(
   /** Normalized prior state: null = not attached. */
   let existing: { enabled: boolean; enabledTools: string[] | null } | null;
   if (flipped) {
-    const { readConnectionAssignment } =
-      await import("../../../lib/capabilities/connection-assignments.js");
+    const { readConnectionAssignment } = await import(
+      "../../../lib/capabilities/connection-assignments.js"
+    );
     const record = await readConnectionAssignment(
       target.targetPrefix,
       generated.slug,
@@ -1164,6 +1169,27 @@ async function executeCapabilityMutation(
     });
   }
 
+  // THINK-321 U4: an applied connector-class grant/detach changes which
+  // source systems the routing map may address — refresh the workspace
+  // projection best-effort (it skips unchanged content and no-ops for
+  // tenants with no identity declarations). Never fails the mutation.
+  if (
+    result.outcome === "applied" &&
+    (capabilityClass === "mcp_server" || capabilityClass === "connection")
+  ) {
+    try {
+      const { refreshRoutingMapFile } = await import(
+        "../../../lib/entity-identity/routing-map-file.js"
+      );
+      await refreshRoutingMapFile(db, rawInput.tenantId);
+    } catch (err) {
+      console.warn(
+        `${LOG_PREFIX} routing-map refresh failed tenant=${rawInput.tenantId}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   // R12 substrate: recompute the selection through the U3 inspector and
   // return the touched item's fresh state.
   const inspection = await capabilityInspector(
@@ -1181,8 +1207,8 @@ async function executeCapabilityMutation(
   const itemClass = capabilityClass;
   const items =
     (inspection.predicted?.items as
-      Array<{ capabilityClass: string; capabilityId: string }> | undefined) ??
-    [];
+      | Array<{ capabilityClass: string; capabilityId: string }>
+      | undefined) ?? [];
   const item =
     items.find(
       (candidate) =>

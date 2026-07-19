@@ -447,8 +447,9 @@ export async function handler(
       } catch {
         return error("invalid JSON body", 400);
       }
-      const { runCapabilityFolderBackfill } =
-        await import("../lib/capabilities/backfill.js");
+      const { runCapabilityFolderBackfill } = await import(
+        "../lib/capabilities/backfill.js"
+      );
       const report = await runCapabilityFolderBackfill({
         tenantId,
         apply: body.apply === true,
@@ -1826,8 +1827,9 @@ async function mcpDeleteServer(
   // Bucket-gated; null (no DB read) in DB-mocked tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } =
-      await import("../lib/mcp/assignment-state.js");
+    const { snapshotMcpServerAttachment } = await import(
+      "../lib/mcp/assignment-state.js"
+    );
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId,
       registryServerId: serverId,
@@ -1962,14 +1964,17 @@ async function mcpDeleteServer(
 
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } =
-        await import("../lib/mcp/assignment-state.js");
+      const { removeMcpAssignmentFoldersForAgents } = await import(
+        "../lib/mcp/assignment-state.js"
+      );
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
-      const { removeConnectionFoldersForAgents } =
-        await import("../lib/capabilities/reconcile-connection-folders.js");
+      const { removeConnectionFoldersForAgents } = await import(
+        "../lib/capabilities/reconcile-connection-folders.js"
+      );
       await removeConnectionFoldersForAgents({
         agentIds: folderSnapshot.agentIds,
         registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+        tenantId,
       });
     } catch (err) {
       console.warn(
@@ -2848,8 +2853,9 @@ async function readAgentMcpAssignments(agentId: string): Promise<Array<{
     // THINK-190: the connection sidecar is the single assignment record.
     // Synthesize the state shape callers consume (enabled/enabledTools);
     // display fields come from the registry join below either way.
-    const { listConnectionAssignments } =
-      await import("../lib/capabilities/connection-assignments.js");
+    const { listConnectionAssignments } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
     const records = await listConnectionAssignments(targetPrefix);
     if (records === null) return null;
     for (const record of records) {
@@ -2988,8 +2994,9 @@ async function mcpAssignToAgent(
     : null;
   let existed = false;
   if (flipped && connectionSlug) {
-    const { readConnectionAssignment } =
-      await import("../lib/capabilities/connection-assignments.js");
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
     existed =
       (await readConnectionAssignment(targetPrefix, connectionSlug)) != null;
   } else if (folderSlug != null) {
@@ -3013,8 +3020,9 @@ async function mcpAssignToAgent(
   // For a flipped agent this write IS the assignment, so its failure is
   // the request's failure; for un-flipped it stays a best-effort shadow.
   try {
-    const { writeConnectionFoldersForAgents } =
-      await import("../lib/capabilities/reconcile-connection-folders.js");
+    const { writeConnectionFoldersForAgents } = await import(
+      "../lib/capabilities/reconcile-connection-folders.js"
+    );
     const allowlist = (config as { toolAllowlist?: unknown } | null)
       ?.toolAllowlist;
     await writeConnectionFoldersForAgents({
@@ -3039,8 +3047,9 @@ async function mcpAssignToAgent(
     // The shared writer is best-effort by contract (it swallows per-agent
     // failures), but for a flipped agent this write IS the assignment —
     // read the record back and fail the request if it did not land.
-    const { readConnectionAssignment } =
-      await import("../lib/capabilities/connection-assignments.js");
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
     const landed = connectionSlug
       ? await readConnectionAssignment(targetPrefix, connectionSlug)
       : null;
@@ -3069,7 +3078,11 @@ async function mcpUnassignFromAgent(
     resolveAgentWorkspacePrefix,
   } = await import("../lib/mcp/assignment-state.js");
   const [serverRow] = await db
-    .select({ slug: tenantMcpServers.slug, name: tenantMcpServers.name })
+    .select({
+      slug: tenantMcpServers.slug,
+      name: tenantMcpServers.name,
+      tenant_id: tenantMcpServers.tenant_id,
+    })
     .from(tenantMcpServers)
     .where(eq(tenantMcpServers.id, mcpServerId));
   const targetPrefix = await resolveAgentWorkspacePrefix(agentId);
@@ -3080,8 +3093,9 @@ async function mcpUnassignFromAgent(
   const flipped = await agentUsesFolderDispatch(agentId);
   const connectionSlug = folderSlug.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   if (flipped) {
-    const { readConnectionAssignment } =
-      await import("../lib/capabilities/connection-assignments.js");
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
     const existing = await readConnectionAssignment(
       targetPrefix,
       connectionSlug,
@@ -3103,11 +3117,13 @@ async function mcpUnassignFromAgent(
   // Remove the signed connection folder — the record itself for a flipped
   // agent (verified below), a Composer-detach-parity shadow otherwise.
   try {
-    const { removeConnectionFoldersForAgents } =
-      await import("../lib/capabilities/reconcile-connection-folders.js");
+    const { removeConnectionFoldersForAgents } = await import(
+      "../lib/capabilities/reconcile-connection-folders.js"
+    );
     await removeConnectionFoldersForAgents({
       agentIds: [agentId],
       registry: { slug: serverRow.slug, name: serverRow.name },
+      tenantId: serverRow.tenant_id,
     });
   } catch (err) {
     console.warn(
@@ -3116,8 +3132,9 @@ async function mcpUnassignFromAgent(
     );
   }
   if (flipped) {
-    const { readConnectionAssignment } =
-      await import("../lib/capabilities/connection-assignments.js");
+    const { readConnectionAssignment } = await import(
+      "../lib/capabilities/connection-assignments.js"
+    );
     if (await readConnectionAssignment(targetPrefix, connectionSlug)) {
       return error("Failed to remove MCP assignment from agent workspace", 500);
     }
@@ -3277,8 +3294,9 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } =
-        await import("@aws-sdk/client-secrets-manager");
+      const { SecretsManagerClient, DeleteSecretCommand } = await import(
+        "@aws-sdk/client-secrets-manager"
+      );
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -3334,8 +3352,9 @@ async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } =
-    await import("@thinkwork/database-pg/schema");
+  const { agents, userMcpTokens } = await import(
+    "@thinkwork/database-pg/schema"
+  );
 
   // Find all agents paired with this user. Agent assignments describe runtime
   // availability, but enabled tenant OAuth connectors also need to be
@@ -4139,8 +4158,9 @@ async function invokeAgentcoreRunSkill(payload: {
   if (!fnName)
     return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes
