@@ -251,6 +251,14 @@ The post-erase state of a memory source (`memory_source_configs.erase_generation
 
 The tenant-level entity resolution layer (`identity.*` schema): canonical entities with normalized names, exact source mappings that always win, natural-key identity claims (name/domain/email hashes), and the Resolution Queue (`entity_resolution_cases`, budgeted at 200 open cases / 30-day expiry) for ambiguous matches. Canonical entity ID — not slug or title — is the authoritative key for tenant wiki Entity pages (partial unique: one live page per canonical id). Cross-source convergence (CRM + web + email + document naming the same customer) is scored by the external-memory golden set.
 
+### Type-Level Map
+
+The ontology's schema-level declaration of which attached source systems hold which facets of each entity type ("Customer invoices and orders live in lastmile; touchpoints live in Twenty"). Operator-authored and governed by the ontology change-set loop, it is the agent's answer to "where would I fetch this kind of information" — the counterpart to the Canonical Identity crosswalk, which answers "what does that system call this specific entity." Introduced by the identity-crosswalk arc (THINK-321).
+
+### Routed Fetch
+
+Answering a cross-system question by federation instead of replication: the agent resolves an entity through the Type-Level Map (which system holds the facet) and the Canonical Identity crosswalk (that system's natural key), then fetches fresh detail live through the registered connector's query path and stitches the answer with per-source provenance. On a crosswalk miss the agent presents candidate matches in-turn; a user confirmation writes a durable, audited mapping. The intelligence layer keeps a skeleton; detail stays in the source systems until asked for (THINK-321).
+
 ### External-Memory Rollout Gates
 
 The independent enablement ladder for external memory, verified per tenant by `packages/api/scripts/external-memory-readiness.ts` (JSON + table): source ledger shadow mode → personal manual → personal schedule → one Space workflow → tenant workflow → canonical graph/wiki writes. Kill switches: per-source `enabled`, per-tenant `tenants.wiki_compile_enabled`, stage-global `WIKI_SOURCE`. Rollback disables new writes but preserves ledgers for diagnosis and retraction; recovery is forward-only (pause, inspect, correct, replay, recompile).
