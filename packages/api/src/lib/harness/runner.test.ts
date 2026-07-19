@@ -1324,6 +1324,41 @@ describe("runHarnessTurn — happy path", () => {
       toolUseId: "tool-9",
       status: "success",
     });
+    expect(deps.finalizePayloads[0].response?.tool_invocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool_name: "memory_search",
+          tool_use_id: "builtin-1",
+          status: "completed",
+          protocol: "agentcore_harness_internal_v1",
+        }),
+      ]),
+    );
+  });
+
+  it("declares native Browser on every enabled interactive Harness invocation", async () => {
+    const deps = makeDeps([stream(textEvents("Browsed successfully."))]);
+    const payload = {
+      ...basePayload(),
+      browser_automation_enabled: true,
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations).toHaveLength(1);
+    expect(deps.invocations[0].tools).toEqual([
+      { type: "agentcore_browser", name: "browser_automation" },
+    ]);
+  });
+
+  it("does not expose native Browser when the effective capability is disabled", async () => {
+    const deps = makeDeps([stream(textEvents("No browser needed."))]);
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations[0].tools).toBeUndefined();
   });
 
   it("relays emission rejections as error tool results and lets the model retry", async () => {
