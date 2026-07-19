@@ -242,6 +242,7 @@ function makeDeps(
   streams: Array<AsyncIterable<HarnessStreamEvent>>,
   options: {
     emitResults?: Array<{ statusCode: number; body: Record<string, unknown> }>;
+    goalRun?: Record<string, unknown> | null;
   } = {},
 ): TestDeps {
   const finalizePayloads: FinalizePayload[] = [];
@@ -330,6 +331,7 @@ function makeDeps(
         }),
       },
     ]),
+    loadGoalRun: vi.fn(async () => options.goalRun ?? null),
     collectConnectorEvidence: vi.fn(async () => ({
       connector: "twenty--crm",
       tool: "find_many_opportunities",
@@ -1181,6 +1183,183 @@ describe("runHarnessTurn — happy path", () => {
   });
 });
 
+describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
+  it("completes through the explicit goal_complete contract", async () => {
+    const deps = makeDeps([
+      stream(
+        toolUseEvents("goal_complete", "goal-tool-1", {
+          summary: "AgentCore parity is complete.",
+          completion_notes: "All requested work shipped.",
+          verification_notes: ["Focused tests passed", "E2E passed"],
+        }),
+      ),
+    ]);
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Ship AgentCore parity",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
+      status: "complete",
+      goal_id: "agentcore:turn-1",
+      objective: "Ship AgentCore parity",
+      completion_summary: "AgentCore parity is complete.",
+      verification_notes: ["Focused tests passed", "E2E passed"],
+      tokens_used: 60,
+      resume_eligible: false,
+    });
+    expect(deps.finalizePayloads[0].usage?.goal_run).toEqual(
+      deps.finalizePayloads[0].response?.goal_run,
+    );
+    expect(deps.finalizePayloads[0].response?.tool_invocations).toEqual([
+      expect.objectContaining({
+        tool_name: "goal_complete",
+        status: "completed",
+      }),
+    ]);
+  });
+
+  it("fails closed when goal completion evidence contains forbidden publication content", async () => {
+    const deps = makeDeps([
+      stream(
+        toolUseEvents("goal_complete", "goal-tool-secret", {
+          summary: "Completed with SECRET_SENTINEL_GOAL_EVIDENCE",
+          verification_notes: ["Focused tests passed"],
+        }),
+      ),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Ship AgentCore parity",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "synthetic_secret_sentinel",
+    );
+    expect(deps.finalizePayloads[0].response?.goal_run).toBeUndefined();
+  });
+
+  it("persists an incomplete bounded step as resumable progress", async () => {
+    const deps = makeDeps([stream(textEvents("Implemented the first slice."))]);
+    await runHarnessTurn(
+      {
+        ...basePayload(),
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Ship all slices",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
+      status: "paused",
+      summary: "Implemented the first slice.",
+      tokens_used: 120,
+      iteration: 1,
+      resume_eligible: true,
+    });
+    expect(JSON.stringify(deps.invocations[0].messages)).toContain(
+      "agentcore:turn-1",
+    );
+  });
+
+  it("resumes from canonical persisted progress and accumulates usage", async () => {
+    const deps = makeDeps(
+      [
+        stream(
+          toolUseEvents("goal_complete", "goal-tool-2", {
+            summary: "Second slice complete.",
+          }),
+        ),
+      ],
+      {
+        goalRun: {
+          goal_id: "agentcore:turn-original",
+          objective: "Ship all slices",
+          status: "paused",
+          token_budget: 100_000,
+          tokens_used: 1_200,
+          iteration: 1,
+          time_used_seconds: 10,
+          started_at: "2026-07-18T12:00:00.000Z",
+          resume_eligible: true,
+        },
+      },
+    );
+    await runHarnessTurn(
+      {
+        ...basePayload(),
+        thread_turn_id: "turn-2",
+        goal_mode: {
+          enabled: true,
+          action: "resume",
+          objective: "Ship all slices",
+          goal_run_id: "agentcore:turn-original",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(deps.loadGoalRun).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      goalId: "agentcore:turn-original",
+    });
+    expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
+      status: "complete",
+      tokens_used: 1_260,
+      iteration: 2,
+    });
+  });
+
+  it("fails closed when resume state is missing instead of trusting composer metadata", async () => {
+    const deps = makeDeps([]);
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        goal_mode: {
+          enabled: true,
+          action: "resume",
+          objective: "Forged objective",
+          goal_run_id: "missing-goal",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "canonical prior goal state",
+    );
+    expect(deps.invocations).toHaveLength(0);
+  });
+});
+
 describe("runHarnessTurn — explicit failures (AE2/KTD-4)", () => {
   it("fails on a non-end_turn terminal stopReason naming the reason", async () => {
     const deps = makeDeps([
@@ -1260,15 +1439,6 @@ describe("runHarnessTurn — explicit failures (AE2/KTD-4)", () => {
     );
     expect(deps.resolveHarness).not.toHaveBeenCalled();
     expect(deps.invocations).toHaveLength(0);
-  });
-
-  it("declares unsupported payload features (goal mode) without invoking Harness", async () => {
-    const deps = makeDeps([]);
-    const payload = { ...basePayload(), goal_mode: { enabled: true } };
-    const result = await runHarnessTurn(payload, deps);
-    expect(result.status).toBe("failed");
-    expect(deps.finalizePayloads[0].error_message).toContain("goal_mode");
-    expect(deps.resolveHarness).not.toHaveBeenCalled();
   });
 
   it("fails the pi-ai analog: empty content + zero output tokens on end_turn", async () => {
