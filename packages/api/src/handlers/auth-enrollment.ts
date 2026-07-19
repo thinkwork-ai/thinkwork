@@ -59,6 +59,11 @@ export interface SessionMigrationGrantInput {
   redirectUri: string;
 }
 
+export interface ProviderSwitchGrantInput {
+  targetClientId: string;
+  redirectUri: string;
+}
+
 export class IdentityRecoveryGrantError extends Error {
   constructor(
     readonly code:
@@ -100,6 +105,7 @@ export async function issueEnrollmentGrants(input: {
     | "identity_recovery"
     | "session_migration";
   transaction?: AuthEnrollmentTransaction;
+  targetCognitoAppClientId?: string;
 }): Promise<IssuedEnrollmentGrant> {
   const now = input.now ?? new Date();
   const expiresAt = new Date(now.getTime() + (input.ttlMs ?? 30 * 60_000));
@@ -109,6 +115,7 @@ export async function issueEnrollmentGrants(input: {
     route_client_id: string;
     route_key: string;
     connection_id: string;
+    cognito_app_client_id: string;
     redirect_uri: string;
   };
   const targets = [
@@ -124,7 +131,8 @@ export async function issueEnrollmentGrants(input: {
       SELECT DISTINCT
         rc.id AS route_client_id,
         rc.route_key,
-        apr.id AS connection_id
+        apr.id AS connection_id,
+        rc.cognito_app_client_id
       FROM auth_route_clients rc
       JOIN auth_provider_resources apr
         ON apr.cognito_app_client_ids ? rc.cognito_app_client_id
@@ -147,10 +155,16 @@ export async function issueEnrollmentGrants(input: {
         )
     `);
     routes.push(
-      ...result.rows.map((route) => ({
-        ...route,
-        redirect_uri: target.redirectUri,
-      })),
+      ...result.rows
+        .filter(
+          (route) =>
+            !input.targetCognitoAppClientId ||
+            route.cognito_app_client_id === input.targetCognitoAppClientId,
+        )
+        .map((route) => ({
+          ...route,
+          redirect_uri: target.redirectUri,
+        })),
     );
   }
   if (routes.length === 0) {
@@ -330,6 +344,67 @@ export async function issueSessionMigrationGrant(
       membershipId: membership.id,
       grantKind: "session_migration",
       redirectUri: input.redirectUri,
+      transaction: tx,
+    });
+  });
+}
+
+/**
+ * Issue a one-use grant for an already-admitted user to attach and activate a
+ * different native Cognito provider. The authenticated identity is the proof;
+ * email claims and caller-supplied user or tenant identifiers are never used.
+ */
+export async function issueProviderSwitchGrant(
+  auth: AuthResult,
+  input: ProviderSwitchGrantInput,
+): Promise<IssuedEnrollmentGrant> {
+  if (
+    auth.authType !== "cognito" ||
+    !auth.route ||
+    auth.route.lifecycleState !== "native"
+  ) {
+    throw new AuthAdmissionError(
+      "native_session_required",
+      "An admitted native Cognito session is required to switch providers.",
+    );
+  }
+  if (auth.route.appClientId === input.targetClientId) {
+    throw new AuthAdmissionError(
+      "provider_already_active",
+      "The requested provider is already active.",
+    );
+  }
+  const admitted = await admitCognitoTenant(
+    auth,
+    auth.tenantId ?? undefined,
+  );
+  return db.transaction(async (tx) => {
+    const [membership] = await tx
+      .select({ id: tenantMembers.id })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, admitted.tenantId),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.principal_id, admitted.userId),
+          eq(tenantMembers.status, "active"),
+        ),
+      )
+      .for("update");
+    if (!membership) {
+      throw new AuthAdmissionError(
+        "tenant_not_admitted",
+        "The current session has no active membership.",
+      );
+    }
+    return issueEnrollmentGrants({
+      tenantId: admitted.tenantId,
+      intendedUserId: admitted.userId,
+      membershipId: membership.id,
+      grantKind: "identity_recovery",
+      redirectUri: input.redirectUri,
+      targetCognitoAppClientId: input.targetClientId,
+      ttlMs: 10 * 60_000,
       transaction: tx,
     });
   });
@@ -696,6 +771,50 @@ export async function handler(
     } catch (cause) {
       if (cause instanceof AuthAdmissionError) {
         return json({ error: cause.code }, 403);
+      }
+      throw cause;
+    }
+  }
+  if (event.rawPath === "/api/auth/enrollment/switch") {
+    const auth = await authenticate(
+      event.headers as Record<string, string | undefined>,
+    );
+    if (!auth || auth.authType !== "cognito") {
+      return unauthorized("Authentication required");
+    }
+    let input: ProviderSwitchGrantInput;
+    try {
+      const parsed = JSON.parse(
+        event.body ?? "{}",
+      ) as Partial<ProviderSwitchGrantInput>;
+      if (
+        !parsed.targetClientId ||
+        parsed.targetClientId.length > 128 ||
+        !parsed.redirectUri ||
+        !isAbsoluteHttpUrl(parsed.redirectUri)
+      ) {
+        return error("Invalid provider switch request", 400);
+      }
+      input = parsed as ProviderSwitchGrantInput;
+    } catch {
+      return error("Invalid provider switch request", 400);
+    }
+    try {
+      const grant = await issueProviderSwitchGrant(auth, input);
+      console.info("[auth-enrollment] provider switch grant issued", {
+        routeCount: grant.routeKeys.length,
+        expiresAt: grant.expiresAt.toISOString(),
+      });
+      return json(grant, 201);
+    } catch (cause) {
+      if (cause instanceof AuthAdmissionError) {
+        return json({ error: cause.code }, 403);
+      }
+      if (
+        cause instanceof Error &&
+        cause.message === "No admitted enrollment route is available"
+      ) {
+        return json({ error: "target_route_not_admitted" }, 409);
       }
       throw cause;
     }

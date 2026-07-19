@@ -18,12 +18,14 @@ const {
     route_client_id: string;
     route_key: string;
     connection_id: string;
+    cognito_app_client_id?: string;
   }>,
   routeRowQueue: [] as Array<
     Array<{
       route_client_id: string;
       route_key: string;
       connection_id: string;
+      cognito_app_client_id?: string;
     }>
   >,
   selectQueue: [] as unknown[][],
@@ -149,6 +151,7 @@ import {
   handler,
   issueEnrollmentGrants,
   issueIdentityRecoveryGrant,
+  issueProviderSwitchGrant,
   issueSessionMigrationGrant,
 } from "./auth-enrollment.js";
 import type { AuthResult } from "../lib/cognito-auth.js";
@@ -255,6 +258,53 @@ describe("identity enrollment", () => {
         }),
       ],
     });
+  });
+
+  it("issues an identity-bound switch grant only for the selected provider route", async () => {
+    selectQueue.push([{ id: "member-1" }]);
+    routeRows.push(
+      {
+        route_client_id: "route-google-web",
+        route_key: "google-web",
+        connection_id: "connection-google",
+        cognito_app_client_id: "google-client",
+      },
+      {
+        route_client_id: "route-microsoft-web",
+        route_key: "microsoft-web",
+        connection_id: "connection-microsoft",
+        cognito_app_client_id: "microsoft-client",
+      },
+    );
+
+    const issued = await issueProviderSwitchGrant(auth, {
+      targetClientId: "microsoft-client",
+      redirectUri: "https://app.example.com/auth/callback",
+    });
+
+    expect(mockAdmitCognitoTenant).toHaveBeenCalledWith(auth, undefined);
+    expect(issued.routeKeys).toEqual(["microsoft-web"]);
+    expect(inserts[0]).toMatchObject({
+      values: [
+        expect.objectContaining({
+          auth_route_client_id: "route-microsoft-web",
+          intended_user_id: "user-1",
+          recipient_grant_kind: "identity_recovery",
+          recipient_grant_id: "member-1",
+        }),
+      ],
+    });
+  });
+
+  it("refuses to issue a provider-switch grant for the current app client", async () => {
+    await expect(
+      issueProviderSwitchGrant(auth, {
+        targetClientId: "app-client-1",
+        redirectUri: "https://app.example.com/auth/callback",
+      }),
+    ).rejects.toMatchObject({ code: "provider_already_active" });
+    expect(mockAdmitCognitoTenant).not.toHaveBeenCalled();
+    expect(inserts).toHaveLength(0);
   });
 
   it("domain-separates the same bearer secret by route", () => {
@@ -496,6 +546,43 @@ describe("identity enrollment", () => {
       recipientChallenge: expect.stringMatching(/^\d{8}$/),
       routeKeys: ["google-web"],
     });
+  });
+
+  it("serves provider switching only from the authenticated admitted identity", async () => {
+    mockAuthenticate.mockResolvedValue(auth);
+    selectQueue.push([{ id: "member-1" }]);
+    routeRows.push(
+      {
+        route_client_id: "route-google",
+        route_key: "google-web",
+        connection_id: "connection-google",
+        cognito_app_client_id: "google-client",
+      },
+      {
+        route_client_id: "route-microsoft",
+        route_key: "microsoft-web",
+        connection_id: "connection-microsoft",
+        cognito_app_client_id: "microsoft-client",
+      },
+    );
+
+    const response = await handler(switchEvent());
+
+    expect(response.statusCode).toBe(201);
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
+      recipientChallenge: expect.stringMatching(/^\d{8}$/),
+      routeKeys: ["microsoft-web"],
+    });
+    expect(mockAdmitCognitoTenant).toHaveBeenCalledWith(auth, undefined);
+  });
+
+  it("rejects provider switching without an authenticated session", async () => {
+    mockAuthenticate.mockResolvedValue(null);
+
+    const response = await handler(switchEvent());
+
+    expect(response.statusCode).toBe(401);
+    expect(inserts).toHaveLength(0);
   });
 
   it("requires service authentication before issuing a recovery grant", async () => {
@@ -1011,6 +1098,27 @@ function migrationEvent(): APIGatewayProxyEventV2 {
       },
     },
     body: JSON.stringify({
+      redirectUri: "https://app.example.com/auth/callback",
+    }),
+  };
+}
+
+function switchEvent(): APIGatewayProxyEventV2 {
+  const event = recoveryEvent("current-native-token");
+  return {
+    ...event,
+    routeKey: "POST /api/auth/enrollment/switch",
+    rawPath: "/api/auth/enrollment/switch",
+    requestContext: {
+      ...event.requestContext,
+      routeKey: "POST /api/auth/enrollment/switch",
+      http: {
+        ...event.requestContext.http,
+        path: "/api/auth/enrollment/switch",
+      },
+    },
+    body: JSON.stringify({
+      targetClientId: "microsoft-client",
       redirectUri: "https://app.example.com/auth/callback",
     }),
   };

@@ -52,6 +52,10 @@ function getActiveClientId(): string {
   );
 }
 
+export function getActiveAuthClientId(): string {
+  return getActiveClientId();
+}
+
 function getUserPool(): CognitoUserPool | null {
   const userPoolId = readRuntimeEnv("VITE_COGNITO_USER_POOL_ID");
   const clientId = getActiveClientId();
@@ -510,6 +514,77 @@ export function getAuthOptionIdentityMigrationUrl(
   });
 }
 
+export async function getAuthOptionProviderSwitchUrl(
+  option: PublicOAuthOption,
+  next = "/profile",
+): Promise<string> {
+  const currentClientId = getActiveClientId();
+  if (!currentClientId) {
+    throw new Error("An authenticated session is required to switch providers.");
+  }
+  if (currentClientId === option.route.clientId) {
+    throw new Error("This provider is already active.");
+  }
+  const idToken = getStoredIdToken();
+  const refreshToken = getStoredToken("refreshToken");
+  if (!idToken || !refreshToken) {
+    throw new Error("An authenticated session is required to switch providers.");
+  }
+  const redirectUri = `${window.location.origin}/auth/callback`;
+  const grantResponse = await fetch(
+    `${apiBaseUrl()}/api/auth/enrollment/switch`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        targetClientId: option.route.clientId,
+        redirectUri,
+      }),
+    },
+  );
+  const grantBody = (await grantResponse.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (
+    !grantResponse.ok ||
+    typeof grantBody.startToken !== "string" ||
+    typeof grantBody.recipientChallenge !== "string"
+  ) {
+    throw new Error(
+      typeof grantBody.error === "string"
+        ? `Provider switch could not be started: ${grantBody.error}`
+        : `Provider switch could not be started (${grantResponse.status}).`,
+    );
+  }
+  const authorizeUrl = await createNativeAuthorizeUrl(option, next, {
+    purpose: "provider_switch",
+    enrollment: {
+      startToken: grantBody.startToken,
+      recipientChallenge: grantBody.recipientChallenge,
+    },
+  });
+
+  const revokeResponse = await fetch(`${apiBaseUrl()}/api/auth/revoke`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!revokeResponse.ok) {
+    throw new Error(
+      `The previous provider session could not be revoked (${revokeResponse.status}).`,
+    );
+  }
+  clearLocalAuthSession();
+  return authorizeUrl;
+}
+
 /**
  * Native email/password sign-in needs the user pool id + client id from the
  * runtime config. When either is missing (e.g. a partially configured local
@@ -534,7 +609,7 @@ interface PendingOAuthFlow {
   initiatingHost: string;
   next: string;
   expiresAt: number;
-  purpose?: "sign_in" | "identity_migration";
+  purpose?: "sign_in" | "identity_migration" | "provider_switch";
   enrollment?: IdentityMigrationGrant;
 }
 
@@ -743,8 +818,11 @@ export async function exchangeCodeForSession(
     refresh_token: raw.refresh_token,
   };
   validateNativeOAuthTokens(tokens, flow);
-  if (flow.purpose === "identity_migration") {
-    await consumeIdentityMigrationGrant(tokens.id_token, flow);
+  if (
+    flow.purpose === "identity_migration" ||
+    flow.purpose === "provider_switch"
+  ) {
+    await consumeIdentityEnrollmentGrant(tokens.id_token, flow);
   }
   return { tokens, clientId: flow.clientId, next: flow.next };
 }
@@ -775,8 +853,10 @@ function consumePendingOAuthFlow(state: string): PendingOAuthFlow {
     !flow.nonce ||
     (flow.purpose !== undefined &&
       flow.purpose !== "sign_in" &&
-      flow.purpose !== "identity_migration") ||
-    (flow.purpose === "identity_migration" &&
+      flow.purpose !== "identity_migration" &&
+      flow.purpose !== "provider_switch") ||
+    ((flow.purpose === "identity_migration" ||
+      flow.purpose === "provider_switch") &&
       (!flow.enrollment?.startToken || !flow.enrollment.recipientChallenge))
   ) {
     throw new Error("OAuth state does not match this login attempt.");
@@ -784,13 +864,13 @@ function consumePendingOAuthFlow(state: string): PendingOAuthFlow {
   return flow;
 }
 
-async function consumeIdentityMigrationGrant(
+async function consumeIdentityEnrollmentGrant(
   idToken: string,
   flow: PendingOAuthFlow,
 ): Promise<void> {
   const enrollment = flow.enrollment;
   if (!enrollment) {
-    throw new Error("The identity migration grant is missing.");
+    throw new Error("The identity enrollment grant is missing.");
   }
   const response = await fetch(`${apiBaseUrl()}/api/auth/enrollment/consume`, {
     method: "POST",
@@ -813,8 +893,8 @@ async function consumeIdentityMigrationGrant(
   if (!response.ok || body.outcome !== "consumed") {
     throw new Error(
       body.outcome
-        ? `Identity migration failed: ${body.outcome}`
-        : `Identity migration failed with status ${response.status}.`,
+        ? `Identity enrollment failed: ${body.outcome}`
+        : `Identity enrollment failed with status ${response.status}.`,
     );
   }
 }
