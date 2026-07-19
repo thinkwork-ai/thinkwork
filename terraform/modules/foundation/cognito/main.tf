@@ -439,9 +439,10 @@ resource "aws_cognito_identity_provider" "google" {
   }
 
   attribute_mapping = {
-    email    = "email"
-    name     = "name"
-    username = "sub"
+    email          = "email"
+    email_verified = "email_verified"
+    name           = "name"
+    username       = "sub"
   }
 }
 
@@ -525,6 +526,7 @@ resource "aws_cognito_user_pool_client" "auth_route" {
 
   write_attributes = [
     "email",
+    "email_verified",
     "name",
     "custom:tenant_id",
     "custom:entra_tenant_id",

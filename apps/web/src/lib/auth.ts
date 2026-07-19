@@ -810,7 +810,10 @@ async function automaticallyLinkNativeIdentity(idToken: string): Promise<void> {
   } catch {
     // Preserve a useful status-based error when an edge proxy returns HTML.
   }
-  const validOutcomes = new Set(["linked", "already_linked", "not_linked"]);
+  if (response.ok && body.outcome === "not_linked") {
+    throw new Error("Automatic identity linking could not admit this account.");
+  }
+  const validOutcomes = new Set(["linked", "already_linked"]);
   if (!response.ok || !body.outcome || !validOutcomes.has(body.outcome)) {
     throw new Error(
       body.error

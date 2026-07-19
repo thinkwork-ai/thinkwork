@@ -64,6 +64,21 @@ describe("Cognito identity provider Terraform fixture", () => {
     expect(outputs).not.toMatch(/client_secret/);
   });
 
+  it("preserves Google's verified-email proof for automatic identity admission", () => {
+    const main = read("terraform/modules/foundation/cognito/main.tf");
+    const googleProvider = main.match(
+      /resource "aws_cognito_identity_provider" "google" \{[\s\S]*?\n\}/,
+    )?.[0];
+    const routeClient = main.match(
+      /resource "aws_cognito_user_pool_client" "auth_route" \{[\s\S]*?\n\}/,
+    )?.[0];
+
+    expect(googleProvider).toMatch(/email_verified\s*=\s*"email_verified"/);
+    expect(routeClient).toMatch(
+      /write_attributes\s*=\s*\[[\s\S]*?"email_verified"/,
+    );
+  });
+
   it("declares OIDC and SAML providers in the foundation Cognito module", () => {
     const vars = read("terraform/modules/foundation/cognito/variables.tf");
     const main = read("terraform/modules/foundation/cognito/main.tf");
