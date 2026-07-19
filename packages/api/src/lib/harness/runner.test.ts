@@ -14,6 +14,7 @@ import {
 } from "./runner.js";
 import type { FinalizePayload } from "../chat-finalize/types.js";
 import type { HarnessInvocationTool } from "./managed-profile.js";
+import type { HarnessTool } from "@aws-sdk/client-bedrock-agentcore";
 
 function stream(
   events: HarnessStreamEvent[],
@@ -180,7 +181,11 @@ function toolUseEvents(
   ];
 }
 
-function managedBrowserEvents(text: string): HarnessStreamEvent[] {
+function managedBrowserEvents(
+  text: string,
+  resultStatus: "success" | "error" = "success",
+  resultText = "Browser action completed.",
+): HarnessStreamEvent[] {
   return [
     { messageStart: { role: "assistant" } },
     {
@@ -202,7 +207,20 @@ function managedBrowserEvents(text: string): HarnessStreamEvent[] {
     { contentBlockStop: { contentBlockIndex: 0 } },
     { messageStop: { stopReason: "tool_use" } },
     { messageStart: { role: "user" } },
-    { contentBlockStart: { contentBlockIndex: 0 } },
+    {
+      contentBlockStart: {
+        contentBlockIndex: 0,
+        start: {
+          toolResult: { toolUseId: "browser-1", status: resultStatus },
+        },
+      },
+    },
+    {
+      contentBlockDelta: {
+        contentBlockIndex: 0,
+        delta: { toolResult: [{ text: resultText }] },
+      },
+    },
     { contentBlockStop: { contentBlockIndex: 0 } },
     { messageStop: { stopReason: "tool_result" } },
     { messageStart: { role: "assistant" } },
@@ -329,7 +347,7 @@ interface TestDeps extends HarnessRunnerDeps {
     messages: unknown;
     modelId?: string;
     allowedTools?: string[];
-    tools?: HarnessInvocationTool[];
+    tools?: HarnessTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }>;
@@ -355,7 +373,7 @@ function makeDeps(
     messages: unknown;
     modelId?: string;
     allowedTools?: string[];
-    tools?: HarnessInvocationTool[];
+    tools?: HarnessTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }> = [];
@@ -1375,7 +1393,20 @@ describe("runHarnessTurn — happy path", () => {
       { contentBlockStop: { contentBlockIndex: 0 } },
       { messageStop: { stopReason: "tool_use" } },
       { messageStart: { role: "user" } },
-      { contentBlockStart: { contentBlockIndex: 0 } },
+      {
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: {
+            toolResult: { toolUseId: "builtin-1", status: "success" },
+          },
+        },
+      },
+      {
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { toolResult: [{ text: "Memory search completed." }] },
+        },
+      },
       { contentBlockStop: { contentBlockIndex: 0 } },
       { messageStop: { stopReason: "tool_result" } },
       { messageStart: { role: "assistant" } },
@@ -1445,7 +1476,13 @@ describe("runHarnessTurn — happy path", () => {
 
     expect(result.status).toBe("completed");
     expect(deps.invocations).toHaveLength(1);
-    expect(deps.invocations[0].tools).toEqual(MANAGED_HARNESS_TOOLS);
+    expect(deps.invocations[0].tools).toEqual(
+      MANAGED_HARNESS_TOOLS.map((tool) =>
+        tool.type === "agentcore_browser"
+          ? { type: "agentcore_browser", name: "browser" }
+          : tool,
+      ),
+    );
     expect(JSON.stringify(deps.invocations[0].messages)).toContain(
       "browser_automation=enabled",
     );
@@ -1482,7 +1519,7 @@ describe("runHarnessTurn — happy path", () => {
 
     expect(result.status).toBe("failed");
     expect(deps.finalizePayloads[0].error_message).toContain(
-      "no managed Browser invocation",
+      "no successful managed Browser invocation",
     );
   });
 
@@ -1533,6 +1570,94 @@ describe("runHarnessTurn — happy path", () => {
         }),
       ]),
     );
+  });
+
+  it("fails closed when the managed Browser streams an error tool result", async () => {
+    const deps = makeDeps([
+      stream(
+        managedBrowserEvents(
+          "I could not access the page.",
+          "error",
+          "Unknown tool: browser",
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Use Browser Automation to open https://example.com and report the title.",
+      browser_automation_enabled: true,
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "no successful managed Browser invocation",
+    );
+    expect(deps.finalizePayloads[0].response?.tool_invocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool_name: "browser",
+          protocol: "agentcore_harness_internal_v1",
+          status: "failed",
+          result_summary: "Unknown tool: browser",
+        }),
+      ]),
+    );
+  });
+
+  it("does not certify an internal Browser tool use without a terminal tool result", async () => {
+    const events = managedBrowserEvents("TITLE=Example Domain").filter(
+      (event) =>
+        !event.contentBlockStart?.start?.toolResult &&
+        !event.contentBlockDelta?.delta?.toolResult,
+    );
+    const deps = makeDeps([stream(events)]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Use Browser Automation to open https://example.com and report the title.",
+      browser_automation_enabled: true,
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].response?.tool_invocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool_name: "browser",
+          status: "failed",
+          result_summary:
+            "AgentCore Harness did not stream a terminal tool result.",
+        }),
+      ]),
+    );
+  });
+
+  it("redacts credential shapes and secret canaries from internal tool-result evidence", async () => {
+    const deps = makeDeps([
+      stream(
+        managedBrowserEvents(
+          "Browser failed.",
+          "error",
+          "Unknown tool; authorization=Bearer live-token-value SECRET_SENTINEL_BROWSER_RESULT",
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message: "Use Browser Automation to inspect https://example.com.",
+      browser_automation_enabled: true,
+    };
+
+    await runHarnessTurn(payload, deps);
+
+    const durable = JSON.stringify(deps.finalizePayloads[0]);
+    expect(durable).not.toContain("live-token-value");
+    expect(durable).not.toContain("SECRET_SENTINEL_BROWSER_RESULT");
+    expect(durable).toContain("<redacted>");
   });
 
   it("removes only native Browser when the effective capability is disabled", async () => {
