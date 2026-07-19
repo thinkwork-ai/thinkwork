@@ -15,13 +15,22 @@ describe("managed multiplayer Harness topology", () => {
     const outputs = await read(
       "terraform/modules/app/agentcore-harness/outputs.tf",
     );
+    const rootModule = await read("terraform/modules/thinkwork/main.tf");
 
     assert.match(
       terraform,
       /harness_name\s+= "Thinkwork_\$\{local\.normalized_stage\}_\$\{local\.normalized_tenant\}_\$\{local\.normalized_profile\}"/,
     );
     assert.doesNotMatch(terraform, /participant_id|thread_id|agent_id/);
-    assert.match(terraform, /endpoint_name\s+= "ThinkworkProof"/);
+    assert.match(terraform, /endpoint_prefix\s+= "ThinkworkProofV"/);
+    assert.match(outputs, /result\.endpoint_name/);
+    const lifecycle = await read(
+      "terraform/modules/app/agentcore-harness/scripts/harness-lifecycle.mjs",
+    );
+    assert.match(lifecycle, /`\$\{endpointPrefix\}\$\{version\}`/);
+    assert.doesNotMatch(lifecycle, /UpdateHarnessEndpointCommand/);
+    assert.match(rootModule, /agentcore_harness_endpoint_retention/);
+    assert.match(rootModule, /aws_ssm_parameter\.agentcore_harness_profile/);
     assert.match(outputs, /target_version/);
     assert.match(outputs, /live_version/);
   });
@@ -54,16 +63,19 @@ describe("managed multiplayer Harness topology", () => {
     const lifecycle = await read(
       "terraform/modules/app/agentcore-harness/scripts/harness-lifecycle.mjs",
     );
+    const toolContract = await read(
+      "terraform/modules/app/agentcore-harness/scripts/harness-tool-contract.mjs",
+    );
 
     assert.match(terraform, /tenant_skill_prefix/);
     assert.match(terraform, /SelectedTenantGateway/);
     assert.match(terraform, /ExactUserIdentityExchange/);
     assert.match(lifecycle, /customJWTAuthorizer/);
-    assert.match(lifecycle, /grantType: "TOKEN_EXCHANGE"/);
+    assert.match(toolContract, /grantType: "TOKEN_EXCHANGE"/);
     assert.match(lifecycle, /memory: \{ disabled: \{\} \}/);
     assert.match(lifecycle, /required\("GATEWAY_TARGET_TOOL_NAMES"\)/);
     assert.match(lifecycle, /"@thinkwork_gateway\/\*"/);
-    assert.match(lifecycle, /"submit_skill_draft"/);
+    assert.match(toolContract, /name: "submit_skill_draft"/);
     assert.match(terraform, /governed-review-draft-v1/);
     assert.doesNotMatch(lifecycle, /targetToolNames\.map/);
     assert.match(

@@ -1341,12 +1341,8 @@ module "agentcore_harness" {
 # participant id, credential, prompt, or private result is stored here. Keep
 # the original address during the migration so deployed runners never lose
 # their profile between releases.
-resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
-  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
-
-  name = "/thinkwork/${var.stage}/agentcore-harness-proof-profile"
-  type = "String"
-  value = jsonencode({
+locals {
+  agentcore_harness_profile_value = jsonencode({
     tenantSlug                     = var.agentcore_multiplayer_proof_tenant_slug
     trustProfile                   = "default"
     harnessArn                     = module.agentcore_harness.managed_harness_arn
@@ -1359,10 +1355,15 @@ resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
     configurationFingerprint       = module.agentcore_harness.managed_configuration_fingerprint
     authorizerAudience             = module.api.agentcore_harness_audience
     sessionStrategy                = "fresh"
+    gatewayArn                     = module.agentcore_proof_gateway.gateway_arn
     gatewayUrl                     = module.agentcore_proof_gateway.gateway_url
     gatewayTargetName              = module.agentcore_proof_gateway.target_name
     identityWorkloadName           = module.agentcore_proof_identity.workload_identity_name
     identityCredentialProviderName = module.agentcore_proof_identity.credential_provider_name
+    identityCredentialProviderArn  = module.agentcore_proof_identity.credential_provider_arn
+    invocationToolsContract        = "control-plane-attested-full-override-v1"
+    invocationToolsFingerprint     = module.agentcore_harness.managed_invocation_tools_fingerprint
+    invocationTools                = jsondecode(module.agentcore_harness.managed_invocation_tools_json)
     strategyDecisionRule           = "reuse_only_if_correct_and_20_percent_benefit"
     capacityEnvelope = {
       activeSessions       = 100
@@ -1370,6 +1371,28 @@ resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
       minimumHeadroom      = 0.50
     }
   })
+}
+
+resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
+  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
+
+  name = "/thinkwork/${var.stage}/agentcore-harness-proof-profile"
+  type = "String"
+  # The exact immutable Harness tool schemas sit close to Standard's 4 KiB
+  # ceiling. Intelligent-Tiering stays Standard while possible and safely
+  # promotes only when a legitimate governed schema requires more room.
+  tier  = "Intelligent-Tiering"
+  value = local.agentcore_harness_profile_value
+
+  lifecycle {
+    precondition {
+      # Base64 expands every three UTF-8 bytes to four ASCII characters. A
+      # conservative 10,920-character ceiling admits at most 8,190 bytes and
+      # cannot cross SSM's 8 KiB Advanced parameter limit.
+      condition     = length(base64encode(local.agentcore_harness_profile_value)) <= 10920
+      error_message = "The AgentCore Harness managed profile exceeds SSM's 8 KiB parameter limit."
+    }
+  }
 
   tags = {
     Name                   = "thinkwork-${var.stage}-agentcore-harness-proof-profile"
@@ -1390,6 +1413,7 @@ resource "aws_ssm_parameter" "agentcore_harness_profile" {
 
   name  = "/thinkwork/${var.stage}/agentcore-harness-profiles/${var.agentcore_multiplayer_proof_tenant_slug}"
   type  = aws_ssm_parameter.agentcore_harness_proof_profile[0].type
+  tier  = "Intelligent-Tiering"
   value = aws_ssm_parameter.agentcore_harness_proof_profile[0].value
 
   tags = {
@@ -1399,6 +1423,34 @@ resource "aws_ssm_parameter" "agentcore_harness_profile" {
     "thinkwork:profile"    = "default"
     "thinkwork:visibility" = "server-only-nonsecret"
   }
+}
+
+# Publish the new immutable endpoint/profile first, then reclaim older
+# endpoint versions. Retain the active endpoint plus exactly one prior endpoint
+# for guarded rollback; the dedicated Harness owns no unrelated endpoints.
+resource "terraform_data" "agentcore_harness_endpoint_retention" {
+  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
+
+  triggers_replace = {
+    active_endpoint = module.agentcore_harness.managed_endpoint_name
+    profile_digest  = module.agentcore_harness.managed_configuration_fingerprint
+  }
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/../app/agentcore-harness/scripts/prune_harness.sh"
+    environment = {
+      AWS_REGION           = var.region
+      HARNESS_ID           = module.agentcore_harness.managed_harness_id
+      ACTIVE_ENDPOINT_NAME = module.agentcore_harness.managed_endpoint_name
+      ENDPOINT_PREFIX      = "ThinkworkProofV"
+      LEGACY_ENDPOINT_NAME = "ThinkworkProof"
+    }
+  }
+
+  depends_on = [
+    aws_ssm_parameter.agentcore_harness_proof_profile,
+    aws_ssm_parameter.agentcore_harness_profile,
+  ]
 }
 
 # THINK-316 U1 proof-only Identity and Gateway plane. These resources use the
