@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  composeHarnessSystemPrompt,
   computeHarnessProjectionFingerprints,
   forceDocumentSectionWaiver,
   HarnessDuplicateDeliveryError,
@@ -418,6 +419,85 @@ describe("normalizeHarnessWireEvent", () => {
     ).toEqual({
       metadata: { usage: { inputTokens: 5, outputTokens: 2 } },
     });
+  });
+});
+
+describe("composeHarnessSystemPrompt", () => {
+  it("hydrates lazy-mounted requester context from the rendered manifest", async () => {
+    const prefix = "tenants/acme/threads/thread-1";
+    const userSource = "tenants/acme/users/eric/USER.md";
+    const objects = new Map<string, string>([
+      [
+        `${prefix}/.hydrate_manifest.json`,
+        JSON.stringify({
+          files: [
+            {
+              path: "User/USER.md",
+              owner: "user",
+              sourceKey: userSource,
+            },
+          ],
+        }),
+      ],
+      [
+        userSource,
+        "# USER.md\n\n- **Name:** Eric Odom\n- **Email:** eric@thinkwork.ai",
+      ],
+    ]);
+    const fetchWorkspaceText = vi.fn(
+      async (key: string) => objects.get(key) ?? null,
+    );
+
+    const prompt = await composeHarnessSystemPrompt(
+      {
+        tenant_slug: "acme",
+        user_id: "user-1",
+        current_user_email: "eric@thinkwork.ai",
+        rendered_workspace_prefix: `${prefix}/`,
+        system_prompt: "fallback",
+      },
+      [],
+      { fetchWorkspaceText },
+    );
+
+    expect(prompt).toContain("<current_requester>");
+    expect(prompt).toContain("Email: eric@thinkwork.ai");
+    expect(prompt).toContain("# USER.md");
+    expect(prompt).toContain("Name:** Eric Odom");
+    expect(fetchWorkspaceText).toHaveBeenCalledWith(`${prefix}/User/USER.md`);
+    expect(fetchWorkspaceText).toHaveBeenCalledWith(userSource);
+  });
+
+  it("does not follow hydrate-manifest source keys outside the current tenant", async () => {
+    const prefix = "tenants/acme/threads/thread-1";
+    const fetchWorkspaceText = vi.fn(async (key: string) => {
+      if (key === `${prefix}/.hydrate_manifest.json`) {
+        return JSON.stringify({
+          files: [
+            {
+              path: "User/USER.md",
+              sourceKey: "tenants/other/users/victim/USER.md",
+            },
+          ],
+        });
+      }
+      return null;
+    });
+
+    const prompt = await composeHarnessSystemPrompt(
+      {
+        tenant_slug: "acme",
+        rendered_workspace_prefix: `${prefix}/`,
+        system_prompt: "fallback",
+      },
+      [],
+      { fetchWorkspaceText },
+    );
+
+    expect(prompt).toBe("fallback");
+    expect(fetchWorkspaceText).not.toHaveBeenCalledWith(
+      "tenants/other/users/victim/USER.md",
+    );
   });
 });
 
