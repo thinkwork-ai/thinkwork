@@ -654,6 +654,10 @@ const CONTINUE_STOP_REASONS = new Set([
   "partial_turn",
 ]);
 const MAX_TOOL_ROUNDS = 16;
+const DOCUMENT_DISCOVERY_MAX_ITERATIONS = 8;
+const GOAL_DOCUMENT_DISCOVERY_MAX_ITERATIONS = 3;
+const DOCUMENT_COMPOSITION_MAX_ITERATIONS = 2;
+const GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS = 1;
 
 interface DocumentPlateContract {
   slug: string;
@@ -996,6 +1000,14 @@ export async function runHarnessTurn(
   let missingEmissionCorrections = 0;
   let missingSkillSubmissionCorrections = 0;
   let documentCompositionPhase = false;
+  let documentCompositionTransition:
+    | "governed_connector_evidence"
+    | "natural_end_turn"
+    | "max_iterations_exceeded"
+    | "caller_tool_continuation"
+    | null = null;
+  let goalDocumentDiscoveryInvocations = 0;
+  let goalDocumentCompositionInvocations = 0;
   let harness: EnsuredHarness | null = null;
   let composedSystemPrompt: string | null = null;
   let turnProjectionFingerprint: string | null = null;
@@ -1076,6 +1088,18 @@ export async function runHarnessTurn(
             document_id: lastDocumentId,
             emission_attempts: emissionAttempts,
             emission_successes: emissionSuccesses,
+            document_composition_transition: documentCompositionTransition,
+            goal_document_phase_limits:
+              goalExecution && documentEmissionRequired
+                ? {
+                    discovery_max_iterations:
+                      GOAL_DOCUMENT_DISCOVERY_MAX_ITERATIONS,
+                    composition_max_iterations:
+                      GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS,
+                    discovery_invocations: goalDocumentDiscoveryInvocations,
+                    composition_invocations: goalDocumentCompositionInvocations,
+                  }
+                : null,
           },
         },
         ...(fields.goalRun ? { goal_run: fields.goalRun } : {}),
@@ -1454,6 +1478,7 @@ export async function runHarnessTurn(
         });
       }
       documentCompositionPhase = true;
+      documentCompositionTransition = "governed_connector_evidence";
     }
     let assertion = await deps.mintHarnessAssertion({
       tenantId: turn.tenantId,
@@ -1497,6 +1522,9 @@ export async function runHarnessTurn(
                 text: [
                   preparedSession.currentMessage,
                   pendingQuestionAnswerBlock,
+                  goalExecution && documentEmissionRequired
+                    ? "This Goal-mode document run is token-bounded. Gather only the evidence required by the selected plate, use each necessary source once, and stop discovery as soon as the plate can be composed."
+                    : "",
                 ]
                   .filter(Boolean)
                   .join("\n\n"),
@@ -1531,6 +1559,32 @@ export async function runHarnessTurn(
           },
         ]
       : undefined;
+    const enterDocumentComposition = (
+      transition:
+        | "natural_end_turn"
+        | "max_iterations_exceeded"
+        | "caller_tool_continuation",
+      continuationMessages?: HarnessInvokeMessage[],
+    ) => {
+      documentCompositionPhase = true;
+      documentCompositionTransition = transition;
+      nextMessages = continuationMessages ?? [
+        {
+          role: "user",
+          content: [
+            {
+              text: [
+                "Now turn the evidence you gathered in this turn into the requested durable ThinkWork document.",
+                selectedDocumentPlate
+                  ? `Use the registered ${selectedDocumentPlate.displayName} plate (${selectedDocumentPlate.slug}) and satisfy its full section and analysis contract.`
+                  : "Use the most specific registered plate for the request.",
+                "Return exactly one JSON document envelope as instructed. Do not call more tools and do not return a prose-only report.",
+              ].join("\n"),
+            },
+          ],
+        },
+      ];
+    };
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       if (round === MAX_TOOL_ROUNDS) {
         return await finalizeWith("failed", {
@@ -1546,6 +1600,25 @@ export async function runHarnessTurn(
           turnId: turn.turnId,
         });
       }
+      if (goalExecution && documentEmissionRequired) {
+        if (documentCompositionPhase) {
+          if (goalDocumentCompositionInvocations >= 1) {
+            return await finalizeWith("failed", {
+              errorMessage:
+                "Goal document composition exceeded its one-invocation phase budget.",
+            });
+          }
+          goalDocumentCompositionInvocations += 1;
+        } else {
+          if (goalDocumentDiscoveryInvocations >= 1) {
+            return await finalizeWith("failed", {
+              errorMessage:
+                "Goal document discovery exceeded its one-invocation phase budget.",
+            });
+          }
+          goalDocumentDiscoveryInvocations += 1;
+        }
+      }
       const stream = await deps.invokeHarness({
         harnessArn: harness.harnessArn,
         qualifier: harness.qualifier,
@@ -1557,7 +1630,9 @@ export async function runHarnessTurn(
               // Use the Harness's configured Gateway allowlist. Live testing
               // showed per-invocation exact names do not share that namespace
               // and silently hide the same Gateway tools that work here.
-              maxIterations: 8,
+              maxIterations: goalExecution
+                ? GOAL_DOCUMENT_DISCOVERY_MAX_ITERATIONS
+                : DOCUMENT_DISCOVERY_MAX_ITERATIONS,
             }
           : {}),
         ...(documentCompositionPhase
@@ -1568,7 +1643,9 @@ export async function runHarnessTurn(
               // validates the returned document envelope before persistence.
               allowedTools: ["__thinkwork_document_envelope__"],
               systemPrompt: documentEnvelopeSystemPrompt,
-              maxIterations: 2,
+              maxIterations: goalExecution
+                ? GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS
+                : DOCUMENT_COMPOSITION_MAX_ITERATIONS,
             }
           : {}),
       });
@@ -1578,6 +1655,20 @@ export async function runHarnessTurn(
       usage.cacheReadTokens += segment.usage.cacheReadTokens;
       usage.cacheWriteTokens += segment.usage.cacheWriteTokens;
       if (segment.text.trim()) finalText = segment.text;
+
+      if (
+        segment.stopReason === "max_iterations_exceeded" &&
+        goalExecution &&
+        documentEmissionRequired &&
+        !documentCompositionPhase
+      ) {
+        // A goal run has a hard ThinkWork token budget, while Harness only
+        // exposes a per-invocation iteration limit. Treat the bounded
+        // discovery cutoff as the phase boundary and compose from evidence
+        // already retained in this fresh turn's Harness session.
+        enterDocumentComposition("max_iterations_exceeded");
+        continue;
+      }
 
       const callerToolUses = segment.toolUses;
       if (segment.stopReason === "end_turn" && callerToolUses.length === 0) {
@@ -1629,23 +1720,7 @@ export async function runHarnessTurn(
           emissionSuccesses === 0 &&
           !documentCompositionPhase
         ) {
-          documentCompositionPhase = true;
-          nextMessages = [
-            {
-              role: "user",
-              content: [
-                {
-                  text: [
-                    "Now turn the evidence you gathered in this turn into the requested durable ThinkWork document.",
-                    selectedDocumentPlate
-                      ? `Use the registered ${selectedDocumentPlate.displayName} plate (${selectedDocumentPlate.slug}) and satisfy its full section and analysis contract.`
-                      : "Use the most specific registered plate for the request.",
-                    "Return exactly one JSON document envelope as instructed. Do not call more tools and do not return a prose-only report.",
-                  ].join("\n"),
-                },
-              ],
-            },
-          ];
+          enterDocumentComposition("natural_end_turn");
           continue;
         }
         if (documentCompositionPhase && emissionSuccesses === 0) {
@@ -1939,8 +2014,36 @@ export async function runHarnessTurn(
           // not persist it to session memory; without it the toolResult
           // below has no toolUse to pair with.
           { role: "assistant", content: segment.finalAssistantContent },
-          { role: "user", content: resultBlocks },
+          {
+            role: "user",
+            content: [
+              ...resultBlocks,
+              ...(goalExecution &&
+              documentEmissionRequired &&
+              !documentCompositionPhase
+                ? [
+                    {
+                      text: [
+                        "Discovery is now closed for this token-bounded Goal document run.",
+                        "Use the evidence already retained in this Harness session and return exactly one JSON document envelope matching the composition system prompt.",
+                        "Do not call more tools or return an evidence summary.",
+                      ].join(" "),
+                    },
+                  ]
+                : []),
+            ],
+          },
         ];
+        if (
+          goalExecution &&
+          documentEmissionRequired &&
+          !documentCompositionPhase
+        ) {
+          // InvokeHarness maxIterations is per invocation. A caller-fulfilled
+          // discovery tool must not reopen another three-iteration discovery
+          // call; continue directly into the single composition invocation.
+          enterDocumentComposition("caller_tool_continuation", nextMessages);
+        }
         continue;
       }
 
