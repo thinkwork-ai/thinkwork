@@ -1901,6 +1901,7 @@ export type CreateEvalProfileInput = {
   judgeModel?: InputMaybe<Scalars["String"]["input"]>;
   model: Scalars["String"]["input"];
   name: Scalars["String"]["input"];
+  runtimeType?: InputMaybe<Scalars["String"]["input"]>;
   trials?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
@@ -2843,6 +2844,7 @@ export type EvalProfile = {
   judgeModel?: Maybe<Scalars["String"]["output"]>;
   model: Scalars["String"]["output"];
   name: Scalars["String"]["output"];
+  runtimeType: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   trials: Scalars["Int"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
@@ -2934,6 +2936,7 @@ export type EvalRun = {
   profileSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
   regression: Scalars["Boolean"]["output"];
   runtimeHost: Scalars["String"]["output"];
+  runtimeType?: Maybe<Scalars["String"]["output"]>;
   scheduledJobId?: Maybe<Scalars["ID"]["output"]>;
   scoringVersion?: Maybe<Scalars["Int"]["output"]>;
   selectedTestCaseIds: Array<Scalars["ID"]["output"]>;
@@ -11171,6 +11174,7 @@ export type UpdateEvalProfileInput = {
   judgeModel?: InputMaybe<Scalars["String"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
+  runtimeType?: InputMaybe<Scalars["String"]["input"]>;
   trials?: InputMaybe<Scalars["Int"]["input"]>;
 };
 

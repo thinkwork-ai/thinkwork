@@ -16,7 +16,10 @@ import {
   EvalRunQuery,
   EvalRunsQuery,
 } from "@/lib/evaluation-queries";
-import { shortModelLabel } from "@/components/settings/SettingsEvalProfiles";
+import {
+  runtimeLabel,
+  shortModelLabel,
+} from "@/components/settings/SettingsEvalProfiles";
 import { cn, relativeTime } from "@/lib/utils";
 
 type CompareRun = {
@@ -34,6 +37,8 @@ type CompareRun = {
 type RunDetail = {
   id: string;
   status: string;
+  model: string | null;
+  runtimeType: "pi" | "agentcore" | null;
   passed: number;
   failed: number;
   errored: number | null;
@@ -51,6 +56,7 @@ type RunDetail = {
 };
 
 export type ProfileSnapshotFields = {
+  runtimeType: "pi" | "agentcore" | null;
   judgeModel: string | null;
   workspaceFingerprint: string[] | null;
   tierCounts: { model: number; agent: number } | null;
@@ -60,15 +66,26 @@ export function parseProfileSnapshot(
   raw: string | null | undefined,
 ): ProfileSnapshotFields {
   if (!raw)
-    return { judgeModel: null, workspaceFingerprint: null, tierCounts: null };
+    return {
+      runtimeType: null,
+      judgeModel: null,
+      workspaceFingerprint: null,
+      tierCounts: null,
+    };
   try {
     const parsed = JSON.parse(raw) as {
       judgeModel?: unknown;
+      runtimeType?: unknown;
       workspaceFingerprint?: unknown;
     };
     const tierCounts = (parsed as { tierCounts?: unknown }).tierCounts as
-      { model?: unknown; agent?: unknown } | undefined;
+      | { model?: unknown; agent?: unknown }
+      | undefined;
     return {
+      runtimeType:
+        parsed.runtimeType === "pi" || parsed.runtimeType === "agentcore"
+          ? parsed.runtimeType
+          : null,
       judgeModel:
         typeof parsed.judgeModel === "string" ? parsed.judgeModel : null,
       workspaceFingerprint: Array.isArray(parsed.workspaceFingerprint)
@@ -82,7 +99,12 @@ export function parseProfileSnapshot(
           : null,
     };
   } catch {
-    return { judgeModel: null, workspaceFingerprint: null, tierCounts: null };
+    return {
+      runtimeType: null,
+      judgeModel: null,
+      workspaceFingerprint: null,
+      tierCounts: null,
+    };
   }
 }
 
@@ -126,6 +148,17 @@ export function comparabilityFlags(
       "Judge pins differ — rubric verdicts came from different judges.",
     );
   }
+  const runtimes = new Set(
+    details.map(
+      (d) =>
+        parseProfileSnapshot(d.profileSnapshot).runtimeType ?? "unrecorded",
+    ),
+  );
+  if (runtimes.size > 1) {
+    flags.push(
+      "Execution runtimes differ — Pi and AgentCore Harness runs are not directly comparable.",
+    );
+  }
   const fingerprints = new Set(
     details.map((d) => {
       const fp = parseProfileSnapshot(d.profileSnapshot).workspaceFingerprint;
@@ -155,6 +188,16 @@ export function comparabilityFlags(
     flags.push("Includes a partial (running or cancelled) run.");
   }
   return flags;
+}
+
+export function pinnedRunConfigLabel(
+  run: Pick<RunDetail, "model" | "runtimeType">,
+): string {
+  const runtime = run.runtimeType
+    ? runtimeLabel(run.runtimeType)
+    : "Legacy runtime";
+  const model = run.model ? shortModelLabel(run.model) : "Unknown model";
+  return `${runtime} · ${model}`;
 }
 
 export function SettingsEvalCompare() {
@@ -221,6 +264,7 @@ export function SettingsEvalCompare() {
     id: string;
     name: string;
     model: string;
+    runtimeType: "pi" | "agentcore";
     isDefault: boolean;
   }>;
   const datasets = (datasetsResult.data?.evalDatasets ?? []) as Array<{
@@ -295,6 +339,7 @@ export function SettingsEvalCompare() {
                   >
                     {profile.name}
                     <span className="ml-1 text-xs opacity-70">
+                      {runtimeLabel(profile.runtimeType)} ·{" "}
                       {shortModelLabel(profile.model)}
                     </span>
                   </CompareChip>
@@ -335,7 +380,12 @@ function ComparisonMatrix({
   profiles,
   latestRunByProfile,
 }: {
-  profiles: Array<{ id: string; name: string; model: string }>;
+  profiles: Array<{
+    id: string;
+    name: string;
+    model: string;
+    runtimeType: "pi" | "agentcore";
+  }>;
   latestRunByProfile: Map<string, CompareRun>;
 }) {
   return (
@@ -353,9 +403,6 @@ function ComparisonMatrix({
               <CardContent className="space-y-3 pt-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold">{profile.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {shortModelLabel(profile.model)}
-                  </span>
                 </div>
                 {run ? (
                   <ProfileRunStats runId={run.id} />
@@ -443,6 +490,9 @@ function ProfileRunStats({ runId }: { runId: string }) {
       : null;
   return (
     <div className="space-y-2 text-sm">
+      <div className="text-xs text-muted-foreground">
+        Pinned run: {pinnedRunConfigLabel(run)}
+      </div>
       <div className="grid grid-cols-4 gap-1 text-center">
         <VerdictStat label="Pass" value={run.passed} tone="text-green-500" />
         <VerdictStat label="Fail" value={run.failed} tone="text-red-500" />

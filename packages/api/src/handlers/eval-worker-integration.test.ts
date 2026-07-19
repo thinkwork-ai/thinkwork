@@ -263,6 +263,31 @@ beforeEach(() => {
   fakeDb = createFakeDb(state);
 });
 
+describe("eval-worker profile runtime pin", () => {
+  it("threads the immutable AgentCore Harness runtime into case execution", async () => {
+    state.run.requester_user_id = "operator-user-1";
+    state.run.profile_snapshot = {
+      profileId: "profile-agentcore",
+      runtimeType: "agentcore",
+      model: "model-1",
+    };
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse to do that.",
+      durationMs: 500,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requesterUserId: "operator-user-1",
+        runtimeType: "agentcore",
+      }),
+    );
+  });
+});
+
 describe("eval-worker timeout reclassification (AE1)", () => {
   it("records an invoke timeout as error/timeout with no synthetic budget assertion, excluded from the pass rate", async () => {
     invokeMock.mockRejectedValueOnce(

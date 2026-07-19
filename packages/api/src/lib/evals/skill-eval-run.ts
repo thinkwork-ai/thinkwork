@@ -100,8 +100,9 @@ async function invokeEvalRunnerAsync(runId: string): Promise<void> {
   if (!fnName) {
     throw new Error("EVAL_RUNNER_FN not configured");
   }
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   await lambda.send(
     new InvokeCommand({
@@ -178,6 +179,13 @@ export async function launchSkillEvalRun(args: {
   //    profile's model must be enabled in the tenant catalog or the run
   //    can't be scored.
   const profile = await getOrCreateDefaultEvalProfile(tenantId);
+  if (profile.runtime_type === "agentcore" && !args.requesterUserId) {
+    return {
+      status: "skipped",
+      reason:
+        "AgentCore Harness skill evaluations require an exact requester user identity",
+    };
+  }
   const model = profile.model;
   const catalogRow = await getTenantModelCatalogEntry({
     tenantId,

@@ -30,6 +30,7 @@ export interface EvalProfileRow {
   tenant_id: string;
   name: string;
   model: string;
+  runtime_type: EvalRuntimeType;
   judge_model: string | null;
   trials: number;
   is_default: boolean;
@@ -43,6 +44,7 @@ export interface EvalProfileSnapshot {
   profileId: string;
   name: string;
   model: string;
+  runtimeType: EvalRuntimeType;
   /** Null = the deployed default judge (EVAL_JUDGE_MODEL_ID). */
   judgeModel: string | null;
   trials: number;
@@ -78,6 +80,14 @@ export class EvalProfileError extends Error {
 
 const DEFAULT_PROFILE_NAME = "Default";
 const MAX_TRIALS = 9;
+export type EvalRuntimeType = "pi" | "agentcore";
+
+export function assertEvalRuntimeType(value: string): EvalRuntimeType {
+  if (value !== "pi" && value !== "agentcore") {
+    throw new EvalProfileError("runtimeType must be pi or agentcore.");
+  }
+  return value;
+}
 
 export function assertTrials(trials: number): void {
   if (!Number.isInteger(trials) || trials < 1 || trials > MAX_TRIALS) {
@@ -120,6 +130,7 @@ export interface CreateEvalProfileArgs {
   tenantId: string;
   name: string;
   model: string;
+  runtimeType?: EvalRuntimeType;
   judgeModel?: string | null;
   trials?: number | null;
 }
@@ -138,6 +149,7 @@ export async function createEvalProfile(
         tenant_id: args.tenantId,
         name,
         model: args.model,
+        runtime_type: assertEvalRuntimeType(args.runtimeType ?? "pi"),
         judge_model: args.judgeModel ?? null,
         trials,
         is_default: false,
@@ -152,6 +164,7 @@ export async function createEvalProfile(
 export interface UpdateEvalProfileArgs {
   name?: string | null;
   model?: string | null;
+  runtimeType?: EvalRuntimeType | null;
   judgeModel?: string | null;
   clearJudgeModel?: boolean | null;
   trials?: number | null;
@@ -168,6 +181,9 @@ export async function updateEvalProfile(
     patch.name = name;
   }
   if (args.model != null) patch.model = args.model;
+  if (args.runtimeType != null) {
+    patch.runtime_type = assertEvalRuntimeType(args.runtimeType);
+  }
   if (args.clearJudgeModel) patch.judge_model = null;
   else if (args.judgeModel != null) patch.judge_model = args.judgeModel;
   if (args.trials != null) {
@@ -201,6 +217,7 @@ export async function duplicateEvalProfile(
     tenantId: source.tenant_id,
     name: targetName,
     model: source.model,
+    runtimeType: source.runtime_type,
     judgeModel: source.judge_model,
     trials: source.trials,
   });
@@ -287,6 +304,7 @@ export async function getOrCreateDefaultEvalProfile(
         tenant_id: tenantId,
         name: DEFAULT_PROFILE_NAME,
         model: DEFAULT_EVAL_MODEL_ID,
+        runtime_type: "pi",
         judge_model: null,
         trials: 1,
         is_default: true,
@@ -379,6 +397,7 @@ export async function resolveProfileSnapshotForRun(run: {
     profileId: profile.id,
     name: profile.name,
     model: run.model?.trim() || profile.model,
+    runtimeType: profile.runtime_type,
     judgeModel: profile.judge_model,
     trials: profile.trials,
     workspaceFingerprint: fingerprint,

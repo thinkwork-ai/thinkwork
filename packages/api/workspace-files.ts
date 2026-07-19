@@ -1356,6 +1356,7 @@ async function handleImportSkill(
     tenantId,
     parsed.slug,
     evalCases,
+    deps.userId,
   );
 
   return json(200, {
@@ -3266,6 +3267,7 @@ async function syncSkillEvalDataset(
   tenantId: string,
   slug: string,
   evalCases: SkillCaseInput[],
+  requesterUserId?: string | null,
 ): Promise<{
   evalDataset?: { slug: string; cases: number; skipped: number };
   evalDatasetWarning?: string;
@@ -3297,7 +3299,11 @@ async function syncSkillEvalDataset(
   // throws), so this can't break the install — but wrap defensively too.
   let evalRunStatus = "skipped";
   try {
-    const launch = await launchSkillEvalRun({ tenantId, skillSlug: slug });
+    const launch = await launchSkillEvalRun({
+      tenantId,
+      skillSlug: slug,
+      requesterUserId,
+    });
     evalRunStatus = launch.status;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -3366,6 +3372,7 @@ async function stageGatedSkillUpdate(
   tenantId: string,
   slug: string,
   evalCases: SkillCaseInput[],
+  requesterUserId?: string | null,
 ): Promise<GatedStageOutcome> {
   const candidateDatasetSlug = skillCandidateDatasetSlug(slug);
   let seed;
@@ -3416,6 +3423,7 @@ async function stageGatedSkillUpdate(
       tenantId,
       skillSlug: slug,
       datasetSlugOverride: candidateDatasetSlug,
+      requesterUserId,
     });
     return {
       held: true,
@@ -3555,7 +3563,12 @@ async function handleInstallSkill(
   );
   if (refreshError) return refreshError;
   const { eval_cases, ...installResult } = result;
-  const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
+  const evalSync = await syncSkillEvalDataset(
+    tenantId,
+    slug,
+    eval_cases,
+    deps.userId,
+  );
   return json(200, {
     ...installResult,
     ...evalSync,
@@ -3674,6 +3687,7 @@ async function handleReinstallSkill(
         tenantId,
         slug,
         dryRun.eval_cases,
+        deps.userId,
       );
       if (staged.held) {
         // The workspace is NOT reinstalled — no manifest/derive/agentsMd
@@ -3724,7 +3738,12 @@ async function handleReinstallSkill(
   );
   if (refreshError) return refreshError;
   const { eval_cases, ...reinstallResult } = result;
-  const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
+  const evalSync = await syncSkillEvalDataset(
+    tenantId,
+    slug,
+    eval_cases,
+    deps.userId,
+  );
   return json(200, {
     ...reinstallResult,
     ...evalSync,

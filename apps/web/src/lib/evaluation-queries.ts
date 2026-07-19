@@ -35,6 +35,7 @@ export const EvalRunsQuery = graphql(`
         datasetVersion
         profileId
         profileName
+        runtimeType
         passRate
         regression
         costUsd
@@ -71,6 +72,7 @@ export const EvalRunQuery = graphql(`
       datasetVersion
       profileId
       profileName
+      runtimeType
       profileSnapshot
       expectedResultRows
       passRate
@@ -137,6 +139,7 @@ export const EvalProfilesQuery = graphql(`
       id
       name
       model
+      runtimeType
       judgeModel
       trials
       isDefault
@@ -153,6 +156,7 @@ export const CreateEvalProfileMutation = graphql(`
       id
       name
       model
+      runtimeType
       judgeModel
       trials
       isDefault
@@ -166,6 +170,7 @@ export const UpdateEvalProfileMutation = graphql(`
       id
       name
       model
+      runtimeType
       judgeModel
       trials
       isDefault

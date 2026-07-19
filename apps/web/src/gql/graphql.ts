@@ -1901,6 +1901,7 @@ export type CreateEvalProfileInput = {
   judgeModel?: InputMaybe<Scalars["String"]["input"]>;
   model: Scalars["String"]["input"];
   name: Scalars["String"]["input"];
+  runtimeType?: InputMaybe<Scalars["String"]["input"]>;
   trials?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
@@ -2843,6 +2844,7 @@ export type EvalProfile = {
   judgeModel?: Maybe<Scalars["String"]["output"]>;
   model: Scalars["String"]["output"];
   name: Scalars["String"]["output"];
+  runtimeType: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   trials: Scalars["Int"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
@@ -2934,6 +2936,7 @@ export type EvalRun = {
   profileSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
   regression: Scalars["Boolean"]["output"];
   runtimeHost: Scalars["String"]["output"];
+  runtimeType?: Maybe<Scalars["String"]["output"]>;
   scheduledJobId?: Maybe<Scalars["ID"]["output"]>;
   scoringVersion?: Maybe<Scalars["Int"]["output"]>;
   selectedTestCaseIds: Array<Scalars["ID"]["output"]>;
@@ -11171,6 +11174,7 @@ export type UpdateEvalProfileInput = {
   judgeModel?: InputMaybe<Scalars["String"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   name?: InputMaybe<Scalars["String"]["input"]>;
+  runtimeType?: InputMaybe<Scalars["String"]["input"]>;
   trials?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
@@ -13338,6 +13342,7 @@ export type EvalRunsQuery = {
       datasetVersion?: number | null;
       profileId?: string | null;
       profileName?: string | null;
+      runtimeType?: string | null;
       passRate?: number | null;
       regression: boolean;
       costUsd?: number | null;
@@ -13377,6 +13382,7 @@ export type EvalRunQuery = {
     datasetVersion?: number | null;
     profileId?: string | null;
     profileName?: string | null;
+    runtimeType?: string | null;
     profileSnapshot?: any | null;
     expectedResultRows?: number | null;
     passRate?: number | null;
@@ -13446,6 +13452,7 @@ export type EvalProfilesQuery = {
     id: string;
     name: string;
     model: string;
+    runtimeType: string;
     judgeModel?: string | null;
     trials: number;
     isDefault: boolean;
@@ -13467,6 +13474,7 @@ export type CreateEvalProfileMutation = {
     id: string;
     name: string;
     model: string;
+    runtimeType: string;
     judgeModel?: string | null;
     trials: number;
     isDefault: boolean;
@@ -13485,6 +13493,7 @@ export type UpdateEvalProfileMutation = {
     id: string;
     name: string;
     model: string;
+    runtimeType: string;
     judgeModel?: string | null;
     trials: number;
     isDefault: boolean;
@@ -20494,6 +20503,10 @@ export const EvalRunsDocument = {
                       },
                       {
                         kind: "Field",
+                        name: { kind: "Name", value: "runtimeType" },
+                      },
+                      {
+                        kind: "Field",
                         name: { kind: "Name", value: "passRate" },
                       },
                       {
@@ -20612,6 +20625,7 @@ export const EvalRunDocument = {
                 },
                 { kind: "Field", name: { kind: "Name", value: "profileId" } },
                 { kind: "Field", name: { kind: "Name", value: "profileName" } },
+                { kind: "Field", name: { kind: "Name", value: "runtimeType" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "profileSnapshot" },
@@ -20834,6 +20848,7 @@ export const EvalProfilesDocument = {
                 { kind: "Field", name: { kind: "Name", value: "id" } },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "runtimeType" } },
                 { kind: "Field", name: { kind: "Name", value: "judgeModel" } },
                 { kind: "Field", name: { kind: "Name", value: "trials" } },
                 { kind: "Field", name: { kind: "Name", value: "isDefault" } },
@@ -20912,6 +20927,7 @@ export const CreateEvalProfileDocument = {
                 { kind: "Field", name: { kind: "Name", value: "id" } },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "runtimeType" } },
                 { kind: "Field", name: { kind: "Name", value: "judgeModel" } },
                 { kind: "Field", name: { kind: "Name", value: "trials" } },
                 { kind: "Field", name: { kind: "Name", value: "isDefault" } },
@@ -20987,6 +21003,7 @@ export const UpdateEvalProfileDocument = {
                 { kind: "Field", name: { kind: "Name", value: "id" } },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "runtimeType" } },
                 { kind: "Field", name: { kind: "Name", value: "judgeModel" } },
                 { kind: "Field", name: { kind: "Name", value: "trials" } },
                 { kind: "Field", name: { kind: "Name", value: "isDefault" } },

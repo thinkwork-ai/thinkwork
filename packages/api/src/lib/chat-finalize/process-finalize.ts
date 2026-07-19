@@ -200,7 +200,9 @@ export async function processFinalize(
          AND he.thread_id = hs.thread_id
          AND he.status = 'active'
          AND he.qualifier = hs.qualifier
-         AND he.resolved_version = hs.resolved_version
+         -- The session itself is immutably pinned to its Harness version.
+         -- A newer fresh turn may advance the enrollment while this turn is
+         -- running; publication must continue to authorize the older session.
         JOIN thread_participants hp
           ON hp.tenant_id = hs.tenant_id
          AND hp.thread_id = hs.thread_id

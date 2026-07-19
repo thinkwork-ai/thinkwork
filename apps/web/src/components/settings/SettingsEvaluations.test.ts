@@ -32,15 +32,33 @@ describe("SettingsEvaluations target selection", () => {
         executionTarget: "cloud",
         runtimeHost: "agentcore",
         scheduledJobId: null,
+        runtimeType: "pi",
       }),
     ).toBe("agentcore-pi");
     expect(
       evalRunSourceKind({
         executionTarget: "cloud",
         runtimeHost: "agentcore",
+        scheduledJobId: null,
+        runtimeType: "agentcore",
+      }),
+    ).toBe("agentcore-harness");
+    expect(
+      evalRunSourceKind({
+        executionTarget: "cloud",
+        runtimeHost: "agentcore",
         scheduledJobId: "job-1",
+        runtimeType: "agentcore",
       }),
     ).toBe("schedule");
+    expect(
+      evalRunSourceKind({
+        executionTarget: "cloud",
+        runtimeHost: "agentcore",
+        scheduledJobId: null,
+        runtimeType: null,
+      }),
+    ).toBe("agentcore-unrecorded");
   });
 
   it("disables starts only while submitting or without a profile", () => {

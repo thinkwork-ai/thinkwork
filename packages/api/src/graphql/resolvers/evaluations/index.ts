@@ -106,6 +106,9 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     profileId: row.profile_id ?? null,
     profileName:
       (row.profile_snapshot as { name?: string } | null)?.name ?? null,
+    runtimeType:
+      (row.profile_snapshot as { runtimeType?: string } | null)?.runtimeType ??
+      null,
     profileSnapshot: row.profile_snapshot
       ? JSON.stringify(row.profile_snapshot)
       : null,
@@ -995,8 +998,9 @@ const evalTestCasesQuery = async (
  */
 const _seededTenants = new Set<string>();
 async function ensureTenantSeeded(tenantId: string): Promise<void> {
-  const { baselineSeedCacheKey, ensureBaselineDatasetSeeded } =
-    await import("../../../lib/evals/baseline-dataset.js");
+  const { baselineSeedCacheKey, ensureBaselineDatasetSeeded } = await import(
+    "../../../lib/evals/baseline-dataset.js"
+  );
   const cacheKey = baselineSeedCacheKey(tenantId);
   if (_seededTenants.has(cacheKey)) return;
   try {
@@ -1215,8 +1219,9 @@ const startEvalRun = async (
         "datasetSlug cannot be combined with categories or testCaseIds.",
       );
     }
-    const { resolveDatasetForLaunch } =
-      await import("../../../lib/evals/run-launch.js");
+    const { resolveDatasetForLaunch } = await import(
+      "../../../lib/evals/run-launch.js"
+    );
     datasetId = (
       await resolveDatasetForLaunch(args.tenantId, args.input.datasetSlug)
     ).id;
@@ -1331,8 +1336,9 @@ async function invokeEvalRunner(
       "EVAL_RUNNER_FN is not configured (set EVAL_RUNNER_FN or STAGE).",
     );
   }
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const payload: {
     runId: string;
@@ -1466,8 +1472,9 @@ const deleteEvalRun = async (
   // row goes away. An S3 failure surfaces (row kept) so the operator can
   // retry; tenant teardown sweeps eval-datasets/ as the backstop.
   if (existing.datasetId || existing.pinnedCaseIds) {
-    const { deleteRunSnapshotForTenant } =
-      await import("../../../lib/evals/run-launch.js");
+    const { deleteRunSnapshotForTenant } = await import(
+      "../../../lib/evals/run-launch.js"
+    );
     await deleteRunSnapshotForTenant(existing.tenantId, args.id);
   }
   await db.delete(evalRuns).where(eq(evalRuns.id, args.id));
@@ -1576,8 +1583,9 @@ const deleteEvalTestCase = async (
         .where(eq(evalDatasets.id, existing.datasetId));
       if (dataset?.slug) {
         const { datasetDeps, datasetContext } = await import("./datasets.js");
-        const { removeEvalDatasetCase: removeCaseInStore } =
-          await import("../../../lib/evals/dataset-store.js");
+        const { removeEvalDatasetCase: removeCaseInStore } = await import(
+          "../../../lib/evals/dataset-store.js"
+        );
         const dctx = await datasetContext(existing.tenantId, dataset.slug);
         const { storage, store } = datasetDeps();
         await removeCaseInStore(dctx, existing.datasetCaseId, storage, store);
@@ -1703,8 +1711,9 @@ const seedEvalTestCases = async (
   // direct DB-insert path is retired; the S3 version marker plus the
   // partial unique index uq_eval_test_cases_tenant_seed_name keep the
   // mutation idempotent across deploy windows and rollbacks.
-  const { ensureBaselineDatasetSeeded } =
-    await import("../../../lib/evals/baseline-dataset.js");
+  const { ensureBaselineDatasetSeeded } = await import(
+    "../../../lib/evals/baseline-dataset.js"
+  );
   const result = await ensureBaselineDatasetSeeded(args.tenantId, {
     categories: args.categories ?? null,
   });
@@ -2341,8 +2350,9 @@ const applySkillUpdate = async (
   // resolver's static graph (which partially-mocked test suites stub).
   const { getConfig } = await import("@thinkwork/runtime-config");
   const { S3Client } = await import("@aws-sdk/client-s3");
-  const { reinstallCatalogSkill } =
-    await import("../../../lib/catalog-reinstall.js");
+  const { reinstallCatalogSkill } = await import(
+    "../../../lib/catalog-reinstall.js"
+  );
   const bucket = getConfig("WORKSPACE_BUCKET");
   if (!bucket) {
     throw new Error("WORKSPACE_BUCKET is not configured");

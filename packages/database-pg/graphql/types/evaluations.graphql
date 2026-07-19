@@ -169,6 +169,8 @@ type EvalProfile {
   name: String!
   # Bedrock model id of the agent under test (tenant-catalog validated).
   model: String!
+  # Execution runtime pinned for the agent under test: pi or agentcore.
+  runtimeType: String!
   # Pinned LLM-judge model for llm-rubric scoring; null = deployed default.
   judgeModel: String
   # Trial count applied to llm-rubric cases only (>= 1). Deterministic-only
@@ -183,6 +185,8 @@ type EvalProfile {
 input CreateEvalProfileInput {
   name: String!
   model: String!
+  # Optional for existing clients; omitted profiles retain the legacy Pi default.
+  runtimeType: String
   judgeModel: String
   trials: Int
 }
@@ -190,6 +194,7 @@ input CreateEvalProfileInput {
 input UpdateEvalProfileInput {
   name: String
   model: String
+  runtimeType: String
   judgeModel: String
   # Explicit null is not distinguishable from omitted for judgeModel; pass
   # clearJudgeModel: true to reset the judge pin to the deployed default.
@@ -223,11 +228,13 @@ type EvalRun {
   datasetId: ID
   datasetVersion: Int
   # Eval Profile the run executed against (THINK-107). profileId stamps at
-  # run creation; profileSnapshot ({ model, judgeModel, trials,
+  # run creation; profileSnapshot ({ runtimeType, model, judgeModel, trials,
   # workspaceFingerprint }) pins at dispatch. Null on pre-profile runs —
   # the UI renders those "Legacy (pre-profile)".
   profileId: ID
   profileName: String
+  # Runtime pinned in the immutable profile snapshot. Null on legacy runs.
+  runtimeType: String
   profileSnapshot: AWSJSON
   # True fan-out count (sum of per-case trial counts); null on pre-profile
   # runs, where completion arithmetic falls back to totalTests.

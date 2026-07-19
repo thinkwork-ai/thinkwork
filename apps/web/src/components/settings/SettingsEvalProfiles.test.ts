@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { clampTrials, shortModelLabel } from "./SettingsEvalProfiles";
+import {
+  clampTrials,
+  runtimeLabel,
+  shortModelLabel,
+} from "./SettingsEvalProfiles";
 
 describe("clampTrials", () => {
   it("clamps to the server's 1..9 bound and rounds fractional input", () => {
@@ -21,5 +25,12 @@ describe("shortModelLabel", () => {
       "claude-haiku-4-5",
     );
     expect(shortModelLabel(null)).toBe("—");
+  });
+});
+
+describe("runtimeLabel", () => {
+  it("uses product-specific labels for each pinned runtime", () => {
+    expect(runtimeLabel("agentcore")).toBe("AgentCore Harness");
+    expect(runtimeLabel("pi")).toBe("Pi");
   });
 });

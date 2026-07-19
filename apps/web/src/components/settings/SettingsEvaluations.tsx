@@ -143,6 +143,8 @@ type RunRow = {
   // pre-profile runs, which render "Legacy (pre-profile)".
   profileId: string | null;
   profileName: string | null;
+  runtimeType?: "pi" | "agentcore" | null;
+  profileSnapshot?: string | Record<string, unknown> | null;
   totalTests: number | null;
   passRate: number | null;
   costUsd: number | null;
@@ -212,11 +214,30 @@ export function evalRunCategoryLabel(categories: string[]): string {
 }
 
 export function evalRunSourceKind(
-  run: Pick<RunRow, "executionTarget" | "runtimeHost" | "scheduledJobId">,
-): "legacy" | "agentcore-pi" | "schedule" {
+  run: Pick<
+    RunRow,
+    "executionTarget" | "runtimeHost" | "scheduledJobId" | "runtimeType"
+  >,
+):
+  | "legacy"
+  | "agentcore-pi"
+  | "agentcore-harness"
+  | "agentcore-unrecorded"
+  | "schedule" {
   if (isDesktopPiEvalRunProvenance(run)) return "legacy";
   if (run.scheduledJobId) return "schedule";
-  return "agentcore-pi";
+  const runtimeType = evalRunRuntimeType(run);
+  if (runtimeType === "agentcore") return "agentcore-harness";
+  if (runtimeType === "pi") return "agentcore-pi";
+  return "agentcore-unrecorded";
+}
+
+export function evalRunRuntimeType(
+  run: Pick<RunRow, "runtimeType">,
+): "pi" | "agentcore" | null {
+  return run.runtimeType === "pi" || run.runtimeType === "agentcore"
+    ? run.runtimeType
+    : null;
 }
 
 const runsColumns: ColumnDef<RunRow>[] = [
@@ -267,6 +288,25 @@ const runsColumns: ColumnDef<RunRow>[] = [
           </Badge>
         );
       }
+      if (sourceKind === "agentcore-harness") {
+        return (
+          <Badge
+            variant="secondary"
+            className="gap-1 bg-purple-500/15 text-purple-600 dark:text-purple-400"
+          >
+            <Cloud className="h-3 w-3" />
+            AgentCore Harness
+          </Badge>
+        );
+      }
+      if (sourceKind === "agentcore-unrecorded") {
+        return (
+          <Badge variant="outline" className="gap-1 text-muted-foreground">
+            <Cloud className="h-3 w-3" />
+            Runtime pending
+          </Badge>
+        );
+      }
       // The legacy scheduled-job detail route was retired when
       // /settings/automations/$automationId became the AgentLoop detail
       // (THINK-137 U7); render the badge without a deep link.
@@ -278,6 +318,11 @@ const runsColumns: ColumnDef<RunRow>[] = [
         >
           <CalendarClock className="h-3 w-3" />
           Schedule
+          {evalRunRuntimeType(row.original) === "agentcore"
+            ? " · AgentCore Harness"
+            : evalRunRuntimeType(row.original) === "pi"
+              ? " · Pi"
+              : " · Runtime pending"}
         </Badge>
       );
     },

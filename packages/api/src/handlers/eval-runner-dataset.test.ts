@@ -81,6 +81,7 @@ function profileSnapshot(overrides: Record<string, unknown> = {}) {
     profileId: "profile-1",
     name: "Default",
     model: "model-1",
+    runtimeType: "pi",
     judgeModel: null,
     trials: 1,
     workspaceFingerprint: null,

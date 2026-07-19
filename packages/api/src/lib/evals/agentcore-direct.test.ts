@@ -8,6 +8,7 @@ import {
   DEFAULT_EVAL_MODEL_ID,
   evalAgentCoreAttemptSessionId,
   evalAgentCoreInvokeTimeoutMs,
+  effectiveEvalRuntimeConfig,
   evalMaxTokens,
   evalModelId,
   extractAgentCoreResponseText,
@@ -88,6 +89,46 @@ const runtimeConfig: AgentRuntimeConfig = {
 };
 
 describe("direct AgentCore eval payload", () => {
+  it("honors the platform agent's selected default thread runtime", () => {
+    expect(
+      effectiveEvalRuntimeConfig({
+        ...runtimeConfig,
+        runtimeType: "pi",
+        defaultThreadRuntime: "agentcore",
+      }).runtimeType,
+    ).toBe("agentcore");
+    expect(
+      effectiveEvalRuntimeConfig({
+        ...runtimeConfig,
+        runtimeType: "pi",
+        defaultThreadRuntime: "pi",
+      }).runtimeType,
+    ).toBe("pi");
+  });
+
+  it("lets the immutable eval-profile runtime override the platform default", () => {
+    expect(
+      effectiveEvalRuntimeConfig(
+        {
+          ...runtimeConfig,
+          runtimeType: "pi",
+          defaultThreadRuntime: "pi",
+        },
+        "agentcore",
+      ).runtimeType,
+    ).toBe("agentcore");
+    expect(
+      effectiveEvalRuntimeConfig(
+        {
+          ...runtimeConfig,
+          runtimeType: "agentcore",
+          defaultThreadRuntime: "agentcore",
+        },
+        "pi",
+      ).runtimeType,
+    ).toBe("pi");
+  });
+
   it("defaults eval invocations to Kimi K2.5 and disables memory", () => {
     const payload = buildEvalAgentCorePayload({
       tenantId: "tenant-1",
@@ -503,10 +544,11 @@ describe("direct AgentCore eval empty-response in-process retry", () => {
     loadCanonicalHarnessEvalResultMock.mockReset();
   });
 
-  it("runs an AgentCore Harness eval through a canonical exact-user turn", async () => {
+  it("runs an AgentCore-pinned eval profile through a canonical exact-user turn", async () => {
     vi.mocked(resolveAgentRuntimeConfig).mockResolvedValueOnce({
       ...runtimeConfig,
-      runtimeType: "agentcore",
+      runtimeType: "pi",
+      defaultThreadRuntime: "pi",
     });
     createCanonicalHarnessEvalTurnMock.mockResolvedValueOnce({
       threadId: "hidden-eval-thread",
@@ -529,6 +571,7 @@ describe("direct AgentCore eval empty-response in-process retry", () => {
       message: "Evaluate this",
       model: null,
       requesterUserId: "operator-user-1",
+      runtimeType: "agentcore",
     });
 
     expect(createCanonicalHarnessEvalTurnMock).toHaveBeenCalledWith(

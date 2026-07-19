@@ -2682,6 +2682,7 @@ describe("catalog import-skill action", () => {
     expect(launchSkillEvalRunMock).toHaveBeenCalledWith({
       tenantId: TENANT_A,
       skillSlug: "imported-skill",
+      requesterUserId: USER_ID,
     });
   });
 

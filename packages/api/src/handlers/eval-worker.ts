@@ -534,6 +534,17 @@ export function pinnedJudgeModelForRun(
     : null;
 }
 
+export function pinnedRuntimeTypeForRun(
+  run: Pick<typeof evalRuns.$inferSelect, "profile_snapshot">,
+): "pi" | "agentcore" | null {
+  const snapshot = run.profile_snapshot;
+  if (typeof snapshot !== "object" || snapshot === null) return null;
+  const runtimeType = (snapshot as { runtimeType?: unknown }).runtimeType;
+  return runtimeType === "pi" || runtimeType === "agentcore"
+    ? runtimeType
+    : null;
+}
+
 /**
  * The model the agent under test actually ran as, for pricing its turn
  * (Eval Profiles U5): the dispatch-pinned profile_snapshot.model, falling
@@ -972,6 +983,7 @@ async function executeCase(
         replayToolOverrides,
         replayRequesterUserId: tc.replay_requester_user_id ?? null,
         requesterUserId: run.requester_user_id,
+        runtimeType: pinnedRuntimeTypeForRun(run),
       });
       actualOutput = inv.output;
       durationMs = inv.durationMs;
@@ -1430,8 +1442,9 @@ async function shortenThrottleRedriveVisibility(
   const queueUrl = queueUrlFromEventSourceArn(record.eventSourceARN ?? "");
   if (!queueUrl || !record.receiptHandle) return;
   const receiveCount = Number(record.attributes?.ApproximateReceiveCount ?? 1);
-  const { SQSClient, ChangeMessageVisibilityCommand } =
-    await import("@aws-sdk/client-sqs");
+  const { SQSClient, ChangeMessageVisibilityCommand } = await import(
+    "@aws-sdk/client-sqs"
+  );
   const client = new SQSClient({});
   await client.send(
     new ChangeMessageVisibilityCommand({

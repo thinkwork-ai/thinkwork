@@ -29,6 +29,21 @@ export const DEFAULT_EVAL_MAX_TOKENS = 1_024;
 
 const lambdaClient = new LambdaClient({});
 
+export function effectiveEvalRuntimeConfig(
+  runtimeConfig: AgentRuntimeConfig,
+  pinnedRuntimeType?: "pi" | "agentcore" | null,
+): AgentRuntimeConfig {
+  if (pinnedRuntimeType) {
+    return runtimeConfig.runtimeType === pinnedRuntimeType
+      ? runtimeConfig
+      : { ...runtimeConfig, runtimeType: pinnedRuntimeType };
+  }
+  return runtimeConfig.defaultThreadRuntime === "agentcore" &&
+    runtimeConfig.runtimeType !== "agentcore"
+    ? { ...runtimeConfig, runtimeType: "agentcore" }
+    : runtimeConfig;
+}
+
 function appsyncEndpoint(): string {
   return getConfig("APPSYNC_ENDPOINT", "");
 }
@@ -375,6 +390,8 @@ export async function invokeAgentCoreForEval(input: {
   replayRequesterUserId?: string | null;
   /** Exact operator/job owner used for synthetic evaluation cases. */
   requesterUserId?: string | null;
+  /** Dispatch-pinned runtime from the Eval Profile. */
+  runtimeType?: "pi" | "agentcore" | null;
 }): Promise<{
   output: string;
   durationMs: number;
@@ -432,6 +449,7 @@ async function invokeAgentCoreForEvalOnce(input: {
   replayToolOverrides?: EvalReplayToolOverride[];
   replayRequesterUserId?: string | null;
   requesterUserId?: string | null;
+  runtimeType?: "pi" | "agentcore" | null;
 }): Promise<{
   output: string;
   durationMs: number;
@@ -457,7 +475,7 @@ async function invokeAgentCoreForEvalOnce(input: {
     logPrefix: "[eval-worker]",
   });
 
-  const runtimeConfig = await resolveAgentRuntimeConfig({
+  const resolvedRuntimeConfig = await resolveAgentRuntimeConfig({
     tenantId: input.tenantId,
     agentId: input.agentId,
     thinkworkApiUrl: thinkworkApiUrl(),
@@ -471,6 +489,10 @@ async function invokeAgentCoreForEvalOnce(input: {
     // plugin OAuth servers then drop fail-closed exactly as before.
     ...(requesterUserId ? { currentUserId: requesterUserId } : {}),
   });
+  const runtimeConfig = effectiveEvalRuntimeConfig(
+    resolvedRuntimeConfig,
+    input.runtimeType,
+  );
   const agentcoreFunctionName = resolveRuntimeFunctionName(
     runtimeConfig.runtimeType,
   );

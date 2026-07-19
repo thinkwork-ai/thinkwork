@@ -55,6 +55,7 @@ function makeDb() {
               tenant_id: values.tenant_id,
               name: values.name,
               model: values.model,
+              runtime_type: values.runtime_type ?? "pi",
               judge_model: values.judge_model ?? null,
               trials: values.trials ?? 1,
               is_default: values.is_default ?? false,
@@ -118,6 +119,7 @@ const profileRow = (overrides: Record<string, unknown> = {}) => ({
   tenant_id: "tenant-1",
   name: "Default",
   model: "moonshotai.kimi-k2.5",
+  runtime_type: "pi",
   judge_model: null,
   trials: 1,
   is_default: false,
@@ -133,7 +135,7 @@ beforeEach(() => {
 });
 
 describe("createEvalProfile", () => {
-  it("creates with trimmed name and default trials", async () => {
+  it("creates with trimmed name, Pi runtime, and default trials", async () => {
     const row = await createEvalProfile({
       tenantId: "tenant-1",
       name: "  Candidate  ",
@@ -143,9 +145,22 @@ describe("createEvalProfile", () => {
     expect(state.inserted[0]).toMatchObject({
       tenant_id: "tenant-1",
       name: "Candidate",
+      runtime_type: "pi",
       trials: 1,
       is_default: false,
     });
+  });
+
+  it("persists an explicit AgentCore Harness runtime", async () => {
+    const row = await createEvalProfile({
+      tenantId: "tenant-1",
+      name: "Harness",
+      model: "us.anthropic.claude-haiku-4-5",
+      runtimeType: "agentcore",
+    });
+
+    expect(row.runtime_type).toBe("agentcore");
+    expect(state.inserted[0]).toMatchObject({ runtime_type: "agentcore" });
   });
 
   it("rejects out-of-range trials", async () => {
@@ -235,6 +250,7 @@ describe("getOrCreateDefaultEvalProfile", () => {
       tenant_id: "tenant-1",
       name: "Default",
       model: "moonshotai.kimi-k2.5",
+      runtime_type: "pi",
       trials: 1,
       is_default: true,
     });
