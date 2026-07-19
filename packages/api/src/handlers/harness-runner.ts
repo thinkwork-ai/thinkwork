@@ -25,6 +25,7 @@ import {
   GetWorkloadAccessTokenForJWTCommand,
   InvokeHarnessCommand,
   type HarnessMessage,
+  type HarnessModelConfiguration,
   type HarnessTool,
   type HarnessSystemContentBlock,
 } from "@aws-sdk/client-bedrock-agentcore";
@@ -90,6 +91,18 @@ export function readIdentity(raw: Record<string, unknown>): {
     );
   }
   return { harnessId, harnessArn, harnessVersion };
+}
+
+export function toHarnessModelConfiguration(
+  modelId: string | undefined,
+): HarnessModelConfiguration | undefined {
+  return modelId
+    ? {
+        bedrockModelConfig: {
+          modelId,
+        },
+      }
+    : undefined;
 }
 
 async function resolveHarness(input: {
@@ -224,6 +237,7 @@ async function* invokeHarnessWithBearer(input: {
   bearerToken: string;
   runtimeSessionId: string;
   messages: HarnessInvokeMessage[];
+  modelId?: string;
   allowedTools?: string[];
   tools?: Array<Record<string, unknown>>;
   systemPrompt?: Array<{ text: string }>;
@@ -258,12 +272,14 @@ async function* invokeHarnessWithBearer(input: {
   );
   let response;
   try {
+    const model = toHarnessModelConfiguration(input.modelId);
     response = await client.send(
       new InvokeHarnessCommand({
         harnessArn: input.harnessArn,
         ...(input.qualifier ? { qualifier: input.qualifier } : {}),
         runtimeSessionId: input.runtimeSessionId,
         messages: input.messages as unknown as HarnessMessage[],
+        ...(model ? { model } : {}),
         ...(input.allowedTools ? { allowedTools: input.allowedTools } : {}),
         ...(input.tools
           ? { tools: input.tools as unknown as HarnessTool[] }

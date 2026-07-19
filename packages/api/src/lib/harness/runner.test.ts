@@ -197,6 +197,7 @@ function basePayload(): Record<string, unknown> {
     system_prompt: "You are ThinkWork, the tenant platform agent.",
     messages_history: [],
     model: "moonshotai.kimi-k2.5",
+    requested_model: "moonshotai.kimi-k2.5",
     instance_id: "thinkwork-agent",
     agent_name: "ThinkWork Agent",
     cost_owner_user_id: "user-1",
@@ -231,6 +232,7 @@ interface TestDeps extends HarnessRunnerDeps {
   invocations: Array<{
     runtimeSessionId: string;
     messages: unknown;
+    modelId?: string;
     allowedTools?: string[];
     tools?: Array<Record<string, unknown>>;
     systemPrompt?: Array<{ text: string }>;
@@ -251,6 +253,7 @@ function makeDeps(
   const invocations: Array<{
     runtimeSessionId: string;
     messages: unknown;
+    modelId?: string;
     allowedTools?: string[];
     tools?: Array<Record<string, unknown>>;
     systemPrompt?: Array<{ text: string }>;
@@ -298,6 +301,7 @@ function makeDeps(
       invocations.push({
         runtimeSessionId: input.runtimeSessionId,
         messages: input.messages,
+        modelId: input.modelId,
         allowedTools: input.allowedTools,
         tools: input.tools,
         systemPrompt: input.systemPrompt,
@@ -445,6 +449,17 @@ describe("runHarnessTurn — happy path", () => {
     );
 
     expect(result.status).toBe("completed");
+    expect(deps.invocations[0]?.modelId).toBe("moonshotai.kimi-k2.5");
+    expect(deps.finalizePayloads[0].agent_model).toBe("moonshotai.kimi-k2.5");
+    expect(deps.finalizePayloads[0].usage?.model).toBe("moonshotai.kimi-k2.5");
+    expect(
+      deps.finalizePayloads[0].response?.diagnostics?.harness,
+    ).toMatchObject({
+      model_id: "moonshotai.kimi-k2.5",
+      configured_model_id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      requested_model: "moonshotai.kimi-k2.5",
+      model_source: "requested",
+    });
     const messages = JSON.stringify(deps.invocations[0]?.messages);
     expect(messages).toContain(
       "authorized_workspace_skills=customer-qbr,document-composer",
@@ -454,6 +469,51 @@ describe("runHarnessTurn — happy path", () => {
     expect(messages).not.toContain("must-not-project-pinned");
     expect(messages).not.toContain("tenants/tei");
     expect(messages).not.toContain("../invalid");
+  });
+
+  it("keeps the Harness default model when the payload has no effective model", async () => {
+    const deps = makeDeps([stream(textEvents("Default model response"))]);
+    const payload = basePayload();
+    delete payload.model;
+    delete payload.requested_model;
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations[0]?.modelId).toBeUndefined();
+    expect(deps.finalizePayloads[0].agent_model).toBe(
+      "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    );
+    expect(deps.finalizePayloads[0].usage?.model).toBe(
+      "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    );
+    expect(
+      deps.finalizePayloads[0].response?.diagnostics?.harness,
+    ).toMatchObject({
+      model_id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      configured_model_id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      requested_model: null,
+      model_source: "harness_default",
+    });
+  });
+
+  it("uses the ThinkWork configured model without labeling it user-requested", async () => {
+    const deps = makeDeps([stream(textEvents("Configured model response"))]);
+    const payload = basePayload();
+    delete payload.requested_model;
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations[0]?.modelId).toBe("moonshotai.kimi-k2.5");
+    expect(
+      deps.finalizePayloads[0].response?.diagnostics?.harness,
+    ).toMatchObject({
+      model_id: "moonshotai.kimi-k2.5",
+      configured_model_id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      requested_model: null,
+      model_source: "thinkwork_configured",
+    });
   });
 
   it("projects only sanitized attachment metadata and directs governed reads", async () => {
@@ -601,6 +661,10 @@ describe("runHarnessTurn — happy path", () => {
     ]);
     // Tool result went back on the same session as a toolResult block.
     expect(deps.invocations).toHaveLength(2);
+    expect(deps.invocations.map((invocation) => invocation.modelId)).toEqual([
+      "moonshotai.kimi-k2.5",
+      "moonshotai.kimi-k2.5",
+    ]);
     const followUp = deps.invocations[1].messages as Array<{
       role: string;
       content: Array<Record<string, unknown>>;
@@ -625,13 +689,13 @@ describe("runHarnessTurn — happy path", () => {
       thread_turn_id: "turn-1",
       status: "completed",
       runtime_type: "agentcore",
-      agent_model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      agent_model: "moonshotai.kimi-k2.5",
       cost_owner_user_id: "user-1",
       changed_files: [],
     });
     expect(finalize.response?.content).toBe("Here is the QBR.");
     expect(finalize.usage).toMatchObject({
-      model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      model: "moonshotai.kimi-k2.5",
       input_tokens: 150,
       output_tokens: 30,
     });
@@ -640,8 +704,10 @@ describe("runHarnessTurn — happy path", () => {
     expect(harness).toMatchObject({
       harness_id: "h1",
       harness_version: "3",
-      model_id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      model_id: "moonshotai.kimi-k2.5",
+      configured_model_id: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
       requested_model: "moonshotai.kimi-k2.5",
+      model_source: "requested",
       manifest_fingerprint: "manifest-fp",
       config_fingerprint: "config-fp",
       artifact_id: "artifact-1",
@@ -1869,6 +1935,81 @@ describe("runHarnessTurn — turn lifecycle (KTD-9)", () => {
     expect(deps.finalizePayloads[0].error_message).toContain(
       "ValidationException",
     );
+  });
+
+  it("preserves allowlisted SDK failure diagnostics without object coercion", async () => {
+    const deps = makeDeps([]);
+    (deps.invokeHarness as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      code: "AccessDeniedException",
+      message: "model access is not enabled",
+    });
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "AccessDeniedException",
+    );
+    expect(deps.finalizePayloads[0].error_message).not.toContain(
+      "[object Object]",
+    );
+  });
+
+  it("redacts secrets and arbitrary provider metadata from durable SDK failures", async () => {
+    const deps = makeDeps([]);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    (deps.invokeHarness as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      code: "AccessDeniedException",
+      message:
+        "authorization=Bearer secret-auth token=secret-token " +
+        'token: "secret-quoted-token" {"token":"secret-json-token"} ' +
+        'password="secret quoted pass" authorization: "Basic secret-basic" ' +
+        '{"access_token":"oauth-secret"} refresh_token="refresh-secret" ' +
+        'client_secret: "client-secret" sessionToken=aws-session-secret ' +
+        "SecretAccessKey=aws-secret-key " +
+        "https://example.test/object?X-Amz-Signature=secret-signature",
+      cookie: "secret-cookie",
+      secret: "secret-value",
+      response: {
+        body: "secret-response-body",
+        headers: { authorization: "secret-nested-auth" },
+      },
+    });
+
+    const result = await runHarnessTurn(basePayload(), deps);
+    const durableFailure = JSON.stringify(deps.finalizePayloads[0]);
+    const loggedFailure = JSON.stringify(errorLog.mock.calls);
+
+    expect(result.status).toBe("failed");
+    expect(durableFailure).toContain("AccessDeniedException");
+    expect(durableFailure).toContain("<redacted>");
+    for (const secret of [
+      "secret-auth",
+      "secret-token",
+      "secret-quoted-token",
+      "secret-json-token",
+      "secret quoted pass",
+      "secret-basic",
+      "oauth-secret",
+      "refresh-secret",
+      "client-secret",
+      "aws-session-secret",
+      "aws-secret-key",
+      "secret-signature",
+      "secret-cookie",
+      "secret-value",
+      "secret-response-body",
+      "secret-nested-auth",
+    ]) {
+      expect(durableFailure).not.toContain(secret);
+      expect(loggedFailure).not.toContain(secret);
+    }
+    expect(durableFailure).not.toContain("X-Amz-Signature");
+    expect(deps.finalizePayloads[0].error_message?.length).toBeLessThanOrEqual(
+      512,
+    );
+
+    errorLog.mockRestore();
   });
 
   it("publishes only through the Harness authorization fence", async () => {

@@ -368,6 +368,8 @@ describe("eval-runner dataset dispatch (U6)", () => {
     expect(finalize.status).toBe("completed");
     expect(finalize.pass_rate).toBeNull();
     expect(finalize.dataset_version).toBe(7);
+    expect(finalize.profile_id).toBe("profile-1");
+    expect(finalize.profile_snapshot).toEqual(profileSnapshot());
     expect(finalize.pinned_case_ids).toEqual([]);
     // Zero-case runs pin an empty plan and zero expected rows (U4).
     expect(finalize.pinned_trial_plan).toEqual([]);

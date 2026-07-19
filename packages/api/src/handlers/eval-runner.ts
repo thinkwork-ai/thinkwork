@@ -355,7 +355,10 @@ async function dispatchDatasetRun(
   if (snapshot.cases.length === 0) {
     // Zero enabled cases: nothing to score — the run completes with a
     // null pass_rate ("no score", never 0%), with the scope still pinned
-    // so the run row records exactly what it ran against.
+    // so the run row records exactly what it ran against. Pin the Eval
+    // Profile too: runtime/model provenance must remain truthful even
+    // when a stale or empty dataset produces no worker fan-out.
+    const profileSnapshot = await resolveProfileSnapshotForRun(run);
     await db
       .update(evalRuns)
       .set({
@@ -363,6 +366,8 @@ async function dispatchDatasetRun(
         started_at: run.started_at ?? startedAt,
         completed_at: startedAt,
         dataset_version: snapshot.datasetVersion,
+        profile_id: profileSnapshot.profileId,
+        profile_snapshot: profileSnapshot,
         pinned_case_ids: [],
         pinned_trial_plan: [],
         expected_result_rows: 0,

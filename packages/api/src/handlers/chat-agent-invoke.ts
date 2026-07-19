@@ -1633,6 +1633,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           : undefined,
       runtime_type: runtimeType,
       model: agentModel,
+      requested_model: requestedParentModel || undefined,
       requested_agent_profile_slug: event.requestedProfileSlug || undefined,
       budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
       budget_paused: runtimeConfig.budgetPaused,
