@@ -1,7 +1,6 @@
 -- 0265_require_fully_valid_auth_publication.sql
 -- Partially validated providers must never be published or admitted. Existing
 -- rows are unpublished before the stricter canonical constraint is installed.
--- drops-constraint: public.auth_provider_resources.auth_provider_resources_no_public_without_valid
 -- creates-constraint: public.auth_provider_resources.auth_provider_resources_no_public_without_valid
 
 BEGIN;

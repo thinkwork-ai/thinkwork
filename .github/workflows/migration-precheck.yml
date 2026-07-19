@@ -38,6 +38,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   STAGE: dev
+  AUTH_RETIREMENT_PHASE: ${{ vars.AUTH_RETIREMENT_PHASE || 'retired' }}
 
 jobs:
   migration-drift-precheck:
@@ -67,6 +68,17 @@ jobs:
               'packages/database-pg/drizzle/*.sql' \
               ':!packages/database-pg/drizzle/*_rollback.sql' | sed '/^$/d')
           fi
+          in_phase_files=""
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            if grep -q '^-- deployment-phase: auth-retired$' "$file" \
+              && [ "$AUTH_RETIREMENT_PHASE" != "retired" ]; then
+              echo "Deferring $file until AUTH_RETIREMENT_PHASE=retired."
+              continue
+            fi
+            in_phase_files="${in_phase_files}${in_phase_files:+$'\\n'}${file}"
+          done <<< "$files"
+          files="$in_phase_files"
           if [ -z "$files" ]; then
             echo "files=" >> "$GITHUB_OUTPUT"
             echo "No migration files changed — script run will be a no-op."

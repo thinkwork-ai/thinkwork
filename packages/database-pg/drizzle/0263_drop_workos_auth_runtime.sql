@@ -8,9 +8,6 @@
 --
 -- drops: public.workos_auth_bridges
 -- drops: public.workos_auth_sessions
--- drops-constraint: public.plugin_components.plugin_components_type_allowed
--- drops-constraint: public.auth_provider_resources.auth_provider_resources_lifecycle_state_allowed
--- drops-constraint: public.auth_route_clients.auth_route_clients_lifecycle_allowed
 -- creates-constraint: public.plugin_components.plugin_components_type_allowed
 -- creates-constraint: public.auth_provider_resources.auth_provider_resources_lifecycle_state_allowed
 -- creates-constraint: public.auth_route_clients.auth_route_clients_lifecycle_allowed
