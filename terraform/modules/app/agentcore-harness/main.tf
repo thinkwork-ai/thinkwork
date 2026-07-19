@@ -57,6 +57,7 @@ locals {
     tool_policy      = "gateway-and-cedar-authoritative"
     connector_facade = "intent-ranked-direct-v1"
     sandbox_facade   = "bounded-internal-python-v1"
+    browser          = "agentcore-browser-v1"
     builtin_web      = "tenant-policy-secret-bound-v1"
     platform_tools   = "brain-email-workspace-skills-message-attachments-user-questions-v6"
     artifact_facade  = "caller-fulfilled-emit-document-v1"
@@ -193,6 +194,24 @@ resource "aws_iam_role_policy" "harness_execution" {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = var.managed_runtime_enabled ? var.oauth_credential_secret_arn : "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:disabled"
+      },
+      {
+        # Native Harness Browser Automation. The Harness tool uses the
+        # service-managed Browser by default and executes under this role.
+        Sid    = "AgentCoreBrowser"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:StartBrowserSession",
+          "bedrock-agentcore:StopBrowserSession",
+          "bedrock-agentcore:GetBrowserSession",
+          "bedrock-agentcore:ListBrowserSessions",
+          "bedrock-agentcore:InvokeBrowser",
+          "bedrock-agentcore:UpdateBrowserStream",
+        ]
+        Resource = [
+          "arn:aws:bedrock-agentcore:${var.region}:aws:browser/aws.browser.v1",
+          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:browser/*",
+        ]
       },
       {
         # The service-managed Harness container resolves its public base image
