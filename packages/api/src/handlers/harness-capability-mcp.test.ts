@@ -63,7 +63,7 @@ function event(
 }
 
 function capabilityBody(body: Record<string, unknown>) {
-  return { tenant_id: CLAIMS.tenant_id, ...body };
+  return body;
 }
 
 function deps() {
@@ -119,7 +119,6 @@ describe("Harness capability MCP target", () => {
 
     const response = await handler(
       event("/agentcore/capabilities/mcp/tools/list", {
-        tenant_id: CLAIMS.tenant_id,
         connector: "twenty--crm",
       }),
     );
@@ -152,8 +151,7 @@ describe("Harness capability MCP target", () => {
         turn_id: "turn-1",
         principal_id: "user-1",
         policy_revision: "policy-v1",
-        credential_owner_alias:
-          "user:user-1:agentcore-identity:twenty--crm",
+        credential_owner_alias: "user:user-1:agentcore-identity:twenty--crm",
         input_preview: { connector: "twenty--crm" },
       }),
       expect.objectContaining({
@@ -184,12 +182,10 @@ describe("Harness capability MCP target", () => {
       expect.objectContaining({
         principal_type: "user",
         principal_id: "user-1",
-        credential_owner_alias:
-          "tenant:tenant-1:service:lastmile-data-catalog",
+        credential_owner_alias: "tenant:tenant-1:service:lastmile-data-catalog",
       }),
       expect.objectContaining({
-        credential_owner_alias:
-          "tenant:tenant-1:service:lastmile-data-catalog",
+        credential_owner_alias: "tenant:tenant-1:service:lastmile-data-catalog",
       }),
     ]);
   });
@@ -441,7 +437,6 @@ describe("Harness capability MCP target", () => {
 
     const response = await handler(
       event("/agentcore/capabilities/mcp/tools/call", {
-        tenant_id: CLAIMS.tenant_id,
         connector: "twenty--crm",
         tool: "get_tool_catalog",
         arguments: { category: "opportunities" },
@@ -480,7 +475,6 @@ describe("Harness capability MCP target", () => {
 
     const response = await handler(
       event("/agentcore/capabilities/mcp/tools/call", {
-        tenant_id: CLAIMS.tenant_id,
         connector: "twenty--crm",
         tool: "delete_everything",
         arguments: {},
@@ -504,7 +498,6 @@ describe("Harness capability MCP target", () => {
 
     const response = await handler(
       event("/agentcore/capabilities/mcp/tools/call", {
-        tenant_id: CLAIMS.tenant_id,
         connector: "twenty--crm",
         tool: "get_tool_catalog",
         arguments: {},
@@ -526,7 +519,6 @@ describe("Harness capability MCP target", () => {
 
     const response = await handler(
       event("/agentcore/capabilities/mcp/tools/list", {
-        tenant_id: CLAIMS.tenant_id,
         connector: "twenty--crm",
       }),
     );
@@ -539,7 +531,6 @@ describe("Harness capability MCP target", () => {
     const injected = deps();
     const handler = createHarnessCapabilityMcpHandler(injected);
     const request = event("/agentcore/capabilities/mcp/tools/list", {
-      tenant_id: CLAIMS.tenant_id,
       connector: "twenty--crm",
     });
     request.headers["x-thinkwork-user-id"] = "user-2";
@@ -550,7 +541,7 @@ describe("Harness capability MCP target", () => {
     expect(injected.verifyAccessToken).not.toHaveBeenCalled();
   });
 
-  it("rejects a tenant input that does not match the signed principal tag", async () => {
+  it("rejects model-supplied tenant identity instead of treating it as authority", async () => {
     const injected = deps();
     const handler = createHarnessCapabilityMcpHandler(injected);
 
@@ -561,7 +552,10 @@ describe("Harness capability MCP target", () => {
       }),
     );
 
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body!)).toEqual({
+      error: "identity_override_rejected",
+    });
     expect(injected.resolveCanonicalContext).not.toHaveBeenCalled();
     expect(injected.resolveMcpConfigs).not.toHaveBeenCalled();
   });

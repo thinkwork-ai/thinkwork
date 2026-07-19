@@ -177,7 +177,6 @@ describe("Harness governed platform tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/user/questions/ask", {
-        tenant_id: "tenant-1",
         questions: [
           {
             header: "Scope",
@@ -224,7 +223,6 @@ describe("Harness governed platform tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/user/questions/ask", {
-        tenant_id: "tenant-1",
         questions: [{ header: "Scope", question: "Choose", options: [] }],
       }),
     );
@@ -240,9 +238,7 @@ describe("Harness governed platform tools target", () => {
   it("lists only sanitized attachments bound to the canonical triggering message", async () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
-      event("/agentcore/capabilities/message/attachments/list", {
-        tenant_id: "tenant-1",
-      }),
+      event("/agentcore/capabilities/message/attachments/list", {}),
     );
 
     expect(result.statusCode).toBe(200);
@@ -267,7 +263,6 @@ describe("Harness governed platform tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/message/attachments/read", {
-        tenant_id: "tenant-1",
         attachment_id: ATTACHMENT_ID,
         offset: 0,
         max_chars: 4096,
@@ -290,7 +285,6 @@ describe("Harness governed platform tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/brain/query", {
-        tenant_id: "tenant-1",
         query: "customer risks",
         limit: 5,
       }),
@@ -323,7 +317,6 @@ describe("Harness governed platform tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/email/send", {
-        tenant_id: "tenant-1",
         to: ["customer@example.com"],
         subject: "Follow up",
         content: "Hello from ThinkWork",
@@ -366,7 +359,6 @@ describe("Harness governed platform tools target", () => {
     });
     const result = await handler(
       event("/agentcore/capabilities/email/send", {
-        tenant_id: "tenant-1",
         to: ["customer@example.com"],
         subject: "Follow up",
         content: "Hello from ThinkWork",
@@ -392,7 +384,6 @@ describe("Harness governed platform tools target", () => {
     });
     const result = await handler(
       event("/agentcore/capabilities/email/send", {
-        tenant_id: "tenant-1",
         to: ["customer@example.com"],
         subject: "Follow up",
         content: "Hello from ThinkWork",
@@ -420,7 +411,6 @@ describe("Harness governed platform tools target", () => {
     });
     const result = await handler(
       event("/agentcore/capabilities/brain/query", {
-        tenant_id: "tenant-1",
         query: "customer risks",
       }),
     );
@@ -434,9 +424,7 @@ describe("Harness governed platform tools target", () => {
   it("lists only the exact user's current canonical skill index", async () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
-      event("/agentcore/capabilities/workspace/skills/list", {
-        tenant_id: "tenant-1",
-      }),
+      event("/agentcore/capabilities/workspace/skills/list", {}),
     );
 
     expect(result.statusCode).toBe(200);
@@ -458,7 +446,6 @@ describe("Harness governed platform tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/workspace/skills/load", {
-        tenant_id: "tenant-1",
         skill: "customer-qbr",
       }),
     );
@@ -497,7 +484,6 @@ describe("Harness governed platform tools target", () => {
     });
     const result = await handler(
       event("/agentcore/capabilities/workspace/skills/load", {
-        tenant_id: "tenant-1",
         skill: "alice-private",
       }),
     );
@@ -513,7 +499,6 @@ describe("Harness governed platform tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/workspace/skills/load", {
-        tenant_id: "tenant-1",
         skill: "../private",
       }),
     );
@@ -523,6 +508,22 @@ describe("Harness governed platform tools target", () => {
       error: "invalid_workspace_skill",
     });
     expect(deps.loadWorkspaceSkill).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("rejects model-supplied tenant identity before canonical authorization", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/workspace/skills/list", {
+        tenant_id: "tenant-2",
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body!)).toEqual({
+      error: "identity_override_rejected",
+    });
+    expect(deps.resolveCanonicalContext).not.toHaveBeenCalled();
     expect(rows).toHaveLength(0);
   });
 });

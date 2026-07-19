@@ -591,7 +591,6 @@ export async function collectGovernedConnectorEvidence(input: {
     "call_connector_tool",
   );
   const discoveryArgs = {
-    tenant_id: input.tenantId,
     connector: input.connector,
     query: input.query,
   };

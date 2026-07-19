@@ -53,13 +53,11 @@ const MAX_URL_CHARS = 2_048;
 const MAX_EXTRACT_MARKDOWN_CHARS = 60_000;
 
 interface SearchBody {
-  tenant_id?: unknown;
   query?: unknown;
   limit?: unknown;
 }
 
 interface ExtractBody {
-  tenant_id?: unknown;
   url?: unknown;
 }
 
@@ -134,8 +132,8 @@ export function createHarnessBuiltinToolsHandler(
     } catch {
       return response(400, { error: "invalid_json" });
     }
-    if (body.tenant_id !== claims.tenant_id) {
-      return response(403, { error: "tenant_context_mismatch" });
+    if (Object.prototype.hasOwnProperty.call(body, "tenant_id")) {
+      return response(400, { error: "identity_override_rejected" });
     }
 
     const parsed =
@@ -171,9 +169,7 @@ export function createHarnessBuiltinToolsHandler(
             limit: (parsed.value as ParsedSearch).limit,
           }
         : { urlLength: (parsed.value as ParsedExtract).url.length },
-      inputAllowPaths: isSearch
-        ? ["queryLength", "limit"]
-        : ["urlLength"],
+      inputAllowPaths: isSearch ? ["queryLength", "limit"] : ["urlLength"],
     });
 
     const finish = async (
@@ -185,7 +181,12 @@ export function createHarnessBuiltinToolsHandler(
         ...correlation,
         status,
         output,
-        outputAllowPaths: ["provider", "resultCount", "contentChars", "truncated"],
+        outputAllowPaths: [
+          "provider",
+          "resultCount",
+          "contentChars",
+          "truncated",
+        ],
         ...(errorCode
           ? { error: { code: errorCode }, errorAllowPaths: ["code"] }
           : {}),
@@ -196,7 +197,11 @@ export function createHarnessBuiltinToolsHandler(
       const tools = await deps.resolveBuiltinTools(context);
       if (isSearch) {
         if (!tools.webSearch) {
-          await finish("failed", { resultCount: 0 }, "web_search_not_authorized");
+          await finish(
+            "failed",
+            { resultCount: 0 },
+            "web_search_not_authorized",
+          );
           return response(403, { error: "web_search_not_authorized" });
         }
         const request = parsed.value as ParsedSearch;
@@ -217,7 +222,11 @@ export function createHarnessBuiltinToolsHandler(
       }
 
       if (!tools.webExtract) {
-        await finish("failed", { contentChars: 0 }, "web_extract_not_authorized");
+        await finish(
+          "failed",
+          { contentChars: 0 },
+          "web_extract_not_authorized",
+        );
         return response(403, { error: "web_extract_not_authorized" });
       }
       const request = parsed.value as ParsedExtract;
@@ -247,15 +256,18 @@ export function createHarnessBuiltinToolsHandler(
         operation,
         errorType: error instanceof Error ? error.name : "unknown",
       });
-      await finish("uncertain", {}, `${operation.replace(".", "_")}_failed`).catch(
-        (ledgerError) =>
-          console.error("[harness-builtin-tools] terminal evidence failed", {
-            tenantId: context.tenantId,
-            turnId: context.turnId,
-            operation,
-            errorType:
-              ledgerError instanceof Error ? ledgerError.name : "unknown",
-          }),
+      await finish(
+        "uncertain",
+        {},
+        `${operation.replace(".", "_")}_failed`,
+      ).catch((ledgerError) =>
+        console.error("[harness-builtin-tools] terminal evidence failed", {
+          tenantId: context.tenantId,
+          turnId: context.turnId,
+          operation,
+          errorType:
+            ledgerError instanceof Error ? ledgerError.name : "unknown",
+        }),
       );
       return response(502, {
         error: `${operation.replace(".", "_")}_failed`,
@@ -285,7 +297,9 @@ async function resolveBuiltinToolsForHarness(
 
   const blocked = new Set(
     Array.isArray(agent.blockedTools)
-      ? agent.blockedTools.filter((value): value is string => typeof value === "string")
+      ? agent.blockedTools.filter(
+          (value): value is string => typeof value === "string",
+        )
       : [],
   );
   const isBlocked = (tool: string) =>
@@ -307,10 +321,17 @@ async function resolveBuiltinToolsForHarness(
   ]);
   return {
     ...(webSearch
-      ? { webSearch: { provider: webSearch.provider, apiKey: webSearch.apiKey } }
+      ? {
+          webSearch: { provider: webSearch.provider, apiKey: webSearch.apiKey },
+        }
       : {}),
     ...(webExtract
-      ? { webExtract: { provider: webExtract.provider, apiKey: webExtract.apiKey } }
+      ? {
+          webExtract: {
+            provider: webExtract.provider,
+            apiKey: webExtract.apiKey,
+          },
+        }
       : {}),
   };
 }
@@ -338,7 +359,10 @@ function parseSearchBody(body: SearchBody): ParseResult<ParsedSearch> {
   if (!Number.isInteger(limit) || Number(limit) < 1 || Number(limit) > 10) {
     return { ok: false, error: "invalid_limit" };
   }
-  return { ok: true, value: { query: body.query.trim(), limit: Number(limit) } };
+  return {
+    ok: true,
+    value: { query: body.query.trim(), limit: Number(limit) },
+  };
 }
 
 function parseExtractBody(body: ExtractBody): ParseResult<ParsedExtract> {
