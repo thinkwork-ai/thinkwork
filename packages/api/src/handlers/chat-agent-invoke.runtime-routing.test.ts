@@ -203,9 +203,8 @@ beforeEach(() => {
 
 describe("chat-agent-invoke runtime routing", () => {
   it("honors an explicit Pi thread pin while the configured runtime is Harness", async () => {
-    const { resolveChatInvocationRuntimeType } = await import(
-      "./chat-agent-invoke.js"
-    );
+    const { resolveChatInvocationRuntimeType } =
+      await import("./chat-agent-invoke.js");
 
     expect(
       resolveChatInvocationRuntimeType({
@@ -570,6 +569,8 @@ describe("chat-agent-invoke runtime routing", () => {
       spaceSlug: "customer-onboarding",
     });
     expect(body.current_user_email).toBe("user-1@example.com");
+    expect(body.model).toBe("moonshotai.kimi-k2.5");
+    expect(body.requested_model).toBeUndefined();
   });
 
   it("uses the selected parent model for the turn context and Pi payload", async () => {
@@ -610,6 +611,7 @@ describe("chat-agent-invoke runtime routing", () => {
     };
     const body = decodeInvokeBody(command);
     expect(body.model).toBe("anthropic.claude-haiku");
+    expect(body.requested_model).toBe("anthropic.claude-haiku");
   });
 
   it("rejects direct selected-model dispatch when the user is not approved", async () => {

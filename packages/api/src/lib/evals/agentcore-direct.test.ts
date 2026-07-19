@@ -155,6 +155,22 @@ describe("direct AgentCore eval payload", () => {
       mcp_configs: undefined,
       browser_automation_enabled: false,
     });
+    expect(payload.requested_model).toBeUndefined();
+  });
+
+  it("records an explicitly pinned eval model separately from the effective model", () => {
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "Refuse this unsafe request",
+      model: "  moonshotai.kimi-k2.5  ",
+      systemPrompt: null,
+      runtimeConfig,
+    });
+
+    expect(payload.model).toBe("moonshotai.kimi-k2.5");
+    expect(payload.requested_model).toBe("moonshotai.kimi-k2.5");
   });
 
   it("strips outbound side-effect configs even when the runtime config carries them (U8 kill list)", () => {

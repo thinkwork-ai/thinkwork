@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { readIdentity, unwrapHarness } from "./harness-runner.js";
+import {
+  readIdentity,
+  toHarnessModelConfiguration,
+  unwrapHarness,
+} from "./harness-runner.js";
 
 describe("harness control-plane response parsing", () => {
   const doc = {
@@ -30,5 +34,21 @@ describe("harness control-plane response parsing", () => {
     expect(() => readIdentity({ $metadata: {} })).toThrow(
       /missing identity fields/,
     );
+  });
+});
+
+describe("Harness invocation model configuration", () => {
+  it("maps an approved Bedrock model ID to the InvokeHarness override", () => {
+    expect(
+      toHarnessModelConfiguration("us.anthropic.claude-sonnet-4-6"),
+    ).toEqual({
+      bedrockModelConfig: {
+        modelId: "us.anthropic.claude-sonnet-4-6",
+      },
+    });
+  });
+
+  it("leaves the Harness default in force when no model is selected", () => {
+    expect(toHarnessModelConfiguration(undefined)).toBeUndefined();
   });
 });

@@ -241,6 +241,8 @@ export interface HarnessRunnerDeps {
     bearerToken: string;
     runtimeSessionId: string;
     messages: HarnessInvokeMessage[];
+    /** Effective ThinkWork Bedrock model for this turn. */
+    modelId?: string;
     /** Optional per-turn narrowing of the Harness's configured tool ceiling. */
     allowedTools?: string[];
     /** Caller-fulfilled tools must be repeated on InvokeHarness. */
@@ -332,6 +334,7 @@ interface ExtractedTurn {
   userMessage: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   modelId: string | null;
+  requestedModelId: string | null;
   agentSlug: string | null;
   agentName: string | null;
   costOwnerUserId: string | null;
@@ -340,6 +343,73 @@ interface ExtractedTurn {
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+const ERROR_DIAGNOSTIC_LIMIT = 512;
+const ERROR_SECRET_ASSIGNMENT_RE =
+  /["']?([A-Za-z0-9_-]*(?:authorization|cookie|token|secret|password|passwd|api[_-]?key|credential|signature)[A-Za-z0-9_-]*)["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|(?:Bearer|Basic)\s+[^\s,;"'<>]+|[^\s,;"'<>]+)/gi;
+const ERROR_BEARER_RE = /\bBearer\s+[^\s,;"'<>]+/gi;
+const ERROR_JWT_RE =
+  /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
+const ERROR_PREFIXED_TOKEN_RE =
+  /\b(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16})\b/g;
+const ERROR_URL_RE = /https?:\/\/[^\s"'<>]+/gi;
+
+/**
+ * Error diagnostics are logged and persisted on the turn, so even the
+ * allowlisted provider message fields must be treated as untrusted. Keep the
+ * useful failure class/message while stripping common credential shapes and
+ * signed URL query strings, then bound the durable value.
+ */
+function sanitizeErrorDiagnostic(value: string): string {
+  return value
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(ERROR_SECRET_ASSIGNMENT_RE, "$1=<redacted>")
+    .replace(ERROR_BEARER_RE, "Bearer <redacted>")
+    .replace(ERROR_JWT_RE, "<redacted>")
+    .replace(ERROR_PREFIXED_TOKEN_RE, "<redacted>")
+    .replace(ERROR_URL_RE, (url) => {
+      const queryIndex = url.indexOf("?");
+      return queryIndex >= 0
+        ? `${url.slice(0, queryIndex)}?<redacted>`
+        : url;
+    })
+    .trim();
+}
+
+function boundErrorDiagnostic(value: string): string {
+  return value.length > ERROR_DIAGNOSTIC_LIMIT
+    ? `${value.slice(0, ERROR_DIAGNOSTIC_LIMIT - 1)}…`
+    : value;
+}
+
+function errorMessage(value: unknown): string {
+  if (value instanceof Error) {
+    const name = sanitizeErrorDiagnostic(value.name);
+    const message = sanitizeErrorDiagnostic(value.message);
+    const diagnostic = name && name !== "Error" && message
+      ? `${name}: ${message}`
+      : message || name || "Unknown error";
+    return boundErrorDiagnostic(diagnostic);
+  }
+  if (typeof value === "string") {
+    return boundErrorDiagnostic(sanitizeErrorDiagnostic(value));
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const code = str(record.code) ?? str(record.name);
+    const detail =
+      str(record.message) ?? str(record.errorMessage) ?? str(record.reason);
+    const safeCode = code ? sanitizeErrorDiagnostic(code) : null;
+    const safeDetail = detail ? sanitizeErrorDiagnostic(detail) : null;
+    if (safeCode && safeDetail && safeCode !== safeDetail) {
+      return boundErrorDiagnostic(`${safeCode}: ${safeDetail}`);
+    }
+    return boundErrorDiagnostic(
+      safeDetail ?? safeCode ?? "Unknown structured error",
+    );
+  }
+  return boundErrorDiagnostic(sanitizeErrorDiagnostic(String(value)));
 }
 
 function extractTurn(payload: Record<string, unknown>): ExtractedTurn {
@@ -374,6 +444,7 @@ function extractTurn(payload: Record<string, unknown>): ExtractedTurn {
     userMessage: str(payload.message) ?? "",
     history,
     modelId: str(payload.model),
+    requestedModelId: str(payload.requested_model),
     agentSlug: str(payload.instance_id),
     agentName: str(payload.agent_name),
     costOwnerUserId: str(payload.cost_owner_user_id),
@@ -1044,7 +1115,7 @@ export async function runHarnessTurn(
       trace_id: turn.traceId,
       cost_owner_user_id: turn.costOwnerUserId,
       user_message: turn.userMessage.slice(0, 2000),
-      agent_model: harness?.modelId ?? turn.modelId,
+      agent_model: turn.modelId ?? harness?.modelId,
       runtime_type: "agentcore",
       ...(skillCreatorTurn
         ? { skill_creator_command: payload.skill_creator_command }
@@ -1071,8 +1142,14 @@ export async function runHarnessTurn(
             harness_id: harness?.harnessId ?? null,
             harness_arn: harness?.harnessArn ?? null,
             harness_version: harness?.harnessVersion ?? null,
-            model_id: harness?.modelId ?? null,
-            requested_model: turn.modelId,
+            model_id: turn.modelId ?? harness?.modelId ?? null,
+            configured_model_id: harness?.modelId ?? null,
+            requested_model: turn.requestedModelId,
+            model_source: turn.requestedModelId
+              ? "requested"
+              : turn.modelId
+                ? "thinkwork_configured"
+                : "harness_default",
             projection_fingerprint: turnProjectionFingerprint,
             manifest_fingerprint: str(
               payload.capabilities_manifest_fingerprint,
@@ -1105,7 +1182,7 @@ export async function runHarnessTurn(
         ...(fields.goalRun ? { goal_run: fields.goalRun } : {}),
       },
       usage: {
-        model: harness?.modelId ?? turn.modelId,
+        model: turn.modelId ?? harness?.modelId,
         input_tokens: usage.inputTokens,
         output_tokens: usage.outputTokens,
         cached_read_tokens: usage.cacheReadTokens,
@@ -1625,6 +1702,12 @@ export async function runHarnessTurn(
         bearerToken: assertion.token,
         runtimeSessionId: preparedSession.runtimeSessionId,
         messages: nextMessages,
+        // `payload.model` is the platform-effective model: either an explicit
+        // approved Composer/Eval choice or the agent's configured default.
+        // Override the Harness default in both cases so switching runtimes
+        // never changes ThinkWork's model semantics. `requested_model` is a
+        // separate audit field and is intentionally not the execution source.
+        ...(turn.modelId ? { modelId: turn.modelId } : {}),
         ...(documentEmissionRequired && !documentCompositionPhase
           ? {
               // Use the Harness's configured Gateway allowlist. Live testing
@@ -2068,7 +2151,7 @@ export async function runHarnessTurn(
     const message =
       err instanceof HarnessStreamError
         ? `Harness stream failure [${err.reason}]: ${err.message}`
-        : `Harness run failed: ${err instanceof Error ? err.message : String(err)}`;
+        : `Harness run failed: ${errorMessage(err)}`;
     console.error(`[harness-runner] ${message}`);
     try {
       return await finalizeWith("failed", { errorMessage: message });

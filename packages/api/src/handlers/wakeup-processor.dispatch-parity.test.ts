@@ -444,6 +444,9 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wakeupSource).toMatch(
       /assertUserModelApproved\(\{\s*tenantId: wakeup\.tenant_id,\s*userId: wakeup\.requested_by_actor_id,\s*modelId: requestedParentModel,/,
     );
+    expect(wakeupSource).toMatch(
+      /requested_model:\s*requestedParentModel && agentModel === requestedParentModel\s*\? requestedParentModel\s*:\s*undefined/,
+    );
   });
 
   it("routes automation wakeups through the selected AgentCore runtime without Pi fallback", () => {

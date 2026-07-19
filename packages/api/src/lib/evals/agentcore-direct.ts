@@ -333,6 +333,7 @@ export function buildEvalAgentCorePayload(input: {
     context_engine_config: undefined,
     runtime_type: runtimeConfig.runtimeType,
     model: evalModelId(input.model),
+    requested_model: input.model?.trim() || undefined,
     budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
     budget_paused: runtimeConfig.budgetPaused,
     max_tokens: evalMaxTokens(),

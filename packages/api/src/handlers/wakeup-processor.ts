@@ -2528,6 +2528,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
       runtime_type: runtimeType,
       model: agentModel,
+      requested_model:
+        requestedParentModel && agentModel === requestedParentModel
+          ? requestedParentModel
+          : undefined,
       skills:
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
       trusted_skill_ids: effectiveSkillsConfig.map((skill) => skill.skillId),
