@@ -290,6 +290,21 @@ export interface HarnessRunnerDeps {
   finalize(payload: FinalizePayload): Promise<unknown>;
   /** thread_turns.last_activity_at keepalive bump (KTD-9). */
   bumpTurnActivity(input: { turnId: string; tenantId: string }): Promise<void>;
+  /**
+   * Persist paired start/terminal evidence for a tool fulfilled inside the
+   * managed Harness rather than by a ThinkWork Gateway target.
+   */
+  recordInternalToolExecution(input: {
+    tenantId: string;
+    threadId: string;
+    turnId: string;
+    principalUserId: string;
+    toolUseId: string;
+    toolName: string;
+    policyRevision: string;
+    input: unknown;
+    status: "completed" | "failed";
+  }): Promise<void>;
   /** Governed target evidence recorded so far for this exact turn. */
   loadToolExecutions(input: {
     tenantId: string;
@@ -972,47 +987,6 @@ const LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS = [
 ] as const;
 const DOCUMENT_COMPOSITION_MAX_ITERATIONS = 2;
 const GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS = 1;
-
-/**
- * The immutable profile stores the full control-plane Browser config for
- * attestation. InvokeHarness' native Browser override uses AWS's documented
- * invocation shape (type + canonical name only); replaying the empty
- * control-plane config makes the internal dispatcher return `Unknown tool`.
- */
-function invocationToolsForTurn(
-  tools: HarnessInvocationTool[],
-  browserEnabled: boolean,
-): HarnessTool[] {
-  return tools
-    .filter((tool) => browserEnabled || tool.type !== "agentcore_browser")
-    .map((tool) =>
-      tool.type === "agentcore_browser"
-        ? { type: tool.type, name: tool.name }
-        : tool,
-    );
-}
-
-/**
- * An AgentLoop gets one corrective continuation after the model ends without
- * governed completion evidence. That continuation is a control-plane decision,
- * not another work step: expose only the attested inline `goal_complete`
- * function so the model cannot mistake a similarly named Gateway/MCP catalog
- * entry for the completion contract. It may still return plain text when work
- * genuinely remains, which preserves the resumable-pause path.
- */
-function goalCompletionCorrectionTools(
-  tools: HarnessInvocationTool[],
-): HarnessTool[] {
-  const goalComplete = tools.find(
-    (tool) => tool.type === "inline_function" && tool.name === "goal_complete",
-  );
-  if (!goalComplete) {
-    throw new Error(
-      "Attested Harness invocation profile omitted the goal_complete inline function.",
-    );
-  }
-  return [goalComplete];
-}
 
 interface DocumentPlateContract {
   slug: string;
@@ -2033,35 +2007,26 @@ export async function runHarnessTurn(
         // never changes ThinkWork's model semantics. `requested_model` is a
         // separate audit field and is intentionally not the execution source.
         ...(turn.modelId ? { modelId: turn.modelId } : {}),
-        ...(!documentCompositionPhase && harness.invocationTools
-          ? {
-              // InvokeHarness treats `tools` as the complete invocation tool
-              // set. Passing Browser alone hides the configured Gateway and
-              // inline functions (including goal_complete). Reuse the exact
-              // control-plane-attested tool array and remove only Browser
-              // when the participant's effective capability is disabled.
-              tools:
-                goalExecution &&
-                payload.invocation_source === "agent_loop" &&
-                missingAgentLoopCompletionCorrections > 0
-                  ? goalCompletionCorrectionTools(harness.invocationTools)
-                  : invocationToolsForTurn(
-                      harness.invocationTools,
-                      payload.browser_automation_enabled === true,
-                    ),
-            }
-          : {}),
         ...(!documentCompositionPhase &&
-        !harness.invocationTools &&
-        payload.browser_automation_enabled !== true
+        goalExecution &&
+        payload.invocation_source === "agent_loop" &&
+        missingAgentLoopCompletionCorrections > 0
           ? {
-              // During the one-release profile migration, the old stable
-              // endpoint remains usable before SSM publishes the attested
-              // full override. Narrow its existing allowlist so Browser stays
-              // unavailable for participants whose capability is disabled.
-              allowedTools: [...LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS],
+              // The immutable Harness already owns the attested tool
+              // definitions. Narrow by configured name only; replaying a
+              // `tools` override against the same endpoint caused the live
+              // native Browser dispatcher to return `Unknown tool: browser`.
+              allowedTools: ["goal_complete"],
             }
-          : {}),
+          : !documentCompositionPhase &&
+              payload.browser_automation_enabled !== true
+            ? {
+                // Browser authorization is participant-specific. Keep the
+                // control-plane tools intact and narrow only the effective
+                // per-turn allowlist when this participant lacks Browser.
+                allowedTools: [...LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS],
+              }
+            : {}),
         ...(documentEmissionRequired && !documentCompositionPhase
           ? {
               // Use the Harness's configured Gateway allowlist. Live testing
@@ -2110,6 +2075,22 @@ export async function runHarnessTurn(
             resultFailure ??
             "AgentCore Harness returned a successful managed tool result.",
         });
+        if (toolUse.name === "browser") {
+          await deps.recordInternalToolExecution({
+            tenantId: turn.tenantId,
+            threadId: turn.threadId,
+            turnId: turn.turnId,
+            principalUserId: turn.currentUserId,
+            toolUseId: toolUse.toolUseId,
+            toolName: toolUse.name,
+            policyRevision:
+              str(payload.capabilities_manifest_fingerprint) ??
+              `projection:${turnProjectionFingerprint}`,
+            input: toolUse.input,
+            status:
+              toolUse.parseError || resultFailure ? "failed" : "completed",
+          });
+        }
       }
 
       if (

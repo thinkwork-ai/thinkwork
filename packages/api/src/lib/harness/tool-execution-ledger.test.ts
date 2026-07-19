@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   appendToolExecutionStarted,
   appendToolExecutionTerminal,
+  mergeToolExecutionInvocations,
   projectToolExecutionInvocations,
   type ToolExecutionLedgerStore,
 } from "./tool-execution-ledger.js";
@@ -166,6 +167,49 @@ describe("tool execution ledger", () => {
         output_preview: '{"connector":"twenty--crm","toolCount":3}',
         evidence_source: "harness_tool_execution_events",
       }),
+    ]);
+  });
+
+  it("deduplicates streamed and governed evidence by tool use id while preferring the ledger", () => {
+    expect(
+      mergeToolExecutionInvocations(
+        [
+          {
+            tool_name: "browser",
+            tool_use_id: "browser-1",
+            status: "completed",
+            protocol: "agentcore_harness_internal_v1",
+          },
+          {
+            tool_name: "memory_search",
+            tool_use_id: "memory-1",
+            status: "completed",
+          },
+        ],
+        [
+          {
+            tool_name: "browser",
+            tool_use_id: "browser-1",
+            status: "completed",
+            policy_revision: "policy-v8",
+            evidence_source: "harness_tool_execution_events",
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        tool_name: "browser",
+        tool_use_id: "browser-1",
+        status: "completed",
+        protocol: "agentcore_harness_internal_v1",
+        policy_revision: "policy-v8",
+        evidence_source: "harness_tool_execution_events",
+      },
+      {
+        tool_name: "memory_search",
+        tool_use_id: "memory-1",
+        status: "completed",
+      },
     ]);
   });
 });

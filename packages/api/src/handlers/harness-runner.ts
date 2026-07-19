@@ -46,7 +46,13 @@ import {
   prepareFreshHarnessTurn,
   transitionFreshHarnessTurn,
 } from "../lib/harness/participant-session-store.js";
-import { loadTurnToolExecutionInvocations } from "../lib/harness/tool-execution-ledger.js";
+import {
+  appendToolExecutionStarted,
+  appendToolExecutionTerminal,
+  drizzleToolExecutionLedgerStore,
+  loadTurnToolExecutionInvocations,
+  mergeToolExecutionInvocations,
+} from "../lib/harness/tool-execution-ledger.js";
 import { collectGovernedConnectorEvidence } from "../lib/harness/gateway-evidence.js";
 import { enforceGovernedActionGrounding } from "../lib/harness/governed-action-grounding.js";
 import { loadCanonicalQuestionAnswerTurn } from "../lib/harness/canonical-question-answer-turn.js";
@@ -368,10 +374,10 @@ function createRealDeps(): HarnessRunnerDeps {
         turnId: payload.thread_turn_id,
       });
       if (payload.response && governedInvocations.length > 0) {
-        const merged = [
-          ...(payload.response.tool_invocations ?? []),
-          ...governedInvocations,
-        ];
+        const merged = mergeToolExecutionInvocations(
+          payload.response.tool_invocations ?? [],
+          governedInvocations,
+        );
         payload.response.tool_invocations = merged;
         payload.response.tools_called = [
           ...new Set(
@@ -397,6 +403,58 @@ function createRealDeps(): HarnessRunnerDeps {
             sql`${threadTurns.finalized_at} IS NULL`,
           ),
         );
+    },
+    async recordInternalToolExecution(input) {
+      const rawInput =
+        input.input &&
+        typeof input.input === "object" &&
+        !Array.isArray(input.input)
+          ? (input.input as Record<string, unknown>)
+          : {};
+      let urlOrigin: string | null = null;
+      if (typeof rawInput.url === "string") {
+        try {
+          const parsed = new URL(rawInput.url);
+          if (parsed.protocol === "https:") urlOrigin = parsed.origin;
+        } catch {
+          // The managed Browser owns full URL validation. Durable evidence
+          // records only a safe origin when one can be derived.
+        }
+      }
+      const correlation = {
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        principalType: "user" as const,
+        principalId: input.principalUserId,
+        toolUseId: input.toolUseId,
+        operation: "agentcore.browser",
+        policyRevision: input.policyRevision,
+        policyDecisionId: null,
+        idempotencyKey: `agentcore-browser:${input.turnId}:${input.toolUseId}`,
+        credentialOwnerAlias: null,
+      };
+      const store = drizzleToolExecutionLedgerStore();
+      await appendToolExecutionStarted(store, {
+        ...correlation,
+        input: {
+          tool: input.toolName,
+          ...(urlOrigin ? { urlOrigin } : {}),
+        },
+        inputAllowPaths: ["tool", "urlOrigin"],
+      });
+      await appendToolExecutionTerminal(store, {
+        ...correlation,
+        status: input.status,
+        output: { status: input.status },
+        outputAllowPaths: ["status"],
+        ...(input.status === "failed"
+          ? {
+              error: { code: "managed_browser_execution_failed" },
+              errorAllowPaths: ["code"],
+            }
+          : {}),
+      });
     },
     loadToolExecutions: loadTurnToolExecutionInvocations,
     async loadGoalRun({ tenantId, threadId, agentId, goalId }) {
