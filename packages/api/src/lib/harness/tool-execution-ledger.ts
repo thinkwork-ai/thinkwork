@@ -224,6 +224,7 @@ export interface ToolExecutionProjectionRow {
 function projectedToolName(row: ToolExecutionProjectionRow): string {
   const input = row.input_preview ?? {};
   const output = row.output_preview ?? {};
+  if (typeof input.tool === "string" && input.tool.trim()) return input.tool;
   if (row.operation === "sandbox.execute_code") return "execute_code";
   if (row.operation === "mcp.tools.list") {
     const connector = String(
@@ -239,6 +240,42 @@ function projectedToolName(row: ToolExecutionProjectionRow): string {
     return `mcp_${connector}_${tool}`;
   }
   return row.operation.replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+/**
+ * Combine Harness stream telemetry with the durable governed ledger without
+ * rendering the same tool use twice. The stream preserves any runtime-only
+ * fields while the ledger wins for authorization, policy, and terminal
+ * evidence because it is the persisted source of truth.
+ */
+export function mergeToolExecutionInvocations(
+  streamed: Array<Record<string, unknown>>,
+  governed: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  const merged: Array<Record<string, unknown>> = [];
+  const byToolUseId = new Map<string, number>();
+
+  for (const invocation of [...streamed, ...governed]) {
+    const rawId = invocation.tool_use_id;
+    const toolUseId =
+      typeof rawId === "string" && rawId.trim() ? rawId : null;
+    if (!toolUseId) {
+      merged.push(invocation);
+      continue;
+    }
+    const existingIndex = byToolUseId.get(toolUseId);
+    if (existingIndex == null) {
+      byToolUseId.set(toolUseId, merged.length);
+      merged.push(invocation);
+      continue;
+    }
+    merged[existingIndex] = {
+      ...merged[existingIndex],
+      ...invocation,
+    };
+  }
+
+  return merged;
 }
 
 function preview(value: Record<string, unknown> | null): string | undefined {
