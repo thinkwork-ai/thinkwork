@@ -140,10 +140,13 @@ function commonConfiguration() {
         },
       },
     ],
-    allowedTools: [
-      ...targetToolNames.map((name) => `@thinkwork_gateway/${name}`),
-      "emit_document",
-    ],
+    // AgentCore validates every allowedTools member at <=64 characters.
+    // Generated Gateway target+operation names can exceed that bound even
+    // though the underlying OpenAPI operation is valid. Authorize the one
+    // explicitly configured Gateway namespace as the Harness visibility
+    // ceiling; Cedar and each target still re-authorize the exact principal,
+    // tenant, operation, and resource on every call.
+    allowedTools: ["@thinkwork_gateway/*", "emit_document"],
     maxIterations: 50,
     timeoutSeconds: 900,
   };

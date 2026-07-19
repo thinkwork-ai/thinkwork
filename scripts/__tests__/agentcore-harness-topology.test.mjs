@@ -62,7 +62,8 @@ describe("managed multiplayer Harness topology", () => {
     assert.match(lifecycle, /grantType: "TOKEN_EXCHANGE"/);
     assert.match(lifecycle, /memory: \{ disabled: \{\} \}/);
     assert.match(lifecycle, /required\("GATEWAY_TARGET_TOOL_NAMES"\)/);
-    assert.match(lifecycle, /targetToolNames\.map/);
+    assert.match(lifecycle, /allowedTools: \["@thinkwork_gateway\/\*"/);
+    assert.doesNotMatch(lifecycle, /targetToolNames\.map/);
     assert.match(
       lifecycle,
       /ListWorkloadIdentitiesCommand\(\{ nextToken, maxResults: 20 \}\)/,
