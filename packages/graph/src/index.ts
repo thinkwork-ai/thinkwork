@@ -35,6 +35,20 @@ export type {
 } from "./KnowledgeGraph.js";
 
 export {
+  OntologyGraph,
+  buildOntologyGraphData,
+  mergeOntologyGraphData,
+  ONTOLOGY_GHOST_CANDIDATE_CAP,
+} from "./OntologyGraph.js";
+export type {
+  OntologyGraphData,
+  OntologyGraphHandle,
+  OntologyGraphLink,
+  OntologyGraphNode,
+  OntologyGraphNodeKind,
+} from "./OntologyGraph.js";
+
+export {
   classifyNode,
   communityColor,
   connectedGraphEdges,
@@ -70,5 +84,6 @@ export type { WikiPageType } from "./palettes/wiki-palette.js";
 export {
   KnowledgeGraphQuery,
   MemoryGraphQuery,
+  OntologyGraphQuery,
   WikiGraphQuery,
 } from "./queries.js";

@@ -63,6 +63,37 @@ export const WikiGraphQuery = gql`
   }
 `;
 
+export const OntologyGraphQuery = gql`
+  query OntologySchemaGraph($tenantId: ID!) {
+    ontologySchemaGraph(tenantId: $tenantId) {
+      tenantId
+      types {
+        slug
+        name
+        instanceCount
+        lifecycleStatus
+      }
+      relationships {
+        slug
+        name
+        sourceTypeSlugs
+        targetTypeSlugs
+      }
+      candidates {
+        itemId
+        changeSetId
+        itemType
+        slug
+        proposedValue
+        editedValue
+        evidenceCount
+        origin
+        status
+      }
+    }
+  }
+`;
+
 export const KnowledgeGraphQuery = gql`
   query KnowledgeGraph($tenantId: ID!, $threadId: ID, $runId: ID) {
     knowledgeGraphGraph(
