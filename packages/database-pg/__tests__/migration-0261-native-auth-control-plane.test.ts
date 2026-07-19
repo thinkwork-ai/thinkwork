@@ -113,7 +113,7 @@ describe("migration 0261 — native auth control plane", () => {
       dataPlan,
     );
     const fullApply = deployWorkflow.lastIndexOf(
-      'terraform apply -auto-approve -refresh=false -lock-timeout=10m "${TF_TARGET_ARGS[@]}"',
+      'terraform apply -auto-approve -lock-timeout=10m "$plan_file"',
     );
     expect(dataPlan).toBeGreaterThan(-1);
     expect(authMigration).toBeGreaterThan(dataPlan);
