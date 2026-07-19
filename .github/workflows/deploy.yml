@@ -1360,6 +1360,9 @@ jobs:
           export TF_VAR_db_password="${{ secrets.DB_PASSWORD }}"
           export TF_VAR_api_auth_secret="${{ secrets.API_AUTH_SECRET }}"
           export TF_VAR_google_oauth_client_secret="${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
+          export TF_VAR_microsoft_oauth_client_id="${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}"
+          export TF_VAR_microsoft_oauth_client_secret="${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}"
+          export TF_VAR_microsoft_oauth_tenant="${{ secrets.MICROSOFT_OAUTH_TENANT }}"
           export TF_VAR_mapbox_public_token="${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}"
           # The deprecated graph memory path is disabled for all deploys.
           # Hindsight is the authoritative user and Space memory engine.
