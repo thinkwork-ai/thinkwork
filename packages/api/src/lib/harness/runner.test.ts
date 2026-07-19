@@ -2218,15 +2218,19 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     );
 
     expect(deps.invocations).toHaveLength(2);
-    for (const invocation of deps.invocations) {
-      expect(invocation.tools).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: "browser" }),
-          expect.objectContaining({ name: "goal_complete" }),
-          expect.objectContaining({ name: "thinkwork_gateway" }),
-        ]),
-      );
-    }
+    expect(deps.invocations[0]?.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "browser" }),
+        expect.objectContaining({ name: "goal_complete" }),
+        expect.objectContaining({ name: "thinkwork_gateway" }),
+      ]),
+    );
+    expect(deps.invocations[1]?.tools).toEqual([
+      expect.objectContaining({
+        type: "inline_function",
+        name: "goal_complete",
+      }),
+    ]);
     expect(JSON.stringify(deps.invocations[1].messages)).toContain(
       "without governed completion evidence",
     );
@@ -2259,6 +2263,12 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     );
 
     expect(deps.invocations).toHaveLength(2);
+    expect(deps.invocations[1]?.tools).toEqual([
+      expect.objectContaining({
+        type: "inline_function",
+        name: "goal_complete",
+      }),
+    ]);
     expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
       status: "paused",
       summary: "More work remains after verification.",

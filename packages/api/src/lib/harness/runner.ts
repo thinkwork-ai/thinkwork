@@ -992,6 +992,28 @@ function invocationToolsForTurn(
     );
 }
 
+/**
+ * An AgentLoop gets one corrective continuation after the model ends without
+ * governed completion evidence. That continuation is a control-plane decision,
+ * not another work step: expose only the attested inline `goal_complete`
+ * function so the model cannot mistake a similarly named Gateway/MCP catalog
+ * entry for the completion contract. It may still return plain text when work
+ * genuinely remains, which preserves the resumable-pause path.
+ */
+function goalCompletionCorrectionTools(
+  tools: HarnessInvocationTool[],
+): HarnessTool[] {
+  const goalComplete = tools.find(
+    (tool) => tool.type === "inline_function" && tool.name === "goal_complete",
+  );
+  if (!goalComplete) {
+    throw new Error(
+      "Attested Harness invocation profile omitted the goal_complete inline function.",
+    );
+  }
+  return [goalComplete];
+}
+
 interface DocumentPlateContract {
   slug: string;
   displayName: string;
@@ -2018,10 +2040,15 @@ export async function runHarnessTurn(
               // inline functions (including goal_complete). Reuse the exact
               // control-plane-attested tool array and remove only Browser
               // when the participant's effective capability is disabled.
-              tools: invocationToolsForTurn(
-                harness.invocationTools,
-                payload.browser_automation_enabled === true,
-              ),
+              tools:
+                goalExecution &&
+                payload.invocation_source === "agent_loop" &&
+                missingAgentLoopCompletionCorrections > 0
+                  ? goalCompletionCorrectionTools(harness.invocationTools)
+                  : invocationToolsForTurn(
+                      harness.invocationTools,
+                      payload.browser_automation_enabled === true,
+                    ),
             }
           : {}),
         ...(!documentCompositionPhase &&
