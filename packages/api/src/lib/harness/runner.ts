@@ -91,11 +91,21 @@ export interface HarnessStreamEvent {
   messageStart?: { role?: string };
   contentBlockStart?: {
     contentBlockIndex: number;
-    start?: { toolUse?: { toolUseId: string; name: string; type?: string } };
+    start?: {
+      toolUse?: { toolUseId: string; name: string; type?: string };
+      toolResult?: {
+        toolUseId: string;
+        status?: "success" | "error";
+      };
+    };
   };
   contentBlockDelta?: {
     contentBlockIndex: number;
-    delta?: { text?: string; toolUse?: { input?: string } };
+    delta?: {
+      text?: string;
+      toolUse?: { input?: string };
+      toolResult?: Array<{ text?: string; json?: unknown }>;
+    };
   };
   contentBlockStop?: { contentBlockIndex: number };
   messageStop?: { stopReason: string };
@@ -369,6 +379,7 @@ const ERROR_JWT_RE =
   /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g;
 const ERROR_PREFIXED_TOKEN_RE =
   /\b(?:gh[oprsu]_[A-Za-z0-9]{20,}|xox[abep]-[A-Za-z0-9-]{10,}|ya29\.[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16})\b/g;
+const ERROR_SECRET_SENTINEL_RE = /\bSECRET_SENTINEL_[A-Z0-9_-]+\b/g;
 const ERROR_URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 
 /**
@@ -384,6 +395,7 @@ function sanitizeErrorDiagnostic(value: string): string {
     .replace(ERROR_BEARER_RE, "Bearer <redacted>")
     .replace(ERROR_JWT_RE, "<redacted>")
     .replace(ERROR_PREFIXED_TOKEN_RE, "<redacted>")
+    .replace(ERROR_SECRET_SENTINEL_RE, "<redacted>")
     .replace(ERROR_URL_RE, (url) => {
       const queryIndex = url.indexOf("?");
       return queryIndex >= 0 ? `${url.slice(0, queryIndex)}?<redacted>` : url;
@@ -649,6 +661,8 @@ interface AssembledToolUse {
   input: unknown;
   inputRaw: string;
   parseError?: string;
+  resultStatus?: "success" | "error";
+  resultSummary?: string;
 }
 
 interface AssembledSegment {
@@ -689,10 +703,11 @@ export class HarnessStreamError extends Error {
 }
 
 type AssembledBlock = {
-  kind: "text" | "toolUse";
+  kind: "text" | "toolUse" | "toolResult";
   text: string;
   toolUseId?: string;
   name?: string;
+  toolResultStatus?: "success" | "error";
   inputJson: string;
 };
 
@@ -770,6 +785,14 @@ async function assembleStream(
           name: start.toolUse.name,
           inputJson: "",
         });
+      } else if (start?.toolResult) {
+        blocks.set(contentBlockIndex, {
+          kind: "toolResult",
+          text: "",
+          toolUseId: start.toolResult.toolUseId,
+          toolResultStatus: start.toolResult.status,
+          inputJson: "",
+        });
       } else {
         blocks.set(contentBlockIndex, {
           kind: "text",
@@ -791,6 +814,29 @@ async function assembleStream(
       if (delta?.toolUse?.input) {
         block.kind = "toolUse";
         block.inputJson += delta.toolUse.input;
+      }
+      if (delta?.toolResult) {
+        block.kind = "toolResult";
+        for (const part of delta.toolResult) {
+          const value =
+            typeof part.text === "string"
+              ? part.text
+              : part.json !== undefined
+                ? (() => {
+                    try {
+                      return JSON.stringify(part.json);
+                    } catch {
+                      return "[unserializable tool result]";
+                    }
+                  })()
+                : "";
+          if (block.text.length < ERROR_DIAGNOSTIC_LIMIT * 2) {
+            block.text += value.slice(
+              0,
+              ERROR_DIAGNOSTIC_LIMIT * 2 - block.text.length,
+            );
+          }
+        }
       }
       blocks.set(contentBlockIndex, block);
       continue;
@@ -816,14 +862,28 @@ async function assembleStream(
       if (block.kind === "text") segment.text += block.text;
     }
   }
-  // Caller-fulfilled toolUses: ONLY the final assistant message's — the
-  // stream ends exactly where the harness needs the caller; everything
-  // earlier was fulfilled inside the harness loop.
+  const internalToolResults = new Map<
+    string,
+    { status?: "success" | "error"; summary: string }
+  >();
+  for (const message of messages) {
+    for (const block of message.blocks.values()) {
+      if (block.kind !== "toolResult" || !block.toolUseId) continue;
+      internalToolResults.set(block.toolUseId, {
+        status: block.toolResultStatus,
+        summary: boundErrorDiagnostic(sanitizeErrorDiagnostic(block.text)),
+      });
+    }
+  }
+
+  // Caller-fulfilled toolUses are the final assistant message's unresolved
+  // tool uses. Any tool use with a matching streamed toolResult was fulfilled
+  // inside the managed Harness loop, regardless of message position.
   const lastAssistant = [...messages]
     .reverse()
     .find((m) => m.role === "assistant");
   for (const message of messages) {
-    if (message.role !== "assistant" || message === lastAssistant) continue;
+    if (message.role !== "assistant") continue;
     for (const [, block] of [...message.blocks.entries()].sort(
       (a, b) => a[0] - b[0],
     )) {
@@ -839,12 +899,16 @@ async function assembleStream(
           parseError = `malformed tool input JSON: ${err instanceof Error ? err.message : String(err)}`;
         }
       }
+      const result = internalToolResults.get(block.toolUseId);
+      if (message === lastAssistant && !result) continue;
       segment.internalToolUses.push({
         toolUseId: block.toolUseId,
         name: block.name,
         input,
         inputRaw: block.inputJson,
         parseError,
+        resultStatus: result?.status,
+        resultSummary: result?.summary,
       });
     }
   }
@@ -855,6 +919,8 @@ async function assembleStream(
       if (block.text) segment.finalAssistantContent.push({ text: block.text });
       continue;
     }
+    if (block.kind === "toolResult") continue;
+    if (internalToolResults.has(block.toolUseId ?? "")) continue;
     if (!block.toolUseId || !block.name) continue;
     let input: unknown = undefined;
     let parseError: string | undefined;
@@ -1981,14 +2047,22 @@ export async function runHarnessTurn(
       usage.cacheWriteTokens += segment.usage.cacheWriteTokens;
       if (segment.text.trim()) finalText = segment.text;
       for (const toolUse of segment.internalToolUses) {
+        const resultFailure =
+          toolUse.resultStatus === "error"
+            ? toolUse.resultSummary ||
+              "AgentCore Harness streamed an error tool result."
+            : toolUse.resultStatus !== "success"
+              ? "AgentCore Harness did not stream a terminal tool result."
+              : undefined;
         toolInvocations.push({
           tool_name: toolUse.name,
           tool_use_id: toolUse.toolUseId,
-          status: toolUse.parseError ? "failed" : "completed",
+          status: toolUse.parseError || resultFailure ? "failed" : "completed",
           protocol: "agentcore_harness_internal_v1",
           result_summary:
             toolUse.parseError ??
-            "AgentCore Harness fulfilled this managed tool inside the invocation.",
+            resultFailure ??
+            "AgentCore Harness returned a successful managed tool result.",
         });
       }
 
@@ -2203,7 +2277,7 @@ export async function runHarnessTurn(
         ) {
           return await finalizeWith("failed", {
             errorMessage:
-              "Harness Browser was explicitly requested but no managed Browser invocation was observed.",
+              "Harness Browser was explicitly requested but no successful managed Browser invocation was observed.",
           });
         }
         guardHarnessPublication(finalText);
