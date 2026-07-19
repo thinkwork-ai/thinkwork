@@ -23,6 +23,25 @@ export interface PreparedFreshHarnessTurn extends CanonicalHarnessPrefix {
   canonicalPendingQuestionAnswer?: Record<string, unknown>;
 }
 
+export function decideFreshEnrollmentProfile(input: {
+  enrollmentAgentId: string;
+  enrollmentQualifier: string;
+  enrollmentVersion: string;
+  requestedAgentId: string;
+  requestedQualifier: string;
+  requestedVersion: string;
+}): "current" | "advance_version" {
+  if (
+    input.enrollmentAgentId !== input.requestedAgentId ||
+    input.enrollmentQualifier !== input.requestedQualifier
+  ) {
+    throw new Error("harness_enrollment_profile_drift");
+  }
+  return input.enrollmentVersion === input.requestedVersion
+    ? "current"
+    : "advance_version";
+}
+
 export async function prepareFreshHarnessTurn(input: {
   tenantId: string;
   threadId: string;
@@ -113,12 +132,43 @@ export async function prepareFreshHarnessTurn(input: {
       )
       .limit(1);
     if (!enrollment) throw new Error("agentcore_thread_enrollment_required");
-    if (
-      enrollment.agentId !== input.agentId ||
-      enrollment.qualifier !== input.qualifier ||
-      enrollment.version !== input.resolvedVersion
-    ) {
-      throw new Error("harness_enrollment_profile_drift");
+    const profileDecision = decideFreshEnrollmentProfile({
+      enrollmentAgentId: enrollment.agentId,
+      enrollmentQualifier: enrollment.qualifier,
+      enrollmentVersion: enrollment.version,
+      requestedAgentId: input.agentId,
+      requestedQualifier: input.qualifier,
+      requestedVersion: input.resolvedVersion,
+    });
+    if (profileDecision === "advance_version") {
+      // Every Harness turn owns a fresh runtime session. A deployment may
+      // therefore advance an existing thread to the new immutable Harness
+      // version between turns, provided the logical agent and endpoint stay
+      // unchanged. Failing on version-only drift makes every Harness rollout
+      // strand all existing threads.
+      const [advanced] = await tx
+        .update(harnessManagedThreadEnrollments)
+        .set({ resolved_version: input.resolvedVersion })
+        .where(
+          and(
+            eq(harnessManagedThreadEnrollments.id, enrollment.id),
+            eq(
+              harnessManagedThreadEnrollments.resolved_version,
+              enrollment.version,
+            ),
+          ),
+        )
+        .returning({ id: harnessManagedThreadEnrollments.id });
+      if (!advanced) {
+        const [current] = await tx
+          .select({ version: harnessManagedThreadEnrollments.resolved_version })
+          .from(harnessManagedThreadEnrollments)
+          .where(eq(harnessManagedThreadEnrollments.id, enrollment.id))
+          .limit(1);
+        if (current?.version !== input.resolvedVersion) {
+          throw new Error("harness_enrollment_profile_drift");
+        }
+      }
     }
     const [triggerEvent] = actionResume
       ? await tx
@@ -280,7 +330,10 @@ export async function transitionFreshHarnessTurn(input: {
               AND he.thread_id = ${harnessParticipantSessions.thread_id}
               AND he.status = 'active'
               AND he.qualifier = ${harnessParticipantSessions.qualifier}
-              AND he.resolved_version = ${harnessParticipantSessions.resolved_version}
+              -- Fresh sessions are pinned to their immutable session version.
+              -- A later turn may advance the enrollment to a newly deployed
+              -- version while this turn is still running; that rollout must
+              -- not fence an already-authorized older session at publication.
               AND ${harnessParticipantSessions.base_fingerprint} <> ''
               AND ${harnessParticipantSessions.participant_fingerprint} <> ''
               AND NOT EXISTS (
