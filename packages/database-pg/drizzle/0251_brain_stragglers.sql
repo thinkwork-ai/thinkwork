@@ -43,6 +43,27 @@
 --
 -- Markers (consumed by scripts/db-migrate-manual.sh):
 --
+-- moves-owner: public.brain_dream_runs -> brain.dream_runs
+-- moves-owner: public.brain_dream_actions -> brain.dream_actions
+-- moves-owner: public.memory_retain_attempts -> brain.retain_attempts
+-- drops: public.brain_dream_runs_dedupe_key_uidx
+-- drops: public.brain_dream_runs_tenant_bank_idx
+-- drops: public.brain_dream_runs_tenant_status_idx
+-- drops: public.brain_dream_actions_run_ordinal_uidx
+-- drops: public.brain_dream_actions_run_status_idx
+-- drops: public.memory_retain_attempts_source_event_uidx
+-- drops: public.memory_retain_attempts_due_idx
+-- drops: public.memory_retain_attempts_tenant_status_idx
+-- drops: public.memory_retain_attempts_thread_idx
+-- drops: public.memory_retain_attempts_user_idx
+-- drops: public.memory_retain_attempts_space_idx
+-- drops: public.memory_retain_attempts_turn_idx
+-- drops-constraint: public.brain_dream_runs.brain_dream_runs_status_check
+-- drops-constraint: public.brain_dream_actions.brain_dream_actions_type_check
+-- drops-constraint: public.brain_dream_actions.brain_dream_actions_status_check
+-- drops-constraint: public.memory_retain_attempts.memory_retain_attempts_status_allowed
+-- drops-constraint: public.memory_retain_attempts.memory_retain_attempts_attempt_count_nonnegative
+-- drops-constraint: public.memory_retain_attempts.memory_retain_attempts_max_attempts_positive
 -- creates: brain.dream_runs
 -- creates: brain.dream_actions
 -- creates: brain.retain_attempts

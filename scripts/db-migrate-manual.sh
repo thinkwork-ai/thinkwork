@@ -47,9 +47,13 @@
 #   -- drops: public.<table_or_index_name>      # probes ABSENT (DROPPED/STILL_PRESENT)
 #   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
 #   -- drops-constraint: public.<table_name>.<constraint_name> # probes ABSENT
+#   -- moves-owner: public.<table> -> brain.<table> # remaps unchanged child objects
+#   -- data-only-migration                     # no durable schema objects
 # Multiple markers per file are fine. A file with zero markers is reported
 # as UNVERIFIED (explicitly flagged, since "no markers" is a header-quality
-# issue that should be fixed at PR time).
+# issue that should be fixed at PR time). Create markers superseded by an
+# explicit drop in a later migration are not probed against the terminal DB;
+# drop markers superseded by a later recreate are treated the same way.
 
 set -euo pipefail
 
@@ -105,6 +109,90 @@ with open('$JOURNAL') as f:
 for e in j.get('entries', []):
     print(e['tag'] + '.sql')
 ")
+
+# Resolve historical create markers that a later migration explicitly retires.
+# The helper examines the full ordered migration history even when this command
+# is scoped to a subset, because a scoped old migration still needs the current
+# terminal-state interpretation. Tab-separated output keeps lookup portable to
+# Bash 3.x without associative arrays.
+TERMINAL_MARKER_RESOLUTIONS=$(
+  python3 "$REPO_ROOT/scripts/manual-migration-terminal-state.py" "$DRIZZLE_DIR" "$JOURNAL"
+)
+
+resolve_marker() {
+  local file="$1"
+  local kind="$2"
+  local target="$3"
+  local needle=$'\n'"$file"$'\t'"$kind"$'\t'"$target"$'\t'
+  local haystack=$'\n'"${FILE_MARKER_RESOLUTIONS:-}"$'\n'
+  local remainder
+  RESOLVED_TARGET=""
+  RESOLUTION_FILE=""
+  if [[ "$haystack" == *"$needle"* ]]; then
+    remainder="${haystack#*"$needle"}"
+    remainder="${remainder%%$'\n'*}"
+    RESOLVED_TARGET="${remainder%%$'\t'*}"
+    RESOLUTION_FILE="${remainder#*$'\t'}"
+  fi
+}
+
+print_create_marker() {
+  local base="$1"
+  local kind="$2"
+  local target="$3"
+  resolve_marker "$base" "$kind" "$target"
+  if [[ "$RESOLVED_TARGET" == "-" ]]; then
+    echo "    $kind: $target -> SUPERSEDED by $RESOLUTION_FILE"
+  elif [[ -n "$RESOLVED_TARGET" ]]; then
+    echo "    $kind: $target -> MOVED to $RESOLVED_TARGET by $RESOLUTION_FILE"
+  else
+    echo "    $kind: $target -> ACTIVE"
+  fi
+}
+
+print_drop_marker() {
+  local base="$1"
+  local kind="$2"
+  local target="$3"
+  resolve_marker "$base" "$kind" "$target"
+  if [[ "$RESOLVED_TARGET" == "-" ]]; then
+    echo "    $kind: $target -> SUPERSEDED by $RESOLUTION_FILE"
+  else
+    echo "    $kind: $target -> ACTIVE"
+  fi
+}
+
+prepare_create_probe() {
+  local base="$1"
+  local kind="$2"
+  local target="$3"
+  local label="$4"
+  resolve_marker "$base" "$kind" "$target"
+  if [[ "$RESOLVED_TARGET" == "-" ]]; then
+    echo "    $label -> SUPERSEDED by $RESOLUTION_FILE"
+    return 1
+  fi
+  PROBE_TARGET="$target"
+  PROBE_LABEL="$label"
+  if [[ -n "$RESOLVED_TARGET" ]]; then
+    PROBE_TARGET="$RESOLVED_TARGET"
+    PROBE_LABEL="$label -> MOVED to $RESOLVED_TARGET by $RESOLUTION_FILE"
+  fi
+  return 0
+}
+
+prepare_drop_probe() {
+  local base="$1"
+  local kind="$2"
+  local target="$3"
+  local label="$4"
+  resolve_marker "$base" "$kind" "$target"
+  if [[ "$RESOLVED_TARGET" == "-" ]]; then
+    echo "    $label -> SUPERSEDED by $RESOLUTION_FILE"
+    return 1
+  fi
+  return 0
+}
 
 # Probes. `to_regclass(<name>)` returns NULL when the relation doesn't exist,
 # non-NULL otherwise — works for tables, indexes, views, sequences. For
@@ -399,6 +487,13 @@ for f in "${WALK_FILES[@]}"; do
 
   echo "  $base"
 
+  # Narrow the terminal-state map once per migration. Marker lookups below
+  # then scan only this file's handful of retired objects instead of the full
+  # migration history.
+  FILE_MARKER_RESOLUTIONS=$(
+    printf '%s\n' "$TERMINAL_MARKER_RESOLUTIONS" | awk -F '\t' -v file="$base" '$1 == file'
+  )
+
   # Pull markers from the header. Again, newline-delimited strings for
   # bash 3.x portability.
   obj_markers=$(
@@ -449,49 +544,58 @@ for f in "${WALK_FILES[@]}"; do
     grep -oE "^--[[:space:]]+drops:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  data_only=0
+  if grep -q '^-- data-only-migration$' "$f"; then
+    data_only=1
+  fi
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$membership_markers" && -z "$policy_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- creates-function:', '-- creates-trigger:', '-- creates-role:', '-- creates-role-membership:', '-- creates-policy:', '-- drops:', '-- drops-column:', or '-- drops-constraint:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$membership_markers" && -z "$policy_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" && "$data_only" -eq 0 ]]; then
+    echo "    UNVERIFIED (no schema markers or '-- data-only-migration' declaration in header)"
     any_unverified=1
+    continue
+  fi
+
+  if [[ "$data_only" -eq 1 && -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$function_markers" && -z "$trigger_markers" && -z "$role_markers" && -z "$membership_markers" && -z "$policy_markers" && -z "$drop_col_markers" && -z "$drop_constraint_markers" && -z "$drop_obj_markers" ]]; then
+    echo "    DATA-ONLY (no durable schema objects)"
     continue
   fi
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     if [[ -n "$obj_markers" ]]; then
-      while IFS= read -r m; do echo "    creates: $m"; done <<< "$obj_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates" "$m"; done <<< "$obj_markers"
     fi
     if [[ -n "$col_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-column: $m"; done <<< "$col_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-column" "$m"; done <<< "$col_markers"
     fi
     if [[ -n "$ext_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-extension: $m"; done <<< "$ext_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-extension" "$m"; done <<< "$ext_markers"
     fi
     if [[ -n "$constraint_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-constraint: $m"; done <<< "$constraint_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-constraint" "$m"; done <<< "$constraint_markers"
     fi
     if [[ -n "$function_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-function: $m"; done <<< "$function_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-function" "$m"; done <<< "$function_markers"
     fi
     if [[ -n "$trigger_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-trigger: $m"; done <<< "$trigger_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-trigger" "$m"; done <<< "$trigger_markers"
     fi
     if [[ -n "$role_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-role: $m"; done <<< "$role_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-role" "$m"; done <<< "$role_markers"
     fi
     if [[ -n "$membership_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-role-membership: $m"; done <<< "$membership_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-role-membership" "$m"; done <<< "$membership_markers"
     fi
     if [[ -n "$policy_markers" ]]; then
-      while IFS= read -r m; do echo "    creates-policy: $m"; done <<< "$policy_markers"
+      while IFS= read -r m; do print_create_marker "$base" "creates-policy" "$m"; done <<< "$policy_markers"
     fi
     if [[ -n "$drop_col_markers" ]]; then
-      while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
+      while IFS= read -r m; do print_drop_marker "$base" "drops-column" "$m"; done <<< "$drop_col_markers"
     fi
     if [[ -n "$drop_constraint_markers" ]]; then
-      while IFS= read -r m; do echo "    drops-constraint: $m"; done <<< "$drop_constraint_markers"
+      while IFS= read -r m; do print_drop_marker "$base" "drops-constraint" "$m"; done <<< "$drop_constraint_markers"
     fi
     if [[ -n "$drop_obj_markers" ]]; then
-      while IFS= read -r m; do echo "    drops: $m"; done <<< "$drop_obj_markers"
+      while IFS= read -r m; do print_drop_marker "$base" "drops" "$m"; done <<< "$drop_obj_markers"
     fi
     continue
   fi
@@ -499,78 +603,88 @@ for f in "${WALK_FILES[@]}"; do
   if [[ -n "$obj_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_object "$m")
-      echo "    $m -> $result"
+      prepare_create_probe "$base" "creates" "$m" "$m" || continue
+      result=$(probe_object "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$obj_markers"
   fi
   if [[ -n "$col_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_column "$m")
-      echo "    $m -> $result"
+      prepare_create_probe "$base" "creates-column" "$m" "$m" || continue
+      result=$(probe_column "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$col_markers"
   fi
   if [[ -n "$ext_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_extension "$m")
-      echo "    extension $m -> $result"
+      prepare_create_probe "$base" "creates-extension" "$m" "extension $m" || continue
+      result=$(probe_extension "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$ext_markers"
   fi
   if [[ -n "$constraint_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_constraint "$m")
-      echo "    constraint $m -> $result"
+      prepare_create_probe "$base" "creates-constraint" "$m" "constraint $m" || continue
+      result=$(probe_constraint "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$constraint_markers"
   fi
   if [[ -n "$function_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_function "$m")
-      echo "    function $m -> $result"
+      prepare_create_probe "$base" "creates-function" "$m" "function $m" || continue
+      result=$(probe_function "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$function_markers"
   fi
   if [[ -n "$trigger_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_trigger "$m")
-      echo "    trigger $m -> $result"
+      prepare_create_probe "$base" "creates-trigger" "$m" "trigger $m" || continue
+      result=$(probe_trigger "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$trigger_markers"
   fi
   if [[ -n "$role_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_role "$m")
-      echo "    role $m -> $result"
+      prepare_create_probe "$base" "creates-role" "$m" "role $m" || continue
+      result=$(probe_role "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$role_markers"
   fi
   if [[ -n "$membership_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_role_membership "$m")
-      echo "    role-membership $m -> $result"
+      prepare_create_probe "$base" "creates-role-membership" "$m" "role-membership $m" || continue
+      result=$(probe_role_membership "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$membership_markers"
   fi
   if [[ -n "$policy_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
-      result=$(probe_policy "$m")
-      echo "    policy $m -> $result"
+      prepare_create_probe "$base" "creates-policy" "$m" "policy $m" || continue
+      result=$(probe_policy "$PROBE_TARGET")
+      echo "    $PROBE_LABEL -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$policy_markers"
   fi
   if [[ -n "$drop_col_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
+      prepare_drop_probe "$base" "drops-column" "$m" "drop $m" || continue
       result=$(probe_column_absent "$m")
       echo "    drop $m -> $result"
       [[ "$result" == "STILL_PRESENT" ]] && any_missing=1
@@ -579,6 +693,7 @@ for f in "${WALK_FILES[@]}"; do
   if [[ -n "$drop_constraint_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
+      prepare_drop_probe "$base" "drops-constraint" "$m" "drop constraint $m" || continue
       result=$(probe_constraint_absent "$m")
       echo "    drop constraint $m -> $result"
       [[ "$result" == "STILL_PRESENT" ]] && any_missing=1
@@ -587,6 +702,7 @@ for f in "${WALK_FILES[@]}"; do
   if [[ -n "$drop_obj_markers" ]]; then
     while IFS= read -r m; do
       [[ -z "$m" ]] && continue
+      prepare_drop_probe "$base" "drops" "$m" "drop $m" || continue
       result=$(probe_object_absent "$m")
       echo "    drop $m -> $result"
       [[ "$result" == "STILL_PRESENT" ]] && any_missing=1

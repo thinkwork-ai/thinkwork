@@ -15,6 +15,7 @@
 -- inert page. Per-tenant variation can be added by INSERTing rows with a
 -- specific tenant_id; the SELECT-from-tenants below is the convenient
 -- "every tenant gets the v1 baseline" path.
+-- data-only-migration
 
 \set ON_ERROR_STOP on
 

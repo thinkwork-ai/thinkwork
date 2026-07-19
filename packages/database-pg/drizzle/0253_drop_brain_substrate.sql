@@ -42,6 +42,8 @@
 -- drops-column: brain.artifact_manifests.migration_id
 -- drops-constraint: brain.artifact_manifests.artifact_manifests_substrate_id_fk
 -- drops-constraint: brain.artifact_manifests.artifact_manifests_migration_id_fk
+-- drops: brain.brain_artifact_manifests_substrate_kind_idx
+-- drops: brain.brain_artifact_manifests_migration_idx
 
 \set ON_ERROR_STOP on
 

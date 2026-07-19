@@ -4,6 +4,9 @@
 -- drops: public.computer_assignments
 -- drops: public.computer_snapshots
 -- drops: public.computers
+-- drops-constraint: public.eval_runs.eval_runs_computer_id_computers_id_fk
+-- drops-constraint: public.thread_idle_learning_state.thread_idle_learning_state_computer_id_computers_id_fk
+-- drops-constraint: public.thread_idle_learning_runs.thread_idle_learning_runs_computer_id_computers_id_fk
 --
 -- Kill the legacy Computer feature. All product surfaces (admin, Spaces,
 -- mobile, CLI), Lambda handlers (computer-runtime, computer-manager,
