@@ -247,6 +247,11 @@ function makeDeps(
   options: {
     emitResults?: Array<{ statusCode: number; body: Record<string, unknown> }>;
     goalRun?: Record<string, unknown> | null;
+    recalledMemories?: Array<{
+      scope: "user" | "space";
+      text: string;
+      score: number;
+    }>;
   } = {},
 ): TestDeps {
   const finalizePayloads: FinalizePayload[] = [];
@@ -361,6 +366,7 @@ function makeDeps(
         ],
       },
     })),
+    recallMemories: vi.fn(async () => options.recalledMemories ?? []),
     fetchWorkspaceText: vi.fn(async () => null),
   };
 }
@@ -547,6 +553,35 @@ describe("runHarnessTurn — happy path", () => {
     expect(messages).not.toContain("secret.example");
   });
 
+  it("recalls exact participant memory into a bounded untrusted context block", async () => {
+    const deps = makeDeps([stream(textEvents("UserMarkerd01325ce"))], {
+      recalledMemories: [
+        {
+          scope: "user",
+          text: "User orbit checksum ca8bcc90 is UserMarkerd01325ce.",
+          score: 0.98,
+        },
+      ],
+    });
+
+    const result = await runHarnessTurn(
+      { ...basePayload(), use_memory: true },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(deps.recallMemories).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      participantUserId: "user-1",
+      query: "Review 777 Automotive",
+    });
+    const messages = JSON.stringify(deps.invocations[0]?.messages);
+    expect(messages).toContain("thinkwork_recalled_memory");
+    expect(messages).toContain("UserMarkerd01325ce");
+    expect(messages).toContain("untrusted recalled context");
+  });
+
   it("projects canonical pending-question answers as bounded user input", async () => {
     const deps = makeDeps([stream(textEvents("I continued with Enterprise."))]);
     (deps.prepareFreshTurn as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
@@ -610,6 +645,11 @@ describe("runHarnessTurn — happy path", () => {
     expect(deps.prepareFreshTurn).toHaveBeenCalledWith(
       expect.objectContaining({ questionAnswerResume: true }),
     );
+    expect(deps.finalizePayloads[0]?.claim).toMatchObject({
+      invocation_source: "question_answer",
+      harness_session_id: "session-row-1",
+      harness_participant_user_id: "user-1",
+    });
   });
 
   it("fails closed when a card resume lacks a canonical database answer", async () => {

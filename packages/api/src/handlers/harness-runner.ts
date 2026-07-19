@@ -15,7 +15,7 @@
 
 import { eq, and, desc, or, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { threadTurns } from "@thinkwork/database-pg/schema";
+import { threads, threadTurns } from "@thinkwork/database-pg/schema";
 import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -52,6 +52,7 @@ import { enforceGovernedActionGrounding } from "../lib/harness/governed-action-g
 import { loadCanonicalQuestionAnswerTurn } from "../lib/harness/canonical-question-answer-turn.js";
 import { submitHarnessSkillDraft } from "../lib/skill-creator/harness-submit-draft.js";
 import { dispatchHarnessMemoryRetain } from "../lib/harness/memory-retain.js";
+import { getMemoryServices } from "../lib/memory/index.js";
 
 const region =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -445,6 +446,81 @@ function createRealDeps(): HarnessRunnerDeps {
         connector: input.connector,
         query: input.query,
       }),
+    async recallMemories(input) {
+      const db = getDb();
+      const [thread] = await db
+        .select({ spaceId: threads.space_id })
+        .from(threads)
+        .where(
+          and(
+            eq(threads.id, input.threadId),
+            eq(threads.tenant_id, input.tenantId),
+          ),
+        )
+        .limit(1);
+      if (!thread) return [];
+
+      const services = getMemoryServices();
+      const scopes: Array<{
+        scope: "user" | "space";
+        ownerType: "user" | "space";
+        ownerId: string;
+      }> = [
+        {
+          scope: "user",
+          ownerType: "user",
+          ownerId: input.participantUserId,
+        },
+        ...(thread.spaceId
+          ? [
+              {
+                scope: "space" as const,
+                ownerType: "space" as const,
+                ownerId: thread.spaceId,
+              },
+            ]
+          : []),
+      ];
+      const batches = await Promise.all(
+        scopes.map(async (scope) => {
+          try {
+            const hits = await services.recall.recall({
+              tenantId: input.tenantId,
+              ownerType: scope.ownerType,
+              ownerId: scope.ownerId,
+              threadId: input.threadId,
+              query: input.query,
+              depth: "quick",
+              limit: 6,
+              tokenBudget: 800,
+              requestContext: {
+                requesterUserId: input.participantUserId,
+                credentialSubject: {
+                  type: "user",
+                  userId: input.participantUserId,
+                },
+                sourceSurface: "agentcore_harness",
+              },
+            });
+            return hits.map((hit) => ({
+              scope: scope.scope,
+              text: hit.record.content.text,
+              score: hit.score,
+            }));
+          } catch (error) {
+            console.warn("Harness memory scope recall degraded", {
+              tenantId: input.tenantId,
+              threadId: input.threadId,
+              participantUserId: input.participantUserId,
+              scope: scope.scope,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            return [];
+          }
+        }),
+      );
+      return batches.flat().sort((a, b) => b.score - a.score);
+    },
     async fetchWorkspaceText(key) {
       if (!workspaceBucket) return null;
       try {

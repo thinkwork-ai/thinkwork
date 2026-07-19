@@ -28,7 +28,7 @@
  * insertion, etc. The behavior must match chat-agent-invoke today.
  */
 
-import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
@@ -129,6 +129,139 @@ export function diagnosticsFromFinalizePayload(
 }
 
 /**
+ * Build the Harness publication fence from canonical persisted state.
+ *
+ * Ordinary chat turns authorize through their immutable triggering user
+ * message. Card answers intentionally create no duplicate user message, so a
+ * `question_answer` resume must instead prove the exact wakeup -> answered
+ * question -> public assistant-card -> active participant chain. Keeping the
+ * two paths explicit prevents a card resume from weakening the ordinary
+ * message fence or impersonating a different answerer.
+ */
+export function buildHarnessFinalizeAuthorizationFence(
+  payload: FinalizePayload,
+): SQL | null {
+  const claim = payload.claim;
+  if (!claim?.harness_session_id && !claim?.harness_participant_user_id) {
+    return null;
+  }
+  if (
+    !claim.harness_session_id ||
+    !claim.harness_participant_user_id ||
+    (payload.runtime_type !== "agentcore" && payload.runtime_type !== "harness")
+  ) {
+    throw new Error("Harness finalize claim is incomplete");
+  }
+
+  if (claim.invocation_source === "question_answer") {
+    return sql`EXISTS (
+      SELECT 1
+      FROM harness_participant_sessions hs
+      JOIN harness_managed_thread_enrollments he
+        ON he.id = hs.enrollment_id
+       AND he.tenant_id = hs.tenant_id
+       AND he.thread_id = hs.thread_id
+       AND he.status = 'active'
+       AND he.qualifier = hs.qualifier
+      JOIN thread_participants hp
+        ON hp.tenant_id = hs.tenant_id
+       AND hp.thread_id = hs.thread_id
+       AND hp.participant_type = 'user'
+       AND hp.user_id = hs.participant_user_id
+      JOIN thread_turns ht
+        ON ht.id = hs.turn_id
+       AND ht.tenant_id = hs.tenant_id
+       AND ht.thread_id = hs.thread_id
+       AND ht.invocation_source = 'question_answer'
+       AND ht.triggering_message_id IS NULL
+      WHERE hs.id = ${claim.harness_session_id}::uuid
+        AND hs.tenant_id = ${payload.tenant_id}::uuid
+        AND hs.thread_id = ${payload.thread_id}::uuid
+        AND hs.turn_id = ${payload.thread_turn_id}::uuid
+        AND hs.participant_user_id = ${claim.harness_participant_user_id}::uuid
+        AND hs.state = 'finalizing'
+        AND hs.base_fingerprint <> ''
+        AND hs.participant_fingerprint <> ''
+        AND EXISTS (
+          SELECT 1
+          FROM agent_wakeup_requests haw
+          JOIN pending_user_questions hpq
+            ON hpq.tenant_id = hs.tenant_id
+           AND hpq.thread_id = hs.thread_id
+           AND hpq.id::text = haw.payload->>'questionId'
+           AND hpq.status = 'answered'
+           AND hpq.answered_via = 'card'
+           AND hpq.answered_by = hs.participant_user_id
+          JOIN messages hqm
+            ON hqm.id = hpq.message_id
+           AND hqm.tenant_id = hs.tenant_id
+           AND hqm.thread_id = hs.thread_id
+           AND hqm.role = 'assistant'
+          WHERE haw.id = ht.wakeup_request_id
+            AND haw.tenant_id = hs.tenant_id
+            AND haw.agent_id = ht.agent_id
+            AND haw.source = 'question_answer'
+            AND haw.requested_by_actor_type = 'user'
+            AND haw.requested_by_actor_id = hs.participant_user_id::text
+            AND haw.payload->>'threadId' = hs.thread_id::text
+            AND coalesce(hqm.metadata->>'visibility', 'public') = 'public'
+            AND coalesce(hqm.metadata->>'disclosure_status', 'published') NOT IN ('withheld', 'confirmation_required')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM thread_public_events hpe
+          WHERE hpe.tenant_id = hs.tenant_id
+            AND hpe.thread_id = hs.thread_id
+            AND hpe.id > hs.captured_high_water
+            AND hpe.event_kind = 'invalidate'
+        )
+    )`;
+  }
+
+  return sql`EXISTS (
+    SELECT 1
+    FROM harness_participant_sessions hs
+    JOIN harness_managed_thread_enrollments he
+      ON he.id = hs.enrollment_id
+     AND he.tenant_id = hs.tenant_id
+     AND he.thread_id = hs.thread_id
+     AND he.status = 'active'
+     AND he.qualifier = hs.qualifier
+    JOIN thread_participants hp
+      ON hp.tenant_id = hs.tenant_id
+     AND hp.thread_id = hs.thread_id
+     AND hp.participant_type = 'user'
+     AND hp.user_id = hs.participant_user_id
+    JOIN thread_turns ht
+      ON ht.id = hs.turn_id
+     AND ht.tenant_id = hs.tenant_id
+     AND ht.thread_id = hs.thread_id
+    JOIN messages hm
+      ON hm.id = ht.triggering_message_id
+     AND hm.tenant_id = hs.tenant_id
+     AND hm.thread_id = hs.thread_id
+     AND hm.role = 'user'
+     AND hm.sender_id = hs.participant_user_id
+    WHERE hs.id = ${claim.harness_session_id}::uuid
+      AND hs.tenant_id = ${payload.tenant_id}::uuid
+      AND hs.thread_id = ${payload.thread_id}::uuid
+      AND hs.turn_id = ${payload.thread_turn_id}::uuid
+      AND hs.participant_user_id = ${claim.harness_participant_user_id}::uuid
+      AND hs.state = 'finalizing'
+      AND hs.base_fingerprint <> ''
+      AND hs.participant_fingerprint <> ''
+      AND coalesce(hm.metadata->>'visibility', 'public') = 'public'
+      AND coalesce(hm.metadata->>'disclosure_status', 'published') NOT IN ('withheld', 'confirmation_required')
+      AND NOT EXISTS (
+        SELECT 1 FROM thread_public_events hpe
+        WHERE hpe.tenant_id = hs.tenant_id
+          AND hpe.thread_id = hs.thread_id
+          AND hpe.id > hs.captured_high_water
+          AND hpe.event_kind = 'invalidate'
+      )
+  )`;
+}
+
+/**
  * Runs the post-AgentCore finalize chain. Reconcile is claimed before
  * `thread_turns.finalized_at` becomes terminal, so non-empty diff failures can
  * be retried. A second call after finalized_at is set skips ordinary finalize
@@ -179,64 +312,12 @@ export async function processFinalize(
       sql`COALESCE(${threadTurns.context_snapshot} #>> '{mobile_turn,ownership}', 'mobile') = ${payload.claim.context_owner}`,
     );
   }
-  if (
-    payload.claim?.harness_session_id ||
-    payload.claim?.harness_participant_user_id
-  ) {
-    if (
-      !payload.claim.harness_session_id ||
-      !payload.claim.harness_participant_user_id ||
-      (payloadRuntimeType !== "agentcore" && payloadRuntimeType !== "harness")
-    ) {
-      throw new Error("Harness finalize claim is incomplete");
-    }
-    claimConditions.push(
-      sql`EXISTS (
-        SELECT 1
-        FROM harness_participant_sessions hs
-        JOIN harness_managed_thread_enrollments he
-          ON he.id = hs.enrollment_id
-         AND he.tenant_id = hs.tenant_id
-         AND he.thread_id = hs.thread_id
-         AND he.status = 'active'
-         AND he.qualifier = hs.qualifier
-         -- The session itself is immutably pinned to its Harness version.
-         -- A newer fresh turn may advance the enrollment while this turn is
-         -- running; publication must continue to authorize the older session.
-        JOIN thread_participants hp
-          ON hp.tenant_id = hs.tenant_id
-         AND hp.thread_id = hs.thread_id
-         AND hp.participant_type = 'user'
-         AND hp.user_id = hs.participant_user_id
-        JOIN thread_turns ht
-          ON ht.id = hs.turn_id
-         AND ht.tenant_id = hs.tenant_id
-         AND ht.thread_id = hs.thread_id
-        JOIN messages hm
-          ON hm.id = ht.triggering_message_id
-         AND hm.tenant_id = hs.tenant_id
-         AND hm.thread_id = hs.thread_id
-         AND hm.role = 'user'
-         AND hm.sender_id = hs.participant_user_id
-        WHERE hs.id = ${payload.claim.harness_session_id}::uuid
-          AND hs.tenant_id = ${tenantId}::uuid
-          AND hs.thread_id = ${threadId}::uuid
-          AND hs.turn_id = ${turnId}::uuid
-          AND hs.participant_user_id = ${payload.claim.harness_participant_user_id}::uuid
-          AND hs.state = 'finalizing'
-          AND hs.base_fingerprint <> ''
-          AND hs.participant_fingerprint <> ''
-          AND coalesce(hm.metadata->>'visibility', 'public') = 'public'
-          AND coalesce(hm.metadata->>'disclosure_status', 'published') NOT IN ('withheld', 'confirmation_required')
-          AND NOT EXISTS (
-            SELECT 1 FROM thread_public_events hpe
-            WHERE hpe.tenant_id = hs.tenant_id
-              AND hpe.thread_id = hs.thread_id
-              AND hpe.id > hs.captured_high_water
-              AND hpe.event_kind = 'invalidate'
-          )
-      )`,
-    );
+  const harnessAuthorizationFence = buildHarnessFinalizeAuthorizationFence({
+    ...payload,
+    runtime_type: payloadRuntimeType,
+  });
+  if (harnessAuthorizationFence) {
+    claimConditions.push(harnessAuthorizationFence);
   }
   const claimed = await db
     .update(threadTurns)
