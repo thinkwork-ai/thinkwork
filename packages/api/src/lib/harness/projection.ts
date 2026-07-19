@@ -436,7 +436,7 @@ export function projectHarnessConfig(
     });
   }
 
-  // --- Tools: remote MCP + inline emit_document ---------------------------
+  // --- Tools: remote MCP + caller-fulfilled ThinkWork contracts -----------
   const tools: HarnessProjectedTool[] = [];
   const allowedTools: string[] = [];
   for (const mcp of input.mcpConfigs) {
@@ -501,6 +501,30 @@ export function projectHarnessConfig(
     },
   });
   allowedTools.push("emit_document");
+
+  tools.push({
+    type: "inline_function",
+    name: "goal_complete",
+    inlineFunction: {
+      description:
+        "Mark the current ThinkWork-managed Goal mode objective complete only after it is fully satisfied.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          summary: { type: "string" },
+          completion_notes: { type: "string" },
+          verification_notes: {
+            type: "array",
+            items: { type: "string" },
+            maxItems: 5,
+          },
+        },
+        required: ["summary"],
+        additionalProperties: false,
+      },
+    },
+  });
+  allowedTools.push("goal_complete");
 
   if (skillMaterializations.length > 0) {
     // Skill loading/reading rides Harness built-in tools; granting

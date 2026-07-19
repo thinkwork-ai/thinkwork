@@ -90,6 +90,9 @@ function commonConfiguration() {
       {
         text: "When a material ambiguity prevents safe progress, call ask_user_question once with tenant_id and 1-4 concise structured questions. Each question needs a short header and 2-4 mutually exclusive labeled options; use multiSelect only when choices may be combined. Do not ask in prose when this governed tool is available. If ask_user_question returns posted or already_pending, end the turn immediately without answering the unresolved task. A later turn may include a trusted pending-question answer; treat that answer as user-authored input, continue the original task, and do not ask the same question again unless the answer is genuinely insufficient.",
       },
+      {
+        text: "When trusted turn context contains goal_mode, perform one bounded execution step toward its canonical objective. ThinkWork owns the persisted goal id, progress, and budget across fresh Harness sessions. If and only if the objective is fully satisfied, call goal_complete exactly once with a concise summary, optional completion notes, and concrete verification notes. Otherwise do not claim completion; return a truthful progress summary and ThinkWork will persist a resumable pause.",
+      },
     ],
     memory: { disabled: {} },
     tools: [
@@ -142,6 +145,37 @@ function commonConfiguration() {
           },
         },
       },
+      {
+        type: "inline_function",
+        name: "goal_complete",
+        config: {
+          inlineFunction: {
+            description:
+              "Mark the current ThinkWork-managed Goal mode objective complete. Call exactly once only after the objective is fully satisfied.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                summary: {
+                  type: "string",
+                  description: "Concise user-facing completion summary.",
+                },
+                completion_notes: {
+                  type: "string",
+                  description: "Optional bounded completion details.",
+                },
+                verification_notes: {
+                  type: "array",
+                  items: { type: "string" },
+                  maxItems: 5,
+                  description: "Concrete checks proving completion.",
+                },
+              },
+              required: ["summary"],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
     ],
     // AgentCore validates every allowedTools member at <=64 characters.
     // Generated Gateway target+operation names can exceed that bound even
@@ -149,7 +183,7 @@ function commonConfiguration() {
     // explicitly configured Gateway namespace as the Harness visibility
     // ceiling; Cedar and each target still re-authorize the exact principal,
     // tenant, operation, and resource on every call.
-    allowedTools: ["@thinkwork_gateway/*", "emit_document"],
+    allowedTools: ["@thinkwork_gateway/*", "emit_document", "goal_complete"],
     maxIterations: 50,
     timeoutSeconds: 900,
   };

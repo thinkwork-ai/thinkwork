@@ -40,6 +40,7 @@ import {
   users,
   costEvents,
   agentWorkspaceRuns,
+  pendingUserQuestions,
   threadAttachments,
   scheduledJobs,
 } from "@thinkwork/database-pg/schema";
@@ -152,6 +153,7 @@ import {
 } from "../lib/goal-mode.js";
 import { normalizeThreadJsonRenderParts } from "../lib/chat-finalize/notify.js";
 import { goalRunProjectionFromFinalizePayload } from "../lib/chat-finalize/process-finalize.js";
+import { goalModeFromQuestionSourceTurn } from "../lib/harness/question-goal-resume.js";
 import { sendThreadReplySlack } from "../lib/slack/thread-reply.js";
 import { projectWorkflowStepFinalizeSafely } from "../lib/workflows/workflow-step-finalize.js";
 import {
@@ -2542,6 +2544,47 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           payload.goalMode as RuntimeGoalMode,
         ),
       });
+    }
+
+    if (wakeup.source === "question_answer") {
+      const questionId =
+        typeof payload?.questionId === "string" ? payload.questionId : null;
+      if (!questionId || !runThreadId) {
+        throw new Error(
+          "question_answer wakeup is missing questionId or threadId",
+        );
+      }
+      const [source] = await db
+        .select({
+          resultJson: threadTurns.result_json,
+          usageJson: threadTurns.usage_json,
+        })
+        .from(pendingUserQuestions)
+        .innerJoin(
+          threadTurns,
+          and(
+            eq(threadTurns.id, pendingUserQuestions.thread_turn_id),
+            eq(threadTurns.tenant_id, pendingUserQuestions.tenant_id),
+            eq(threadTurns.thread_id, pendingUserQuestions.thread_id),
+          ),
+        )
+        .where(
+          and(
+            eq(pendingUserQuestions.id, questionId),
+            eq(pendingUserQuestions.tenant_id, wakeup.tenant_id),
+            eq(pendingUserQuestions.thread_id, runThreadId),
+          ),
+        )
+        .limit(1);
+      const resumedGoal = goalModeFromQuestionSourceTurn({
+        resultJson: source?.resultJson,
+        usageJson: source?.usageJson,
+      });
+      if (resumedGoal) {
+        Object.assign(agentCorePayload, {
+          goal_mode: toRuntimeGoalModePayload(resumedGoal),
+        });
+      }
     }
 
     // Workflow interpreter agent step (THINK-219 U6): the wakeup runs in Pi

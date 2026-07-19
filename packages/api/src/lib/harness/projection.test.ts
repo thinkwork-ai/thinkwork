@@ -110,11 +110,23 @@ describe("projectHarnessConfig — reference-run happy path", () => {
           inputSchema: expect.objectContaining({ type: "object" }),
         },
       },
+      {
+        type: "inline_function",
+        name: "goal_complete",
+        inlineFunction: {
+          description: expect.stringContaining("Goal mode"),
+          inputSchema: expect.objectContaining({
+            type: "object",
+            required: ["summary"],
+          }),
+        },
+      },
     ]);
     // Connector narrowing (operations: ["query"]) becomes allowedTools.
     expect(config.allowedTools).toEqual([
       "@lastmile-data/query",
       "emit_document",
+      "goal_complete",
       "@builtin",
     ]);
     // Only the real content skill materializes; platform skills are

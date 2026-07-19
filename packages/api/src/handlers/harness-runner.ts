@@ -13,7 +13,7 @@
  * (runtime_type='agentcore' exclusion) and releases the thread checkout.
  */
 
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, desc, or, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { threadTurns } from "@thinkwork/database-pg/schema";
 import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
@@ -378,6 +378,32 @@ function createRealDeps(): HarnessRunnerDeps {
         );
     },
     loadToolExecutions: loadTurnToolExecutionInvocations,
+    async loadGoalRun({ tenantId, threadId, agentId, goalId }) {
+      const db = getDb();
+      const [row] = await db
+        .select({
+          result_json: threadTurns.result_json,
+          usage_json: threadTurns.usage_json,
+        })
+        .from(threadTurns)
+        .where(
+          and(
+            eq(threadTurns.tenant_id, tenantId),
+            eq(threadTurns.thread_id, threadId),
+            eq(threadTurns.agent_id, agentId),
+            eq(threadTurns.status, "succeeded"),
+            or(
+              sql`${threadTurns.result_json}->'goal_run'->>'goal_id' = ${goalId}`,
+              sql`${threadTurns.usage_json}->'goal_run'->>'goal_id' = ${goalId}`,
+            ),
+          ),
+        )
+        .orderBy(desc(threadTurns.created_at))
+        .limit(1);
+      const result = readRecord(row?.result_json).goal_run;
+      const usage = readRecord(row?.usage_json).goal_run;
+      return readRecord(result ?? usage);
+    },
     collectConnectorEvidence: async (input) =>
       collectGovernedConnectorEvidence({
         profile: {
@@ -412,6 +438,12 @@ function createRealDeps(): HarnessRunnerDeps {
       }
     },
   };
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 export async function handler(event: unknown): Promise<{ ok: boolean }> {
