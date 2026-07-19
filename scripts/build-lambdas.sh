@@ -34,7 +34,8 @@ ESBUILD_FLAGS=(
 )
 
 # graphql-http, memory-retain, mcp-user-memory,
-# mcp-context-engine, requester-memory-dreaming, eval-runner, eval-worker, wiki-compile, and ontology-scan use AWS Bedrock SDKs
+# mcp-context-engine, requester-memory-dreaming, eval-runner, eval-worker,
+# wakeup-processor, wiki-compile, and ontology-scan use AWS Bedrock SDKs
 # (@aws-sdk/client-bedrock-agentcore for memory adapter commands;
 # @aws-sdk/client-bedrock-runtime for eval-runner's Converse judge and
 # wiki-compile's InvokeModel planner/section-writer) that aren't in the default
@@ -87,7 +88,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "harness-runner" ] || [ "$name" = "harness-capability-mcp" ] || [ "$name" = "harness-code-interpreter-target" ] || [ "$name" = "harness-builtin-tools-target" ] || [ "$name" = "harness-platform-tools-target" ] || [ "$name" = "agentcore-proof-oauth-provider" ] || [ "$name" = "skills" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "harness-runner" ] || [ "$name" = "harness-capability-mcp" ] || [ "$name" = "harness-code-interpreter-target" ] || [ "$name" = "harness-builtin-tools-target" ] || [ "$name" = "harness-platform-tools-target" ] || [ "$name" = "agentcore-proof-oauth-provider" ] || [ "$name" = "skills" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \

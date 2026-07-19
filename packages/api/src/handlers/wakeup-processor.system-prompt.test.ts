@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extractComposedSystemPrompt,
   invokeAgentCore,
+  resolveWakeupRuntimeType,
   shouldInsertSyntheticWakeupUserMessage,
   SOURCES_WITH_MESSAGES,
 } from "./wakeup-processor.js";
@@ -28,6 +29,50 @@ beforeEach(() => {
 });
 
 describe("wakeup processor system prompt capture", () => {
+  it("routes workflow automations through the tenant-selected AgentCore runtime", () => {
+    expect(
+      resolveWakeupRuntimeType({
+        source: "workflow_step",
+        agentRuntime: "pi",
+        templateRuntime: "pi",
+        runtimeConfig: { defaultThreadRuntime: "agentcore" },
+      }),
+    ).toBe("agentcore");
+  });
+
+  it("honors a selected Pi runtime for background automation", () => {
+    expect(
+      resolveWakeupRuntimeType({
+        source: "trigger",
+        agentRuntime: "agentcore",
+        templateRuntime: "agentcore",
+        runtimeConfig: { defaultThreadRuntime: "pi" },
+      }),
+    ).toBe("pi");
+  });
+
+  it("does not reinterpret interactive wakeups after the default changes", () => {
+    expect(
+      resolveWakeupRuntimeType({
+        source: "chat_message",
+        agentRuntime: "pi",
+        templateRuntime: "pi",
+        runtimeConfig: { defaultThreadRuntime: "agentcore" },
+      }),
+    ).toBe("pi");
+  });
+
+  it("preserves legacy automation routing when no selected default exists", () => {
+    expect(
+      resolveWakeupRuntimeType({
+        source: "agent_loop",
+        agentRuntime: "agentcore",
+        templateRuntime: "pi",
+        runtimeConfig: {},
+      }),
+    ).toBe("agentcore");
+  });
+
   it("extracts the composed prompt returned at the top level", () => {
     expect(
       extractComposedSystemPrompt({
