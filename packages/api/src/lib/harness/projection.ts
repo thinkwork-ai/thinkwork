@@ -161,9 +161,19 @@ export interface HarnessProjectedInlineFunctionTool {
   };
 }
 
+export interface HarnessProjectedAgentCoreBrowserTool {
+  type: "agentcore_browser";
+  name: "browser_automation";
+  config: {
+    /** Empty selects AWS's built-in managed Browser ARN. */
+    agentCoreBrowser: Record<string, never>;
+  };
+}
+
 export type HarnessProjectedTool =
   | HarnessProjectedRemoteMcpTool
-  | HarnessProjectedInlineFunctionTool;
+  | HarnessProjectedInlineFunctionTool
+  | HarnessProjectedAgentCoreBrowserTool;
 
 /**
  * A skill folder the runner must materialize into an AgentSkills-shaped
@@ -310,14 +320,6 @@ export function projectHarnessConfig(
       detail: `${surface.piExtensionCount} Pi extension(s) are assigned; extension tools are Pi-runtime code with no Harness analogue`,
     });
   }
-  if (surface.browserAutomationEnabled) {
-    return reject({
-      kind: "adapter_unimplemented",
-      capability: "browser_automation",
-      detail:
-        "agent has browser automation enabled; Harness offers agentCoreBrowser but the trial adapter does not project it",
-    });
-  }
   // --- Model -------------------------------------------------------------
   if (!input.modelId) {
     return reject({
@@ -439,6 +441,14 @@ export function projectHarnessConfig(
   // --- Tools: remote MCP + caller-fulfilled ThinkWork contracts -----------
   const tools: HarnessProjectedTool[] = [];
   const allowedTools: string[] = [];
+  if (surface.browserAutomationEnabled) {
+    tools.push({
+      type: "agentcore_browser",
+      name: "browser_automation",
+      config: { agentCoreBrowser: {} },
+    });
+    allowedTools.push("browser_automation");
+  }
   for (const mcp of input.mcpConfigs) {
     const name = mcp.name?.trim();
     if (!name) {

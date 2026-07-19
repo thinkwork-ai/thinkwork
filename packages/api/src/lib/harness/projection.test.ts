@@ -220,11 +220,6 @@ describe("projectHarnessConfig — AE2 rejections name the capability", () => {
 
   it.each([
     [{ piExtensionCount: 2 }, "harness_unsupported", "pi_extensions"],
-    [
-      { browserAutomationEnabled: true },
-      "adapter_unimplemented",
-      "browser_automation",
-    ],
   ] as const)("rejects %o as %s (%s)", (surfacePatch, kind, capability) => {
     const input = referenceInput();
     const result = projectHarnessConfig({
@@ -235,6 +230,30 @@ describe("projectHarnessConfig — AE2 rejections name the capability", () => {
       ok: false,
       rejection: expect.objectContaining({ kind, capability }),
     });
+  });
+
+  it("projects enabled Browser Automation to the native managed Browser", () => {
+    const input = referenceInput();
+    const result = projectHarnessConfig({
+      ...input,
+      capabilitySurface: {
+        ...input.capabilitySurface,
+        browserAutomationEnabled: true,
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.config.tools).toContainEqual({
+      type: "agentcore_browser",
+      name: "browser_automation",
+      config: { agentCoreBrowser: {} },
+    });
+    expect(result.config.allowedTools).toContain("browser_automation");
+    expect(result.config.evidence.exclusions).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ capability: "browser_automation" }),
+      ]),
+    );
   });
 
   it("rejects when the manifest fingerprint is absent (R9 evidence contract)", () => {
