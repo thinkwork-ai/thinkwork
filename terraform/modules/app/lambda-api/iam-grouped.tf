@@ -105,31 +105,6 @@ locals {
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*/plugin-tokens/*"
       },
-      # Backend notification publishing is IAM-only. Scope the shared API
-      # execution role to the twelve NONE-resolver mutation fields; end-user
-      # identity-pool credentials have no AppSync grant.
-      {
-        Sid    = "PublishAppSyncNotifications"
-        Effect = "Allow"
-        Action = ["appsync:GraphQL"]
-        Resource = [
-          for field in [
-            "notifyAgentStatus",
-            "notifyNewMessage",
-            "notifyHeartbeatActivity",
-            "notifyThreadActivity",
-            "notifyThreadUpdate",
-            "notifyInboxItemUpdate",
-            "notifyThreadTurnUpdate",
-            "notifyThreadTurnStep",
-            "notifyOrgUpdate",
-            "notifyCostRecorded",
-            "notifyEvalRunUpdate",
-            "notifyWorkspaceAccessRevoked",
-            "invalidateSubscription",
-          ] : "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}/types/Mutation/fields/${field}"
-        ]
-      },
       # (was inline policy "s3-access" — the workspace bucket)
       {
         Effect = "Allow"
@@ -1063,6 +1038,33 @@ locals {
   )
 
   api_observability_statements = concat(local.api_observability_sqs_statements, [
+    # Backend notification publishing is IAM-only. Scope the shared API
+    # execution role to the NONE-resolver mutation fields; end-user identity-
+    # pool credentials have no AppSync grant. This statement lives in the
+    # observability envelope for size balance: adding subscription invalidation
+    # pushed the data-plane policy over IAM's 6,144-character hard cap.
+    {
+      Sid    = "PublishAppSyncNotifications"
+      Effect = "Allow"
+      Action = ["appsync:GraphQL"]
+      Resource = [
+        for field in [
+          "notifyAgentStatus",
+          "notifyNewMessage",
+          "notifyHeartbeatActivity",
+          "notifyThreadActivity",
+          "notifyThreadUpdate",
+          "notifyInboxItemUpdate",
+          "notifyThreadTurnUpdate",
+          "notifyThreadTurnStep",
+          "notifyOrgUpdate",
+          "notifyCostRecorded",
+          "notifyEvalRunUpdate",
+          "notifyWorkspaceAccessRevoked",
+          "invalidateSubscription",
+        ] : "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}/types/Mutation/fields/${field}"
+      ]
+    },
     # (was inline policy "cloudwatch-logs-read")
     {
       Effect = "Allow"
@@ -1106,16 +1108,41 @@ locals {
       Resource = "*"
     },
   ])
+
+  api_grouped_policy_documents = {
+    data_plane = jsonencode({
+      Version   = "2012-10-17"
+      Statement = local.api_data_plane_statements
+    })
+    orchestration = jsonencode({
+      Version   = "2012-10-17"
+      Statement = local.api_orchestration_statements
+    })
+    ai = jsonencode({
+      Version   = "2012-10-17"
+      Statement = local.api_ai_statements
+    })
+    observability = jsonencode({
+      Version   = "2012-10-17"
+      Statement = local.api_observability_statements
+    })
+  }
+}
+
+check "api_grouped_managed_policy_sizes" {
+  assert {
+    condition = alltrue([
+      for document in values(local.api_grouped_policy_documents) : length(document) <= 6144
+    ])
+    error_message = "Each grouped API managed-policy document must remain within AWS IAM's 6,144-character limit."
+  }
 }
 
 resource "aws_iam_policy" "api_data_plane" {
   name        = "thinkwork-${var.stage}-api-data-plane"
   description = "Grouped data-plane grants (RDS Data API, Secrets Manager, S3, DynamoDB, Cognito, SSM, KMS-via-SSM, SQS) for the shared api Lambda role"
 
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = local.api_data_plane_statements
-  })
+  policy = local.api_grouped_policy_documents.data_plane
 }
 
 resource "aws_iam_role_policy_attachment" "api_data_plane" {
@@ -1127,10 +1154,7 @@ resource "aws_iam_policy" "api_orchestration" {
   name        = "thinkwork-${var.stage}-api-orchestration"
   description = "Grouped orchestration grants (Lambda invoke, EventBridge Scheduler, Step Functions, SES) for the shared api Lambda role"
 
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = local.api_orchestration_statements
-  })
+  policy = local.api_grouped_policy_documents.orchestration
 }
 
 resource "aws_iam_role_policy_attachment" "api_orchestration" {
@@ -1142,10 +1166,7 @@ resource "aws_iam_policy" "api_ai" {
   name        = "thinkwork-${var.stage}-api-ai"
   description = "Grouped AI grants (Bedrock invoke, Knowledge Bases, AgentCore memory/eval/code-interpreter) for the shared api Lambda role"
 
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = local.api_ai_statements
-  })
+  policy = local.api_grouped_policy_documents.ai
 }
 
 resource "aws_iam_role_policy_attachment" "api_ai" {
@@ -1157,10 +1178,7 @@ resource "aws_iam_policy" "api_observability" {
   name        = "thinkwork-${var.stage}-api-observability"
   description = "Grouped observability grants (CloudWatch Logs reads, ECS/ALB health reads) for the shared api Lambda role"
 
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = local.api_observability_statements
-  })
+  policy = local.api_grouped_policy_documents.observability
 }
 
 resource "aws_iam_role_policy_attachment" "api_observability" {

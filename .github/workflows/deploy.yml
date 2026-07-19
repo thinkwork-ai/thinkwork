@@ -1704,6 +1704,13 @@ jobs:
 
           terraform apply -auto-approve -lock-timeout=10m "$plan_file"
 
+      - name: Reconcile Cognito-native auth metadata
+        env:
+          API_AUTH_SECRET: ${{ secrets.API_AUTH_SECRET }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          MICROSOFT_OAUTH_TENANT: ${{ secrets.MICROSOFT_OAUTH_TENANT }}
+        run: python3 scripts/deploy/reconcile-native-auth.py
+
       - name: Restart Twenty CRM runtime after database prep
         working-directory: terraform/examples/greenfield
         run: |
