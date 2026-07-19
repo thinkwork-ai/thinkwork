@@ -8,6 +8,7 @@ const {
   routeRows,
   routeRowQueue,
   selectQueue,
+  selectWheres,
   updates,
 } = vi.hoisted(() => ({
   inserts: [] as unknown[],
@@ -26,6 +27,7 @@ const {
     }>
   >,
   selectQueue: [] as unknown[][],
+  selectWheres: [] as unknown[],
   updates: [] as unknown[],
 }));
 
@@ -77,6 +79,7 @@ vi.mock("@thinkwork/database-pg/schema", () => {
 vi.mock("drizzle-orm", () => ({
   and: (...values: unknown[]) => ({ and: values }),
   eq: (left: unknown, right: unknown) => ({ eq: [left, right] }),
+  inArray: (left: unknown, right: unknown[]) => ({ inArray: [left, right] }),
   ne: (left: unknown, right: unknown) => ({ ne: [left, right] }),
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
     strings,
@@ -96,7 +99,14 @@ vi.mock("../lib/db.js", () => {
   const tx = {
     execute: () =>
       Promise.resolve({ rows: routeRowQueue.shift() ?? routeRows }),
-    select: () => ({ from: () => ({ where: selectResult }) }),
+    select: () => ({
+      from: () => ({
+        where: (where: unknown) => {
+          selectWheres.push(where);
+          return selectResult();
+        },
+      }),
+    }),
     insert: (table: unknown) => ({
       values: (values: unknown) => {
         inserts.push({ table, values });
@@ -190,6 +200,7 @@ describe("identity enrollment", () => {
     routeRows.length = 0;
     routeRowQueue.length = 0;
     selectQueue.length = 0;
+    selectWheres.length = 0;
     updates.length = 0;
     mockAdmitCognitoTenant.mockReset();
     mockAuthenticate.mockReset();
@@ -314,8 +325,11 @@ describe("identity enrollment", () => {
     });
   });
 
-  it("issues recovery only for an active member with a quarantined identity", async () => {
-    selectQueue.push([{ id: "member-1" }], [{ id: "quarantined-identity-1" }]);
+  it("issues recovery for an active member with a quarantined identity", async () => {
+    selectQueue.push(
+      [{ id: "member-1" }],
+      [{ id: "quarantined-identity-1", status: "quarantined" }],
+    );
     routeRows.push({
       route_client_id: "route-google",
       route_key: "google-web",
@@ -340,7 +354,44 @@ describe("identity enrollment", () => {
     });
   });
 
-  it("refuses recovery when no quarantined identity exists", async () => {
+  it("issues recovery for an active member with an existing active identity so another provider can be linked", async () => {
+    selectQueue.push(
+      [{ id: "member-1" }],
+      [{ id: "microsoft-identity-1", status: "active" }],
+    );
+    routeRows.push(
+      {
+        route_client_id: "route-google",
+        route_key: "google-web",
+        connection_id: "connection-google",
+      },
+      {
+        route_client_id: "route-microsoft",
+        route_key: "microsoft-web",
+        connection_id: "connection-microsoft",
+      },
+    );
+
+    const issued = await issueIdentityRecoveryGrant({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      redirectUri: "https://app.example.com/auth/callback",
+    });
+
+    expect(issued.routeKeys).toEqual(["google-web", "microsoft-web"]);
+    expect(JSON.stringify(selectWheres[1])).toContain("active");
+    expect(inserts[0]).toMatchObject({
+      values: expect.arrayContaining([
+        expect.objectContaining({
+          intended_user_id: "user-1",
+          recipient_grant_kind: "identity_recovery",
+          recipient_grant_id: "member-1",
+        }),
+      ]),
+    });
+  });
+
+  it("refuses recovery when the intended user has no prior identity proof", async () => {
     selectQueue.push([{ id: "member-1" }], []);
 
     await expect(
@@ -349,7 +400,7 @@ describe("identity enrollment", () => {
         userId: "user-1",
         redirectUri: "https://app.example.com/auth/callback",
       }),
-    ).rejects.toMatchObject({ code: "quarantined_identity_not_found" });
+    ).rejects.toMatchObject({ code: "recoverable_identity_not_found" });
     expect(inserts).toHaveLength(0);
   });
 
@@ -712,8 +763,8 @@ describe("identity enrollment", () => {
     );
   });
 
-  it("rejects a forwarded start link without the recipient challenge", async () => {
-    const grant = enrollment();
+  it("does not link a verified-email federated subject without the recipient challenge", async () => {
+    const grant = enrollment({ recipient_grant_kind: "identity_recovery" });
     selectQueue.push([grant], [grant]);
     await expect(
       consumeEnrollment(
@@ -722,7 +773,12 @@ describe("identity enrollment", () => {
           recipientChallenge: "wrong",
           redirectUri: "https://app.example.com/auth/callback",
         },
-        auth,
+        {
+          ...auth,
+          principalId: "new-google-cognito-sub",
+          email: "existing-member@example.com",
+          emailVerified: true,
+        },
         new Date("2026-07-18T00:00:00Z"),
       ),
     ).resolves.toBe("invalid_challenge");

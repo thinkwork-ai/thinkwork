@@ -8,7 +8,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import {
   authIdentityEnrollments,
   authSubscriptionInvalidations,
@@ -63,7 +63,7 @@ export class IdentityRecoveryGrantError extends Error {
   constructor(
     readonly code:
       | "active_membership_not_found"
-      | "quarantined_identity_not_found",
+      | "recoverable_identity_not_found",
   ) {
     super(code);
     this.name = "IdentityRecoveryGrantError";
@@ -238,19 +238,24 @@ export async function issueIdentityRecoveryGrant(
       throw new IdentityRecoveryGrantError("active_membership_not_found");
     }
 
-    const [quarantinedIdentity] = await tx
-      .select({ id: userAuthIdentities.id })
+    // Recovery is also the proof-bound path for adding another admitted
+    // provider to an existing user. Requiring a prior active or quarantined
+    // identity prevents an operator from using this endpoint as first-owner
+    // bootstrap, while the one-use link + separately delivered challenge still
+    // chooses the exact replacement/additional Cognito subject at consumption.
+    const [knownIdentity] = await tx
+      .select({ id: userAuthIdentities.id, status: userAuthIdentities.status })
       .from(userAuthIdentities)
       .where(
         and(
           eq(userAuthIdentities.tenant_id, input.tenantId),
           eq(userAuthIdentities.user_id, input.userId),
-          eq(userAuthIdentities.status, "quarantined"),
+          inArray(userAuthIdentities.status, ["active", "quarantined"]),
         ),
       )
       .limit(1);
-    if (!quarantinedIdentity) {
-      throw new IdentityRecoveryGrantError("quarantined_identity_not_found");
+    if (!knownIdentity) {
+      throw new IdentityRecoveryGrantError("recoverable_identity_not_found");
     }
 
     return issueEnrollmentGrants({
