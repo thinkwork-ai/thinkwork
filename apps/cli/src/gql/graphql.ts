@@ -3196,6 +3196,31 @@ export type IngestSpaceMemoryDocumentInput = {
   title?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type InstallOntologyPackInput = {
+  packSlug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type InstallOntologyPackPayload = {
+  __typename?: "InstallOntologyPackPayload";
+  /**
+   * The staged (or re-surfaced) change set. Null when every pack item merged
+   * into other pending items, conflicted, or was skipped as rejected.
+   */
+  changeSet?: Maybe<OntologyChangeSet>;
+  conflicts: Array<OntologyChangeSetSlugConflict>;
+  /**
+   * Items whose slug matched an existing pending item — merged in place
+   * instead of duplicating (R14/AE6).
+   */
+  mergedItemIds: Array<Scalars["ID"]["output"]>;
+  /**
+   * Pack slugs skipped because the operator previously rejected them
+   * (R13 fingerprints) — re-install never resurrects a rejection.
+   */
+  skippedRejectedSlugs: Array<Scalars["String"]["output"]>;
+};
+
 export type InstallPluginInput = {
   idempotencyKey: Scalars["String"]["input"];
   /** ThinkWork-provided one-time key for premium plugins when no entitlement exists. */
@@ -4612,6 +4637,12 @@ export type Mutation = {
   ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   /**
+   * Stage a seed-template pack as a pre-staged change set (THINK-320 U3/R11).
+   * Existing hand-authored slugs merge or surface as conflicts (R14); rejected
+   * fingerprints are skipped and deferred items re-surface (R13).
+   */
+  installOntologyPack: InstallOntologyPackPayload;
+  /**
    * Install a catalog plugin tenant-wide (tenant admin). Idempotent per
    * (tenant, plugin): a concurrent call returns the in-flight install; a
    * stuck-installing install past the staleness threshold re-drives the
@@ -5494,6 +5525,10 @@ export type MutationIngestSpaceMemoryDocumentArgs = {
 
 export type MutationInstallManagedApplicationMcpServerArgs = {
   key: Scalars["String"]["input"];
+};
+
+export type MutationInstallOntologyPackArgs = {
+  input: InstallOntologyPackInput;
 };
 
 export type MutationInstallPluginArgs = {
@@ -6743,6 +6778,38 @@ export enum OntologyMappingKind {
   Related = "RELATED",
 }
 
+/**
+ * Named bundle of dormant seed templates (THINK-320 U3/R11), browsable in the
+ * Ontology tab. Install stages the pack as a pre-staged change set for
+ * one-click admin approval — nothing applies without review.
+ */
+export type OntologyPack = {
+  __typename?: "OntologyPack";
+  description: Scalars["String"]["output"];
+  name: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+  types: Array<OntologyPackType>;
+};
+
+export type OntologyPackType = {
+  __typename?: "OntologyPackType";
+  description?: Maybe<Scalars["String"]["output"]>;
+  name: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+  state: OntologyPackTypeState;
+};
+
+/**
+ * Per-type install state inside a pack (THINK-320 U3/R11): APPROVED — the
+ * type is an approved definition; PENDING — a change-set item for the type is
+ * awaiting review; AVAILABLE — installable.
+ */
+export enum OntologyPackTypeState {
+  Approved = "APPROVED",
+  Available = "AVAILABLE",
+  Pending = "PENDING",
+}
+
 export type OntologyRelationshipType = {
   __typename?: "OntologyRelationshipType";
   aliases: Array<Scalars["String"]["output"]>;
@@ -7457,6 +7524,8 @@ export type Query = {
   n8nPluginSettings?: Maybe<N8nPluginSettings>;
   ontologyChangeSets: Array<OntologyChangeSet>;
   ontologyDefinitions: OntologyDefinitions;
+  /** Installable seed-template bundles with per-type state (THINK-320 U3/R11). */
+  ontologyPacks: Array<OntologyPack>;
   ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
   /**
    * Living Map feed (THINK-320 U1): approved types with live instance
@@ -8253,6 +8322,10 @@ export type QueryOntologyChangeSetsArgs = {
 };
 
 export type QueryOntologyDefinitionsArgs = {
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryOntologyPacksArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 

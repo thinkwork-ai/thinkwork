@@ -390,6 +390,60 @@ type CreateOntologyChangeSetPayload {
   conflicts: [OntologyChangeSetSlugConflict!]!
 }
 
+"""
+Per-type install state inside a pack (THINK-320 U3/R11): APPROVED — the
+type is an approved definition; PENDING — a change-set item for the type is
+awaiting review; AVAILABLE — installable.
+"""
+enum OntologyPackTypeState {
+  APPROVED
+  PENDING
+  AVAILABLE
+}
+
+type OntologyPackType {
+  slug: String!
+  name: String!
+  description: String
+  state: OntologyPackTypeState!
+}
+
+"""
+Named bundle of dormant seed templates (THINK-320 U3/R11), browsable in the
+Ontology tab. Install stages the pack as a pre-staged change set for
+one-click admin approval — nothing applies without review.
+"""
+type OntologyPack {
+  slug: String!
+  name: String!
+  description: String!
+  types: [OntologyPackType!]!
+}
+
+input InstallOntologyPackInput {
+  tenantId: ID!
+  packSlug: String!
+}
+
+type InstallOntologyPackPayload {
+  """
+  The staged (or re-surfaced) change set. Null when every pack item merged
+  into other pending items, conflicted, or was skipped as rejected.
+  """
+  changeSet: OntologyChangeSet
+  """
+  Items whose slug matched an existing pending item — merged in place
+  instead of duplicating (R14/AE6).
+  """
+  mergedItemIds: [ID!]!
+  conflicts: [OntologyChangeSetSlugConflict!]!
+  """
+  Pack slugs skipped because the operator previously rejected them
+  (R13 fingerprints) — re-install never resurrects a rejection.
+  """
+  skippedRejectedSlugs: [String!]!
+}
+
 input RejectOntologyChangeSetInput {
   tenantId: ID!
   changeSetId: ID!
@@ -439,6 +493,10 @@ extend type Query {
   counts, approved relationships, and pending candidate items.
   """
   ontologySchemaGraph(tenantId: ID!): OntologySchemaGraph!
+  """
+  Installable seed-template bundles with per-type state (THINK-320 U3/R11).
+  """
+  ontologyPacks(tenantId: ID!): [OntologyPack!]!
   ontologyChangeSets(
     tenantId: ID!
     status: OntologyChangeSetStatus
@@ -457,6 +515,14 @@ extend type Mutation {
   createOntologyChangeSet(
     input: CreateOntologyChangeSetInput!
   ): CreateOntologyChangeSetPayload!
+  """
+  Stage a seed-template pack as a pre-staged change set (THINK-320 U3/R11).
+  Existing hand-authored slugs merge or surface as conflicts (R14); rejected
+  fingerprints are skipped and deferred items re-surface (R13).
+  """
+  installOntologyPack(
+    input: InstallOntologyPackInput!
+  ): InstallOntologyPackPayload!
   updateOntologyChangeSet(
     input: UpdateOntologyChangeSetInput!
   ): OntologyChangeSet!

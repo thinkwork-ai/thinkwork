@@ -26,7 +26,6 @@ import {
   InvokeHarnessCommand,
   type HarnessMessage,
   type HarnessModelConfiguration,
-  type HarnessTool,
   type HarnessSystemContentBlock,
 } from "@aws-sdk/client-bedrock-agentcore";
 import {
@@ -41,6 +40,7 @@ import {
 import { handleDocumentEmission } from "../lib/artifacts/document-emission.js";
 import { processFinalize } from "../lib/chat-finalize/process-finalize.js";
 import { requireHarnessManagedProfile } from "../lib/harness/managed-profile.js";
+import type { HarnessInvocationTool } from "../lib/harness/managed-profile.js";
 import {
   abandonFreshHarnessTurn,
   prepareFreshHarnessTurn,
@@ -126,6 +126,9 @@ async function resolveHarness(input: {
     gatewayTargetName: profile.gatewayTargetName,
     identityWorkloadName: profile.identityWorkloadName,
     identityCredentialProviderName: profile.identityCredentialProviderName,
+    ...(profile.invocationTools
+      ? { invocationTools: profile.invocationTools }
+      : {}),
   };
 }
 
@@ -241,7 +244,7 @@ async function* invokeHarnessWithBearer(input: {
   messages: HarnessInvokeMessage[];
   modelId?: string;
   allowedTools?: string[];
-  tools?: Array<Record<string, unknown>>;
+  tools?: HarnessInvocationTool[];
   systemPrompt?: Array<{ text: string }>;
   maxIterations?: number;
 }): AsyncIterable<HarnessStreamEvent> {
@@ -283,9 +286,7 @@ async function* invokeHarnessWithBearer(input: {
         messages: input.messages as unknown as HarnessMessage[],
         ...(model ? { model } : {}),
         ...(input.allowedTools ? { allowedTools: input.allowedTools } : {}),
-        ...(input.tools
-          ? { tools: input.tools as unknown as HarnessTool[] }
-          : {}),
+        ...(input.tools ? { tools: input.tools } : {}),
         ...(input.systemPrompt
           ? {
               systemPrompt: input.systemPrompt as HarnessSystemContentBlock[],

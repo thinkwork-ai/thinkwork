@@ -2773,6 +2773,37 @@ resource "aws_scheduler_schedule" "knowledge_graph_observations_ingest" {
   }
 }
 
+# Ontology suggestion scan sweep (THINK-320 U4/KTD-3). Enumerates tenants and
+# starts a suggestion scan job per tenant; tenants with a pending/running scan
+# are skipped in the handler, and the scan-job dedupe key drops same-bucket
+# duplicate starts. Ships DISABLED — enabled per stage via
+# ontology_scan_sweep_enabled after the Living Map review surfaces land.
+resource "aws_scheduler_schedule" "ontology_scan_sweep" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-ontology-scan-sweep"
+  group_name          = "default"
+  schedule_expression = "rate(1 days)"
+  state               = var.ontology_scan_sweep_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["ontology-scan"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ sweep = true, trigger = "scheduled" })
+
+    # Periodic idempotent worker: the next daily tick IS the retry (mirrors
+    # the knowledge_graph_observations_ingest precedent — scheduler retries
+    # only stack invocations onto a self-correcting cadence).
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
 resource "aws_scheduler_schedule" "wiki_lint" {
   count = local.deploy_lambda_handlers ? 1 : 0
 

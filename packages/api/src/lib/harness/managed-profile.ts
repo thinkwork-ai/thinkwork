@@ -1,4 +1,12 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
+import type { HarnessTool } from "@aws-sdk/client-bedrock-agentcore";
+import { createHash } from "node:crypto";
+
+export type HarnessInvocationTool = HarnessTool & {
+  type: NonNullable<HarnessTool["type"]>;
+  name: string;
+  config: NonNullable<HarnessTool["config"]>;
+};
 
 export type HarnessReadinessState =
   | "disabled"
@@ -17,10 +25,14 @@ export interface HarnessManagedProfile {
   status: string;
   configurationFingerprint: string;
   sessionStrategy: string;
+  gatewayArn?: string;
   gatewayUrl: string;
   gatewayTargetName: string;
   identityWorkloadName: string;
   identityCredentialProviderName: string;
+  identityCredentialProviderArn?: string;
+  invocationToolsFingerprint?: string;
+  invocationTools?: HarnessInvocationTool[];
 }
 
 export interface HarnessReadiness {
@@ -35,10 +47,14 @@ export interface HarnessReadiness {
   modelId: string | null;
   configurationFingerprint: string | null;
   sessionStrategy: string | null;
+  gatewayArn: string | null;
   gatewayUrl: string | null;
   gatewayTargetName: string | null;
   identityWorkloadName: string | null;
   identityCredentialProviderName: string | null;
+  identityCredentialProviderArn: string | null;
+  invocationToolsFingerprint: string | null;
+  invocationTools: HarnessInvocationTool[] | null;
   checkedAt: string;
 }
 
@@ -61,6 +77,175 @@ function requiredProfileString(
   return value.trim();
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function recordProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function fingerprintHarnessInvocationTools(value: unknown): string {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+const REQUIRED_INVOCATION_TOOLS: ReadonlyMap<string, string> = new Map([
+  ["thinkwork_gateway", "agentcore_gateway"],
+  ["browser", "agentcore_browser"],
+  ["emit_document", "inline_function"],
+  ["goal_complete", "inline_function"],
+  ["submit_skill_draft", "inline_function"],
+] as const);
+
+function invalidInvocationTool(index: number): never {
+  throw new Error(
+    `AgentCore Harness profile has invalid invocationTools[${index}]`,
+  );
+}
+
+function validateInvocationToolConfig(
+  tool: Record<string, unknown>,
+  index: number,
+): void {
+  if (!isRecord(tool.config) || Object.keys(tool.config).length !== 1) {
+    invalidInvocationTool(index);
+  }
+  if (tool.type === "agentcore_gateway") {
+    const gateway = tool.config.agentCoreGateway;
+    if (
+      !isRecord(gateway) ||
+      Object.keys(gateway).some(
+        (key) => !["gatewayArn", "outboundAuth"].includes(key),
+      ) ||
+      typeof gateway.gatewayArn !== "string" ||
+      !/^arn:aws[^:]*:bedrock-agentcore:[^:]+:\d+:gateway\/.+/.test(
+        gateway.gatewayArn,
+      )
+    ) {
+      invalidInvocationTool(index);
+    }
+    if (gateway.outboundAuth === undefined) invalidInvocationTool(index);
+    if (gateway.outboundAuth !== undefined) {
+      const outboundAuth = gateway.outboundAuth;
+      const oauth = isRecord(outboundAuth) ? outboundAuth.oauth : undefined;
+      if (
+        !isRecord(outboundAuth) ||
+        Object.keys(outboundAuth).length !== 1 ||
+        !isRecord(oauth) ||
+        Object.keys(oauth).some(
+          (key) =>
+            ![
+              "providerArn",
+              "scopes",
+              "customParameters",
+              "grantType",
+            ].includes(key),
+        ) ||
+        typeof oauth.providerArn !== "string" ||
+        !/^arn:aws[^:]*:bedrock-agentcore:[^:]+:\d+:token-vault\/.+\/oauth2credentialprovider\/.+/.test(
+          oauth.providerArn,
+        ) ||
+        !Array.isArray(oauth.scopes) ||
+        oauth.scopes.length !== 1 ||
+        oauth.scopes[0] !== "gateway:invoke" ||
+        oauth.grantType !== "TOKEN_EXCHANGE"
+      ) {
+        invalidInvocationTool(index);
+      }
+      if (
+        oauth.customParameters !== undefined &&
+        (!isRecord(oauth.customParameters) ||
+          Object.keys(oauth.customParameters).length !== 1 ||
+          oauth.customParameters.subject_token_type !==
+            "urn:ietf:params:oauth:token-type:jwt")
+      ) {
+        invalidInvocationTool(index);
+      }
+    }
+    return;
+  }
+  if (tool.type === "agentcore_browser") {
+    const browser = tool.config.agentCoreBrowser;
+    if (!isRecord(browser) || Object.keys(browser).length !== 0) {
+      invalidInvocationTool(index);
+    }
+    return;
+  }
+  if (tool.type === "inline_function") {
+    const inlineFunction = tool.config.inlineFunction;
+    if (
+      !isRecord(inlineFunction) ||
+      typeof inlineFunction.description !== "string" ||
+      !inlineFunction.description.trim() ||
+      !isRecord(inlineFunction.inputSchema) ||
+      inlineFunction.inputSchema.type !== "object" ||
+      inlineFunction.inputSchema.additionalProperties !== false
+    ) {
+      invalidInvocationTool(index);
+    }
+    return;
+  }
+  invalidInvocationTool(index);
+}
+
+function requiredInvocationTools(value: unknown): HarnessInvocationTool[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("AgentCore Harness profile is missing invocationTools");
+  }
+  if (value.length !== REQUIRED_INVOCATION_TOOLS.size) {
+    throw new Error(
+      "AgentCore Harness profile has unexpected invocation tools",
+    );
+  }
+  const tools = value.map((candidate, index) => {
+    if (!isRecord(candidate)) invalidInvocationTool(index);
+    const tool = candidate;
+    if (
+      typeof tool.type !== "string" ||
+      !tool.type.trim() ||
+      typeof tool.name !== "string" ||
+      !tool.name.trim() ||
+      Object.keys(tool).some(
+        (key) => !["type", "name", "config"].includes(key),
+      ) ||
+      REQUIRED_INVOCATION_TOOLS.get(tool.name) !== tool.type
+    ) {
+      invalidInvocationTool(index);
+    }
+    validateInvocationToolConfig(tool, index);
+    return {
+      type: tool.type as HarnessInvocationTool["type"],
+      name: tool.name,
+      config: tool.config as HarnessInvocationTool["config"],
+    };
+  });
+  const uniqueNames = new Set(tools.map((tool) => tool.name));
+  if (uniqueNames.size !== tools.length) {
+    throw new Error("AgentCore Harness profile has duplicate invocation tools");
+  }
+  for (const name of REQUIRED_INVOCATION_TOOLS.keys()) {
+    if (!uniqueNames.has(name)) {
+      throw new Error(
+        `AgentCore Harness profile is missing required invocation tool ${name}`,
+      );
+    }
+  }
+  return tools;
+}
+
 export function parseHarnessManagedProfile(
   value: string,
 ): HarnessManagedProfile {
@@ -70,10 +255,81 @@ export function parseHarnessManagedProfile(
   } catch {
     throw new Error("AgentCore Harness profile is not valid JSON");
   }
+  const tenantSlug = requiredProfileString(candidate.tenantSlug, "tenantSlug");
+  const endpointName = requiredProfileString(
+    candidate.endpointName,
+    "endpointName",
+  );
+  const attestationFields = [
+    "gatewayArn",
+    "identityCredentialProviderArn",
+    "invocationToolsContract",
+    "invocationToolsFingerprint",
+    "invocationTools",
+  ];
+  const hasAttestedTools = attestationFields.some(
+    (field) => candidate[field] !== undefined,
+  );
+  if (!hasAttestedTools && endpointName !== "ThinkworkProof") {
+    throw new Error(
+      "AgentCore Harness profile cannot use legacy tools on a versioned endpoint",
+    );
+  }
+  let gatewayArn: string | undefined;
+  let identityCredentialProviderArn: string | undefined;
+  let invocationToolsFingerprint: string | undefined;
+  let invocationTools: HarnessInvocationTool[] | undefined;
+  if (hasAttestedTools) {
+    if (
+      candidate.invocationToolsContract !==
+      "control-plane-attested-full-override-v1"
+    ) {
+      throw new Error(
+        "AgentCore Harness profile has unsupported invocationToolsContract",
+      );
+    }
+    gatewayArn = requiredProfileString(candidate.gatewayArn, "gatewayArn");
+    identityCredentialProviderArn = requiredProfileString(
+      candidate.identityCredentialProviderArn,
+      "identityCredentialProviderArn",
+    );
+    invocationTools = requiredInvocationTools(candidate.invocationTools);
+    const gatewayTool = invocationTools.find(
+      (tool) => tool.name === "thinkwork_gateway",
+    );
+    const gatewayConfig = recordProperty(
+      gatewayTool?.config,
+      "agentCoreGateway",
+    );
+    const outboundAuth = recordProperty(gatewayConfig, "outboundAuth");
+    const oauth = recordProperty(outboundAuth, "oauth");
+    if (
+      !isRecord(gatewayConfig) ||
+      gatewayConfig.gatewayArn !== gatewayArn ||
+      !isRecord(oauth) ||
+      oauth.providerArn !== identityCredentialProviderArn
+    ) {
+      throw new Error(
+        "AgentCore Harness profile invocation tools do not match governed resources",
+      );
+    }
+    invocationToolsFingerprint = requiredProfileString(
+      candidate.invocationToolsFingerprint,
+      "invocationToolsFingerprint",
+    );
+    if (
+      invocationToolsFingerprint !==
+      fingerprintHarnessInvocationTools(invocationTools)
+    ) {
+      throw new Error(
+        "AgentCore Harness profile invocation tools fingerprint mismatch",
+      );
+    }
+  }
   return {
-    tenantSlug: requiredProfileString(candidate.tenantSlug, "tenantSlug"),
+    tenantSlug,
     harnessArn: requiredProfileString(candidate.harnessArn, "harnessArn"),
-    endpointName: requiredProfileString(candidate.endpointName, "endpointName"),
+    endpointName,
     expectedVersion: requiredProfileString(
       candidate.expectedVersion,
       "expectedVersion",
@@ -89,6 +345,7 @@ export function parseHarnessManagedProfile(
       candidate.sessionStrategy,
       "sessionStrategy",
     ),
+    ...(gatewayArn ? { gatewayArn } : {}),
     gatewayUrl: requiredProfileString(candidate.gatewayUrl, "gatewayUrl"),
     gatewayTargetName: requiredProfileString(
       candidate.gatewayTargetName,
@@ -102,6 +359,9 @@ export function parseHarnessManagedProfile(
       candidate.identityCredentialProviderName,
       "identityCredentialProviderName",
     ),
+    ...(identityCredentialProviderArn ? { identityCredentialProviderArn } : {}),
+    ...(invocationToolsFingerprint ? { invocationToolsFingerprint } : {}),
+    ...(invocationTools ? { invocationTools } : {}),
   };
 }
 
@@ -191,10 +451,15 @@ export async function readHarnessReadiness(
     modelId: profile.modelId,
     configurationFingerprint: profile.configurationFingerprint,
     sessionStrategy: profile.sessionStrategy,
+    gatewayArn: profile.gatewayArn ?? null,
     gatewayUrl: profile.gatewayUrl,
     gatewayTargetName: profile.gatewayTargetName,
     identityWorkloadName: profile.identityWorkloadName,
     identityCredentialProviderName: profile.identityCredentialProviderName,
+    identityCredentialProviderArn:
+      profile.identityCredentialProviderArn ?? null,
+    invocationToolsFingerprint: profile.invocationToolsFingerprint ?? null,
+    invocationTools: profile.invocationTools ?? null,
     checkedAt,
   };
   if (profile.tenantSlug !== tenantSlug) {
@@ -265,10 +530,23 @@ export async function requireHarnessManagedProfile(
     status: "ready",
     configurationFingerprint: readiness.configurationFingerprint!,
     sessionStrategy: readiness.sessionStrategy!,
+    ...(readiness.gatewayArn ? { gatewayArn: readiness.gatewayArn } : {}),
     gatewayUrl: readiness.gatewayUrl!,
     gatewayTargetName: readiness.gatewayTargetName!,
     identityWorkloadName: readiness.identityWorkloadName!,
     identityCredentialProviderName: readiness.identityCredentialProviderName!,
+    ...(readiness.identityCredentialProviderArn
+      ? {
+          identityCredentialProviderArn:
+            readiness.identityCredentialProviderArn,
+        }
+      : {}),
+    ...(readiness.invocationToolsFingerprint
+      ? { invocationToolsFingerprint: readiness.invocationToolsFingerprint }
+      : {}),
+    ...(readiness.invocationTools
+      ? { invocationTools: readiness.invocationTools }
+      : {}),
   };
 }
 
@@ -289,10 +567,14 @@ function emptyReadiness(
     modelId: null,
     configurationFingerprint: null,
     sessionStrategy: null,
+    gatewayArn: null,
     gatewayUrl: null,
     gatewayTargetName: null,
     identityWorkloadName: null,
     identityCredentialProviderName: null,
+    identityCredentialProviderArn: null,
+    invocationToolsFingerprint: null,
+    invocationTools: null,
     checkedAt,
   };
 }

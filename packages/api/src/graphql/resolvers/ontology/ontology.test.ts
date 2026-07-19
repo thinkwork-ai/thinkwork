@@ -17,6 +17,8 @@ const {
   mockRejectOntologyChangeSetItem,
   mockUpdateOntologyEntityType,
   mockUpdateOntologyRelationshipType,
+  mockListOntologyPacks,
+  mockInstallOntologyPack,
 } = vi.hoisted(() => ({
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
@@ -33,6 +35,8 @@ const {
   mockRejectOntologyChangeSetItem: vi.fn(),
   mockUpdateOntologyEntityType: vi.fn(),
   mockUpdateOntologyRelationshipType: vi.fn(),
+  mockListOntologyPacks: vi.fn(),
+  mockInstallOntologyPack: vi.fn(),
 }));
 
 vi.mock("../core/authz.js", () => ({
@@ -66,13 +70,20 @@ vi.mock("../../../lib/ontology/suggestions.js", () => ({
   startOntologySuggestionScanJob: mockStartOntologySuggestionScan,
 }));
 
+vi.mock("../../../lib/ontology/packs.js", () => ({
+  listOntologyPacks: mockListOntologyPacks,
+  installOntologyPack: mockInstallOntologyPack,
+}));
+
 import { approveOntologyChangeSetMutation } from "./approveOntologyChangeSet.mutation.js";
 import { createOntologyChangeSetMutation } from "./createOntologyChangeSet.mutation.js";
 import {
   changeSetStatusFromGraphQL,
   itemStatusFromGraphQL,
 } from "./coercion.js";
+import { installOntologyPackMutation } from "./installOntologyPack.mutation.js";
 import { ontologyChangeSets } from "./ontologyChangeSets.query.js";
+import { ontologyPacks } from "./ontologyPacks.query.js";
 import { ontologyDefinitions } from "./ontologyDefinitions.query.js";
 import { ontologyReprocessJob } from "./ontologyReprocessJob.query.js";
 import { ontologySchemaGraph } from "./ontologySchemaGraph.query.js";
@@ -103,6 +114,8 @@ describe("ontology GraphQL resolvers", () => {
     mockRejectOntologyChangeSetItem.mockReset();
     mockUpdateOntologyEntityType.mockReset();
     mockUpdateOntologyRelationshipType.mockReset();
+    mockListOntologyPacks.mockReset();
+    mockInstallOntologyPack.mockReset();
 
     mockRequireTenantAdmin.mockResolvedValue("admin");
     mockResolveCallerUserId.mockResolvedValue("user-1");
@@ -622,5 +635,83 @@ describe("ontology GraphQL resolvers", () => {
     expect(() => itemStatusFromGraphQL("DRAFT")).toThrow(
       /not a valid ontology change-set item status/,
     );
+  });
+
+  it("lists ontology packs behind the admin gate with uppercased states", async () => {
+    mockListOntologyPacks.mockResolvedValue([
+      {
+        slug: "revenue",
+        name: "Revenue Operations",
+        description: "Opportunities and orders.",
+        types: [
+          { slug: "opportunity", name: "Opportunity", state: "approved" },
+          { slug: "order", name: "Order", state: "available" },
+        ],
+      },
+    ]);
+
+    const packs = await ontologyPacks({}, { tenantId: "tenant-1" }, ctx);
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(ctx, "tenant-1");
+    expect(packs[0]?.types).toEqual([
+      expect.objectContaining({ slug: "opportunity", state: "APPROVED" }),
+      expect.objectContaining({ slug: "order", state: "AVAILABLE" }),
+    ]);
+  });
+
+  it("installs a pack behind the admin gate and maps conflicts to GraphQL", async () => {
+    mockInstallOntologyPack.mockResolvedValue({
+      changeSet: { id: "set-1" },
+      mergedItemIds: ["item-1"],
+      conflicts: [
+        {
+          slug: "order",
+          itemType: "entity_type",
+          reason: "approved_definition",
+        },
+      ],
+      skippedRejectedSlugs: ["risk"],
+    });
+
+    const payload = await installOntologyPackMutation(
+      {},
+      { input: { tenantId: "tenant-1", packSlug: "revenue" } },
+      ctx,
+    );
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(ctx, "tenant-1");
+    expect(mockInstallOntologyPack).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      packSlug: "revenue",
+    });
+    expect(payload).toEqual({
+      changeSet: { id: "set-1" },
+      mergedItemIds: ["item-1"],
+      conflicts: [
+        {
+          slug: "order",
+          itemType: "ENTITY_TYPE",
+          reason: "approved_definition",
+        },
+      ],
+      skippedRejectedSlugs: ["risk"],
+    });
+  });
+
+  it("propagates the admin-gate rejection for pack surfaces", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(new GraphQLError("forbidden"));
+
+    await expect(
+      ontologyPacks({}, { tenantId: "tenant-1" }, ctx),
+    ).rejects.toThrow("forbidden");
+    await expect(
+      installOntologyPackMutation(
+        {},
+        { input: { tenantId: "tenant-1", packSlug: "revenue" } },
+        ctx,
+      ),
+    ).rejects.toThrow("forbidden");
+    expect(mockListOntologyPacks).not.toHaveBeenCalled();
+    expect(mockInstallOntologyPack).not.toHaveBeenCalled();
   });
 });

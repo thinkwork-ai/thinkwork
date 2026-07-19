@@ -13,6 +13,7 @@ import {
   type HarnessStreamEvent,
 } from "./runner.js";
 import type { FinalizePayload } from "../chat-finalize/types.js";
+import type { HarnessInvocationTool } from "./managed-profile.js";
 
 function stream(
   events: HarnessStreamEvent[],
@@ -220,6 +221,65 @@ const EMIT_INPUT = {
   digest_markdown: "# QBR\n\ncontent",
 };
 
+const MANAGED_HARNESS_TOOLS: HarnessInvocationTool[] = [
+  {
+    type: "agentcore_gateway",
+    name: "thinkwork_gateway",
+    config: {
+      agentCoreGateway: {
+        gatewayArn: "arn:aws:bedrock-agentcore:us-east-1:123:gateway/g1",
+      },
+    },
+  },
+  {
+    type: "agentcore_browser",
+    name: "browser",
+    config: { agentCoreBrowser: {} },
+  },
+  {
+    type: "inline_function",
+    name: "emit_document",
+    config: {
+      inlineFunction: {
+        description: "Emit document",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+        },
+      },
+    },
+  },
+  {
+    type: "inline_function",
+    name: "goal_complete",
+    config: {
+      inlineFunction: {
+        description: "Complete goal",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+        },
+      },
+    },
+  },
+  {
+    type: "inline_function",
+    name: "submit_skill_draft",
+    config: {
+      inlineFunction: {
+        description: "Submit skill draft",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+        },
+      },
+    },
+  },
+];
+
 function basePayload(): Record<string, unknown> {
   return {
     tenant_id: "tenant-1",
@@ -269,7 +329,7 @@ interface TestDeps extends HarnessRunnerDeps {
     messages: unknown;
     modelId?: string;
     allowedTools?: string[];
-    tools?: Array<Record<string, unknown>>;
+    tools?: HarnessInvocationTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }>;
@@ -295,7 +355,7 @@ function makeDeps(
     messages: unknown;
     modelId?: string;
     allowedTools?: string[];
-    tools?: Array<Record<string, unknown>>;
+    tools?: HarnessInvocationTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }> = [];
@@ -322,6 +382,7 @@ function makeDeps(
       gatewayTargetName: "ThinkworkDevOwnerProof",
       identityWorkloadName: "thinkwork-dev-multiplayer-proof",
       identityCredentialProviderName: "thinkwork-dev-proof-oauth",
+      invocationTools: MANAGED_HARNESS_TOOLS,
     })),
     mintHarnessAssertion: vi.fn(async () => ({
       token: "signed-turn-assertion",
@@ -919,7 +980,10 @@ describe("runHarnessTurn — happy path", () => {
       "__thinkwork_document_envelope__",
     ]);
     expect(deps.invocations[1]?.maxIterations).toBe(2);
-    expect(deps.invocations[0]?.tools).toBeUndefined();
+    expect(deps.invocations[0]?.tools).toEqual(
+      MANAGED_HARNESS_TOOLS.filter((tool) => tool.type !== "agentcore_browser"),
+    );
+    expect(deps.invocations[1]?.tools).toBeUndefined();
     expect(deps.emissions).toHaveLength(1);
     expect(deps.finalizePayloads[0]?.response?.content).toBe(
       "Done — Harness report is ready.",
@@ -1370,7 +1434,7 @@ describe("runHarnessTurn — happy path", () => {
     );
   });
 
-  it("declares native Browser on every enabled interactive Harness invocation", async () => {
+  it("preserves every governed Harness tool when native Browser is enabled", async () => {
     const deps = makeDeps([stream(textEvents("Browsed successfully."))]);
     const payload = {
       ...basePayload(),
@@ -1381,9 +1445,26 @@ describe("runHarnessTurn — happy path", () => {
 
     expect(result.status).toBe("completed");
     expect(deps.invocations).toHaveLength(1);
-    expect(deps.invocations[0].tools).toEqual([
-      { type: "agentcore_browser", name: "browser" },
-    ]);
+    expect(deps.invocations[0].tools).toEqual(MANAGED_HARNESS_TOOLS);
+    expect(JSON.stringify(deps.invocations[0].messages)).toContain(
+      "browser_automation=enabled",
+    );
+    expect(deps.invocations[0].tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "agentcore_gateway",
+          name: "thinkwork_gateway",
+        }),
+        expect.objectContaining({
+          type: "agentcore_browser",
+          name: "browser",
+        }),
+        expect.objectContaining({
+          type: "inline_function",
+          name: "goal_complete",
+        }),
+      ]),
+    );
   });
 
   it("fails closed when an explicit Browser request ends without managed execution evidence", async () => {
@@ -1454,13 +1535,48 @@ describe("runHarnessTurn — happy path", () => {
     );
   });
 
-  it("does not expose native Browser when the effective capability is disabled", async () => {
+  it("removes only native Browser when the effective capability is disabled", async () => {
     const deps = makeDeps([stream(textEvents("No browser needed."))]);
 
     const result = await runHarnessTurn(basePayload(), deps);
 
     expect(result.status).toBe("completed");
+    expect(deps.invocations[0].tools).toEqual(
+      MANAGED_HARNESS_TOOLS.filter((tool) => tool.type !== "agentcore_browser"),
+    );
+    expect(JSON.stringify(deps.invocations[0].messages)).toContain(
+      "browser_automation=disabled",
+    );
+    expect(deps.invocations[0].tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "thinkwork_gateway" }),
+        expect.objectContaining({ name: "goal_complete" }),
+      ]),
+    );
+  });
+
+  it("keeps turns available while the legacy profile is being upgraded", async () => {
+    const deps = makeDeps([stream(textEvents("Migration-safe response."))]);
+    const resolved = await deps.resolveHarness({
+      tenantId: "tenant-1",
+      tenantSlug: "sleek-squirrel-230",
+    });
+    const legacyHarness = { ...resolved };
+    delete legacyHarness.invocationTools;
+    (
+      deps.resolveHarness as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(legacyHarness);
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
     expect(deps.invocations[0].tools).toBeUndefined();
+    expect(deps.invocations[0].allowedTools).toEqual([
+      "@thinkwork_gateway/*",
+      "emit_document",
+      "goal_complete",
+      "submit_skill_draft",
+    ]);
   });
 
   it("relays emission rejections as error tool results and lets the model retry", async () => {
@@ -1964,6 +2080,7 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
       {
         ...basePayload(),
         invocation_source: "agent_loop",
+        browser_automation_enabled: true,
         message: "Reply with exactly AGENTCORE_SCHEDULE_PROOF",
         goal_mode: {
           enabled: true,
@@ -1976,6 +2093,15 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     );
 
     expect(deps.invocations).toHaveLength(2);
+    for (const invocation of deps.invocations) {
+      expect(invocation.tools).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "browser" }),
+          expect.objectContaining({ name: "goal_complete" }),
+          expect.objectContaining({ name: "thinkwork_gateway" }),
+        ]),
+      );
+    }
     expect(JSON.stringify(deps.invocations[1].messages)).toContain(
       "without governed completion evidence",
     );
