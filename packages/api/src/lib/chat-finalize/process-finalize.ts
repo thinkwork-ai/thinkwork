@@ -69,6 +69,10 @@ import {
 import { projectAgentLoopFinalize } from "../agent-loops/finalize-projection.js";
 import { projectWorkflowStepFinalizeSafely } from "../workflows/workflow-step-finalize.js";
 import { autoSubmitSkillCreatorDraft } from "../skill-creator/auto-submit-draft.js";
+import {
+  loadCanonicalHarnessSkillDraftRegistration,
+  type HarnessSkillDraftRegistration,
+} from "../skill-creator/harness-submit-draft.js";
 import { recordTraceEvidence } from "../trace-ledger/record-trace-evidence.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
@@ -317,9 +321,10 @@ export async function processFinalize(
     throw err;
   }
 
-  let skillDraftRegistration: Awaited<
-    ReturnType<typeof autoSubmitSkillCreatorDraft>
-  > | null = null;
+  let skillDraftRegistration:
+    | Awaited<ReturnType<typeof autoSubmitSkillCreatorDraft>>
+    | HarnessSkillDraftRegistration
+    | null = null;
   if (status === "completed") {
     try {
       const skillCreatorRequesterUserId =
@@ -327,15 +332,42 @@ export async function processFinalize(
         (payload.skill_creator_command
           ? await resolveSkillCreatorRequesterUserId({ tenantId, threadId })
           : null);
-      skillDraftRegistration = await autoSubmitSkillCreatorDraft({
-        tenantId,
-        threadId,
-        threadTurnId: turnId,
-        requesterUserId: skillCreatorRequesterUserId,
-        userMessage,
-        skillCreatorCommand: payload.skill_creator_command,
-        reconcileReport,
-      });
+      const requestedRegistration = readRecord(
+        payload.skill_draft_registration,
+      );
+      const requestedDraftId =
+        typeof requestedRegistration.draftId === "string"
+          ? requestedRegistration.draftId
+          : null;
+      if (
+        payload.runtime_type === "agentcore" &&
+        requestedDraftId &&
+        skillCreatorRequesterUserId
+      ) {
+        skillDraftRegistration =
+          await loadCanonicalHarnessSkillDraftRegistration({
+            tenantId,
+            requesterUserId: skillCreatorRequesterUserId,
+            threadId,
+            threadTurnId: turnId,
+            draftId: requestedDraftId,
+          });
+        if (!skillDraftRegistration) {
+          throw new Error(
+            "AgentCore skill draft registration failed canonical ownership verification",
+          );
+        }
+      } else {
+        skillDraftRegistration = await autoSubmitSkillCreatorDraft({
+          tenantId,
+          threadId,
+          threadTurnId: turnId,
+          requesterUserId: skillCreatorRequesterUserId,
+          userMessage,
+          skillCreatorCommand: payload.skill_creator_command,
+          reconcileReport,
+        });
+      }
       if (skillDraftRegistration.status !== "skipped") {
         console.log(
           `[chat-finalize] /skill-creator ${skillDraftRegistration.status} draft ${skillDraftRegistration.draftId} (${skillDraftRegistration.slug})`,
@@ -997,7 +1029,10 @@ export function goalRunProjectionFromFinalizePayload(
 }
 
 function assistantMessageMetadata(
-  registration: Awaited<ReturnType<typeof autoSubmitSkillCreatorDraft>> | null,
+  registration:
+    | Awaited<ReturnType<typeof autoSubmitSkillCreatorDraft>>
+    | HarnessSkillDraftRegistration
+    | null,
   threadId: string,
   threadTurnId: string,
 ): Record<string, unknown> {

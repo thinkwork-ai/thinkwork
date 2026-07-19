@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   mergeWorkspaceProjectionReconcileSummary: vi.fn(),
   projectAgentLoopFinalize: vi.fn(),
   autoSubmitSkillCreatorDraft: vi.fn(),
+  loadCanonicalHarnessSkillDraftRegistration: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -135,6 +136,11 @@ vi.mock("../skill-creator/auto-submit-draft.js", () => ({
   autoSubmitSkillCreatorDraft: mocks.autoSubmitSkillCreatorDraft,
 }));
 
+vi.mock("../skill-creator/harness-submit-draft.js", () => ({
+  loadCanonicalHarnessSkillDraftRegistration:
+    mocks.loadCanonicalHarnessSkillDraftRegistration,
+}));
+
 vi.mock("../workspace-projection-snapshot.js", async (importOriginal) => {
   const actual =
     await importOriginal<
@@ -235,6 +241,8 @@ beforeEach(() => {
     status: "skipped",
     reason: "not_skill_creator_turn",
   });
+  mocks.loadCanonicalHarnessSkillDraftRegistration.mockReset();
+  mocks.loadCanonicalHarnessSkillDraftRegistration.mockResolvedValue(null);
 });
 
 describe("capturedSystemPromptFromFinalizePayload", () => {
@@ -640,6 +648,63 @@ describe("processFinalize reconcile seam", () => {
       },
     );
     expect(mocks.updateSets).toContainEqual({ source_message_id: "msg-1" });
+  });
+
+  it("re-authorizes an AgentCore draft registration before rendering its review card", async () => {
+    mocks.loadCanonicalHarnessSkillDraftRegistration.mockResolvedValueOnce({
+      status: "submitted",
+      draftId: "draft-agentcore-1",
+      slug: "account-brief",
+      fileCount: 2,
+      currentContentHash: "sha256:agentcore",
+    });
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        runtime_type: "agentcore",
+        cost_owner_user_id: "55555555-5555-5555-5555-555555555555",
+        user_message: "Submit this skill for review",
+        duration_ms: 25,
+        status: "completed",
+        skill_creator_command: {
+          type: "skill_creator",
+          source: "slash_command",
+          command: "/skill-creator",
+        },
+        skill_draft_registration: { draftId: "draft-agentcore-1" },
+        response: { content: "The draft is ready for review." },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(
+      mocks.loadCanonicalHarnessSkillDraftRegistration,
+    ).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      requesterUserId: "55555555-5555-5555-5555-555555555555",
+      threadId: THREAD_ID,
+      threadTurnId: TURN_ID,
+      draftId: "draft-agentcore-1",
+    });
+    expect(mocks.autoSubmitSkillCreatorDraft).not.toHaveBeenCalled();
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "The draft is ready for review.",
+      [],
+      undefined,
+      expect.objectContaining({
+        skillDraft: expect.objectContaining({
+          id: "draft-agentcore-1",
+          slug: "account-brief",
+          status: "submitted",
+        }),
+      }),
+    );
   });
 
   it("falls back to the latest user message sender when the finalize payload has no cost owner", async () => {

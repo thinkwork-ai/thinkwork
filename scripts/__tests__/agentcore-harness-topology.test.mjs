@@ -63,6 +63,8 @@ describe("managed multiplayer Harness topology", () => {
     assert.match(lifecycle, /memory: \{ disabled: \{\} \}/);
     assert.match(lifecycle, /required\("GATEWAY_TARGET_TOOL_NAMES"\)/);
     assert.match(lifecycle, /"@thinkwork_gateway\/\*"/);
+    assert.match(lifecycle, /"submit_skill_draft"/);
+    assert.match(terraform, /governed-review-draft-v1/);
     assert.doesNotMatch(lifecycle, /targetToolNames\.map/);
     assert.match(
       lifecycle,

@@ -236,6 +236,7 @@ interface TestDeps extends HarnessRunnerDeps {
     maxIterations?: number;
   }>;
   emissions: Array<Record<string, unknown>>;
+  skillDraftSubmissions: Array<Record<string, unknown>>;
 }
 
 function makeDeps(
@@ -254,12 +255,14 @@ function makeDeps(
     maxIterations?: number;
   }> = [];
   const emissions: Array<Record<string, unknown>> = [];
+  const skillDraftSubmissions: Array<Record<string, unknown>> = [];
   const emitResults = [...(options.emitResults ?? [])];
   const queue = [...streams];
   return {
     finalizePayloads,
     invocations,
     emissions,
+    skillDraftSubmissions,
     workspaceBucket: "bucket-1",
     keepaliveIntervalMs: 0,
     resolveHarness: vi.fn(async () => ({
@@ -315,6 +318,16 @@ function makeDeps(
           },
         }
       );
+    }),
+    submitSkillDraft: vi.fn(async (input) => {
+      skillDraftSubmissions.push(input as unknown as Record<string, unknown>);
+      return {
+        status: "submitted" as const,
+        draftId: "draft-1",
+        slug: "account-brief",
+        fileCount: 2,
+        currentContentHash: "sha256:draft",
+      };
     }),
     finalize: vi.fn(async (payload: FinalizePayload) => {
       finalizePayloads.push(payload);
@@ -1180,6 +1193,105 @@ describe("runHarnessTurn — happy path", () => {
       emission_successes: 1,
       artifact_id: "artifact-2",
     });
+  });
+});
+
+describe("runHarnessTurn — governed AgentCore Skill Creator", () => {
+  const command = {
+    type: "skill_creator",
+    source: "slash_command",
+    command: "/skill-creator",
+  };
+  const skillMarkdown = [
+    "---",
+    "name: account-brief",
+    "description: Creates a governed account brief.",
+    "---",
+    "",
+    "# Account Brief",
+  ].join("\n");
+
+  it("submits through the exact participant and carries canonical registration into finalize", async () => {
+    const deps = makeDeps([
+      stream(
+        toolUseEvents("submit_skill_draft", "skill-tool-1", {
+          skill_markdown: skillMarkdown,
+        }),
+      ),
+      stream(textEvents("The account-brief draft is ready for review.")),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Create this account brief skill and submit it for review",
+        skill_creator_command: command,
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(deps.skillDraftSubmissions).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        requesterUserId: "user-1",
+        threadId: "thread-1",
+        threadTurnId: "turn-1",
+      }),
+    ]);
+    expect(deps.finalizePayloads[0]).toMatchObject({
+      runtime_type: "agentcore",
+      skill_creator_command: command,
+      skill_draft_registration: {
+        status: "submitted",
+        draftId: "draft-1",
+        slug: "account-brief",
+      },
+    });
+    expect(JSON.stringify(deps.invocations[0].messages)).toContain(
+      "skill_creator_mode=enabled",
+    );
+  });
+
+  it("keeps interview-only turns conversational without creating a draft", async () => {
+    const deps = makeDeps([
+      stream(textEvents("What should trigger this skill?")),
+    ]);
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Help me design a new skill",
+        skill_creator_command: command,
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(deps.skillDraftSubmissions).toHaveLength(0);
+    expect(deps.finalizePayloads[0].skill_draft_registration).toBeUndefined();
+  });
+
+  it("never false-passes an explicit submission request without a draft", async () => {
+    const deps = makeDeps([
+      stream(textEvents("I drafted the skill.")),
+      stream(textEvents("It is all done.")),
+    ]);
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Submit the new skill for review",
+        skill_creator_command: command,
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "without a validated draft submission",
+    );
+    expect(JSON.stringify(deps.invocations[1].messages)).toContain(
+      "submit_skill_draft exactly once",
+    );
   });
 });
 
