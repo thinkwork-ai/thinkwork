@@ -150,6 +150,7 @@ export function parseArgs(argv = process.argv.slice(2)): Args {
     Number.isNaN(since.getTime()) ||
     Number.isNaN(until.getTime()) ||
     until <= since ||
+    until.getTime() > Date.now() ||
     minimumHours <= 0 ||
     minimumSuccessRate <= 0 ||
     minimumSuccessRate > 1 ||
@@ -335,7 +336,7 @@ function containsEvidence(
   return result;
 }
 
-async function loadSurfaceEvidence(
+export async function loadSurfaceEvidence(
   pool: pg.Pool,
   args: Args,
   item: Args["cases"][number],
@@ -347,12 +348,13 @@ async function loadSurfaceEvidence(
             COALESCE(result_json->'goal_run'->>'status', usage_json->'goal_run'->>'status', '')
               IN ('complete', 'completed', 'cleared', 'budget_limited') AS goal_evidence,
             invocation_source, trigger_id::text
-       FROM thread_turns
+      FROM thread_turns
       WHERE tenant_id = $1 AND thread_id = $2
         AND ($3::uuid IS NULL OR id = $3::uuid)
+        AND created_at >= $4 AND created_at < $5
       ORDER BY created_at DESC
       LIMIT 1`,
-    [args.tenantId, item.threadId, item.turnId ?? null],
+    [args.tenantId, item.threadId, item.turnId ?? null, args.since, args.until],
   );
   const turn = rows[0];
   if (!turn) {
@@ -371,7 +373,7 @@ async function loadSurfaceEvidence(
       principalIds: [],
       credentialOwners: [],
       semanticEvidence: false,
-      semanticDetail: "thread has no turn",
+      semanticDetail: "thread has no turn in the certification window",
     };
   }
   const [
@@ -402,7 +404,7 @@ async function loadSurfaceEvidence(
                AND source_message.metadata->>'sourceTurnId' = $3::text) AS artifact_count,
            (SELECT count(*) FROM thread_attachments WHERE tenant_id = $1 AND thread_id = $2) AS attachment_count,
            (SELECT count(*) FROM brain.retain_attempts
-             WHERE tenant_id = $1 AND thread_id = $2 AND thread_turn_id = $3
+             WHERE tenant_id = $1 AND thread_id = $2 AND thread_turn_id = $3::uuid
                AND status = 'retained') AS retained_memory_count,
            (SELECT count(*)
               FROM agent_wakeup_requests awr
@@ -414,7 +416,7 @@ async function loadSurfaceEvidence(
                AND asking_turn.id = pq.thread_turn_id
              WHERE awr.tenant_id = $1 AND awr.id = (
                SELECT wakeup_request_id FROM thread_turns
-                WHERE tenant_id = $1 AND id = $3
+                WHERE tenant_id = $1 AND id = $3::uuid
              )
                AND awr.source = 'question_answer'
                AND awr.payload->>'runtimeType' = 'agentcore'
@@ -512,7 +514,7 @@ async function loadRuntimeStats(
   }));
 }
 
-async function loadEvalEvidence(
+export async function loadEvalEvidence(
   pool: pg.Pool,
   args: Args,
 ): Promise<EvalEvidence[]> {
@@ -521,8 +523,10 @@ async function loadEvalEvidence(
       const { rows } = await pool.query<Record<string, unknown>>(
         `SELECT id, status, total_tests, passed, failed, COALESCE(errored, 0) AS errored,
                 profile_snapshot->>'runtimeType' AS actual_runtime, cost_partial
-           FROM eval_runs WHERE tenant_id = $1 AND id = $2`,
-        [args.tenantId, item.runId],
+           FROM eval_runs
+          WHERE tenant_id = $1 AND id = $2
+            AND created_at >= $3 AND created_at < $4`,
+        [args.tenantId, item.runId, args.since, args.until],
       );
       const row = rows[0] ?? {};
       return {

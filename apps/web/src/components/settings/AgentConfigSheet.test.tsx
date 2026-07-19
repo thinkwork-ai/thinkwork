@@ -140,12 +140,33 @@ describe("AgentConfigSection", () => {
     expect(screen.getByText("Default Space")).toBeTruthy();
     expect(screen.getByText("Default model")).toBeTruthy();
     expect(screen.getByText("Goal token budget")).toBeTruthy();
-    expect(
-      screen.getByText(/AgentCore Harness ready · version 4/),
-    ).toBeTruthy();
+    expect(screen.queryByTestId("agentcore-harness-readiness")).toBeNull();
+    expect(screen.getByTestId("agent-runtime-control").className).toContain(
+      "max-w-60",
+    );
     expect(
       (screen.getByLabelText("Goal token budget") as HTMLInputElement).value,
     ).toBe("100000");
+  });
+
+  it("shows compact runtime guidance only when AgentCore is unavailable", () => {
+    queryResponses.set("SettingsDeploymentStatus", {
+      data: {
+        deploymentStatus: {
+          agentcoreHarness: {
+            state: "degraded",
+            ready: false,
+            reasonCode: "target_not_ready",
+          },
+        },
+      },
+    });
+
+    render(<AgentConfigSection spaces={SPACES} />);
+
+    expect(screen.getByTestId("agentcore-harness-readiness").textContent).toBe(
+      "AgentCore unavailable · target_not_ready",
+    );
   });
 
   it("saves a valid goal budget through the goal-budget mutation", async () => {

@@ -226,43 +226,45 @@ export function AgentConfigSection({
         label="Runtime"
         description="Default runtime for new Composer threads. Existing threads keep their pinned runtime."
       >
-        <Select
-          value={runtime ?? undefined}
-          onValueChange={(v) => {
-            const next = v as AgentRuntime;
-            if (next === AgentRuntime.Agentcore) {
-              setConfirmHarness(true);
-              return;
-            }
-            void saveDefaultThreadRuntime(next);
-          }}
-          disabled={saveState.fetching}
-        >
-          <SelectTrigger className="w-60">
-            <SelectValue placeholder="Select runtime" />
-          </SelectTrigger>
-          <SelectContent>
-            {runtimeOptions.map((opt) => (
-              <SelectItem
-                key={opt.value}
-                value={opt.value}
-                disabled={opt.disabled}
-              >
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {isOperator && (
-          <div
-            className="mt-2 text-xs text-muted-foreground"
-            data-testid="agentcore-harness-readiness"
+        <div className="w-full max-w-60" data-testid="agent-runtime-control">
+          <Select
+            value={runtime ?? undefined}
+            onValueChange={(v) => {
+              const next = v as AgentRuntime;
+              if (next === AgentRuntime.Agentcore) {
+                setConfirmHarness(true);
+                return;
+              }
+              void saveDefaultThreadRuntime(next);
+            }}
+            disabled={saveState.fetching}
           >
-            {agentcoreHarness?.ready
-              ? `AgentCore Harness ready · version ${agentcoreHarness.liveVersion ?? "unknown"} · ${agentcoreHarness.sessionStrategy ?? "unknown"} sessions`
-              : `AgentCore Harness unavailable · ${agentcoreHarness?.reasonCode ?? (deploymentResult.fetching ? "checking" : "status_unavailable")}`}
-          </div>
-        )}
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select runtime" />
+            </SelectTrigger>
+            <SelectContent>
+              {runtimeOptions.map((opt) => (
+                <SelectItem
+                  key={opt.value}
+                  value={opt.value}
+                  disabled={opt.disabled}
+                >
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isOperator && agentcoreHarness?.ready !== true ? (
+            <p
+              className="mt-1.5 text-xs text-muted-foreground"
+              data-testid="agentcore-harness-readiness"
+            >
+              {deploymentResult.fetching
+                ? "Checking AgentCore availability…"
+                : `AgentCore unavailable · ${agentcoreHarness?.reasonCode ?? "status_unavailable"}`}
+            </p>
+          ) : null}
+        </div>
       </SettingsRow>
 
       <AlertDialog open={confirmHarness} onOpenChange={setConfirmHarness}>

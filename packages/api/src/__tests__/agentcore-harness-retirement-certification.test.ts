@@ -7,6 +7,8 @@ import {
   type SurfaceEvidence,
 } from "../lib/harness/retirement-certification.js";
 import {
+  loadEvalEvidence,
+  loadSurfaceEvidence,
   parseArgs,
   poolConfig,
 } from "../../scripts/proofs/agentcore-harness-retirement-certification.js";
@@ -127,6 +129,164 @@ describe("AgentCore Harness retirement certification", () => {
         },
       ]);
     } finally {
+      if (priorDatabaseUrl == null) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = priorDatabaseUrl;
+    }
+  });
+
+  it("rejects named surface evidence outside the certification window", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const since = new Date("2026-07-19T10:09:32.000Z");
+    const until = new Date("2026-07-20T10:09:32.000Z");
+
+    const evidence = await loadSurfaceEvidence(
+      { query } as never,
+      {
+        tenantId: "0015953e-aa13-4cab-8398-2e70f73dda63",
+        since,
+        until,
+      } as never,
+      {
+        surface: "memory",
+        threadId: "48cf78a7-f56e-481a-b952-4cd6212f01f2",
+        turnId: "f9601018-9f70-4330-ad6f-cc23aa542a5e",
+      },
+    );
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toContain(
+      "created_at >= $4 AND created_at < $5",
+    );
+    expect(query.mock.calls[0]?.[1]).toEqual([
+      "0015953e-aa13-4cab-8398-2e70f73dda63",
+      "48cf78a7-f56e-481a-b952-4cd6212f01f2",
+      "f9601018-9f70-4330-ad6f-cc23aa542a5e",
+      since,
+      until,
+    ]);
+    expect(evidence).toMatchObject({
+      status: "missing",
+      semanticEvidence: false,
+      semanticDetail: "thread has no turn in the certification window",
+    });
+  });
+
+  it("casts shared turn parameters for UUID-backed evidence joins", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "840daac0-060b-4ee5-8944-ffb3bcf103bd",
+            thread_id: "50a406f1-0c2e-4715-8dc5-1d6a254f7f6e",
+            runtime_type: "agentcore",
+            status: "succeeded",
+            finalized: true,
+            usage_present: true,
+            goal_evidence: false,
+            invocation_source: "chat_message",
+            trigger_id: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ runtime_type: "agentcore" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            artifact_count: "0",
+            attachment_count: "0",
+            retained_memory_count: "1",
+            question_resume_count: "0",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const evidence = await loadSurfaceEvidence(
+      { query } as never,
+      {
+        tenantId: "0015953e-aa13-4cab-8398-2e70f73dda63",
+        since: new Date("2026-07-19T10:09:32.000Z"),
+        until: new Date("2026-07-20T10:09:32.000Z"),
+      } as never,
+      {
+        surface: "memory",
+        threadId: "50a406f1-0c2e-4715-8dc5-1d6a254f7f6e",
+        turnId: "840daac0-060b-4ee5-8944-ffb3bcf103bd",
+      },
+    );
+
+    expect(query).toHaveBeenCalledTimes(5);
+    expect(query.mock.calls[3]?.[0]).toContain("thread_turn_id = $3::uuid");
+    expect(query.mock.calls[3]?.[0]).toContain("id = $3::uuid");
+    expect(evidence).toMatchObject({
+      runtimeType: "agentcore",
+      status: "succeeded",
+      semanticEvidence: true,
+      semanticDetail: "1 retained memory ledger records",
+    });
+  });
+
+  it("rejects named eval evidence outside the certification window", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const since = new Date("2026-07-19T10:09:32.000Z");
+    const until = new Date("2026-07-20T10:09:32.000Z");
+
+    const evidence = await loadEvalEvidence(
+      { query } as never,
+      {
+        tenantId: "0015953e-aa13-4cab-8398-2e70f73dda63",
+        since,
+        until,
+        evals: [
+          {
+            runtimeType: "agentcore",
+            runId: "685051d2-3a0e-43a2-9f2d-9481285035a8",
+          },
+        ],
+      } as never,
+    );
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toContain(
+      "created_at >= $3 AND created_at < $4",
+    );
+    expect(query.mock.calls[0]?.[1]).toEqual([
+      "0015953e-aa13-4cab-8398-2e70f73dda63",
+      "685051d2-3a0e-43a2-9f2d-9481285035a8",
+      since,
+      until,
+    ]);
+    expect(evidence).toEqual([
+      expect.objectContaining({
+        id: "685051d2-3a0e-43a2-9f2d-9481285035a8",
+        expectedRuntime: "agentcore",
+        actualRuntime: null,
+        status: "missing",
+      }),
+    ]);
+  });
+
+  it("rejects a future certification window end", () => {
+    const priorDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = "postgres://example.invalid/thinkwork";
+    const exit = vi.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`exit:${code}`);
+    });
+    try {
+      expect(() =>
+        parseArgs([
+          "--tenant-id",
+          "0015953e-aa13-4cab-8398-2e70f73dda63",
+          "--since",
+          "2026-07-19T10:09:32.000Z",
+          "--until",
+          "2999-07-20T10:09:32.000Z",
+        ]),
+      ).toThrow("exit:2");
+    } finally {
+      exit.mockRestore();
       if (priorDatabaseUrl == null) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = priorDatabaseUrl;
     }
