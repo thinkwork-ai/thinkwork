@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Button, Sheet, SheetContent } from "@thinkwork/ui";
 import {
   OntologyGraph,
@@ -10,6 +10,10 @@ import {
 import { OntologyChangeSetStatus } from "@/gql/graphql";
 import { SettingsOntologySchemaGraphQuery } from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
+import {
+  dismissPackCallout,
+  usePackCalloutDismissed,
+} from "@/lib/ontology-pack-callout-pref";
 import {
   OntologyReviewRail,
   ontologyCandidateLabel,
@@ -30,18 +34,53 @@ type SheetEntry =
   | { kind: "form"; editItem: OntologyEditableItem | null };
 
 /**
+ * The platform seeds every tenant with 4 baseline types (customer, person,
+ * project, task). A tenant still at or under that count with nothing pending
+ * has never grown its schema — the day-one pack callout's trigger (R12).
+ */
+export const BASELINE_TYPE_COUNT = 4;
+
+/**
  * Living Map view (THINK-320 U6): the schema-graph canvas (self-fetching
  * @thinkwork/graph OntologyGraph) side by side with the review rail, plus
  * the Explorer-style Sheet hosting the evidence panel and the shared
  * triple form. The rail reads a typed copy of the same ontologySchemaGraph
  * feed; canvas ghost overflow (R18) surfaces as the rail's banner.
+ *
+ * U7 additions: a dismissible day-one "install a starter pack" callout for
+ * fresh tenants (R12) and an `initialFocus` handoff so a pack install lands
+ * directly in the review flow (AE4).
  */
-export function OntologyMapView() {
-  const { tenantId } = useTenant();
+export function OntologyMapView({
+  initialFocus = null,
+  onInitialFocusConsumed,
+  onOpenPacks,
+}: {
+  /** Open the sheet on this focus at mount (pack-install handoff, AE4). */
+  initialFocus?: OntologyFocus | null;
+  /** Fired once the initial focus has been captured into the sheet stack. */
+  onInitialFocusConsumed?: () => void;
+  /** Navigate to the starter-pack browser (day-one callout, R12). */
+  onOpenPacks?: () => void;
+} = {}) {
+  const { tenantId, userId } = useTenant();
   const effectiveTenantId = tenantId ?? null;
   const graphRef = useRef<OntologyGraphHandle>(null);
   const [overflowCount, setOverflowCount] = useState(0);
-  const [stack, setStack] = useState<SheetEntry[]>([]);
+  const [stack, setStack] = useState<SheetEntry[]>(() =>
+    initialFocus ? [{ kind: "focus", focus: initialFocus }] : [],
+  );
+  const calloutDismissed = usePackCalloutDismissed(
+    userId ?? null,
+    effectiveTenantId,
+  );
+
+  // The initial focus is captured into the sheet stack's initial state; tell
+  // the host so a later remount of this view doesn't re-open the sheet.
+  useEffect(() => {
+    if (initialFocus) onInitialFocusConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [railResult, reexecuteRail] = useQuery({
     query: SettingsOntologySchemaGraphQuery,
@@ -144,6 +183,14 @@ export function OntologyMapView() {
       ? top.focus.itemId
       : null;
 
+  // Day-one nudge (R12): only the 4 baseline types, nothing pending, and
+  // this admin hasn't dismissed it. Informational — never blocking.
+  const showPackCallout =
+    graph != null &&
+    graph.types.length <= BASELINE_TYPE_COUNT &&
+    candidates.length === 0 &&
+    !calloutDismissed;
+
   return (
     <div className="flex h-full min-h-0 w-full gap-4">
       <div className="border-border relative min-w-0 flex-1 overflow-hidden rounded-lg border">
@@ -162,6 +209,35 @@ export function OntologyMapView() {
             Add triple
           </Button>
         </div>
+        {showPackCallout ? (
+          <div
+            role="status"
+            className="border-border bg-background/95 absolute bottom-3 left-3 right-3 z-30 flex items-start gap-3 rounded-lg border p-4 shadow-sm sm:right-auto sm:max-w-md"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Give your map a head start</p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Your schema only has the baseline types so far. Install a
+                starter pack to stage reviewable structure for your domain.
+              </p>
+              {onOpenPacks ? (
+                <Button size="sm" className="mt-3" onClick={onOpenPacks}>
+                  Browse starter packs
+                </Button>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss starter pack suggestion"
+              className="text-muted-foreground hover:text-foreground shrink-0"
+              onClick={() =>
+                dismissPackCallout(userId ?? null, effectiveTenantId)
+              }
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex w-80 shrink-0 flex-col">

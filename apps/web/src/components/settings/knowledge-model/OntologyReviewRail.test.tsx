@@ -127,7 +127,7 @@ describe("OntologyReviewRail", () => {
     ).toBe("candidate_2");
   });
 
-  it("renders the empty state when nothing is pending", () => {
+  it("renders the steady-state copy instead of a blank rail (U7)", () => {
     render(
       <OntologyReviewRail
         candidates={[]}
@@ -138,6 +138,8 @@ describe("OntologyReviewRail", () => {
       />,
     );
 
-    expect(screen.getByText(/Nothing waiting for review/)).toBeTruthy();
+    const empty = screen.getByText(/All caught up/);
+    expect(empty).toBeTruthy();
+    expect(empty.textContent).toContain("next scheduled scan");
   });
 });

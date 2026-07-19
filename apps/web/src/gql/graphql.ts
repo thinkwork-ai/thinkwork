@@ -18072,6 +18072,62 @@ export type SettingsRejectOntologyChangeSetItemMutation = {
   };
 };
 
+export type SettingsOntologyPacksQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsOntologyPacksQuery = {
+  __typename?: "Query";
+  ontologyPacks: Array<{
+    __typename?: "OntologyPack";
+    slug: string;
+    name: string;
+    description: string;
+    types: Array<{
+      __typename?: "OntologyPackType";
+      slug: string;
+      name: string;
+      description?: string | null;
+      state: OntologyPackTypeState;
+    }>;
+  }>;
+};
+
+export type SettingsInstallOntologyPackMutationVariables = Exact<{
+  input: InstallOntologyPackInput;
+}>;
+
+export type SettingsInstallOntologyPackMutation = {
+  __typename?: "Mutation";
+  installOntologyPack: {
+    __typename?: "InstallOntologyPackPayload";
+    mergedItemIds: Array<string>;
+    skippedRejectedSlugs: Array<string>;
+    changeSet?: {
+      __typename?: "OntologyChangeSet";
+      id: string;
+      status: OntologyChangeSetStatus;
+      updatedAt: any;
+      items: Array<{
+        __typename?: "OntologyChangeSetItem";
+        id: string;
+        status: OntologyChangeSetStatus;
+        itemType: OntologyChangeItemType;
+        targetSlug?: string | null;
+        title: string;
+        proposedValue: any;
+        editedValue?: any | null;
+      }>;
+    } | null;
+    conflicts: Array<{
+      __typename?: "OntologyChangeSetSlugConflict";
+      slug: string;
+      itemType: OntologyChangeItemType;
+      reason: string;
+    }>;
+  };
+};
+
 export type SettingsMySlackLinksQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
 }>;
@@ -38515,6 +38571,209 @@ export const SettingsRejectOntologyChangeSetItemDocument = {
 } as unknown as DocumentNode<
   SettingsRejectOntologyChangeSetItemMutation,
   SettingsRejectOntologyChangeSetItemMutationVariables
+>;
+export const SettingsOntologyPacksDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsOntologyPacks" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "ontologyPacks" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "types" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "state" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsOntologyPacksQuery,
+  SettingsOntologyPacksQueryVariables
+>;
+export const SettingsInstallOntologyPackDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsInstallOntologyPack" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "InstallOntologyPackInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "installOntologyPack" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "changeSet" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "items" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "status" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "itemType" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "targetSlug" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "title" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "proposedValue" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "editedValue" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "mergedItemIds" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "skippedRejectedSlugs" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "conflicts" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "itemType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "reason" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsInstallOntologyPackMutation,
+  SettingsInstallOntologyPackMutationVariables
 >;
 export const SettingsMySlackLinksDocument = {
   kind: "Document",

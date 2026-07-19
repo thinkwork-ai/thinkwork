@@ -53,7 +53,7 @@ vi.mock("urql", () => ({
 }));
 vi.mock("@/lib/settings-queries", () => queryDocs);
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({ tenantId: "tenant-1" }),
+  useTenant: () => ({ tenantId: "tenant-1", userId: "user-1" }),
 }));
 
 vi.mock("@thinkwork/graph", () => ({
@@ -182,6 +182,7 @@ describe("OntologyMapView", () => {
       fetching: false,
       error: undefined,
     };
+    window.localStorage.clear();
   });
 
   it("hosts the self-fetching canvas and the review rail side by side", () => {
@@ -308,6 +309,71 @@ describe("OntologyMapView", () => {
       requestPolicy: "network-only",
     });
     expect(screen.queryByTestId("candidate-sheet")).toBeNull();
+  });
+
+  it("shows the day-one pack callout on a fresh tenant and routes to packs (R12)", () => {
+    queryState.graph = {
+      data: {
+        ontologySchemaGraph: { ...GRAPH, candidates: [] },
+      },
+      fetching: false,
+      error: undefined,
+    };
+    const onOpenPacks = vi.fn();
+    render(<OntologyMapView onOpenPacks={onOpenPacks} />);
+
+    expect(screen.getByText(/install a starter pack/i)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Browse starter packs" }),
+    );
+    expect(onOpenPacks).toHaveBeenCalled();
+  });
+
+  it("persists callout dismissal per admin across remounts", () => {
+    queryState.graph = {
+      data: { ontologySchemaGraph: { ...GRAPH, candidates: [] } },
+      fetching: false,
+      error: undefined,
+    };
+    const first = render(<OntologyMapView onOpenPacks={vi.fn()} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss starter pack suggestion" }),
+    );
+    expect(screen.queryByText(/install a starter pack/i)).toBeNull();
+
+    // A fresh mount (reload / view switch) stays dismissed for this admin.
+    first.unmount();
+    render(<OntologyMapView onOpenPacks={vi.fn()} />);
+    expect(screen.queryByText(/install a starter pack/i)).toBeNull();
+  });
+
+  it("hides the callout once candidates are pending review", () => {
+    // GRAPH has <= 4 types but one pending candidate — no nudge.
+    render(<OntologyMapView onOpenPacks={vi.fn()} />);
+    expect(screen.queryByText(/install a starter pack/i)).toBeNull();
+  });
+
+  it("opens the sheet on the handed-off focus after a pack install (AE4)", () => {
+    const onInitialFocusConsumed = vi.fn();
+    render(
+      <OntologyMapView
+        initialFocus={{
+          kind: "candidate",
+          itemId: "item-1",
+          changeSetId: "set-1",
+          label: "Work Order",
+        }}
+        onInitialFocusConsumed={onInitialFocusConsumed}
+      />,
+    );
+
+    expect(screen.getByTestId("candidate-sheet")).toBeTruthy();
+    expect(sheetProps.current.focus).toMatchObject({
+      kind: "candidate",
+      itemId: "item-1",
+      changeSetId: "set-1",
+    });
+    expect(onInitialFocusConsumed).toHaveBeenCalled();
   });
 
   it("refreshes without closing after a form save conflict refresh (AE1 ghost via refetch)", () => {

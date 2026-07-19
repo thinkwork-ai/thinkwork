@@ -105,9 +105,12 @@ export function OntologyReviewRail({
             Loading candidates...
           </div>
         ) : candidates.length === 0 ? (
+          // Steady state (U7): "all caught up" instead of a blank rail. No
+          // next-scan timestamp is queryable client-side (the weekly sweep
+          // lives in AWS Scheduler), so the copy names the cadence instead.
           <div className="text-muted-foreground rounded-md border p-4 text-sm">
-            Nothing waiting for review. New candidates appear here when
-            suggestion scans land or a teammate authors a triple.
+            All caught up — nothing is waiting for review. The next scheduled
+            scan will surface new candidates here.
           </div>
         ) : (
           <>

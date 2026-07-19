@@ -2722,6 +2722,55 @@ export const SettingsRejectOntologyChangeSetItemMutation = graphql(`
   }
 `);
 
+// ─── Ontology starter packs (THINK-320 U7) ─────────────────────────────────
+// Installable seed-template bundles with per-type state; install stages a
+// change set through the governed review path (R11/AE4) — nothing applies
+// without admin approval.
+
+export const SettingsOntologyPacksQuery = graphql(`
+  query SettingsOntologyPacks($tenantId: ID!) {
+    ontologyPacks(tenantId: $tenantId) {
+      slug
+      name
+      description
+      types {
+        slug
+        name
+        description
+        state
+      }
+    }
+  }
+`);
+
+export const SettingsInstallOntologyPackMutation = graphql(`
+  mutation SettingsInstallOntologyPack($input: InstallOntologyPackInput!) {
+    installOntologyPack(input: $input) {
+      changeSet {
+        id
+        status
+        updatedAt
+        items {
+          id
+          status
+          itemType
+          targetSlug
+          title
+          proposedValue
+          editedValue
+        }
+      }
+      mergedItemIds
+      skippedRejectedSlugs
+      conflicts {
+        slug
+        itemType
+        reason
+      }
+    }
+  }
+`);
+
 // ─── Connections (per-user integrations surface) ──────────────────────────
 // Slack per-user identity links render alongside the OAuth connections on the
 // Connections tab — the same GraphQL surface mobile's Credential Locker uses.

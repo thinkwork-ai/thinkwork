@@ -227,6 +227,8 @@ type Documents = {
   "\n  mutation SettingsApproveOntologyChangeSet(\n    $input: ApproveOntologyChangeSetInput!\n  ) {\n    approveOntologyChangeSet(input: $input) {\n      id\n      status\n      updatedAt\n      items {\n        id\n        status\n        updatedAt\n      }\n    }\n  }\n": typeof types.SettingsApproveOntologyChangeSetDocument;
   "\n  mutation SettingsRejectOntologyChangeSet(\n    $input: RejectOntologyChangeSetInput!\n  ) {\n    rejectOntologyChangeSet(input: $input) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.SettingsRejectOntologyChangeSetDocument;
   "\n  mutation SettingsRejectOntologyChangeSetItem(\n    $input: RejectOntologyChangeSetItemInput!\n  ) {\n    rejectOntologyChangeSetItem(input: $input) {\n      id\n      status\n      updatedAt\n      items {\n        id\n        status\n        updatedAt\n      }\n    }\n  }\n": typeof types.SettingsRejectOntologyChangeSetItemDocument;
+  "\n  query SettingsOntologyPacks($tenantId: ID!) {\n    ontologyPacks(tenantId: $tenantId) {\n      slug\n      name\n      description\n      types {\n        slug\n        name\n        description\n        state\n      }\n    }\n  }\n": typeof types.SettingsOntologyPacksDocument;
+  "\n  mutation SettingsInstallOntologyPack($input: InstallOntologyPackInput!) {\n    installOntologyPack(input: $input) {\n      changeSet {\n        id\n        status\n        updatedAt\n        items {\n          id\n          status\n          itemType\n          targetSlug\n          title\n          proposedValue\n          editedValue\n        }\n      }\n      mergedItemIds\n      skippedRejectedSlugs\n      conflicts {\n        slug\n        itemType\n        reason\n      }\n    }\n  }\n": typeof types.SettingsInstallOntologyPackDocument;
   "\n  query SettingsMySlackLinks($tenantId: ID!) {\n    mySlackLinks(tenantId: $tenantId) {\n      id\n      slackTeamId\n      slackTeamName\n      slackUserId\n      slackUserName\n      slackUserEmail\n      status\n      linkedAt\n    }\n  }\n": typeof types.SettingsMySlackLinksDocument;
   "\n  mutation SettingsUnlinkSlackIdentity($id: ID!) {\n    unlinkSlackIdentity(id: $id) {\n      id\n      status\n    }\n  }\n": typeof types.SettingsUnlinkSlackIdentityDocument;
   "\n  query TenantSkillCatalog($agentId: ID) {\n    tenantSkillCatalog(agentId: $agentId) {\n      slug\n      displayName\n      description\n      icon\n      installed\n    }\n  }\n": typeof types.TenantSkillCatalogDocument;
@@ -662,6 +664,10 @@ const documents: Documents = {
     types.SettingsRejectOntologyChangeSetDocument,
   "\n  mutation SettingsRejectOntologyChangeSetItem(\n    $input: RejectOntologyChangeSetItemInput!\n  ) {\n    rejectOntologyChangeSetItem(input: $input) {\n      id\n      status\n      updatedAt\n      items {\n        id\n        status\n        updatedAt\n      }\n    }\n  }\n":
     types.SettingsRejectOntologyChangeSetItemDocument,
+  "\n  query SettingsOntologyPacks($tenantId: ID!) {\n    ontologyPacks(tenantId: $tenantId) {\n      slug\n      name\n      description\n      types {\n        slug\n        name\n        description\n        state\n      }\n    }\n  }\n":
+    types.SettingsOntologyPacksDocument,
+  "\n  mutation SettingsInstallOntologyPack($input: InstallOntologyPackInput!) {\n    installOntologyPack(input: $input) {\n      changeSet {\n        id\n        status\n        updatedAt\n        items {\n          id\n          status\n          itemType\n          targetSlug\n          title\n          proposedValue\n          editedValue\n        }\n      }\n      mergedItemIds\n      skippedRejectedSlugs\n      conflicts {\n        slug\n        itemType\n        reason\n      }\n    }\n  }\n":
+    types.SettingsInstallOntologyPackDocument,
   "\n  query SettingsMySlackLinks($tenantId: ID!) {\n    mySlackLinks(tenantId: $tenantId) {\n      id\n      slackTeamId\n      slackTeamName\n      slackUserId\n      slackUserName\n      slackUserEmail\n      status\n      linkedAt\n    }\n  }\n":
     types.SettingsMySlackLinksDocument,
   "\n  mutation SettingsUnlinkSlackIdentity($id: ID!) {\n    unlinkSlackIdentity(id: $id) {\n      id\n      status\n    }\n  }\n":
@@ -1970,6 +1976,18 @@ export function graphql(
 export function graphql(
   source: "\n  mutation SettingsRejectOntologyChangeSetItem(\n    $input: RejectOntologyChangeSetItemInput!\n  ) {\n    rejectOntologyChangeSetItem(input: $input) {\n      id\n      status\n      updatedAt\n      items {\n        id\n        status\n        updatedAt\n      }\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SettingsRejectOntologyChangeSetItem(\n    $input: RejectOntologyChangeSetItemInput!\n  ) {\n    rejectOntologyChangeSetItem(input: $input) {\n      id\n      status\n      updatedAt\n      items {\n        id\n        status\n        updatedAt\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query SettingsOntologyPacks($tenantId: ID!) {\n    ontologyPacks(tenantId: $tenantId) {\n      slug\n      name\n      description\n      types {\n        slug\n        name\n        description\n        state\n      }\n    }\n  }\n",
+): (typeof documents)["\n  query SettingsOntologyPacks($tenantId: ID!) {\n    ontologyPacks(tenantId: $tenantId) {\n      slug\n      name\n      description\n      types {\n        slug\n        name\n        description\n        state\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation SettingsInstallOntologyPack($input: InstallOntologyPackInput!) {\n    installOntologyPack(input: $input) {\n      changeSet {\n        id\n        status\n        updatedAt\n        items {\n          id\n          status\n          itemType\n          targetSlug\n          title\n          proposedValue\n          editedValue\n        }\n      }\n      mergedItemIds\n      skippedRejectedSlugs\n      conflicts {\n        slug\n        itemType\n        reason\n      }\n    }\n  }\n",
+): (typeof documents)["\n  mutation SettingsInstallOntologyPack($input: InstallOntologyPackInput!) {\n    installOntologyPack(input: $input) {\n      changeSet {\n        id\n        status\n        updatedAt\n        items {\n          id\n          status\n          itemType\n          targetSlug\n          title\n          proposedValue\n          editedValue\n        }\n      }\n      mergedItemIds\n      skippedRejectedSlugs\n      conflicts {\n        slug\n        itemType\n        reason\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
