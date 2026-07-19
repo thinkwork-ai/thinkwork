@@ -245,10 +245,10 @@ describe("projectHarnessConfig — AE2 rejections name the capability", () => {
     if (!result.ok) return;
     expect(result.config.tools).toContainEqual({
       type: "agentcore_browser",
-      name: "browser_automation",
+      name: "browser",
       config: { agentCoreBrowser: {} },
     });
-    expect(result.config.allowedTools).toContain("browser_automation");
+    expect(result.config.allowedTools).toContain("browser");
     expect(result.config.evidence.exclusions).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ capability: "browser_automation" }),

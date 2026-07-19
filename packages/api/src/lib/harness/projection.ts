@@ -163,7 +163,7 @@ export interface HarnessProjectedInlineFunctionTool {
 
 export interface HarnessProjectedAgentCoreBrowserTool {
   type: "agentcore_browser";
-  name: "browser_automation";
+  name: "browser";
   config: {
     /** Empty selects AWS's built-in managed Browser ARN. */
     agentCoreBrowser: Record<string, never>;
@@ -196,7 +196,7 @@ export interface HarnessSkillMaterialization {
 export interface HarnessProjectionExclusion {
   capability: string;
   disposition: /** Replaced by the caller-fulfilled inline emit_document tool. */
-    | "replaced_by_inline_tool"
+  | "replaced_by_inline_tool"
     /** Platform-side behavior that never enters the model/tool loop. */
     | "platform_side"
     /** Deliberately outside the trial's scoped parity (dossier-bounded). */
@@ -444,10 +444,10 @@ export function projectHarnessConfig(
   if (surface.browserAutomationEnabled) {
     tools.push({
       type: "agentcore_browser",
-      name: "browser_automation",
+      name: "browser",
       config: { agentCoreBrowser: {} },
     });
-    allowedTools.push("browser_automation");
+    allowedTools.push("browser");
   }
   for (const mcp of input.mcpConfigs) {
     const name = mcp.name?.trim();

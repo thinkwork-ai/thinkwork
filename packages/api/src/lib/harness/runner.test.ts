@@ -179,6 +179,40 @@ function toolUseEvents(
   ];
 }
 
+function managedBrowserEvents(text: string): HarnessStreamEvent[] {
+  return [
+    { messageStart: { role: "assistant" } },
+    {
+      contentBlockStart: {
+        contentBlockIndex: 0,
+        start: { toolUse: { toolUseId: "browser-1", name: "browser" } },
+      },
+    },
+    {
+      contentBlockDelta: {
+        contentBlockIndex: 0,
+        delta: {
+          toolUse: {
+            input: JSON.stringify({ url: "https://example.com" }),
+          },
+        },
+      },
+    },
+    { contentBlockStop: { contentBlockIndex: 0 } },
+    { messageStop: { stopReason: "tool_use" } },
+    { messageStart: { role: "user" } },
+    { contentBlockStart: { contentBlockIndex: 0 } },
+    { contentBlockStop: { contentBlockIndex: 0 } },
+    { messageStop: { stopReason: "tool_result" } },
+    { messageStart: { role: "assistant" } },
+    { contentBlockStart: { contentBlockIndex: 0 } },
+    { contentBlockDelta: { contentBlockIndex: 0, delta: { text } } },
+    { contentBlockStop: { contentBlockIndex: 0 } },
+    { messageStop: { stopReason: "end_turn" } },
+    { metadata: { usage: { inputTokens: 120, outputTokens: 30 } } },
+  ];
+}
+
 const EMIT_INPUT = {
   genre: "qbr",
   title: "QBR: 777 Automotive",
@@ -1348,8 +1382,76 @@ describe("runHarnessTurn — happy path", () => {
     expect(result.status).toBe("completed");
     expect(deps.invocations).toHaveLength(1);
     expect(deps.invocations[0].tools).toEqual([
-      { type: "agentcore_browser", name: "browser_automation" },
+      { type: "agentcore_browser", name: "browser" },
     ]);
+  });
+
+  it("fails closed when an explicit Browser request ends without managed execution evidence", async () => {
+    const deps = makeDeps([
+      stream(textEvents("TITLE=Example Domain\nHEADING=Example Domain")),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Use Browser Automation to open https://example.com and report the title.",
+      browser_automation_enabled: true,
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "no managed Browser invocation",
+    );
+  });
+
+  it("rejects raw function-call markup instead of publishing a fabricated Browser success", async () => {
+    const deps = makeDeps([
+      stream(
+        textEvents(
+          '<function_calls>[{"type":"get_page_content"}]</function_calls>\nTITLE=Example Domain',
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message: "Use Browser Automation to inspect https://example.com.",
+      browser_automation_enabled: true,
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "raw tool-call markup",
+    );
+  });
+
+  it("accepts an explicit Browser request only with managed internal evidence", async () => {
+    const deps = makeDeps([
+      stream(
+        managedBrowserEvents("TITLE=Example Domain\nHEADING=Example Domain"),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Use Browser Automation to open https://example.com and report the title.",
+      browser_automation_enabled: true,
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.finalizePayloads[0].response?.tool_invocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool_name: "browser",
+          protocol: "agentcore_harness_internal_v1",
+          status: "completed",
+        }),
+      ]),
+    );
   });
 
   it("does not expose native Browser when the effective capability is disabled", async () => {

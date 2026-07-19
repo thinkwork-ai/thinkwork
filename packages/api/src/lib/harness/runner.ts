@@ -1111,9 +1111,9 @@ export function requiresExplicitDocumentEmission(
 ): boolean {
   return Boolean(
     selectRequestedDocumentPlate(message, documentPlates) ??
-    /(?:\bemit_document\b|\bhtml\s+artifact\b|\bdurable\s+html\b|\busing\s+the\s+[a-z0-9_-]+\s+plate\b)/i.test(
-      message,
-    ),
+      /(?:\bemit_document\b|\bhtml\s+artifact\b|\bdurable\s+html\b|\busing\s+the\s+[a-z0-9_-]+\s+plate\b)/i.test(
+        message,
+      ),
   );
 }
 
@@ -1193,6 +1193,21 @@ const UNSUPPORTED_PAYLOAD_FIELDS: Array<[string, string]> = [
 ];
 const SKILL_CREATOR_SUBMIT_INTENT_RE =
   /\b(?:submit|review|approval|approve|ready|queue|register|publish|library)\b/i;
+const RAW_HARNESS_TOOL_MARKUP_RE =
+  /<\s*\/?\s*(?:tool_call|tool_response|function_calls?|function_results?)\b/i;
+const EXPLICIT_BROWSER_REQUEST_RE =
+  /\b(?:use|call|invoke|run|open|browse|inspect|navigate|visit|interact)\b[\s\S]{0,48}\b(?:browser automation|managed browser|agentcore browser|browser tool)\b/i;
+
+function hasManagedBrowserEvidence(
+  invocations: Array<Record<string, unknown>>,
+): boolean {
+  return invocations.some(
+    (invocation) =>
+      invocation.tool_name === "browser" &&
+      invocation.protocol === "agentcore_harness_internal_v1" &&
+      invocation.status === "completed",
+  );
+}
 
 function isSkillCreatorCommandPayload(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -1447,16 +1462,16 @@ export async function runHarnessTurn(
     const normalizedTask = normalizePlatePhrase(turn.userMessage);
     const connectorEvidenceRequired = Boolean(
       selectedDocumentPlate &&
-      connectorNames.some((name) => {
-        const normalizedName = normalizePlatePhrase(name);
-        return (
-          normalizedTask.includes(normalizedName) ||
-          normalizedTask.includes("live") ||
-          ((selectedDocumentPlate.slug === "sales-rep-review" ||
-            selectedDocumentPlate.slug === "opportunity-review") &&
-            normalizedName.includes("crm"))
-        );
-      }),
+        connectorNames.some((name) => {
+          const normalizedName = normalizePlatePhrase(name);
+          return (
+            normalizedTask.includes(normalizedName) ||
+            normalizedTask.includes("live") ||
+            ((selectedDocumentPlate.slug === "sales-rep-review" ||
+              selectedDocumentPlate.slug === "opportunity-review") &&
+              normalizedName.includes("crm"))
+          );
+        }),
     );
     const selectedConnectorName = connectorEvidenceRequired
       ? (connectorNames.find((name) =>
@@ -1905,7 +1920,10 @@ export async function runHarnessTurn(
               tools: [
                 {
                   type: "agentcore_browser",
-                  name: "browser_automation",
+                  // Keep the ThinkWork capability slug `browser_automation`,
+                  // but expose AWS's canonical native Harness tool name. The
+                  // service examples and managed tool contract use `browser`.
+                  name: "browser",
                 },
               ],
             }
@@ -2149,6 +2167,22 @@ export async function runHarnessTurn(
             },
           ];
           continue;
+        }
+        if (RAW_HARNESS_TOOL_MARKUP_RE.test(finalText)) {
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness returned raw tool-call markup instead of a managed tool execution.",
+          });
+        }
+        if (
+          payload.browser_automation_enabled === true &&
+          EXPLICIT_BROWSER_REQUEST_RE.test(turn.userMessage) &&
+          !hasManagedBrowserEvidence(toolInvocations)
+        ) {
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness Browser was explicitly requested but no managed Browser invocation was observed.",
+          });
         }
         guardHarnessPublication(finalText);
         if (goalExecution) {
