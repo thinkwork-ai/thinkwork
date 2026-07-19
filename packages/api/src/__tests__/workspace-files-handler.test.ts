@@ -4418,13 +4418,12 @@ describe("user context workspace target", () => {
     expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
   });
 
-  it("writes requester context files directly to the tenant/user S3 prefix", async () => {
+  it("lets a member write their own user workspace directly to the tenant/user S3 prefix", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([{ principalId: USER_ID, principalType: "USER" }]);
     pushDbRows([tenantRow()]);
     pushDbRows([userRow()]);
-    pushDbRows([{ role: "admin" }]);
     s3Mock.on(PutObjectCommand).resolves({});
 
     const res = await parse(
@@ -4446,6 +4445,61 @@ describe("user context workspace target", () => {
       Bucket: "test-bucket",
       Key: "tenants/acme/users/eric/memory/MEMORY.md",
       Body: "- Prefers concise summaries\n",
+    });
+  });
+
+  it("does not let a member write another user's workspace", async () => {
+    const otherUserId = "user-dana-id";
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: otherUserId, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow({ id: otherUserId, workspaceFolderName: "dana" })]);
+    pushDbRows([{ role: "member" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          userId: otherUserId,
+          path: "USER.md",
+          content: "# Dana\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toMatch(/admin or owner/i);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
+  it("lets an operator write another user's workspace", async () => {
+    const otherUserId = "user-dana-id";
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([{ principalId: otherUserId, principalType: "USER" }]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([userRow({ id: otherUserId, workspaceFolderName: "dana" })]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          userId: otherUserId,
+          path: "USER.md",
+          content: "# Dana\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Key: "tenants/acme/users/dana/USER.md",
+      Body: "# Dana\n",
     });
   });
 });

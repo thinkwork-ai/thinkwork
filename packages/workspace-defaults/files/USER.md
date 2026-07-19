@@ -1,6 +1,7 @@
 # USER.md - About Your Human
 
 - **Name:** {{HUMAN_NAME}}
+- **Email:** {{HUMAN_EMAIL}}
 - **What to call them:** {{HUMAN_CALL_BY}}
 - **Pronouns:** {{HUMAN_PRONOUNS}}
 - **Timezone:** {{HUMAN_TIMEZONE}}

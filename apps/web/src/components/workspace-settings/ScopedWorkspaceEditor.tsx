@@ -17,10 +17,10 @@ import {
  * settings surface embeds one of these with its own single target, so edits
  * land under that source and the tree never lists another source's files.
  *
- * Editing stays operator-gated (everyone else sees the files read-only),
- * mirroring the consolidated view's `isOperator && roleResolved` rule — gating
- * on roleResolved too so members never flash an editable state before
- * /api/auth/me resolves the role.
+ * Operators may edit any source. Every admitted user may also edit their own
+ * user source, matched by the resolved database users.id from /api/auth/me.
+ * Gating on roleResolved prevents a writable flash before caller identity and
+ * role have resolved; the server repeats the same self-only authorization.
  */
 export function ScopedWorkspaceEditor({
   target,
@@ -38,7 +38,11 @@ export function ScopedWorkspaceEditor({
   bordered?: boolean;
   className?: string;
 }) {
-  const { isOperator, roleResolved } = useTenant();
+  const { isOperator, roleResolved, userId: callerUserId } = useTenant();
+  const isSelfUserTarget =
+    "userId" in target &&
+    Boolean(callerUserId) &&
+    target.userId === callerUserId;
 
   const client = useMemo(
     () =>
@@ -53,7 +57,7 @@ export function ScopedWorkspaceEditor({
       target={target}
       targetKey={targetKey}
       client={client}
-      readOnly={!(isOperator && roleResolved)}
+      readOnly={!(roleResolved && (isOperator || isSelfUserTarget))}
       defaultOpenFile={defaultOpenFile}
       bordered={bordered}
       className={className}
