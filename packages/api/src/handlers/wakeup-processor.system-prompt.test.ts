@@ -213,22 +213,25 @@ describe("wakeup processor system prompt capture", () => {
     expect(mocks.lambdaSend).not.toHaveBeenCalled();
   });
 
-  it("declares non-question Harness wakeups unsupported instead of running Pi", async () => {
+  it("routes automation wakeups to the selected Harness runner instead of Pi", async () => {
     vi.stubEnv("AGENTCORE_PI_FUNCTION_NAME", "thinkwork-dev-agentcore-pi");
     vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "thinkwork-dev-harness-runner");
 
     const result = await invokeAgentCore({ message: "wake up" }, "agentcore");
 
-    expect(result).toMatchObject({
-      ok: false,
-      status: 501,
-      result: {
-        runtime_type: "agentcore",
-        error: expect.stringContaining("trial-scoped to chat dispatch"),
-      },
+    expect(result).toEqual({
+      ok: true,
+      status: 200,
+      result: { ok: true },
     });
-    // Neither engine is invoked — even with both functions provisioned.
-    expect(mocks.lambdaSend).not.toHaveBeenCalled();
+    expect(mocks.lambdaSend).toHaveBeenCalledTimes(1);
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: { FunctionName: string; InvocationType: string };
+    };
+    expect(command.input).toMatchObject({
+      FunctionName: "thinkwork-dev-harness-runner",
+      InvocationType: "RequestResponse",
+    });
   });
 
   it("routes a pending-question answer wakeup to the Harness runner", async () => {

@@ -1170,6 +1170,12 @@ const startEvalRun = async (
   // Gate before ANY side effect — a denied caller must leave zero rows
   // and never reach the model-catalog probe (arg-derived: no row yet).
   await requireTenantAdmin(ctx, args.tenantId);
+  const requesterUserId = await resolveCallerUserId(ctx);
+  if (!requesterUserId) {
+    throw new GraphQLError("Evaluation requester identity is required", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
 
   if (args.input.computerId) {
     throw new Error(
@@ -1225,6 +1231,7 @@ const startEvalRun = async (
       tenant_id: args.tenantId,
       agent_id: null,
       computer_id: null,
+      requester_user_id: requesterUserId,
       status: "pending",
       execution_target: "agentcore",
       runtime_host: "aws-agentcore",

@@ -31,6 +31,7 @@ export async function publishSkillDraft(
     publishResult = await publishSkillDraftToCatalog({
       tenantId,
       tenantSlug,
+      requesterUserId: userId,
       draft,
       confirmReplace: args.input.confirmReplace === true,
     });

@@ -131,6 +131,7 @@ async function markRunFailed(runId: string, message: string): Promise<void> {
 export async function launchSkillEvalRun(args: {
   tenantId: string;
   skillSlug: string;
+  requesterUserId?: string | null;
   /**
    * Dataset slug override (Skill Tests & Evals U6). Defaults to the live
    * `skill-<slug>` dataset. The gated-update path passes the candidate
@@ -195,6 +196,7 @@ export async function launchSkillEvalRun(args: {
     .values({
       tenant_id: tenantId,
       agent_id: null,
+      requester_user_id: args.requesterUserId ?? null,
       status: "pending",
       execution_target: "agentcore",
       runtime_host: "aws-agentcore",

@@ -971,10 +971,12 @@ async function executeCase(
         messagesHistory: tc.messages_history,
         replayToolOverrides,
         replayRequesterUserId: tc.replay_requester_user_id ?? null,
+        requesterUserId: run.requester_user_id,
       });
       actualOutput = inv.output;
       durationMs = inv.durationMs;
       systemPrompt = inv.composedSystemPrompt;
+      threadTurnId = inv.threadTurnId ?? null;
       // Agent-turn telemetry (U5): undefined on envelopes from older
       // runtime images — the row then records null tokens/cost and the
       // run summary marks cost partial, never zero.

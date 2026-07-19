@@ -9,11 +9,13 @@ import {
   resolveAgentRuntimeConfig,
   type AgentRuntimeConfig,
 } from "../resolve-agent-runtime-config.js";
-import {
-  HarnessChatDispatchOnlyError,
-  resolveRuntimeFunctionName,
-} from "../resolve-runtime-function-name.js";
+import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js";
 import { resolveCurrentCapabilitiesManifest } from "../capabilities/current-manifest.js";
+import {
+  canonicalHarnessEvalTraceId,
+  createCanonicalHarnessEvalTurn,
+  loadCanonicalHarnessEvalResult,
+} from "./agentcore-harness-turn.js";
 
 // Import from the leaf module (used internally below) and re-export so
 // callers that only need the id (e.g. skill-eval-run.ts) can import it
@@ -138,9 +140,13 @@ export function extractAgentCoreUsage(
   }
   const usage = data as Record<string, unknown>;
   const inputTokens =
-    finiteNonNegative(usage.input) ?? finiteNonNegative(usage.inputTokens);
+    finiteNonNegative(usage.input) ??
+    finiteNonNegative(usage.inputTokens) ??
+    finiteNonNegative(usage.input_tokens);
   const outputTokens =
-    finiteNonNegative(usage.output) ?? finiteNonNegative(usage.outputTokens);
+    finiteNonNegative(usage.output) ??
+    finiteNonNegative(usage.outputTokens) ??
+    finiteNonNegative(usage.output_tokens);
   if (inputTokens === undefined || outputTokens === undefined) {
     return undefined;
   }
@@ -367,9 +373,12 @@ export async function invokeAgentCoreForEval(input: {
    * pass null/undefined and keep the no-requester fail-closed behavior.
    */
   replayRequesterUserId?: string | null;
+  /** Exact operator/job owner used for synthetic evaluation cases. */
+  requesterUserId?: string | null;
 }): Promise<{
   output: string;
   durationMs: number;
+  threadTurnId?: string | null;
   /**
    * The composed system prompt the runtime ran against, captured from
    * the runtime's response (Pi's `composed_system_prompt` field). Null
@@ -422,9 +431,11 @@ async function invokeAgentCoreForEvalOnce(input: {
   messagesHistory?: EvalReplayHistoryMessage[];
   replayToolOverrides?: EvalReplayToolOverride[];
   replayRequesterUserId?: string | null;
+  requesterUserId?: string | null;
 }): Promise<{
   output: string;
   durationMs: number;
+  threadTurnId?: string | null;
   composedSystemPrompt: string | null;
   usage?: EvalAgentUsage;
 }> {
@@ -437,10 +448,12 @@ async function invokeAgentCoreForEvalOnce(input: {
   // still carries no manifest fingerprint, so eval turns never register
   // folder binding/script tools that would bypass selectReplayMcpTools'
   // read-only filter.
+  const requesterUserId =
+    input.replayRequesterUserId ?? input.requesterUserId ?? null;
   const capabilitiesManifest = await resolveCurrentCapabilitiesManifest({
     tenantId: input.tenantId,
     agentId: input.agentId,
-    userId: input.replayRequesterUserId ?? null,
+    userId: requesterUserId,
     logPrefix: "[eval-worker]",
   });
 
@@ -456,24 +469,44 @@ async function invokeAgentCoreForEvalOnce(input: {
     // owner becomes the requester so per-user OAuth servers resolve the
     // way that user's chat turns do. Undefined for synthetic cases —
     // plugin OAuth servers then drop fail-closed exactly as before.
-    ...(input.replayRequesterUserId
-      ? { currentUserId: input.replayRequesterUserId }
-      : {}),
+    ...(requesterUserId ? { currentUserId: requesterUserId } : {}),
   });
-  // THINK-311 (KTD-7): the Harness trial is chat-dispatch only — evals of
-  // a harness-flagged agent fail explicitly rather than resolving the
-  // harness runner (out of trial scope) or silently running Pi (R4).
-  if (runtimeConfig.runtimeType === "agentcore") {
-    throw new HarnessChatDispatchOnlyError("eval");
-  }
   const agentcoreFunctionName = resolveRuntimeFunctionName(
     runtimeConfig.runtimeType,
   );
+  let canonicalHarnessTurn:
+    | Awaited<ReturnType<typeof createCanonicalHarnessEvalTurn>>
+    | undefined;
+  if (runtimeConfig.runtimeType === "agentcore") {
+    if (!requesterUserId) {
+      throw new Error(
+        "AgentCore Harness evaluations require an exact requester user identity.",
+      );
+    }
+    canonicalHarnessTurn = await createCanonicalHarnessEvalTurn({
+      tenantId: input.tenantId,
+      tenantSlug: runtimeConfig.tenantSlug,
+      agentId: input.agentId,
+      requesterUserId,
+      sessionId: input.sessionId,
+      message: input.message,
+      messagesHistory: input.messagesHistory,
+    });
+  }
   const invokePayload = buildEvalAgentCorePayload({
     ...input,
     systemPrompt: input.systemPrompt ?? null,
     runtimeConfig,
   });
+  if (canonicalHarnessTurn) {
+    Object.assign(invokePayload, {
+      thread_id: canonicalHarnessTurn.threadId,
+      thread_turn_id: canonicalHarnessTurn.threadTurnId,
+      user_id: requesterUserId,
+      cost_owner_user_id: requesterUserId,
+      trace_id: canonicalHarnessEvalTraceId(input.sessionId),
+    });
+  }
   const lambdaEventPayload = JSON.stringify({
     requestContext: { http: { method: "POST", path: "/invocations" } },
     rawPath: "/invocations",
@@ -514,6 +547,24 @@ async function invokeAgentCoreForEvalOnce(input: {
     );
   }
 
+  if (canonicalHarnessTurn) {
+    const harnessResult = await loadCanonicalHarnessEvalResult({
+      tenantId: input.tenantId,
+      threadTurnId: canonicalHarnessTurn.threadTurnId,
+    });
+    if (!harnessResult.output || harnessResult.output === "{}") {
+      throw new AgentCoreEvalEmptyResponseError();
+    }
+    const usage = extractAgentCoreUsage(harnessResult.usage ?? undefined);
+    return {
+      output: harnessResult.output,
+      durationMs: Date.now() - startedAt,
+      composedSystemPrompt: harnessResult.composedSystemPrompt,
+      threadTurnId: canonicalHarnessTurn.threadTurnId,
+      ...(usage ? { usage } : {}),
+    };
+  }
+
   const adapterResp = JSON.parse(rawPayload) as Record<string, unknown>;
   const adapterStatus = (adapterResp.statusCode as number) || 200;
   const adapterBodyStr = (adapterResp.body as string) || rawPayload;
@@ -552,6 +603,7 @@ async function invokeAgentCoreForEvalOnce(input: {
     output,
     durationMs: Date.now() - startedAt,
     composedSystemPrompt,
+    threadTurnId: null,
     ...(usage ? { usage } : {}),
   };
 }
