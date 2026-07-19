@@ -41,6 +41,12 @@ import {
   type WorkspaceSkillAccessErrorCode,
 } from "../lib/harness/workspace-tools.js";
 import {
+  messageAttachmentTools,
+  type AuthorizedMessageAttachment,
+  type MessageAttachmentAccessErrorCode,
+  type ReadMessageAttachmentResult,
+} from "../lib/harness/message-attachment-tools.js";
+import {
   appendToolExecutionStarted,
   appendToolExecutionTerminal,
   drizzleToolExecutionLedgerStore,
@@ -54,6 +60,10 @@ const WORKSPACE_SKILLS_LIST_PATH =
   "/agentcore/capabilities/workspace/skills/list";
 const WORKSPACE_SKILLS_LOAD_PATH =
   "/agentcore/capabilities/workspace/skills/load";
+const MESSAGE_ATTACHMENTS_LIST_PATH =
+  "/agentcore/capabilities/message/attachments/list";
+const MESSAGE_ATTACHMENTS_READ_PATH =
+  "/agentcore/capabilities/message/attachments/read";
 const MAX_BODY_BYTES = 80 * 1024;
 const MAX_QUERY_CHARS = 2_000;
 const MAX_EMAIL_SUBJECT_CHARS = 500;
@@ -77,6 +87,13 @@ interface EmailBody {
 interface WorkspaceSkillBody {
   tenant_id?: unknown;
   skill?: unknown;
+}
+
+interface MessageAttachmentBody {
+  tenant_id?: unknown;
+  attachment_id?: unknown;
+  offset?: unknown;
+  max_chars?: unknown;
 }
 
 interface PlatformAccess {
@@ -130,6 +147,16 @@ export interface HarnessPlatformToolsDeps {
       manifestFingerprint: string;
     }
   >;
+  listMessageAttachments(context: HarnessCapabilityContext): Promise<{
+    attachmentSetFingerprint: string;
+    attachments: AuthorizedMessageAttachment[];
+  }>;
+  readMessageAttachment(
+    context: HarnessCapabilityContext,
+    attachmentId: string,
+    offset: number,
+    maxChars: number,
+  ): Promise<ReadMessageAttachmentResult>;
   claimEmail(input: EmailClaimInput): Promise<EmailClaim>;
   finishEmail(input: {
     context: HarnessCapabilityContext;
@@ -157,6 +184,8 @@ export function createHarnessPlatformToolsHandler(
         EMAIL_PATH,
         WORKSPACE_SKILLS_LIST_PATH,
         WORKSPACE_SKILLS_LOAD_PATH,
+        MESSAGE_ATTACHMENTS_LIST_PATH,
+        MESSAGE_ATTACHMENTS_READ_PATH,
       ].includes(path)
     ) {
       return response(404, { error: "not_found" });
@@ -184,12 +213,17 @@ export function createHarnessPlatformToolsHandler(
     if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
       return response(413, { error: "request_too_large" });
     }
-    let body: BrainBody | EmailBody | WorkspaceSkillBody;
+    let body:
+      | BrainBody
+      | EmailBody
+      | WorkspaceSkillBody
+      | MessageAttachmentBody;
     try {
       body = JSON.parse(rawBody || "{}") as
         | BrainBody
         | EmailBody
-        | WorkspaceSkillBody;
+        | WorkspaceSkillBody
+        | MessageAttachmentBody;
     } catch {
       console.warn("[harness-platform-tools] Invalid Gateway body encoding", {
         path,
@@ -213,7 +247,9 @@ export function createHarnessPlatformToolsHandler(
           ? parseEmailBody(body as EmailBody)
           : path === WORKSPACE_SKILLS_LOAD_PATH
             ? parseWorkspaceSkillBody(body as WorkspaceSkillBody)
-            : ({ ok: true, value: {} } as ParseResult<Record<string, never>>);
+            : path === MESSAGE_ATTACHMENTS_READ_PATH
+              ? parseMessageAttachmentBody(body as MessageAttachmentBody)
+              : ({ ok: true, value: {} } as ParseResult<Record<string, never>>);
     if (!parsed.ok) return response(400, { error: parsed.error });
 
     const context = await deps.resolveCanonicalContext(claims);
@@ -240,11 +276,22 @@ export function createHarnessPlatformToolsHandler(
     if (path === WORKSPACE_SKILLS_LIST_PATH) {
       return runWorkspaceSkillList(deps, context, event);
     }
-    return runWorkspaceSkillLoad(
+    if (path === WORKSPACE_SKILLS_LOAD_PATH) {
+      return runWorkspaceSkillLoad(
+        deps,
+        context,
+        event,
+        parsed.value as ParsedWorkspaceSkill,
+      );
+    }
+    if (path === MESSAGE_ATTACHMENTS_LIST_PATH) {
+      return runMessageAttachmentList(deps, context, event);
+    }
+    return runMessageAttachmentRead(
       deps,
       context,
       event,
-      parsed.value as ParsedWorkspaceSkill,
+      parsed.value as ParsedMessageAttachment,
     );
   };
 }
@@ -418,6 +465,157 @@ async function finishWorkspaceSkillError(
     });
   }
   return response(workspaceSkillErrorStatus(code), { error: code });
+}
+
+async function runMessageAttachmentList(
+  deps: HarnessPlatformToolsDeps,
+  context: HarnessCapabilityContext,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const startedAt = deps.now();
+  const correlation = correlationFor({
+    context,
+    event,
+    operation: "message.attachments.list",
+    policyRevision: deps.policyRevision,
+    idempotencyKey: event.requestContext.requestId,
+    credentialOwnerAlias: null,
+  });
+  await appendToolExecutionStarted(deps.ledgerStore, {
+    ...correlation,
+    input: {},
+    inputAllowPaths: [],
+  });
+  try {
+    const result = await deps.listMessageAttachments(context);
+    await appendToolExecutionTerminal(deps.ledgerStore, {
+      ...correlation,
+      status: "completed",
+      output: {
+        attachmentCount: result.attachments.length,
+        attachmentSetFingerprint: result.attachmentSetFingerprint,
+      },
+      outputAllowPaths: ["attachmentCount", "attachmentSetFingerprint"],
+      durationMs: Math.max(0, deps.now() - startedAt),
+    });
+    return response(200, result);
+  } catch (error) {
+    return finishMessageAttachmentError(
+      deps,
+      correlation,
+      startedAt,
+      error,
+      "message_attachment_source_unavailable",
+    );
+  }
+}
+
+async function runMessageAttachmentRead(
+  deps: HarnessPlatformToolsDeps,
+  context: HarnessCapabilityContext,
+  event: APIGatewayProxyEventV2,
+  input: ParsedMessageAttachment,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const startedAt = deps.now();
+  const correlation = correlationFor({
+    context,
+    event,
+    operation: "message.attachments.read",
+    policyRevision: deps.policyRevision,
+    idempotencyKey: event.requestContext.requestId,
+    credentialOwnerAlias: null,
+  });
+  await appendToolExecutionStarted(deps.ledgerStore, {
+    ...correlation,
+    input: {
+      attachmentId: input.attachmentId,
+      offset: input.offset,
+      maxChars: input.maxChars,
+    },
+    inputAllowPaths: ["attachmentId", "offset", "maxChars"],
+  });
+  try {
+    const result = await deps.readMessageAttachment(
+      context,
+      input.attachmentId,
+      input.offset,
+      input.maxChars,
+    );
+    await appendToolExecutionTerminal(deps.ledgerStore, {
+      ...correlation,
+      status: "completed",
+      output: {
+        attachmentId: result.attachmentId,
+        kind: result.kind,
+        contentSha256: result.contentSha256,
+        offset: result.offset,
+        nextOffset: result.nextOffset,
+        totalChars: result.totalChars,
+        truncated: result.truncated,
+      },
+      outputAllowPaths: [
+        "attachmentId",
+        "kind",
+        "contentSha256",
+        "offset",
+        "nextOffset",
+        "totalChars",
+        "truncated",
+      ],
+      durationMs: Math.max(0, deps.now() - startedAt),
+    });
+    return response(200, result);
+  } catch (error) {
+    return finishMessageAttachmentError(
+      deps,
+      correlation,
+      startedAt,
+      error,
+      "message_attachment_source_unavailable",
+    );
+  }
+}
+
+async function finishMessageAttachmentError(
+  deps: HarnessPlatformToolsDeps,
+  correlation: ToolExecutionCorrelation,
+  startedAt: number,
+  error: unknown,
+  fallbackCode: MessageAttachmentAccessErrorCode,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const code = messageAttachmentErrorCode(error) ?? fallbackCode;
+  await appendToolExecutionTerminal(deps.ledgerStore, {
+    ...correlation,
+    status: "failed",
+    output: {},
+    outputAllowPaths: [],
+    error: { code },
+    errorAllowPaths: ["code"],
+    durationMs: Math.max(0, deps.now() - startedAt),
+  });
+  return response(messageAttachmentErrorStatus(code), { error: code });
+}
+
+function messageAttachmentErrorCode(
+  error: unknown,
+): MessageAttachmentAccessErrorCode | null {
+  if (!error || typeof error !== "object" || !("code" in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return code === "invalid_message_attachment" ||
+    code === "message_attachment_not_authorized" ||
+    code === "message_attachment_source_unavailable" ||
+    code === "message_attachment_too_large" ||
+    code === "message_attachment_unreadable"
+    ? code
+    : null;
+}
+
+function messageAttachmentErrorStatus(code: MessageAttachmentAccessErrorCode) {
+  if (code === "invalid_message_attachment") return 400;
+  if (code === "message_attachment_not_authorized") return 403;
+  if (code === "message_attachment_too_large") return 413;
+  if (code === "message_attachment_unreadable") return 422;
+  return 503;
 }
 
 function workspaceSkillErrorCode(
@@ -779,6 +977,12 @@ interface ParsedWorkspaceSkill {
   skill: string;
 }
 
+interface ParsedMessageAttachment {
+  attachmentId: string;
+  offset: number;
+  maxChars: number;
+}
+
 type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 function parseBrainBody(body: BrainBody): ParseResult<ParsedBrain> {
@@ -850,6 +1054,35 @@ function parseWorkspaceSkillBody(
     return { ok: false, error: "invalid_workspace_skill" };
   }
   return { ok: true, value: { skill: body.skill } };
+}
+
+function parseMessageAttachmentBody(
+  body: MessageAttachmentBody,
+): ParseResult<ParsedMessageAttachment> {
+  const attachmentId = body.attachment_id;
+  const offset = body.offset === undefined ? 0 : body.offset;
+  const maxChars = body.max_chars === undefined ? 32 * 1024 : body.max_chars;
+  if (
+    typeof attachmentId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      attachmentId,
+    ) ||
+    !Number.isSafeInteger(offset) ||
+    Number(offset) < 0 ||
+    !Number.isSafeInteger(maxChars) ||
+    Number(maxChars) < 1 ||
+    Number(maxChars) > 64 * 1024
+  ) {
+    return { ok: false, error: "invalid_message_attachment" };
+  }
+  return {
+    ok: true,
+    value: {
+      attachmentId: attachmentId.toLowerCase(),
+      offset: Number(offset),
+      maxChars: Number(maxChars),
+    },
+  };
 }
 
 function digestEmailInput(input: ParsedEmail): string {
@@ -995,6 +1228,8 @@ const deployedHandler = createHarnessPlatformToolsHandler({
   sendEmail,
   listWorkspaceSkills: listAuthorizedWorkspaceSkills,
   loadWorkspaceSkill: loadAuthorizedWorkspaceSkill,
+  listMessageAttachments: messageAttachmentTools.list,
+  readMessageAttachment: messageAttachmentTools.read,
   claimEmail,
   finishEmail,
   ledgerStore: drizzleToolExecutionLedgerStore(),

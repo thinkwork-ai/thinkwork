@@ -17,6 +17,8 @@ const claims = {
   session_generation: 1,
 };
 
+const ATTACHMENT_ID = "11111111-1111-4111-8111-111111111111";
+
 function event(
   path: string,
   body: Record<string, unknown>,
@@ -120,6 +122,30 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
       sizeBytes: 47,
       manifestFingerprint: "manifest-1",
     })),
+    listMessageAttachments: vi.fn(async () => ({
+      attachmentSetFingerprint: "attachment-set-1",
+      attachments: [
+        {
+          attachmentId: ATTACHMENT_ID,
+          name: "pipeline.csv",
+          mimeType: "text/csv",
+          sizeBytes: 42,
+        },
+      ],
+    })),
+    readMessageAttachment: vi.fn(async (_context, attachmentId, offset) => ({
+      attachmentId,
+      name: "pipeline.csv",
+      mimeType: "text/csv",
+      sizeBytes: 42,
+      kind: "text" as const,
+      content: "customer,amount\nAcme,1000\n",
+      contentSha256: "b".repeat(64),
+      offset,
+      nextOffset: null,
+      totalChars: 27,
+      truncated: false,
+    })),
     claimEmail: vi.fn<HarnessPlatformToolsDeps["claimEmail"]>(async () => ({
       state: "claimed",
     })),
@@ -138,6 +164,55 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
 }
 
 describe("Harness governed platform tools target", () => {
+  it("lists only sanitized attachments bound to the canonical triggering message", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/message/attachments/list", {
+        tenant_id: "tenant-1",
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body!)).toEqual({
+      attachmentSetFingerprint: "attachment-set-1",
+      attachments: [
+        {
+          attachmentId: ATTACHMENT_ID,
+          name: "pipeline.csv",
+          mimeType: "text/csv",
+          sizeBytes: 42,
+        },
+      ],
+    });
+    expect(deps.listMessageAttachments).toHaveBeenCalledWith(
+      expect.objectContaining({ triggeringMessageId: "message-1" }),
+    );
+    expect(rows.map((row) => row.event_type)).toEqual(["started", "completed"]);
+  });
+
+  it("reads a bounded attachment chunk without recording its content", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/message/attachments/read", {
+        tenant_id: "tenant-1",
+        attachment_id: ATTACHMENT_ID,
+        offset: 0,
+        max_chars: 4096,
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body!).content).toContain("Acme,1000");
+    expect(deps.readMessageAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({ triggeringMessageId: "message-1" }),
+      ATTACHMENT_ID,
+      0,
+      4096,
+    );
+    expect(JSON.stringify(rows)).not.toContain("Acme,1000");
+    expect(JSON.stringify(rows)).not.toContain("pipeline.csv");
+  });
+
   it("queries ThinkWork Brain under the canonical exact user and removes provider metadata", async () => {
     const { handler, deps, rows } = setup();
     const result = await handler(

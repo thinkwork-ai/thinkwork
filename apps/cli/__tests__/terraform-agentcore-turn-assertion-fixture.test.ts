@@ -171,6 +171,6 @@ describe("AgentCore turn assertion Terraform fixture", () => {
     expect(handlers).toContain(
       '"POST /agentcore/capabilities/workspace/skills/load"',
     );
-    expect(handlers).toContain("platform-tools-v2-workspace-skills");
+    expect(handlers).toContain("platform-tools-v3-message-attachments");
   });
 });

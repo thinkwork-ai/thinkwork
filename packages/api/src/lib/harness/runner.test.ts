@@ -438,6 +438,37 @@ describe("runHarnessTurn — happy path", () => {
     expect(messages).not.toContain("../invalid");
   });
 
+  it("projects only sanitized attachment metadata and directs governed reads", async () => {
+    const deps = makeDeps([stream(textEvents("I read the attached file."))]);
+    const attachmentId = "11111111-1111-4111-8111-111111111111";
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message_attachments: [
+          {
+            attachment_id: attachmentId,
+            s3_key: `tenants/tenant-1/attachments/thread-1/${attachmentId}/pipeline.csv`,
+            download_url: "https://secret.example/download",
+            name: "pipeline.csv",
+            mime_type: "text/csv",
+            size_bytes: 42,
+          },
+        ],
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    const messages = JSON.stringify(deps.invocations[0]?.messages);
+    expect(messages).toContain(attachmentId);
+    expect(messages).toContain("pipeline.csv");
+    expect(messages).toContain("list_message_attachments");
+    expect(messages).toContain("read_message_attachment");
+    expect(messages).not.toContain("tenants/tenant-1/attachments");
+    expect(messages).not.toContain("secret.example");
+  });
+
   it("fulfills emit_document and finalizes completed with the evidence triple", async () => {
     const deps = makeDeps([
       stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),
