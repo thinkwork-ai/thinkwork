@@ -29,10 +29,8 @@ describe("migration 0266 — identity recovery enrollment grants", () => {
     expect(migration).toContain("'session_migration'");
   });
 
-  it("declares explicit constraint drift markers", () => {
-    expect(migration).toContain(
-      "-- drops-constraint: public.auth_identity_enrollments.auth_identity_enrollments_grant_kind_allowed",
-    );
+  it("declares the final constraint state for drift verification", () => {
+    expect(migration).not.toContain("-- drops-constraint:");
     expect(migration).toContain(
       "-- creates-constraint: public.auth_identity_enrollments.auth_identity_enrollments_grant_kind_allowed",
     );
