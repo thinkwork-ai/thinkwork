@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,6 +8,7 @@ import { describe, expect, it } from "vitest";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..", "..", "..");
 const REPORTER = join(REPO_ROOT, "scripts", "db-migrate-manual.sh");
+const DEPLOY_WORKFLOW = join(REPO_ROOT, ".github", "workflows", "deploy.yml");
 
 function dryRunReport(): string {
   const result = spawnSync(
@@ -53,5 +55,12 @@ describe("manual migration drift reporter", () => {
     expect(report).toContain("0076_scheduled_jobs_marco_backfill.sql");
     expect(report).toContain("DATA-ONLY (no durable schema objects)");
     expect(report).not.toContain("UNVERIFIED");
+  });
+
+  it("does not recreate retired migration tombstones during deployment", () => {
+    const workflow = readFileSync(DEPLOY_WORKFLOW, "utf8");
+
+    expect(workflow).not.toContain("0089_remove_maniflow_eval_seeds.sql");
+    expect(workflow).not.toContain("0096_true_redteam_eval_seed_cleanup.sql");
   });
 });
