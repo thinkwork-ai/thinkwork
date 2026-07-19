@@ -2693,6 +2693,21 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       });
     }
 
+    // AgentLoop iterations need canonical goal evidence so the loop projector
+    // can distinguish a completed step from a missing/failed worker result.
+    // Pi keeps its existing AgentLoop orchestration contract, but the native
+    // AgentCore Harness owns goal-mode projection and must receive the same
+    // persisted goal envelope used by chat/workflow turns.
+    if (
+      wakeup.source === "agent_loop" &&
+      runtimeType === "agentcore" &&
+      agentLoopPayload?.goalMode
+    ) {
+      Object.assign(agentCorePayload, {
+        goal_mode: toRuntimeGoalModePayload(agentLoopPayload.goalMode),
+      });
+    }
+
     if (wakeup.source === "question_answer") {
       const questionId =
         typeof payload?.questionId === "string" ? payload.questionId : null;
