@@ -90,10 +90,15 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wakeupSource).toContain('wakeup.source === "agent_loop"');
   });
 
-  it("keeps AgentLoop goal metadata out of Pi runtime goal mode", () => {
+  it("keeps AgentLoop goal metadata out of Pi while forwarding it to AgentCore", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
 
     expect(wakeupSource).toContain('wakeup.source === "agent_loop"');
+    expect(wakeupSource).toContain('runtimeType === "agentcore"');
+    expect(wakeupSource).toContain("agentLoopPayload?.goalMode");
+    expect(wakeupSource).toContain(
+      "goal_mode: toRuntimeGoalModePayload(agentLoopPayload.goalMode)",
+    );
     expect(wakeupSource).toContain(
       'if (wakeup.source === "chat_message" && payload?.goalMode)',
     );
