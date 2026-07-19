@@ -335,7 +335,7 @@ function containsEvidence(
   return result;
 }
 
-async function loadSurfaceEvidence(
+export async function loadSurfaceEvidence(
   pool: pg.Pool,
   args: Args,
   item: Args["cases"][number],
@@ -347,12 +347,13 @@ async function loadSurfaceEvidence(
             COALESCE(result_json->'goal_run'->>'status', usage_json->'goal_run'->>'status', '')
               IN ('complete', 'completed', 'cleared', 'budget_limited') AS goal_evidence,
             invocation_source, trigger_id::text
-       FROM thread_turns
+      FROM thread_turns
       WHERE tenant_id = $1 AND thread_id = $2
         AND ($3::uuid IS NULL OR id = $3::uuid)
+        AND created_at >= $4 AND created_at < $5
       ORDER BY created_at DESC
       LIMIT 1`,
-    [args.tenantId, item.threadId, item.turnId ?? null],
+    [args.tenantId, item.threadId, item.turnId ?? null, args.since, args.until],
   );
   const turn = rows[0];
   if (!turn) {
@@ -371,7 +372,7 @@ async function loadSurfaceEvidence(
       principalIds: [],
       credentialOwners: [],
       semanticEvidence: false,
-      semanticDetail: "thread has no turn",
+      semanticDetail: "thread has no turn in the certification window",
     };
   }
   const [
@@ -512,7 +513,7 @@ async function loadRuntimeStats(
   }));
 }
 
-async function loadEvalEvidence(
+export async function loadEvalEvidence(
   pool: pg.Pool,
   args: Args,
 ): Promise<EvalEvidence[]> {
@@ -521,8 +522,10 @@ async function loadEvalEvidence(
       const { rows } = await pool.query<Record<string, unknown>>(
         `SELECT id, status, total_tests, passed, failed, COALESCE(errored, 0) AS errored,
                 profile_snapshot->>'runtimeType' AS actual_runtime, cost_partial
-           FROM eval_runs WHERE tenant_id = $1 AND id = $2`,
-        [args.tenantId, item.runId],
+           FROM eval_runs
+          WHERE tenant_id = $1 AND id = $2
+            AND created_at >= $3 AND created_at < $4`,
+        [args.tenantId, item.runId, args.since, args.until],
       );
       const row = rows[0] ?? {};
       return {
