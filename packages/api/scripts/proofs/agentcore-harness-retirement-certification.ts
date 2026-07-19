@@ -403,7 +403,7 @@ export async function loadSurfaceEvidence(
                AND source_message.metadata->>'sourceTurnId' = $3::text) AS artifact_count,
            (SELECT count(*) FROM thread_attachments WHERE tenant_id = $1 AND thread_id = $2) AS attachment_count,
            (SELECT count(*) FROM brain.retain_attempts
-             WHERE tenant_id = $1 AND thread_id = $2 AND thread_turn_id = $3
+             WHERE tenant_id = $1 AND thread_id = $2 AND thread_turn_id = $3::uuid
                AND status = 'retained') AS retained_memory_count,
            (SELECT count(*)
               FROM agent_wakeup_requests awr
@@ -415,7 +415,7 @@ export async function loadSurfaceEvidence(
                AND asking_turn.id = pq.thread_turn_id
              WHERE awr.tenant_id = $1 AND awr.id = (
                SELECT wakeup_request_id FROM thread_turns
-                WHERE tenant_id = $1 AND id = $3
+                WHERE tenant_id = $1 AND id = $3::uuid
              )
                AND awr.source = 'question_answer'
                AND awr.payload->>'runtimeType' = 'agentcore'

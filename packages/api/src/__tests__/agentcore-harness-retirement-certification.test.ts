@@ -171,6 +171,63 @@ describe("AgentCore Harness retirement certification", () => {
     });
   });
 
+  it("casts shared turn parameters for UUID-backed evidence joins", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "840daac0-060b-4ee5-8944-ffb3bcf103bd",
+            thread_id: "50a406f1-0c2e-4715-8dc5-1d6a254f7f6e",
+            runtime_type: "agentcore",
+            status: "succeeded",
+            finalized: true,
+            usage_present: true,
+            goal_evidence: false,
+            invocation_source: "chat_message",
+            trigger_id: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ runtime_type: "agentcore" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            artifact_count: "0",
+            attachment_count: "0",
+            retained_memory_count: "1",
+            question_resume_count: "0",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const evidence = await loadSurfaceEvidence(
+      { query } as never,
+      {
+        tenantId: "0015953e-aa13-4cab-8398-2e70f73dda63",
+        since: new Date("2026-07-19T10:09:32.000Z"),
+        until: new Date("2026-07-20T10:09:32.000Z"),
+      } as never,
+      {
+        surface: "memory",
+        threadId: "50a406f1-0c2e-4715-8dc5-1d6a254f7f6e",
+        turnId: "840daac0-060b-4ee5-8944-ffb3bcf103bd",
+      },
+    );
+
+    expect(query).toHaveBeenCalledTimes(5);
+    expect(query.mock.calls[3]?.[0]).toContain("thread_turn_id = $3::uuid");
+    expect(query.mock.calls[3]?.[0]).toContain("id = $3::uuid");
+    expect(evidence).toMatchObject({
+      runtimeType: "agentcore",
+      status: "succeeded",
+      semanticEvidence: true,
+      semanticDetail: "1 retained memory ledger records",
+    });
+  });
+
   it("rejects named eval evidence outside the certification window", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] });
     const since = new Date("2026-07-19T10:09:32.000Z");
