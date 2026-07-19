@@ -425,6 +425,29 @@ done
   printf 'target %s never reached a usable authorization state (last=%s)\n' "$target_id" "$target_status" >&2; exit 1;
 }
 
+# The Harness config grants one Gateway namespace, so a missing OpenAPI
+# operation is otherwise silent: the model simply never sees that tool. Keep
+# the reconciler from reporting success when Terraform's expected contract and
+# AgentCore's live target schema have drifted apart.
+expected_operations=(
+  owner_probe mixed_disclosure list_connector_tools call_connector_tool
+  execute_code web_search web_extract query_brain list_workspace_skills
+  load_workspace_skill list_message_attachments read_message_attachment
+  ask_user_question send_email
+)
+live_schema="$(aws bedrock-agentcore-control get-gateway-target \
+  --region "$AWS_REGION" --gateway-identifier "$gateway_id" --target-id "$target_id" \
+  --query 'targetConfiguration.mcp.openApiSchema.inlinePayload' --output text)"
+for operation_id in "${expected_operations[@]}"; do
+  jq -e --arg operation_id "$operation_id" \
+    '[.paths[][] | .operationId] | index($operation_id) != null' \
+    <<<"$live_schema" >/dev/null || {
+      printf 'Gateway target %s is missing required operationId %s after reconciliation\n' \
+        "$target_id" "$operation_id" >&2
+      exit 1
+    }
+done
+
 # Explicit OAuthUser principal branches make the owner match mechanically
 # reviewable and let Cedar reject cross-owner requests before AgentCore resolves
 # a target credential. AgentCore maps JWT `sub` to the principal entity id (not

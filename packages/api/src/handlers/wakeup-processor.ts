@@ -231,7 +231,11 @@ export function resolveWakeupRuntimeType(args: {
   agentRuntime: unknown;
   templateRuntime: unknown;
   runtimeConfig: unknown;
+  pinnedRuntimeType?: unknown;
 }): AgentRuntimeType {
+  if (args.source === "question_answer" && args.pinnedRuntimeType != null) {
+    return normalizeAgentRuntimeType(args.pinnedRuntimeType);
+  }
   const fallback = normalizeAgentRuntimeType(
     args.agentRuntime ?? args.templateRuntime,
   );
@@ -942,6 +946,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     agentRuntime: agent.runtime,
     templateRuntime: agent.template_runtime,
     runtimeConfig: agent.runtime_config,
+    pinnedRuntimeType: payload?.runtimeType,
   });
   const configuredAgentModel = agent.model ?? agent.template_model ?? null;
   let agentModel = configuredAgentModel;

@@ -12,6 +12,7 @@
     "auth:finalize-cutover": "tsx scripts/finalize-auth-cutover.ts",
     "pi:capability-smoke": "tsx scripts/pi-runtime-capability-smoke.ts",
     "agentcore:fast-track": "tsx scripts/proofs/agentcore-harness-fast-track.ts",
+    "agentcore:retirement-certify": "tsx scripts/proofs/agentcore-harness-retirement-certification.ts",
     "memory:retain-recall-smoke": "tsx src/__smoke__/memory-retain-recall-smoke.ts",
     "context-engine:e2e": "vitest run --config vitest.context-engine-e2e.config.ts",
     "model-stacking:e2e": "vitest run --config vitest.model-stacking-e2e.config.ts",

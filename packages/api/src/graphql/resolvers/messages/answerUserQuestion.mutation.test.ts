@@ -41,6 +41,13 @@ const mocks = vi.hoisted(() => ({
       status: { name: "status" },
       title: { name: "title" },
     },
+    threadTurns: {
+      __table__: "thread_turns",
+      id: { name: "id" },
+      tenant_id: { name: "tenant_id" },
+      thread_id: { name: "thread_id" },
+      runtime_type: { name: "runtime_type" },
+    },
     agentWakeupRequests: {
       __table__: "agent_wakeup_requests",
       id: { name: "id" },
@@ -52,6 +59,7 @@ const mocks = vi.hoisted(() => ({
   questionRow: null as Record<string, unknown> | null,
   visibleThreadRows: [] as Array<Record<string, unknown>>,
   threadRow: null as Record<string, unknown> | null,
+  threadTurnRows: [] as Array<Record<string, unknown>>,
   messageRows: [] as Array<Record<string, unknown>>,
   existingWakeupRows: [] as Array<{ id: string }>,
   insertedWakeups: [] as Array<Record<string, unknown>>,
@@ -84,6 +92,9 @@ vi.mock("@thinkwork/database-pg", () => ({
               }
               return mocks.visibleThreadRows;
             }
+            if (table === mocks.tables.threadTurns) {
+              return mocks.threadTurnRows;
+            }
             if (table === mocks.tables.agentWakeupRequests) {
               return mocks.existingWakeupRows;
             }
@@ -114,6 +125,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   pendingUserQuestions: mocks.tables.pendingUserQuestions,
   messages: mocks.tables.messages,
   threads: mocks.tables.threads,
+  threadTurns: mocks.tables.threadTurns,
   agentWakeupRequests: mocks.tables.agentWakeupRequests,
 }));
 
@@ -186,6 +198,7 @@ beforeEach(() => {
     status: "in_progress",
     title: "Quarterly report",
   };
+  mocks.threadTurnRows = [{ runtimeType: "agentcore" }];
   mocks.messageRows = [];
   mocks.existingWakeupRows = [];
   mocks.insertedWakeups = [];
@@ -249,6 +262,7 @@ describe("answerUserQuestion — happy path (card route)", () => {
       questionId: QUESTION_ID,
       answers: { env: "Dev" },
       answeredVia: "card",
+      runtimeType: "agentcore",
       delegationContext: { profileSlug: "researcher", escalationCount: 0 },
     });
 

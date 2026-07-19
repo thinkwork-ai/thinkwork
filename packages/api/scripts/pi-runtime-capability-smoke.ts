@@ -343,7 +343,7 @@ async function waitForTurn(args: Args, threadId: string) {
   while (Date.now() < deadline) {
     latest = await readThreadState(args, threadId);
     const assistant = latest.messages.edges.find(
-      ({ node }) => node.role === "ASSISTANT",
+      ({ node }) => node.role.toUpperCase() === "ASSISTANT",
     )?.node;
     const turn = latest.threadTurns[0];
     if (
