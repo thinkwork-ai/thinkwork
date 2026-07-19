@@ -726,6 +726,9 @@ async function fireScheduledJob(
   const isEvalTrigger = trig.trigger_type === "eval_scheduled";
 
   if (isEvalTrigger) {
+    if (!firingUserId) {
+      return error("Evaluation requester identity is required", 403);
+    }
     // Manual fire of an eval schedule: insert a pending eval_run + fire
     // the eval-runner Lambda. Mirrors the EventBridge path in
     // packages/lambda/job-trigger.ts.
@@ -758,6 +761,7 @@ async function fireScheduledJob(
         tenant_id: tenantId,
         agent_id: targetAgentId,
         scheduled_job_id: trig.id,
+        requester_user_id: firingUserId,
         status: "pending",
         model: DEFAULT_EVAL_MODEL_ID,
         categories: cfg.categories ?? [],

@@ -80,6 +80,7 @@ export interface SkillDraftPublishStorage {
 export interface PublishSkillDraftToCatalogInput {
   tenantId: string;
   tenantSlug: string;
+  requesterUserId?: string | null;
   draft: DraftPublishRow;
   confirmReplace?: boolean;
   storage?: SkillDraftPublishStorage;
@@ -194,6 +195,7 @@ export async function publishSkillDraftToCatalog(
     input.tenantId,
     validated.slug,
     validated.files,
+    input.requesterUserId,
   );
 
   return {
@@ -312,6 +314,7 @@ async function syncBundledEvals(
   tenantId: string,
   slug: string,
   files: CatalogSkillArchiveFile[],
+  requesterUserId?: string | null,
 ): Promise<{
   evalDataset?: { slug: string; cases: number; skipped: number };
   evalDatasetWarning?: string;
@@ -326,7 +329,11 @@ async function syncBundledEvals(
   if (evalCases.length === 0) return {};
   try {
     const seeded = await ensureSkillDatasetSeeded(tenantId, slug, evalCases);
-    const launch = await launchSkillEvalRun({ tenantId, skillSlug: slug });
+    const launch = await launchSkillEvalRun({
+      tenantId,
+      skillSlug: slug,
+      requesterUserId,
+    });
     return {
       evalDataset: {
         slug: seeded.datasetSlug,

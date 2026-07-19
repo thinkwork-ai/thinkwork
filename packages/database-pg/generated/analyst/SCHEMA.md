@@ -1623,6 +1623,7 @@ Join hints:
 | agent_id | uuid |  |
 | computer_id | uuid |  |
 | scheduled_job_id | uuid |  |
+| requester_user_id | uuid |  |
 | status | text | not null |
 | execution_target | text | not null |
 | runtime_host | text | not null |
@@ -1657,6 +1658,7 @@ Join hints:
 - `eval_runs.agent_id` → `agents.id`
 - `eval_runs.dataset_id` → `eval_datasets.id`
 - `eval_runs.profile_id` → `eval_profiles.id`
+- `eval_runs.requester_user_id` → `users.id`
 - `eval_runs.scheduled_job_id` → `scheduled_jobs.id`
 - `eval_runs.tenant_id` → `tenants.id`
 

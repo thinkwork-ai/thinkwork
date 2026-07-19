@@ -25,7 +25,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { tenants } from "./core";
+import { tenants, users } from "./core";
 import { agents } from "./agents";
 import { scheduledJobs, threadTurns } from "./scheduled-jobs";
 
@@ -221,6 +221,12 @@ export const evalRuns = pgTable(
         onDelete: "set null",
       },
     ),
+    // Exact human principal whose identity/capability projection the agent
+    // under test runs as. Required by AgentCore Harness evaluations; nullable
+    // only for legacy rows and Pi-only system launches.
+    requester_user_id: uuid("requester_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     status: text("status").notNull().default("pending"), // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
     execution_target: text("execution_target").notNull().default("agentcore"), // 'agentcore' | 'desktop-pi'
     runtime_host: text("runtime_host").notNull().default("aws-agentcore"), // 'aws-agentcore' | 'desktop-local'
@@ -329,6 +335,7 @@ export const evalRuns = pgTable(
       table.created_at,
     ),
     index("idx_eval_runs_scheduled_job_id").on(table.scheduled_job_id),
+    index("idx_eval_runs_requester_user_id").on(table.requester_user_id),
   ],
 );
 

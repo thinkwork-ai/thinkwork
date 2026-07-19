@@ -1857,6 +1857,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         await db.insert(evalRuns).values({
           tenant_id: tenantId,
           scheduled_job_id: triggerId,
+          requester_user_id: ownerUserId,
           status: "failed",
           model: DEFAULT_EVAL_MODEL_ID,
           categories: cfg.categories ?? [],
@@ -1873,6 +1874,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           tenant_id: tenantId,
           agent_id: targetAgentId,
           scheduled_job_id: triggerId,
+          requester_user_id: ownerUserId,
           status: "pending",
           model: DEFAULT_EVAL_MODEL_ID,
           categories: cfg.categories ?? [],

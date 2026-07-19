@@ -43,6 +43,8 @@ import {
   pendingUserQuestions,
   threadAttachments,
   scheduledJobs,
+  harnessManagedThreadEnrollments,
+  threadParticipants,
 } from "@thinkwork/database-pg/schema";
 import {
   extractUsage,
@@ -97,7 +99,6 @@ import {
 import { WORKSPACE_TURN_IN_FLIGHT_STATUSES } from "../lib/workspace-events/run-lifecycle.js";
 import type { PromptTemplateContext } from "../lib/orchestration/index.js";
 import {
-  HarnessChatDispatchOnlyError,
   normalizeAgentRuntimeType,
   resolveRuntimeFunctionName,
   type AgentRuntimeType,
@@ -124,6 +125,7 @@ import {
   resolveDispatchPinnedSkills,
 } from "../lib/skills/message-pinned-skills.js";
 import { loadTrustedCatalogSkillIds } from "../lib/skill-trust/runtime-gate.js";
+import { requireHarnessManagedProfile } from "../lib/harness/managed-profile.js";
 import {
   prependThreadProgressPromptBlock,
   readThreadProgressMarkdown,
@@ -235,20 +237,10 @@ const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
 export async function invokeAgentCore(
   payload: Record<string, unknown>,
   runtimeType: AgentRuntimeType = "pi",
-  options: { channel?: string } = {},
+  _options: { channel?: string } = {},
 ): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
   let functionName = "";
   try {
-    // AgentCore owns finalization for its Lambda dispatch. The only wakeup
-    // source admitted today is the exact-user pending-question resume; every
-    // other background/retry source stays an explicit failure until its
-    // lifecycle and writeback semantics are implemented (never Pi fallback).
-    if (
-      normalizeAgentRuntimeType(runtimeType) === "agentcore" &&
-      options.channel !== "question_answer"
-    ) {
-      throw new HarnessChatDispatchOnlyError("wakeup");
-    }
     functionName = resolveRuntimeFunctionName(runtimeType);
   } catch (err) {
     // Normalization itself may be what threw (unknown selector), so fall
@@ -261,7 +253,7 @@ export async function invokeAgentCore(
     }
     return {
       ok: false,
-      status: err instanceof HarnessChatDispatchOnlyError ? 501 : 503,
+      status: 503,
       result: {
         error: err instanceof Error ? err.message : String(err),
         runtime_type: runtimeLabel,
@@ -322,14 +314,15 @@ export async function invokeAgentCore(
   return { ok: true, status: 200, result };
 }
 
-async function finishHarnessQuestionResumeWakeup(input: {
+async function finishHarnessWakeup(input: {
   wakeup: WakeupRow;
   runId: string;
   runThreadId: string | null;
 }): Promise<void> {
-  // The Harness runner calls processFinalize itself. Rewriting the turn or
-  // inserting another assistant message here would race/duplicate the
-  // canonical finalize path, so this processor owns only the wakeup envelope.
+  // The Harness runner calls processFinalize itself for every admitted wakeup.
+  // Rewriting the turn or inserting another assistant message here would
+  // race/duplicate the canonical finalize path, so this processor owns only
+  // the wakeup envelope.
   const [turn] = await db
     .select({
       status: threadTurns.status,
@@ -346,7 +339,7 @@ async function finishHarnessQuestionResumeWakeup(input: {
     .limit(1);
   if (!turn?.finalizedAt) {
     throw new Error(
-      "AgentCore Harness returned before the question-resume turn finalized.",
+      "AgentCore Harness returned before the wakeup turn finalized.",
     );
   }
 
@@ -404,6 +397,74 @@ async function finishHarnessQuestionResumeWakeup(input: {
   if (input.runThreadId) {
     await promoteNextDeferredWakeup(input.wakeup.tenant_id, input.runThreadId);
   }
+}
+
+async function ensureHarnessWakeupEnrollment(input: {
+  tenantId: string;
+  tenantSlug: string;
+  threadId: string;
+  agentId: string;
+  requesterUserId: string;
+}): Promise<void> {
+  const profile = await requireHarnessManagedProfile(input.tenantSlug);
+  const [thread] = await db
+    .select({ spaceId: threads.space_id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.id, input.threadId),
+        eq(threads.tenant_id, input.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!thread?.spaceId) {
+    throw new Error("AgentCore automation thread is missing a Space");
+  }
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(threadParticipants)
+      .values({
+        tenant_id: input.tenantId,
+        thread_id: input.threadId,
+        space_id: thread.spaceId,
+        participant_type: "user",
+        user_id: input.requesterUserId,
+        role: "requester",
+        source: "automation",
+        notification_preference: "muted",
+      })
+      .onConflictDoNothing();
+    await tx
+      .insert(harnessManagedThreadEnrollments)
+      .values({
+        tenant_id: input.tenantId,
+        thread_id: input.threadId,
+        logical_agent_id: input.agentId,
+        trust_profile: "default",
+        harness_arn: profile.harnessArn,
+        qualifier: profile.endpointName,
+        resolved_version: profile.liveVersion,
+        session_strategy: "fresh",
+        prior_runtime: "pi",
+        status: "active",
+        enrolled_by_user_id: input.requesterUserId,
+      })
+      .onConflictDoUpdate({
+        target: [
+          harnessManagedThreadEnrollments.tenant_id,
+          harnessManagedThreadEnrollments.thread_id,
+        ],
+        set: {
+          logical_agent_id: input.agentId,
+          harness_arn: profile.harnessArn,
+          qualifier: profile.endpointName,
+          resolved_version: profile.liveVersion,
+          status: "active",
+          enrolled_by_user_id: input.requesterUserId,
+          restored_at: null,
+        },
+      });
+  });
 }
 
 interface RenderWorkspaceTupleForWakeupResult {
@@ -1379,6 +1440,21 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     }
   }
 
+  if (runtimeType === "agentcore") {
+    if (!runThreadId || !costOwnerUserId) {
+      throw new Error(
+        "AgentCore automation requires a canonical thread and exact requester user identity",
+      );
+    }
+    await ensureHarnessWakeupEnrollment({
+      tenantId: wakeup.tenant_id,
+      tenantSlug,
+      threadId: runThreadId,
+      agentId: wakeup.agent_id,
+      requesterUserId: costOwnerUserId,
+    });
+  }
+
   let turnNumber: number | undefined;
   if (runThreadId) {
     try {
@@ -2237,7 +2313,35 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     })
   ) {
     const userContent = agentMessage.trim();
-    await insertUserMessage(runThreadId, wakeup.tenant_id, userContent);
+    const syntheticMessage = await insertUserMessage(
+      runThreadId,
+      wakeup.tenant_id,
+      userContent,
+      {
+        trustedActingUserId:
+          normalizeAgentRuntimeType(runtimeType) === "agentcore"
+            ? (invokerUserId ?? null)
+            : null,
+      },
+    );
+    // AgentCore Identity mints only from a canonical human-authored turn.
+    // User-owned automations therefore bind their synthetic prompt to the
+    // exact persisted invoker before the Harness Lambda is called. System
+    // wakeups remain sender_type=system and fail closed at assertion mint.
+    if (
+      syntheticMessage &&
+      normalizeAgentRuntimeType(runtimeType) === "agentcore"
+    ) {
+      await db
+        .update(threadTurns)
+        .set({ triggering_message_id: syntheticMessage.id })
+        .where(
+          and(
+            eq(threadTurns.id, run.id),
+            eq(threadTurns.tenant_id, wakeup.tenant_id),
+          ),
+        );
+    }
   }
 
   agentMessage = await prependThreadProgressForAgentTurn(agentMessage, {
@@ -2655,11 +2759,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
     }
 
-    if (
-      normalizeAgentRuntimeType(runtimeType) === "agentcore" &&
-      wakeup.source === "question_answer"
-    ) {
-      await finishHarnessQuestionResumeWakeup({
+    if (normalizeAgentRuntimeType(runtimeType) === "agentcore") {
+      await finishHarnessWakeup({
         wakeup,
         runId: run.id,
         runThreadId: runThreadId ?? null,
@@ -4086,6 +4187,7 @@ async function insertUserMessage(
   threadId: string,
   tenantId: string,
   content: string,
+  options: { trustedActingUserId?: string | null } = {},
 ): Promise<{ id: string } | null> {
   try {
     const [row] = await db
@@ -4095,7 +4197,8 @@ async function insertUserMessage(
         tenant_id: tenantId,
         role: "user",
         content,
-        sender_type: "system",
+        sender_type: options.trustedActingUserId ? "user" : "system",
+        sender_id: options.trustedActingUserId ?? undefined,
       })
       .returning({ id: messages.id });
     console.log(`[wakeup-processor] Inserted user message: ${row.id}`);

@@ -437,6 +437,7 @@ async function dispatchDatasetRun(
         sessionId: `eval-compose-${run.id}`,
         message: "Reply with exactly: OK",
         model: profileSnapshot.model,
+        requesterUserId: run.requester_user_id,
       });
       if (ping.composedSystemPrompt) {
         profileSnapshot = {
