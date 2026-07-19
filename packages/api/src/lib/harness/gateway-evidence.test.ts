@@ -219,7 +219,6 @@ describe("AgentCore Gateway evidence", () => {
     expect(fifthBody.params).toEqual({
       name: "target-generated___call_connector_tool",
       arguments: {
-        tenant_id: "tenant-1",
         connector: "generic--crm",
         query: "Create a sales rep review from CRM opportunities",
         tool: "find_many_opportunities",

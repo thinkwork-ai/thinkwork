@@ -104,7 +104,6 @@ describe("Harness governed built-in tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/web/search", {
-        tenant_id: "tenant-1",
         query: "Austin events this weekend",
         limit: 5,
       }),
@@ -138,7 +137,6 @@ describe("Harness governed built-in tools target", () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event("/agentcore/capabilities/web/extract", {
-        tenant_id: "tenant-1",
         url: "https://example.test/austin",
       }),
     );
@@ -169,7 +167,6 @@ describe("Harness governed built-in tools target", () => {
     });
     const result = await handler(
       event("/agentcore/capabilities/web/search", {
-        tenant_id: "tenant-1",
         query: "Austin events this weekend",
       }),
     );
@@ -181,12 +178,12 @@ describe("Harness governed built-in tools target", () => {
     expect(rows.map((row) => row.event_type)).toEqual(["started", "failed"]);
   });
 
-  it("rejects identity overrides before resolving live runtime policy", async () => {
+  it("rejects header identity overrides before resolving live runtime policy", async () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
       event(
         "/agentcore/capabilities/web/search",
-        { tenant_id: "tenant-1", query: "Austin" },
+        { query: "Austin" },
         {
           authorization: "Bearer valid",
           "x-thinkwork-user-id": "user-2",
@@ -194,6 +191,23 @@ describe("Harness governed built-in tools target", () => {
       ),
     );
     expect(result.statusCode).toBe(400);
+    expect(deps.resolveCanonicalContext).not.toHaveBeenCalled();
+    expect(deps.resolveBuiltinTools).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("rejects model-supplied tenant identity before resolving live runtime policy", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/web/search", {
+        tenant_id: "tenant-2",
+        query: "Austin",
+      }),
+    );
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body!)).toEqual({
+      error: "identity_override_rejected",
+    });
     expect(deps.resolveCanonicalContext).not.toHaveBeenCalled();
     expect(deps.resolveBuiltinTools).not.toHaveBeenCalled();
     expect(rows).toHaveLength(0);

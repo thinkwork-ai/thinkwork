@@ -95,7 +95,6 @@ export interface HarnessCapabilityContext {
 }
 
 interface ListBody {
-  tenant_id: string;
   connector: string;
   query?: string;
 }
@@ -185,6 +184,9 @@ export function createHarnessCapabilityMcpHandler(
     } catch {
       return response(400, { error: "invalid_json" });
     }
+    if (Object.prototype.hasOwnProperty.call(body, "tenant_id")) {
+      return response(400, { error: "identity_override_rejected" });
+    }
     if (!isIdentifier(body.connector)) {
       return response(400, { error: "invalid_connector" });
     }
@@ -195,9 +197,6 @@ export function createHarnessCapabilityMcpHandler(
         body.query.length > MAX_DISCOVERY_QUERY_CHARS)
     ) {
       return response(400, { error: "invalid_discovery_query" });
-    }
-    if (body.tenant_id !== claims.tenant_id) {
-      return response(403, { error: "tenant_context_mismatch" });
     }
     if (
       path === CALL_PATH &&
@@ -844,8 +843,9 @@ async function loadHarnessMcpProjection(
   let folderCapabilities: { manifest: CapabilitiesManifest | null } | undefined;
   if (agent.capabilityFolderDispatch === true) {
     if (!context.spaceId) return null;
-    const { renderWorkspaceTuple } =
-      await import("../lib/workspace-renderer/compose-tuple.js");
+    const { renderWorkspaceTuple } = await import(
+      "../lib/workspace-renderer/compose-tuple.js"
+    );
     const rendered = await renderWorkspaceTuple(
       {
         tenantId: context.tenantId,
@@ -904,15 +904,15 @@ function hasCompleteTurnTuple(
 ): claims is HarnessCapabilityClaims {
   return Boolean(
     claims &&
-    claims.sub &&
-    claims.participant_id &&
-    claims.sub === claims.participant_id &&
-    claims.tenant_id &&
-    claims.agent_id &&
-    claims.thread_id &&
-    claims.turn_id &&
-    Number.isInteger(claims.session_generation) &&
-    claims.session_generation > 0,
+      claims.sub &&
+      claims.participant_id &&
+      claims.sub === claims.participant_id &&
+      claims.tenant_id &&
+      claims.agent_id &&
+      claims.thread_id &&
+      claims.turn_id &&
+      Number.isInteger(claims.session_generation) &&
+      claims.session_generation > 0,
   );
 }
 

@@ -169,9 +169,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       operationId: "list_connector_tools",
       summary: "List the current participant authorized tools for one ThinkWork connector",
       requestBody: {required: true, content: {"application/json": {schema: {
-        type: "object", additionalProperties: false, required: ["tenant_id", "connector", "query"],
+        type: "object", additionalProperties: false, required: ["connector", "query"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           connector: {type: "string", description: "Connector name from the trusted turn context"},
           query: {type: "string", description: "The connector task, used to return only relevant direct tools"}
         }
@@ -183,9 +182,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Call one currently authorized ThinkWork connector tool as the exact turn participant",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "connector", "query", "tool", "arguments"],
+        required: ["connector", "query", "tool", "arguments"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           connector: {type: "string", description: "Connector name from the trusted turn context"},
           query: {type: "string", description: "The same user task passed to list_connector_tools"},
           tool: {type: "string", description: "Tool name returned by list_connector_tools"},
@@ -199,9 +197,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Execute one bounded Python program in a short-lived internal-only sandbox",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "language", "code"],
+        required: ["language", "code"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           language: {type: "string", enum: ["python"]},
           code: {type: "string", maxLength: 16384},
           output_files: {
@@ -218,9 +215,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Search the current web through the tenant-configured governed provider",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "query"],
+        required: ["query"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           query: {type: "string", minLength: 1, maxLength: 2000},
           limit: {type: "integer", minimum: 1, maximum: 10, default: 5}
         }
@@ -232,9 +228,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Extract one known HTTPS page through the tenant-configured governed provider",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "url"],
+        required: ["url"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           url: {type: "string", format: "uri", maxLength: 2048, pattern: "^https://"}
         }
       }}}},
@@ -245,9 +240,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Query permissioned ThinkWork Brain context as the exact turn participant",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "query"],
+        required: ["query"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           query: {type: "string", minLength: 1, maxLength: 2000},
           mode: {type: "string", enum: ["results", "answer"], default: "results"},
           limit: {type: "integer", minimum: 1, maximum: 10, default: 8}
@@ -260,10 +254,7 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "List the exact participant current authorized ThinkWork workspace skills",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id"],
-        properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"}
-        }
+        properties: {}
       }}}},
       responses: {"200": {description: "Current canonical authorized skill index"}}
     }},
@@ -272,9 +263,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Load one currently authorized ThinkWork SKILL.md as the exact turn participant",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "skill"],
+        required: ["skill"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           skill: {type: "string", pattern: "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"}
         }
       }}}},
@@ -288,10 +278,7 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "List files attached to the exact canonical triggering message",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id"],
-        properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"}
-        }
+        properties: {}
       }}}},
       responses: {"200": {description: "Sanitized canonical attachment metadata"}}
     }},
@@ -300,9 +287,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Read a bounded text chunk from one file on the exact triggering message",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "attachment_id"],
+        required: ["attachment_id"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           attachment_id: {type: "string", format: "uuid"},
           offset: {type: "integer", minimum: 0, default: 0},
           max_chars: {type: "integer", minimum: 1, maximum: 65536, default: 32768}
@@ -319,9 +305,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Pause the exact participant turn for one governed structured question batch",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "questions"],
+        required: ["questions"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           questions: {
             type: "array", minItems: 1, maxItems: 4,
             items: {
@@ -358,9 +343,8 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
       summary: "Send or request approval for one idempotent policy-governed email",
       requestBody: {required: true, content: {"application/json": {schema: {
         type: "object", additionalProperties: false,
-        required: ["tenant_id", "to", "subject", "content"],
+        required: ["to", "subject", "content"],
         properties: {
-          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
           to: {type: "array", minItems: 1, maxItems: 5, items: {type: "string", format: "email", maxLength: 320}},
           subject: {type: "string", minLength: 1, maxLength: 500},
           content: {type: "string", minLength: 1, maxLength: 60000, description: "Complete email message body"}
@@ -522,8 +506,7 @@ when {
         action == AgentCore::Action::"${TARGET_NAME}___read_message_attachment" ||
         action == AgentCore::Action::"${TARGET_NAME}___ask_user_question" ||
         action == AgentCore::Action::"${TARGET_NAME}___send_email"
-      ) &&
-      context.input.tenant_id == principal.getTag("tenant_id")
+      )
     )
   )
 };

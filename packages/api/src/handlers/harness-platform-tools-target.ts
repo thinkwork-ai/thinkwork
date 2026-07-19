@@ -77,14 +77,12 @@ const MAX_EMAIL_SUBJECT_CHARS = 500;
 const MAX_EMAIL_BODY_CHARS = 60_000;
 
 interface BrainBody {
-  tenant_id?: unknown;
   query?: unknown;
   mode?: unknown;
   limit?: unknown;
 }
 
 interface EmailBody {
-  tenant_id?: unknown;
   to?: unknown;
   subject?: unknown;
   content?: unknown;
@@ -92,19 +90,16 @@ interface EmailBody {
 }
 
 interface WorkspaceSkillBody {
-  tenant_id?: unknown;
   skill?: unknown;
 }
 
 interface MessageAttachmentBody {
-  tenant_id?: unknown;
   attachment_id?: unknown;
   offset?: unknown;
   max_chars?: unknown;
 }
 
 interface UserQuestionBody {
-  tenant_id?: unknown;
   questions?: unknown;
   delegation_context?: unknown;
 }
@@ -262,8 +257,8 @@ export function createHarnessPlatformToolsHandler(
       });
       return response(400, { error: "invalid_json" });
     }
-    if (body.tenant_id !== claims.tenant_id) {
-      return response(403, { error: "tenant_context_mismatch" });
+    if (Object.prototype.hasOwnProperty.call(body, "tenant_id")) {
+      return response(400, { error: "identity_override_rejected" });
     }
 
     const parsed =
@@ -1352,23 +1347,23 @@ function sanitizeEmailResult(result: Record<string, unknown>) {
 function hasIdentityOverride(headers: Record<string, string | undefined>) {
   return Boolean(
     headers["x-thinkwork-user-id"] ||
-    headers["x-thinkwork-tenant-id"] ||
-    headers["x-thinkwork-agent-id"] ||
-    headers["x-thinkwork-turn-id"],
+      headers["x-thinkwork-tenant-id"] ||
+      headers["x-thinkwork-agent-id"] ||
+      headers["x-thinkwork-turn-id"],
   );
 }
 
 function hasCompleteTurnTuple(claims: HarnessCapabilityClaims) {
   return Boolean(
     claims.sub &&
-    claims.participant_id &&
-    claims.sub === claims.participant_id &&
-    claims.tenant_id &&
-    claims.agent_id &&
-    claims.thread_id &&
-    claims.turn_id &&
-    Number.isInteger(claims.session_generation) &&
-    claims.session_generation > 0,
+      claims.participant_id &&
+      claims.sub === claims.participant_id &&
+      claims.tenant_id &&
+      claims.agent_id &&
+      claims.thread_id &&
+      claims.turn_id &&
+      Number.isInteger(claims.session_generation) &&
+      claims.session_generation > 0,
   );
 }
 

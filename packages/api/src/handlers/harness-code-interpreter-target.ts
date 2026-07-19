@@ -53,7 +53,6 @@ const EXECUTE_PATH = "/agentcore/capabilities/sandbox/execute";
 const MAX_BODY_BYTES = 24 * 1024;
 
 interface ExecuteBody {
-  tenant_id?: unknown;
   code?: unknown;
   language?: unknown;
   output_files?: unknown;
@@ -130,8 +129,8 @@ export function createHarnessCodeInterpreterHandler(
     } catch {
       return response(400, { error: "invalid_json" });
     }
-    if (body.tenant_id !== claims.tenant_id) {
-      return response(403, { error: "tenant_context_mismatch" });
+    if (Object.prototype.hasOwnProperty.call(body, "tenant_id")) {
+      return response(400, { error: "identity_override_rejected" });
     }
     let request: HarnessSandboxRequest;
     try {
@@ -392,14 +391,14 @@ function hasCompleteTurnTuple(
 ): claims is HarnessCapabilityClaims {
   return Boolean(
     claims.sub &&
-    claims.participant_id &&
-    claims.sub === claims.participant_id &&
-    claims.tenant_id &&
-    claims.agent_id &&
-    claims.thread_id &&
-    claims.turn_id &&
-    Number.isInteger(claims.session_generation) &&
-    claims.session_generation > 0,
+      claims.participant_id &&
+      claims.sub === claims.participant_id &&
+      claims.tenant_id &&
+      claims.agent_id &&
+      claims.thread_id &&
+      claims.turn_id &&
+      Number.isInteger(claims.session_generation) &&
+      claims.session_generation > 0,
   );
 }
 

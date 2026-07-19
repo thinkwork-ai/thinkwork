@@ -90,7 +90,6 @@ function setup(overrides: Partial<HarnessCodeInterpreterDeps> = {}) {
 }
 
 const validBody = {
-  tenant_id: "tenant-1",
   language: "python",
   code: "from pathlib import Path\nPath('/tmp/thinkwork').mkdir(exist_ok=True)\nprint(6 * 7)",
   output_files: ["/tmp/thinkwork/result.txt"],
@@ -132,7 +131,7 @@ describe("Harness Code Interpreter target", () => {
     });
   });
 
-  it("denies tenant and header identity overrides before touching canonical state", async () => {
+  it("denies body and header identity overrides before touching canonical state", async () => {
     const { handler, deps, rows } = setup();
     const tenantMismatch = await handler(
       event({ ...validBody, tenant_id: "tenant-2" }),
@@ -143,7 +142,10 @@ describe("Harness Code Interpreter target", () => {
         "x-thinkwork-user-id": "user-2",
       }),
     );
-    expect(tenantMismatch.statusCode).toBe(403);
+    expect(tenantMismatch.statusCode).toBe(400);
+    expect(JSON.parse(tenantMismatch.body!)).toEqual({
+      error: "identity_override_rejected",
+    });
     expect(headerOverride.statusCode).toBe(400);
     expect(deps.resolveCanonicalContext).not.toHaveBeenCalled();
     expect(rows).toHaveLength(0);
