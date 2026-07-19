@@ -24,6 +24,9 @@ describe("AgentCore turn assertion Terraform fixture", () => {
   const harnessLifecycle = read(
     "terraform/modules/app/agentcore-harness/scripts/harness-lifecycle.mjs",
   );
+  const gatewayModule = read(
+    "terraform/modules/app/agentcore-gateway/main.tf",
+  );
   const gatewayReconciler = read(
     "terraform/modules/app/agentcore-gateway/scripts/reconcile_gateway.sh",
   );
@@ -153,6 +156,21 @@ describe("AgentCore turn assertion Terraform fixture", () => {
     expect(thinkworkOutputs).toContain('output "agentcore_harness_status"');
     expect(thinkworkOutputs).toMatch(
       /output "agentcore_harness_proof_arn" \{[\s\S]*?Deprecated: use agentcore_harness_arn/,
+    );
+  });
+
+  it("reconciles Harness and Gateway whenever their executable contracts change", () => {
+    expect(harnessModule).toContain(
+      'filesha256("${path.module}/scripts/reconcile_harness.sh")',
+    );
+    expect(harnessModule).toContain(
+      'filesha256("${path.module}/scripts/harness-lifecycle.mjs")',
+    );
+    expect(harnessModule).toContain(
+      'filesha256("${path.module}/scripts/harness-tool-contract.mjs")',
+    );
+    expect(gatewayModule).toContain(
+      'filesha256("${path.module}/scripts/reconcile_gateway.sh")',
     );
   });
 

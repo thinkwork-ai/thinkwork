@@ -23,6 +23,9 @@ locals {
   # begin with a letter. Gateway names have a separate, hyphen-friendly API.
   policy_engine_name = "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}MultiplayerProof"
   policy_name        = "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerIsolation"
+  # The reconciler owns the Gateway target schemas and Cedar boundary. Hash
+  # the executable itself so contract-only edits cannot leave AWS stale.
+  reconciler_hash = filesha256("${path.module}/scripts/reconcile_gateway.sh")
   configuration_hash = nonsensitive(sha256(jsonencode({
     discovery_url       = var.discovery_url
     audience            = var.gateway_audience
@@ -36,6 +39,7 @@ locals {
     # be added to an existing Gateway, so changing this contract must replace
     # the script-owned Gateway lifecycle.
     protocol_versions = ["2025-03-26", "2025-11-25"]
+    reconciler        = local.reconciler_hash
   })))
 }
 
