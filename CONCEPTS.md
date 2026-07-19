@@ -207,6 +207,14 @@ The recurring background consolidation pass over memory banks. It does two jobs:
 
 The mechanical rule deciding which knowledge-graph entities earn wiki pages: an entity is promoted when it crosses observable evidence thresholds (distinct-thread mentions over time, relationship count, referenced by another page). Ontology types are optional labels and never gate promotion. Sub-threshold entities remain fully agent-queryable in the graph; promotion controls only the human wiki window.
 
+### Living Map
+
+The Ontology tab's landing surface: the schema graph rendered as a canvas where approved entity/relationship types are solid nodes and edges, and candidates (from suggestion scans, untyped entities, or operator authoring) appear as ghost nodes with evidence counts. Focusing a candidate or adding a triple opens a form editor whose Save always emits a change-set item — review and authoring share one gesture and one governed exit path; the canvas never writes definitions directly.
+
+### Ontology Pack
+
+A bundle of seed ontology entity-type templates installable from the Ontology tab. Install creates a pre-staged change set for admin approval — never a direct write. The templates ship in code (14 exist; 4 install at tenant bootstrap as the baseline, the rest activate only via pack install).
+
 ### Progressive Discovery
 
 The agent's Brain-first memory read path: consult the compiled wiki and knowledge graph first, then drill down into raw Hindsight bank recall only when underlying detail is needed.
