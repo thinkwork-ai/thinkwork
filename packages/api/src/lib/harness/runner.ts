@@ -1233,6 +1233,7 @@ export async function runHarnessTurn(
   let emissionSuccesses = 0;
   let missingEmissionCorrections = 0;
   let missingSkillSubmissionCorrections = 0;
+  let missingAgentLoopCompletionCorrections = 0;
   let documentCompositionPhase = false;
   let documentCompositionTransition:
     | "governed_connector_evidence"
@@ -1557,7 +1558,7 @@ export async function runHarnessTurn(
       composedSystemPrompt ? `agent_context:\n${composedSystemPrompt}` : "",
       "Governed action rule: when a user asks to send email, call the send_email tool. Never say an email was sent, submitted, queued, or is awaiting approval unless that tool returned the matching status in this turn. If you do not call the tool, state that nothing was sent.",
       goalExecution
-        ? "Goal mode rule: perform one bounded execution step toward the canonical objective. When the objective is fully satisfied, call goal_complete exactly once with a concise summary and concrete verification notes. If it is not yet satisfied, do not claim completion; summarize progress and ThinkWork will persist a resumable pause."
+        ? "Goal mode rule: perform one bounded execution step toward the canonical objective. When the objective is fully satisfied, call goal_complete exactly once with a concise summary and concrete verification notes. For a one-shot response objective, use the exact requested response as the goal_complete summary instead of ending the turn with plain text. If it is not yet satisfied, do not claim completion; summarize progress and ThinkWork will persist a resumable pause."
         : "",
       skillCreatorTurn
         ? "Skill Creator rule: interview when requirements remain ambiguous. Only when the user asks to submit or publish a complete skill, call submit_skill_draft exactly once with a valid Agent Skills SKILL.md and only necessary bounded text support files. The platform validates and places it in the existing review/trust queue; do not claim it is published."
@@ -2121,6 +2122,33 @@ export async function runHarnessTurn(
             errorMessage:
               "Harness ended without a valid document envelope after one corrective continuation.",
           });
+        }
+        if (
+          goalExecution &&
+          payload.invocation_source === "agent_loop" &&
+          missingAgentLoopCompletionCorrections < 1
+        ) {
+          missingAgentLoopCompletionCorrections += 1;
+          nextMessages = [
+            {
+              role: "assistant",
+              content: segment.finalAssistantContent,
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  text: [
+                    "You ended this AgentLoop iteration without governed completion evidence.",
+                    "Re-evaluate the canonical objective against the work you just produced.",
+                    "If it is fully satisfied, call goal_complete exactly once now; when the objective requires an exact response, use that exact response as the summary.",
+                    "If work genuinely remains, return a concise progress summary without claiming completion.",
+                  ].join(" "),
+                },
+              ],
+            },
+          ];
+          continue;
         }
         guardHarnessPublication(finalText);
         if (goalExecution) {

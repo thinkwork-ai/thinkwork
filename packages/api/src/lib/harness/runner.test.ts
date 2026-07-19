@@ -1829,6 +1829,7 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
       deps,
     );
 
+    expect(deps.invocations).toHaveLength(1);
     expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
       status: "paused",
       summary: "Implemented the first slice.",
@@ -1843,6 +1844,72 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
       deps.finalizePayloads[0].response?.diagnostics?.harness,
     ).toMatchObject({
       goal_document_phase_limits: null,
+    });
+  });
+
+  it("gives an AgentLoop one corrective chance to return governed completion evidence", async () => {
+    const deps = makeDeps([
+      stream(textEvents("AGENTCORE_SCHEDULE_PROOF")),
+      stream(
+        toolUseEvents("goal_complete", "goal-tool-correction", {
+          summary: "AGENTCORE_SCHEDULE_PROOF",
+          verification_notes: ["Returned the exact requested response"],
+        }),
+      ),
+    ]);
+
+    await runHarnessTurn(
+      {
+        ...basePayload(),
+        invocation_source: "agent_loop",
+        message: "Reply with exactly AGENTCORE_SCHEDULE_PROOF",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Reply with exactly AGENTCORE_SCHEDULE_PROOF",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(deps.invocations).toHaveLength(2);
+    expect(JSON.stringify(deps.invocations[1].messages)).toContain(
+      "without governed completion evidence",
+    );
+    expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
+      status: "complete",
+      completion_summary: "AGENTCORE_SCHEDULE_PROOF",
+      verification_notes: ["Returned the exact requested response"],
+      resume_eligible: false,
+    });
+  });
+
+  it("keeps an AgentLoop resumable when the completion correction still reports progress", async () => {
+    const deps = makeDeps([
+      stream(textEvents("Implemented the first slice.")),
+      stream(textEvents("More work remains after verification.")),
+    ]);
+
+    await runHarnessTurn(
+      {
+        ...basePayload(),
+        invocation_source: "agent_loop",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Ship all slices",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
+      status: "paused",
+      summary: "More work remains after verification.",
+      resume_eligible: true,
     });
   });
 
