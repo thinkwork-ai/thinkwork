@@ -26,6 +26,7 @@
 # Usage:
 #   DATABASE_URL=postgres://... bash scripts/db-migrate-manual.sh
 #   bash scripts/db-migrate-manual.sh --dry-run     # list files + markers, no psql
+#   AUTH_RETIREMENT_PHASE=coexistence bash scripts/db-migrate-manual.sh
 #   bash scripts/db-migrate-manual.sh --help
 #
 # Exit codes:
@@ -380,6 +381,19 @@ for f in "${WALK_FILES[@]}"; do
   fi
   # Skip journal-registered files.
   if printf '%s\n' "$INDEXED" | grep -qx "$base"; then
+    continue
+  fi
+
+  # Phase-gated retirement migrations are deliberately unapplied while their
+  # rollback boundary remains active. Treating their declared drops as drift
+  # would make every coexistence deployment fail even though migration apply
+  # correctly deferred the destructive step. Once the environment advances
+  # to `retired`, the file is probed normally and any leftover resource fails
+  # the gate.
+  if grep -q '^-- deployment-phase: auth-retired$' "$f" \
+    && [[ "${AUTH_RETIREMENT_PHASE:-retired}" != "retired" ]]; then
+    echo "  $base"
+    echo "    DEFERRED (AUTH_RETIREMENT_PHASE=${AUTH_RETIREMENT_PHASE:-retired})"
     continue
   fi
 

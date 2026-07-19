@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const mocks = vi.hoisted(() => ({
   updateSets: [] as unknown[],
@@ -155,6 +156,7 @@ vi.mock("../workspace-projection-snapshot.js", async (importOriginal) => {
 
 import {
   capturedSystemPromptFromFinalizePayload,
+  buildHarnessFinalizeAuthorizationFence,
   collectAgentProfileRuns,
   collectModelRoutedToolCalls,
   diagnosticsFromFinalizePayload,
@@ -175,6 +177,47 @@ const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
 const THREAD_ID = "33333333-3333-3333-3333-333333333333";
 const TURN_ID = "44444444-4444-4444-4444-444444444444";
+
+describe("Harness finalize authorization fence", () => {
+  const dialect = new PgDialect();
+  const base = {
+    thread_turn_id: TURN_ID,
+    tenant_id: TENANT_ID,
+    agent_id: AGENT_ID,
+    thread_id: THREAD_ID,
+    runtime_type: "agentcore",
+    duration_ms: 25,
+    status: "completed" as const,
+    claim: {
+      status: "running",
+      harness_session_id: "55555555-5555-5555-5555-555555555555",
+      harness_participant_user_id: "66666666-6666-6666-6666-666666666666",
+    },
+  };
+
+  it("authorizes ordinary Harness turns through their exact triggering user message", () => {
+    const fence = buildHarnessFinalizeAuthorizationFence(base);
+    expect(fence).not.toBeNull();
+    const query = dialect.sqlToQuery(fence!);
+    expect(query.sql).toContain("JOIN messages hm");
+    expect(query.sql).not.toContain("agent_wakeup_requests");
+    expect(query.sql).toContain("hm.sender_id = hs.participant_user_id");
+  });
+
+  it("authorizes card resumes through the canonical answered-question chain", () => {
+    const fence = buildHarnessFinalizeAuthorizationFence({
+      ...base,
+      claim: { ...base.claim, invocation_source: "question_answer" },
+    });
+    expect(fence).not.toBeNull();
+    const query = dialect.sqlToQuery(fence!);
+    expect(query.sql).toContain("agent_wakeup_requests haw");
+    expect(query.sql).toContain("pending_user_questions hpq");
+    expect(query.sql).toContain("JOIN messages hqm");
+    expect(query.sql).toContain("ht.triggering_message_id IS NULL");
+    expect(query.sql).toContain("hpq.answered_by = hs.participant_user_id");
+  });
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
