@@ -48,6 +48,7 @@ import {
 import { loadTurnToolExecutionInvocations } from "../lib/harness/tool-execution-ledger.js";
 import { collectGovernedConnectorEvidence } from "../lib/harness/gateway-evidence.js";
 import { enforceGovernedActionGrounding } from "../lib/harness/governed-action-grounding.js";
+import { loadCanonicalQuestionAnswerTurn } from "../lib/harness/canonical-question-answer-turn.js";
 
 const region =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -307,8 +308,9 @@ function createRealDeps(): HarnessRunnerDeps {
     abandonFreshTurn: abandonFreshHarnessTurn,
     invokeHarness: invokeHarnessWithBearer,
     async emitDocument(input) {
-      // Resolve triggering_message_id the same way the activity handler
-      // does — handleDocumentEmission derives the acting user from it.
+      // Message turns derive the actor from triggering_message_id. A
+      // question-card resume has no triggering message, so re-authorize its
+      // exact answerer from the canonical persisted action chain instead.
       const db = getDb();
       const [turnRow] = await db
         .select({
@@ -322,12 +324,19 @@ function createRealDeps(): HarnessRunnerDeps {
           ),
         )
         .limit(1);
+      const actionIdentity = turnRow?.triggering_message_id
+        ? null
+        : await loadCanonicalQuestionAnswerTurn({
+            tenantId: input.tenantId,
+            turnId: input.turnId,
+          });
       return handleDocumentEmission({
         tenantId: input.tenantId,
         threadId: input.threadId,
         agentId: input.agentId,
         turnId: input.turnId,
         triggeringMessageId: turnRow?.triggering_message_id ?? null,
+        trustedActingUserId: actionIdentity?.participantUserId ?? null,
         raw: input.raw,
       });
     },

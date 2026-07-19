@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   harnessManagedThreadEnrollments,
@@ -14,11 +14,13 @@ import {
   type CanonicalHarnessPrefix,
 } from "./thread-public-state.js";
 import { HarnessDuplicateDeliveryError } from "./runner.js";
+import { loadCanonicalQuestionAnswerTurn } from "./canonical-question-answer-turn.js";
 
 export interface PreparedFreshHarnessTurn extends CanonicalHarnessPrefix {
   sessionRecordId: string;
   runtimeSessionId: string;
   participantUserId: string;
+  canonicalPendingQuestionAnswer?: Record<string, unknown>;
 }
 
 export async function prepareFreshHarnessTurn(input: {
@@ -31,14 +33,22 @@ export async function prepareFreshHarnessTurn(input: {
   resolvedVersion: string;
   baseFingerprint: string;
   participantFingerprint: string;
+  questionAnswerResume?: boolean;
 }): Promise<PreparedFreshHarnessTurn> {
   const database = getDb();
+  const questionAnswerTurn = input.questionAnswerResume
+    ? await loadCanonicalQuestionAnswerTurn({
+        tenantId: input.tenantId,
+        turnId: input.turnId,
+      })
+    : null;
   const allocated = await database.transaction(async (tx) => {
     const [turn] = await tx
       .select({
         threadId: threadTurns.thread_id,
         agentId: threadTurns.agent_id,
         triggeringMessageId: threadTurns.triggering_message_id,
+        invocationSource: threadTurns.invocation_source,
       })
       .from(threadTurns)
       .where(
@@ -51,26 +61,40 @@ export async function prepareFreshHarnessTurn(input: {
     if (
       !turn ||
       turn.threadId !== input.threadId ||
-      turn.agentId !== input.agentId ||
-      !turn.triggeringMessageId
+      turn.agentId !== input.agentId
     ) {
       throw new Error("harness_turn_tuple_mismatch");
     }
-    const [trigger] = await tx
-      .select({ senderId: messages.sender_id })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.tenant_id, input.tenantId),
-          eq(messages.thread_id, input.threadId),
-          eq(messages.id, turn.triggeringMessageId),
-          eq(messages.role, "user"),
-        ),
-      )
-      .limit(1);
-    if (!trigger || trigger.senderId !== input.participantUserId) {
+    const actionResume =
+      !turn.triggeringMessageId &&
+      turn.invocationSource === "question_answer" &&
+      questionAnswerTurn?.tenantId === input.tenantId &&
+      questionAnswerTurn.turnId === input.turnId &&
+      questionAnswerTurn.threadId === input.threadId &&
+      questionAnswerTurn.agentId === input.agentId &&
+      questionAnswerTurn.participantUserId === input.participantUserId;
+    if (!turn.triggeringMessageId && !actionResume) {
       throw new Error("harness_turn_participant_mismatch");
     }
+    if (turn.triggeringMessageId) {
+      const [trigger] = await tx
+        .select({ senderId: messages.sender_id })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.tenant_id, input.tenantId),
+            eq(messages.thread_id, input.threadId),
+            eq(messages.id, turn.triggeringMessageId),
+            eq(messages.role, "user"),
+          ),
+        )
+        .limit(1);
+      if (!trigger || trigger.senderId !== input.participantUserId) {
+        throw new Error("harness_turn_participant_mismatch");
+      }
+    }
+    const canonicalAnchorMessageId =
+      turn.triggeringMessageId ?? questionAnswerTurn!.anchorMessageId;
     const [enrollment] = await tx
       .select({
         id: harnessManagedThreadEnrollments.id,
@@ -96,20 +120,32 @@ export async function prepareFreshHarnessTurn(input: {
     ) {
       throw new Error("harness_enrollment_profile_drift");
     }
-    const [triggerEvent] = await tx
-      .select({ id: threadPublicEvents.id })
-      .from(threadPublicEvents)
-      .where(
-        and(
-          eq(threadPublicEvents.tenant_id, input.tenantId),
-          eq(threadPublicEvents.thread_id, input.threadId),
-          eq(threadPublicEvents.source_kind, "message"),
-          eq(threadPublicEvents.source_id, turn.triggeringMessageId),
-          eq(threadPublicEvents.event_kind, "insert"),
-        ),
-      )
-      .orderBy(threadPublicEvents.id)
-      .limit(1);
+    const [triggerEvent] = actionResume
+      ? await tx
+          .select({ id: threadPublicEvents.id })
+          .from(threadPublicEvents)
+          .where(
+            and(
+              eq(threadPublicEvents.tenant_id, input.tenantId),
+              eq(threadPublicEvents.thread_id, input.threadId),
+            ),
+          )
+          .orderBy(desc(threadPublicEvents.id))
+          .limit(1)
+      : await tx
+          .select({ id: threadPublicEvents.id })
+          .from(threadPublicEvents)
+          .where(
+            and(
+              eq(threadPublicEvents.tenant_id, input.tenantId),
+              eq(threadPublicEvents.thread_id, input.threadId),
+              eq(threadPublicEvents.source_kind, "message"),
+              eq(threadPublicEvents.source_id, canonicalAnchorMessageId),
+              eq(threadPublicEvents.event_kind, "insert"),
+            ),
+          )
+          .orderBy(threadPublicEvents.id)
+          .limit(1);
     if (!triggerEvent) throw new Error("harness_trigger_event_missing");
 
     const runtimeSessionId = `tw-harness-turn-${input.turnId}`;
@@ -180,7 +216,13 @@ export async function prepareFreshHarnessTurn(input: {
       sessionRecordId: session.id,
       runtimeSessionId: session.runtimeSessionId,
       capturedHighWater: session.highWater,
-      triggeringMessageId: turn.triggeringMessageId,
+      triggeringMessageId: canonicalAnchorMessageId,
+      actionCurrentMessage: actionResume
+        ? "Continue the task using the canonical pending-question answer provided for this turn."
+        : null,
+      canonicalPendingQuestionAnswer: actionResume
+        ? questionAnswerTurn!.pendingQuestionAnswer
+        : undefined,
     };
   });
 
@@ -192,6 +234,7 @@ export async function prepareFreshHarnessTurn(input: {
       participantUserId: input.participantUserId,
       triggeringMessageId: allocated.triggeringMessageId,
       capturedHighWater: allocated.capturedHighWater,
+      actionCurrentMessage: allocated.actionCurrentMessage,
     });
   } catch (error) {
     await abandonFreshHarnessTurn({
@@ -207,6 +250,7 @@ export async function prepareFreshHarnessTurn(input: {
     sessionRecordId: allocated.sessionRecordId,
     runtimeSessionId: allocated.runtimeSessionId,
     participantUserId: input.participantUserId,
+    canonicalPendingQuestionAnswer: allocated.canonicalPendingQuestionAnswer,
   };
 }
 

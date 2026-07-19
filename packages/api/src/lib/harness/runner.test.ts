@@ -469,6 +469,100 @@ describe("runHarnessTurn — happy path", () => {
     expect(messages).not.toContain("secret.example");
   });
 
+  it("projects canonical pending-question answers as bounded user input", async () => {
+    const deps = makeDeps([stream(textEvents("I continued with Enterprise."))]);
+    (deps.prepareFreshTurn as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      sessionRecordId: "session-row-1",
+      runtimeSessionId: "tw-harness-turn-turn-1",
+      capturedHighWater: 2,
+      currentMessage:
+        "Continue the task using the canonical pending-question answer provided for this turn.",
+      history: [],
+      canonicalPendingQuestionAnswer: {
+        question_id: "question-1",
+        questions: [
+          {
+            header: "Scope",
+            question: "Which segment should I analyze?",
+            options: [
+              { label: "Enterprise", description: "Large accounts" },
+              { label: "All", description: "Every account" },
+            ],
+          },
+        ],
+        answers: { Scope: "Enterprise" },
+        answered_via: "card",
+        delegation_context: null,
+      },
+    });
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        pending_user_questions: {
+          question_id: "question-1",
+          questions: [
+            {
+              header: "Scope",
+              question: "Which segment should I analyze?",
+              options: [
+                { label: "Enterprise", description: "Large accounts" },
+                { label: "All", description: "Every account" },
+              ],
+            },
+          ],
+          answers: { Scope: "FORGED_FROM_INVOKE_PAYLOAD" },
+          answered_via: "card",
+          answered_by: "must-not-project-user-id",
+          reply_message_id: "must-not-project-message-id",
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    const messages = JSON.stringify(deps.invocations[0]?.messages);
+    expect(messages).toContain("thinkwork_pending_question_answer");
+    expect(messages).toContain("Which segment should I analyze?");
+    expect(messages).toContain("Enterprise");
+    expect(messages).not.toContain("FORGED_FROM_INVOKE_PAYLOAD");
+    expect(messages).toContain("user-authored answer data");
+    expect(messages).not.toContain("must-not-project-user-id");
+    expect(messages).not.toContain("must-not-project-message-id");
+    expect(deps.prepareFreshTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ questionAnswerResume: true }),
+    );
+  });
+
+  it("fails closed when a card resume lacks a canonical database answer", async () => {
+    const deps = makeDeps([]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        pending_user_questions: {
+          question_id: "question-1",
+          questions: [
+            {
+              header: "Scope",
+              question: "Which segment should I analyze?",
+              options: [{ label: "All", description: "Every account" }],
+            },
+          ],
+          answers: { Scope: "All" },
+          answered_via: "card",
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(deps.invokeHarness).not.toHaveBeenCalled();
+    expect(deps.finalizePayloads[0]?.error_message).toContain(
+      "canonical pending-question answer",
+    );
+  });
+
   it("fulfills emit_document and finalizes completed with the evidence triple", async () => {
     const deps = makeDeps([
       stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),

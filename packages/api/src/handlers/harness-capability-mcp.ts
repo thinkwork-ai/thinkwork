@@ -44,6 +44,7 @@ import {
   type ToolExecutionCorrelation,
   type ToolExecutionLedgerStore,
 } from "../lib/harness/tool-execution-ledger.js";
+import { loadCanonicalQuestionAnswerTurn } from "../lib/harness/canonical-question-answer-turn.js";
 
 const LIST_PATH = "/agentcore/capabilities/mcp/tools/list";
 const CALL_PATH = "/agentcore/capabilities/mcp/tools/call";
@@ -701,35 +702,63 @@ export async function resolveHarnessCapabilityContext(
     .limit(1);
 
   if (
-    !row ||
-    row.turnStatus !== "running" ||
-    (row.retryAttempt ?? 0) + 1 !== claims.session_generation ||
-    !ACCEPTED_RUNTIME_TYPES.has(row.runtimeType ?? "") ||
-    row.tenantId !== claims.tenant_id ||
-    row.turnId !== claims.turn_id ||
-    row.threadId !== claims.thread_id ||
-    row.turnAgentId !== claims.agent_id ||
-    row.threadAgentId !== claims.agent_id ||
-    row.triggeringMessageId == null ||
-    row.senderId !== claims.participant_id ||
-    row.senderId !== claims.sub ||
-    (row.senderType !== "human" && row.senderType !== "user") ||
-    row.userId !== claims.sub ||
-    row.userTenantId !== claims.tenant_id ||
-    row.agentId !== claims.agent_id ||
-    row.agentTenantId !== claims.tenant_id ||
-    (claims.space_id !== undefined && row.spaceId !== claims.space_id)
+    row &&
+    row.turnStatus === "running" &&
+    (row.retryAttempt ?? 0) + 1 === claims.session_generation &&
+    ACCEPTED_RUNTIME_TYPES.has(row.runtimeType ?? "") &&
+    row.tenantId === claims.tenant_id &&
+    row.turnId === claims.turn_id &&
+    row.threadId === claims.thread_id &&
+    row.turnAgentId === claims.agent_id &&
+    row.threadAgentId === claims.agent_id &&
+    row.triggeringMessageId != null &&
+    row.senderId === claims.participant_id &&
+    row.senderId === claims.sub &&
+    (row.senderType === "human" || row.senderType === "user") &&
+    row.userId === claims.sub &&
+    row.userTenantId === claims.tenant_id &&
+    row.agentId === claims.agent_id &&
+    row.agentTenantId === claims.tenant_id &&
+    (claims.space_id === undefined || row.spaceId === claims.space_id)
+  ) {
+    return {
+      tenantId: row.tenantId,
+      userId: row.userId,
+      agentId: row.agentId,
+      threadId: row.threadId,
+      turnId: row.turnId,
+      triggeringMessageId: row.triggeringMessageId,
+      spaceId: row.spaceId,
+    };
+  }
+
+  const action = await loadCanonicalQuestionAnswerTurn({
+    tenantId: claims.tenant_id,
+    turnId: claims.turn_id,
+  });
+  if (
+    !action ||
+    action.status !== "running" ||
+    action.retryAttempt + 1 !== claims.session_generation ||
+    !ACCEPTED_RUNTIME_TYPES.has(action.runtimeType ?? "") ||
+    action.tenantId !== claims.tenant_id ||
+    action.turnId !== claims.turn_id ||
+    action.threadId !== claims.thread_id ||
+    action.agentId !== claims.agent_id ||
+    action.participantUserId !== claims.participant_id ||
+    action.participantUserId !== claims.sub ||
+    (claims.space_id !== undefined && action.spaceId !== claims.space_id)
   ) {
     return null;
   }
   return {
-    tenantId: row.tenantId,
-    userId: row.userId,
-    agentId: row.agentId,
-    threadId: row.threadId,
-    turnId: row.turnId,
-    triggeringMessageId: row.triggeringMessageId,
-    spaceId: row.spaceId,
+    tenantId: action.tenantId,
+    userId: action.participantUserId,
+    agentId: action.agentId,
+    threadId: action.threadId,
+    turnId: action.turnId,
+    triggeringMessageId: action.anchorMessageId,
+    spaceId: action.spaceId,
   };
 }
 

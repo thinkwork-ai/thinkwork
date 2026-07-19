@@ -150,6 +150,7 @@ function emit(
   document: unknown,
   deps: DocumentEmissionDeps,
   triggeringMessageId: string | null = MESSAGE_ID,
+  trustedActingUserId: string | null = null,
 ) {
   return handleDocumentEmission(
     {
@@ -158,6 +159,7 @@ function emit(
       agentId: AGENT_ID,
       turnId: TURN_ID,
       triggeringMessageId,
+      trustedActingUserId,
       raw: document,
     },
     deps,
@@ -430,6 +432,46 @@ describe("handleDocumentEmission", () => {
     expect(result.body.headVersion).toBe(1);
     expect(recorded.pins).toHaveLength(1);
     expect(recorded.pins[0].userId).toBe(USER_ID);
+  });
+
+  it("attributes a question-resume artifact to its re-authorized exact user", async () => {
+    const resolveMessageActor = vi.fn(async () => null);
+    const resolveRunActor = vi.fn(async () => null);
+    const { deps, recorded } = makeDeps({
+      resolveActingUserId: resolveMessageActor,
+      resolveTurnRunContext: resolveRunActor,
+    });
+
+    const result = await emit(
+      { ...VALID_DOCUMENT, status: "final", spaceId: SPACE_ID },
+      deps,
+      null,
+      USER_ID,
+    );
+
+    expect(result.body.ok).toBe(true);
+    expect(resolveMessageActor).not.toHaveBeenCalled();
+    expect(resolveRunActor).not.toHaveBeenCalled();
+    expect(recorded.upserts[0].actingUserId).toBe(USER_ID);
+    expect(recorded.pins[0].userId).toBe(USER_ID);
+  });
+
+  it("keeps a triggering message authoritative over trusted action identity", async () => {
+    const resolveMessageActor = vi.fn(async () => USER_ID);
+    const { deps, recorded } = makeDeps({
+      resolveActingUserId: resolveMessageActor,
+    });
+
+    const result = await emit(
+      VALID_DOCUMENT,
+      deps,
+      MESSAGE_ID,
+      "88888888-8888-8888-8888-888888888888",
+    );
+
+    expect(result.body.ok).toBe(true);
+    expect(resolveMessageActor).toHaveBeenCalledOnce();
+    expect(recorded.upserts[0].actingUserId).toBe(USER_ID);
   });
 
   it("rejects finalize into a space the acting user is not a member of", async () => {

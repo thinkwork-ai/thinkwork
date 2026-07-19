@@ -171,6 +171,18 @@ describe("AgentCore turn assertion Terraform fixture", () => {
     expect(handlers).toContain(
       '"POST /agentcore/capabilities/workspace/skills/load"',
     );
-    expect(handlers).toContain("platform-tools-v3-message-attachments");
+    expect(handlers).toContain("platform-tools-v4-user-questions");
+  });
+
+  it("keeps governed user questions wired through Gateway, Cedar, Lambda, and Harness", () => {
+    expect(gatewayReconciler).toContain('operationId: "ask_user_question"');
+    expect(gatewayReconciler).toContain(
+      'AgentCore::Action::"${TARGET_NAME}___ask_user_question"',
+    );
+    expect(harnessModule).toContain("OwnerProof___ask_user_question");
+    expect(harnessLifecycle).toContain("ask_user_question");
+    expect(handlers).toContain(
+      '"POST /agentcore/capabilities/user/questions/ask"',
+    );
   });
 });

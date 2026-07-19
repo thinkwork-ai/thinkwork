@@ -7,6 +7,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
@@ -28,6 +29,11 @@ import {
   type HarnessCapabilityContext,
 } from "./harness-capability-mcp.js";
 import { sendDirectRoutineEmail } from "./email-send.js";
+import { handleQuestionIntake } from "../lib/user-questions/intake.js";
+import {
+  validateQuestionBatch,
+  type UserQuestionInput,
+} from "../lib/user-questions/question-message.js";
 import { getContextEngineService } from "../lib/context-engine/service.js";
 import type { ContextEngineResponse } from "../lib/context-engine/types.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
@@ -64,6 +70,7 @@ const MESSAGE_ATTACHMENTS_LIST_PATH =
   "/agentcore/capabilities/message/attachments/list";
 const MESSAGE_ATTACHMENTS_READ_PATH =
   "/agentcore/capabilities/message/attachments/read";
+const USER_QUESTIONS_ASK_PATH = "/agentcore/capabilities/user/questions/ask";
 const MAX_BODY_BYTES = 80 * 1024;
 const MAX_QUERY_CHARS = 2_000;
 const MAX_EMAIL_SUBJECT_CHARS = 500;
@@ -96,9 +103,16 @@ interface MessageAttachmentBody {
   max_chars?: unknown;
 }
 
+interface UserQuestionBody {
+  tenant_id?: unknown;
+  questions?: unknown;
+  delegation_context?: unknown;
+}
+
 interface PlatformAccess {
   brain: boolean;
   email: boolean;
+  questions: boolean;
 }
 
 type EmailClaim =
@@ -157,6 +171,15 @@ export interface HarnessPlatformToolsDeps {
     offset: number,
     maxChars: number,
   ): Promise<ReadMessageAttachmentResult>;
+  askUserQuestion(input: {
+    context: HarnessCapabilityContext;
+    questions: UserQuestionInput[];
+    delegationContext?: Record<string, unknown> | null;
+  }): Promise<{
+    status: "posted" | "already_pending";
+    questionId?: string;
+    messageId?: string;
+  }>;
   claimEmail(input: EmailClaimInput): Promise<EmailClaim>;
   finishEmail(input: {
     context: HarnessCapabilityContext;
@@ -186,6 +209,7 @@ export function createHarnessPlatformToolsHandler(
         WORKSPACE_SKILLS_LOAD_PATH,
         MESSAGE_ATTACHMENTS_LIST_PATH,
         MESSAGE_ATTACHMENTS_READ_PATH,
+        USER_QUESTIONS_ASK_PATH,
       ].includes(path)
     ) {
       return response(404, { error: "not_found" });
@@ -217,13 +241,15 @@ export function createHarnessPlatformToolsHandler(
       | BrainBody
       | EmailBody
       | WorkspaceSkillBody
-      | MessageAttachmentBody;
+      | MessageAttachmentBody
+      | UserQuestionBody;
     try {
       body = JSON.parse(rawBody || "{}") as
         | BrainBody
         | EmailBody
         | WorkspaceSkillBody
-        | MessageAttachmentBody;
+        | MessageAttachmentBody
+        | UserQuestionBody;
     } catch {
       console.warn("[harness-platform-tools] Invalid Gateway body encoding", {
         path,
@@ -249,7 +275,11 @@ export function createHarnessPlatformToolsHandler(
             ? parseWorkspaceSkillBody(body as WorkspaceSkillBody)
             : path === MESSAGE_ATTACHMENTS_READ_PATH
               ? parseMessageAttachmentBody(body as MessageAttachmentBody)
-              : ({ ok: true, value: {} } as ParseResult<Record<string, never>>);
+              : path === USER_QUESTIONS_ASK_PATH
+                ? parseUserQuestionBody(body as UserQuestionBody)
+                : ({ ok: true, value: {} } as ParseResult<
+                    Record<string, never>
+                  >);
     if (!parsed.ok) return response(400, { error: parsed.error });
 
     const context = await deps.resolveCanonicalContext(claims);
@@ -258,11 +288,20 @@ export function createHarnessPlatformToolsHandler(
     }
     const isBrain = path === BRAIN_PATH;
     const isEmail = path === EMAIL_PATH;
-    if (isBrain || isEmail) {
+    const isQuestion = path === USER_QUESTIONS_ASK_PATH;
+    if (isBrain || isEmail || isQuestion) {
       const access = await deps.resolveAccess(context);
-      if ((isBrain && !access.brain) || (isEmail && !access.email)) {
+      if (
+        (isBrain && !access.brain) ||
+        (isEmail && !access.email) ||
+        (isQuestion && !access.questions)
+      ) {
         return response(403, {
-          error: isBrain ? "brain_not_authorized" : "send_email_not_authorized",
+          error: isBrain
+            ? "brain_not_authorized"
+            : isEmail
+              ? "send_email_not_authorized"
+              : "ask_user_question_not_authorized",
         });
       }
     }
@@ -272,6 +311,14 @@ export function createHarnessPlatformToolsHandler(
     }
     if (isEmail) {
       return runEmail(deps, context, event, parsed.value as ParsedEmail);
+    }
+    if (isQuestion) {
+      return runUserQuestion(
+        deps,
+        context,
+        event,
+        parsed.value as ParsedUserQuestion,
+      );
     }
     if (path === WORKSPACE_SKILLS_LIST_PATH) {
       return runWorkspaceSkillList(deps, context, event);
@@ -294,6 +341,68 @@ export function createHarnessPlatformToolsHandler(
       parsed.value as ParsedMessageAttachment,
     );
   };
+}
+
+async function runUserQuestion(
+  deps: HarnessPlatformToolsDeps,
+  context: HarnessCapabilityContext,
+  event: APIGatewayProxyEventV2,
+  input: ParsedUserQuestion,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const startedAt = deps.now();
+  const correlation = correlationFor({
+    context,
+    event,
+    operation: "ask_user_question",
+    policyRevision: deps.policyRevision,
+    idempotencyKey: event.requestContext.requestId,
+    credentialOwnerAlias: null,
+  });
+  await appendToolExecutionStarted(deps.ledgerStore, {
+    ...correlation,
+    input: { questionCount: input.questions.length },
+    inputAllowPaths: ["questionCount"],
+  });
+  try {
+    const result = await deps.askUserQuestion({
+      context,
+      questions: input.questions,
+      delegationContext: input.delegationContext,
+    });
+    await appendToolExecutionTerminal(deps.ledgerStore, {
+      ...correlation,
+      status: "completed",
+      output: {
+        status: result.status,
+        ...(result.questionId ? { questionId: result.questionId } : {}),
+        ...(result.messageId ? { messageId: result.messageId } : {}),
+      },
+      outputAllowPaths: ["status", "questionId", "messageId"],
+      durationMs: Math.max(0, deps.now() - startedAt),
+    });
+    return response(200, {
+      ...result,
+      endTurn: true,
+      instruction:
+        "The question is persisted. End this turn now; the user's answer arrives in a later turn.",
+    });
+  } catch (error) {
+    await appendToolExecutionTerminal(deps.ledgerStore, {
+      ...correlation,
+      status: "failed",
+      output: {},
+      outputAllowPaths: [],
+      error: { code: "ask_user_question_failed" },
+      errorAllowPaths: ["code"],
+      durationMs: Math.max(0, deps.now() - startedAt),
+    });
+    console.error("[harness-platform-tools] User question intake failed", {
+      tenantId: context.tenantId,
+      turnId: context.turnId,
+      errorType: error instanceof Error ? error.name : "unknown",
+    });
+    return response(502, { error: "ask_user_question_failed" });
+  }
 }
 
 async function runBrain(
@@ -804,7 +913,7 @@ async function resolvePlatformAccess(
       ),
     )
     .limit(1);
-  if (!agent) return { brain: false, email: false };
+  if (!agent) return { brain: false, email: false, questions: false };
   const blocked = new Set(
     Array.isArray(agent.blockedTools)
       ? agent.blockedTools.filter(
@@ -821,6 +930,7 @@ async function resolvePlatformAccess(
       brain.ok && brain.value?.enabled === true && !isBlocked("context_engine"),
     email:
       email.ok && email.value?.enabled === true && !isBlocked("send_email"),
+    questions: !isBlocked("ask_user_question"),
   };
 }
 
@@ -880,6 +990,66 @@ async function sendEmail(input: {
     return { ...parsed, httpStatus: statusCode };
   }
   return result;
+}
+
+async function askUserQuestion(input: {
+  context: HarnessCapabilityContext;
+  questions: UserQuestionInput[];
+  delegationContext?: Record<string, unknown> | null;
+}): Promise<{
+  status: "posted" | "already_pending";
+  questionId?: string;
+  messageId?: string;
+}> {
+  const path = `/api/threads/${input.context.threadId}/questions`;
+  const result = await handleQuestionIntake({
+    version: "2.0",
+    routeKey: `POST ${path}`,
+    rawPath: path,
+    rawQueryString: "",
+    headers: { authorization: `Bearer ${getApiAuthSecret()}` },
+    requestContext: {
+      accountId: "internal",
+      apiId: "internal",
+      domainName: "internal",
+      domainPrefix: "internal",
+      http: {
+        method: "POST",
+        path,
+        protocol: "internal",
+        sourceIp: "127.0.0.1",
+        userAgent: "ThinkWork-AgentCore-Harness/1.0",
+      },
+      requestId: input.context.turnId,
+      routeKey: `POST ${path}`,
+      stage: "$default",
+      time: "",
+      timeEpoch: Date.now(),
+    },
+    pathParameters: { threadId: input.context.threadId },
+    body: JSON.stringify({
+      thread_turn_id: input.context.turnId,
+      questions: input.questions,
+      delegation_context: input.delegationContext ?? null,
+    }),
+    isBase64Encoded: false,
+  });
+  const body = JSON.parse(result.body ?? "{}") as Record<string, unknown>;
+  if (result.statusCode === 409 && body.code === "QUESTION_ALREADY_PENDING") {
+    return { status: "already_pending" };
+  }
+  if (result.statusCode !== 200 || body.ok !== true) {
+    throw new Error(`question_intake_${result.statusCode}`);
+  }
+  return {
+    status: "posted",
+    ...(typeof body.questionId === "string"
+      ? { questionId: body.questionId }
+      : {}),
+    ...(typeof body.messageId === "string"
+      ? { messageId: body.messageId }
+      : {}),
+  };
 }
 
 async function claimEmail(input: EmailClaimInput): Promise<EmailClaim> {
@@ -983,6 +1153,11 @@ interface ParsedMessageAttachment {
   maxChars: number;
 }
 
+interface ParsedUserQuestion {
+  questions: UserQuestionInput[];
+  delegationContext: Record<string, unknown> | null;
+}
+
 type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 function parseBrainBody(body: BrainBody): ParseResult<ParsedBrain> {
@@ -1081,6 +1256,22 @@ function parseMessageAttachmentBody(
       attachmentId: attachmentId.toLowerCase(),
       offset: Number(offset),
       maxChars: Number(maxChars),
+    },
+  };
+}
+
+function parseUserQuestionBody(
+  body: UserQuestionBody,
+): ParseResult<ParsedUserQuestion> {
+  const error = validateQuestionBatch(body.questions, body.delegation_context);
+  if (error) return { ok: false, error: "invalid_user_questions" };
+  return {
+    ok: true,
+    value: {
+      questions: body.questions as UserQuestionInput[],
+      delegationContext: isRecord(body.delegation_context)
+        ? body.delegation_context
+        : null,
     },
   };
 }
@@ -1230,6 +1421,7 @@ const deployedHandler = createHarnessPlatformToolsHandler({
   loadWorkspaceSkill: loadAuthorizedWorkspaceSkill,
   listMessageAttachments: messageAttachmentTools.list,
   readMessageAttachment: messageAttachmentTools.read,
+  askUserQuestion,
   claimEmail,
   finishEmail,
   ledgerStore: drizzleToolExecutionLedgerStore(),
