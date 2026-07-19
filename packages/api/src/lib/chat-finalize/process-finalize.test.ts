@@ -215,7 +215,9 @@ describe("Harness finalize authorization fence", () => {
     expect(query.sql).toContain("pending_user_questions hpq");
     expect(query.sql).toContain("JOIN messages hqm");
     expect(query.sql).toContain("ht.triggering_message_id IS NULL");
-    expect(query.sql).toContain("hpq.answered_by = hs.participant_user_id");
+    expect(query.sql).toContain(
+      "hpq.answered_by = hs.participant_user_id::text",
+    );
   });
 });
 

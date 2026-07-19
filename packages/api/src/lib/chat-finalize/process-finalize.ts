@@ -191,7 +191,7 @@ export function buildHarnessFinalizeAuthorizationFence(
            AND hpq.id::text = haw.payload->>'questionId'
            AND hpq.status = 'answered'
            AND hpq.answered_via = 'card'
-           AND hpq.answered_by = hs.participant_user_id
+           AND hpq.answered_by = hs.participant_user_id::text
           JOIN messages hqm
             ON hqm.id = hpq.message_id
            AND hqm.tenant_id = hs.tenant_id
