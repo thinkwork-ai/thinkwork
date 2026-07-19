@@ -184,6 +184,58 @@ describe("native Cognito callback exchange", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("rejects a federated session when automatic identity linking cannot admit it", async () => {
+    stubLocation("https://app.example");
+    const auth = await import("./auth");
+    const authorizeUrl = new URL(
+      await auth.getAuthOptionSignInUrl({
+        key: "google",
+        label: "Continue with Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "google-client",
+          identityProvider: "Google",
+          prompt: "select_account",
+        },
+      }),
+    );
+    const state = authorizeUrl.searchParams.get("state")!;
+    const nonce = authorizeUrl.searchParams.get("nonce")!;
+    const issuer =
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool";
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          Response.json({
+            id_token: makeIdToken({
+              token_use: "id",
+              aud: "google-client",
+              nonce,
+              iss: issuer,
+              exp: Math.floor(Date.now() / 1000) + 3600,
+            }),
+            access_token: makeIdToken({
+              token_use: "access",
+              client_id: "google-client",
+              iss: issuer,
+              exp: Math.floor(Date.now() / 1000) + 3600,
+            }),
+            refresh_token: "refresh-token",
+          }),
+        )
+        .mockResolvedValueOnce(Response.json({ outcome: "not_linked" })),
+    );
+
+    await expect(auth.exchangeCodeForSession("one-time-code", state)).rejects.toThrow(
+      "Automatic identity linking could not admit this account.",
+    );
+  });
+
   it("binds a native subject with the one-use legacy-session migration grant before returning tokens", async () => {
     stubLocation("https://app.example");
     const auth = await import("./auth");
