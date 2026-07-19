@@ -6,6 +6,7 @@ import { Type } from "typebox";
 import type {
   CanvasProvider,
   DelegationProvider,
+  IdentityResolutionProvider,
   KnowledgeGraphProvider,
   MemoryProvider,
   ModelProvider,
@@ -31,6 +32,7 @@ export interface ProviderBundle {
   memory?: MemoryProvider;
   delegation?: DelegationProvider;
   knowledgeGraph?: KnowledgeGraphProvider;
+  identityResolution?: IdentityResolutionProvider;
   okfWiki?: OkfWikiNavigatorProvider;
   canvas?: CanvasProvider;
   search?: SearchProvider;

@@ -521,10 +521,21 @@ locals {
     # knowledge_graph_search tool; the per-agent tool policy gates on top.
     "chat-agent-invoke" = {
       KNOWLEDGE_GRAPH_TOOL_ENABLED = tostring(var.knowledge_graph_tool_enabled)
+      # THINK-321 U5: stage gate for the Pi identity-resolution tools; the
+      # per-agent tool policy gates on top. Mirrored on wakeup-processor so
+      # wakeup turns carry the same payload flag (env-gated feature is dead
+      # in deployed stacks without the terraform var).
+      IDENTITY_RESOLUTION_ENABLED = tostring(var.identity_resolution_tool_enabled)
       # THINK-311 U5: no HARNESS_RUNNER_FUNCTION_NAME env — derivable
       # thinkwork-<stage>-api-* names never ride env (R1/R10 identity-only
       # rule); resolveRuntimeFunctionName derives it from STAGE at call
       # time, exactly like workspace-renderer.
+    }
+    # THINK-321 U5: wakeup turns read the same identity-resolution stage
+    # gate as chat-agent-invoke (both payload builders emit
+    # identity_resolution_enabled).
+    "wakeup-processor" = {
+      IDENTITY_RESOLUTION_ENABLED = tostring(var.identity_resolution_tool_enabled)
     }
     # THINK-316 U5: the runner reads the server-only attested profile and
     # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives

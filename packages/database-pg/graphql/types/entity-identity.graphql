@@ -96,6 +96,112 @@ type CanonicalEntityMergeResult {
   impact: CanonicalEntityMergeImpact!
 }
 
+"""
+One entity reference for resolveEntities (THINK-321 U5). Exactly one shape
+applies, checked in precedence order: canonicalId, then
+(sourceSystem, externalId), then (name, entityTypeSlug). A ref matching no
+shape resolves to an explicit invalid_ref miss rather than being dropped.
+"""
+input EntityRefInput {
+  canonicalId: ID
+  sourceSystem: String
+  namespace: String
+  externalId: String
+  name: String
+  entityTypeSlug: String
+}
+
+"""
+One crosswalk mapping with full provenance (THINK-321 KTD-1/KTD-5).
+connectorSlug is null — and fetchable false — when the source system has no
+registered connector link (fail-closed): callers must never invent a slug.
+"""
+type ResolvedEntityMapping {
+  sourceSystem: String!
+  namespace: String!
+  externalId: String!
+  connectorSlug: String
+  fetchable: Boolean!
+  unroutableReason: String
+  createdBy: String!
+  createdByUserId: ID
+  createdThreadRef: String
+  createdAt: AWSDateTime
+  """
+  curated | matched | user_confirmed — who vouches for this link (R3).
+  """
+  caveat: String!
+  confidence: Float
+}
+
+type ResolvedEntityHit {
+  canonicalEntityId: ID!
+  displayName: String!
+  entityTypeSlug: String!
+  mappings: [ResolvedEntityMapping!]!
+}
+
+type EntityRefResolution {
+  """
+  hit | miss.
+  """
+  status: String!
+  """
+  Miss reason: not_found | ambiguous_name | archived | invalid_ref.
+  """
+  unroutable: String
+  entity: ResolvedEntityHit
+}
+
+type ResolveEntitiesResult {
+  results: [EntityRefResolution!]!
+  page: Int!
+  limit: Int!
+  totalRefs: Int!
+  hasMore: Boolean!
+}
+
+"""
+Candidate proposal result (THINK-321 KTD-2). candidates is the ranked
+MappingCandidate array (external-record identity evidence only); the set is
+persisted server-side for the consent echo check.
+"""
+type ProposeMappingCandidatesResult {
+  """
+  proposed | refused.
+  """
+  status: String!
+  reason: String
+  candidateSetId: ID
+  candidates: AWSJSON
+  expiresAt: AWSDateTime
+}
+
+type ConfirmEntityMappingResult {
+  """
+  confirmed | already_linked | refused.
+  """
+  status: String!
+  reason: String
+  mappingId: ID
+  canonicalEntityId: ID
+  sourceSystem: String
+  namespace: String
+  externalId: String
+  existingMappingId: ID
+  existingCanonicalEntityId: ID
+}
+
+type DeclineEntityMappingResult {
+  """
+  declined | refused.
+  """
+  status: String!
+  reason: String
+  caseId: ID
+  coalesced: Boolean
+}
+
 extend type Query {
   canonicalEntities(
     tenantId: ID
@@ -116,6 +222,20 @@ extend type Query {
     survivorId: ID!
     loserId: ID!
   ): CanonicalEntityMergeImpact!
+  """
+  Bulk-first crosswalk resolve (THINK-321 U5, R1/R2). Service (agent-tool)
+  callers are turn-bound: tenant derives server-side from the
+  x-thread-turn-id / x-thread-id header; other callers are tenant-admin
+  gated. Results are paged (server-capped page size) so unbounded bulk
+  resolves cannot blow the payload envelope.
+  """
+  resolveEntities(
+    tenantId: ID
+    refs: [EntityRefInput!]!
+    targetSystems: [String!]
+    page: Int
+    limit: Int
+  ): ResolveEntitiesResult!
 }
 
 extend type Mutation {
@@ -143,4 +263,39 @@ extend type Mutation {
     loserId: ID!
     confirmImpact: CanonicalEntityMergeImpactInput!
   ): CanonicalEntityMergeResult!
+  """
+  Rank candidate matches for one entity's unmapped target system and persist
+  the set for the consent echo check (THINK-321 KTD-2). Turn-bound service
+  callers derive threadRef server-side; an asserted threadRef that mismatches
+  the derivation is rejected. Admin callers must supply threadRef.
+  """
+  proposeMappingCandidates(
+    tenantId: ID
+    canonicalEntityId: ID!
+    targetSystem: String!
+    threadRef: ID
+  ): ProposeMappingCandidatesResult!
+  """
+  Consent-bound confirm (THINK-321 KTD-2): succeeds only when the echoed
+  candidate id equals the user selection recorded at answer intake on an
+  open, unexpired set for the same thread. Attribution is SERVER-derived —
+  created_by='user' and the user id come from the turn context, never from
+  arguments.
+  """
+  confirmEntityMapping(
+    tenantId: ID
+    threadRef: ID
+    candidateSetId: ID!
+    candidateId: String!
+  ): ConfirmEntityMappingResult!
+  """
+  Reject-all path (THINK-321 R16): no mapping is written; a
+  signature-deduped resolution case is filed with agent/turn provenance so
+  the miss converges to operator stewardship instead of re-asking forever.
+  """
+  declineEntityMappingCandidates(
+    tenantId: ID
+    threadRef: ID
+    candidateSetId: ID!
+  ): DeclineEntityMappingResult!
 }

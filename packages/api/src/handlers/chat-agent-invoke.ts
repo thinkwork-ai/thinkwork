@@ -150,6 +150,13 @@ function hindsightEndpoint(): string {
 // KNOWLEDGE_GRAPH_TOOL_ENABLED=true on this Lambda in its own PR.
 const KNOWLEDGE_GRAPH_TOOL_ENABLED =
   (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true";
+// THINK-321 U5 — stage-level seam flag for the agent-facing identity
+// resolution tools (resolve_entities / propose_mapping_candidates /
+// confirm_mapping). Same pattern as the knowledge-graph flag: terraform
+// sets IDENTITY_RESOLUTION_ENABLED on this Lambda; per-agent tool policy
+// gates on top.
+const IDENTITY_RESOLUTION_TOOL_ENABLED =
+  (process.env.IDENTITY_RESOLUTION_ENABLED || "").toLowerCase() === "true";
 function workspaceRendererFunctionName(): string {
   // Derived from the per-stage naming convention (R7); a config/env
   // override still wins. "" preserves the legacy unconfigured guard
@@ -1629,6 +1636,15 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       knowledge_graph_enabled:
         KNOWLEDGE_GRAPH_TOOL_ENABLED &&
         isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"))
+          ? true
+          : undefined,
+      // THINK-321 U5 — identity-resolution tool seam. Stage env flag gates
+      // the rollout; the per-agent tool policy can still block it. The
+      // runtime additionally requires thread_turn_id / thread id for the
+      // turn-bound auth the entity-identity resolvers enforce.
+      identity_resolution_enabled:
+        IDENTITY_RESOLUTION_TOOL_ENABLED &&
+        isAnyToolAllowed(...toolPolicyAliases("resolve_entities"))
           ? true
           : undefined,
       runtime_type: runtimeType,
