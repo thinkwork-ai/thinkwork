@@ -15,8 +15,10 @@ import {
   filterMappingsForOntologyDefinitions,
   guardOntologyChangeSetItemEdit,
   ontologyCandidateFingerprint,
+  parseOntologySystemMap,
   partitionOntologyApprovalItems,
   planOntologyChangeSetItemWrites,
+  stageOntologyEntityTypeSystemMap,
   rejectOntologyChangeSet,
   rejectOntologyChangeSetItem,
   updateOntologyChangeSet,
@@ -1099,5 +1101,136 @@ describe("updateOntologyChangeSet optimistic concurrency (R16)", () => {
         db: db as any,
       }),
     ).rejects.toThrow(/settled/i);
+  });
+});
+
+describe("system map staging (THINK-321 U3)", () => {
+  it("parses entries and drops malformed ones", () => {
+    expect(
+      parseOntologySystemMap([
+        { facet: "invoices", sourceSystem: "lastmile", note: " billing " },
+        { facet: "touchpoints", sourceSystem: "twenty" },
+        { facet: "", sourceSystem: "lastmile" },
+        { facet: "orders" },
+        "not-an-object",
+        null,
+      ]),
+    ).toEqual([
+      { facet: "invoices", sourceSystem: "lastmile", note: "billing" },
+      { facet: "touchpoints", sourceSystem: "twenty" },
+    ]);
+    expect(parseOntologySystemMap("nope")).toEqual([]);
+  });
+
+  it("stages a draft identity_map item and never writes entity_types before approval", async () => {
+    const db = new FakeOntologyDb(
+      new Map<unknown, unknown[][]>([
+        // open change sets (none), then the load at the end
+        [ontologyChangeSets, [[], [changeSetRow({ id: "generated-1" })]]],
+        [ontologyChangeSetItems, [[], []]],
+        // approved entity types include "customer" — must NOT conflict:
+        // an identity_map targets the type, it does not redefine it.
+        [ontologyEntityTypes, [[{ slug: "customer" }]]],
+      ]),
+    );
+
+    const result = await stageOntologyEntityTypeSystemMap({
+      tenantId: "tenant-1",
+      entityTypeSlug: "Customer",
+      systemMap: [
+        { facet: "invoices", sourceSystem: "lastmile" },
+        { facet: "touchpoints", sourceSystem: "twenty" },
+      ],
+      actorUserId: "admin-1",
+      db: db as any,
+    });
+
+    const itemInsert = db.inserts.find(
+      (entry) => entry.table === ontologyChangeSetItems,
+    );
+    expect(itemInsert).toBeDefined();
+    expect(itemInsert!.values).toMatchObject({
+      item_type: "identity_map",
+      action: "update",
+      target_slug: "customer",
+      status: "pending_review",
+      proposed_value: {
+        entityTypeSlug: "customer",
+        systemMap: [
+          { facet: "invoices", sourceSystem: "lastmile" },
+          { facet: "touchpoints", sourceSystem: "twenty" },
+        ],
+        slug: "customer",
+      },
+    });
+    const setInsert = db.inserts.find(
+      (entry) => entry.table === ontologyChangeSets,
+    );
+    expect(setInsert!.values).toMatchObject({ status: "draft" });
+
+    // Direct write impossible by construction: staging touches no
+    // entity_types row and no ontology version.
+    expect(
+      db.inserts.some((entry) => entry.table === ontologyEntityTypes),
+    ).toBe(false);
+    expect(
+      db.updates.some((entry) => entry.table === ontologyEntityTypes),
+    ).toBe(false);
+    expect(db.inserts.some((entry) => entry.table === ontologyVersions)).toBe(
+      false,
+    );
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it("merges a second submission for the same entity type into the pending item instead of duplicating (R14)", async () => {
+    const db = new FakeOntologyDb(
+      new Map<unknown, unknown[][]>([
+        [
+          ontologyChangeSets,
+          [[changeSetRow({ id: "set-1", proposed_by: "suggestion_engine" })]],
+        ],
+        [
+          ontologyChangeSetItems,
+          [
+            [
+              itemRow({
+                id: "item-map",
+                change_set_id: "set-1",
+                item_type: "identity_map",
+                target_slug: "customer",
+                proposed_value: {
+                  entityTypeSlug: "customer",
+                  systemMap: [{ facet: "invoices", sourceSystem: "legacy" }],
+                },
+              }),
+            ],
+          ],
+        ],
+      ]),
+    );
+
+    const result = await stageOntologyEntityTypeSystemMap({
+      tenantId: "tenant-1",
+      entityTypeSlug: "customer",
+      systemMap: [{ facet: "invoices", sourceSystem: "lastmile" }],
+      actorUserId: "admin-1",
+      db: db as any,
+    });
+
+    expect(
+      db.inserts.some((entry) => entry.table === ontologyChangeSetItems),
+    ).toBe(false);
+    const mergePatch = db.updates.find(
+      (entry) => entry.table === ontologyChangeSetItems,
+    );
+    expect(mergePatch?.patch).toMatchObject({
+      proposed_value: {
+        entityTypeSlug: "customer",
+        systemMap: [{ facet: "invoices", sourceSystem: "lastmile" }],
+      },
+      status: "pending_review",
+    });
+    expect(result.mergedItemIds).toEqual(["item-map"]);
+    expect(result.conflicts).toEqual([]);
   });
 });

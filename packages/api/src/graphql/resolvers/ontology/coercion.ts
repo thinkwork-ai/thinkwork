@@ -17,6 +17,10 @@ export function changeSetStatusFromGraphQL(
   return value as OntologyChangeSetStatus;
 }
 
+/**
+ * Lowercases the GraphQL enum into the storage kind — covers every
+ * OntologyChangeItemType member including IDENTITY_MAP (THINK-321 U3).
+ */
 export function changeItemTypeFromGraphQL(
   itemType: string,
 ): OntologyChangeItemKind {

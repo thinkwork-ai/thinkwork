@@ -4881,6 +4881,14 @@ export type Mutation = {
    */
   setOntologyEntityTypeIdentityRules: OntologyEntityType;
   /**
+   * Stage a type-level system-map edit (THINK-321 U3 / R6): creates or
+   * updates a DRAFT identity_map change-set item carrying
+   * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Never a
+   * direct write — entity_types.system_map only changes when the change set
+   * is approved and applied. Tenant-admin gated.
+   */
+  setOntologyEntityTypeSystemMap: CreateOntologyChangeSetPayload;
+  /**
    * Owner-only: set/clear the caller's personal memory automation schedule.
    * enabled=true requires a rate(...)/cron(...) scheduleExpression; false
    * disables the scheduled trigger (manual runs stay available).
@@ -6097,6 +6105,12 @@ export type MutationSetOntologyEntityTypeIdentityRulesArgs = {
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type MutationSetOntologyEntityTypeSystemMapArgs = {
+  entityTypeSlug: Scalars["String"]["input"];
+  systemMap: Scalars["AWSJSON"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type MutationSetPersonalMemoryAutomationScheduleArgs = {
   enabled: Scalars["Boolean"]["input"];
   scheduleExpression?: InputMaybe<Scalars["String"]["input"]>;
@@ -6572,10 +6586,16 @@ export enum OntologyChangeAction {
   Update = "UPDATE",
 }
 
+/**
+ * IDENTITY_MAP (THINK-321 U3): a type-level system-map edit — value carries
+ * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Operator
+ * authored only; the suggestion pipeline never proposes it.
+ */
 export enum OntologyChangeItemType {
   EntityType = "ENTITY_TYPE",
   ExternalMapping = "EXTERNAL_MAPPING",
   FacetTemplate = "FACET_TEMPLATE",
+  IdentityMap = "IDENTITY_MAP",
   RelationshipType = "RELATIONSHIP_TYPE",
 }
 
@@ -6693,6 +6713,14 @@ export type OntologyEntityType = {
   propertiesSchema: Scalars["AWSJSON"]["output"];
   rejectedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   slug: Scalars["String"]["output"];
+  /**
+   * Type-level system map (THINK-321 U3 / R6): array of
+   * { facet, sourceSystem, note? } entries declaring which attached system
+   * holds which facets for this type. Edited only through identity_map
+   * change-set items — never a direct write.
+   */
+  systemMap: Scalars["AWSJSON"]["output"];
+  systemMapVersion: Scalars["Int"]["output"];
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
   versionId?: Maybe<Scalars["ID"]["output"]>;

@@ -137,6 +137,10 @@ export function extractAffectedEntityTypeSlugs(
         value.subjectKind === "entity_type" && value.subjectSlug,
       );
     }
+    if (item.item_type === "identity_map") {
+      addString(slugs, item.target_slug);
+      addString(slugs, value.entityTypeSlug);
+    }
   }
   return [...slugs].sort();
 }

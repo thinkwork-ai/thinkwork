@@ -708,6 +708,43 @@ describe("ontology suggestions", () => {
       ),
     ).toThrow(/has no items/);
   });
+
+  it("never accepts identity_map proposals — the system map is operator-authored only (THINK-321 U3)", () => {
+    expect(() =>
+      parseOntologySynthesisResponse(
+        JSON.stringify({
+          proposals: [
+            {
+              title: "System map for customer",
+              items: [
+                {
+                  itemType: "identity_map",
+                  action: "update",
+                  targetSlug: "customer",
+                  title: "Customer system map",
+                  proposedValue: {
+                    entityTypeSlug: "customer",
+                    systemMap: [
+                      { facet: "invoices", sourceSystem: "lastmile" },
+                    ],
+                  },
+                  evidenceIndexes: [0],
+                },
+              ],
+            },
+          ],
+        }),
+        [
+          {
+            kind: "customer_commitment",
+            title: "feature",
+            frequency: 2,
+            evidence: [{ sourceKind: "manual", quote: "observed" }],
+          } as any,
+        ],
+      ),
+    ).toThrow(/Unsupported ontology suggestion item type: identity_map/);
+  });
 });
 
 describe("untyped-entity scan source (KTD-2)", () => {

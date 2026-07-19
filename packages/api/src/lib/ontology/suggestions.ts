@@ -89,6 +89,11 @@ export interface OntologySuggestionFeature {
 }
 
 export interface OntologySuggestionItemProposal {
+  /**
+   * Deliberately excludes `identity_map` (THINK-321 U3): the type-level
+   * system map is operator-authored only — the suggestion pipeline never
+   * proposes it.
+   */
   itemType:
     | "entity_type"
     | "relationship_type"
@@ -970,6 +975,9 @@ export async function synthesizeOntologyChangeSetProposals(args: {
   return deterministicProposals(args.features, args.activeOntology);
 }
 
+// The itemType alternation below deliberately omits `identity_map`
+// (THINK-321 U3): the type-level system map is operator-authored only and
+// the LLM must never propose it — ontologyItemType() also rejects it.
 const ONTOLOGY_SYNTHESIS_SYSTEM = `You group recurring ThinkWork business-memory observations into ontology change-set proposals.
 Return JSON only: {"proposals":[{"key":"...","title":"...","summary":"...","confidence":0.75,"observedFrequency":2,"expectedImpact":{},"items":[{"itemType":"entity_type|relationship_type|facet_template|external_mapping","action":"create|update|deprecate|reject","targetKind":"...","targetSlug":"...","title":"...","description":"...","proposedValue":{},"confidence":0.75,"evidenceIndexes":[0,1]}]}]}.
 Every item must cite at least one feature evidence index. External standards are metadata only and must not rename ThinkWork canonical types such as customer.`;
@@ -1780,6 +1788,9 @@ function ontologyItemType(
   value: unknown,
 ): OntologySuggestionItemProposal["itemType"] {
   const itemType = stringValue(value);
+  // `identity_map` is intentionally absent (THINK-321 U3): system-map
+  // declarations are operator-authored only, so a model proposal carrying
+  // one is rejected rather than staged.
   if (
     itemType === "entity_type" ||
     itemType === "relationship_type" ||

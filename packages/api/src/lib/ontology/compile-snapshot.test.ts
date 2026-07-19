@@ -206,6 +206,8 @@ function entityType(overrides: Record<string, unknown> = {}) {
     propertiesSchema: {},
     identityRules: [],
     identityRulesVersion: 0,
+    systemMap: [],
+    systemMapVersion: 0,
     guidanceNotes: null,
     lifecycleStatus: "APPROVED",
     approvedAt: null,
