@@ -150,6 +150,7 @@ export function parseArgs(argv = process.argv.slice(2)): Args {
     Number.isNaN(since.getTime()) ||
     Number.isNaN(until.getTime()) ||
     until <= since ||
+    until.getTime() > Date.now() ||
     minimumHours <= 0 ||
     minimumSuccessRate <= 0 ||
     minimumSuccessRate > 1 ||

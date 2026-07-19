@@ -268,6 +268,30 @@ describe("AgentCore Harness retirement certification", () => {
     ]);
   });
 
+  it("rejects a future certification window end", () => {
+    const priorDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = "postgres://example.invalid/thinkwork";
+    const exit = vi.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`exit:${code}`);
+    });
+    try {
+      expect(() =>
+        parseArgs([
+          "--tenant-id",
+          "0015953e-aa13-4cab-8398-2e70f73dda63",
+          "--since",
+          "2026-07-19T10:09:32.000Z",
+          "--until",
+          "2999-07-20T10:09:32.000Z",
+        ]),
+      ).toThrow("exit:2");
+    } finally {
+      exit.mockRestore();
+      if (priorDatabaseUrl == null) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = priorDatabaseUrl;
+    }
+  });
+
   it("rejects unknown or duplicate evidence keys before querying production data", () => {
     const priorDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = "postgres://example.invalid/thinkwork";
