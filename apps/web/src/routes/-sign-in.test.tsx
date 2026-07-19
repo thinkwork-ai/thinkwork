@@ -548,6 +548,57 @@ describe("SignInPage", () => {
     );
   });
 
+  it("shows OAuth progress only on the provider being opened", async () => {
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true, clientId: "local-client" },
+      oauthOptions: [
+        {
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
+            prompt: "select_account",
+          },
+        },
+        {
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
+            prompt: "select_account",
+          },
+        },
+      ],
+    });
+    authMocks.getAuthOptionSignInUrl.mockReturnValue(new Promise(() => {}));
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue with Google" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Opening Google..." }),
+    ).toHaveProperty("disabled", true);
+    expect(
+      screen.getByRole("button", { name: "Continue with Microsoft" }),
+    ).toHaveProperty("disabled", true);
+    expect(
+      screen.queryByRole("button", { name: "Opening Microsoft..." }),
+    ).toBeNull();
+  });
+
   it("uses Terraform-provided runtime config when build-time env is empty", () => {
     for (const key of [
       "VITE_API_URL",

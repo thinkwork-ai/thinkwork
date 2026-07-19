@@ -51,7 +51,8 @@ export function SignInPage() {
   const [desktopConfig, setDesktopConfig] = useState<DesktopConfig | null>(
     null,
   );
-  const [isStartingOAuth, setIsStartingOAuth] = useState(false);
+  const [startingOAuthKey, setStartingOAuthKey] = useState<string | null>(null);
+  const isStartingOAuth = startingOAuthKey !== null;
   const [isProfileBusy, setIsProfileBusy] = useState(false);
   const [authOptions, setAuthOptions] = useState<PublicAuthOptions>({
     password: { enabled: false },
@@ -83,7 +84,7 @@ export function SignInPage() {
 
     return bridge.onOAuthError((event) => {
       setError(event.message);
-      setIsStartingOAuth(false);
+      setStartingOAuthKey(null);
     });
   }, []);
 
@@ -173,7 +174,7 @@ export function SignInPage() {
         );
         return;
       }
-      setIsStartingOAuth(true);
+      setStartingOAuthKey(option.key);
       try {
         await bridge.startOAuth({
           authOptionKey: option.key,
@@ -186,7 +187,7 @@ export function SignInPage() {
             : "Desktop sign-in failed",
         );
       } finally {
-        setIsStartingOAuth(false);
+        setStartingOAuthKey(null);
       }
       return;
     }
@@ -201,7 +202,7 @@ export function SignInPage() {
       );
       return;
     }
-    setIsStartingOAuth(true);
+    setStartingOAuthKey(option.key);
     try {
       window.location.href = await getAuthOptionSignInUrl(
         option,
@@ -213,7 +214,7 @@ export function SignInPage() {
           ? oauthError.message
           : "Sign-in could not be started.",
       );
-      setIsStartingOAuth(false);
+      setStartingOAuthKey(null);
     }
   }
 
@@ -322,43 +323,44 @@ export function SignInPage() {
           )}
           {!showLegacyMigration && showPublicOAuthOptions && (
             <div className="grid w-full gap-3 min-[360px]:grid-cols-2">
-              {publicOAuthOptions.map((option) => (
-                <Button
-                  key={option.key}
-                  aria-label={
-                    isLoading
-                      ? "Checking session..."
-                      : isStartingOAuth
-                        ? "Opening..."
-                        : option.label
-                  }
-                  onClick={() =>
-                    void (isDesktop
-                      ? handleDesktopOAuth(option)
-                      : handlePublicOAuth(option))
-                  }
-                  size="lg"
-                  variant={showPasswordForm ? "outline" : "default"}
-                  className="w-full min-w-0"
-                  disabled={
-                    isLoading ||
-                    isStartingOAuth ||
-                    isProfileBusy ||
-                    loginBlocked
-                  }
-                >
-                  {isLoading ? (
-                    "Checking session..."
-                  ) : isStartingOAuth ? (
-                    "Opening..."
-                  ) : (
-                    <>
-                      <ProviderIcon icon={option.icon} />
-                      {option.label.replace(/^Continue with\s+/i, "")}
-                    </>
-                  )}
-                </Button>
-              ))}
+              {publicOAuthOptions.map((option) => {
+                const provider = oauthProviderLabel(option);
+                const isOpening = startingOAuthKey === option.key;
+                const label = isOpening
+                  ? `Opening ${provider}...`
+                  : option.label;
+                return (
+                  <Button
+                    key={option.key}
+                    aria-label={isLoading ? "Checking session..." : label}
+                    onClick={() =>
+                      void (isDesktop
+                        ? handleDesktopOAuth(option)
+                        : handlePublicOAuth(option))
+                    }
+                    size="lg"
+                    variant={showPasswordForm ? "outline" : "default"}
+                    className="w-full min-w-0"
+                    disabled={
+                      isLoading ||
+                      isStartingOAuth ||
+                      isProfileBusy ||
+                      loginBlocked
+                    }
+                  >
+                    {isLoading ? (
+                      "Checking session..."
+                    ) : isOpening ? (
+                      label
+                    ) : (
+                      <>
+                        <ProviderIcon icon={option.icon} />
+                        {provider}
+                      </>
+                    )}
+                  </Button>
+                );
+              })}
             </div>
           )}
           {!showLegacyMigration && showPasswordForm && (
@@ -434,6 +436,10 @@ function desktopDeploymentLabel(config: DesktopConfig): string {
 function ProviderIcon({ icon }: { icon: PublicOAuthOption["icon"] }) {
   if (icon === "google") return <GoogleIcon />;
   return <MicrosoftIcon />;
+}
+
+function oauthProviderLabel(option: PublicOAuthOption): string {
+  return option.label.replace(/^Continue with\s+/i, "");
 }
 
 function GoogleIcon() {
