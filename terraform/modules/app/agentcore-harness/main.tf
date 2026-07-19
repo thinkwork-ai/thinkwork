@@ -61,6 +61,7 @@ locals {
     platform_tools   = "brain-email-workspace-skills-message-attachments-user-questions-v6"
     artifact_facade  = "caller-fulfilled-emit-document-v1"
     goal_mode        = "thinkwork-managed-fresh-turn-goal-complete-v1"
+    skill_creator    = "governed-review-draft-v1"
   })))
 }
 

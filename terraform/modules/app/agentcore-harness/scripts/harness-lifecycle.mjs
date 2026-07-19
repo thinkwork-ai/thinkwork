@@ -93,6 +93,9 @@ function commonConfiguration() {
       {
         text: "When trusted turn context contains goal_mode, perform one bounded execution step toward its canonical objective. ThinkWork owns the persisted goal id, progress, and budget across fresh Harness sessions. If and only if the objective is fully satisfied, call goal_complete exactly once with a concise summary, optional completion notes, and concrete verification notes. Otherwise do not claim completion; return a truthful progress summary and ThinkWork will persist a resumable pause.",
       },
+      {
+        text: "When trusted turn context says skill_creator_mode=enabled, interview the user until the skill is sufficiently specified. Only when the user explicitly asks to submit, review, queue, or publish the complete draft, call submit_skill_draft exactly once. Supply a valid Agent Skills SKILL.md and only necessary bounded text support files. The tool submits to ThinkWork's existing review and trust pipeline; never claim the skill is published. Never call this tool outside trusted Skill Creator mode.",
+      },
     ],
     memory: { disabled: {} },
     tools: [
@@ -176,6 +179,43 @@ function commonConfiguration() {
           },
         },
       },
+      {
+        type: "inline_function",
+        name: "submit_skill_draft",
+        config: {
+          inlineFunction: {
+            description:
+              "Submit a complete Agent Skills draft to ThinkWork's governed review and trust queue. Available only during a trusted /skill-creator turn; this does not publish the skill.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                skill_markdown: {
+                  type: "string",
+                  description:
+                    "Complete SKILL.md including valid name and description frontmatter.",
+                },
+                supporting_files: {
+                  type: "array",
+                  maxItems: 20,
+                  items: {
+                    type: "object",
+                    properties: {
+                      path: { type: "string" },
+                      content: { type: "string" },
+                    },
+                    required: ["path", "content"],
+                    additionalProperties: false,
+                  },
+                  description:
+                    "Optional bounded text references, scripts, or assets required by the skill.",
+                },
+              },
+              required: ["skill_markdown"],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
     ],
     // AgentCore validates every allowedTools member at <=64 characters.
     // Generated Gateway target+operation names can exceed that bound even
@@ -183,7 +223,12 @@ function commonConfiguration() {
     // explicitly configured Gateway namespace as the Harness visibility
     // ceiling; Cedar and each target still re-authorize the exact principal,
     // tenant, operation, and resource on every call.
-    allowedTools: ["@thinkwork_gateway/*", "emit_document", "goal_complete"],
+    allowedTools: [
+      "@thinkwork_gateway/*",
+      "emit_document",
+      "goal_complete",
+      "submit_skill_draft",
+    ],
     maxIterations: 50,
     timeoutSeconds: 900,
   };

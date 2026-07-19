@@ -49,6 +49,7 @@ import { loadTurnToolExecutionInvocations } from "../lib/harness/tool-execution-
 import { collectGovernedConnectorEvidence } from "../lib/harness/gateway-evidence.js";
 import { enforceGovernedActionGrounding } from "../lib/harness/governed-action-grounding.js";
 import { loadCanonicalQuestionAnswerTurn } from "../lib/harness/canonical-question-answer-turn.js";
+import { submitHarnessSkillDraft } from "../lib/skill-creator/harness-submit-draft.js";
 
 const region =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -340,6 +341,7 @@ function createRealDeps(): HarnessRunnerDeps {
         raw: input.raw,
       });
     },
+    submitSkillDraft: submitHarnessSkillDraft,
     async finalize(payload) {
       const governedInvocations = await loadTurnToolExecutionInvocations({
         tenantId: payload.tenant_id,

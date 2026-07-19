@@ -45,6 +45,7 @@ import {
   type HarnessGoalExecution,
   type HarnessGoalMode,
 } from "./goal-mode.js";
+import type { HarnessSkillDraftRegistration } from "../skill-creator/harness-submit-draft.js";
 
 // ---------------------------------------------------------------------------
 // Deps
@@ -257,6 +258,14 @@ export interface HarnessRunnerDeps {
     turnId: string;
     raw: Record<string, unknown>;
   }): Promise<{ statusCode: number; body: Record<string, unknown> }>;
+  /** Persist one exact-user validated skill into the existing review queue. */
+  submitSkillDraft(input: {
+    tenantId: string;
+    requesterUserId: string;
+    threadId: string;
+    threadTurnId: string;
+    raw: unknown;
+  }): Promise<HarnessSkillDraftRegistration>;
   /** Direct lib call into processFinalize. */
   finalize(payload: FinalizePayload): Promise<unknown>;
   /** thread_turns.last_activity_at keepalive bump (KTD-9). */
@@ -942,9 +951,20 @@ export function parseDocumentEnvelope(
 /** Payload features the trial's chat-only adapter refuses up front. */
 const UNSUPPORTED_PAYLOAD_FIELDS: Array<[string, string]> = [
   ["computer_task_id", "computer task turns"],
-  ["skill_creator_command", "skill-creator command turns"],
   ["guardrail_config", "bedrock_guardrail projection"],
 ];
+const SKILL_CREATOR_SUBMIT_INTENT_RE =
+  /\b(?:submit|review|approval|approve|ready|queue|register|publish|library)\b/i;
+
+function isSkillCreatorCommandPayload(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.type === "skill_creator" &&
+    record.source === "slash_command" &&
+    record.command === "/skill-creator"
+  );
+}
 
 export async function runHarnessTurn(
   payload: Record<string, unknown>,
@@ -974,6 +994,7 @@ export async function runHarnessTurn(
   let emissionAttempts = 0;
   let emissionSuccesses = 0;
   let missingEmissionCorrections = 0;
+  let missingSkillSubmissionCorrections = 0;
   let documentCompositionPhase = false;
   let harness: EnsuredHarness | null = null;
   let composedSystemPrompt: string | null = null;
@@ -988,6 +1009,12 @@ export async function runHarnessTurn(
   } | null = null;
   let goalMode: HarnessGoalMode | null = null;
   let goalExecution: HarnessGoalExecution | null = null;
+  let skillDraftRegistration: HarnessSkillDraftRegistration | null = null;
+  const skillCreatorTurn = isSkillCreatorCommandPayload(
+    payload.skill_creator_command,
+  );
+  const skillCreatorSubmissionRequired =
+    skillCreatorTurn && SKILL_CREATOR_SUBMIT_INTENT_RE.test(turn.userMessage);
 
   const finalizeWith = async (
     status: "completed" | "failed",
@@ -1007,6 +1034,12 @@ export async function runHarnessTurn(
       user_message: turn.userMessage.slice(0, 2000),
       agent_model: harness?.modelId ?? turn.modelId,
       runtime_type: "agentcore",
+      ...(skillCreatorTurn
+        ? { skill_creator_command: payload.skill_creator_command }
+        : {}),
+      ...(skillDraftRegistration
+        ? { skill_draft_registration: skillDraftRegistration }
+        : {}),
       agent_slug: turn.agentSlug,
       agent_name: turn.agentName,
       duration_ms: now() - startedAt,
@@ -1239,6 +1272,7 @@ export async function runHarnessTurn(
       `authorized_workspace_skills=${authorizedWorkspaceSkillIds.join(",") || "none"}`,
       `message_pinned_skills=${messagePinnedSkillIds.join(",") || "none"}`,
       `message_attachments=${messageAttachments.length > 0 ? JSON.stringify(messageAttachments) : "none"}`,
+      `skill_creator_mode=${skillCreatorTurn ? "enabled" : "disabled"}`,
       goalExecution
         ? `goal_mode=${JSON.stringify({
             action: goalExecution.action,
@@ -1257,6 +1291,9 @@ export async function runHarnessTurn(
       goalExecution
         ? "Goal mode rule: perform one bounded execution step toward the canonical objective. When the objective is fully satisfied, call goal_complete exactly once with a concise summary and concrete verification notes. If it is not yet satisfied, do not claim completion; summarize progress and ThinkWork will persist a resumable pause."
         : "",
+      skillCreatorTurn
+        ? "Skill Creator rule: interview when requirements remain ambiguous. Only when the user asks to submit or publish a complete skill, call submit_skill_draft exactly once with a valid Agent Skills SKILL.md and only necessary bounded text support files. The platform validates and places it in the existing review/trust queue; do not claim it is published."
+        : "Never call submit_skill_draft unless skill_creator_mode is enabled by trusted turn context.",
       "</thinkwork_trusted_turn_context>",
     ]
       .filter(Boolean)
@@ -1567,6 +1604,26 @@ export async function runHarnessTurn(
             errorMessage: `Harness run ended without a successful document emission after ${emissionAttempts} rejected emit_document attempt(s).`,
           });
         }
+        if (skillCreatorSubmissionRequired && !skillDraftRegistration) {
+          if (missingSkillSubmissionCorrections < 1) {
+            missingSkillSubmissionCorrections += 1;
+            nextMessages = [
+              {
+                role: "user",
+                content: [
+                  {
+                    text: "The user explicitly asked to submit this /skill-creator result, but no governed draft was created. Call submit_skill_draft exactly once now with a complete valid SKILL.md and only necessary text support files. Do not claim publication.",
+                  },
+                ],
+              },
+            ];
+            continue;
+          }
+          return await finalizeWith("failed", {
+            errorMessage:
+              "AgentCore Skill Creator ended without a validated draft submission after one corrective continuation.",
+          });
+        }
         if (
           documentEmissionRequired &&
           emissionSuccesses === 0 &&
@@ -1732,6 +1789,50 @@ export async function runHarnessTurn(
           if (toolUse.parseError) {
             resultText = toolUse.parseError;
             resultStatus = "error";
+          } else if (toolUse.name === "submit_skill_draft") {
+            if (!skillCreatorTurn) {
+              resultText =
+                "submit_skill_draft is available only during a trusted /skill-creator turn.";
+              resultStatus = "error";
+            } else if (callerToolUses.length !== 1) {
+              resultText =
+                "submit_skill_draft must be the only caller-fulfilled tool in its message.";
+              resultStatus = "error";
+            } else if (skillDraftRegistration) {
+              resultText = JSON.stringify({
+                ok: true,
+                status: "submitted",
+                draftId: skillDraftRegistration.draftId,
+                slug: skillDraftRegistration.slug,
+                reviewRequired: true,
+              });
+              resultStatus = "success";
+            } else {
+              try {
+                guardHarnessPublication(JSON.stringify(toolUse.input));
+                skillDraftRegistration = await deps.submitSkillDraft({
+                  tenantId: turn.tenantId,
+                  requesterUserId: turn.currentUserId!,
+                  threadId: turn.threadId,
+                  threadTurnId: turn.turnId,
+                  raw: toolUse.input,
+                });
+                resultText = JSON.stringify({
+                  ok: true,
+                  status: "submitted",
+                  draftId: skillDraftRegistration.draftId,
+                  slug: skillDraftRegistration.slug,
+                  reviewRequired: true,
+                });
+                resultStatus = "success";
+              } catch (error) {
+                resultText =
+                  error instanceof Error
+                    ? error.message
+                    : "Skill draft submission failed validation.";
+                resultStatus = "error";
+              }
+            }
           } else if (toolUse.name === "goal_complete") {
             if (!goalExecution) {
               resultText =
@@ -1788,7 +1889,7 @@ export async function runHarnessTurn(
               : "emit_document is locked until the bounded research phase ends. Return your evidence summary first.";
             resultStatus = "error";
           } else if (toolUse.name !== "emit_document") {
-            resultText = `Unknown caller-fulfilled tool "${toolUse.name}" — only emit_document and goal_complete are available.`;
+            resultText = `Unknown caller-fulfilled tool "${toolUse.name}" — only emit_document, goal_complete, and submit_skill_draft are available.`;
             resultStatus = "error";
           } else {
             emissionAttempts += 1;

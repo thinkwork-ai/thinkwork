@@ -117,6 +117,8 @@ export interface FinalizePayload {
   changed_files?: ChangedFilePayload[];
   /** Slash-command metadata carried through Pi finalize for /skill-creator turns. */
   skill_creator_command?: unknown;
+  /** Server-created AgentCore draft registration; always reloaded canonically. */
+  skill_draft_registration?: unknown;
   /** Composed runtime system prompt captured for this turn, when available. */
   composed_system_prompt?: string | null;
   /** Computer task / event context for tasks that originated from the Computer surface. */
