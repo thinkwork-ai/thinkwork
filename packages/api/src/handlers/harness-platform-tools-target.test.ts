@@ -66,7 +66,11 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
       triggeringMessageId: "message-1",
       spaceId: "space-1",
     })),
-    resolveAccess: vi.fn(async () => ({ brain: true, email: true })),
+    resolveAccess: vi.fn(async () => ({
+      brain: true,
+      email: true,
+      questions: true,
+    })),
     queryBrain: vi.fn<HarnessPlatformToolsDeps["queryBrain"]>(async () => ({
       query: "customer risks",
       mode: "results",
@@ -146,6 +150,11 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
       totalChars: 27,
       truncated: false,
     })),
+    askUserQuestion: vi.fn(async () => ({
+      status: "posted" as const,
+      questionId: "question-1",
+      messageId: "message-question-1",
+    })),
     claimEmail: vi.fn<HarnessPlatformToolsDeps["claimEmail"]>(async () => ({
       state: "claimed",
     })),
@@ -164,6 +173,70 @@ function setup(overrides: Partial<HarnessPlatformToolsDeps> = {}) {
 }
 
 describe("Harness governed platform tools target", () => {
+  it("persists a structured user question and records only bounded evidence", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/user/questions/ask", {
+        tenant_id: "tenant-1",
+        questions: [
+          {
+            header: "Scope",
+            question: "Which customer segment should I analyze?",
+            options: [
+              {
+                label: "Enterprise (Recommended)",
+                description: "Focus on enterprise accounts.",
+              },
+              { label: "All", description: "Include every account." },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(JSON.parse(result.body!)).toMatchObject({
+      status: "posted",
+      questionId: "question-1",
+      messageId: "message-question-1",
+      endTurn: true,
+    });
+    expect(deps.askUserQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          userId: "user-1",
+          turnId: "turn-1",
+        }),
+      }),
+    );
+    expect(rows.map((row) => row.event_type)).toEqual(["started", "completed"]);
+    expect(rows[0]?.operation).toBe("ask_user_question");
+    expect(rows[0]?.input_preview).toEqual({ questionCount: 1 });
+    expect(JSON.stringify(rows)).not.toContain("Which customer segment");
+    expect(rows[1]?.output_preview).toEqual({
+      status: "posted",
+      questionId: "question-1",
+      messageId: "message-question-1",
+    });
+  });
+
+  it("rejects malformed user questions before persistence", async () => {
+    const { handler, deps, rows } = setup();
+    const result = await handler(
+      event("/agentcore/capabilities/user/questions/ask", {
+        tenant_id: "tenant-1",
+        questions: [{ header: "Scope", question: "Choose", options: [] }],
+      }),
+    );
+
+    expect(result.statusCode).toBe(400);
+    expect(JSON.parse(result.body!)).toEqual({
+      error: "invalid_user_questions",
+    });
+    expect(deps.askUserQuestion).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(0);
+  });
+
   it("lists only sanitized attachments bound to the canonical triggering message", async () => {
     const { handler, deps, rows } = setup();
     const result = await handler(
@@ -339,7 +412,11 @@ describe("Harness governed platform tools target", () => {
 
   it("fails closed when current agent policy blocks a platform tool", async () => {
     const { handler, deps, rows } = setup({
-      resolveAccess: vi.fn(async () => ({ brain: false, email: false })),
+      resolveAccess: vi.fn(async () => ({
+        brain: false,
+        email: false,
+        questions: false,
+      })),
     });
     const result = await handler(
       event("/agentcore/capabilities/brain/query", {

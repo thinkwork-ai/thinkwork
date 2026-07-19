@@ -37,6 +37,7 @@ locals {
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___load_workspace_skill",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___list_message_attachments",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___read_message_attachment",
+    "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___ask_user_question",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___send_email",
   ]
   tenant_skill_prefix = var.tenant_slug != "" ? (
@@ -57,7 +58,7 @@ locals {
     connector_facade = "intent-ranked-direct-v1"
     sandbox_facade   = "bounded-internal-python-v1"
     builtin_web      = "tenant-policy-secret-bound-v1"
-    platform_tools   = "brain-email-workspace-skills-message-attachments-v5"
+    platform_tools   = "brain-email-workspace-skills-message-attachments-user-questions-v6"
     artifact_facade  = "caller-fulfilled-emit-document-v1"
   })))
 }

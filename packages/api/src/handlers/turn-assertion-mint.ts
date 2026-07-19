@@ -8,6 +8,7 @@ import {
   TURN_ASSERTION_MAX_TTL_SECONDS,
   type TurnAssertionSigner,
 } from "../lib/mcp-oauth/turn-assertion.js";
+import { loadCanonicalQuestionAnswerTurn } from "../lib/harness/canonical-question-answer-turn.js";
 
 export interface TurnAssertionMintEvent {
   tenantId: string;
@@ -180,34 +181,44 @@ export async function loadTrustedTurnFromDatabase(args: {
     .limit(1);
 
   if (
-    !row?.agentId ||
-    !row.threadId ||
-    !row.triggeringMessageId ||
-    !row.participantId ||
-    (row.participantType !== "human" && row.participantType !== "user") ||
-    row.threadAgentId !== row.agentId ||
-    row.messageThreadId !== row.threadId ||
-    row.messageTenantId !== row.tenantId ||
-    !Number.isInteger(row.retryAttempt ?? 0) ||
-    (row.retryAttempt ?? 0) < 0
+    row?.agentId &&
+    row.threadId &&
+    row.triggeringMessageId &&
+    row.participantId &&
+    (row.participantType === "human" || row.participantType === "user") &&
+    row.threadAgentId === row.agentId &&
+    row.messageThreadId === row.threadId &&
+    row.messageTenantId === row.tenantId &&
+    Number.isInteger(row.retryAttempt ?? 0) &&
+    (row.retryAttempt ?? 0) >= 0
   ) {
-    return null;
+    return {
+      tenantId: row.tenantId,
+      agentId: row.agentId,
+      threadId: row.threadId,
+      turnId: row.turnId,
+      triggeringMessageId: row.triggeringMessageId,
+      participantId: row.participantId,
+      sessionGeneration: (row.retryAttempt ?? 0) + 1,
+      spaceId: row.spaceId,
+      runtimeType: row.runtimeType,
+      status: row.status,
+    };
   }
+
+  const action = await loadCanonicalQuestionAnswerTurn(args);
+  if (!action) return null;
   return {
-    tenantId: row.tenantId,
-    agentId: row.agentId,
-    threadId: row.threadId,
-    turnId: row.turnId,
-    triggeringMessageId: row.triggeringMessageId,
-    participantId: row.participantId,
-    // U1 has no reusable participant-session row yet. Bind the assertion to
-    // the persisted turn attempt (1-based) rather than accepting a generation
-    // from the invoker. U3 replaces this derivation with its fenced durable
-    // participant-session generation without changing the token contract.
-    sessionGeneration: (row.retryAttempt ?? 0) + 1,
-    spaceId: row.spaceId,
-    runtimeType: row.runtimeType,
-    status: row.status,
+    tenantId: action.tenantId,
+    agentId: action.agentId,
+    threadId: action.threadId,
+    turnId: action.turnId,
+    triggeringMessageId: action.anchorMessageId,
+    participantId: action.participantUserId,
+    sessionGeneration: action.retryAttempt + 1,
+    spaceId: action.spaceId,
+    runtimeType: action.runtimeType,
+    status: action.status,
   };
 }
 

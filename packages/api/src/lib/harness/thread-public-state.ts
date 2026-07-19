@@ -61,6 +61,7 @@ export async function loadCanonicalHarnessPrefix(input: {
   participantUserId: string;
   triggeringMessageId: string;
   capturedHighWater: number;
+  actionCurrentMessage?: string | null;
   db?: ReturnType<typeof getDb>;
 }): Promise<CanonicalHarnessPrefix> {
   const database = input.db ?? getDb();
@@ -210,6 +211,14 @@ export async function loadCanonicalHarnessPrefix(input: {
     (message) => message.sourceMessageId === input.triggeringMessageId,
   );
   if (currentIndex < 0) throw new Error("harness_trigger_not_in_public_prefix");
+  if (input.actionCurrentMessage) {
+    return {
+      history: canonical,
+      currentMessage: input.actionCurrentMessage,
+      currentMessageId: input.triggeringMessageId,
+      capturedHighWater: input.capturedHighWater,
+    };
+  }
   const current = byId.get(input.triggeringMessageId);
   if (
     !current ||

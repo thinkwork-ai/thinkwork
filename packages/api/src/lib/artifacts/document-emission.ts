@@ -797,6 +797,13 @@ export async function handleDocumentEmission(
     agentId: string | null;
     turnId: string;
     triggeringMessageId: string | null;
+    /**
+     * Exact human identity already re-authorized from a non-message action
+     * chain (for example an answered question card). Never populate this
+     * from an invoke payload; ordinary message turns keep resolving sender
+     * identity from triggeringMessageId below.
+     */
+    trustedActingUserId?: string | null;
     raw: unknown;
   },
   deps: DocumentEmissionDeps = defaultDeps(),
@@ -813,10 +820,18 @@ export async function handleDocumentEmission(
   // ---- Identity: acting user + documentId fallback (KTD8) ----------------
   // Resolved before the content gates so a failed scheduled refresh can be
   // recorded against its automation (THINK-155 U3).
-  let actingUserId = await deps.resolveActingUserId({
-    tenantId: input.tenantId,
-    triggeringMessageId: input.triggeringMessageId,
-  });
+  // A normal message remains the authoritative identity source even if a
+  // caller accidentally supplies both fields. Trusted action identity is
+  // accepted only for turns that have no triggering human message.
+  let actingUserId = input.triggeringMessageId
+    ? null
+    : (input.trustedActingUserId ?? null);
+  if (!actingUserId) {
+    actingUserId = await deps.resolveActingUserId({
+      tenantId: input.tenantId,
+      triggeringMessageId: input.triggeringMessageId,
+    });
+  }
   // THINK-155 U1: scheduled turns (no triggering user message) fall back to
   // the automation's run-as user; human turns keep priority. The run context
   // also drives write ordering (U2 keep-last-good) and failure

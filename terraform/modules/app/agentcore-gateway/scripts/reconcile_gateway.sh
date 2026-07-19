@@ -314,6 +314,45 @@ openapi_payload="$(jq -nc --arg server "$TARGET_BASE_URL" '{
         "422": {description: "Attachment format has no safe text projection"}
       }
     }},
+    "/agentcore/capabilities/user/questions/ask": {post: {
+      operationId: "ask_user_question",
+      summary: "Pause the exact participant turn for one governed structured question batch",
+      requestBody: {required: true, content: {"application/json": {schema: {
+        type: "object", additionalProperties: false,
+        required: ["tenant_id", "questions"],
+        properties: {
+          tenant_id: {type: "string", description: "Tenant UUID from the trusted turn context"},
+          questions: {
+            type: "array", minItems: 1, maxItems: 4,
+            items: {
+              type: "object", additionalProperties: false,
+              required: ["question", "header", "options"],
+              properties: {
+                question: {type: "string", minLength: 1, maxLength: 500},
+                header: {type: "string", minLength: 1, maxLength: 12},
+                options: {
+                  type: "array", minItems: 2, maxItems: 4,
+                  items: {
+                    type: "object", additionalProperties: false,
+                    required: ["label", "description"],
+                    properties: {
+                      label: {type: "string", minLength: 1, maxLength: 60},
+                      description: {type: "string", minLength: 1, maxLength: 300}
+                    }
+                  }
+                },
+                multiSelect: {type: "boolean", default: false}
+              }
+            }
+          },
+          delegation_context: {type: "object", additionalProperties: true}
+        }
+      }}}},
+      responses: {
+        "200": {description: "Question batch posted or an existing pending batch retained"},
+        "403": {description: "Question capability denied for this exact participant"}
+      }
+    }},
     "/agentcore/capabilities/email/send": {post: {
       operationId: "send_email",
       summary: "Send or request approval for one idempotent policy-governed email",
@@ -427,6 +466,7 @@ permit(
     AgentCore::Action::"${TARGET_NAME}___load_workspace_skill",
     AgentCore::Action::"${TARGET_NAME}___list_message_attachments",
     AgentCore::Action::"${TARGET_NAME}___read_message_attachment",
+    AgentCore::Action::"${TARGET_NAME}___ask_user_question",
     AgentCore::Action::"${TARGET_NAME}___send_email"
   ],
   resource == AgentCore::Gateway::"${gateway_arn}"
@@ -457,6 +497,7 @@ when {
         action == AgentCore::Action::"${TARGET_NAME}___load_workspace_skill" ||
         action == AgentCore::Action::"${TARGET_NAME}___list_message_attachments" ||
         action == AgentCore::Action::"${TARGET_NAME}___read_message_attachment" ||
+        action == AgentCore::Action::"${TARGET_NAME}___ask_user_question" ||
         action == AgentCore::Action::"${TARGET_NAME}___send_email"
       ) &&
       context.input.tenant_id == principal.getTag("tenant_id")

@@ -139,6 +139,10 @@ import {
 } from "../lib/model-approvals.js";
 import { normalizeRequestedModelId } from "../lib/turn-model-selection.js";
 import {
+  appendThreadTurnEvent,
+  drizzleThreadTurnEventStore,
+} from "../lib/thread-turn-events.js";
+import {
   pendingQuestionAnswersFromPayload,
   toRuntimePendingUserQuestions,
 } from "../lib/user-questions/runtime-payload.js";
@@ -229,15 +233,18 @@ const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
 export async function invokeAgentCore(
   payload: Record<string, unknown>,
   runtimeType: AgentRuntimeType = "pi",
+  options: { channel?: string } = {},
 ): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
   let functionName = "";
   try {
-    // THINK-311 (KTD-7): the Harness trial is chat-dispatch only. A
-    // harness-flagged agent reaching the wakeup/retry path is a declared
-    // explicit failure — resolving the harness function here would run
-    // the trial engine outside its scope, and falling through to Pi
-    // would be the silent fallback R4 forbids.
-    if (normalizeAgentRuntimeType(runtimeType) === "agentcore") {
+    // AgentCore owns finalization for its Lambda dispatch. The only wakeup
+    // source admitted today is the exact-user pending-question resume; every
+    // other background/retry source stays an explicit failure until its
+    // lifecycle and writeback semantics are implemented (never Pi fallback).
+    if (
+      normalizeAgentRuntimeType(runtimeType) === "agentcore" &&
+      options.channel !== "question_answer"
+    ) {
       throw new HarnessChatDispatchOnlyError("wakeup");
     }
     functionName = resolveRuntimeFunctionName(runtimeType);
@@ -261,9 +268,8 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -312,6 +318,90 @@ export async function invokeAgentCore(
   }
   const result = (await resp.json()) as Record<string, unknown>;
   return { ok: true, status: 200, result };
+}
+
+async function finishHarnessQuestionResumeWakeup(input: {
+  wakeup: WakeupRow;
+  runId: string;
+  runThreadId: string | null;
+}): Promise<void> {
+  // The Harness runner calls processFinalize itself. Rewriting the turn or
+  // inserting another assistant message here would race/duplicate the
+  // canonical finalize path, so this processor owns only the wakeup envelope.
+  const [turn] = await db
+    .select({
+      status: threadTurns.status,
+      finalizedAt: threadTurns.finalized_at,
+      error: threadTurns.error,
+    })
+    .from(threadTurns)
+    .where(
+      and(
+        eq(threadTurns.id, input.runId),
+        eq(threadTurns.tenant_id, input.wakeup.tenant_id),
+      ),
+    )
+    .limit(1);
+  if (!turn?.finalizedAt) {
+    throw new Error(
+      "AgentCore Harness returned before the question-resume turn finalized.",
+    );
+  }
+
+  if (turn.status !== "succeeded") {
+    const error =
+      turn.error || `AgentCore Harness question resume ${turn.status}.`;
+    await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
+      tenantId: input.wakeup.tenant_id,
+      runId: input.runId,
+      agentId: input.wakeup.agent_id || null,
+      eventType: "error",
+      stream: "system",
+      level: "error",
+      message: "error",
+      payload: { error, owner: "harness_finalize" },
+    }).catch((eventError) => {
+      console.error(
+        "[wakeup-processor] Failed to append Harness resume error event:",
+        eventError,
+      );
+    });
+    await failWakeup(input.wakeup.id, error);
+    if (input.runThreadId) {
+      await promoteNextDeferredWakeup(
+        input.wakeup.tenant_id,
+        input.runThreadId,
+      );
+    }
+    return;
+  }
+
+  await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
+    tenantId: input.wakeup.tenant_id,
+    runId: input.runId,
+    agentId: input.wakeup.agent_id || null,
+    eventType: "completed",
+    stream: "system",
+    level: "info",
+    message: "completed",
+    payload: { owner: "harness_finalize" },
+  }).catch((eventError) => {
+    console.error(
+      "[wakeup-processor] Failed to append Harness resume completion event:",
+      eventError,
+    );
+  });
+  await db
+    .update(agentWakeupRequests)
+    .set({ status: "completed", finished_at: new Date() })
+    .where(eq(agentWakeupRequests.id, input.wakeup.id));
+  await db
+    .update(agents)
+    .set({ last_heartbeat_at: new Date() })
+    .where(eq(agents.id, input.wakeup.agent_id));
+  if (input.runThreadId) {
+    await promoteNextDeferredWakeup(input.wakeup.tenant_id, input.runThreadId);
+  }
 }
 
 interface RenderWorkspaceTupleForWakeupResult {
@@ -380,9 +470,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1415,15 +1504,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -2515,6 +2601,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     const invokeResponse = await invokeAgentCore(
       agentCorePayload as any,
       runtimeType,
+      { channel: wakeup.source },
     );
 
     const durationMs = Date.now() - startMs;
@@ -2523,6 +2610,18 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       throw new Error(
         `AgentCore invoke failed: ${invokeResponse.status} ${JSON.stringify(invokeResponse.result)}`,
       );
+    }
+
+    if (
+      normalizeAgentRuntimeType(runtimeType) === "agentcore" &&
+      wakeup.source === "question_answer"
+    ) {
+      await finishHarnessQuestionResumeWakeup({
+        wakeup,
+        runId: run.id,
+        runThreadId: runThreadId ?? null,
+      });
+      return;
     }
 
     const invokeResult = invokeResponse.result;
@@ -3079,6 +3178,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             }),
           },
           runtimeType,
+          { channel: wakeup.source },
         );
 
         if (!loopResponse.ok) {
@@ -3279,9 +3379,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
