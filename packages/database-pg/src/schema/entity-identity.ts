@@ -16,6 +16,15 @@
  * tenant-visible mappings, and resolution cases never carry private content
  * — candidates/conflicting_claims jsonb store source-safe identity evidence
  * only.
+ *
+ * Crosswalk agent routing (THINK-321 U1, plan 2026-07-19-001) adds the
+ * user-attribution vocabulary (`created_by='user'` + audit columns on
+ * mappings, `revoke`/`split` event types), the negative-evidence store
+ * (`mapping_rejections`, KTD-6), the source-system → connector linkage
+ * (`source_system_connectors`, KTD-5), the bootstrap/drift match jobs
+ * (`match_jobs`, KTD-7), and the in-turn confirm echo-check store
+ * (`mapping_candidate_sets`, KTD-2). Constraint widening ships before any
+ * writer code.
  */
 
 import {
@@ -29,10 +38,13 @@ import {
   uniqueIndex,
   index,
   check,
+  foreignKey,
+  primaryKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
+import { tenantMcpServers } from "./mcp-servers";
 
 export const identity = pgSchema("identity");
 
@@ -47,12 +59,55 @@ export const ENTITY_MAPPING_VISIBILITIES = ["tenant", "private"] as const;
 export type EntityMappingVisibility =
   (typeof ENTITY_MAPPING_VISIBILITIES)[number];
 
+/** 'user' = in-turn confirm_mapping attribution (THINK-321). */
 export const ENTITY_MAPPING_CREATED_BY = [
   "rule",
   "operator",
   "backfill",
+  "user",
 ] as const;
 export type EntityMappingCreatedBy = (typeof ENTITY_MAPPING_CREATED_BY)[number];
+
+/** Append-only audit vocabulary; 'revoke'/'split' landed with THINK-321. */
+export const ENTITY_RESOLUTION_EVENT_TYPES = [
+  "create",
+  "link",
+  "defer",
+  "reject",
+  "merge",
+  "revoke",
+  "split",
+] as const;
+export type EntityResolutionEventType =
+  (typeof ENTITY_RESOLUTION_EVENT_TYPES)[number];
+
+export const MAPPING_REJECTION_CREATED_BY = [
+  "user",
+  "operator",
+  "rule",
+  "system",
+] as const;
+export type MappingRejectionCreatedBy =
+  (typeof MAPPING_REJECTION_CREATED_BY)[number];
+
+export const IDENTITY_MATCH_JOB_STATUSES = [
+  "pending",
+  "running",
+  "succeeded",
+  "failed",
+] as const;
+export type IdentityMatchJobStatus =
+  (typeof IDENTITY_MATCH_JOB_STATUSES)[number];
+
+export const MAPPING_CANDIDATE_SET_STATUSES = [
+  "open",
+  "confirmed",
+  "declined",
+  "superseded",
+  "expired",
+] as const;
+export type MappingCandidateSetStatus =
+  (typeof MAPPING_CANDIDATE_SET_STATUSES)[number];
 
 export const ENTITY_IDENTITY_CLAIM_STATES = [
   "active",
@@ -165,6 +220,12 @@ export const entitySourceMappings = identity.table(
     external_id: text("external_id").notNull(),
     visibility: text("visibility").notNull().default("tenant"),
     created_by: text("created_by").notNull(),
+    /** Set when created_by='user' — the confirming user (server-derived). */
+    created_by_user_id: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** Audit reference to the thread/turn that produced a user confirm. */
+    created_thread_ref: text("created_thread_ref"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -184,7 +245,7 @@ export const entitySourceMappings = identity.table(
     ),
     check(
       "entity_source_mappings_created_by_allowed",
-      sql`${table.created_by} IN ('rule','operator','backfill')`,
+      sql`${table.created_by} IN ('rule','operator','backfill','user')`,
     ),
   ],
 );
@@ -321,7 +382,8 @@ export const entityResolutionCases = identity.table(
 );
 
 // ---------------------------------------------------------------------------
-// identity.entity_resolution_events — append-only audit (NO split in V1)
+// identity.entity_resolution_events — append-only audit (revoke/split landed
+// with THINK-321; the V1 "no split" restriction is lifted)
 // ---------------------------------------------------------------------------
 
 export const entityResolutionEvents = identity.table(
@@ -361,7 +423,213 @@ export const entityResolutionEvents = identity.table(
     index("idx_entity_resolution_events_case").on(table.case_id),
     check(
       "entity_resolution_events_type_allowed",
-      sql`${table.event_type} IN ('create','link','defer','reject','merge')`,
+      sql`${table.event_type} IN ('create','link','defer','reject','merge','revoke','split')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// identity.mapping_rejections — negative evidence (KTD-6)
+// ---------------------------------------------------------------------------
+
+/**
+ * A rejected (source identity ↔ canonical entity) pairing. Written by revoke
+ * and split; honored by the matcher, which demotes a rejected pairing from
+ * auto-link to at most a suggestion case.
+ */
+export const mappingRejections = identity.table(
+  "mapping_rejections",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    source_system: text("source_system").notNull(),
+    /** Sub-namespace inside the source system (mirrors entity_source_mappings). */
+    namespace: text("namespace").notNull().default(""),
+    external_id: text("external_id").notNull(),
+    canonical_entity_id: uuid("canonical_entity_id")
+      .references(() => canonicalEntities.id, { onDelete: "cascade" })
+      .notNull(),
+    reason: text("reason"),
+    created_by: text("created_by").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    // One rejection row per (source identity, canonical entity) pairing.
+    uniqueIndex("uq_mapping_rejections_pairing").on(
+      table.tenant_id,
+      table.source_system,
+      table.namespace,
+      table.external_id,
+      table.canonical_entity_id,
+    ),
+    index("idx_mapping_rejections_tenant_canonical").on(
+      table.tenant_id,
+      table.canonical_entity_id,
+    ),
+    check(
+      "mapping_rejections_created_by_allowed",
+      sql`${table.created_by} IN ('user','operator','rule','system')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// identity.source_system_connectors — source-system → connector linkage (KTD-5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Links an identity source_system to the tenant connector that can fetch its
+ * records. Written at identity-source registration; resolve reads it
+ * fail-closed — a mapping is unroutable when the linked connector is absent
+ * or not granted to the calling agent.
+ *
+ * The composite FK rides `uq_tenant_mcp_servers_slug` (a plain unique index
+ * on (tenant_id, slug), which Postgres accepts as an FK target). Deleting or
+ * renaming a connector cascades so the link never dangles.
+ */
+export const sourceSystemConnectors = identity.table(
+  "source_system_connectors",
+  {
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    source_system: text("source_system").notNull(),
+    /** tenant_mcp_servers.slug for this tenant. */
+    connector_slug: text("connector_slug").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    primaryKey({
+      name: "source_system_connectors_pkey",
+      columns: [table.tenant_id, table.source_system],
+    }),
+    foreignKey({
+      name: "source_system_connectors_connector_slug_fk",
+      columns: [table.tenant_id, table.connector_slug],
+      foreignColumns: [tenantMcpServers.tenant_id, tenantMcpServers.slug],
+    })
+      .onUpdate("cascade")
+      .onDelete("cascade"),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// identity.match_jobs — bootstrap/drift identity match jobs (KTD-7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors ontology.suggestion_scan_jobs: dedupe-key insert-or-load, async
+ * Event invoke of the identity-match Lambda, invoke failure marked on the
+ * row. Metrics report scanned / auto-linked / cases-filed / cases-expired so
+ * the open-case budget interaction is visible, not silent. Continuation
+ * dedupe keys derive from the predecessor's key, never wall-clock.
+ */
+export const identityMatchJobs = identity.table(
+  "match_jobs",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    status: text("status").notNull().default("pending"),
+    trigger: text("trigger").notNull().default("manual"),
+    dedupe_key: text("dedupe_key"),
+    /** Source systems this job scans (subset of registered identity sources). */
+    source_systems: jsonb("source_systems")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    result: jsonb("result")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    metrics: jsonb("metrics")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    error: text("error"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    started_at: timestamp("started_at", { withTimezone: true }),
+    finished_at: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [
+    // Insert-or-load dedupe: at most one job per live dedupe key.
+    uniqueIndex("uq_identity_match_jobs_dedupe")
+      .on(table.tenant_id, table.dedupe_key)
+      .where(sql`${table.dedupe_key} IS NOT NULL`),
+    index("idx_identity_match_jobs_tenant_status").on(
+      table.tenant_id,
+      table.status,
+    ),
+    check(
+      "match_jobs_status_allowed",
+      sql`${table.status} IN ('pending','running','succeeded','failed')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// identity.mapping_candidate_sets — in-turn confirm echo-check store (KTD-2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Candidate sets presented to a user via ask_user_question. Lifecycle:
+ * written by propose (status='open'), invalidated on confirm/decline/
+ * re-propose (confirmed/declined/superseded), and expired rows are refused —
+ * confirm_mapping succeeds only when the echoed candidate id matches the
+ * recorded selection on an open, unexpired row for the same thread.
+ * Candidate payloads are source-safe identity evidence only (data, never
+ * instructions).
+ */
+export const mappingCandidateSets = identity.table(
+  "mapping_candidate_sets",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    /** Thread/turn reference the question was asked in (echo-check scope). */
+    thread_ref: text("thread_ref").notNull(),
+    source_system: text("source_system").notNull(),
+    namespace: text("namespace").notNull().default(""),
+    /** The source identity being resolved (source-safe fields only). */
+    target_entity_ref:
+      jsonb("target_entity_ref").$type<Record<string, unknown>>(),
+    /** Candidates as presented, keyed by candidate id. */
+    candidates: jsonb("candidates")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    status: text("status").notNull().default("open"),
+    /** Recorded at answer intake — confirm_mapping must echo this id. */
+    selected_candidate_id: text("selected_candidate_id"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    expires_at: timestamp("expires_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_mapping_candidate_sets_tenant_thread").on(
+      table.tenant_id,
+      table.thread_ref,
+    ),
+    check(
+      "mapping_candidate_sets_status_allowed",
+      sql`${table.status} IN ('open','confirmed','declined','superseded','expired')`,
     ),
   ],
 );
@@ -400,6 +668,61 @@ export const entitySourceMappingsRelations = relations(
     canonicalEntity: one(canonicalEntities, {
       fields: [entitySourceMappings.canonical_entity_id],
       references: [canonicalEntities.id],
+    }),
+    createdByUser: one(users, {
+      fields: [entitySourceMappings.created_by_user_id],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const mappingRejectionsRelations = relations(
+  mappingRejections,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [mappingRejections.tenant_id],
+      references: [tenants.id],
+    }),
+    canonicalEntity: one(canonicalEntities, {
+      fields: [mappingRejections.canonical_entity_id],
+      references: [canonicalEntities.id],
+    }),
+  }),
+);
+
+export const sourceSystemConnectorsRelations = relations(
+  sourceSystemConnectors,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [sourceSystemConnectors.tenant_id],
+      references: [tenants.id],
+    }),
+    connector: one(tenantMcpServers, {
+      fields: [
+        sourceSystemConnectors.tenant_id,
+        sourceSystemConnectors.connector_slug,
+      ],
+      references: [tenantMcpServers.tenant_id, tenantMcpServers.slug],
+    }),
+  }),
+);
+
+export const identityMatchJobsRelations = relations(
+  identityMatchJobs,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [identityMatchJobs.tenant_id],
+      references: [tenants.id],
+    }),
+  }),
+);
+
+export const mappingCandidateSetsRelations = relations(
+  mappingCandidateSets,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [mappingCandidateSets.tenant_id],
+      references: [tenants.id],
     }),
   }),
 );
