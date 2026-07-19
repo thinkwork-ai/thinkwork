@@ -61,11 +61,38 @@
 --
 -- Markers (consumed by scripts/db-migrate-manual.sh):
 --
+-- moves-owner: public.knowledge_graph_ingest_runs -> kg.ingest_runs
+-- moves-owner: public.knowledge_graph_entities -> kg.entities
+-- moves-owner: public.knowledge_graph_relationships -> kg.relationships
+-- moves-owner: public.knowledge_graph_evidence -> kg.evidence
+-- moves-owner: public.knowledge_graph_observation_cursors -> kg.observation_cursors
 -- creates: kg.ingest_runs
 -- creates: kg.entities
 -- creates: kg.relationships
 -- creates: kg.evidence
 -- creates: kg.observation_cursors
+-- creates: kg.uq_kg_entities_run_graph_node
+-- creates: kg.uq_kg_relationships_run_graph_edge
+-- drops: public.uq_kg_entities_run_graph_node
+-- drops: public.uq_kg_relationships_run_graph_edge
+-- drops-constraint: public.knowledge_graph_ingest_runs.knowledge_graph_ingest_runs_status_allowed
+-- drops-constraint: public.knowledge_graph_ingest_runs.knowledge_graph_ingest_runs_trigger_allowed
+-- drops-constraint: public.knowledge_graph_ingest_runs.knowledge_graph_ingest_runs_source_kind_allowed
+-- drops-constraint: public.knowledge_graph_ingest_runs.knowledge_graph_ingest_runs_thread_scope_required
+-- drops-constraint: public.knowledge_graph_entities.knowledge_graph_entities_grounding_allowed
+-- drops-constraint: public.knowledge_graph_entities.knowledge_graph_entities_provenance_allowed
+-- drops-constraint: public.knowledge_graph_entities.knowledge_graph_entities_source_kind_allowed
+-- drops-constraint: public.knowledge_graph_entities.knowledge_graph_entities_resolution_state_allowed
+-- drops-constraint: public.knowledge_graph_relationships.knowledge_graph_relationships_grounding_allowed
+-- drops-constraint: public.knowledge_graph_relationships.knowledge_graph_relationships_provenance_allowed
+-- drops-constraint: public.knowledge_graph_relationships.knowledge_graph_relationships_source_kind_allowed
+-- drops-constraint: public.knowledge_graph_evidence.knowledge_graph_evidence_source_kind_allowed
+-- drops-constraint: public.knowledge_graph_evidence.knowledge_graph_evidence_evidence_source_kind_allowed
+-- drops-constraint: public.knowledge_graph_evidence.knowledge_graph_evidence_subject_required
+-- creates-trigger: kg.ingest_runs.knowledge_graph_ingest_runs_scope_guard
+-- creates-trigger: kg.entities.knowledge_graph_entities_scope_guard
+-- creates-trigger: kg.relationships.knowledge_graph_relationships_scope_guard
+-- creates-trigger: kg.evidence.knowledge_graph_evidence_scope_guard
 -- creates-constraint: kg.ingest_runs.ingest_runs_status_allowed
 -- creates-constraint: kg.ingest_runs.ingest_runs_trigger_allowed
 -- creates-constraint: kg.ingest_runs.ingest_runs_source_kind_allowed

@@ -18,7 +18,8 @@
 --
 -- Idempotent: re-running with the same :computer_id is a no-op.
 --
--- This is a data backfill, not a schema change — no creates: markers.
+-- data-only-migration
+-- This is a data backfill, not a schema change.
 
 \set ON_ERROR_STOP on
 

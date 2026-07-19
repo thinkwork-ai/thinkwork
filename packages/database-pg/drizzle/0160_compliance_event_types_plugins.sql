@@ -15,6 +15,8 @@
 --
 -- creates-constraint: compliance.audit_outbox.audit_outbox_event_type_prefix_v3
 -- creates-constraint: compliance.audit_events.audit_events_event_type_prefix_v3
+-- drops-constraint: compliance.audit_outbox.audit_outbox_event_type_prefix_v2
+-- drops-constraint: compliance.audit_events.audit_events_event_type_prefix_v2
 
 BEGIN;
 

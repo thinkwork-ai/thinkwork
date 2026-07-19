@@ -48,6 +48,7 @@
 -- drops-column: public.agent_loops.cost_per_accepted_run_usd_cents
 -- drops-column: public.agent_loop_versions.judge_spec
 -- drops-column: public.agent_loop_versions.evidence_policy
+-- drops: public.view_agent_loop_versions_judge_evidence_nullable
 
 \set ON_ERROR_STOP on
 

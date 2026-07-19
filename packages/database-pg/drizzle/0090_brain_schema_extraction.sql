@@ -60,6 +60,16 @@
 --
 -- Markers (consumed by scripts/db-migrate-manual.sh):
 --
+-- moves-owner: public.tenant_entity_pages -> brain.pages
+-- moves-owner: public.tenant_entity_page_sections -> brain.page_sections
+-- moves-owner: public.tenant_entity_page_links -> brain.page_links
+-- moves-owner: public.tenant_entity_page_aliases -> brain.page_aliases
+-- moves-owner: public.tenant_entity_section_sources -> brain.section_sources
+-- moves-owner: public.tenant_entity_external_refs -> brain.external_refs
+-- drops: public.uq_tenant_entity_pages_tenant_type_subtype_slug
+-- drops: public.idx_tenant_entity_pages_search_tsv
+-- drops: public.uq_tenant_entity_section_sources_section_kind_ref
+-- creates-trigger: brain.section_sources.trg_tenant_entity_section_sources_tenant
 -- creates: brain.pages
 -- creates: brain.page_sections
 -- creates: brain.page_links

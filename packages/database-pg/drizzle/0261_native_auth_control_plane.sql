@@ -38,6 +38,7 @@
 -- creates: public.auth_identity_proofs
 -- creates: public.uq_auth_identity_proofs_digest
 -- creates: public.idx_auth_identity_proofs_identity
+-- drops: public.uq_tenant_auth_provider_references_install_resource
 
 ALTER TABLE public.auth_provider_resources
   ADD COLUMN IF NOT EXISTS connection_key text,

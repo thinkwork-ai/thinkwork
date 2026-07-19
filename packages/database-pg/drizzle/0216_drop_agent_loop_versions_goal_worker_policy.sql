@@ -27,6 +27,7 @@
 -- drops-column: public.agent_loop_versions.worker_spec
 -- drops-column: public.agent_loop_versions.loop_policy
 -- creates: public.view_agent_loop_versions_target_spec_required
+-- drops: public.view_agent_loop_versions_goal_worker_policy_nullable
 
 \set ON_ERROR_STOP on
 
