@@ -5,6 +5,7 @@ import {
   buildOntologyReprocessDedupeKey,
   dispatchObservationsReingestForOntologyApproval,
   enqueueObservationsReingestForOntologyApproval,
+  refreshRoutingMapProjectionForApply,
 } from "./reprocess.js";
 import { rejectOntologyChangeSet } from "./repository.js";
 import { ontologyEntityTypes } from "@thinkwork/database-pg/schema";
@@ -435,5 +436,82 @@ describe("applyOntologyChangeSetItems (THINK-321 U3)", () => {
 
     expect(db.inserts).toEqual([]);
     expect(db.updates).toEqual([]);
+  });
+});
+
+describe("refreshRoutingMapProjectionForApply (THINK-321 U4)", () => {
+  const identityMapItem = {
+    item_type: "identity_map",
+    action: "update",
+    status: "approved",
+    target_slug: "customer",
+    proposed_value: {
+      entityTypeSlug: "customer",
+      systemMap: [{ facet: "invoices", sourceSystem: "lastmile" }],
+    },
+  } as any;
+
+  it("refreshes the routing map after an apply containing identity_map items", async () => {
+    const refresh = vi.fn().mockResolvedValue({
+      content: "# Entity Routing Map",
+      agents: 2,
+      written: 2,
+      skipped: [],
+    });
+
+    const metrics = await refreshRoutingMapProjectionForApply({
+      tenantId: "tenant-1",
+      items: [identityMapItem],
+      baseMetrics: { approvedItems: 1 },
+      db: {} as any,
+      refresh,
+    });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledWith(expect.anything(), "tenant-1");
+    expect(metrics).toEqual({
+      approvedItems: 1,
+      routingMapProjection: { agents: 2, written: 2, skipped: 0 },
+    });
+  });
+
+  it("no-ops for change sets without identity_map items", async () => {
+    const refresh = vi.fn();
+
+    const metrics = await refreshRoutingMapProjectionForApply({
+      tenantId: "tenant-1",
+      items: [
+        {
+          item_type: "entity_type",
+          action: "create",
+          status: "approved",
+          target_slug: "shipment",
+          proposed_value: { slug: "shipment", name: "Shipment" },
+        } as any,
+      ],
+      baseMetrics: { approvedItems: 1 },
+      db: {} as any,
+      refresh,
+    });
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(metrics).toEqual({ approvedItems: 1 });
+  });
+
+  it("swallows refresh failures onto metrics — the applied change set never fails", async () => {
+    const refresh = vi.fn().mockRejectedValue(new Error("s3 unavailable"));
+
+    const metrics = await refreshRoutingMapProjectionForApply({
+      tenantId: "tenant-1",
+      items: [identityMapItem],
+      baseMetrics: { approvedItems: 1 },
+      db: {} as any,
+      refresh,
+    });
+
+    expect(metrics).toEqual({
+      approvedItems: 1,
+      routingMapProjection: { error: "s3 unavailable" },
+    });
   });
 });

@@ -162,8 +162,9 @@ export function createDefaultTwentyCutoverDeps(
       // effects never ride the DB tx. Bucket-gated; null in DB-mocked tests.
       let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
       try {
-        const { snapshotMcpServerAttachment } =
-          await import("../../mcp/assignment-state.js");
+        const { snapshotMcpServerAttachment } = await import(
+          "../../mcp/assignment-state.js"
+        );
         folderSnapshot = await snapshotMcpServerAttachment({
           tenantId,
           registryServerId: serverId,
@@ -201,14 +202,17 @@ export function createDefaultTwentyCutoverDeps(
 
       if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
         try {
-          const { removeMcpAssignmentFoldersForAgents } =
-            await import("../../mcp/assignment-state.js");
+          const { removeMcpAssignmentFoldersForAgents } = await import(
+            "../../mcp/assignment-state.js"
+          );
           await removeMcpAssignmentFoldersForAgents(folderSnapshot);
-          const { removeConnectionFoldersForAgents } =
-            await import("../../capabilities/reconcile-connection-folders.js");
+          const { removeConnectionFoldersForAgents } = await import(
+            "../../capabilities/reconcile-connection-folders.js"
+          );
           await removeConnectionFoldersForAgents({
             agentIds: folderSnapshot.agentIds,
             registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
+            tenantId,
           });
         } catch (err) {
           console.warn(

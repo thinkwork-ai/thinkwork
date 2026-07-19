@@ -46,6 +46,27 @@ import type { CapabilitySignedBy } from "./sidecar-signing.js";
 
 const LOG_PREFIX = "[connection-folder-reconcile]";
 
+/**
+ * THINK-321 U4: connector attach/detach changes what the routing map may
+ * address, so the workspace projection refreshes behind both choke points
+ * below. Best-effort like every other write here — the refresh itself
+ * skips unchanged content and no-ops for tenants with no identity
+ * declarations, so this stays cheap on unrelated provisioning flows.
+ */
+async function refreshRoutingMapBestEffort(tenantId: string): Promise<void> {
+  try {
+    const { refreshRoutingMapFile } = await import(
+      "../entity-identity/routing-map-file.js"
+    );
+    await refreshRoutingMapFile(db, tenantId);
+  } catch (err) {
+    console.warn(
+      `${LOG_PREFIX} routing-map refresh failed tenant=${tenantId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 function workspaceBucketConfigured(): boolean {
   try {
     return Boolean(getConfig("WORKSPACE_BUCKET"));
@@ -159,12 +180,19 @@ export async function writeConnectionFoldersForAgents(input: {
       );
     }
   }
+  await refreshRoutingMapBestEffort(input.tenantId);
 }
 
 /** Explicit removal for detach/uninstall paths that know the registry row. */
 export async function removeConnectionFoldersForAgents(input: {
   agentIds: string[];
   registry: { slug: string | null; name: string };
+  /**
+   * When provided, the tenant's routing-map projection refreshes after the
+   * removal (THINK-321 U4) — deregistration may strand a source-system
+   * link, and the file must say so instead of naming a dead connector.
+   */
+  tenantId?: string;
   deps?: CapabilityFolderWriteDeps;
 }): Promise<void> {
   const slug = connectionSlugForRegistry(input.registry);
@@ -189,5 +217,8 @@ export async function removeConnectionFoldersForAgents(input: {
         err instanceof Error ? err.message : err,
       );
     }
+  }
+  if (input.tenantId) {
+    await refreshRoutingMapBestEffort(input.tenantId);
   }
 }
