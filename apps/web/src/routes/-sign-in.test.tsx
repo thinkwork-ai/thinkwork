@@ -283,7 +283,7 @@ describe("SignInPage", () => {
     expect(
       (
         (await screen.findByRole("button", {
-          name: "Checking session...",
+          name: "Checking session",
         })) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -588,14 +588,17 @@ describe("SignInPage", () => {
       await screen.findByRole("button", { name: "Continue with Google" }),
     );
 
-    expect(
-      await screen.findByRole("button", { name: "Opening Google..." }),
-    ).toHaveProperty("disabled", true);
+    const openingGoogle = await screen.findByRole("button", {
+      name: "Opening Google",
+    });
+    expect(openingGoogle).toHaveProperty("disabled", true);
+    expect(screen.getByRole("status", { name: "Opening Google" })).toBeTruthy();
+    expect(openingGoogle.textContent).toBe("");
     expect(
       screen.getByRole("button", { name: "Continue with Microsoft" }),
     ).toHaveProperty("disabled", true);
     expect(
-      screen.queryByRole("button", { name: "Opening Microsoft..." }),
+      screen.queryByRole("button", { name: "Opening Microsoft" }),
     ).toBeNull();
   });
 

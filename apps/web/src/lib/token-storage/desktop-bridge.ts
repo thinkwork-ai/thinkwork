@@ -61,6 +61,10 @@ export class DesktopBridgeTokenStorage implements TokenStorage {
     });
   }
 
+  keys(): string[] {
+    return [...this.cache.keys()];
+  }
+
   clear(): void {
     const hadItems = this.cache.size > 0 || this.version !== 0;
     this.cache.clear();

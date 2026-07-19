@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { DesktopConfig } from "@thinkwork/desktop-ipc";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "@thinkwork/ui";
+import { Button, Spinner } from "@thinkwork/ui";
 import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { EmailPasswordForm } from "@/components/auth/EmailPasswordForm";
 import { useAuth } from "@/context/AuthContext";
@@ -326,13 +326,17 @@ export function SignInPage() {
               {publicOAuthOptions.map((option) => {
                 const provider = oauthProviderLabel(option);
                 const isOpening = startingOAuthKey === option.key;
-                const label = isOpening
-                  ? `Opening ${provider}...`
-                  : option.label;
+                const label = option.label;
                 return (
                   <Button
                     key={option.key}
-                    aria-label={isLoading ? "Checking session..." : label}
+                    aria-label={
+                      isLoading
+                        ? "Checking session"
+                        : isOpening
+                          ? `Opening ${provider}`
+                          : label
+                    }
                     onClick={() =>
                       void (isDesktop
                         ? handleDesktopOAuth(option)
@@ -348,10 +352,8 @@ export function SignInPage() {
                       loginBlocked
                     }
                   >
-                    {isLoading ? (
-                      "Checking session..."
-                    ) : isOpening ? (
-                      label
+                    {isOpening ? (
+                      <Spinner aria-label={`Opening ${provider}`} />
                     ) : (
                       <>
                         <ProviderIcon icon={option.icon} />

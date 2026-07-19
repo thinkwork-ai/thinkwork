@@ -46,8 +46,10 @@ export interface AuthResult {
   email: string | null;
   /**
    * Whether the Cognito-verified ID token asserts `email_verified: true`.
-   * This is delivery/enrollment metadata only; identity and tenant admission
-   * never resolve by email. Always false for apikey/service callers.
+   * This is used by the narrow post-OAuth automatic-link flow for native
+   * Google routes. Entra does not provide this claim, so its validated native
+   * route uses the authenticated UPN instead. Normal admission still uses the
+   * resulting immutable issuer/subject binding. Always false for service callers.
    */
   emailVerified: boolean;
   /**

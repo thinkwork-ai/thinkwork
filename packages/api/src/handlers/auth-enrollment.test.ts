@@ -14,20 +14,8 @@ const {
   inserts: [] as unknown[],
   mockAdmitCognitoTenant: vi.fn(),
   mockAuthenticate: vi.fn(),
-  routeRows: [] as Array<{
-    route_client_id: string;
-    route_key: string;
-    connection_id: string;
-    cognito_app_client_id?: string;
-  }>,
-  routeRowQueue: [] as Array<
-    Array<{
-      route_client_id: string;
-      route_key: string;
-      connection_id: string;
-      cognito_app_client_id?: string;
-    }>
-  >,
+  routeRows: [] as Array<Record<string, unknown>>,
+  routeRowQueue: [] as Array<Array<Record<string, unknown>>>,
   selectQueue: [] as unknown[][],
   selectWheres: [] as unknown[],
   updates: [] as unknown[],
@@ -146,12 +134,12 @@ vi.mock("../lib/auth.js", () => ({
 }));
 
 import {
+  automaticallyLinkFederatedIdentity,
   consumeEnrollment,
   enrollmentDigest,
   handler,
   issueEnrollmentGrants,
   issueIdentityRecoveryGrant,
-  issueProviderSwitchGrant,
   issueSessionMigrationGrant,
 } from "./auth-enrollment.js";
 import type { AuthResult } from "../lib/cognito-auth.js";
@@ -260,50 +248,87 @@ describe("identity enrollment", () => {
     });
   });
 
-  it("issues an identity-bound switch grant only for the selected provider route", async () => {
-    selectQueue.push([{ id: "member-1" }]);
-    routeRows.push(
-      {
-        route_client_id: "route-google-web",
-        route_key: "google-web",
-        connection_id: "connection-google",
-        cognito_app_client_id: "google-client",
-      },
-      {
-        route_client_id: "route-microsoft-web",
-        route_key: "microsoft-web",
-        connection_id: "connection-microsoft",
-        cognito_app_client_id: "microsoft-client",
-      },
-    );
+  it("automatically links a verified Google login to the one admitted user membership", async () => {
+    selectQueue.push([]);
+    routeRows.push({ user_id: "user-1", tenant_id: "tenant-1" });
 
-    const issued = await issueProviderSwitchGrant(auth, {
-      targetClientId: "microsoft-client",
-      redirectUri: "https://app.example.com/auth/callback",
-    });
+    await expect(
+      automaticallyLinkFederatedIdentity(
+        auth,
+        new Date("2026-07-19T00:00:00Z"),
+      ),
+    ).resolves.toBe("linked");
 
-    expect(mockAdmitCognitoTenant).toHaveBeenCalledWith(auth, undefined);
-    expect(issued.routeKeys).toEqual(["microsoft-web"]);
-    expect(inserts[0]).toMatchObject({
-      values: [
+    expect(inserts).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
-          auth_route_client_id: "route-microsoft-web",
-          intended_user_id: "user-1",
-          recipient_grant_kind: "identity_recovery",
-          recipient_grant_id: "member-1",
+          values: expect.objectContaining({
+            tenant_id: "tenant-1",
+            user_id: "user-1",
+            cognito_sub: "cognito-sub-1",
+            auth_provider_resource_id: "connection-1",
+            status: "active",
+            proof_kind: "federated_login_email_match",
+          }),
         }),
-      ],
+        expect.objectContaining({
+          values: expect.objectContaining({
+            tenant_id: "tenant-1",
+            user_id: "user-1",
+            reason: "federated_identity_automatically_linked",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("does not link a federated login whose email is not verified", async () => {
+    selectQueue.push([]);
+
+    await expect(
+      automaticallyLinkFederatedIdentity({ ...auth, emailVerified: false }),
+    ).resolves.toBe("not_linked");
+    expect(inserts).toHaveLength(0);
+  });
+
+  it("links an authenticated Microsoft UPN without requiring an unavailable email_verified claim", async () => {
+    selectQueue.push([]);
+    routeRows.push({ user_id: "user-1", tenant_id: "tenant-1" });
+
+    await expect(
+      automaticallyLinkFederatedIdentity({
+        ...auth,
+        emailVerified: false,
+        route: {
+          ...auth.route,
+          providerKind: "microsoft_organizations",
+          connectionKey: "microsoft-organizations",
+        },
+      }),
+    ).resolves.toBe("linked");
+    expect(inserts[0]).toMatchObject({
+      values: expect.objectContaining({
+        proof_kind: "federated_login_email_match",
+        evidence: expect.objectContaining({
+          emailClaimTrust: "entra_authenticated_upn",
+        }),
+      }),
     });
   });
 
-  it("refuses to issue a provider-switch grant for the current app client", async () => {
-    await expect(
-      issueProviderSwitchGrant(auth, {
-        targetClientId: "app-client-1",
-        redirectUri: "https://app.example.com/auth/callback",
-      }),
-    ).rejects.toMatchObject({ code: "provider_already_active" });
-    expect(mockAdmitCognitoTenant).not.toHaveBeenCalled();
+  it("accepts an already-active exact provider binding without relinking it", async () => {
+    selectQueue.push([
+      {
+        userId: "user-1",
+        tenantId: "tenant-1",
+        resourceId: "connection-1",
+        status: "active",
+      },
+    ]);
+
+    await expect(automaticallyLinkFederatedIdentity(auth)).resolves.toBe(
+      "already_linked",
+    );
     expect(inserts).toHaveLength(0);
   });
 
@@ -548,38 +573,21 @@ describe("identity enrollment", () => {
     });
   });
 
-  it("serves provider switching only from the authenticated admitted identity", async () => {
+  it("automatically links the authenticated federated identity after OAuth", async () => {
     mockAuthenticate.mockResolvedValue(auth);
-    selectQueue.push([{ id: "member-1" }]);
-    routeRows.push(
-      {
-        route_client_id: "route-google",
-        route_key: "google-web",
-        connection_id: "connection-google",
-        cognito_app_client_id: "google-client",
-      },
-      {
-        route_client_id: "route-microsoft",
-        route_key: "microsoft-web",
-        connection_id: "connection-microsoft",
-        cognito_app_client_id: "microsoft-client",
-      },
-    );
+    selectQueue.push([]);
+    routeRows.push({ user_id: "user-1", tenant_id: "tenant-1" });
 
-    const response = await handler(switchEvent());
+    const response = await handler(autoLinkEvent());
 
-    expect(response.statusCode).toBe(201);
-    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
-      recipientChallenge: expect.stringMatching(/^\d{8}$/),
-      routeKeys: ["microsoft-web"],
-    });
-    expect(mockAdmitCognitoTenant).toHaveBeenCalledWith(auth, undefined);
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body ?? "{}")).toEqual({ outcome: "linked" });
   });
 
-  it("rejects provider switching without an authenticated session", async () => {
+  it("rejects automatic linking without an authenticated session", async () => {
     mockAuthenticate.mockResolvedValue(null);
 
-    const response = await handler(switchEvent());
+    const response = await handler(autoLinkEvent());
 
     expect(response.statusCode).toBe(401);
     expect(inserts).toHaveLength(0);
@@ -1103,23 +1111,20 @@ function migrationEvent(): APIGatewayProxyEventV2 {
   };
 }
 
-function switchEvent(): APIGatewayProxyEventV2 {
+function autoLinkEvent(): APIGatewayProxyEventV2 {
   const event = recoveryEvent("current-native-token");
   return {
     ...event,
-    routeKey: "POST /api/auth/enrollment/switch",
-    rawPath: "/api/auth/enrollment/switch",
+    routeKey: "POST /api/auth/enrollment/auto-link",
+    rawPath: "/api/auth/enrollment/auto-link",
     requestContext: {
       ...event.requestContext,
-      routeKey: "POST /api/auth/enrollment/switch",
+      routeKey: "POST /api/auth/enrollment/auto-link",
       http: {
         ...event.requestContext.http,
-        path: "/api/auth/enrollment/switch",
+        path: "/api/auth/enrollment/auto-link",
       },
     },
-    body: JSON.stringify({
-      targetClientId: "microsoft-client",
-      redirectUri: "https://app.example.com/auth/callback",
-    }),
+    body: undefined,
   };
 }
