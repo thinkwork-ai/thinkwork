@@ -6696,6 +6696,52 @@ export type OntologyReprocessJob = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type OntologySchemaGraph = {
+  __typename?: "OntologySchemaGraph";
+  candidates: Array<OntologySchemaGraphCandidate>;
+  relationships: Array<OntologySchemaGraphRelationship>;
+  tenantId: Scalars["ID"]["output"];
+  types: Array<OntologySchemaGraphType>;
+};
+
+/**
+ * Pending change-set item surfaced as a ghost candidate on the map. `origin`
+ * is the owning change set's proposedBy (suggestion_engine, user, ...).
+ */
+export type OntologySchemaGraphCandidate = {
+  __typename?: "OntologySchemaGraphCandidate";
+  changeSetId: Scalars["ID"]["output"];
+  editedValue?: Maybe<Scalars["AWSJSON"]["output"]>;
+  evidenceCount: Scalars["Int"]["output"];
+  itemId: Scalars["ID"]["output"];
+  itemType: OntologyChangeItemType;
+  origin: Scalars["String"]["output"];
+  proposedValue: Scalars["AWSJSON"]["output"];
+  slug?: Maybe<Scalars["String"]["output"]>;
+  status: OntologyChangeSetStatus;
+};
+
+/** Approved relationship type projected as a labeled schema-graph edge. */
+export type OntologySchemaGraphRelationship = {
+  __typename?: "OntologySchemaGraphRelationship";
+  name: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+  sourceTypeSlugs: Array<Scalars["String"]["output"]>;
+  targetTypeSlugs: Array<Scalars["String"]["output"]>;
+};
+
+/**
+ * Approved entity type projected for the Living Map canvas (THINK-320 U1):
+ * slug/name plus a live count of kg entities carrying the type.
+ */
+export type OntologySchemaGraphType = {
+  __typename?: "OntologySchemaGraphType";
+  instanceCount: Scalars["Int"]["output"];
+  lifecycleStatus: OntologyLifecycleStatus;
+  name: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+};
+
 export type OntologySuggestionScanJob = {
   __typename?: "OntologySuggestionScanJob";
   createdAt: Scalars["AWSDateTime"]["output"];
@@ -7321,6 +7367,11 @@ export type Query = {
   ontologyChangeSets: Array<OntologyChangeSet>;
   ontologyDefinitions: OntologyDefinitions;
   ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
+  /**
+   * Living Map feed (THINK-320 U1): approved types with live instance
+   * counts, approved relationships, and pending candidate items.
+   */
+  ontologySchemaGraph: OntologySchemaGraph;
   ontologySuggestionScanJob?: Maybe<OntologySuggestionScanJob>;
   openEngineEligibleWorkItems: Array<WorkItem>;
   pendingSystemReviewsCount: Scalars["Int"]["output"];
@@ -8116,6 +8167,10 @@ export type QueryOntologyDefinitionsArgs = {
 
 export type QueryOntologyReprocessJobArgs = {
   jobId: Scalars["ID"]["input"];
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryOntologySchemaGraphArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 

@@ -686,9 +686,6 @@ export function graphql(
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
 export function graphql(
   source: "\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      mentioned\n      shouldNotify\n      createdAt\n    }\n  }\n",
 ): (typeof documents)["\n  subscription SpacesThreadActivity($userId: ID!) {\n    onThreadActivity(userId: $userId) {\n      userId\n      tenantId\n      threadId\n      messageId\n      authorId\n      authorType\n      snippet\n      threadTitle\n      mentioned\n      shouldNotify\n      createdAt\n    }\n  }\n"];
@@ -1817,9 +1814,6 @@ export function graphql(
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
 export function graphql(
   source: "\n  mutation SettingsGrantCapability($input: GrantCapabilityInput!) {\n    grantCapability(input: $input) {\n      outcome\n      inspectionState\n      computedAt\n      configFingerprint\n      item {\n        capabilityClass\n        capabilityId\n        displayName\n        active\n        provenance\n        reason\n        detail\n        tokenStatus\n      }\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SettingsGrantCapability($input: GrantCapabilityInput!) {\n    grantCapability(input: $input) {\n      outcome\n      inspectionState\n      computedAt\n      configFingerprint\n      item {\n        capabilityClass\n        capabilityId\n        displayName\n        active\n        provenance\n        reason\n        detail\n        tokenStatus\n      }\n    }\n  }\n"];
@@ -1955,9 +1949,6 @@ export function graphql(
 export function graphql(
   source: "\n  query WebhookOwningLoop($id: ID!) {\n    webhook(id: $id) {\n      id\n      agentLoopId\n    }\n  }\n",
 ): (typeof documents)["\n  query WebhookOwningLoop($id: ID!) {\n    webhook(id: $id) {\n      id\n      agentLoopId\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

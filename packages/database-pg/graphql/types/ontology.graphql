@@ -226,6 +226,50 @@ type OntologyReprocessJob {
   updatedAt: AWSDateTime!
 }
 
+"""
+Approved entity type projected for the Living Map canvas (THINK-320 U1):
+slug/name plus a live count of kg entities carrying the type.
+"""
+type OntologySchemaGraphType {
+  slug: String!
+  name: String!
+  instanceCount: Int!
+  lifecycleStatus: OntologyLifecycleStatus!
+}
+
+"""
+Approved relationship type projected as a labeled schema-graph edge.
+"""
+type OntologySchemaGraphRelationship {
+  slug: String!
+  name: String!
+  sourceTypeSlugs: [String!]!
+  targetTypeSlugs: [String!]!
+}
+
+"""
+Pending change-set item surfaced as a ghost candidate on the map. `origin`
+is the owning change set's proposedBy (suggestion_engine, user, ...).
+"""
+type OntologySchemaGraphCandidate {
+  itemId: ID!
+  changeSetId: ID!
+  itemType: OntologyChangeItemType!
+  slug: String
+  proposedValue: AWSJSON!
+  editedValue: AWSJSON
+  evidenceCount: Int!
+  origin: String!
+  status: OntologyChangeSetStatus!
+}
+
+type OntologySchemaGraph {
+  tenantId: ID!
+  types: [OntologySchemaGraphType!]!
+  relationships: [OntologySchemaGraphRelationship!]!
+  candidates: [OntologySchemaGraphCandidate!]!
+}
+
 type OntologyDefinitions {
   tenantId: ID!
   activeVersion: OntologyVersion
@@ -293,6 +337,11 @@ input UpdateOntologyRelationshipTypeInput {
 
 extend type Query {
   ontologyDefinitions(tenantId: ID!): OntologyDefinitions!
+  """
+  Living Map feed (THINK-320 U1): approved types with live instance
+  counts, approved relationships, and pending candidate items.
+  """
+  ontologySchemaGraph(tenantId: ID!): OntologySchemaGraph!
   ontologyChangeSets(
     tenantId: ID!
     status: OntologyChangeSetStatus

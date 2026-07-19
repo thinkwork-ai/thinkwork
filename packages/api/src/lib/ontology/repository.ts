@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { parseIdentityRules } from "../entity-identity/normalizers.js";
 import {
   activityLog,
+  kgEntities,
   ontologyChangeSetItems,
   ontologyChangeSets,
   ontologyEntityTypes,
@@ -207,6 +208,199 @@ export async function listOntologyDefinitions(args: {
     facetTemplates: facetRows.map(toOntologyFacetTemplate),
     externalMappings: activeMappingRows.map(toOntologyExternalMapping),
   };
+}
+
+/**
+ * Change-set statuses whose items are still reviewable — the candidate
+ * supply for the Living Map (THINK-320 U1). Approved/rejected/applied
+ * sets are settled and never surface candidates.
+ */
+const PENDING_CANDIDATE_CHANGE_SET_STATUSES: OntologyChangeSetStatus[] = [
+  "draft",
+  "pending_review",
+];
+
+const graphEnumValue = (value: string | null | undefined) =>
+  value ? value.toUpperCase() : value;
+
+/**
+ * Pure assembly for the Living Map schema graph (THINK-320 U1): approved
+ * types with live instance counts, approved relationships, and pending
+ * change-set items as candidates. Split from getOntologySchemaGraph so
+ * count merging and candidate filtering are unit-testable without a DB.
+ */
+export function assembleOntologySchemaGraph(args: {
+  tenantId: string;
+  entityRows: Array<{ slug: string; name: string; lifecycle_status: string }>;
+  relationshipRows: Array<{
+    slug: string;
+    name: string;
+    source_type_slugs: string[] | null;
+    target_type_slugs: string[] | null;
+  }>;
+  instanceCountRows: Array<{ slug: string | null; count: number }>;
+  changeSetRows: Array<{ id: string; status: string; proposed_by: string }>;
+  candidateItemRows: Array<{
+    id: string;
+    change_set_id: string;
+    item_type: string;
+    status: string;
+    target_slug: string | null;
+    proposed_value: unknown;
+    edited_value: unknown;
+  }>;
+  evidenceCountRows: Array<{ itemId: string | null; count: number }>;
+}) {
+  const countBySlug = new Map<string, number>();
+  for (const row of args.instanceCountRows) {
+    if (row.slug) countBySlug.set(row.slug, Number(row.count));
+  }
+  const changeSetById = new Map(args.changeSetRows.map((row) => [row.id, row]));
+  const evidenceCountByItemId = new Map<string, number>();
+  for (const row of args.evidenceCountRows) {
+    if (row.itemId) evidenceCountByItemId.set(row.itemId, Number(row.count));
+  }
+
+  return {
+    tenantId: args.tenantId,
+    types: args.entityRows.map((row) => ({
+      slug: row.slug,
+      name: row.name,
+      instanceCount: countBySlug.get(row.slug) ?? 0,
+      lifecycleStatus: graphEnumValue(row.lifecycle_status),
+    })),
+    relationships: args.relationshipRows.map((row) => ({
+      slug: row.slug,
+      name: row.name,
+      sourceTypeSlugs: row.source_type_slugs ?? [],
+      targetTypeSlugs: row.target_type_slugs ?? [],
+    })),
+    candidates: args.candidateItemRows
+      .filter(
+        (item) =>
+          // Only still-reviewable items in still-open change sets count as
+          // candidates — approved/rejected items are settled, not ghosts.
+          item.status === "pending_review" &&
+          changeSetById.has(item.change_set_id),
+      )
+      .map((item) => {
+        const proposedValue = (item.proposed_value ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const proposedSlug =
+          typeof proposedValue.slug === "string" ? proposedValue.slug : null;
+        return {
+          itemId: item.id,
+          changeSetId: item.change_set_id,
+          itemType: graphEnumValue(item.item_type),
+          slug: item.target_slug ?? proposedSlug,
+          proposedValue,
+          editedValue: item.edited_value,
+          evidenceCount: evidenceCountByItemId.get(item.id) ?? 0,
+          origin: changeSetById.get(item.change_set_id)?.proposed_by ?? "",
+          status: graphEnumValue(item.status),
+        };
+      }),
+  };
+}
+
+export async function getOntologySchemaGraph(args: {
+  tenantId: string;
+  db?: DbLike;
+}) {
+  const db = args.db ?? defaultDb;
+  const [entityRows, relationshipRows, instanceCountRows, changeSetRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(ontologyEntityTypes)
+        .where(
+          and(
+            eq(ontologyEntityTypes.tenant_id, args.tenantId),
+            eq(ontologyEntityTypes.lifecycle_status, "approved"),
+          ),
+        )
+        .orderBy(asc(ontologyEntityTypes.slug)),
+      db
+        .select()
+        .from(ontologyRelationshipTypes)
+        .where(
+          and(
+            eq(ontologyRelationshipTypes.tenant_id, args.tenantId),
+            eq(ontologyRelationshipTypes.lifecycle_status, "approved"),
+          ),
+        )
+        .orderBy(asc(ontologyRelationshipTypes.slug)),
+      db
+        .select({
+          slug: kgEntities.ontology_type_slug,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(kgEntities)
+        .where(
+          and(
+            eq(kgEntities.tenant_id, args.tenantId),
+            isNotNull(kgEntities.ontology_type_slug),
+          ),
+        )
+        .groupBy(kgEntities.ontology_type_slug),
+      db
+        .select()
+        .from(ontologyChangeSets)
+        .where(
+          and(
+            eq(ontologyChangeSets.tenant_id, args.tenantId),
+            inArray(
+              ontologyChangeSets.status,
+              PENDING_CANDIDATE_CHANGE_SET_STATUSES,
+            ),
+          ),
+        )
+        .orderBy(desc(ontologyChangeSets.created_at)),
+    ]);
+
+  const changeSetIds = changeSetRows.map((row) => row.id);
+  const candidateItemRows =
+    changeSetIds.length > 0
+      ? await db
+          .select()
+          .from(ontologyChangeSetItems)
+          .where(
+            and(
+              eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+              inArray(ontologyChangeSetItems.change_set_id, changeSetIds),
+            ),
+          )
+          .orderBy(asc(ontologyChangeSetItems.position))
+      : [];
+  const itemIds = candidateItemRows.map((row) => row.id);
+  const evidenceCountRows =
+    itemIds.length > 0
+      ? await db
+          .select({
+            itemId: ontologyEvidenceExamples.item_id,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(ontologyEvidenceExamples)
+          .where(
+            and(
+              eq(ontologyEvidenceExamples.tenant_id, args.tenantId),
+              inArray(ontologyEvidenceExamples.item_id, itemIds),
+            ),
+          )
+          .groupBy(ontologyEvidenceExamples.item_id)
+      : [];
+
+  return assembleOntologySchemaGraph({
+    tenantId: args.tenantId,
+    entityRows,
+    relationshipRows,
+    instanceCountRows,
+    changeSetRows,
+    candidateItemRows,
+    evidenceCountRows,
+  });
 }
 
 export async function updateOntologyEntityType(args: {

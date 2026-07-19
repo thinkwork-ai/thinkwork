@@ -1,4 +1,5 @@
 import { ontologyDefinitions } from "./ontologyDefinitions.query.js";
+import { ontologySchemaGraph } from "./ontologySchemaGraph.query.js";
 import { ontologyChangeSets } from "./ontologyChangeSets.query.js";
 import { ontologySuggestionScanJob } from "./ontologySuggestionScanJob.query.js";
 import { ontologyReprocessJob } from "./ontologyReprocessJob.query.js";
@@ -12,6 +13,7 @@ import { setOntologyEntityTypeIdentityRulesMutation } from "./setOntologyEntityT
 
 export const ontologyQueries = {
   ontologyDefinitions,
+  ontologySchemaGraph,
   ontologyChangeSets,
   ontologySuggestionScanJob,
   ontologyReprocessJob,
